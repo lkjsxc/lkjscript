@@ -1,10 +1,10 @@
 # Collector-Free Value Island
 
 ## Status
+<!-- LKJ-F collector-free-value-island accepted-contract EWyuvKK8qqTiLl5V4reOtDbMa5TFHvetTpt9jiwU64o -->
+<!-- LKJ-F native-byte-vector-island current uI_K12iGc_89oG9WvuVgN12XIEliK5GmRLMZR-QEv8I -->
+<!-- LKJ-F native-bytes-island current h4xX9ke02YIt3_sfD4kpjN02hnuvyMgirQDBKatYm6o -->
 
-<!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
-<!-- LKJ-STATUS id=native-byte-vector-island status=current -->
-<!-- LKJ-STATUS id=native-bytes-island status=current -->
 
 **The complete listed island remains an Accepted Contract.** The exact
 collector-free native `byte-vector`/`byte-slice`/`byte-slice-mut` subset and the

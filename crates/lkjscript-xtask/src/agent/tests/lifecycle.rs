@@ -113,6 +113,7 @@ fn resume_context_reports_deterministic_output_truncation() {
     let context_result = crate::model::QueryResult {
         schema: "lkjscript.repository-query".into(),
         contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
+        graph_identity: "graph-input".into(),
         command: "context".into(),
         target: "workspace".into(),
         profile: Some("weak".into()),

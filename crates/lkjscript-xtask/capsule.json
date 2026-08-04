@@ -11,7 +11,7 @@
     "structure audit",
     "repository graph",
     "agent work state semantic references",
-    "capability status graph"
+    "public fact and projection graph"
   ],
   "facade": [
     "crates/lkjscript-xtask/src/main.rs"
@@ -31,7 +31,7 @@
     "crates/lkjscript-xtask/src/structure/graph_tests/mod.rs",
     "crates/lkjscript-xtask/src/structure/repository_tests.rs",
     "crates/lkjscript-xtask/src/agent/tests/mod.rs",
-    "crates/lkjscript-xtask/src/documentation_status/tests.rs"
+    "crates/lkjscript-xtask/src/public_facts/tests/mod.rs"
   ],
   "decisions": [
     "docs/decisions/platform/bounded-repository-topology.md",
@@ -70,7 +70,7 @@
       "Git-tracked authority",
       "atomic generated state",
       "explicit staleness and truncation",
-      "registered cross-authority capability status"
+      "registered public facts with explicit exclusions and projections"
     ]
   }
 }

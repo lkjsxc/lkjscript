@@ -6,32 +6,41 @@ Capture exact Current capability, accepted next contracts, sharp edges, and
 verification discipline for autonomous continuation.
 
 ## Status
+<!-- LKJ-F agent-work-state current zZjKRc-VC6Kog756utq95Lp9qp-777kO230LOHgrlDo -->
+<!-- LKJ-F collector-free-deterministic-memory accepted-contract rkjfKvq1DyedQHYLOyjWNWY6cFpyxhaJczuQ4sKqTpk -->
+<!-- LKJ-F collector-free-value-island accepted-contract EWyuvKK8qqTiLl5V4reOtDbMa5TFHvetTpt9jiwU64o -->
+<!-- LKJ-F compiler-selected-sealed-value-vertical current Z1BDJ1a9GkItEXgvYOReTEectW8UtdH2lCS-EGJyqQM -->
+<!-- LKJ-F deterministic-drop accepted-contract 3x9ef1XNMfeqD8J9zudNzZhRsKS_iaOJU3iwBS-pD_M -->
+<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
+<!-- LKJ-F generation-safe-resources accepted-contract 8O8qZdjo1P070HkSVRoGF1uiUmfurgX9QUR39LSxvpk -->
+<!-- LKJ-F jit-auto-promotion accepted-selection -Qrh99Wliic18Iem5GSC_n5jB7iMak1iXIARYSJIcjI -->
+<!-- LKJ-F memory-obligations current O6vRxGZFx22cu1jAvqIzFLXEYqbWU2lgpID4BLggGQ0 -->
+<!-- LKJ-F memory-plan current N83612OzP36uXSfLw059mX4PXU092GhhfBkNXgIpqjY -->
+<!-- LKJ-F memory-tracing-ratchet superseded bdaumT2umNgHfR4PJEhamvu7kWz29TK0EFboRoK6HOg -->
+<!-- LKJ-F modules-and-packages current -WLVVqG-Eulxjxz99Mm4UfIl5Z_LCVypQfsAqLcRiA8 -->
+<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
+<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
+<!-- LKJ-F repository-graph-context current gEjOG-jfKyHf81iN7Mb1jeNORliJTFtPPc2QXgpJKt0 -->
+<!-- LKJ-F repository-topology current 4grjef-Dt9HiegyvGVss2RIRPiQKnSbeYGJrwQWqT4A -->
+<!-- LKJ-F residual-generic-compare-vertical current 99CeXYDFnc7vxFwUMwQH70BbTBRU1c10puE0OHg_l-U -->
+<!-- LKJ-F resource-profile-compiler current YGoyLZ9-lyrN4i-CgrshSF2zTZrg_obgHkXGecLH24w -->
+<!-- LKJ-F resource-profile-preallocation current mSMt-gglOr7P_dt0Ar0KTsJccrE5bNcovT4zciHx0Ig -->
+<!-- LKJ-F resource-profile-shared-ledger accepted-target 1pa9JN0jJ11EtZHNgqDL1l_wNIert1_4gEBMsPwuM74 -->
+<!-- LKJ-F semantic-core-target accepted-target O8JUCOa_fL8G7IHnFH6xSHZqv4VkzTRaMGiddFzuEuI -->
+<!-- LKJ-F semantic-resource-plane accepted-contract dt2A_KuS_WJMXDN2VfJ0cHGLJsSpzgTRkFAqjhRiwHY -->
+<!-- LKJ-F semantic-resource-runtime current AG9TS0lYLqMFpETkrEGMQLbw4yE5ozFdBqALzy4yvKU -->
+<!-- LKJ-F semantic-session current GaA_GN7xWh6Ae_7ZLtbi5ESPBHQCBhm7mNlwo9KBVDs -->
+<!-- LKJ-F semantic-source current GnFZks4AfR15wGCqhoO4NjGBjQs3VWvcDrOjadAZvKI -->
+<!-- LKJ-F typed-holes current 15-l9HXntoyIf1sTpMwBCjFPH2wYUzJXMGhz7ZoBzTU -->
+<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
 
-<!-- LKJ-STATUS id=agent-work-state status=current -->
-<!-- LKJ-STATUS id=repository-graph-context status=current -->
-<!-- LKJ-STATUS id=repository-topology status=current -->
-<!-- LKJ-STATUS id=residual-generic-compare-vertical status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
-<!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
-<!-- LKJ-STATUS id=semantic-resource-runtime status=current -->
-<!-- LKJ-STATUS id=semantic-session status=current -->
-<!-- LKJ-STATUS id=semantic-source status=current -->
-<!-- LKJ-STATUS id=typed-holes status=current -->
-<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
-<!-- LKJ-STATUS id=memory-obligations status=current -->
-<!-- LKJ-STATUS id=memory-tracing-ratchet status=superseded -->
-<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
-<!-- LKJ-STATUS id=memory-plan status=current -->
-<!-- LKJ-STATUS id=modules-and-packages status=current -->
-<!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
-<!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
-<!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
-<!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
-<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
-<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
+
+Platform revision 19 has a Current strict public-fact foundation: 52 sharded
+facts bind positive interfaces, exclusions, authority, anchors, evidence,
+projections, and content-derived digests. Fact explain, context, and impact are
+Current. Complete command/example classification, evidence freshness,
+architecture derivation, and Historical-scope enforcement remain Accepted
+Contract work; documentation authority as a whole is not Current.
 
 Repository topology and graph/context, bounded task state, exact modules and
 packages, canonical Semantic Source and local sessions, explicit capabilities,
@@ -161,14 +170,15 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Separate minimal semantic generic requirements from independently verified
-   physical routes and complete residual compare, codec, and list operations.
-2. Replace invocation-only structural-owner lists with compiler-selected
-   persistent sealed segments for the exact immutable element matrix.
-3. Carry static capture-free indirect generic callables with exact hidden
+1. Close command/example classification, evidence freshness, architecture
+   derivation, and Historical-scope enforcement for the public-fact authority.
+2. Bind one semantic generic-requirement algebra and an exact residual codec
+   contract, then complete encode/decode through all four engines, package lock,
+   and fresh-process rehydration.
+3. Add residual list store/load and replace invocation-only structural-owner
+   lists with compiler-selected persistent sealed segments for the exact matrix.
+4. Carry static capture-free indirect generic callables with exact hidden
    witness signatures through evaluator, VM, baseline, and proof tiers.
-4. Authenticate persistent-list process snapshots, rehydrate them into a fresh
-   runtime, retain no per-node ownership candidate, and promote only passed cuts.
 5. Keep affine aggregates, captures, services, provider IPC, broader storage
    domains, and non-Linux native acceptance outside this boundary.
 

@@ -99,7 +99,7 @@ wrong-operand/non-dominating/effectful/over-budget certificates, plus 64
 bounded randomized type-correct scalar evaluator differentials. The public
 optimizing authority has no raw `Program` constructor.
 
-the canonical source contract control tests cover early return, divergent `Never` joins, nearest
+Canonical-language control tests cover early return, divergent `Never` joins, nearest
 nested continue, typed value-loop break, Unit-only while break, dynamic Str
 trap values, and structured exit across the independent SSA evaluator,
 validated reference bytecode/VM, forced baseline, and forced proof JIT. They

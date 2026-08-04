@@ -4,20 +4,20 @@
 
 ## Purpose
 
-Close the complete the removed legacy source contract source schema and define honest correlation to
+Close the complete canonical source schema and define honest correlation to
 compiler and execution facts under the single canonical source contract.
 
 ## Status
 
-**Historical identity; Current preserved base.** The exact closed the removed legacy source contract
-node/value/type representation defined here is the unchanged base of Current
-`lkjscript.semantic-source`. Input version 1 is rejected without an alias.
-Agent Foundation legacy contract is also historical.
+**Historical schema record; Current preserved representation.** The exact closed
+canonical source node, value, and type representation recorded here remains a
+base of Current `lkjscript.semantic-source`. Removed versioned schema and agent-
+foundation identities are rejected without aliases or fallback.
 
 ## Closed Source Schema
 
-The preserved Complete Schema base represents every Current the removed legacy source contract
-concept with closed typed nodes and no generic fallback object:
+The preserved Complete Schema base represents every concept in Current canonical
+source with closed typed nodes and no generic fallback object:
 
 - source unit and edition identity, import, main, function, signature,
   parameters, type variables, bounds, and exact type forms;
@@ -33,9 +33,9 @@ concept with closed typed nodes and no generic fallback object:
 Schema appends the Current development typed-hole node/value and response
 records without changing any base variant or field.
 
-Kinds are closed enums. The schema preserves one canonical tree and
-deterministic the removed legacy source contract projection. Its complete kind/field table is tested
-against all 125 tracked `.lkjscript` files, including all 121 under `src/`.
+Kinds are closed enums. The schema preserves one canonical tree and a
+deterministic canonical source projection. Current contract tests cover its
+complete kind and field table.
 
 Every union is closed. Unknown kind, field, enum variant, schema, version,
 attachment position, duplicate field, malformed value, or trailing input fails.
@@ -65,16 +65,11 @@ native code/metadata identities only where the producing pipeline actually has
 that mapping. One-to-zero, one-to-one, and one-to-many cardinality is explicit.
 Optimization deletion or fusion is represented, not reverse-engineered.
 
-## Registration
+## Historical Registration
 
-`removed Semantic Source contract` was emitted after complete vocabulary,
-schema/source roundtrip, malformed-boundary, correlation, diagnostic, and
-transaction gates. It is now historical and rejected. The older
-Removed agent-foundation identities are historical evidence, not a competing
-Current source schema. No generation-numbered agent schema is emitted.
-
-Current Schema reuses this closure discipline and has identity
-`lkjscript.semantic-source`. It preserves the legacy contract representation as its base
-rather than mutating or overloading the legacy contract identity, and closes the Current
-the canonical source contract enum, match, Never type-node, typed loop, return, break, continue,
-value-bearing trap, and exit variants.
+Removed generation-numbered Semantic Source and agent-foundation identities are
+Historical evidence and provide no Current alias or fallback. Current Semantic
+Source uses the stable identity `lkjscript.semantic-source` plus its exact full
+contract digest. It retains the proven closed representation while adding the
+Current canonical-language enum, match, Never type node, typed loop, return,
+break, continue, value-bearing trap, and exit variants.

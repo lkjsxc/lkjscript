@@ -2,7 +2,7 @@ mod execution;
 mod language;
 mod platform;
 
-pub use platform::capability_status;
+pub use platform::public_facts;
 
 use crate::{ContractDescriptor, ContractDigest, ContractError, ContractName, ContractSet};
 
@@ -17,7 +17,7 @@ pub const SEMANTIC_RESOURCE_PLANE: &str = "lkjscript.semantic-resource-plane";
 pub const REPOSITORY_GRAPH: &str = "lkjscript.repository-graph";
 pub const CAPSULE_MANIFEST: &str = "lkjscript.capsule-manifest";
 pub const AGENT_WORK_STATE: &str = "lkjscript.agent-work-state";
-pub const CAPABILITY_STATUS: &str = "lkjscript.capability-status";
+pub const PUBLIC_FACTS: &str = "lkjscript.public-facts";
 pub const TYPED_HIR: &str = "lkjscript.typed-hir";
 pub const VERIFIED_SSA: &str = "lkjscript.verified-ssa";
 pub const BYTECODE: &str = "lkjscript.bytecode";
@@ -78,8 +78,8 @@ pub const CAPSULE_MANIFEST_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0xbb, 0x93, 0xe4, 0x3c, 0x2c, 0xf8, 0x7d, 0x3d, 0x64, 0x36, 0x12, 0xa4, 0xf9, 0x44, 0x78, 0x9e,
 ]);
 pub const REPOSITORY_GRAPH_DIGEST: ContractDigest = ContractDigest::from_bytes([
-    0x07, 0x88, 0xe4, 0x7b, 0x76, 0xcf, 0xc6, 0xc3, 0x0e, 0xc4, 0xf7, 0x5b, 0x20, 0x45, 0x66, 0xa3,
-    0x71, 0xab, 0xa7, 0x0e, 0xf3, 0x22, 0xdb, 0x1a, 0x89, 0x83, 0x1c, 0xf9, 0xf2, 0x8c, 0x73, 0x3a,
+    0x15, 0x43, 0xbe, 0xf2, 0x54, 0xb3, 0x36, 0xa5, 0xf7, 0xe5, 0x07, 0x74, 0x4b, 0x9b, 0xc5, 0xe2,
+    0x27, 0x7b, 0x0c, 0xe4, 0x76, 0x0f, 0x0c, 0xfc, 0x09, 0x23, 0x79, 0xfc, 0xa6, 0x64, 0x5e, 0x00,
 ]);
 pub const RESOURCE_CATEGORIES_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x96, 0x99, 0x44, 0x01, 0xb4, 0x18, 0x07, 0x6f, 0x5f, 0x6c, 0x90, 0xa5, 0xdb, 0x75, 0x53, 0x1d,
@@ -114,7 +114,7 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     add(&mut set, platform::repository_graph())?;
     add(&mut set, platform::capsule_manifest())?;
     add(&mut set, platform::agent_work_state(semantic))?;
-    add(&mut set, platform::capability_status())?;
+    add(&mut set, platform::public_facts())?;
     let runtime_control = add(&mut set, platform::runtime_control())?;
     let memory = add(&mut set, execution::memory_obligations(language))?;
     add(&mut set, execution::structural_ownership_domains(memory))?;

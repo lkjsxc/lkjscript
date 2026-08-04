@@ -12,6 +12,9 @@ operations remain Accepted Targets.
 
 ## Envelope
 
+Every present-tense statement below describes only the recorded baseline named
+in Status. It grants no Current interface, identity, alias, or implementation.
+
 Every request and response carries its exact registered schema name and integer
 version. Requests select a resource profile and name the complete loaded source
 closure. Success identifies compiler build, profile, exact source revision, and
@@ -120,9 +123,9 @@ Before parsing, the endpoint checks exact request bytes. During/after parsing it
 checks nesting, strings, collection entries, schema nodes, operation count, and
 work categories. Duplicate fields, malformed Unicode/escapes, trailing data,
 unknown variants, non-integer identity/counter encodings, and overflow fail.
-The locked dependency selection is Current. Both crates are MIT OR Apache-2.0;
-the reviewed OSV queries reported no advisory, and strict malformed-boundary
-tests pass. Dedicated fuzzing and `cargo-audit` remain explicitly untested; the
+At the recorded baseline, the locked dependency selection was implemented. Both
+crates were MIT OR Apache-2.0; the reviewed OSV queries reported no advisory,
+and strict malformed-boundary tests passed. Dedicated fuzzing and `cargo-audit` remain explicitly untested; the
 latter tool is not installed. Those omissions are not presented as evidence.
 
 ## Acceptance

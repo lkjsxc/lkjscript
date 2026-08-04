@@ -1,8 +1,8 @@
-# Current State: Current Implementation
-[Authority](../../current-state.md)
+# Historical Snapshot Before The Canonical Cutover
 ## Status
-**Mixed.** Status follows explicit labels in this capsule and its authority; this capsule cannot promote a capability.
-## Current Implementation
+**Historical snapshot.** Present-tense and Current wording below records only
+the pre-cutover baseline and grants no active fact, alias, decoder, or fallback.
+## Recorded Baseline Implementation
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
 - Corpus: all canonical language files under `src` have executable roots covering the exact corpus closure
@@ -13,14 +13,14 @@
   is validation/migration input only
 - Semantic Source contract: public identity `lkjscript.semantic-source` version 2; version 1 input is historical and
   rejected. One opaque immutable `ValidatedSourceTree` is parser/load authority. The
-  canonical contract preserves every legacy contract from the removed legacy source contract
+  canonical contract preserves every record from the removed prior source contract
   node/value/type/built-in/declaration/trivia/transaction-expression/diagnostic/correlation record, typed-hole facts,
   and generic enum declaration nodes. Subtrees roundtrip with exact spans/origins/revisions, stable keys, dense nodes,
   and canonical formatting. Unknown schema kinds, fields, operations, versions, duplicates, and trailing input fail.
   The bounded one-shot endpoint provides snapshot/entity/node/diagnostic/hole/legal action queries plus atomic rename,
   expression replacement, and all four hole transactions. resource profile categories reserve candidate, action,
   transaction, impact, and staged publication work before allocation. Agent Foundation
-  legacy contract is historical. The local
+  baseline is historical. The local
   `semantic serve --stdio` session uses exact 8-byte framing, pins one profile/root/revision, rejects stale/external
   changes, refreshes explicitly, intersects resource profile session ceilings, and publishes
   through the same typed engine

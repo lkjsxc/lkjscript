@@ -1,0 +1,163 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "collector-free-lists",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "memory"
+      ],
+      "interface": "collector-free invocation-local segmented copy-list and selected structural-list execution",
+      "exclusions": [
+        {
+          "id": "persistent-sealed-lists",
+          "interface": "Persistent sealed list segments are not Current."
+        },
+        {
+          "id": "persistent-structural-lists",
+          "interface": "General persistent lists, arbitrary sharing, and cyclic lists are not Current."
+        },
+        {
+          "id": "universal-list-elements",
+          "interface": "Arbitrary list element families are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/collector-free-deterministic-memory.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/hir/memory_plan/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/collector-free-deterministic-memory.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/collector-free-deterministic-memory.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "collector-free-products",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "memory"
+      ],
+      "interface": "collector-free product values",
+      "exclusions": [
+        {
+          "id": "unregistered-product-shapes",
+          "interface": "Unregistered product shapes, cycles, and operations reject without fallback."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/collector-free-deterministic-memory.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/hir/memory_plan/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/collector-free-deterministic-memory.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/collector-free-deterministic-memory.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "collector-free-runtime",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "memory",
+        "runtime"
+      ],
+      "interface": "no-tracing runtime for the exact registered value and engine matrix",
+      "exclusions": [
+        {
+          "id": "unregistered-runtime-matrix",
+          "interface": "Values or engine routes outside the registered no-tracing matrix are not Current."
+        },
+        {
+          "id": "unsupported-values",
+          "interface": "Unsupported value families reject rather than trace."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/collector-free-deterministic-memory.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/hir/memory_plan/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/collector-free-deterministic-memory.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/collector-free-deterministic-memory.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "collector-free-strings",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "memory"
+      ],
+      "interface": "collector-free owned string structural values",
+      "exclusions": [
+        {
+          "id": "borrowed-str",
+          "interface": "Borrowed str is not Current."
+        },
+        {
+          "id": "borrowed-str-and-ropes",
+          "interface": "General borrowed str values, ropes, and cyclic text structures are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/collector-free-deterministic-memory.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/hir/memory_plan/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/collector-free-deterministic-memory.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/collector-free-deterministic-memory.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

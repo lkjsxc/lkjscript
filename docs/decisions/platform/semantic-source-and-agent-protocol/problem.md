@@ -19,34 +19,19 @@ migration risk.
 The source schema must not become a second trusted type system or a sibling
 backend frontend. It must preserve exact source origin while keeping compiler-
 derived type, ownership, effect, layout, and proof facts authoritative.
-## Versioned Identities
+## Historical Versioned Identities
 
-The first registered complete-target identities are:
-
-- Semantic Source schema: `lkjscript.semantic-source`, version `1`;
-- agent protocol: `lkjscript.agent`, version `1`;
-- structured diagnostic schema: `lkjscript.diagnostic`, version `1`;
-- semantic edit schema: `lkjscript.edit`, version `1`.
-
-Every serialized envelope carries a schema name and exact integer version.
-Unknown schema names, versions, variants, and fields fail with structured
-protocol diagnostics; they are not ignored. Canonical serialization uses
-UTF-8, deterministic field order, deterministic list order, and no
-floating-point numbers for identities or counters.
-
-The parser/load/identity cutover is an explicitly incomplete foundation, not
-Schema. Its registered identity is
-`lkjscript.semantic-source-foundation`, version `1`; its structured diagnostics
-use `lkjscript.source-diagnostic-foundation`, version `1`. Foundation legacy contract
-contains the opaque validated the removed legacy source contract source tree, deterministic dependency-
-first loading, exact source-byte revision identity, stable declaration keys,
-formatting, and structural source diagnostics. It does not claim the complete public Schema
-node vocabulary, serialization, transactions, JSON protocol, typed holes, or
-machine repairs. The complete `lkjscript.semantic-source` version `1` identity
-must not be emitted until all of its accepted contract is implemented.
+The removed versioned identities were `lkjscript.semantic-source`,
+`lkjscript.agent`, `lkjscript.diagnostic`, and `lkjscript.edit`. The removed
+`lkjscript.semantic-source-foundation` identity contained the opaque validated
+canonical source tree, deterministic dependency-first loading, exact source-byte
+revision identity, stable declaration keys, formatting, and structural source
+diagnostics. These identities are Historical and rejected; they grant no Current
+interface, alias, or fallback. Current envelopes use stable schema names plus
+exact full contract digests.
 ## Source Authority Boundary
 
-A parser adapter accepts canonical the removed legacy source contract `.lkjscript` and constructs a
+A parser adapter accepts canonical `.lkjscript` source and constructs a
 private mutable builder. Public in-memory validation and compilation require a
 canonical relative non-dot UTF-8 logical path ending in `.lkjscript`; absolute,
 `./`, parent, doubled-separator, and legacy-extension spellings are rejected.
@@ -73,11 +58,11 @@ adapter may feed unchanged analysis during the cutover. It is removed once HIR
 consumes the validated source nodes directly.
 ## Schema
 
-Schema represents the complete Current the removed legacy source contract source vocabulary:
+Schema represents the complete vocabulary of Current canonical source:
 
 - source unit, edition, schema version, canonical relative origin, and imports;
 - top-level main, function, product, trait, and implementation declarations;
-- declaration visibility as an explicit closed value, even where the removed legacy source contract
+- declaration visibility as an explicit closed value, even where canonical source
   permits only its default;
 - names, type forms, parameters, generic bounds, product fields, trait markers,
   and implementation targets;
@@ -102,7 +87,7 @@ A stable declaration key is derived deterministically from:
 ```text
 schema version
 + edition
-+ future package identity (an explicit the removed legacy source contract root identity initially)
++ exact package identity
 + canonical relative source-unit identity
 + declaration kind
 + declared name or reserved main identity
@@ -116,12 +101,11 @@ bytes, not only its digest. Human projections escape field delimiters and are
 not key authority. Function, product, and trait names must be spellable source
 identifiers before key construction. Rename and move operations report old and
 new keys plus the semantic relationship. Duplicate keys are rejected rather
-than disambiguated by source order. Package and module identities replace the
-the removed legacy source contract root component when those contracts become Current.
+than disambiguated by source order. Package and module identities are Current components of declaration keys.
 
 ### Revision-scoped node IDs
 
-Every validated revision assigns dense preorder `NodeId` values. Foundation legacy contract
+Every validated revision assigns dense preorder `NodeId` values. Foundation
 revision framing includes each source unit's canonical logical path and exact
 input byte length plus SHA-256, so distinct accepted spellings and line endings
 cannot share a revision merely because canonical formatting is equal. A node ID

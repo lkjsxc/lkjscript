@@ -1,5 +1,4 @@
 # Structural Memory Substrate Evidence
-
 ## Status
 
 **Current for the safe runtime substrate and deterministic structural-value
@@ -84,6 +83,7 @@ zero on that integration tree.
 
 Commands actually run after implementation:
 
+<!-- LKJ-EXAMPLE class=historical -->
 ```text
 cargo test --locked -p lkjscript-core --all-targets
 cargo clippy --locked -p lkjscript-core --all-targets -- -D warnings

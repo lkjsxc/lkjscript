@@ -20,8 +20,28 @@ pub fn walk(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
 }
 
 pub fn print_json<T: serde::Serialize>(value: &T) -> Result<(), String> {
-    let text =
-        serde_json::to_string_pretty(value).map_err(|error| format!("serialize JSON: {error}"))?;
+    let text = json_pretty(value)?;
     println!("{text}");
     Ok(())
+}
+
+pub fn print_json_bounded<T: serde::Serialize>(value: &T, limit: u64) -> Result<(), String> {
+    let text = json_pretty(value)?;
+    let bytes = u64::try_from(text.len()).map_err(|_| "serialized JSON size overflow")?;
+    if bytes > limit {
+        return Err(format!(
+            "serialized JSON exceeds byte limit: {bytes} > {limit}"
+        ));
+    }
+    println!("{text}");
+    Ok(())
+}
+
+pub fn json_pretty_len<T: serde::Serialize>(value: &T) -> Result<u64, String> {
+    let text = json_pretty(value)?;
+    u64::try_from(text.len()).map_err(|_| "serialized JSON size overflow".into())
+}
+
+fn json_pretty<T: serde::Serialize>(value: &T) -> Result<String, String> {
+    serde_json::to_string_pretty(value).map_err(|error| format!("serialize JSON: {error}"))
 }

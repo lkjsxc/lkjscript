@@ -12,15 +12,15 @@ runtime.
 typed HIR, verified SSA, reference bytecode VM, callable Linux x86-64 baseline
 JIT, exact native roots, and forced proof-checked optimizing JIT remain
 **Current**. This record changes the accepted destination and dependency order;
-it does not make wider Agent operations, the canonical source contract, packages, general
-ownership, AOT, Wasm, concurrency, or self-hosting Current.
+it does not make wider Agent operations, the remaining canonical-language
+surface, general ownership, AOT, Wasm, concurrency, or self-hosting Current.
 
 The selected foundation sequence is now Current for bounded repository
 topology, repository graph/context, agent work state, complete Semantic Source
 Schema with bounded one-shot/session operations and typed holes, and
-compiler Resource resource profile core/pre-allocation foundations. These slices are
+compiler resource profile core/pre-allocation foundations. These slices are
 indexed in [Platform Decisions](README.md); they do not make wider Agent
-operations, shared ledgers, or the canonical source contract Current. Automatic
+operations, shared ledgers, or the remaining canonical-language surface Current. Automatic
 optimizing promotion remains a valid later measured experiment.
 
 ## Problem
@@ -87,10 +87,10 @@ The following are no longer permanent product decisions:
 
 | Earlier assumption | Replacement authority | Current migration rule |
 | --- | --- | --- |
-| Physical named-open/named-close lines identify the language | Versioned Semantic Source with measured deterministic projections | the removed legacy source contract text remains Current until roundtrip and migration gates pass | <!-- LKJ-EXACT-DATA -->
+| Physical named-open/named-close lines identify the language | Versioned Semantic Source with measured deterministic projections | Canonical source text is the deterministic Git projection of Current Semantic Source authority | <!-- LKJ-EXACT-DATA -->
 | Tiny depth, token, form, field, and directory-width numbers are semantic forever | Implementation safety maxima, host-selected profiles, and AI-maintainability lints | No Current limit is weakened before aggregate replacement bounds are Current | <!-- LKJ-EXACT-DATA -->
 | One program-global imported declaration namespace is sufficient | Explicit package/module/declaration identities and qualified imports | Current resolution remains until package migration is complete | <!-- LKJ-EXACT-DATA -->
-| `I64` and `F64` are the final numeric surface | the canonical source contract exact-width numeric slices with explicit conversions | Current numeric behavior remains exact and unchanged | <!-- LKJ-EXACT-DATA -->
+| `I64` and `F64` are the final numeric surface | canonical language exact-width numeric slices with explicit conversions | Current numeric behavior remains exact and unchanged | <!-- LKJ-EXACT-DATA -->
 | Generic `Result T SystemError` is the closed system error model | Nominal typed provider/domain errors and distinct outcome channels | Current prelude and wrappers use generic enums; provider-specific domains remain targeted | <!-- LKJ-EXACT-DATA -->
 | One universal `Handle` is the public resource model | Typed affine resources and typestate | Current handles retain stale-safe behavior during migration | <!-- LKJ-EXACT-DATA -->
 | Host authority may be ambient | Explicit typed capabilities supplied through an application/component context | Existing ambient wrappers are transitional Current behavior | <!-- LKJ-EXACT-DATA -->
@@ -103,13 +103,13 @@ The following are no longer permanent product decisions:
 The historical records remain evidence. Their incompatible permanent policy is
 superseded; their descriptions of Current behavior and measured results are not.
 
-## Target Architecture And Status Matrix
+## Historical Adoption-Baseline Architecture And Target Matrix
 
 | Layer | Current at the adoption baseline | Accepted target | First acceptance evidence |
 | --- | --- | --- | --- |
-| Source | Semantic Source contract over the removed legacy source contract with deterministic projection and typed holes | the canonical source contract Semantic Source | Exact corpus parse/format/parse and byte-canonical roundtrip | <!-- LKJ-EXACT-DATA -->
+| Source | Semantic Source contract over canonical source with deterministic projection and typed holes | Semantic Source as primary authority for the canonical language | Exact corpus parse/format/parse and byte-canonical roundtrip | <!-- LKJ-EXACT-DATA -->
 | Agent interface | Revisioned queries, legal actions, structured diagnostics, and atomic semantic edits | Wider Agent operations and constrained decoding | Stale/precondition rejection and no partial writes | <!-- LKJ-EXACT-DATA -->
-| Semantics | Products, marker traits, I64/F64, partial ownership island | the canonical source contract ADTs/match/Never, exact widths, typed errors, general safe ownership | Cross-evaluator/VM differential and malformed-boundary gates per slice | <!-- LKJ-EXACT-DATA -->
+| Semantics | Products, marker traits, I64/F64, partial ownership island | canonical language ADTs/match/Never, exact widths, typed errors, general safe ownership | Cross-evaluator/VM differential and malformed-boundary gates per slice | <!-- LKJ-EXACT-DATA -->
 | Authority | Operation/effect summaries plus transitional ambient host services | Explicit capabilities and typed provider resources | Capability-confinement and fake-provider tests | <!-- LKJ-EXACT-DATA -->
 | Packages | Contained import roots and environment fallback | Manifest, lock, content identity, explicit modules/components | Clean locked hermetic rebuild and fingerprint tests | <!-- LKJ-EXACT-DATA -->
 | IR | Resolved typed HIR, verified SSA, exact roots/proofs | Ownership/effect/capability/drop/metering-complete IR family | Independent verifier and differential gates | <!-- LKJ-EXACT-DATA -->
@@ -128,7 +128,7 @@ The accepted sequence is:
 1. Semantic Source, structured diagnostics, semantic transactions, typed holes,
    and an AI-authorability harness;
 2. aggregate safety budgets, resource profiles, and maintainability lints;
-3. the canonical source contract ADTs, control flow, typed errors, and exact conversion semantics;
+3. canonical language ADTs, control flow, typed errors, and exact conversion semantics;
 4. modules, packages, capabilities, typed resources, and provider schemas;
 5. final data, ownership, drop, region, sharing, and tracing foundations;
 6. IR, logical metering, incremental queries, and artifact identities;

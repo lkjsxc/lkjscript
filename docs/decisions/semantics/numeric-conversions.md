@@ -3,8 +3,8 @@
 [Authority](semantic-core.md)
 
 ## Status
+<!-- LKJ-F numeric-conversions current N4c5ttSuiAHz_OcQuC3hi8JneGs0KnVL6E64XGSRrBQ -->
 
-<!-- LKJ-STATUS id=numeric-conversions status=current -->
 
 **Current.** Four explicit conversion operations and rejection of implicit
 mixed `i64`/`f64` arithmetic and ordering are implemented through Semantic

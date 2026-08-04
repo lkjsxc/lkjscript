@@ -7,6 +7,7 @@ pub struct Graph {
     pub schema: String,
     pub contract: String,
     pub revision: String,
+    pub input_identity: String,
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     pub work_used: u64,
@@ -46,6 +47,7 @@ pub struct ContextSection {
 pub struct QueryResult {
     pub schema: String,
     pub contract: String,
+    pub graph_identity: String,
     pub command: String,
     pub target: String,
     pub profile: Option<String>,
@@ -62,9 +64,23 @@ pub struct QueryResult {
 pub struct ExplainResult {
     pub schema: String,
     pub contract: String,
+    pub graph_identity: String,
     pub query: String,
     pub rules: Vec<Rule>,
     pub files: Vec<FileRecord>,
+    pub facts: Vec<FactExplanation>,
     pub findings: Vec<Finding>,
     pub unsupported: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FactExplanation {
+    pub id: String,
+    pub status: String,
+    pub digest: String,
+    pub interface: String,
+    pub exclusions: Vec<String>,
+    pub authority: String,
+    pub evidence: Vec<String>,
+    pub projections: Vec<String>,
 }

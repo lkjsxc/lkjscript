@@ -1,8 +1,8 @@
 # Generation-Safe Typed Resources
 
 ## Status
+<!-- LKJ-F generation-safe-resources accepted-contract 8O8qZdjo1P070HkSVRoGF1uiUmfurgX9QUR39LSxvpk -->
 
-<!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 
 **Accepted end-to-end contract with Current core lifecycle and static/dead
 owned-resource glue in the compiler, evaluator, and reference VM.** All eleven

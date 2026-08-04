@@ -13,13 +13,13 @@ pub struct Selection {
 }
 
 impl Selection {
-    fn new(work_limit: u64, byte_limit: u64, truncated: bool) -> Self {
+    fn new(work_limit: u64, byte_limit: u64) -> Self {
         Self {
             nodes: BTreeSet::new(),
             edges: BTreeSet::new(),
             work: 0,
             bytes: 0,
-            truncated,
+            truncated: false,
             work_limit,
             byte_limit,
         }
@@ -38,6 +38,16 @@ impl Selection {
         self.work = next_work;
         self.bytes = next_bytes;
         true
+    }
+
+    fn charge_edge(&mut self, bytes: u64) -> bool {
+        let Some(next_bytes) = self.bytes.checked_add(bytes) else {
+            return false;
+        };
+        if next_bytes > self.byte_limit / 2 {
+            return false;
+        }
+        self.charge(0, bytes)
     }
 
     pub fn include_required(&mut self, node: &Node) {
@@ -61,7 +71,7 @@ pub fn select(
     byte_limit: u64,
     depth_limit: u64,
 ) -> Selection {
-    let mut result = Selection::new(work_limit, byte_limit, graph.truncated);
+    let mut result = Selection::new(work_limit, byte_limit);
     let mut incoming = BTreeMap::<&str, Vec<usize>>::new();
     let mut outgoing = BTreeMap::<&str, Vec<usize>>::new();
     for (index, edge) in graph.edges.iter().enumerate() {
@@ -108,7 +118,7 @@ pub fn select(
             };
             let size =
                 (edge.from.len() + edge.to.len() + edge.kind.len() + edge.evidence.len()) as u64;
-            if !result.charge(0, size) {
+            if !result.charge_edge(size) {
                 result.truncated = true;
                 break;
             }
@@ -117,10 +127,8 @@ pub fn select(
                 queue.push_back((next.into(), depth + 1));
             }
         }
-        if result.truncated {
-            break;
-        }
     }
+    result.truncated |= graph.truncated;
     result
 }
 
@@ -131,7 +139,7 @@ fn indexes(
     outgoing: &BTreeMap<&str, Vec<usize>>,
 ) -> Vec<usize> {
     let mut result = Vec::new();
-    if matches!(command, "impact" | "tests" | "context") {
+    if matches!(command, "impact" | "fact-impact" | "tests" | "context") {
         result.extend(incoming.get(id).into_iter().flatten().copied());
     }
     if matches!(command, "tests" | "context") {
@@ -145,6 +153,16 @@ fn indexes(
 fn next<'a>(command: &str, id: &str, edge: &'a Edge) -> Option<&'a str> {
     match command {
         "impact" if edge.to == id => Some(edge.from.as_str()),
+        "fact-impact"
+            if edge.to == id
+                && id.starts_with("fact:")
+                && matches!(
+                    edge.kind.as_str(),
+                    "projects" | "depends-on" | "invalidated-by"
+                ) =>
+        {
+            Some(edge.from.as_str())
+        }
         "tests" if edge.to == id && matches!(edge.kind.as_str(), "tests" | "owns") => {
             Some(edge.from.as_str())
         }

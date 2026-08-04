@@ -19,11 +19,11 @@ exact charged input shape before SSA construction, and immutable normalized SSA
 reserves its exact charged input shape before bytecode construction. Public compiler and Semantic Source
 `_with_ledger` entry points share one
 outer-owned ledger through strict protocol decode, typed request execution,
-hole exploration, legal actions, transaction staging, the canonical source contract migration
-staging, and exact response preflight. Local sessions invoke the typed one-shot
+hole exploration, legal actions, transaction staging, and exact response
+preflight. Local sessions invoke the typed one-shot
 engine directly rather than serializing and decoding an inner request/response;
 an explicitly supplied session ledger is retained across frames. Source loading
-still allocates behind the bounded Foundation legacy contract reader before its exact loaded
+still allocates behind the bounded source reader before its exact loaded
 shape is reserved, and complete cross-authority pre-allocation remains an
 Accepted Target.
 
@@ -99,10 +99,10 @@ structured budget-prefix field: the `_with_ledger` typed result retains the
 exact `BudgetError`, while canonical contract wire errors retain its deterministic textual
 rendering only. Adding a typed prefix field requires a new exact schema contract digest.
 
-## Closed resource profile Categories
+## Closed Resource Profile Categories
 
-resource profile has identity `lkjscript.resource-profile`. It retains all 25 legacy contract
-categories and appends these distinct closed categories:
+The resource profile has identity `lkjscript.resource-profile`. It retains all
+25 established categories and appends these distinct closed categories:
 
 ```text
 enum_declarations enum_variants variant_fields enum_recursion_work
@@ -158,9 +158,9 @@ The appended ceilings are exact inclusive sandbox ceilings below.
 These ceilings establish the core contract; they do not claim that existing
 pipelines reserve every allocation or share one ledger.
 
-## the removed legacy source contract Boundary
+## Canonical Source Boundary
 
-All the removed legacy source contract per-file, form, product-field, and source-directory limits remain
+All per-file, form, product-field, and source-directory limits on canonical source remain
 Current until these replacement charges are pre-allocation Current across the
 complete amplification path. Profile selection cannot weaken implementation
 maxima or those limits.

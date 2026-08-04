@@ -2,9 +2,9 @@
 
 mod agent;
 mod documentation;
-mod documentation_status;
 mod model;
 mod no_tracing;
+mod public_facts;
 mod sha256;
 #[cfg(test)]
 mod sha256_tests;
@@ -23,7 +23,7 @@ fn main() -> ExitCode {
     let root = PathBuf::from(".");
     let code = match args.first().map(String::as_str) {
         Some("agent") => agent::run(&root, &args[1..]),
-        Some("check-docs") => documentation::check(&root),
+        Some("check-docs") => documentation::run(&root, &args[1..]),
         Some("check-tree") => source_checks::check_tree(&root),
         Some("check-sources") => source_checks::check_sources(&root),
         Some("check-unsafe") => unsafe_check::run(&root),
@@ -32,7 +32,7 @@ fn main() -> ExitCode {
         _ => {
             eprintln!(
                 "usage: lkjscript-xtask \
-                 [agent ...|check-docs|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
+                 [agent ...|check-docs [--expected]|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
             );
             2
         }

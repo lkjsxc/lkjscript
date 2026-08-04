@@ -1,23 +1,22 @@
 # Verification
-
 ## Purpose
-
 Define Current evidence gates and predeclare accepted repository-intelligence
 gates without claiming unimplemented checks.
 
 ## Status
+<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
-registered capability-status consistency, placeholder, retained-result,
+registered public-fact status, exclusion, and projection consistency, retained-result,
 exact unsafe-boundary registry, `structure`, repository graph/context,
-agent-state, complete Semantic Source
-Schema with its exact legacy contract base, typed holes/legal actions and transactions,
-the canonical source contract enum construction, exhaustive match, Never/control, and explicit
+agent-state, Semantic Source with typed holes, legal actions, and transactions,
+the implemented canonical-language enum construction, exhaustive match, Never/control, and explicit
 numeric conversion through evaluator, VM, forced baseline, and forced proof,
 its one-shot protocol, bounded local stdio sessions,
 resource profile core reservation tests, and compiler resource checks are described
-in the capsules. the canonical source contract cross-engine/JIT acceptance, exact atomic migration, the canonical
-corpus cutover, and ordinary the removed legacy source contract rejection are Current. Nonzero query
+in the capsules. Cross-engine and JIT acceptance for implemented canonical-language
+slices, the completed atomic migration and canonical corpus cutover, and ordinary
+rejection of removed marker forms are Current. Nonzero query
 caching, whole-pipeline pre-allocation, and logical metering beyond enum
 construction remain **Accepted Targets**, not Current commands.
 
@@ -29,11 +28,13 @@ The existing command is:
 cargo run --locked -p lkjscript-xtask -- check-docs
 ```
 
-It checks a hardcoded required-document set, repository-local links, and the
-registered cross-authority capability claims defined by [Capability Status
-Authority](status-authority.md). Any document move must update those authorities
-in the integration change; moved paths must not be retained as aliases merely
-to satisfy the old checker.
+It checks entry documents, local links, the strict sharded [Public Fact
+Authority](status-authority.md), statuses, interfaces, exclusions, contained
+paths, content-derived digests, projection markers, cycles, bounds, focused
+coherence rules, platform revision, and removed generation names. Deterministic
+inventory and expected markers go under `target/lkjscript/documentation/`.
+Example execution, evidence freshness, architecture derivation, and arbitrary
+prose equivalence are not Current.
 
 `structure check` is the hard repository topology gate. It checks every tracked
 authored text file for at most 200 physical lines, 32 KiB, and ordinary lines
@@ -177,7 +178,7 @@ whole-platform cross-authority ledger remain Accepted.
 
 ## Current Canonical Source Contract Gate
 
-The canonical source contract gate is Current for all 102 tracked sources
+The canonical language gate is Current for all 102 tracked sources
 (89 under `src/`). Retained
 [execution acceptance evidence](../history/semantics/edition/execution-and-acceptance.md)
 records exact source and semantic identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict

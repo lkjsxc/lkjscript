@@ -17,6 +17,7 @@ fn graph_is_deterministic_and_stable_ids_ignore_unrelated_revision_edits() {
     let changed = fixture(&root, &"b".repeat(40));
     let third = super::graph::build(&root, &changed, &policy(1000, 4000, 100_000, 1_000_000));
     let id = "cargo-package:lkjscript-x";
+    assert_ne!(first.input_identity, third.input_identity);
     assert!(first.nodes.iter().any(|node| node.id == id));
     assert!(third.nodes.iter().any(|node| node.id == id));
     assert_ne!(
@@ -38,6 +39,7 @@ fn graph_is_deterministic_and_stable_ids_ignore_unrelated_revision_edits() {
 fn exact_import_markdown_cargo_capsule_and_test_edges_have_evidence() {
     let root = root();
     let audit = fixture(&root, &"c".repeat(40));
+    support::public_facts(&root);
     let graph = super::graph::build(&root, &audit, &policy(1000, 4000, 100_000, 1_000_000));
     let expected = [
         ("imports", "source-unit:src/part.lkjscript"),
@@ -60,6 +62,30 @@ fn exact_import_markdown_cargo_capsule_and_test_edges_have_evidence() {
             && node.confidence == "compiler-derived"
             && node.span.is_some()
     }));
+    assert!(graph.nodes.iter().any(|node| node.id == "fact:test-fact"));
+    assert!(graph.edges.iter().any(|edge| {
+        edge.from == "file:docs/decision.md"
+            && edge.to == "fact:test-fact"
+            && edge.kind == "projects"
+    }));
+    let limits = policy(1000, 4000, 100_000, 1_000_000);
+    let context = super::query::run("context", "fact:test-fact", Some("strong"), &graph, &limits);
+    assert!(context
+        .sections
+        .iter()
+        .any(|section| { section.name == "exclusions" && !section.node_ids.is_empty() }));
+    let impact = super::query::run("impact", "fact:test-fact", None, &graph, &limits);
+    assert!(impact
+        .nodes
+        .iter()
+        .any(|node| node.id == "file:docs/decision.md"));
+    assert!(!impact.nodes.iter().any(|node| node.id == "capsule:x"));
+    let tests = super::query::run("tests", "fact:test-fact", None, &graph, &limits);
+    assert!(tests
+        .nodes
+        .iter()
+        .any(|node| node.id == "file:docs/decision.md"));
+    assert!(tests.edges.iter().any(|edge| edge.kind == "tests"));
     assert!(fs::remove_dir_all(root).is_ok());
 }
 
@@ -72,6 +98,8 @@ fn truncation_context_order_impact_and_tests_are_explicit() {
     let full = super::graph::build(&root, &audit, &policy(1000, 4000, 100_000, 1_000_000));
     let limits = policy(1000, 4000, 100_000, 1_000_000);
     let context = super::query::run("context", "x", Some("strong"), &full, &limits);
+    let serialized = serde_json::to_string_pretty(&context).unwrap_or_default();
+    assert!(u64::try_from(serialized.len()).unwrap_or(u64::MAX) <= limits.limits.query_bytes);
     assert_eq!(
         context
             .sections
@@ -83,8 +111,21 @@ fn truncation_context_order_impact_and_tests_are_explicit() {
         context.sections.last().map(|section| section.name.as_str()),
         Some("omissions")
     );
+    let mut tight = limits.clone();
+    tight.limits.query_bytes = 2_048;
+    let bounded = super::query::run("context", "x", Some("strong"), &full, &tight);
+    assert!(bounded.nodes.len() > 1);
+    assert!(bounded.edges.iter().all(|edge| {
+        bounded.nodes.iter().any(|node| node.id == edge.from)
+            && bounded.nodes.iter().any(|node| node.id == edge.to)
+    }));
     let impact = super::query::run("impact", "core", None, &full, &limits);
     assert!(impact.nodes.iter().any(|node| node.id == "capsule:x"));
+    let mut inherited_truncation = full.clone();
+    inherited_truncation.truncated = true;
+    let retained = super::query::run("impact", "core", None, &inherited_truncation, &limits);
+    assert!(retained.truncated);
+    assert!(retained.nodes.iter().any(|node| node.id == "capsule:x"));
     let tests = super::query::run("tests", "x", None, &full, &limits);
     assert!(tests.nodes.iter().any(|node| node.kind == "test"));
     assert!(fs::remove_dir_all(root).is_ok());

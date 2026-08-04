@@ -1,8 +1,8 @@
 # Ordinary Owned Regions
 
 ## Status
+<!-- LKJ-F ordinary-regions current UdPHmFAbAd0OAgz1IkiJd3ZR6UnkaA0XERulWvHIxHs -->
 
-<!-- LKJ-STATUS id=ordinary-regions status=current -->
 
 **Current as a typed safe-core internal runtime domain.** Compiler planning and
 execution-tier selection remain Accepted Targets. Ordinary regions are not a

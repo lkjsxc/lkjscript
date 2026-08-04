@@ -1,15 +1,15 @@
 # Collector-Free Deterministic Memory
 
 ## Status
+<!-- LKJ-F collector-free-closures accepted-target nUQa7KTnqVqR3jtCeEjwY0W4OaqzL3RE29sfLe39dm0 -->
+<!-- LKJ-F collector-free-deterministic-memory accepted-contract rkjfKvq1DyedQHYLOyjWNWY6cFpyxhaJczuQ4sKqTpk -->
+<!-- LKJ-F collector-free-enums current AcnkTwvysSc8RQB_aL4aTFtglK2f0efO9pXF_9bY9Vo -->
+<!-- LKJ-F collector-free-lists current LOXS9V470flmFYtQwyXRd7DV0IA9cgmHQB_p6S7_2VU -->
+<!-- LKJ-F collector-free-products current 7n-7XwVfjHzzC9Kp0LdoGrb2oazwXzyP7mcJa8sDN4g -->
+<!-- LKJ-F collector-free-runtime current 8sYacCrxHj8B33Fbzu1eZIEKb7Ooy6cFBc096T4bUGc -->
+<!-- LKJ-F collector-free-strings current AGZR8kMFyRFI_jUzQTFS6AiFP4I4y-MPbAdfoyNVBV4 -->
+<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
 
-<!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
-<!-- LKJ-STATUS id=collector-free-strings status=current -->
-<!-- LKJ-STATUS id=collector-free-products status=current -->
-<!-- LKJ-STATUS id=collector-free-enums status=current -->
-<!-- LKJ-STATUS id=collector-free-lists status=current -->
-<!-- LKJ-STATUS id=collector-free-closures status=accepted-target -->
-<!-- LKJ-STATUS id=collector-free-runtime status=current -->
-<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
 
 **Current contract and implementation.** No tracing object family, liveness
 traversal, collector fallback, collecting poll, root/map service, barrier,

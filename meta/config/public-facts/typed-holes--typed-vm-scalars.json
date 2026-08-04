@@ -1,0 +1,118 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "typed-holes",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "semantic-source"
+      ],
+      "interface": "hole_context",
+      "exclusions": [
+        {
+          "id": "runtime-hole-values",
+          "interface": "Holes are Semantic Source obligations, not runtime values or permission to guess edits."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/semantic-source-and-agent-protocol.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/semantic/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/current-state.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "typed-resources",
+      "kind": "contract",
+      "status": "accepted-contract",
+      "scope": [
+        "language",
+        "runtime"
+      ],
+      "interface": "typed affine resources and cleanup",
+      "exclusions": [
+        {
+          "id": "complete-resource-runtime",
+          "interface": "Complete typed-resource runtime and exactly-once cleanup are not wholly Current."
+        },
+        {
+          "id": "native-owned-resources",
+          "interface": "General native owned-resource execution is not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/capabilities/typed-affine-resources.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/capabilities/typed-affine-resources.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "typed-vm-scalars",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "platform"
+      ],
+      "interface": "complete-range inline i64 and exact-bit f64 VM values",
+      "exclusions": [
+        {
+          "id": "composite-vm-values",
+          "interface": "This scalar fact excludes composites, containers, pointer identity, and collectors."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/typed-vm-scalars.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-vm/src/run/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/operations/verification.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/decisions/memory/typed-vm-scalars.md",
+        "docs/operations/agent-handoff.md",
+        "docs/runtime/vm.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

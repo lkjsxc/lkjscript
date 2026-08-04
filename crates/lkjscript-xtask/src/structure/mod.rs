@@ -7,29 +7,32 @@ mod graph_edges;
 mod graph_tests;
 mod query;
 mod repository;
-mod repository_support;
+pub(crate) mod repository_support;
 #[cfg(test)]
 mod repository_tests;
 mod rules;
 mod source_facts;
 mod validation;
+pub(crate) use commands::agent_context;
 #[cfg(test)]
 mod validation_tests;
 
 use std::path::Path;
 
-use crate::model::{Audit, ExplainResult, Policy, ProvenanceFile};
+use crate::model::{Audit, Policy, ProvenanceFile};
 
-const POLICY: &str = "meta/structure/policy.json";
-const PROVENANCE: &str = "meta/structure/provenance.json";
+const INPUTS: (&str, &str) = (
+    "meta/structure/policy.json",
+    "meta/structure/provenance.json",
+);
 
 pub fn run(root: &Path, args: &[String]) -> i32 {
     let command = args.first().map(String::as_str).unwrap_or("");
-    let policy: Policy = match repository::load_json(&root.join(POLICY)) {
+    let policy: Policy = match repository::load_json(&root.join(INPUTS.0)) {
         Ok(value) => value,
         Err(error) => return fail(command, &error),
     };
-    let provenance: ProvenanceFile = match repository::load_json(&root.join(PROVENANCE)) {
+    let provenance: ProvenanceFile = match repository::load_json(&root.join(INPUTS.1)) {
         Ok(value) => value,
         Err(error) => return fail(command, &error),
     };
@@ -40,38 +43,41 @@ pub fn run(root: &Path, args: &[String]) -> i32 {
         Ok(snapshot) => rules::audit(root, &policy, provenance.entries, snapshot),
         Err(error) => return fail(command, &error),
     };
+    let registry = if matches!(
+        command,
+        "explain" | "graph" | "context" | "impact" | "tests"
+    ) {
+        match crate::public_facts::load(root) {
+            Ok(value) => Some(value),
+            Err(error) => return fail(command, &format!("public facts unavailable: {error}")),
+        }
+    } else {
+        None
+    };
     match command {
         "audit" => audit_command(&audit, args.get(1).map(String::as_str)),
         "check" => check(&audit),
-        "explain" => explain(&audit, &policy, args.get(1)),
-        "graph" => commands::graph(root, &audit, &policy, args.get(1).map(String::as_str)),
-        "context" | "impact" | "tests" => {
-            commands::query(command, root, &audit, &policy, &args[1..])
-        }
+        "explain" => explain(root, &audit, &policy, registry.as_ref(), args.get(1)),
+        "graph" => commands::graph(
+            root,
+            &audit,
+            &policy,
+            registry.as_ref(),
+            args.get(1).map(String::as_str),
+        ),
+        "context" | "impact" | "tests" => commands::query(
+            command,
+            root,
+            &audit,
+            &policy,
+            registry.as_ref(),
+            &args[1..],
+        ),
         _ => {
             usage();
             2
         }
     }
-}
-
-pub(crate) fn agent_context(
-    root: &Path,
-    targets: &[String],
-    profile: &str,
-) -> Result<Vec<crate::model::QueryResult>, String> {
-    let policy: Policy = repository::load_json(&root.join(POLICY))?;
-    let provenance: ProvenanceFile = repository::load_json(&root.join(PROVENANCE))?;
-    if !current_structure_contract(&policy, &provenance) {
-        return Err("structure policy or provenance contract mismatch".into());
-    }
-    let snapshot = repository::capture(root, &provenance.entries)?;
-    let audit = rules::audit(root, &policy, provenance.entries, snapshot);
-    let graph = graph::build(root, &audit, &policy);
-    Ok(targets
-        .iter()
-        .map(|target| query::run("context", target, Some(profile), &graph, &policy))
-        .collect())
 }
 
 fn current_structure_contract(policy: &Policy, provenance: &ProvenanceFile) -> bool {
@@ -122,36 +128,24 @@ fn check(audit: &Audit) -> i32 {
     }
 }
 
-fn explain(audit: &Audit, policy: &Policy, query: Option<&String>) -> i32 {
+fn explain(
+    root: &Path,
+    audit: &Audit,
+    policy: &Policy,
+    registry: Option<&crate::public_facts::Registry>,
+    query: Option<&String>,
+) -> i32 {
     let Some(query) = query else {
-        eprintln!("usage: structure explain <rule-or-path>");
+        eprintln!("usage: structure explain <rule-path-or-fact>");
         return 2;
     };
-    let result = ExplainResult {
-        schema: "lkjscript.structure.explain".into(),
-        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
-        query: query.clone(),
-        rules: policy
-            .rules
-            .iter()
-            .filter(|rule| rule.id == *query)
-            .cloned()
-            .collect(),
-        files: audit
-            .files
-            .iter()
-            .filter(|file| file.path == *query)
-            .cloned()
-            .collect(),
-        findings: audit
-            .findings
-            .iter()
-            .filter(|item| item.rule == *query || item.path == *query)
-            .cloned()
-            .collect(),
-        unsupported: audit.unsupported.clone(),
+    let Some(registry) = registry else {
+        eprintln!("public facts unavailable");
+        return 1;
     };
-    crate::util::print_json(&result).map_or_else(
+    let graph = graph::build_with_facts(root, audit, policy, registry);
+    let result = query::explain(audit, policy, registry, &graph.input_identity, query);
+    crate::util::print_json_bounded(&result, policy.limits.query_bytes).map_or_else(
         |error| {
             eprintln!("{error}");
             1
@@ -165,7 +159,8 @@ fn fail(command: &str, error: &str) -> i32 {
         let encoded =
             serde_json::to_string(error).unwrap_or_else(|_| "\"serialization failure\"".into());
         println!(
-            "{{\"schema\":\"lkjscript.repository-audit-error\",\"version\":1,\"error\":{encoded}}}"
+            "{{\"schema\":\"lkjscript.repository-audit-error\",\"contract\":\"{}\",\"error\":{encoded}}}",
+            lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex()
         );
         1
     } else {

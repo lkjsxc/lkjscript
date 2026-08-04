@@ -10,6 +10,7 @@ pub fn resolve(target: &str, graph: &Graph) -> Vec<String> {
         "cargo-package",
         "cargo-crate",
         "command",
+        "fact",
         "source-unit",
         "rule",
     ];
@@ -26,12 +27,26 @@ pub fn resolve(target: &str, graph: &Graph) -> Vec<String> {
     result
 }
 
-pub fn sections(start: &[String], nodes: &[Node], edges: &[Edge]) -> Vec<ContextSection> {
+struct SectionGroups<'a> {
+    start: &'a [String],
+    inbound: BTreeSet<&'a str>,
+    outbound: BTreeSet<&'a str>,
+    interfaces: BTreeSet<&'a str>,
+    tests: BTreeSet<&'a str>,
+    evidence: BTreeSet<&'a str>,
+    projections: BTreeSet<&'a str>,
+}
+
+pub fn sections<'a>(start: &'a [String], nodes: &[Node], edges: &'a [Edge]) -> Vec<ContextSection> {
     let order = [
         "goal",
         "revision/profile",
         "capsule-card",
         "interfaces",
+        "status",
+        "exclusions",
+        "evidence",
+        "projections",
         "rules",
         "implementations",
         "source-facts",
@@ -60,7 +75,9 @@ pub fn sections(start: &[String], nodes: &[Node], edges: &[Edge]) -> Vec<Context
         .collect();
     let interfaces: BTreeSet<_> = edges
         .iter()
-        .filter(|edge| start.contains(&edge.from) && edge.kind == "exports")
+        .filter(|edge| {
+            start.contains(&edge.from) && matches!(edge.kind.as_str(), "exports" | "exposes")
+        })
         .map(|edge| edge.to.as_str())
         .collect();
     let tests: BTreeSet<_> = edges
@@ -68,12 +85,31 @@ pub fn sections(start: &[String], nodes: &[Node], edges: &[Edge]) -> Vec<Context
         .filter(|edge| edge.kind == "tests")
         .flat_map(|edge| [edge.from.as_str(), edge.to.as_str()])
         .collect();
+    let evidence: BTreeSet<_> = edges
+        .iter()
+        .filter(|edge| start.contains(&edge.from) && edge.kind == "evidenced-by")
+        .map(|edge| edge.to.as_str())
+        .collect();
+    let projections: BTreeSet<_> = edges
+        .iter()
+        .filter(|edge| start.contains(&edge.to) && edge.kind == "projects")
+        .map(|edge| edge.from.as_str())
+        .collect();
+    let groups = SectionGroups {
+        start,
+        inbound,
+        outbound,
+        interfaces,
+        tests,
+        evidence,
+        projections,
+    };
     order
         .iter()
         .map(|name| {
             let mut ids: Vec<_> = nodes
                 .iter()
-                .filter(|node| section(name, node, start, &inbound, &outbound, &interfaces, &tests))
+                .filter(|node| section(name, node, &groups))
                 .map(|node| node.id.clone())
                 .collect();
             ids.sort();
@@ -85,20 +121,16 @@ pub fn sections(start: &[String], nodes: &[Node], edges: &[Edge]) -> Vec<Context
         .collect()
 }
 
-fn section(
-    name: &str,
-    node: &Node,
-    start: &[String],
-    inbound: &BTreeSet<&str>,
-    outbound: &BTreeSet<&str>,
-    interfaces: &BTreeSet<&str>,
-    tests: &BTreeSet<&str>,
-) -> bool {
+fn section(name: &str, node: &Node, groups: &SectionGroups<'_>) -> bool {
     match name {
-        "goal" => start.contains(&node.id),
+        "goal" => groups.start.contains(&node.id),
         "revision/profile" => node.kind == "repository-revision",
         "capsule-card" => node.kind == "capsule",
-        "interfaces" => interfaces.contains(node.id.as_str()),
+        "interfaces" => groups.interfaces.contains(node.id.as_str()),
+        "status" => node.kind == "fact-status",
+        "exclusions" => node.kind == "fact-exclusion",
+        "evidence" => groups.evidence.contains(node.id.as_str()),
+        "projections" => groups.projections.contains(node.id.as_str()),
         "rules" => node.kind == "rule",
         "implementations" => {
             matches!(node.kind.as_str(), "authored-file" | "rust-symbol")
@@ -106,9 +138,9 @@ fn section(
         "source-facts" => {
             matches!(node.kind.as_str(), "source-unit" | "lkjscript-declaration")
         }
-        "dependencies" => outbound.contains(node.id.as_str()),
-        "dependents" => inbound.contains(node.id.as_str()),
-        "tests" => node.kind == "test" || tests.contains(node.id.as_str()),
+        "dependencies" => groups.outbound.contains(node.id.as_str()),
+        "dependents" => groups.inbound.contains(node.id.as_str()),
+        "tests" => node.kind == "test" || groups.tests.contains(node.id.as_str()),
         "decisions/status" => matches!(node.kind.as_str(), "decision" | "current-state"),
         "provenance" => matches!(node.provenance.as_str(), "generated" | "immutable-evidence"),
         "omissions" => false,

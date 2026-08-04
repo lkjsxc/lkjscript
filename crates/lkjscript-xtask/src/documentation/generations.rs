@@ -85,6 +85,7 @@ fn generation_name(line: &str) -> bool {
                 && numeric_generation(next))
     }) || numbered_category(&lower)
         || owned_schema_generation(&lower)
+        || numbered_version(&lower)
 }
 
 fn numbered_category(value: &str) -> bool {
@@ -108,6 +109,30 @@ fn numbered_category(value: &str) -> bool {
                 })
             })
         })
+}
+
+fn numbered_version(value: &str) -> bool {
+    if ![
+        "abi",
+        "envelope",
+        "identity",
+        "profile",
+        "protocol",
+        "schema",
+        "semantic source",
+    ]
+    .iter()
+    .any(|category| value.contains(category))
+    {
+        return false;
+    }
+    let words: Vec<_> = value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    words
+        .windows(2)
+        .any(|pair| pair[0] == "version" && pair[1].bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn owned_schema_generation(value: &str) -> bool {
@@ -135,6 +160,7 @@ mod tests {
         assert!(generation_name("lkjscript.semantic-source.v3"));
         assert!(generation_name("native ABI v4"));
         assert!(generation_name("the old V2 output"));
+        assert!(generation_name("semantic source schema version 2"));
         assert!(!generation_name("schema uses a full contract digest"));
         assert!(!generation_name("sqlite3_prepare_v2"));
     }

@@ -75,6 +75,46 @@ fn capsule() -> Capsule {
     }
 }
 
+pub fn public_facts(root: &Path) {
+    let directory = root.join("meta/config/public-facts");
+    assert!(fs::create_dir_all(&directory).is_ok());
+    let contract = lkjscript_contracts::current_contracts()
+        .ok()
+        .and_then(|contracts| {
+            contracts
+                .get(lkjscript_contracts::PUBLIC_FACTS)
+                .map(lkjscript_contracts::RegisteredContract::digest)
+        })
+        .map_or_else(String::new, |digest| digest.to_hex());
+    let manifest = format!(
+        concat!(
+            "{{\"schema\":\"lkjscript.public-facts\",\"contract\":\"{}\",",
+            "\"platform_revision\":{},\"shards\":[{{\"path\":\"facts.json\",",
+            "\"first\":\"test-fact\",\"last\":\"test-fact\"}}]}}"
+        ),
+        contract,
+        lkjscript_contracts::PLATFORM_REVISION
+    );
+    let shard = format!(
+        concat!(
+            "{{\"schema\":\"lkjscript.public-fact-shard\",\"contract\":\"{}\",",
+            "\"facts\":[{{\"id\":\"test-fact\",\"kind\":\"capability\",",
+            "\"status\":\"current\",\"scope\":[\"repository\"],",
+            "\"interface\":\"test fact\",\"exclusions\":[{{\"id\":\"outside-scope\",",
+            "\"interface\":\"outside scope is excluded\"}}],",
+            "\"authority\":{{\"kind\":\"repository-path\",\"path\":\"docs/decision.md\"}},",
+            "\"implementation_anchors\":[\"crates/x/src/lib.rs\"],",
+            "\"evidence\":[{{\"path\":\"docs/decision.md\",\"class\":\"implementation-test\"}}],",
+            "\"projections\":[\"docs/decision.md\"],\"dependencies\":[],",
+            "\"invalidated_by\":[],\"platform_revision\":{},\"contracts\":[]}}]}}"
+        ),
+        contract,
+        lkjscript_contracts::PLATFORM_REVISION
+    );
+    assert!(fs::write(directory.join("manifest.json"), manifest).is_ok());
+    assert!(fs::write(directory.join("facts.json"), shard).is_ok());
+}
+
 pub fn fixture(root: &Path, revision: &str) -> Audit {
     let content = [
         (

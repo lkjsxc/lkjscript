@@ -7,7 +7,8 @@ native file-emission tests, and future Wasm so performance backends cannot
 reinterpret the language.
 ## Status
 
-**Current** for validated exact the canonical source contract Semantic Source tree -> resolved
+**Current** for the validated exact Semantic Source tree for implemented
+canonical-language forms -> resolved
 typed HIR -> mandatory affine `byte-vector` and whole-owner slice
 ownership analysis with fixed-point function effects -> verified typed SSA ->
 verified baseline normalization -> reference bytecode. The independent bounded SSA evaluator and

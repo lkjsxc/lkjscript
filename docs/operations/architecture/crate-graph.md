@@ -92,7 +92,7 @@ CLI path
   -> package-root and import resolution through an explicit dependency-first stack
   -> checked source-unit/file/closure implementation maxima
   -> lex/parse each source with exact spans and trivia
-  -> enforce unchanged the removed legacy source contract per-file/tree limits
+  -> enforce unchanged canonical source per-file/tree limits
   -> build opaque ValidatedSourceTree with exact revision, stable keys, and nodes
   -> enforce one root main and declaration-only imports
   -> collect immutable function and product headers
@@ -126,7 +126,8 @@ are rejected.
 Opaque validated Semantic Source Foundation tree -> resolved typed HIR ->
 verified typed SSA -> verified baseline normalization -> reference bytecode is
 **Current**. HIR consumes the private mechanically checked exact-edition form
-projection from the validated tree; ordinary compilation requires the canonical source contract,
+projection from the validated tree; ordinary compilation requires the exact Current
+source and semantic contract digests,
 and no sibling parser or raw public AST can enter analysis. HIR owns an explicit Main
 and Functions, resolved binding IDs and local slot references, immutable
 declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs and field

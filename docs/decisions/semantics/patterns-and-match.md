@@ -8,10 +8,10 @@ Define the closed pattern language, match semantics, usefulness algorithm, and
 lowering boundary.
 
 ## Status
+<!-- LKJ-F enum-declarations current -_ZEXiA5PkVRIWfTiAV0BIJHNdm8AXbTmTteGzb4uyE -->
 
-<!-- LKJ-STATUS id=enum-declarations status=current -->
 
-**Current for the canonical language source match.** the removed legacy source contract remains unchanged. The closed
+**Current for canonical-language source match.** The closed
 patterns, bounded usefulness matrices, independently verified match plan,
 ordinary-SSA lowering, evaluator/VM execution, and forced baseline/proof
 execution described below are implemented.

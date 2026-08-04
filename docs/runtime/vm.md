@@ -6,6 +6,7 @@ Describe the current execution engine, host-resource boundary, and accepted
 next repairs.
 
 ## Status
+<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
 
 **Current** unless a section is labeled **Accepted Target** or **Deferred**.
 
@@ -34,9 +35,11 @@ next repairs.
 - Synchronous, single-threaded execution with explicit fuel, stack/frame,
   runtime-storage bytes, allocation, logical aggregate construction, handle-slot,
   output, and wall-time budgets.
-- One compiler invocation and one VM per CLI process.
-- Process-global console/terminal behavior, but no process termination from VM
-  core.
+- One validated program and fresh VM execution scope per invocation. The
+  standalone CLI hosts that scope in its process; daemon-supervised applications
+  use isolated cells and app-private providers.
+- VM core never terminates its host process. Console and terminal authority is
+  explicit at the host adapter boundary.
 
 Mutable `Chunk` remains the compiler/test builder. The only executable boundary
 is opaque immutable `ValidatedChunk`, created by `validate_chunk`; public VM,
@@ -59,9 +62,10 @@ and stdout is flushed before the CLI translates the outcome.
 - Integer values are never accepted as resources.
 - Standard input has the exact borrowed kind `input-stream` and a reserved token
   disjoint from owned slots.
-- Owned tokens are monotonic and never reused after close; exact file mode,
-  listener/stream, connection/statement, and directory kinds are checked before
-  host access.
+- Owned tokens combine a reusable slot with a nonzero generation. Close
+  invalidates the generation; stale tokens reject even after the slot is reused.
+  Exact file mode, listener/stream, connection/statement, and directory kinds
+  are checked before host access.
 - All raw descriptor resolution is centralized in the VM resource table.
 - Close rejects borrowed, unknown, stale, wrong-kind, and repeatedly closed
   tokens. File readers cannot write, sync, or truncate; listener and stream
@@ -79,8 +83,9 @@ and stdout is flushed before the CLI translates the outcome.
 
 - Core console IO and terminal-restoration failures are `HostFailure`, while
   ordinary fallible host-operation errors remain language results.
-- The terminal guard and stdin/stdout are process-global rather than per-VM
-  leases, preventing safe concurrent VM supervision.
+- The standalone terminal guard and direct stdin/stdout adapter remain
+  process-global. Daemon-supervised process cells isolate those host effects;
+  in-process concurrent terminal leases are not Current.
 - Strings and network/file bytes do not provide a complete lossless byte model.
 - The default deadline is cooperative. Poll, wait, stdin/handle read,
   accept, and receive use remaining time. Filesystem, console-write, send/write,
@@ -112,6 +117,6 @@ they preserve the same structured resource category but do not claim identical
 instruction-by-instruction exhaustion points.
 
 Complete host-service injection, instruction quanta, fully cancellable
-filesystem and output services, terminal leases, generation-reused handle
-slots, loop OSR, and broader invocation-region witnesses remain **Deferred** to
+filesystem and output services, in-process terminal leases, loop OSR, and broader invocation-region witnesses
+remain **Deferred** to
 later measured cycles.

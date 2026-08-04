@@ -1,45 +1,45 @@
 # Current State
 ## Status
-<!-- LKJ-STATUS id=affine-resource-handles status=superseded -->
-<!-- LKJ-STATUS id=agent-work-state status=current -->
-<!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
-<!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
-<!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
-<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
-<!-- LKJ-STATUS id=enum-declarations status=current -->
-<!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
-<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
-<!-- LKJ-STATUS id=jit-proof-forced status=current -->
-<!-- LKJ-STATUS id=memory-obligations status=current -->
-<!-- LKJ-STATUS id=memory-plan status=current -->
-<!-- LKJ-STATUS id=memory-tracing-ratchet status=superseded -->
-<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
-<!-- LKJ-STATUS id=modules-and-packages status=current -->
-<!-- LKJ-STATUS id=native-byte-vector-island status=current -->
-<!-- LKJ-STATUS id=native-bytes-island status=current -->
-<!-- LKJ-STATUS id=never-control status=current -->
-<!-- LKJ-STATUS id=numeric-conversions status=current -->
-<!-- LKJ-STATUS id=opaque-paths status=current -->
-<!-- LKJ-STATUS id=os-resident-runtime-foundation status=current -->
-<!-- LKJ-STATUS id=repository-graph-context status=current -->
-<!-- LKJ-STATUS id=repository-topology status=current -->
-<!-- LKJ-STATUS id=residual-generic-compare-vertical status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
-<!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
-<!-- LKJ-STATUS id=semantic-resource-runtime status=current -->
-<!-- LKJ-STATUS id=semantic-session status=current -->
-<!-- LKJ-STATUS id=semantic-source status=current -->
-<!-- LKJ-STATUS id=typed-holes status=current -->
-<!-- LKJ-STATUS id=typed-capabilities status=current -->
-<!-- LKJ-STATUS id=typed-resources status=accepted-contract -->
-<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
-This concise Current authority excludes historical source generations, protocol
-experiments, candidate profiles, rejected results, and immutable AI records.
-Those remain under `docs/history/`, `docs/vision/experiments/`, retained results,
-or Git history and provide no aliases or acceptance fallbacks.
+<!-- LKJ-F affine-resource-handles superseded MMYhlRA9rH83-BYOlz9T18QOPFZ-Hxk-NSxNq8Rlwak -->
+<!-- LKJ-F agent-work-state current zZjKRc-VC6Kog756utq95Lp9qp-777kO230LOHgrlDo -->
+<!-- LKJ-F byte-text-ownership accepted-contract QoAsXE9fFLN7YyXpeSto0V3dDC8hGbvmC3noUpAUp-o -->
+<!-- LKJ-F canonical-lowercase-vocabulary accepted-contract bHfZyBD3BD-wg2eyng83wk4ljnZr9moSl6CXWiYgs8s -->
+<!-- LKJ-F collector-free-deterministic-memory accepted-contract rkjfKvq1DyedQHYLOyjWNWY6cFpyxhaJczuQ4sKqTpk -->
+<!-- LKJ-F compiler-selected-sealed-value-vertical current Z1BDJ1a9GkItEXgvYOReTEectW8UtdH2lCS-EGJyqQM -->
+<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
+<!-- LKJ-F enum-declarations current -_ZEXiA5PkVRIWfTiAV0BIJHNdm8AXbTmTteGzb4uyE -->
+<!-- LKJ-F generation-safe-resources accepted-contract 8O8qZdjo1P070HkSVRoGF1uiUmfurgX9QUR39LSxvpk -->
+<!-- LKJ-F jit-auto-promotion accepted-selection -Qrh99Wliic18Iem5GSC_n5jB7iMak1iXIARYSJIcjI -->
+<!-- LKJ-F jit-proof-forced current oSQRIl0aIaw-bZriT4e0HhvsUOLfOZyjRvvTcuYCFmo -->
+<!-- LKJ-F memory-obligations current O6vRxGZFx22cu1jAvqIzFLXEYqbWU2lgpID4BLggGQ0 -->
+<!-- LKJ-F memory-plan current N83612OzP36uXSfLw059mX4PXU092GhhfBkNXgIpqjY -->
+<!-- LKJ-F memory-tracing-ratchet superseded bdaumT2umNgHfR4PJEhamvu7kWz29TK0EFboRoK6HOg -->
+<!-- LKJ-F modules-and-packages current -WLVVqG-Eulxjxz99Mm4UfIl5Z_LCVypQfsAqLcRiA8 -->
+<!-- LKJ-F native-byte-vector-island current uI_K12iGc_89oG9WvuVgN12XIEliK5GmRLMZR-QEv8I -->
+<!-- LKJ-F native-bytes-island current h4xX9ke02YIt3_sfD4kpjN02hnuvyMgirQDBKatYm6o -->
+<!-- LKJ-F never-control current roZNELxuCb6YqBP-sLsSzoJ72c-pOyPIOX5PINUIRWg -->
+<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
+<!-- LKJ-F numeric-conversions current N4c5ttSuiAHz_OcQuC3hi8JneGs0KnVL6E64XGSRrBQ -->
+<!-- LKJ-F opaque-paths current xb2fQ1vv-0M4EWDrY-YlRWiCNvVSXNTIesfLWphHMRs -->
+<!-- LKJ-F os-resident-runtime-foundation current tv7TmvPjmBID87VD91R-ewgRyhsyYnqTN6Hirq-t9VY -->
+<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
+<!-- LKJ-F repository-graph-context current gEjOG-jfKyHf81iN7Mb1jeNORliJTFtPPc2QXgpJKt0 -->
+<!-- LKJ-F repository-topology current 4grjef-Dt9HiegyvGVss2RIRPiQKnSbeYGJrwQWqT4A -->
+<!-- LKJ-F residual-generic-compare-vertical current 99CeXYDFnc7vxFwUMwQH70BbTBRU1c10puE0OHg_l-U -->
+<!-- LKJ-F resource-profile-compiler current YGoyLZ9-lyrN4i-CgrshSF2zTZrg_obgHkXGecLH24w -->
+<!-- LKJ-F resource-profile-preallocation current mSMt-gglOr7P_dt0Ar0KTsJccrE5bNcovT4zciHx0Ig -->
+<!-- LKJ-F resource-profile-shared-ledger accepted-target 1pa9JN0jJ11EtZHNgqDL1l_wNIert1_4gEBMsPwuM74 -->
+<!-- LKJ-F semantic-core-target accepted-target O8JUCOa_fL8G7IHnFH6xSHZqv4VkzTRaMGiddFzuEuI -->
+<!-- LKJ-F semantic-resource-plane accepted-contract dt2A_KuS_WJMXDN2VfJ0cHGLJsSpzgTRkFAqjhRiwHY -->
+<!-- LKJ-F semantic-resource-runtime current AG9TS0lYLqMFpETkrEGMQLbw4yE5ozFdBqALzy4yvKU -->
+<!-- LKJ-F semantic-session current GaA_GN7xWh6Ae_7ZLtbi5ESPBHQCBhm7mNlwo9KBVDs -->
+<!-- LKJ-F semantic-source current GnFZks4AfR15wGCqhoO4NjGBjQs3VWvcDrOjadAZvKI -->
+<!-- LKJ-F typed-capabilities current R5o50ClEvG2aJAUlo20qLngmMyPRqN-4AInk2hC_h5c -->
+<!-- LKJ-F typed-holes current 15-l9HXntoyIf1sTpMwBCjFPH2wYUzJXMGhz7ZoBzTU -->
+<!-- LKJ-F typed-resources accepted-contract f1438fO12DxfBNYmNPHD9mxT7pNgdAzUMLUfWO7VC9o -->
+<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
+This concise Current authority excludes Historical, Experimental, Deferred, and Rejected records.
+Those remain in bounded history, experiments, retained results, or Git and grant no fallback.
 ## Language and source
 - `.lkjscript` is the only accepted suffix. Source is marker-free with one exact
   contract digest; unknown or removed marker forms are ordinary syntax errors.
@@ -166,23 +166,24 @@ or Git history and provide no aliases or acceptance fallbacks.
   Database VM operations, interactive cells, GUI, and non-Linux transports are not Current.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
-- Capsule manifests, repository policy/provenance, graph/query outputs,
-  capability status, and agent work state use stable schemas plus exact contract digests.
+- Platform revision 19 replaced the legacy capability registry with 52 strict sharded public facts.
+  Interfaces, exclusions, authority, anchors, evidence, projections, and edges bind one digest.
+- Fact explain, context, and impact traverse retained edges despite global graph truncation;
+  generated inventories and expected markers remain under `target/`.
 - The repository graph remains bounded and evidence-backed. Agent checkpoints
   remain revision-checked, append-only, and fail closed on stale semantic or repository identities.
-- The machine `LKJ-DOC-GENERATION` rule rejects numbered language, schema,
-  protocol, profile, ABI, and standalone generation names in Current-owned
-  code, tests, fixtures, examples, config, and documentation. Immutable
-  historical evidence is explicitly excluded rather than rewritten.
+- `LKJ-DOC-GENERATION` rejects numbered language, schema, protocol, profile, ABI,
+  and standalone generations in Current-owned inputs; immutable Historical evidence is excluded.
 ## Accepted targets not claimed Current
+- documentation command/example classes, evidence freshness, architecture derivation,
+  and Historical-scope enforcement beyond the Current public-fact foundation;
 - evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
 - ranged lexical byte-slice source syntax and borrowed `str`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
 - language `sealed`, source recursive products, indirect generics, and structural lists;
   Current coarse owner traffic is node-count invariant and rejects universal per-node RC;
 - a portable path policy beyond the Current Linux absolute-byte contract;
-- a replacement persistent verified artifact cache after the first complete
-  candidate failed its measured adoption gate and was removed;
+- a replacement persistent artifact cache after the first candidate failed and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
 - the semantic resource plane beyond its Current runtime slice: elastic/adaptive

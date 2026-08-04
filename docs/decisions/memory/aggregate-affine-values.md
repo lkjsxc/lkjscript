@@ -1,8 +1,8 @@
 # Aggregate Affine Values
 
 ## Status
+<!-- LKJ-F aggregate-affine-values accepted-contract Wn2JQdACAjQLkAkZzqxLa4HM--gJt2NLhugiN0UvjA8 -->
 
-<!-- LKJ-STATUS id=aggregate-affine-values status=accepted-contract -->
 
 **Current for the generic nonrecursive deterministic island.** Compact
 structural-root execution and four-engine evidence cover deterministic products,

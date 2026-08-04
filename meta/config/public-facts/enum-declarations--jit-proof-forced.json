@@ -1,0 +1,156 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "enum-declarations",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "execution"
+      ],
+      "interface": "generic enums and exhaustive source match through all four engines",
+      "exclusions": [
+        {
+          "id": "unregistered-enum-operations",
+          "interface": "Automatic codecs, unregistered generic enum ops, and cyclic enum graphs are excluded."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/semantics/algebraic-data-types.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/analyze/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/operations/verification.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/decisions/semantics/algebraic-data-types.md",
+        "docs/decisions/semantics/patterns-and-match.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "generation-safe-resources",
+      "kind": "contract",
+      "status": "accepted-contract",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "typed reusable generation-bearing resource slots",
+      "exclusions": [
+        {
+          "id": "complete-resource-cutover",
+          "interface": "Complete reusable-resource cutover and general resource families are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/generation-safe-resources.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/generation-safe-resources.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/decisions/memory/generation-safe-resources.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "jit-auto-promotion",
+      "kind": "selection",
+      "status": "accepted-selection",
+      "scope": [
+        "execution"
+      ],
+      "interface": "auto --auto-jit-threshold",
+      "exclusions": [
+        {
+          "id": "automatic-proof-current",
+          "interface": "Automatic proof promotion is not Current."
+        },
+        {
+          "id": "offline-and-mid-frame-jit",
+          "interface": "AOT, OSR, persistent caches, background compilation, and local PGO are not selected."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/current-state/accepted-target-automatic-baseline-to-proof-promotion.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/operations/verification/accepted-automatic-promotion-gate.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "jit-proof-forced",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "execution"
+      ],
+      "interface": "run --engine optimizing-jit",
+      "exclusions": [
+        {
+          "id": "automatic-proof",
+          "interface": "Only forced proof execution is Current for this fact."
+        },
+        {
+          "id": "unsupported-native-groups",
+          "interface": "Unsupported proof groups reject before effects; fallback and emission-only are absent."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/jit/proof-based-optimizing-jit.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/analyze/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/current-state/optimizer-and-allocation-evidence.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "README.md",
+        "docs/current-state.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

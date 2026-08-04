@@ -1,7 +1,7 @@
 # Prepared Compiler-Selected Sealed-Value Vertical
 
 ## Status
-<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
+<!-- LKJ-F compiler-selected-sealed-value-vertical current Z1BDJ1a9GkItEXgvYOReTEectW8UtdH2lCS-EGJyqQM -->
 **Current for the first narrow executable vertical.** Revision 17 implements this
 record over the revision-16 canonical semantic closure. The complete polymorphic
 value plane remains Experimental under its Accepted Target until its broader

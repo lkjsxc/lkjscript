@@ -32,6 +32,7 @@ Environment: Linux x86-64 locked workspace based on
 
 Commands run after implementation:
 
+<!-- LKJ-EXAMPLE class=historical -->
 ```text
 cargo test --locked -p lkjscript-app --test jit_engines \
   regions::nested_region_product_and_list_graph_is_collector_free_in_all_engines

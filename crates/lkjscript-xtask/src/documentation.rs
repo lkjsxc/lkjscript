@@ -3,10 +3,22 @@ use std::path::Path;
 
 use crate::util::walk;
 
+mod coherence;
 mod generations;
 mod platform_revision;
 
-pub fn check(root: &Path) -> i32 {
+pub fn run(root: &Path, args: &[String]) -> i32 {
+    match args {
+        [] => check(root),
+        [flag] if flag == "--expected" => i32::from(crate::public_facts::generate(root) > 0),
+        _ => {
+            eprintln!("usage: check-docs [--expected]");
+            2
+        }
+    }
+}
+
+pub(crate) fn check(root: &Path) -> i32 {
     let required = [
         "AGENTS.md",
         "docs/README.md",
@@ -66,10 +78,14 @@ pub fn check(root: &Path) -> i32 {
         failures += 1;
     }
     failures += markdown(root);
-    failures += crate::documentation_status::check(root);
+    failures += crate::public_facts::check(root);
+    failures += coherence::check(root);
     failures += inert_markers(root);
     failures += generations::check(root);
     failures += platform_revision::check(root);
+    if failures == 0 {
+        failures += crate::public_facts::generate(root);
+    }
     i32::from(failures > 0)
 }
 

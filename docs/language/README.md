@@ -7,10 +7,10 @@ source budgets of `lkjscript`.
 
 ## Status
 
-**Current** for the implemented the canonical source contract source, semantic, and execution
+**Current** for the implemented canonical-language source, semantic, and execution
 slices. Canonical source uses `.lkjscript`; the former LKJML name and `.lkjml`
-extension are **Superseded** and unsupported. Markerless the removed legacy source contract is explicit
-validation/migration input only. Broader the canonical source contract surfaces retain their
+extension are **Superseded** and unsupported. Removed language or edition marker
+forms are rejected as ordinary syntax errors. Broader canonical-language surfaces retain their
 [Accepted Target](../decisions/semantics/semantic-core.md) status.
 
 ## Table of Contents
@@ -18,7 +18,7 @@ validation/migration input only. Broader the canonical source contract surfaces 
 - [source-format.md](source-format.md): canonical line-oriented notation
 - [syntax.md](syntax.md): expressions, forms, types, and imports
 - [limits.md](limits.md): fixed source budgets and source-tree width
-- [the canonical source contract](../decisions/semantics/semantic-core.md): current slices and accepted
+- [semantic core](../decisions/semantics/semantic-core.md): Current slices and Accepted Targets
   migration, ADT, match, Never, conversion, error, and execution contracts
 
 Historical notation records live only under

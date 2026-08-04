@@ -1,7 +1,19 @@
 mod context;
+mod explain;
 mod traversal;
 
-use crate::model::{Graph, Policy, QueryResult};
+use crate::model::{Audit, ExplainResult, Graph, Policy, QueryResult};
+use crate::public_facts::Registry;
+
+pub fn explain(
+    audit: &Audit,
+    policy: &Policy,
+    registry: &Registry,
+    graph_identity: &str,
+    query: &str,
+) -> ExplainResult {
+    explain::run(audit, policy, registry, graph_identity, query)
+}
 
 pub fn run(
     command: &str,
@@ -17,18 +29,31 @@ pub fn run(
     } else {
         policy.limits.query_work
     };
-    let byte_limit = if weak {
+    let output_byte_limit = if weak {
         policy.limits.query_bytes.min(32_768)
     } else {
         policy.limits.query_bytes
     };
+    let byte_limit = (output_byte_limit / 8).max(1_024);
     let depth_limit = match command {
         "context" => 1,
         "tests" => 2,
         _ => 3,
     };
-    let mut selected =
-        traversal::select(command, &start, graph, work_limit, byte_limit, depth_limit);
+    let traversal_command = if command == "impact" && start.iter().any(|id| id.starts_with("fact:"))
+    {
+        "fact-impact"
+    } else {
+        command
+    };
+    let mut selected = traversal::select(
+        traversal_command,
+        &start,
+        graph,
+        work_limit,
+        byte_limit,
+        depth_limit,
+    );
     if command == "context" {
         for node in graph
             .nodes
@@ -72,6 +97,7 @@ pub fn run(
     QueryResult {
         schema: "lkjscript.repository-query".into(),
         contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
+        graph_identity: graph.input_identity.clone(),
         command: command.into(),
         target: target.into(),
         profile: profile.map(str::to_owned),

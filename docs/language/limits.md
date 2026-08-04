@@ -74,9 +74,9 @@ package containment.
 
 ## Policy
 
-the removed legacy source contract shape limits remain language-version constants, not user
+Canonical-source shape limits remain fixed implementation contracts, not user
 configuration, until aggregate profile replacements are Current. A change
-requires documentation, boundary tests, and edition migration. Foundation
+requires authority updates, boundary tests, and one platform-revision cut. Foundation
 maxima now bound exact source bytes and source-unit/tree counts; aggregate
 import edges, source-schema nodes, type/trait/compiler work, compiler memory,
 constants, globals, and other categories still need named resource profiles.

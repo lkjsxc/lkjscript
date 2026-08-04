@@ -104,5 +104,5 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   profiles, and persistent code caches remain absent
 ## Semantic Source foundation Evidence
 
-The Foundation legacy contract implementation tree based on `e71c976` was checked on Ubuntu
+The recorded Foundation baseline implementation tree based on `e71c976` was checked on Ubuntu
 24.04.4 LTS, Linux 7.0.0-27-generic x86-64, with Rust/Cargo 1.96.0. It changes

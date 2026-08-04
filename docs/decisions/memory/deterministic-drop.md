@@ -1,8 +1,8 @@
 # Deterministic Drop Elaboration
 
 ## Status
+<!-- LKJ-F deterministic-drop accepted-contract 3x9ef1XNMfeqD8J9zudNzZhRsKS_iaOJU3iwBS-pD_M -->
 
-<!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
 **Accepted contract with verified static, dead, conditional, and
 instruction-originated whole-place cleanup for exact byte owners and owned typed

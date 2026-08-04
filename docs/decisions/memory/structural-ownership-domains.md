@@ -1,9 +1,9 @@
 # Structural Ownership Domains
 
 ## Status
+<!-- LKJ-F structural-ownership-domains current sufGXvqJvtJmt9edYjXHpfCjLsszftT5cVLwMHnK3CU -->
+<!-- LKJ-F structural-root-values current vwp2rNIPuZupfUJ1RlKLe2lsAfLP8FJOXMxDBLhNolg -->
 
-<!-- LKJ-STATUS id=structural-ownership-domains status=current -->
-<!-- LKJ-STATUS id=structural-root-values status=current -->
 
 **Current for the safe core substrate, resource-plane owner-home adapter, and
 deterministic language runtime.** Dynamic strings, paths, eligible products,

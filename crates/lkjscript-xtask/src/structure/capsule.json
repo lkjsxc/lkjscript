@@ -6,7 +6,7 @@
   "kind": "tooling",
   "purpose": "Capture, validate, graph, and query exact bounded repository structure evidence.",
   "layer": "repository intelligence",
-  "concepts": ["repository audit", "repository graph", "context bundle", "impact and test queries"],
+  "concepts": ["repository audit", "repository graph", "public fact impact", "context bundle", "impact and test queries"],
   "facade": ["crates/lkjscript-xtask/src/structure/mod.rs"],
   "allowed_dependencies": ["compiler.source", "core"],
   "forbidden_dependencies": ["app", "jit", "vm"],
@@ -19,6 +19,6 @@
   "context_card": {
     "goal": "Answer repository questions from exact authority without guessing.",
     "interfaces": ["structure audit", "structure graph", "structure context", "structure impact", "structure tests"],
-    "invariants": ["stable entity IDs", "revision IDs remain separate", "bounded deterministic traversal"]
+    "invariants": ["stable entity IDs", "revision IDs remain separate", "bounded deterministic traversal", "fact projection closure"]
   }
 }

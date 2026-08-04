@@ -1,7 +1,7 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, ContractItemKind};
 
 use super::super::{
-    name, AGENT_WORK_STATE, CAPABILITY_STATUS, CAPSULE_MANIFEST, REPOSITORY_GRAPH, SEMANTIC_SOURCE,
+    name, AGENT_WORK_STATE, CAPSULE_MANIFEST, PUBLIC_FACTS, REPOSITORY_GRAPH, SEMANTIC_SOURCE,
 };
 
 pub(crate) fn repository_graph() -> ContractDescriptor {
@@ -9,14 +9,27 @@ pub(crate) fn repository_graph() -> ContractDescriptor {
         ContractItem::new("graph", ContractItemKind::Type)
             .fact(fact("schema", "schema", "lkjscript.repository-graph"))
             .fact(fact("contract", "contract", "full ContractDigest"))
-            .fact(fact("revision", "revision", "exact Git revision"))
+            .fact(fact("revision", "revision", "base Git revision"))
             .fact(fact(
-                "inputs",
-                "authority inputs",
-                "sorted full content digests",
+                "input-identity",
+                "input identity",
+                "SHA-256 of canonical emitted graph closure and budget state",
             ))
-            .fact(fact("nodes", "nodes", "bounded stable graph nodes"))
-            .fact(fact("edges", "edges", "bounded stable graph edges")),
+            .fact(fact(
+                "nodes",
+                "nodes",
+                "bounded files capsules commands public facts and semantic entities",
+            ))
+            .fact(fact(
+                "edges",
+                "edges",
+                "bounded dependency authority evidence projection and impact edges",
+            ))
+            .fact(fact(
+                "queries",
+                "query output",
+                "graph identity with exact serialized byte limit",
+            )),
     )
 }
 
@@ -40,22 +53,40 @@ pub(crate) fn capsule_manifest() -> ContractDescriptor {
     )
 }
 
-pub fn capability_status() -> ContractDescriptor {
-    descriptor(CAPABILITY_STATUS).item(
+pub fn public_facts() -> ContractDescriptor {
+    descriptor(PUBLIC_FACTS).item(
         ContractItem::new("registry", ContractItemKind::Type)
-            .fact(fact("schema", "schema", "lkjscript.capability-status"))
+            .fact(fact(
+                "schema",
+                "schema",
+                "lkjscript.public-facts and strict shards",
+            ))
             .fact(fact("contract", "contract", "full ContractDigest"))
             .fact(fact(
                 "identity",
-                "capability IDs",
-                "stable unnumbered names",
+                "fact IDs",
+                "stable lowercase unnumbered names",
             ))
             .fact(fact(
                 "status",
                 "status",
-                "closed current accepted-target accepted-selection",
+                "closed nine-status lifecycle vocabulary",
             ))
-            .fact(fact("authority", "authority", "exact repository paths")),
+            .fact(fact(
+                "boundary",
+                "interface and exclusions",
+                "canonical positive interface plus explicit negative scope",
+            ))
+            .fact(fact(
+                "closure",
+                "fact closure",
+                "authority anchors evidence projections dependencies and digests",
+            ))
+            .fact(fact(
+                "limits",
+                "resource limits",
+                "strict bounded decode validation graph and reports",
+            )),
     )
 }
 

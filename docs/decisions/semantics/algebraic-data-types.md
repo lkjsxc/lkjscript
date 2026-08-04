@@ -8,8 +8,8 @@ Define nominal immutable algebraic data types, stable identities, and their
 exact the canonical language line projection.
 
 ## Status
+<!-- LKJ-F enum-declarations current -_ZEXiA5PkVRIWfTiAV0BIJHNdm8AXbTmTteGzb4uyE -->
 
-<!-- LKJ-STATUS id=enum-declarations status=current -->
 
 **Current for declarations, resolved type facts, and exact value construction.**
 the canonical language accepts generic nominal `enum` declarations, `variant-value`, and

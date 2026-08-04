@@ -1,0 +1,153 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "numeric-conversions",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "execution"
+      ],
+      "interface": "explicit I64/F64 conversions through all four engines",
+      "exclusions": [
+        {
+          "id": "implicit-and-wider-conversions",
+          "interface": "Implicit numeric conversion and unregistered numeric families are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/semantics/numeric-conversions.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/analyze/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/operations/verification.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/decisions/semantics/numeric-conversions.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "opaque-paths",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "opaque absolute byte-preserving Linux Path values",
+      "exclusions": [
+        {
+          "id": "portable-relative-paths",
+          "interface": "Opaque paths cover only the absolute Linux boundary; portable relative paths use grants."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/capabilities/opaque-paths.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/analyze/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/current-state.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "ordinary-regions",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "memory"
+      ],
+      "interface": "safe internal affine bulk-lifetime regions",
+      "exclusions": [
+        {
+          "id": "source-visible-regions",
+          "interface": "Region, allocation, and cycle identity and memory controls are not source-visible."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/ordinary-regions.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/hir/memory_plan/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "crates/lkjscript-core/tests/regions.rs",
+          "class": "implementation-test"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/ordinary-regions.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "os-resident-runtime-foundation",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "Linux daemon and Unix control",
+      "exclusions": [
+        {
+          "id": "non-linux-runtime",
+          "interface": "Non-Linux runtime execution is not Current."
+        },
+        {
+          "id": "unexecuted-host-adapters",
+          "interface": "Non-Linux adapters, privileged install, and extended process I/O operations are absent."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-runtime/src/lib.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/current-state/os-resident-runtime-evidence.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "README.md",
+        "docs/current-state.md",
+        "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

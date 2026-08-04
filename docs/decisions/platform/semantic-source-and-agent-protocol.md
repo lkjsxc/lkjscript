@@ -3,33 +3,26 @@
 ## Purpose
 
 Define the primary manipulation boundary for complete and incomplete programs,
-the deterministic the removed legacy source contract projection adapter, and the smallest complete
+the deterministic canonical source projection adapter, and the smallest complete
 agent-facing transaction/query slice.
 ## Status
 
 
-**Current** for closed `lkjscript.semantic-source` version 2 over the removed legacy source contract and
-the implemented the canonical source contract identity, generic-enum, construction, closed-pattern,
-source-match, and Never/structured-control slices. Source-unit records expose
-exact edition and edition-framed identity; snapshots expose tree edition and
-identity; marker, enum, match, pattern, Never, loop, return, break, continue,
-trap, exit, and edition-number nodes roundtrip strictly.
-Schema identity remains version 2 rather than introducing an edition-specific
-schema version.
-Schema preserves the exact legacy contract node, value, declaration, type, built-in,
-trivia, transaction-expression, diagnostic, and correlation representation as
-its base and adds typed-hole source identity, bounded legal actions, exact enum
-and match transaction expressions, and match-arm expected/scope facts. Version
-1 input is historical and rejected; there is no alias, shim, or fallback.
-Unknown kinds, fields, operations, versions, duplicates, and trailing input
-fail. Inferred facts remain derived authority.
+**Current** for closed `lkjscript.semantic-source` over canonical source and the
+implemented canonical-language generic-enum, construction, closed-pattern,
+source-match, Never, and structured-control slices. Source-unit, snapshot, node,
+and revision identities carry the exact Current source and semantic contract
+digests. Removed language and edition marker inputs are rejected without aliases
+or fallback; no generation-numbered envelope is accepted. Unknown kinds, fields,
+operations, contract identities, duplicates, and trailing input fail. Inferred
+facts remain derived authority.
 
 The bounded one-shot `snapshot`, `read-entity`, `query-node`, `diagnostics`,
 `hole-context`, `legal-actions`, atomic `rename`, `replace-expression`,
 `insert-hole`, `fill-hole`, `refine-hole`, and structurally legal `delete-hole`
 operations emit the canonical contract. Hole context comes from the pinned parsed tree and a bounded
 checker-valid completion; unavailable expected, capability, ownership-correlation,
-qualification, and the removed legacy source contract control facts are explicit rather than invented.
+qualification, and canonical source control facts are explicit rather than invented.
 One outer-owned resource profile ledger now spans strict request decode, exact loaded
 shape/query work reservation, snapshot/query/hole/action construction,
 transaction staging, and exact response encoding. Hole, legal-action,

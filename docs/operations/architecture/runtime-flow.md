@@ -91,7 +91,7 @@ may call and allocate internally. There is no OSR, background compile,
 deoptimization, guard, or speculation.
 ## Source Layout Rule
 
-The current the removed legacy source contract language rule limits each lkjscript source directory to
+The Current rule for canonical source limits each lkjscript source directory to
 16 immediate entries, counting files and subdirectories together. Rust crates,
 documentation, metadata, `.git`, and build output are not language source and
 are outside this rule.
@@ -102,10 +102,10 @@ an external project receives the same contract. The accepted destination is an
 AI-maintainability lint, but this check is not weakened until aggregate source
 closure/import/byte/node safety bounds are Current. See [Resource Budget
 Profiles](../../decisions/platform/resource-budget-profiles.md).
-## the canonical source contract Accepted Flow
+## Canonical-Language Accepted Flow
 
-the canonical source contract is an [Accepted Target, not
-Current](../../decisions/semantics/semantic-core.md). Its exact path remains the one
+The canonical-language semantic core has [mixed Current and Accepted Target
+status](../../decisions/semantics/semantic-core.md). Its exact path remains the one
 validated Semantic Source tree through resolved HIR and verified SSA. Match is
 verified then lowered to SSA CFG; evaluators and backends implement only ADT,
 numeric, layout, charge, and terminator primitives. Acceptance requires actual

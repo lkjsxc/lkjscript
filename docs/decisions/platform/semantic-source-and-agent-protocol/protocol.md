@@ -4,9 +4,9 @@
 
 ## Status
 
-**Current preserved one-shot contract in Schema.** The request/response
-shape selected here is emitted only as `lkjscript.semantic-source`; version 1
-input is historical and rejected. Deferred and Rejected labels below remain
+**Current one-shot contract.** The request and response shape uses the stable
+`lkjscript.semantic-source` identity plus its exact full contract digest.
+Removed numbered input is Historical and rejected. Deferred and Rejected labels below remain
 non-current.
 
 ## Protocol
@@ -30,14 +30,14 @@ Required requests in the first complete slice are:
 - `diagnostics`: structured diagnostics for the loaded revision; and
 - `hole-context`: expected type, visible bindings, allowed effects, source
   origin, and bounded candidates for one hole; and
-- `legal-actions`: the exact supported the removed legacy source contract child/action/transaction subset
+- `legal-actions`: the exact supported child/action/transaction subset for canonical source
   plus explicit coverage blockers.
 
 Responses are deterministic for the same source closure, compiler build,
 request, and profile. Lists define their sort keys. Requests and responses have
 aggregate byte/node/work limits. Normal program stdout is never mixed with
 protocol output.
-## Structured Diagnostic legacy contract
+## Structured Diagnostics
 
 Every diagnostic contains:
 
@@ -96,9 +96,9 @@ literals, visible local bindings, available constructors, and directly callable
 functions whose result and effect contract fit. Candidate enumeration is
 resource bounded and explicitly reports truncation. It does not claim complete
 inhabitation for the full language.
-## Deterministic the removed legacy source contract Projection
+## Deterministic Canonical Source Projection
 
-The formatter is total over every validated legacy contract tree representable in the removed legacy source contract.
+The formatter is total over every validated Semantic Source tree representable as canonical source.
 It emits one canonical UTF-8 byte sequence with LF endings. Required laws are:
 
 ```text
@@ -107,12 +107,9 @@ format(parse(canonical_corpus_file)) == canonical_corpus_file
 format(parse(format(tree))) == format(tree)
 ```
 
-The exact 121-file canonical `src` corpus, all 125 tracked `.lkjscript`
-sources/fixtures/workloads, and benchmark identities recorded in Current State
-are immutable migration evidence. If existing canonical files reveal more
-than one accepted spelling, the decision records whether the formatter
-preserves one spelling field or mechanically migrates the corpus; it does not
-silently normalize benchmark input.
+Current contract tests enforce these laws over the tracked canonical corpus.
+Recorded cutover corpus counts and benchmark identities are Historical evidence
+and belong under `docs/history/`.
 
 Comments require explicit stable attachment rules before the formatter accepts
 them. A parser that discards source bytes it cannot reproduce does not satisfy
@@ -120,8 +117,8 @@ the roundtrip gate.
 ## Constrained Generation Boundary
 
 Full-language legal-next-token masking and constrained decoding remain
-**Deferred**. Current `legal-actions` claims only its closed the removed legacy source contract semantic
-child/action subset and reports every unsupported context or form. A future
+**Deferred**. Current `legal-actions` claims only its closed semantic child/action
+subset for canonical source and reports every unsupported context or form. A future
 constrainer must state its exact supported subset and soundness/completeness
 evidence. Unsupported states fail open to ordinary generation followed by
 compiler validation, or return an explicit unsupported result. They never

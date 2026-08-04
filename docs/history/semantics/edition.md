@@ -1,43 +1,36 @@
-# Edition 2 Semantic Core
+# Historical Numbered-Edition Semantic-Core Proposal
 
 ## Purpose
 
-Define the accepted Edition 2 source, type, control, value, layout, error,
-compiler, execution, migration, and semantic-authoring contracts before any of
-them become implementation claims.
+Preserve the recorded numbered-edition proposal and its evidence after the
+canonical language moved to one unnumbered source and semantic identity.
 
 ## Status
 
+**Historical.** Nothing in this page or its capsules grants a Current interface,
+source marker, schema generation, decoder, alias, or fallback. Surviving enum,
+match, Never, control, numeric, and execution facts moved to active unnumbered
+authorities under `docs/decisions/semantics/`.
 
-**Accepted Target overall.** Explicit identity, compiler-owned atomic
-migration, generic enum declaration/resolved-type-fact, construction,
-exhaustive match, Never/structured-control, explicit numeric conversion, the
-125-file corpus, and ordinary-compilation cutover are Current through the
-evaluator, reference VM, and forced Linux x86-64 baseline/proof JIT.
-Automatic/host-native enum transitions, changed semantics beyond these slices,
-and protocol-level semantic migration remain non-Current. Edition 1 is accepted
-only by explicit source-validation/migration APIs and immutable fixture data.
+## Recorded Baseline
 
-## Authority
+The proposal selected an explicit source-unit edition marker, closure-wide
+agreement, numbered Semantic Source identity, and compiler-owned atomic corpus
+migration. It also selected generic enum declarations, resolved type facts,
+variant construction, exhaustive match, Never and structured control, explicit
+numeric conversion, typed errors, one verified-SSA path, evaluator and VM
+execution, and forced Linux x86-64 baseline and proof execution.
 
-This page is the authority for Edition 2 and its strict capsule manifest.
-Capsules may refine this contract but cannot promote it. Edition 2 is explicit
-per source unit: the first semantic form is exactly `edition/`, atom `2`, and
-`/edition`. Every unit in a loaded closure must agree. Explicit validation treats a file
-without that form as Edition 1 migration input; ordinary compilation rejects it. The Semantic Source identity is
-`lkjscript.semantic-source/2`; the public ABI changes only where public Edition
-2 semantics require it.
+At that baseline, ordinary compilation rejected missing or mixed markers while a
+migration API accepted the prior form. One parser and validated tree remained
+a hard constraint; a sibling parser, compatibility alias, or backend syntax
+interpreter was rejected.
 
-Semantic Source remains primary. Edition 1 and Edition 2 share one source
-parser and validated tree plus deterministic edition projections; a second
-parser/tree is forbidden. The current line projection remains canonical during
-this target. Edition 2 now accepts the complete generic `enum` declaration, resolved type
-facts, and exact `variant-value` construction under exactly those names, with
-no aliases. Construction executes only through verified SSA consumers: its evaluator,
-validated reference bytecode/VM, and forced Linux x86-64 baseline/proof JIT.
-Polymorphic entries, host operations, and automatic reference transfer reject.
+The numbered identity and marker contract were later removed. Active unnumbered
+authorities, rather than this record, define marker-free `.lkjscript` source,
+stable schema names, exact full contract digests, and the platform revision.
 
-## Strict Capsule Manifest
+## Historical Capsule Manifest
 
 1. [Research inputs](edition/research-inputs.md)
 2. [Identity and migration](edition/identity-and-migration.md)
@@ -52,20 +45,15 @@ Polymorphic entries, host operations, and automatic reference transfer reject.
 11. [Execution and acceptance](edition/execution-and-acceptance.md)
 12. [Semantic authoring](edition/semantic-authoring.md)
 
-The manifest is closed and ordered. Every listed capsule is required, and no
-unlisted file is part of this authority.
+The ordered list preserves the proposal's research and migration evidence. The
+active linked semantic decisions own surviving unnumbered contracts; the
+historical capsules do not refine them.
 
-## Cross-Authority Dependencies
+## Recorded Dependencies And Rejections
 
-Edition 2 depends on [Semantic Source and Agent
-Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) Schema V1 closure
-and the [Resource Budget Profiles](../../decisions/platform/resource-budget-profiles.md)
-Profile V2 pre-allocation contract. Current source limits and execution
-behavior remain unchanged until the acceptance capsule's gates all pass.
-
-## Rejected
-
-- implicit edition selection or mixed-edition closures;
-- `.lkjml`, compatibility aliases, sibling source parsers, or backend syntax;
-- status language that calls an Edition 2 contract Current before evidence; and
-- an ABI version change made only because the source edition number changed.
+The proposal depended on the then-versioned Semantic Source and resource-profile
+preallocation proposals. It rejected implicit edition selection, mixed-edition
+closures, `.lkjml`, compatibility aliases, sibling source parsers, backend
+syntax interpretation, premature capability promotion, and ABI changes caused
+only by a source edition number. Those rejections remain useful evidence; the
+numbered public mechanism does not.

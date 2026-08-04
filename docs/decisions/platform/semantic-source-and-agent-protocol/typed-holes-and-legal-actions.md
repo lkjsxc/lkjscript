@@ -11,8 +11,8 @@ legal actions, and checked hole transactions.
 
 **Current.** Semantic Source Schema implements typed expression holes,
 `hole-context`, `legal-actions`, and the four closed hole transactions over the
-Current the removed legacy source contract expression subset plus Current the canonical source contract enum, match,
-Never, and structured-control forms. Schema input is historical and rejected.
+Current canonical-language expression subset, including enum, match, Never,
+and structured-control forms. Removed versioned input is Historical and rejected.
 
 ## Typed Holes
 

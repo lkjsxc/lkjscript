@@ -1,8 +1,8 @@
 # Typed VM Scalar Representation
 
 ## Status
+<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
 
-<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
 
 **Current.** Evaluator, VM, baseline JIT, and proof JIT scalar fixtures retain
 complete-range i64 and exact-bit f64 values without scalar heap allocation.

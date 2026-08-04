@@ -64,7 +64,7 @@ or capability boundary. Top-level semantic items warn above 16 while supported
 counting matures. Capsule dependencies and principal public concepts warn above
 12 and fail above 16. Cross-capsule dependency cycles fail.
 
-These repository limits do not change the removed legacy source contract language semantics. In
+These repository limits do not change the semantics of canonical source. In
 particular, source depth 8, form children 16, 384 tokens per file, 8 top-level
 forms, 15 product fields, and 16 combined immediate source-directory entries
 remain Current until their separate aggregate-budget migration gate passes.
@@ -109,11 +109,11 @@ Initial stable IDs include `LKJ-REPO-FILE-LINES`, `LKJ-REPO-FILE-BYTES`,
 `LKJ-REPO-CAPSULE-FANOUT`, `LKJ-REPO-UNCLASSIFIED`,
 `LKJ-REPO-GENERATED-PROVENANCE`, and `LKJ-REPO-VAGUE-MODULE`.
 
-Audit identity `lkjscript.repository-audit` version `1` contains repository and
+The stable `lkjscript.repository-audit` identity and exact graph contract digest contain repository and
 policy revisions, every tracked file/directory measurement, item counts where
 supported, capsule membership/dependencies, classifications, findings,
 provenance, deterministic sort keys, and explicit unsupported analyses. Unknown
-versions or fields fail at consumers.
+contract identities or fields fail at consumers.
 
 ## Migration And Policy Coverage
 

@@ -6,14 +6,17 @@ Define one checked authority for public fact identity, lifecycle status, interfa
 scope, exclusions, evidence, and documentation projections.
 
 ## Status
+<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
+<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
 
-**Accepted Contract.** The existing capability-status registry and exact status
-marker check remain Current only for their narrow legacy behavior until the
-atomic migration below passes. They do not provide fact, exclusion, projection,
-or impact closure and cannot certify documentation coherence.
+**Accepted Contract with a Current foundation.** Platform revision 19 atomically
+replaced the legacy capability-status path and marker grammar with strict sharded
+public facts, explicit exclusions, digest-bound projections, generated expected
+markers, and fact graph/context/impact edges. Complete command/example classes,
+evidence freshness, architecture derivation, and Historical-scope enforcement
+remain acceptance blockers; the broader authority is not Current.
 
 ## Problem And Threat Model
-
 Current prose can outlive a removed command, broaden a narrow capability, import
 Historical wording, or copy a crate or engine list that already has another
 machine authority. A passing link and marker scan does not detect those faults.
@@ -25,7 +28,6 @@ Malformed, excessive, escaping, cyclic, conflicting, or stale input publishes no
 partial registry, graph, report, or projection result.
 
 ## Authority Order
-
 1. Executable registries, Cargo, capsule manifests, structure policy, contract
    descriptors, compiler vocabulary, platform revision, and unsafe registry own
    their machine facts.
@@ -91,11 +93,11 @@ high-risk contradictions.
 
 ## Evidence And Implementation Anchors
 
-Current facts name applicable implementation anchors and evidence. The checker
-validates normalized contained paths, exact content digests, declared evidence
-class, and any recorded commit, contract digest, platform revision, result, and
-untested fields. A recorded commit must be exact and reachable unless the record
-explicitly identifies external immutable evidence.
+Current facts name applicable implementation anchors and evidence. The Current
+foundation validates normalized contained paths, exact content digests, declared
+evidence class, and the syntax of any recorded commit, contract digest, platform
+revision, result, and untested fields. Commit reachability and complete evidence
+freshness remain Accepted Contract blockers.
 
 Freshness validation does not rerun a command. Parse, type, compile, build, link,
 VM execution, native execution, process execution, measurement, and acceptance
@@ -111,9 +113,10 @@ remain distinct. Missing proof stays explicit rather than inferred from age.
   migration, while default context does not rank it above Current facts.
 - Mixed-status documents delimit every status scope.
 
-Default fact context includes interface, exclusions, authority, evidence
-freshness, projections, dependencies, tests, and nearest accepted next work.
-Historical records appear only through explicit edges or explicit requests.
+Default fact context groups interface, status, exclusions, authority and evidence
+paths, projections, dependencies, dependents, and declared test edges. It does
+not infer evidence freshness or nearest next work; those remain Accepted Contract
+blockers. Historical records appear only through explicit edges or requests.
 
 ## Projection And Impact Closure
 
@@ -124,37 +127,36 @@ fact -> authority and machine source
 fact -> implementation anchor and evidence
 fact -> interface, exclusion, status, dependency, and invalidating fact
 projection -> fact
-fact -> verification gate
-command -> classified example
-crate or capsule -> architecture projection
 ```
 
-Impact from a changed fact, authority, anchor, command, contract, or crate reaches
-every affected projection. Output is sorted, bounded, content-addressed, and
-serialized only under `target/`. Unsupported edge classes and truncation remain
-explicit. A globally truncated graph must still traverse retained focused edges.
+Impact follows registered retained edges from a changed fact, authority, anchor,
+command, contract, or implementation path to affected projections. Query output
+is sorted, bounded, content-addressed JSON on standard output; generated graph
+artifacts remain under `target/`. Unsupported edge classes and truncation stay
+explicit. A globally truncated graph still traverses retained focused edges.
 
 ## Commands And Generated Output
-
 The canonical interfaces remain:
 
 ```text
 cargo run --locked -p lkjscript-xtask -- check-docs
+cargo run --locked -p lkjscript-xtask -- check-docs --expected
 cargo run --locked -p lkjscript-xtask -- structure explain fact:<id>
 cargo run --locked -p lkjscript-xtask -- structure context fact:<id> --profile strong
 cargo run --locked -p lkjscript-xtask -- structure impact fact:<id>
 ```
 
-`check-docs` writes canonical inventories, expected projection markers, impact
-summaries, and diagnostics under `target/lkjscript/documentation/`. Checks never
-rewrite tracked prose. Any later mutation command must be separate, atomic,
-previewable, bounded, and leave no compatibility alias.
+A successful `check-docs` writes one atomic canonical fact inventory containing
+expected projection markers under `target/lkjscript/documentation/`. The separate
+`--expected` mode validates the authority and writes that inventory without
+accepting tracked projections. Checks never rewrite tracked prose. `structure`
+writes graph output under `target/lkjscript/structure/`.
 
-Shell and lkjscript blocks are classified as executable verification, safe
-demonstration, illustrative syntax, privileged or external, or historical.
-Only an explicitly local deterministic class may execute. CLI shape derives
-from canonical command authority. Natural-language generated tests and LLM prose
-review remain Experimental and cannot certify Current behavior.
+The Accepted Contract will classify shell and lkjscript blocks as executable
+verification, safe demonstration, illustrative syntax, privileged or external,
+or historical. The Current foundation applies deterministic contradiction and
+generation lints but does not yet execute classified examples. Natural-language
+generated tests and LLM prose review cannot certify Current behavior.
 
 ## Resource Contract And Baseline
 
@@ -162,10 +164,11 @@ The cold starting baseline at commit `5edd9ed8` was 213 documentation inputs,
 1,106,863 bytes, `check-docs` 1.615 seconds, graph 4,096 nodes and 9,344 edges in
 1.165 seconds, and `quiet verify` 108.220 seconds. Peak RSS was unavailable.
 
-The public-fact gate rejects before publication above 2,048 files, 16 MiB input,
-16 shards, 256 facts, 32 members in any per-fact collection, 8,192 aggregate fact
-members, 4,096 claims or examples, 16,384 fact edges, 262,144 work units, or 256
-diagnostics. Arithmetic is checked and traversal is iterative.
+The tracked projection scan rejects above 2,048 documentation entries, 16 MiB,
+4,096 markers, or depth 16. Authority decode rejects above 16 MiB JSON, 16 shards,
+256 facts, 32 members per collection, or 8,192 aggregate members. Unique closure
+content and the atomic generated report each have separate 16 MiB ceilings.
+Graph and query limits derive from structure policy rather than this registry.
 
 Acceptance requires cold and warm byte-identical verdicts and generated output,
 `check-docs` no slower than 3.25 seconds on the baseline environment, graph no
@@ -175,10 +178,11 @@ after results.
 
 ## Migration, Rollback, And Acceptance
 
-Migration atomically replaces `meta/config/capability-status.json`, its contract
-name, decoder, marker grammar, and consumers. There is no dual read, dual write,
-old marker, alias, or compatibility decoder. The platform revision and exact
-contract digests advance in the same cut.
+Platform revision 19 atomically replaced the historical
+`meta/config/capability-status.json` path, its contract name, decoder, marker
+grammar, and consumers. No dual read, dual write, old marker, alias, or
+compatibility decoder remains. Exact public-fact and repository-graph contract
+digests advanced in the same cut.
 
 The authority is not Current until strict decoding, projection staleness,
 exclusion binding, graph impact, focused contradiction fixtures, corpus repair,

@@ -1,0 +1,145 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "affine-resource-handles",
+      "kind": "evidence",
+      "status": "superseded",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "removed universal handle source contract",
+      "exclusions": [
+        {
+          "id": "compatibility-handle",
+          "interface": "The removed universal handle has no alias, decoder, or fallback."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/capabilities/resource-handles.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/semantics/ownership-and-borrowing.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "agent-work-state",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "repository"
+      ],
+      "interface": "lkjscript.agent-work-state",
+      "exclusions": [
+        {
+          "id": "semantic-authority",
+          "interface": "Agent Work State is coordination state, not source, status, or capability authority."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/agent-work-state.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-xtask/src/agent/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/platform/agent-work-state.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "aggregate-affine-values",
+      "kind": "contract",
+      "status": "accepted-contract",
+      "scope": [
+        "platform"
+      ],
+      "interface": "whole-value aggregate move borrow and drop",
+      "exclusions": [
+        {
+          "id": "partial-aggregate-support",
+          "interface": "Partial field moves, arbitrary aliasing, and general aggregate cleanup are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/memory/aggregate-affine-values.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/memory/aggregate-affine-values.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/decisions/memory/aggregate-affine-values.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "byte-text-ownership",
+      "kind": "contract",
+      "status": "accepted-contract",
+      "scope": [
+        "memory"
+      ],
+      "interface": "bytes byte-vector byte-slice byte-slice-mut string str path",
+      "exclusions": [
+        {
+          "id": "borrowed-str",
+          "interface": "Borrowed str remains outside the implemented Current slice."
+        },
+        {
+          "id": "borrowed-text-vertical",
+          "interface": "General borrowed str execution and the complete engine matrix are not Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/semantics/byte-and-text-ownership.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/semantics/byte-and-text-ownership.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

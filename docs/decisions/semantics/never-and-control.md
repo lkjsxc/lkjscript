@@ -8,11 +8,12 @@ Define the uninhabited `never` type, structured divergence, early return, and
 typed loop control.
 
 ## Status
+<!-- LKJ-F never-control current roZNELxuCb6YqBP-sLsSzoJ72c-pOyPIOX5PINUIRWg -->
 
-<!-- LKJ-STATUS id=never-control status=current -->
 
-**Current for the canonical language.** the removed legacy source contract retains its existing control behavior and
-its existing `exit` operation; the new forms require the exact the canonical language marker.
+**Current for the implemented canonical-language slice.** Canonical source
+retains its existing control behavior and `exit` operation; Never and
+structured-control forms require no language or edition marker.
 
 ## Never
 

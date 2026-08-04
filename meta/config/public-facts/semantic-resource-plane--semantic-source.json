@@ -1,0 +1,153 @@
+{
+  "schema": "lkjscript.public-fact-shard",
+  "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
+  "facts": [
+    {
+      "id": "semantic-resource-plane",
+      "kind": "contract",
+      "status": "accepted-contract",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "lkjscript.semantic-resource-plane",
+      "exclusions": [
+        {
+          "id": "complete-plane",
+          "interface": "The complete semantic resource plane is Accepted Contract work, not wholly Current."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/semantic-resource-plane.md"
+      },
+      "implementation_anchors": [],
+      "evidence": [
+        {
+          "path": "docs/decisions/platform/semantic-resource-plane.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/decisions/platform/semantic-resource-plane.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "semantic-resource-runtime",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "runtime"
+      ],
+      "interface": "verified resource runtime and Linux observation",
+      "exclusions": [
+        {
+          "id": "unregistered-policies-and-hosts",
+          "interface": "Non-Linux observation, unregistered policies, and unsupported scheduling are excluded."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/semantic-resource-plane.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-resource/src/lib.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/current-state/semantic-resource-plane-evidence.md",
+          "class": "executed-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "semantic-session",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "semantic-source"
+      ],
+      "interface": "lkjscript semantic serve --stdio",
+      "exclusions": [
+        {
+          "id": "network-session",
+          "interface": "Network and remote semantic sessions are not Current."
+        },
+        {
+          "id": "remote-session-service",
+          "interface": "Remote sessions, cross-process identity, and ambient authority are excluded."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/semantic-source-and-agent-protocol.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/semantic/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    },
+    {
+      "id": "semantic-source",
+      "kind": "capability",
+      "status": "current",
+      "scope": [
+        "semantic-source"
+      ],
+      "interface": "lkjscript.semantic-source",
+      "exclusions": [
+        {
+          "id": "distributed-semantic-authority",
+          "interface": "Distributed authority, unbounded context, guessed edits, and text offsets are excluded."
+        }
+      ],
+      "authority": {
+        "kind": "repository-path",
+        "path": "docs/decisions/platform/semantic-source-and-agent-protocol.md"
+      },
+      "implementation_anchors": [
+        "crates/lkjscript-compiler/src/semantic/mod.rs"
+      ],
+      "evidence": [
+        {
+          "path": "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
+          "class": "contract-record"
+        }
+      ],
+      "projections": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ],
+      "dependencies": [],
+      "invalidated_by": [],
+      "platform_revision": 19,
+      "contracts": []
+    }
+  ]
+}

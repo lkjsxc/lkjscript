@@ -3,11 +3,14 @@ mod cargo;
 mod markdown_links;
 mod metadata;
 mod provenance;
+mod public_fact_evidence;
+mod public_facts;
 mod rust;
 
 use std::path::Path;
 
 use crate::model::{Audit, Edge, Node, Policy};
+use crate::public_facts::Registry;
 
 use super::graph::Budget;
 
@@ -15,11 +18,13 @@ pub fn add_project_edges(
     root: &Path,
     audit: &Audit,
     policy: &Policy,
+    registry: Option<&Registry>,
     nodes: &mut Vec<Node>,
     edges: &mut Vec<Edge>,
     budget: &mut Budget,
 ) {
     metadata::add(audit, policy, nodes, edges, budget);
+    public_facts::add(registry, nodes, edges, budget);
     provenance::add(audit, nodes, edges, budget);
     cargo::add(root, audit, nodes, edges, budget);
     markdown_links::add(root, audit, edges, budget);

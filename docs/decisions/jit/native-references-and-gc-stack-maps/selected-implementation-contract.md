@@ -9,9 +9,9 @@ preserve the former collecting-frame implementation and are not Current. Typed
 frame homes, bounds, W^X installation, and structured cleanup survive under
 the parent authority; collection-specific mechanisms do not.
 
-## Selected Implementation Contract
+## Recorded Baseline: Selected Implementation Contract
 
-**Current for closed machine plans and actual sys invocation.** Semantic,
+**Implemented at the recorded collecting-runtime baseline.** Semantic,
 native-layout, verified-SSA, and runtime-call identities are full contract
 digests. Reference-capable and scalar code objects use the same contract tuple.
 Frame and collection-dispatch calls are enum identified; objects with any
@@ -23,8 +23,8 @@ metadata beside the active invocation, holds raw generated-frame addresses,
 validates every active map and heap argument/result home, and copies typed
 values/handles into the safe `NativeRuntimeServices` callback.
 Code installation remains owned RW-then-RX and no heap word is exposed as a
-native object pointer. The former VM arena now lives in `lkjscript-core` as session-owned `GcHeap` and
-is used by both execution implementations. Automatic reference transitions are
+native object pointer. At that baseline, the VM arena lived in `lkjscript-core` as a session-owned
+`GcHeap` shared by both recorded execution implementations. Automatic reference transitions are
 still absent, so auto conservatively retains reference-typed functions in VM.
 
 Native plans identify each GC reference by an exact reference/layout identity.
@@ -77,7 +77,7 @@ unregisters once. Reports
 retain peak depth and native-stack bytes, collection calls, maximum roots, and
 the exact root count for every collection; completed outcomes report zero
 active depth and zero reserved native-stack bytes.
-## Reference Representation
+## Recorded Baseline: Reference Representation
 
 A worker-local GC reference is a typed stable runtime handle, not a raw object
 address and not a lexical borrow. Generated code may hold its machine word only
@@ -92,7 +92,7 @@ source-language reference or an independently owned heap value; it cannot be
 converted to a native pointer in safe source or outlive its owning runtime
 session. Lexical shared/exclusive borrows, uniquely owned values, immutable
 cross-worker bytes, and explicitly pinned values are distinct categories.
-## Native Frame Chain
+## Recorded Baseline: Native Frame Chain
 
 Every active generated function has an explicit runtime-visible frame record.
 The record identifies:
@@ -116,7 +116,7 @@ mechanisms.
 Any raw stack address needed to implement registration and root access remains
 inside `lkjscript-executable`. Safe callers receive only owned descriptors, bounded
 invocation objects, and structured outcomes.
-## Stack Maps
+## Recorded Baseline: Stack Maps
 
 Each direct or native-runtime call records an exact sorted, deduplicated set of
 typed root locations. Calls that may collect publish the map's dense identity
@@ -139,16 +139,16 @@ certificate equality, reference type, safepoint ownership, and code offset.
 
 A future moving collector may update every listed root. Generated code reloads
 live references after a collecting call rather than relying on stale registers.
-## Safepoints
+## Recorded Baseline: Safepoints
 
 Safepoints are required at allocation slow paths, allocation-capable runtime
 calls, direct calls whose summaries may allocate, recursive calls, loop/deadline
 polls, explicit GC polls, and VM/native transitions. A collecting safepoint has
 an exact frame state and stack map before native installation.
-## Allocation ABI
+## Recorded Baseline: Allocation ABI
 
-Runtime ABI version 1 is extended only through new enum-identified versioned
-calls. The accepted shape is:
+At the recorded baseline, the runtime ABI was extended only through new
+enum-identified calls. The accepted shape was:
 
 ```text
 worker-local allocation context
@@ -165,14 +165,14 @@ heap-byte, and stable `u32` handle-index exhaustion before publication; index
 exhaustion is an allocation resource outcome and cannot create a duplicate
 handle. Partially initialized objects are runtime-private and never visible to
 source or the collector as complete objects.
-## Write Barrier ABI
+## Recorded Baseline: Write Barrier ABI
 
 Every heap store is classified in SSA as initialization, scalar store,
 reference store, or reference-clearing store. A versioned write-barrier call may
 be a verified no-op for the current non-generational collector, but code and
 metadata retain owner/value/type facts. This permits a later nursery/old
 collector without reinterpreting source operations.
-## Pinning
+## Recorded Baseline: Pinning
 
 Pinning is explicit, session-owned, bounded, and unavailable to ordinary safe
 source until a separate native-capability contract requires it. Objects are not

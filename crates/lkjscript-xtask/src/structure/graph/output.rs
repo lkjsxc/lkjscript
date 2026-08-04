@@ -1,13 +1,12 @@
 use std::collections::BTreeSet;
 
-use crate::model::{Audit, Edge, Graph, Node, Policy};
+use crate::model::{Edge, Graph, Node, Policy};
 
 use super::Budget;
 
 pub fn canonicalize(
     nodes: &mut Vec<Node>,
     edges: &mut Vec<Edge>,
-    audit: &Audit,
     policy: &Policy,
     budget: &mut Budget,
 ) {
@@ -47,9 +46,6 @@ pub fn canonicalize(
     if edges.len() > edge_limit {
         budget.truncated = true;
         edges.truncate(edge_limit);
-    }
-    for item in nodes {
-        item.revision_id = format!("{}@{}", item.id, audit.revision);
     }
 }
 

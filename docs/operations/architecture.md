@@ -7,14 +7,14 @@ to their authorities.
 
 ## Status
 
-The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
-Complete Semantic Source Schema with its preserved legacy contract representation,
-typed holes/legal actions, Bounded Repository Topology, Repository Intelligence
-Graph/context, externalized Agent Work State canonical contract with exact semantic references,
-the bounded one-shot semantic protocol, bounded local stdio sessions, and
-compiler Resource resource profile and the the canonical source contract enum declaration/type-fact plus
-construction/evaluator/reference-VM slice are Current. Agent Foundation legacy contract and Semantic Source Schema are
-historical rejected identities. the canonical source contract exhaustive source match is Current;
+The compiler/runtime map below projects Current crate and capsule authority.
+Semantic Source with typed holes and legal actions, bounded repository topology,
+repository graph and context, externalized Agent Work State, bounded one-shot and
+local stdio semantic protocols, compiler resource profiles, and the implemented
+canonical-language enum declaration, type-fact, construction, evaluator, and VM
+slice are Current. Removed agent-foundation and generation-numbered Semantic
+Source identities are Historical and rejected. Canonical-language exhaustive
+source match is Current;
 automatic/host-native enum transitions, the remaining semantic core, whole-pipeline resource profile
 pre-allocation, nonzero
 incremental query caching, and logical metering beyond enum construction are
@@ -81,7 +81,7 @@ Non-Linux execution remains untested and is not a Current support claim.
 tracked authorities + strict manifest
     -> bounded topology/provenance validation
     -> deterministic repository graph
-    -> versioned bounded context profiles
+    -> digest-bound bounded context profiles
     -> atomic agent task/read/write/evidence state
     -> Semantic Source query/edit transactions
     -> policy checks and Git publication
@@ -116,7 +116,7 @@ Generated indexes and task assertions never enter compiler semantic authority.
 
 ## Aggregate Boundaries
 
-The Semantic Protocol and compiler select the same five versioned profiles but
+The Semantic Protocol and compiler select the same five digest-bound profiles but
 retain independent request-local ledgers. Topology, graph/context, and task
 state use versioned bounded contracts without pretending to share that ledger.
 Topology and graph bound traversal; task state bounds decode, retained Git
@@ -128,11 +128,11 @@ work; immutable HIR reserves its charged input shape before SSA; immutable
 normalized SSA reserves its charged input shape before bytecode. Parser-wide
 preflight and exact bytecode-output categories are not Current, and protocol and
 compiler ledgers remain separate. Exhaustion cannot publish partial authority.
-the removed legacy source contract source limits remain unchanged.
+Canonical source limits remain unchanged.
 
-## Accepted the canonical source contract Path
+## Accepted Canonical-Language Path
 
-[the canonical source contract](../decisions/semantics/semantic-core.md) preserves the same architecture:
+[Canonical language](../decisions/semantics/semantic-core.md) preserves the same architecture:
 Semantic Source -> resolved typed HIR -> verified SSA -> evaluator/VM/native/
 proof consumers. Generic enum declarations, resolved type facts, exact construction, independent
 layout identities, enum SSA primitives, the SSA evaluator, validated bytecode,

@@ -9,8 +9,8 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 HIR/verified SSA, opaque verifier/proof authority, exact roots, structured
 outcomes, deterministic budgets, W^X, and fallback-free forced native evidence.
-The accepted destination is versioned Semantic Source, semantic agent edits,
-the canonical source contract ADTs and exact control/numerics, explicit capabilities, hybrid safe
+The accepted destination extends Semantic Source and semantic agent edits with
+canonical-language ADTs and exact control/numerics, explicit capabilities, hybrid safe
 memory, reproducible packages/components, one semantic IR family, and a
 measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. None of those absent layers
 is Current by adoption of the direction.

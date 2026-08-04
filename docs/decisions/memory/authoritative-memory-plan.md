@@ -1,6 +1,6 @@
 # Authoritative Memory Plan
 ## Status
-<!-- LKJ-STATUS id=memory-plan status=current -->
+<!-- LKJ-F memory-plan current N83612OzP36uXSfLw059mX4PXU092GhhfBkNXgIpqjY -->
 
 **Current for the complete HIR accepted by the Current compiler pipeline.** The
 closed plan is produced and independently verified before SSA lowering; the

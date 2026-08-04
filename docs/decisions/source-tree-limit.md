@@ -7,11 +7,11 @@ the compiler implementation or repository infrastructure.
 
 ## Status
 
-**Current** for the removed legacy source contract. It supersedes the former repository-wide
-eight-visible-child policy. Its permanent-language-rule status is
-**Superseded** by [Resource Budget Profiles](platform/resource-budget-profiles.md); the
-16-entry check remains enforced until aggregate source closure/import/byte/node
-bounds are Current.
+**Current implementation limit; Superseded permanent policy.** The 16-entry
+canonical-source check remains enforced until aggregate source closure, import,
+byte, and node bounds are Current. [Resource Budget
+Profiles](platform/resource-budget-profiles.md) supersedes treating this limit
+as permanent language semantics.
 
 ## Decision
 

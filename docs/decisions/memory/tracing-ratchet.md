@@ -1,9 +1,9 @@
 # Tracing Family Ratchet
 
 ## Status
+<!-- LKJ-F memory-tracing-ratchet superseded bdaumT2umNgHfR4PJEhamvu7kWz29TK0EFboRoK6HOg -->
+<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
 
-<!-- LKJ-STATUS id=memory-tracing-ratchet status=superseded -->
-<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
 
 **Superseded migration gate.** This document retains the decrement history.
 The registry and `memory traced` command were deleted when the final

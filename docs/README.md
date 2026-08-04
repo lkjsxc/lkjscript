@@ -2,45 +2,46 @@
 
 ## Purpose
 
-Provide the authoritative, status-labeled contract for `lkjscript`.
+Map authored authority, checked Current projections, accepted targets, and
+bounded Historical evidence without creating a second implementation registry.
 
 ## Status
+<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
+<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
 
-**Current.** This index defines the documentation status vocabulary.
 
-## Status Vocabulary
+**Current map; Accepted Contract for complete documentation coherence.** The
+public-fact registry binds critical projections to exact interfaces and
+exclusions. Deterministic checks do not claim arbitrary prose equivalence.
 
-Every behavior that is not unambiguously current must use one of these labels:
+## Closed Status Vocabulary
 
-- **Current**: implemented and supported by recorded evidence.
-- **Accepted Target**: approved contract that implementation is expected to
-  reach next; it must not be described as already available.
-- **Experimental**: implemented or proposed for measurement without an adoption
-  decision.
-- **Deferred**: intentionally outside the active implementation cycle.
-- **Placeholder**: intentionally incomplete. Code and user-facing behavior must
-  also say `PLACEHOLDER` wherever the incomplete surface is observable.
-- **Rejected**: explicitly not an implementation target; retain the reason and
-  evidence boundary until a later accepted decision replaces it.
-- **Superseded**: historical contract that must not guide new implementation.
+- **Current**: implemented for the exact registered interface and exclusions.
+- **Accepted Contract**: accepted interface awaiting complete implementation.
+- **Accepted Target**: binding destination that is not implemented as a whole.
+- **Accepted Selection**: measured candidate selected but not fully integrated.
+- **Experimental**: bounded implementation or investigation without adoption.
+- **Deferred**: explicitly outside the active sequence.
+- **Rejected**: evaluated and not accepted.
+- **Superseded**: retained decision history only.
+- **Historical**: immutable evidence or a recorded baseline only.
 
-A mixed-status document must label the affected sections. Aspirations are not
-release claims, and an old passing command is historical evidence rather than a
-permanent property.
+A mixed-status document delimits each scope. Historical evidence cannot grant a
+Current interface, alias, or fallback.
 
-## Map
+## Authority Map
 
-- [current-state.md](current-state.md): observed baseline and accepted next contracts
-- [capability status](operations/status-authority.md): registered cross-authority capability status
-- [operations/architecture.md](operations/architecture.md): Current crate flow and accepted repository-intelligence flow
-- [bounded topology](decisions/platform/bounded-repository-topology.md): authored repository limits,
-  provenance, manifests, and audit contract
-- [repository graph/context](decisions/platform/repository-intelligence-graph.md): derived
-  identities, edges, budgets, and context profiles
-- [agent work state](decisions/platform/agent-work-state.md): atomic task scope, attempts, evidence, and publication
-- [language/](language/README.md): source format, semantics, imports, and limits
-- [runtime/](runtime/README.md): VM and explicitly labeled JIT placeholder
-- [operations/](operations/README.md): verification and engineering handoff
-- [product/](product/README.md): validation applications and capability boundaries
-- [vision/](vision/README.md): long-term direction and experiment registry
-- [decisions/](decisions/README.md): active and superseded decisions
+- [Current State](current-state.md): concise Current facts, exclusions, and gaps.
+- [Public Fact Authority](operations/status-authority.md): fact, status,
+  projection, evidence, impact, and resource contract.
+- [Architecture](operations/architecture.md): Current crate and execution flow.
+- [Verification](operations/verification.md): exact gates and evidence rules.
+- [Agent Handoff](operations/agent-handoff.md): sharp edges and accepted order.
+- [Language](language/README.md): canonical source and implemented semantics.
+- [Runtime](runtime/README.md): VM, baseline JIT, proof JIT, and runtime scope.
+- [Decisions](decisions/README.md): active accepted and Current decisions.
+- [History example](history/semantics/edition.md): bounded Historical records.
+- [Vision](vision/README.md): long-term direction and Experimental work.
+
+Generated inventories, expected projection markers, graph output, and impact
+reports are reproducible under `target/`; they are not tracked prose authority.

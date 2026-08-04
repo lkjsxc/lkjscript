@@ -1,8 +1,8 @@
 # Typed Generational Pools
 
 ## Status
+<!-- LKJ-F typed-generational-pools current BEj71HjE6i841AATR9_wAjf6aMOV_LRiHO8KnqsoEHA -->
 
-<!-- LKJ-STATUS id=typed-generational-pools status=current -->
 
 **Current as a typed safe-core internal runtime domain.** Source and backend
 exposure remain Accepted Targets. Pools own mutable identity, individual
