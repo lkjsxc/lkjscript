@@ -24,7 +24,7 @@ use lkjscript_ir::{
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
 use crate::memory_plan::{
     HirMemoryPlan, MemoryDropClass, MemoryDropGlueKind, MemoryExpressionId, MemoryFunctionId,
-    MemoryObligationKind, MemorySubject, MemoryVerifiedHir,
+    MemoryObligationKind, MemoryParameterMode, MemorySubject, MemoryVerifiedHir,
 };
 use crate::types::Type;
 
@@ -123,7 +123,7 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) product_ids: &'a HashMap<String, ProductId>,
     pub(in crate::ssa) function_ids: &'a HashMap<BindingId, FunctionId>,
     pub(in crate::ssa) function_effects: &'a HashMap<FunctionId, EffectSet>,
-    pub(in crate::ssa) function_parameter_consumption: &'a HashMap<FunctionId, Vec<bool>>,
+    pub(in crate::ssa) function_parameter_modes: &'a HashMap<FunctionId, Vec<MemoryParameterMode>>,
     pub(in crate::ssa) function_witness_parameters:
         &'a HashMap<FunctionId, Vec<MemoryWitnessParameter>>,
     pub(in crate::ssa) structural: &'a StructuralMemoryMetadata,
@@ -142,7 +142,9 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) failure_cleanups: Vec<FailureCleanupPlan>,
     pub(in crate::ssa) cleanup: CleanupPlan,
+    pub(in crate::ssa) current_memory_expression: Option<MemoryExpressionId>,
     pub(in crate::ssa) current_placement: Option<ActiveValuePlacement>,
+    pub(in crate::ssa) borrowed_call_argument: bool,
     pub(in crate::ssa) active_place_bindings: Vec<BindingId>,
     pub(in crate::ssa) active_loans: BTreeMap<SsaLoanId, ActiveLoan>,
     pub(in crate::ssa) unplaced_owners: Vec<ValueId>,

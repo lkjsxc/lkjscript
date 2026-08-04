@@ -18,6 +18,8 @@ mod enum_source_variants;
 mod native_ssa;
 #[path = "enum_execution/recursive.rs"]
 mod recursive;
+#[path = "enum_execution/scale.rs"]
+mod scale;
 
 fn evaluator_owned(program: &lkjscript_compiler::ExecutableProgram) -> OwnedValue {
     match evaluate(program.ssa(), &EvalConfig::default()) {

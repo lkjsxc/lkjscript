@@ -59,4 +59,5 @@ pub use value_runtime::{
     StructuralOwnerKind, StructuralProjection, StructuralPublishFailure, StructuralSealResult,
     StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
     StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey,
+    DEFAULT_STRUCTURAL_TREE_NODES, STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
 };

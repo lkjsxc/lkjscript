@@ -15,7 +15,7 @@ pub fn add(
     };
     for located in registry.facts.values() {
         add_fact(located, nodes, edges, budget);
-        if budget.truncated {
+        if budget.error.is_some() {
             break;
         }
     }
@@ -159,7 +159,11 @@ pub(super) fn add_node(
         .len()
         .checked_add(label.len())
         .and_then(|value| value.checked_add(authority.len()));
-    if bytes.is_some_and(|bytes| budget.charge(1, bytes as u64)) {
+    let Some(_) = bytes else {
+        budget.reject("retained-byte-arithmetic");
+        return;
+    };
+    if budget.charge(1, 0) {
         declared_node(nodes, id, kind, label, authority);
     }
 }
@@ -177,7 +181,11 @@ pub(super) fn add_file_edge(
         .checked_add(to.len())
         .and_then(|value| value.checked_add(kind.len()))
         .and_then(|value| value.checked_add(located.digest.len()));
-    if bytes.is_some_and(|bytes| budget.charge(1, bytes as u64)) {
+    let Some(_) = bytes else {
+        budget.reject("retained-byte-arithmetic");
+        return;
+    };
+    if budget.charge(1, 0) {
         edge(edges, from, to, kind, &located.digest, "declared");
     }
 }

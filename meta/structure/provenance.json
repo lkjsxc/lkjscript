@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.structure.provenance",
-  "contract": "1543bef254b336a5f7e507744b9bc5e2277b0ce4760f0cfc092379fca6645e00",
+  "contract": "06e1affa81955d9856f0d1cdd593996abb8557d50cc2853f1f181578307009a0",
   "entries": [
     {
       "path": "Cargo.lock",

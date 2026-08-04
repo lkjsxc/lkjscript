@@ -15,7 +15,7 @@ pub fn add(
 ) {
     let id = format!("fact-evidence:{}:{index}", located.fact.id);
     let Ok(label) = serde_json::to_string(evidence) else {
-        budget.truncated = true;
+        budget.reject("evidence-serialization");
         return;
     };
     add_node(nodes, &id, "fact-evidence", &label, &evidence.path, budget);

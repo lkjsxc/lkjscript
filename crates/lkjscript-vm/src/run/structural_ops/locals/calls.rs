@@ -109,26 +109,7 @@ fn cleanup_copy_roots<J: RuntimeTier>(
         let Some(key) = value.as_structural_root() else {
             continue;
         };
-        let Some(record) = invocation(vm)?.owners.get(&key.get()) else {
-            continue;
-        };
-        let copy = vm
-            .chunk
-            .structural_representations()
-            .get(record.representation.index())
-            .and_then(|representation| {
-                vm.chunk
-                    .structural_types()
-                    .get(representation.type_id.index())
-            })
-            .is_some_and(|ty| {
-                matches!(
-                    ty.mode,
-                    lkjscript_core::StructuralTypeMode::Copy
-                        | lkjscript_core::StructuralTypeMode::Immutable
-                )
-            });
-        if copy {
+        if is_copy_root(vm, key)? {
             roots.push(value);
         }
     }
@@ -136,6 +117,64 @@ fn cleanup_copy_roots<J: RuntimeTier>(
         adapter::drop_registered_owner(vm, root)?;
     }
     Ok(())
+}
+
+pub(in crate::run) fn cleanup_tail_copy_roots<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    arguments_start: usize,
+    retained: &[Value],
+) -> Result<()> {
+    let frame = vm
+        .frames
+        .last()
+        .ok_or_else(|| Error::msg("tail cleanup requires an active frame"))?;
+    let caller = vm.stack[..frame.stack_base].to_vec();
+    let mut roots = Vec::new();
+    for value in vm.stack[frame.locals_base..arguments_start]
+        .iter()
+        .copied()
+    {
+        if value.is_invalid()
+            || retained.contains(&value)
+            || caller.contains(&value)
+            || roots.contains(&value)
+        {
+            continue;
+        }
+        let Some(key) = value.as_structural_root() else {
+            continue;
+        };
+        if is_copy_root(vm, key)? {
+            roots.push(value);
+        }
+    }
+    for root in roots {
+        adapter::drop_registered_owner(vm, root)?;
+    }
+    Ok(())
+}
+
+fn is_copy_root<J: RuntimeTier>(vm: &Vm<'_, J>, key: StructuralValueKey) -> Result<bool> {
+    let Some(record) = invocation(vm)?.owners.get(&key.get()) else {
+        return Ok(false);
+    };
+    let copy = vm
+        .chunk
+        .structural_representations()
+        .get(record.representation.index())
+        .and_then(|representation| {
+            vm.chunk
+                .structural_types()
+                .get(representation.type_id.index())
+        })
+        .is_some_and(|ty| {
+            matches!(
+                ty.mode,
+                lkjscript_core::StructuralTypeMode::Copy
+                    | lkjscript_core::StructuralTypeMode::Immutable
+            )
+        });
+    Ok(copy)
 }
 
 fn restore_value(stack: &mut [Value], index: usize, value: Value) -> Result<()> {

@@ -1,16 +1,15 @@
 # Structural Ownership Domains
 
 ## Status
-<!-- LKJ-F structural-ownership-domains current sufGXvqJvtJmt9edYjXHpfCjLsszftT5cVLwMHnK3CU -->
-<!-- LKJ-F structural-root-values current vwp2rNIPuZupfUJ1RlKLe2lsAfLP8FJOXMxDBLhNolg -->
+<!-- LKJ-F structural-ownership-domains current 56H_rIDMf_A6Eq-WWlvaqpN8kpx8fshyv7kLQbhuP0Q -->
+<!-- LKJ-F structural-root-values current 884L32TM5zDTXXdzJRovVnM2IXias0oX3O3W6g2U4ho -->
 
 
 **Current for the safe core substrate, resource-plane owner-home adapter, and
 deterministic language runtime.** Dynamic strings, paths, eligible products,
 enums, results, regular recursive aggregates, copy-leaf segmented lists,
 narrow list-bearing ordinary-region products, destinations, and key-free
-snapshots execute in all four tiers. No traced object family or tracing
-collector remains.
+snapshots execute in all four tiers. No traced object family or tracing collector remains.
 
 ## Decision
 
@@ -26,12 +25,10 @@ selects legacy tracing. Physical placement does not change resource charges or s
 
 Every runtime, domain, root, layout, and semantic type has a typed identity.
 A domain key binds runtime identity, class, slot, and nonzero generation. A root
-also binds root class, location generation, layout, and semantic type. Safe
-constructors do not fabricate live keys.
+also binds root class, location generation, layout, and semantic type. Safe constructors do not fabricate live keys.
 
 Reuse changes generation before publication. Exhausted slots retire permanently;
-wrap cannot validate a stale key. Reservations, arithmetic, and capacity are
-checked before mutation or publication.
+wrap cannot validate a stale key. Reservations, arithmetic, and capacity are checked before mutation or publication.
 
 ## Runtime Root Table
 
@@ -54,21 +51,18 @@ addresses, serializable values, or substitutes for domain ownership.
 
 Domain and root-table transitions are closed and checked. Partially initialized
 state is private. Independent validation reconstructs live slots, roots, loans,
-dependency and drop ledgers, region-level ownership, and metrics without
-deciding liveness.
+dependency and drop ledgers, region-level ownership, and metrics without deciding liveness.
 
 Optional debug facts may record live roots, state transitions, poisoning,
 ownership events, and leaks. Debug tracking is observation only. Runtime storage
-uses no reachability traversal, finalizer, collector fallback, or source raw
-pointer.
+uses no reachability traversal, finalizer, collector fallback, or source raw pointer.
 
 ## Execution Service Cutover
 
 Each evaluator, VM, or native invocation owns one structural execution service:
 a structural runtime, compact root table, deterministic domain stores, exact
 limits, and metrics. Publishing a dynamic value creates or selects its domain,
-creates one typed root, publishes one table entry, and returns only a
-`StructuralValueKey` in runtime `Value` storage.
+creates one typed root, publishes one table entry, and returns only a `StructuralValueKey` in runtime `Value` storage.
 
 A move takes and invalidates the old table entry before transfer or
 republication. A borrow couples a stale-safe table loan to the exact domain
@@ -81,17 +75,15 @@ loans, private destinations, and release backlog.
 The adapter dispatches by typed domain/layout metadata, never source type-name
 strings. It rejects wrong runtime, stale generation, wrong layout or semantic
 type, conflicting borrow, drop while borrowed, and a domain/root mismatch
-before mutation. Structural keys and loan tokens are invocation-private and
-never returned through a process codec.
+before mutation. Structural keys and loan tokens are invocation-private and never returned through a process codec.
 
 ## Current Flat Image Cutover
 
-Production recursive aggregates and lists use one flat typed structural image,
-not nested Rust-owned semantic trees. An image contains bounded typed node
-records, field cells, local node IDs, immutable byte storage, exact external
-dependencies, and an exact side-drop ledger. A node records semantic type,
-runtime layout, product or enum identity/tag, field range, and private build or
-published state.
+Production recursive aggregates use one flat typed structural image, not nested Rust-owned semantic trees. An image
+contains fallibly grown typed node records, field cells, local `u32` node IDs, immutable bytes, exact external
+dependencies, and an exact side-drop ledger. The default production runtime quota is 65,536 semantic nodes; the
+implementation safety maximum is 1,048,576 and `u32::MAX` is the separate addressability maximum. Domain release work
+never bounds image-internal nodes.
 
 A field cell is closed: inline scalar, static artifact, local node reference,
 external deterministic dependency, owned leaf payload, or an allowed side-drop
@@ -105,8 +97,7 @@ escape seals the completed image and publishes one typed root. Final release
 runs side drops, releases external dependencies with an iterative bounded
 worklist, frees flat storage, and invalidates domain/root generations. It does
 not traverse internal payload edges and cannot recurse on the native stack.
-Key-free semantic snapshots remain bounded observation and wire values, not
-production ownership storage.
+Key-free semantic snapshots remain bounded observation and wire values, not production ownership storage.
 
 Copy-mode products use this image despite copy multiplicity: construction uses
 a private destination, field access copies a projection, and immutable update
@@ -115,6 +106,15 @@ drives bytecode/native identities; validation rejects noncanonical reductions.
 Copy roots need no language drop obligation;
 dead locals may release early and remaining roots bulk-release at session end.
 No collector service participates.
+
+Verified immutable call modes now remove pre-backend structural copies for direct calls and operations. The evaluator
+and VM borrow the existing owner; VM tail forwarding recognizes checked return epilogues, preserves tail arguments, and
+releases dead copy roots before frame replacement. Forced native tiers still take an explicit independent boundary copy;
+native borrow ABI and native tail transfer remain incomplete and are not claimed by this cut.
+
+Core tests publish, clone, inspect, and release 65,536 nodes under defaults and reuse one domain slot across 8,192
+sequential publications. A 32,767-node recursive language value executes through evaluator, VM, forced baseline, and
+forced proof with zero fallback and empty teardown.
 
 ## Current Segmented Lists
 

@@ -130,6 +130,10 @@ impl<'a> StructuralNode<'a> {
         self.id
     }
 
+    pub fn image_node_count(self) -> u32 {
+        self.image.node_count()
+    }
+
     pub fn value_type(self) -> StructuralType {
         self.image.nodes[self.id.get() as usize].value_type
     }

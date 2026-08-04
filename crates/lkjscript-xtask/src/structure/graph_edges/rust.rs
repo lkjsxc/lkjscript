@@ -138,7 +138,13 @@ fn module_name(line: &str) -> Option<&str> {
     line.strip_prefix("mod ")?.strip_suffix(';')
 }
 fn crate_for(path: &str) -> Option<String> {
-    let name = path.strip_prefix("crates/")?.split('/').next()?;
+    let mut components = path.strip_prefix("crates/")?.split('/');
+    let first = components.next()?;
+    let name = if first == "mechanisms" {
+        components.next()?
+    } else {
+        first
+    };
     Some(format!("cargo-crate:{name}"))
 }
 fn module_targets(path: &str, module: &str) -> [String; 2] {

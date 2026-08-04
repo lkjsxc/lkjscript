@@ -19,6 +19,12 @@ intelligence, agent state, protocol, proof, native artifact, and runtime budgets
 Logical-charge IR preservation, aggregate parser preflight, bytecode-output sizing, and whole-platform pre-allocation
 remain **Accepted Targets**, not Current behavior.
 
+The Current affected-limit inventory is `cargo run --locked -p lkjscript-xtask -- limits --json`. It classifies the
+structural image/runtime and repository graph/query limits migrated by platform revision 20. The default structural
+publication quota is 65,536 semantic nodes below a 1,048,576 safety maximum and `u32` addressability. Live domains,
+roots, and objects release and reuse capacity; publication/clone/release work remains cumulative and peak use remains
+monotonic. This inventory does not claim complete migration of unrelated compiler, verifier, host, or protocol limits.
+
 All Current canonical source limits remain enforced unchanged: source depth 8, form
 children 16, tokens per file 384, top-level forms 8, product fields 15, and 16
 combined immediate entries per lkjscript source directory. Existing compiler,
@@ -47,8 +53,7 @@ would expose unbounded source bytes, import closure, parser nodes, solver work,
 ownership state, SSA growth, proof work, metadata, and agent context.
 
 Language safety and determinism require explicit bounded amplification. Human
-and AI maintainability require different signals than overflow and denial-of-
-service protection.
+and AI maintainability require different signals than overflow and denial-of-service protection.
 
 ## Decision
 
@@ -84,8 +89,7 @@ outcome and cannot publish partially verified authority.
 
 A manifest, host, or explicit CLI selection chooses a named profile. Profiles
 never change type, ownership, memory, capability, or artifact-validation
-semantics. They only select lower resource ceilings or execution policy within
-implementation maxima.
+semantics. They only select lower resource ceilings or execution policy within implementation maxima.
 
 The registered target profile names are:
 
@@ -112,8 +116,7 @@ semantic node or artifact section when available.
 Function/module/package size, directory width, declaration count, nesting,
 dependency fan-out, control-flow complexity, ownership-state complexity, and
 retrieval-context footprint are configurable lints. They can offer semantic
-split/move/extract repairs. They do not decide whether a program is type- or
-memory-safe.
+split/move/extract repairs. They do not decide whether a program is type- or memory-safe.
 
 Lint thresholds may vary by repository policy and may be warnings or CI errors.
 Canonical language validity does not vary with a lint configuration. A lint
@@ -121,8 +124,7 @@ must prefer semantic cohesion and measured retrieval cost over line count.
 
 ## Aggregate Source And Compiler Charges
 
-The first replacement slice must add aggregate, pre-allocation charges for at
-least:
+The first replacement slice must add aggregate, pre-allocation charges for at least:
 
 - total bytes in the loaded source closure;
 - number of source units and imported edges;
@@ -135,8 +137,7 @@ least:
 
 Per-file and per-form checks remain as defense in depth until aggregate fuzzing
 and corpus measurements justify migration. Directory enumeration is sorted and
-charged before recursive loading. Symlink/canonicalization and import-cycle
-checks remain fail closed.
+charged before recursive loading. Symlink/canonicalization and import-cycle checks remain fail closed.
 
 ## Semantic Metering Versus Physical Resources
 

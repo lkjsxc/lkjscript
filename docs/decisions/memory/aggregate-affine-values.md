@@ -1,7 +1,7 @@
 # Aggregate Affine Values
 
 ## Status
-<!-- LKJ-F aggregate-affine-values accepted-contract Wn2JQdACAjQLkAkZzqxLa4HM--gJt2NLhugiN0UvjA8 -->
+<!-- LKJ-F aggregate-affine-values accepted-contract f14a7Gdty3254QMAwwPOB9ICERk_br-acNiRpKhuhm8 -->
 
 
 **Current for the generic nonrecursive deterministic island.** Compact

@@ -2,7 +2,7 @@ mod context;
 mod explain;
 mod traversal;
 
-use crate::model::{Audit, ExplainResult, Graph, Policy, QueryResult};
+use crate::model::{Audit, ExplainResult, Graph, Policy, QueryCompletion, QueryResult};
 use crate::public_facts::Registry;
 
 pub fn explain(
@@ -88,12 +88,20 @@ pub fn run(
     let mut unsupported = graph.unsupported.clone();
     if start.is_empty() {
         unsupported.push("target did not resolve to an evidence-backed node".into());
+        selected.stop_reasons.insert("target-unresolved".into());
+        selected.omitted_frontier.insert(target.into());
     }
-    if selected.truncated {
-        unsupported.push(
-            "query traversal was explicitly truncated by a work, byte, or depth limit".into(),
-        );
-    }
+    let complete = selected.stop_reasons.is_empty();
+    let completion = QueryCompletion {
+        status: if complete { "complete" } else { "bounded" }.into(),
+        stop_reasons: selected.stop_reasons.into_iter().collect(),
+        ordering: "canonical-node-id-then-canonical-edge-order".into(),
+        continuation_supported: false,
+        omitted_frontier: selected.omitted_frontier.into_iter().collect(),
+        work_limit,
+        retained_byte_limit: byte_limit,
+        output_byte_limit,
+    };
     QueryResult {
         schema: "lkjscript.repository-query".into(),
         contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
@@ -106,7 +114,7 @@ pub fn run(
         edges,
         work_used: selected.work,
         bytes_used: selected.bytes,
-        truncated: selected.truncated,
+        completion,
         unsupported,
     }
 }

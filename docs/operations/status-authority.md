@@ -6,13 +6,13 @@ Define one checked authority for public fact identity, lifecycle status, interfa
 scope, exclusions, evidence, and documentation projections.
 
 ## Status
-<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
-<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
+<!-- LKJ-F documentation-authority accepted-contract mNBp5F48YmWvCfUZWovZ5YKqvSnefIQTu8xE7sStxaQ -->
+<!-- LKJ-F public-fact-foundation current SGKIjH0dOrHd7llJKsJ7U-Og3PGjX1VflQ0CFAZXpy0 -->
 
-**Accepted Contract with a Current foundation.** Platform revision 19 atomically
-replaced the legacy capability-status path and marker grammar with strict sharded
-public facts, explicit exclusions, digest-bound projections, generated expected
-markers, and fact graph/context/impact edges. Complete command/example classes,
+**Accepted Contract with a Current foundation.** Platform revision 20 retains the revision-19 strict public-fact
+replacement and adds one affected-limit fact plus complete graph and structured bounded-query projections. Public facts,
+explicit exclusions, digest-bound projections, generated expected markers, and fact graph/context/impact edges are
+Current. Complete command/example classes,
 evidence freshness, architecture derivation, and Historical-scope enforcement
 remain acceptance blockers; the broader authority is not Current.
 
@@ -129,11 +129,10 @@ fact -> interface, exclusion, status, dependency, and invalidating fact
 projection -> fact
 ```
 
-Impact follows registered retained edges from a changed fact, authority, anchor,
-command, contract, or implementation path to affected projections. Query output
-is sorted, bounded, content-addressed JSON on standard output; generated graph
-artifacts remain under `target/`. Unsupported edge classes and truncation stay
-explicit. A globally truncated graph still traverses retained focused edges.
+Impact follows registered edges from a changed fact, authority, anchor, command, contract, or implementation path to
+affected projections. The successful underlying graph is complete for accepted extraction; construction exhaustion
+publishes nothing. Query output is sorted, bounded, content-addressed JSON with structured stop reasons and omitted
+frontier. Generated graph artifacts remain under `target/`; unsupported extraction classes stay explicit.
 
 ## Commands And Generated Output
 The canonical interfaces remain:

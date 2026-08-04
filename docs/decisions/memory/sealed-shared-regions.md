@@ -1,7 +1,7 @@
 # Sealed Immutable Shared Regions
 
 ## Status
-<!-- LKJ-F sealed-shared-regions current 0utFvo5fq4SGEdqZIkEW4yCqqsBz0EuI3O2pKNMjNdk -->
+<!-- LKJ-F sealed-shared-regions current xM-AKLG1JPlVA0ixhvhNbnEVld_9k12VGHULkhYBNt4 -->
 
 
 **Current as a typed safe-core domain and in the prepared sealed-value vertical.**

@@ -6,10 +6,10 @@ HIR, verified SSA, validated bytecode, the evaluator, the reference VM, and the
 native JIT tiers.
 
 ## Status
-<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
-<!-- LKJ-F jit-proof-forced current oSQRIl0aIaw-bZriT4e0HhvsUOLfOZyjRvvTcuYCFmo -->
-<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
-<!-- LKJ-F os-resident-runtime-foundation current tv7TmvPjmBID87VD91R-ewgRyhsyYnqTN6Hirq-t9VY -->
+<!-- LKJ-F documentation-authority accepted-contract mNBp5F48YmWvCfUZWovZ5YKqvSnefIQTu8xE7sStxaQ -->
+<!-- LKJ-F jit-proof-forced current 17j6L43d9Fi6RBsicYW35vmSIBb2VWtoJBFrmjJd2Wk -->
+<!-- LKJ-F no-tracing-runtime current FWMY13I30geyQOA0b0DiqLAtyX3rWuYJeiLTRQmnOVE -->
+<!-- LKJ-F os-resident-runtime-foundation current QGVIHLHgKeS5SBg9o97QU1axaFUq4liXv2E0_7iGBkc -->
 
 
 Canonical source uses **`.lkjscript`** only. Removed suffixes, language markers,

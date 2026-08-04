@@ -26,7 +26,8 @@
     "crates/lkjscript-core/src/validation/tests/mod.rs",
     "crates/lkjscript-core/tests/pools.rs",
     "crates/lkjscript-core/tests/regions.rs",
-    "crates/lkjscript-core/tests/sealed.rs"
+    "crates/lkjscript-core/tests/sealed.rs",
+    "crates/lkjscript-core/tests/value_runtime/scale.rs"
   ],
   "decisions": [
     "docs/decisions/execution/compiler-pipeline.md",
@@ -36,6 +37,7 @@
     "docs/decisions/memory/structural-ownership-domains.md",
     "docs/decisions/memory/typed-generational-pools.md",
     "docs/decisions/memory/unique-storage.md",
+    "docs/decisions/limits/scalable-structural-and-index-limits.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/runtime-foundation/isolated-process-cells.md"
   ],
@@ -48,7 +50,7 @@
     "interfaces": ["crates/lkjscript-core/src/lib.rs"],
     "invariants": [
       "memory-safe Rust",
-      "checked resource limits",
+      "typed profile quotas and addressability maxima",
       "stale-safe resource identity",
       "generation-safe unique keys",
       "graph-independent region release",

@@ -1,9 +1,9 @@
 # Collector-Free Value Island
 
 ## Status
-<!-- LKJ-F collector-free-value-island accepted-contract EWyuvKK8qqTiLl5V4reOtDbMa5TFHvetTpt9jiwU64o -->
-<!-- LKJ-F native-byte-vector-island current uI_K12iGc_89oG9WvuVgN12XIEliK5GmRLMZR-QEv8I -->
-<!-- LKJ-F native-bytes-island current h4xX9ke02YIt3_sfD4kpjN02hnuvyMgirQDBKatYm6o -->
+<!-- LKJ-F collector-free-value-island accepted-contract 9UydN7ESMrGX7uGbPhXLdJUKhXlsy5HzC1Xh7HbjFYI -->
+<!-- LKJ-F native-byte-vector-island current 1gV9U8-vk3dShujo_TYUTs1Zd5IOXwYXw5rwZ1R6PlM -->
+<!-- LKJ-F native-bytes-island current MICzXdusUpZIUa2PXT-2LMoN2lsMcmEu-b-W5oEy0Ng -->
 
 
 **The complete listed island remains an Accepted Contract.** The exact

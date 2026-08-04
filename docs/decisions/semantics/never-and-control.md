@@ -8,7 +8,7 @@ Define the uninhabited `never` type, structured divergence, early return, and
 typed loop control.
 
 ## Status
-<!-- LKJ-F never-control current roZNELxuCb6YqBP-sLsSzoJ72c-pOyPIOX5PINUIRWg -->
+<!-- LKJ-F never-control current 7yKoipUGsBZTlS9gsRXWF3X84jzZ4q-KZpMJEDf9l28 -->
 
 
 **Current for the implemented canonical-language slice.** Canonical source

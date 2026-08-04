@@ -1,11 +1,10 @@
 # Authoritative Memory Plan
 ## Status
-<!-- LKJ-F memory-plan current N83612OzP36uXSfLw059mX4PXU092GhhfBkNXgIpqjY -->
+<!-- LKJ-F memory-plan current nwSDK6gZVIOJa-rMcAtZlRMgoIuYbkiHL6XLIWaMQSs -->
 
 **Current for the complete HIR accepted by the Current compiler pipeline.** The
 closed plan is produced and independently verified before SSA lowering; the
-existing SSA memory inventory remains derived diagnostic evidence rather than
-semantic authority.
+existing SSA memory inventory remains derived diagnostic evidence rather than semantic authority.
 
 ## Decision
 
@@ -57,9 +56,11 @@ Each parameter is exactly one of `copy`, `borrow-shared`, `borrow-exclusive`,
 or `consume`. Each result is `trivial`, `owned`, `sealed-shared`, or `external`.
 Borrowed structural results remain rejected in this slice.
 
-Direct calls consume the verified signature. Affine or borrowed indirect calls
-remain rejected unless a complete callable signature exists. A backend cannot
-invent a copy to satisfy a call.
+Direct calls consume the verified signature. Affine or borrowed indirect calls remain rejected unless a complete
+callable signature exists. SSA lowering now preserves `borrow-shared` for direct immutable local arguments and operation
+operands, so evaluator and VM reuse one owner. The forced native ABI still performs an explicit independent structural
+copy for that boundary; native borrow transport remains an Accepted blocker rather than a Current plan
+equivalence claim.
 
 ## Analysis
 
@@ -74,9 +75,9 @@ and runtime operations. CFG fixed points derive:
 5. shared and exclusive loan issuance, invalidation, liveness, and kill points;
 6. exact drop obligations and cleanup paths.
 
-Immutable transient call uses borrow where the signature permits it. Mutation
-requires an exclusive loan. Loans end after their last reachable use, not at
-function end.
+Immutable transient call uses borrow where the signature permits it. The evaluator and VM execute that mode without a
+physical clone; native copy elision is not Current. Mutation requires an exclusive loan. Loans end after their last
+reachable use, not at function end.
 
 ## Current Aggregate Cutover
 

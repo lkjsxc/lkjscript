@@ -19,7 +19,20 @@ pub fn graph(
         eprintln!("public facts unavailable");
         return 1;
     };
-    let graph = super::graph::build_with_facts(root, audit, policy, registry);
+    let graph = match super::graph::build_with_facts(root, audit, policy, registry) {
+        Ok(graph) => graph,
+        Err(error) => {
+            if flag == Some("--json") {
+                match serde_json::to_string_pretty(&error) {
+                    Ok(json) => println!("{json}"),
+                    Err(serialize) => eprintln!("serialize graph error: {serialize}"),
+                }
+            } else {
+                eprintln!("{error}");
+            }
+            return 1;
+        }
+    };
     let output = root.join("target/lkjscript/structure");
     if let Err(error) = fs::create_dir_all(&output) {
         eprintln!("create {}: {error}", output.display());
@@ -65,7 +78,8 @@ pub(crate) fn agent_context(
     let audit = super::rules::audit(root, &policy, provenance.entries, snapshot);
     let registry = crate::public_facts::load(root)
         .map_err(|error| format!("public facts unavailable: {error}"))?;
-    let graph = super::graph::build_with_facts(root, &audit, &policy, &registry);
+    let graph = super::graph::build_with_facts(root, &audit, &policy, &registry)
+        .map_err(|error| error.to_string())?;
     let results: Vec<_> = targets
         .iter()
         .map(|target| super::query::run("context", target, Some(profile), &graph, &policy))
@@ -120,7 +134,13 @@ pub fn query(
         eprintln!("public facts unavailable");
         return 1;
     };
-    let graph = super::graph::build_with_facts(root, audit, policy, registry);
+    let graph = match super::graph::build_with_facts(root, audit, policy, registry) {
+        Ok(graph) => graph,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
     let result = super::query::run(command, target, profile, &graph, policy);
     let output_limit = if profile == Some("weak") {
         policy.limits.query_bytes.min(32_768)

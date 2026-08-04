@@ -5,6 +5,7 @@
 Define fixed source budgets for this language version.
 
 ## Status
+<!-- LKJ-F limit-inventory current c8woKdU31j7BiHTAlVYLEpwlLIPMMFnqmeL2JB0qL0c -->
 
 **Current.** All values are enforced through shared language constants.
 
@@ -40,6 +41,26 @@ blocks, represents dominators as bitsets, and caps charged dominator work at
 4,194,304 word operations. These verifier limits reject malformed or
 adversarial public IR before unbounded path-state retention or quadratic
 set-based dominance construction.
+
+## Structural Runtime Limits
+
+A structural value has no 4,096-node language rule. The default production runtime accepts at most 65,536 semantic
+nodes in one private flat-image publication; this is a lowerable resource-profile quota. The implementation safety
+maximum is 1,048,576 nodes and the flat image's separate addressability maximum is `u32::MAX` local node IDs. Payload
+bytes, fields per node, depth, live domains, roots, objects, and release work are independently classified limits.
+
+Live domain/root/object capacity is released exactly once and can be reused. Cumulative construction, clone, and release
+work never decreases; peak counters retain their high-water mark. Exhaustion before publication returns a typed outcome
+and publishes no partial root. Runtime IDs and tuning values are not source or wire values.
+
+The deterministic affected-limit inventory is:
+
+```sh
+cargo run --locked -p lkjscript-xtask -- limits --json
+```
+
+Its Current scope covers structural image/runtime and repository graph/query limits. Equal values elsewhere, including
+4,096-block verifier safety maxima and 4,096-operation specialization work, remain independent authorities.
 
 ## Semantic Source Foundation Safety Maxima
 

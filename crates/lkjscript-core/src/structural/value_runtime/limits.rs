@@ -1,6 +1,9 @@
 use super::super::{StructuralLimits, StructuralRootTableLimits};
 use super::{StructuralValueError, StructuralValueLimit};
 
+pub const DEFAULT_STRUCTURAL_TREE_NODES: u32 = 65_536;
+pub const STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM: u32 = 1_048_576;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StructuralValueRuntimeLimits {
     pub domains: StructuralLimits,
@@ -35,11 +38,14 @@ impl StructuralValueRuntimeLimits {
         if values.contains(&0) || self.max_payload_bytes == 0 {
             return Err(StructuralValueError::InvalidLimits);
         }
-        if self.max_objects > self.domains.max_domains
-            || self.max_tree_nodes > self.domains.max_release_work
-        {
+        if self.max_objects > self.domains.max_domains {
             return Err(StructuralValueError::LimitExceeded(
                 StructuralValueLimit::Objects,
+            ));
+        }
+        if self.max_tree_nodes > STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM {
+            return Err(StructuralValueError::LimitExceeded(
+                StructuralValueLimit::TreeNodes,
             ));
         }
         Ok(self)
@@ -54,7 +60,7 @@ impl Default for StructuralValueRuntimeLimits {
             max_objects: 4_096,
             max_destinations: 1_024,
             max_views: 4_096,
-            max_tree_nodes: 4_096,
+            max_tree_nodes: DEFAULT_STRUCTURAL_TREE_NODES,
             max_tree_depth: 64,
             max_fields: 1_024,
             max_payload_bytes: 64 * 1024 * 1024,

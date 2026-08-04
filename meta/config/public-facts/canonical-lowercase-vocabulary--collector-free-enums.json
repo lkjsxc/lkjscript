@@ -32,7 +32,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -65,7 +65,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -100,7 +100,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -136,7 +136,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     }
   ]

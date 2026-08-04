@@ -6,8 +6,8 @@ Map authored authority, checked Current projections, accepted targets, and
 bounded Historical evidence without creating a second implementation registry.
 
 ## Status
-<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
-<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
+<!-- LKJ-F documentation-authority accepted-contract mNBp5F48YmWvCfUZWovZ5YKqvSnefIQTu8xE7sStxaQ -->
+<!-- LKJ-F public-fact-foundation current SGKIjH0dOrHd7llJKsJ7U-Og3PGjX1VflQ0CFAZXpy0 -->
 
 
 **Current map; Accepted Contract for complete documentation coherence.** The

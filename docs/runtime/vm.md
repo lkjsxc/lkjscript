@@ -6,7 +6,7 @@ Describe the current execution engine, host-resource boundary, and accepted
 next repairs.
 
 ## Status
-<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
+<!-- LKJ-F typed-vm-scalars current C1VP7M79Zi03E75dMS2NE11LnOZ2WF6kFxUMBAjaEzg -->
 
 **Current** unless a section is labeled **Accepted Target** or **Deferred**.
 

@@ -5,6 +5,7 @@ mod destinations;
 mod nested;
 mod ownership;
 mod publication;
+mod scale;
 mod sealed;
 mod sealed_failures;
 mod support;

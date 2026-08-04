@@ -9,15 +9,7 @@ impl FunctionBuilder<'_> {
         ty: SsaType,
         expression_origin: hir::SourceId,
     ) -> Result<Option<ValueId>> {
-        let Some(arguments) = self.lower_arguments(args)? else {
-            return Ok(None);
-        };
-        let signature = Signature::monomorphic(
-            args.iter()
-                .map(|argument| lower_type(&argument.ty, self.product_ids))
-                .collect::<Result<Vec<_>>>()?,
-            ty.clone(),
-        );
+        let parameter_modes = self.verified_call_parameter_modes()?;
         let (target, call_effects) = match callee.storage {
             BindingStorage::Function => {
                 let function =
@@ -35,6 +27,19 @@ impl FunctionBuilder<'_> {
                     .get(&function)
                     .copied()
                     .ok_or_else(|| Error::msg("SSA call target has no effect summary"))?;
+                let declared = self
+                    .function_parameter_modes
+                    .get(&function)
+                    .ok_or_else(|| {
+                        Error::msg("SSA call target has no parameter ownership modes")
+                    })?;
+                if declared.len() != parameter_modes.len()
+                    || (instantiation.is_none() && declared != &parameter_modes)
+                {
+                    return Err(Error::msg(
+                        "SSA call parameter modes disagree with the verified callee",
+                    ));
+                }
                 (CallTarget::Direct(function), effects)
             }
             BindingStorage::Local(_) => {
@@ -47,6 +52,15 @@ impl FunctionBuilder<'_> {
                 (CallTarget::Indirect(target), EffectSet::CONSERVATIVE_CALL)
             }
         };
+        let Some(arguments) = self.lower_call_arguments(args, Some(&parameter_modes))? else {
+            return Ok(None);
+        };
+        let signature = Signature::monomorphic(
+            args.iter()
+                .map(|argument| lower_type(&argument.ty, self.product_ids))
+                .collect::<Result<Vec<_>>>()?,
+            ty.clone(),
+        );
         let witness_parameters = match &target {
             CallTarget::Direct(function) => self
                 .function_witness_parameters
@@ -55,23 +69,10 @@ impl FunctionBuilder<'_> {
                 .ok_or_else(|| Error::msg("SSA call target has no memory witness signature"))?,
             CallTarget::Indirect(_) => Vec::new(),
         };
-        let consuming = match target {
-            CallTarget::Direct(function) => self
-                .function_parameter_consumption
-                .get(&function)
-                .cloned()
-                .ok_or_else(|| Error::msg("SSA call target has no parameter ownership modes"))?,
-            CallTarget::Indirect(_) => arguments
-                .iter()
-                .map(|argument| {
-                    self.value_type(*argument).map(|ty| {
-                        is_owned_value(self.structural, &ty)
-                            && !self.structural.is_immutable(&ty)
-                            && !matches!(ty, SsaType::Resource(_))
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?,
-        };
+        let consuming = parameter_modes
+            .iter()
+            .map(|mode| *mode == MemoryParameterMode::Consume)
+            .collect::<Vec<_>>();
         if consuming.len() != arguments.len() {
             return Err(Error::msg(
                 "SSA call parameter ownership modes do not match arity",
@@ -104,22 +105,20 @@ impl FunctionBuilder<'_> {
         ty: SsaType,
         expression: &Expr,
     ) -> Result<Option<ValueId>> {
+        if matches!(operation, Operation::And | Operation::Or) {
+            return self.lower_short_circuit(operation, args, expression);
+        }
+        let parameter_modes = self.verified_call_parameter_modes()?;
+        let Some(arguments) = self.lower_call_arguments(args, Some(&parameter_modes))? else {
+            return Ok(None);
+        };
         if operation == Operation::Exit {
-            let Some(arguments) = self.lower_arguments(args)? else {
-                return Ok(None);
-            };
             let Some(code) = arguments.first().copied() else {
                 return Err(Error::msg("resolved exit has no code argument"));
             };
             self.terminate(Terminator::Exit { code })?;
             return Ok(None);
         }
-        if matches!(operation, Operation::And | Operation::Or) {
-            return self.lower_short_circuit(operation, args, expression);
-        }
-        let Some(arguments) = self.lower_arguments(args)? else {
-            return Ok(None);
-        };
         if operation == Operation::EqualValue {
             if let [Expr {
                 ty: Type::Param(left),
@@ -153,5 +152,16 @@ impl FunctionBuilder<'_> {
             ty,
             expression,
         )
+    }
+
+    fn verified_call_parameter_modes(&self) -> Result<Vec<MemoryParameterMode>> {
+        let expression = self
+            .current_memory_expression
+            .ok_or_else(|| Error::msg("SSA call has no HIR memory expression"))?;
+        self.cleanup
+            .call_parameter_modes
+            .get(&expression.raw())
+            .cloned()
+            .ok_or_else(|| Error::msg("SSA call has no verified parameter modes"))
     }
 }

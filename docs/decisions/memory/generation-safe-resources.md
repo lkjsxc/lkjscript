@@ -1,7 +1,7 @@
 # Generation-Safe Typed Resources
 
 ## Status
-<!-- LKJ-F generation-safe-resources accepted-contract 8O8qZdjo1P070HkSVRoGF1uiUmfurgX9QUR39LSxvpk -->
+<!-- LKJ-F generation-safe-resources accepted-contract y86E-iM-jpNexjLFzJuIoxysn5nwYtD0O-KdkfcEhvY -->
 
 
 **Accepted end-to-end contract with Current core lifecycle and static/dead

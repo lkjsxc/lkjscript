@@ -11,7 +11,8 @@
     "structure audit",
     "repository graph",
     "agent work state semantic references",
-    "public fact and projection graph"
+    "public fact and projection graph",
+    "typed affected-limit inventory"
   ],
   "facade": [
     "crates/lkjscript-xtask/src/main.rs"
@@ -29,8 +30,10 @@
   ],
   "tests": [
     "crates/lkjscript-xtask/src/structure/graph_tests/mod.rs",
+    "crates/lkjscript-xtask/src/structure/graph_tests/completion.rs",
     "crates/lkjscript-xtask/src/structure/repository_tests.rs",
     "crates/lkjscript-xtask/src/agent/tests/mod.rs",
+    "crates/lkjscript-xtask/src/limits/catalog.rs",
     "crates/lkjscript-xtask/src/public_facts/tests/mod.rs"
   ],
   "decisions": [
@@ -38,6 +41,7 @@
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/repository-intelligence-graph.md",
     "docs/decisions/platform/agent-work-state.md",
+    "docs/decisions/limits/scalable-structural-and-index-limits.md",
     "docs/operations/status-authority.md"
   ],
   "unsafe_boundary": {
@@ -64,12 +68,13 @@
     "interfaces": [
       "lkjscript-xtask structure",
       "lkjscript-xtask agent",
+      "lkjscript-xtask limits --json",
       "lkjscript-xtask quiet verify"
     ],
     "invariants": [
       "Git-tracked authority",
       "atomic generated state",
-      "explicit staleness and truncation",
+      "complete indexes and structured bounded query completion",
       "registered public facts with explicit exclusions and projections"
     ]
   }

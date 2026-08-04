@@ -4,7 +4,7 @@
   "id": "xtask.structure",
   "root": "crates/lkjscript-xtask/src/structure",
   "kind": "tooling",
-  "purpose": "Capture, validate, graph, and query exact bounded repository structure evidence.",
+  "purpose": "Capture and validate complete repository graph evidence with bounded query views.",
   "layer": "repository intelligence",
   "concepts": ["repository audit", "repository graph", "public fact impact", "context bundle", "impact and test queries"],
   "facade": ["crates/lkjscript-xtask/src/structure/mod.rs"],
@@ -19,6 +19,6 @@
   "context_card": {
     "goal": "Answer repository questions from exact authority without guessing.",
     "interfaces": ["structure audit", "structure graph", "structure context", "structure impact", "structure tests"],
-    "invariants": ["stable entity IDs", "revision IDs remain separate", "bounded deterministic traversal", "fact projection closure"]
+    "invariants": ["stable entity IDs", "complete-or-error graph publication", "structured bounded query completion", "fact projection closure"]
   }
 }

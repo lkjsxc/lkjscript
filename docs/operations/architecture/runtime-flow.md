@@ -15,7 +15,7 @@ ValidatedChunk main
   -> install internal immutable function closures
   -> execute the source main body
   -> dense opcode dispatch with fuel/stack/frame/heap/allocation metering
-  -> stack frames and return-adjacent tail reuse
+  -> stack frames and checked forwarding-epilogue tail reuse
   -> tagged immediate values or arena objects
   -> bounded generation-safe resource/output accounting
   -> reserve a provider/scope-bound slot before host acquisition
@@ -31,8 +31,10 @@ exit, traps, limits, deadlines, and host failures stop only the current VM.
 Returned values own key-free structural/list snapshots or explicit unique
 bytes, and later VM instances have fresh globals, invocation regions,
 structural stores, resource scopes, generation-bearing slots, counters, and
-deadlines. Borrowed standard input is table-bound but
-remains provider-owned. Process-global stdin/stdout and the terminal guard still
+deadlines. Verified immutable direct-call and operation operands reuse one structural owner in evaluator and VM;
+forwarding tail transfer preserves arguments and releases outgoing dead copy roots before frame replacement. Forced
+native structural calls still make an independent boundary copy and native tail transfer is not Current. Borrowed
+standard input is table-bound but remains provider-owned. Process-global stdin/stdout and the terminal guard still
 prevent parallel VM supervision. Cooperative deadlines can overrun inside current filesystem and
 write/send wrappers; hard-deadline mode rejects those operations before effects
 rather than claiming cancellation.
@@ -121,7 +123,7 @@ runtime behavior is changed by that contract.
 - Add an opcode: core ABI, code generation, dispatch, disassembly, and malformed-bytecode validation.
 - Add host capability: accepted decision, sys safety wrapper, VM resource boundary, typed prelude,
   script policy wrapper, and failure tests.
-- Change limits: language decision, shared core constant, compiler enforcement, repository gate, and boundary tests.
+- Change limits: typed limit inventory, owning authority, enforcement, boundary tests, projections, and evidence.
 - Change packaging: imports decision, resolver, installed layout, Docker/native bundle, and external-project smoke.
 ## Accepted Redesign Direction
 

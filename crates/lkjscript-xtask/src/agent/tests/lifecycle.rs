@@ -122,7 +122,16 @@ fn resume_context_reports_deterministic_output_truncation() {
         edges: Vec::new(),
         work_used: 0,
         bytes_used: 0,
-        truncated: false,
+        completion: crate::model::QueryCompletion {
+            status: "complete".into(),
+            stop_reasons: Vec::new(),
+            ordering: "canonical-node-id-then-canonical-edge-order".into(),
+            continuation_supported: false,
+            omitted_frontier: Vec::new(),
+            work_limit: 1,
+            retained_byte_limit: 1,
+            output_byte_limit: 1,
+        },
         unsupported: Vec::new(),
     };
     let limit = serde_json::to_vec_pretty(&response).unwrap().len() + 128;

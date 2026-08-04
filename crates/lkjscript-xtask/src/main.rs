@@ -2,6 +2,7 @@
 
 mod agent;
 mod documentation;
+mod limits;
 mod model;
 mod no_tracing;
 mod public_facts;
@@ -27,13 +28,14 @@ fn main() -> ExitCode {
         Some("check-tree") => source_checks::check_tree(&root),
         Some("check-sources") => source_checks::check_sources(&root),
         Some("check-unsafe") => unsafe_check::run(&root),
+        Some("limits") => limits::run(&root, &args[1..]),
         Some("quiet") => verification::quiet(&root, &args[1..]),
         Some("structure") => structure::run(&root, &args[1..]),
         _ => {
-            eprintln!(
-                "usage: lkjscript-xtask \
-                 [agent ...|check-docs [--expected]|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
-            );
+            eprintln!(concat!(
+                "usage: lkjscript-xtask [agent ...|check-docs [--expected]|check-tree|",
+                "check-sources|check-unsafe|limits --json|quiet ...|structure ...]"
+            ));
             2
         }
     };

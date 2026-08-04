@@ -57,11 +57,12 @@ pub(crate) fn include(
 ) -> Result<(), String> {
     let omissions_before = response.omissions.len();
     let truncated_before = response.truncated;
-    if context.truncated {
+    if context.completion.status != "complete" {
         response.truncated = true;
         response.omissions.push(format!(
-            "repository context for {} was truncated",
-            context.target
+            "repository context for {} stopped: {}",
+            context.target,
+            context.completion.stop_reasons.join(",")
         ));
     }
     for unsupported in &context.unsupported {

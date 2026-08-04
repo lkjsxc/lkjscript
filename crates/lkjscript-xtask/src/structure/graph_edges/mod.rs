@@ -31,12 +31,24 @@ pub fn add_project_edges(
     rust::add(root, audit, nodes, edges, budget);
 }
 
-pub fn read_text(root: &Path, path: &str, bytes: u64, budget: &mut Budget) -> Option<String> {
-    if !budget.charge(1, bytes) {
+pub fn read_text(root: &Path, path: &str, _bytes: u64, budget: &mut Budget) -> Option<String> {
+    if !budget.charge(1, 0) {
         return None;
     }
-    let input = super::repository_support::read_bounded(&root.join(path), 4 * 1024 * 1024).ok()?;
-    String::from_utf8(input).ok()
+    let input = match super::repository_support::read_bounded(&root.join(path), 4 * 1024 * 1024) {
+        Ok(input) => input,
+        Err(_) => {
+            budget.reject_subject("source-read", path);
+            return None;
+        }
+    };
+    match String::from_utf8(input) {
+        Ok(input) => Some(input),
+        Err(_) => {
+            budget.reject_subject("source-utf8", path);
+            None
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

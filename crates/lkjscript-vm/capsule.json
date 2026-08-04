@@ -17,10 +17,13 @@
   "forbidden_dependencies": ["app", "compiler"],
   "tests": [
     "crates/lkjscript-vm/src/host_ext/tests/mod.rs",
+    "crates/lkjscript-vm/src/run/calls/execution/tests.rs",
+    "crates/lkjscript-vm/src/run/calls/tests.rs",
     "crates/lkjscript-vm/src/run/tests/mod.rs"
   ],
   "decisions": [
     "docs/decisions/execution/execution-portfolio.md",
+    "docs/decisions/limits/scalable-structural-and-index-limits.md",
     "docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md",
     "docs/decisions/memory/generation-safe-resources.md",
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md"
@@ -35,6 +38,7 @@
     "invariants": [
       "validated bytecode",
       "provider-bound generation-safe resources",
+      "checked forwarding-tail frame reuse",
       "shared verified SSA semantics"
     ]
   }

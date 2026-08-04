@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use super::{FileRecord, Finding, Rule};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Graph {
     pub schema: String,
     pub contract: String,
@@ -13,10 +13,9 @@ pub struct Graph {
     pub work_used: u64,
     pub bytes_used: u64,
     pub unsupported: Vec<String>,
-    pub truncated: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Node {
     pub id: String,
     pub revision_id: String,
@@ -28,7 +27,7 @@ pub struct Node {
     pub confidence: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Edge {
     pub from: String,
     pub to: String,
@@ -41,6 +40,18 @@ pub struct Edge {
 pub struct ContextSection {
     pub name: String,
     pub node_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct QueryCompletion {
+    pub status: String,
+    pub stop_reasons: Vec<String>,
+    pub ordering: String,
+    pub continuation_supported: bool,
+    pub omitted_frontier: Vec<String>,
+    pub work_limit: u64,
+    pub retained_byte_limit: u64,
+    pub output_byte_limit: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -56,7 +67,7 @@ pub struct QueryResult {
     pub edges: Vec<Edge>,
     pub work_used: u64,
     pub bytes_used: u64,
-    pub truncated: bool,
+    pub completion: QueryCompletion,
     pub unsupported: Vec<String>,
 }
 

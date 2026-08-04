@@ -1,21 +1,14 @@
-fn parameter_consumption(
+fn parameter_modes(
     function_ids: &HashMap<BindingId, FunctionId>,
     memory_plan: &HirMemoryPlan,
-) -> HashMap<FunctionId, Vec<bool>> {
+) -> HashMap<FunctionId, Vec<MemoryParameterMode>> {
     function_ids
         .values()
         .copied()
         .map(|id| {
             let modes = memory_plan
                 .function(MemoryFunctionId::new(id.raw()))
-                .map(|function| {
-                    function
-                        .signature
-                        .parameters
-                        .iter()
-                        .map(|mode| *mode == crate::memory_plan::MemoryParameterMode::Consume)
-                        .collect()
-                })
+                .map(|function| function.signature.parameters.clone())
                 .unwrap_or_default();
             (id, modes)
         })

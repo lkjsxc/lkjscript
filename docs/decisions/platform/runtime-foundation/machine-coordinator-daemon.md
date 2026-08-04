@@ -6,7 +6,7 @@ Define the persistent `lkjscriptd` coordinator, its database-independent boot
 store, authenticated local protocol, and installable service boundary.
 
 ## Status
-<!-- LKJ-F os-resident-runtime-foundation current tv7TmvPjmBID87VD91R-ewgRyhsyYnqTN6Hirq-t9VY -->
+<!-- LKJ-F os-resident-runtime-foundation current QGVIHLHgKeS5SBg9o97QU1axaFUq4liXv2E0_7iGBkc -->
 
 
 **Current on Linux x86-64** for the focused foreground coordinator, exclusive

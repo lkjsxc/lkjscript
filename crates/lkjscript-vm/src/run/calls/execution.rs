@@ -145,6 +145,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
             if is_tail_position(vm) {
                 let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
                 let args = vm.stack[args_start..].to_vec();
+                super::super::structural_ops::cleanup_tail_copy_roots(vm, args_start, &args)?;
                 vm.stack.truncate(stack_base);
                 vm.stack.extend_from_slice(&args);
                 while vm.stack.len() < stack_base + locals as usize {
@@ -185,3 +186,8 @@ include!("execution/setup.rs");
 
 #[cfg(feature = "jit")]
 include!("execution/native.rs");
+
+#[cfg(test)]
+mod forwarding_tests {
+    include!("execution/tests.rs");
+}

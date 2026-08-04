@@ -2,16 +2,21 @@ use std::collections::BTreeSet;
 
 use crate::model::{Edge, Graph, Node, Policy};
 
-use super::Budget;
+use super::GraphBuildError;
 
 pub fn canonicalize(
     nodes: &mut Vec<Node>,
     edges: &mut Vec<Edge>,
     policy: &Policy,
-    budget: &mut Budget,
-) {
+) -> Result<(), GraphBuildError> {
     nodes.sort_by(|left, right| left.id.cmp(&right.id));
-    nodes.dedup_by(|left, right| left.id == right.id);
+    if let Some(pair) = nodes
+        .windows(2)
+        .find(|pair| pair[0].id == pair[1].id && pair[0] != pair[1])
+    {
+        return Err(GraphBuildError::conflicting_node(&pair[0].id));
+    }
+    nodes.dedup();
     edges.sort_by(|left, right| {
         (
             &left.from,
@@ -28,25 +33,76 @@ pub fn canonicalize(
                 &right.confidence,
             ))
     });
-    edges.dedup_by(|left, right| {
-        left.from == right.from
-            && left.to == right.to
-            && left.kind == right.kind
-            && left.evidence == right.evidence
-            && left.confidence == right.confidence
-    });
-    let node_limit = usize::try_from(policy.limits.graph_nodes).unwrap_or(usize::MAX);
-    let edge_limit = usize::try_from(policy.limits.graph_edges).unwrap_or(usize::MAX);
-    budget.truncated |= nodes.len() > node_limit || edges.len() > edge_limit;
-    nodes.truncate(node_limit);
-    let retained: BTreeSet<_> = nodes.iter().map(|item| item.id.as_str()).collect();
-    edges.retain(|item| {
-        retained.contains(item.from.as_str()) && retained.contains(item.to.as_str())
-    });
-    if edges.len() > edge_limit {
-        budget.truncated = true;
-        edges.truncate(edge_limit);
+    edges.dedup();
+    let node_count = u64::try_from(nodes.len()).unwrap_or(u64::MAX);
+    if node_count > policy.limits.graph_nodes {
+        return Err(GraphBuildError::exhausted(
+            "nodes",
+            policy.limits.graph_nodes,
+            0,
+            node_count,
+        ));
     }
+    let edge_count = u64::try_from(edges.len()).unwrap_or(u64::MAX);
+    if edge_count > policy.limits.graph_edges {
+        return Err(GraphBuildError::exhausted(
+            "edges",
+            policy.limits.graph_edges,
+            0,
+            edge_count,
+        ));
+    }
+    let retained: BTreeSet<_> = nodes.iter().map(|item| item.id.as_str()).collect();
+    if let Some(edge) = edges
+        .iter()
+        .find(|item| !retained.contains(item.from.as_str()) || !retained.contains(item.to.as_str()))
+    {
+        let mut error = GraphBuildError::exhausted("dangling-edge-endpoint", 0, 0, 1);
+        error.subject = format!("{} -> {}", edge.from, edge.to);
+        return Err(error);
+    }
+    Ok(())
+}
+
+pub fn retained_field_bytes(nodes: &[Node], edges: &[Edge]) -> Option<u64> {
+    let mut bytes = 0;
+    for item in nodes {
+        add_bytes(&mut bytes, item.id.len())?;
+        if item.revision_id.is_empty() {
+            add_bytes(&mut bytes, item.id.len().checked_add(65)?)?;
+        } else {
+            add_bytes(&mut bytes, item.revision_id.len())?;
+        }
+        for value in [
+            &item.kind,
+            &item.label,
+            &item.provenance,
+            &item.authority,
+            &item.confidence,
+        ] {
+            add_bytes(&mut bytes, value.len())?;
+        }
+        if let Some(span) = &item.span {
+            add_bytes(&mut bytes, span.len())?;
+        }
+    }
+    for item in edges {
+        for value in [
+            &item.from,
+            &item.to,
+            &item.kind,
+            &item.evidence,
+            &item.confidence,
+        ] {
+            add_bytes(&mut bytes, value.len())?;
+        }
+    }
+    Some(bytes)
+}
+
+fn add_bytes(total: &mut u64, bytes: usize) -> Option<()> {
+    *total = total.checked_add(u64::try_from(bytes).ok()?)?;
+    Some(())
 }
 
 pub fn dot(graph: &Graph) -> String {

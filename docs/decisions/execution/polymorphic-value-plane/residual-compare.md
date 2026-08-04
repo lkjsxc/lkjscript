@@ -1,7 +1,7 @@
 # Residual Generic Compare Vertical
 
 ## Status
-<!-- LKJ-F residual-generic-compare-vertical current 99CeXYDFnc7vxFwUMwQH70BbTBRU1c10puE0OHg_l-U -->
+<!-- LKJ-F residual-generic-compare-vertical current eqYzVUhKfvvbx9cABxrV6TJ_gXiHswa5uYwrPeRIeFA -->
 **Current at platform revision 18 for the bounded direct-call vertical below.**
 The complete polymorphic value plane remains Experimental under its Accepted
 Target.

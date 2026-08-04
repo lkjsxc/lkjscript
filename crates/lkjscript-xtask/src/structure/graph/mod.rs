@@ -1,6 +1,10 @@
 mod base;
+mod error;
+mod identity;
 mod kinds;
 mod output;
+
+pub use error::GraphBuildError;
 
 use std::path::Path;
 
@@ -12,7 +16,7 @@ pub(crate) struct Budget {
     pub bytes: u64,
     work_limit: u64,
     byte_limit: u64,
-    pub truncated: bool,
+    pub error: Option<GraphBuildError>,
 }
 
 impl Budget {
@@ -22,36 +26,80 @@ impl Budget {
             bytes: 0,
             work_limit: policy.limits.graph_work,
             byte_limit: policy.limits.graph_bytes,
-            truncated: false,
+            error: None,
         }
     }
 
     pub fn charge(&mut self, work: u64, bytes: u64) -> bool {
+        if self.error.is_some() {
+            return false;
+        }
         let Some(next_work) = self.work.checked_add(work) else {
-            self.truncated = true;
+            self.error = Some(GraphBuildError::exhausted(
+                "work",
+                self.work_limit,
+                self.work,
+                u64::MAX,
+            ));
             return false;
         };
         let Some(next_bytes) = self.bytes.checked_add(bytes) else {
-            self.truncated = true;
+            self.error = Some(GraphBuildError::exhausted(
+                "retained-bytes",
+                self.byte_limit,
+                self.bytes,
+                u64::MAX,
+            ));
             return false;
         };
-        if next_work > self.work_limit || next_bytes > self.byte_limit {
-            self.truncated = true;
+        if next_work > self.work_limit {
+            self.error = Some(GraphBuildError::exhausted(
+                "work",
+                self.work_limit,
+                self.work,
+                next_work,
+            ));
+            return false;
+        }
+        if next_bytes > self.byte_limit {
+            self.error = Some(GraphBuildError::exhausted(
+                "retained-bytes",
+                self.byte_limit,
+                self.bytes,
+                next_bytes,
+            ));
             return false;
         }
         self.work = next_work;
         self.bytes = next_bytes;
         true
     }
+
+    pub fn reject(&mut self, dimension: &str) {
+        self.reject_subject(dimension, "");
+    }
+
+    pub fn reject_subject(&mut self, dimension: &str, subject: &str) {
+        if self.error.is_none() {
+            let mut error = GraphBuildError::exhausted(dimension, 0, 0, 1);
+            error.subject = subject.into();
+            self.error = Some(error);
+        }
+    }
 }
 
 #[cfg(test)]
-pub fn build(root: &Path, audit: &Audit, policy: &Policy) -> Graph {
+pub fn build(root: &Path, audit: &Audit, policy: &Policy) -> Result<Graph, GraphBuildError> {
     let registry = crate::public_facts::load(root).ok();
     build_internal(root, audit, policy, registry.as_ref())
 }
 
-pub fn build_with_facts(root: &Path, audit: &Audit, policy: &Policy, registry: &Registry) -> Graph {
+pub fn build_with_facts(
+    root: &Path,
+    audit: &Audit,
+    policy: &Policy,
+    registry: &Registry,
+) -> Result<Graph, GraphBuildError> {
     build_internal(root, audit, policy, Some(registry))
 }
 
@@ -60,7 +108,7 @@ fn build_internal(
     audit: &Audit,
     policy: &Policy,
     registry: Option<&Registry>,
-) -> Graph {
+) -> Result<Graph, GraphBuildError> {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
     let mut budget = Budget::new(policy);
@@ -78,19 +126,35 @@ fn build_internal(
         &mut budget,
     );
     super::source_facts::add(root, audit, &mut nodes, &mut edges, &mut budget);
-    output::canonicalize(&mut nodes, &mut edges, policy, &mut budget);
-    let input_identity = graph_identity(
-        &audit.revision,
-        &nodes,
-        &edges,
-        budget.work,
-        budget.bytes,
-        budget.truncated,
-    );
+    if let Some(error) = budget.error.take() {
+        return Err(error);
+    }
+    output::canonicalize(&mut nodes, &mut edges, policy)?;
+    let Some(retained_bytes) = output::retained_field_bytes(&nodes, &edges) else {
+        return Err(GraphBuildError::exhausted(
+            "retained-byte-arithmetic",
+            policy.limits.graph_bytes,
+            0,
+            u64::MAX,
+        ));
+    };
+    if !budget.charge(0, retained_bytes) {
+        return Err(match budget.error.take() {
+            Some(error) => error,
+            None => GraphBuildError::exhausted(
+                "retained-bytes",
+                policy.limits.graph_bytes,
+                0,
+                retained_bytes,
+            ),
+        });
+    }
+    let input_identity =
+        identity::graph_identity(&audit.revision, &nodes, &edges, budget.work, budget.bytes);
     for item in &mut nodes {
         item.revision_id = format!("{}@{input_identity}", item.id);
     }
-    Graph {
+    Ok(Graph {
         schema: "lkjscript.repository-graph".into(),
         contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         revision: audit.revision.clone(),
@@ -109,57 +173,7 @@ fn build_internal(
             "artifact consumption beyond exact provenance and command contracts is unsupported"
                 .into(),
         ],
-        truncated: budget.truncated,
-    }
-}
-
-fn graph_identity(
-    revision: &str,
-    nodes: &[crate::model::Node],
-    edges: &[crate::model::Edge],
-    work: u64,
-    charged_bytes: u64,
-    truncated: bool,
-) -> String {
-    let mut bytes = Vec::new();
-    append_identity(&mut bytes, revision);
-    append_identity(
-        &mut bytes,
-        &lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
-    );
-    bytes.extend_from_slice(&work.to_be_bytes());
-    bytes.extend_from_slice(&charged_bytes.to_be_bytes());
-    bytes.push(u8::from(truncated));
-    for item in nodes {
-        for value in [
-            &item.id,
-            &item.kind,
-            &item.label,
-            &item.provenance,
-            &item.authority,
-            item.span.as_deref().unwrap_or(""),
-            &item.confidence,
-        ] {
-            append_identity(&mut bytes, value);
-        }
-    }
-    for item in edges {
-        for value in [
-            &item.from,
-            &item.to,
-            &item.kind,
-            &item.evidence,
-            &item.confidence,
-        ] {
-            append_identity(&mut bytes, value);
-        }
-    }
-    crate::sha256::digest(&bytes)
-}
-
-fn append_identity(bytes: &mut Vec<u8>, value: &str) {
-    bytes.extend_from_slice(&(value.len() as u128).to_be_bytes());
-    bytes.extend_from_slice(value.as_bytes());
+    })
 }
 
 pub use output::dot;

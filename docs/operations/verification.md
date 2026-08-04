@@ -4,7 +4,7 @@ Define Current evidence gates and predeclare accepted repository-intelligence
 gates without claiming unimplemented checks.
 
 ## Status
-<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
+<!-- LKJ-F public-fact-foundation current SGKIjH0dOrHd7llJKsJ7U-Og3PGjX1VflQ0CFAZXpy0 -->
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered public-fact status, exclusion, and projection consistency, retained-result,
@@ -33,8 +33,7 @@ Authority](status-authority.md), statuses, interfaces, exclusions, contained
 paths, content-derived digests, projection markers, cycles, bounds, focused
 coherence rules, platform revision, and removed generation names. Deterministic
 inventory and expected markers go under `target/lkjscript/documentation/`.
-Example execution, evidence freshness, architecture derivation, and arbitrary
-prose equivalence are not Current.
+Example execution, evidence freshness, architecture derivation, and arbitrary prose equivalence are not Current.
 
 `structure check` is the hard repository topology gate. It checks every tracked
 authored text file for at most 200 physical lines, 32 KiB, and ordinary lines
@@ -83,10 +82,10 @@ The structure gate must cover at least:
 
 ## Current Graph, Context, And Work-State Gates
 
-Repository graph tests cover closed graph data, stable identities, deterministic
-builds, stale input, aggregate charges, cycle-safe traversal, and explicit
-truncation. Context tests cover section order, inclusion, omission, profile
-limits, revision, and total charge.
+Repository graph tests cover complete endpoint-closed data, stable identities, deterministic repeated builds, typed
+node/edge/work/byte exhaustion with no publication, conflicting IDs, aggregate charges, cycle-safe traversal, and graph
+identity. Context tests cover section order, inclusion, structured completion, deterministic omitted frontier, profile
+limits, revision, and exact total charge. Successful global graph truncation is not an accepted result.
 
 Agent-state tests cover malformed, duplicate, unknown, and trailing JSON; stale
 and concurrent preconditions; exact and limit-plus-one bounds; checked revision
@@ -111,17 +110,14 @@ references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
 prepared-journal crash recovery before the next read; descriptor-anchored
 ancestor-swap rejection; and preservation of an externally created leaf at the
-no-replace install boundary. Focused hole tests cover strict stale and
-mismatched contract rejection;
+no-replace install boundary. Focused hole tests cover strict stale and mismatched contract rejection;
 malformed and duplicate identity; expected type and scope ambiguity;
 deterministic ranking; snippets and blockers; ownership/effect validation;
 roundtrip; legal actions; exact/+1 pre-allocation; stale preconditions; all four
-hole transactions; release rejection; and local sessions. Session tests cover
-8-byte framing, clean EOF,
+hole transactions; release rejection; and local sessions. Session tests cover 8-byte framing, clean EOF,
 partial/oversized/cumulative boundaries, strict envelopes, pinned profile/root,
 stale revisions, external edits, refresh, publication revision advance,
-lifetime/request/revision limits, deterministic responses, shutdown, and CLI
-stdout isolation.
+lifetime/request/revision limits, deterministic responses, shutdown, and CLI stdout isolation.
 
 Focused native immutable-bytes tests cover exact static/dynamic owner/loan ABI
 categories, immutable verified image-data identities, literal/read/length,
@@ -129,8 +125,7 @@ checked slice copy, clone independence, zero-copy freeze and dynamic thaw,
 one-copy static thaw, direct calls, exact returned payload transfer, allocation
 failure, stale/wrong-layout/forged identities, traps, and cleanup. Differentials
 require evaluator/VM/native equality, nonzero selected-tier entries,
-optimizing-only proof entries, zero fallback/transitions, and zero final owners,
-loans, or release backlog.
+optimizing-only proof entries, zero fallback/transitions, and zero final owners, loans, or release backlog.
 
 Focused native resource-island tests cover exact capability/resource ABI
 categories, wrong capability and resource kinds, whole-group rejection of
@@ -145,6 +140,12 @@ returns, VM/native and detached-return transitions, SQLite f64 binding, zero
 scalar aggregate allocation through evaluator/VM/baseline/proof fixtures,
 synchronous generated entry, and zero forced fallback. The unconditional
 `LKJ-RUNTIME-NO-TRACING-COLLECTOR` source gate rejects any collector mechanism.
+
+Focused structural scale tests cover default 4,095, 4,096, 4,097, 16,384, and 65,536-node flat images; clone and
+iterative release; exact plus-one quota failure; 8,192 sequential domain-slot reuse; pre-backend immutable call copy
+elision; VM forwarding-tail frame reuse; and a 32,767-node evaluator/VM/forced-baseline/forced-proof value with zero
+fallback and empty teardown. Forced native call borrowing and native tail transfer remain untested because they are not
+implemented.
 
 Focused enum tests cover exact Schema declaration nodes and roundtrip,
 stable nominal/member/layout identities, source order, generic substitutions,
@@ -178,8 +179,7 @@ whole-platform cross-authority ledger remain Accepted.
 
 ## Current Canonical Source Contract Gate
 
-The canonical language gate is Current for all 102 tracked sources
-(89 under `src/`). Retained
+The canonical language gate is Current for all 102 tracked sources (89 under `src/`). Retained
 [execution acceptance evidence](../history/semantics/edition/execution-and-acceptance.md)
 records exact source and semantic identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
 rejection, atomic all-file rollback and crash recovery, compiler-resolved

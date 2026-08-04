@@ -143,7 +143,13 @@ fn explain(
         eprintln!("public facts unavailable");
         return 1;
     };
-    let graph = graph::build_with_facts(root, audit, policy, registry);
+    let graph = match graph::build_with_facts(root, audit, policy, registry) {
+        Ok(graph) => graph,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
     let result = query::explain(audit, policy, registry, &graph.input_identity, query);
     crate::util::print_json_bounded(&result, policy.limits.query_bytes).map_or_else(
         |error| {

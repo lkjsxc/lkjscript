@@ -55,7 +55,7 @@ fn commands(policy: &Policy, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budge
         ("cargo-test-workspace", "cargo test --workspace --locked"),
     ];
     for (name, command) in commands {
-        if !budget.charge(1, command.len() as u64) {
+        if !budget.charge(1, 0) {
             return;
         }
         declared_node(
@@ -131,10 +131,10 @@ fn capsules(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget:
             );
         }
         for name in &capsule.capability.names {
-            if !budget.charge(1, name.len() as u64) {
+            if !budget.charge(1, 0) {
                 return;
             }
-            let target = format!("capability:{}", stable(name));
+            let target = format!("capability:{}:{}", capsule.id, stable(name));
             declared_node(nodes, &target, "capability", name, &manifest);
             edge(
                 edges,
@@ -146,7 +146,7 @@ fn capsules(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget:
             );
         }
         for name in &capsule.unsafe_boundary.boundaries {
-            let target = format!("unsafe-boundary:{}", stable(name));
+            let target = format!("unsafe-boundary:{}:{}", capsule.id, stable(name));
             declared_node(nodes, &target, "unsafe-boundary", name, &manifest);
             edge(
                 edges,
@@ -158,10 +158,11 @@ fn capsules(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget:
             );
         }
         for command in &capsule.verification {
-            let target = format!(
-                "command:manifest-{}",
-                &crate::sha256::digest(command.as_bytes())[..16]
-            );
+            let mut identity = Vec::new();
+            identity.extend_from_slice(manifest.as_bytes());
+            identity.push(0);
+            identity.extend_from_slice(command.as_bytes());
+            let target = format!("command:manifest-{}", crate::sha256::digest(&identity));
             declared_node(nodes, &target, "command", command, &manifest);
             edge(edges, &target, &id, "validated-by", &manifest, "declared");
         }

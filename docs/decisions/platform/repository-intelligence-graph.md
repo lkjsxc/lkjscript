@@ -1,15 +1,14 @@
 # Repository Intelligence Graph And Context
 
 ## Purpose
-Define the Current deterministic, bounded repository graph and query boundary
+Define the Current complete deterministic repository graph and bounded query boundary
 without making a generated index semantic authority.
 
 ## Status
 
-**Current.** `structure graph`, `structure explain`, `structure context`,
-`structure impact`, and `structure tests` are implemented in `lkjscript-xtask`.
-The richer selectors, profiles, diagnostics, and derived documentation described
-under Deferred are not Current.
+**Current immediate correctness cut.** `structure graph` publishes a complete in-memory graph or typed exhaustion.
+`structure explain`, `structure context`, `structure impact`, and `structure tests` use that complete graph and expose
+structured bounded completion. Incremental rebuilds, sharding, and continuation cursors remain Deferred.
 
 ## Authority And Identity
 
@@ -18,11 +17,10 @@ Source, compiler facts, manifests, public facts, and evidence remain their own
 authorities. A graph result cannot manufacture typing, ownership, proof,
 implementation, status, or evidence.
 
-The graph uses stable identity `lkjscript.repository-graph` and its exact full
-contract digest. Each build records the base Git revision and a SHA-256 identity
-over its canonical retained nodes, edges, contract, revision, and budget state.
-Node revision IDs bind that graph identity, so a dirty or staged graph does not
-claim to be the unchanged base commit.
+The graph uses stable identity `lkjscript.repository-graph` and its exact full contract digest. Each successful build
+records the base Git revision and a SHA-256 identity over complete nodes, edges, contract, revision, charged work, and
+retained node/edge field bytes. Node revision IDs bind that identity.
+Unextracted file bytes are not semantic input; unsupported extraction classes remain explicit.
 
 ## Retained Records
 
@@ -65,22 +63,21 @@ Production graph and query commands validate the public-fact registry once and
 pass that validated value into graph construction. Malformed facts therefore
 cannot produce a graph with silently omitted fact edges.
 
-## Bounds And Truncation
+## Bounds And Completion
 
-Policy sets graph node, edge, work, and charged-byte limits and separate query
-work and output-byte limits. Graph producers charge bounded work and retained
-field bytes. Canonicalization sorts and deduplicates records, truncates at node
-and edge limits, and drops edges whose endpoints were not retained.
+Policy sets 32,768-node and 65,536-edge implementation safety maxima, plus separate graph work and retained-byte maxima.
+Producers charge work and exact retained node/edge field bytes. Canonicalization sorts, deduplicates, and rejects
+conflicting IDs, verifies every endpoint, and returns typed exhaustion with the dimension, used amount, attempted
+amount,
+limit, and no-publication guarantee. It never selects a successful prefix.
 
-Query traversal is iterative, uses checked work and byte charging, and retains a
-conservative fraction of the serialized output budget. The command then measures
-the exact pretty-printed JSON before publication. Oversized output fails rather
-than crossing the configured limit. Truncation and unsupported classes remain
-explicit in successful output.
+Query traversal is iterative and uses checked work and retained-byte charging. Results contain `complete` or `bounded`,
+closed stop reasons, deterministic omitted frontier, ordering, selected limits, and `continuation_supported=false`.
+Exact pretty-printed output is measured before publication; oversized output fails rather than publishing a partial
+result. Unsupported extraction classes remain separate from bounded query completion.
 
-These charges bound the Current implementation; they are not a claim that every
-future parser allocation or wall-clock cost is represented. Typed exhaustion
-diagnostics with attempted charges and responsible edges remain Deferred.
+These charges bound the Current in-memory implementation; they do not claim every future parser allocation or wall-clock
+cost is represented. The affected taxonomy is available through `lkjscript-xtask limits --json`.
 
 ## Context Sections
 
@@ -90,18 +87,16 @@ projections, rules, implementations, source facts, dependencies, dependents,
 tests, decisions/status, provenance, and omissions. A section may be empty.
 The checker does not infer evidence freshness or nearest next work.
 
-Impact follows a focused relation set for facts so an affected fact reaches its
-registered projections and dependent facts without inheriting unrelated capsule
-closure. Tests queries follow retained test relations. A globally truncated
-graph remains explicitly truncated even when a focused retained route succeeds.
+Impact follows a focused relation set for facts so an affected fact reaches its registered projections and dependent
+facts without inheriting unrelated capsule closure. Tests queries follow retained test relations. Any budget stop is a
+bounded result with an exact frontier; it cannot masquerade as complete impact.
 
 ## Verification
 
-Focused tests require deterministic repeated builds, stable IDs, graph identity
-changes across revision inputs, evidence-bearing extracted edges, public-fact
-projection impact, fixed context section order, retained-edge truncation, and
-serialized query bounds. `structure check` enforces repository topology; it does
-not prove every graph edge semantically.
+Focused tests require deterministic repeated complete builds, stable IDs, graph identity changes across revision inputs,
+evidence-bearing extracted edges, endpoint closure, typed exact-limit exhaustion, public-fact projection impact, fixed
+context section order, structured query completion, and serialized output bounds. `structure check` enforces repository
+topology; it does not prove every graph edge semantically.
 
 ## Deferred And Rejected
 
@@ -110,6 +105,6 @@ macro-expanded Rust edges, complete architecture projection, classified example
 edges, evidence-freshness ranking, embeddings, remote graph services,
 cross-repository federation, and probabilistic ranking are **Deferred**.
 
-Treating graph data as type, proof, status, implementation, or evidence
-authority; unlimited traversal; silent truncation; uploaded private context; and
-tracked generated graph output are **Rejected**.
+Treating graph data as type, proof, status, implementation, or evidence authority; unlimited traversal; successful
+global truncation; hidden query omissions; uploaded private context; and tracked generated graph output are
+**Rejected**.

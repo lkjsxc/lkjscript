@@ -3,7 +3,7 @@
 Define one bounded in-process authority for verified task legality, deterministic
 resource outcomes, and replaceable topology-aware placement.
 ## Status
-<!-- LKJ-F semantic-resource-plane accepted-contract dt2A_KuS_WJMXDN2VfJ0cHGLJsSpzgTRkFAqjhRiwHY -->
+<!-- LKJ-F semantic-resource-plane accepted-contract dDuJbyakzTSanrogdkkeaBTy85SoUEdkiSv9rdBRQOU -->
 
 
 **Accepted Contract.** The contract is binding before implementation. No

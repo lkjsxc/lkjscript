@@ -33,7 +33,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -78,7 +78,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -112,7 +112,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -158,7 +158,7 @@
         "repository-topology"
       ],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": [
         "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1"
       ]

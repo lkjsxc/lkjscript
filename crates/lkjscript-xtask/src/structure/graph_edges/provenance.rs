@@ -8,7 +8,7 @@ pub fn add(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget: 
         let Some(generator) = &item.generator else {
             continue;
         };
-        if !budget.charge(1, generator.len() as u64) {
+        if !budget.charge(1, 0) {
             return;
         }
         let origin = format!(

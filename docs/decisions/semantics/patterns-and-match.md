@@ -8,7 +8,7 @@ Define the closed pattern language, match semantics, usefulness algorithm, and
 lowering boundary.
 
 ## Status
-<!-- LKJ-F enum-declarations current -_ZEXiA5PkVRIWfTiAV0BIJHNdm8AXbTmTteGzb4uyE -->
+<!-- LKJ-F enum-declarations current _gCgoppkLj-1w5f16Rdk-RXbmQ2QX6LmSGZGuc0w-Ig -->
 
 
 **Current for canonical-language source match.** The closed

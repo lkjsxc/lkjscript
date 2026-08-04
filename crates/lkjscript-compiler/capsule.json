@@ -16,7 +16,7 @@
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/source/tests/mod.rs"
   ],
-  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/memory/authoritative-memory-plan.md", "docs/decisions/memory/collector-free-deterministic-memory.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md", "docs/decisions/semantics/ownership-and-borrowing.md"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/limits/scalable-structural-and-index-limits.md", "docs/decisions/memory/authoritative-memory-plan.md", "docs/decisions/memory/collector-free-deterministic-memory.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md", "docs/decisions/semantics/ownership-and-borrowing.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Rust crate source" },

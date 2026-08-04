@@ -42,12 +42,14 @@
   ],
   "tests": [
     "crates/lkjscript-app/tests/cli_contract.rs",
+    "crates/lkjscript-app/tests/enum_execution/scale.rs",
     "crates/lkjscript-app/tests/jit_engines.rs",
     "crates/lkjscript-app/tests/ssa_equivalence.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
   ],
   "decisions": [
     "docs/decisions/execution/execution-portfolio.md",
+    "docs/decisions/limits/scalable-structural-and-index-limits.md",
     "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md",

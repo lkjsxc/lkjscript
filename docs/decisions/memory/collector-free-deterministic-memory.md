@@ -1,14 +1,14 @@
 # Collector-Free Deterministic Memory
 
 ## Status
-<!-- LKJ-F collector-free-closures accepted-target nUQa7KTnqVqR3jtCeEjwY0W4OaqzL3RE29sfLe39dm0 -->
-<!-- LKJ-F collector-free-deterministic-memory accepted-contract rkjfKvq1DyedQHYLOyjWNWY6cFpyxhaJczuQ4sKqTpk -->
-<!-- LKJ-F collector-free-enums current AcnkTwvysSc8RQB_aL4aTFtglK2f0efO9pXF_9bY9Vo -->
-<!-- LKJ-F collector-free-lists current LOXS9V470flmFYtQwyXRd7DV0IA9cgmHQB_p6S7_2VU -->
-<!-- LKJ-F collector-free-products current 7n-7XwVfjHzzC9Kp0LdoGrb2oazwXzyP7mcJa8sDN4g -->
-<!-- LKJ-F collector-free-runtime current 8sYacCrxHj8B33Fbzu1eZIEKb7Ooy6cFBc096T4bUGc -->
-<!-- LKJ-F collector-free-strings current AGZR8kMFyRFI_jUzQTFS6AiFP4I4y-MPbAdfoyNVBV4 -->
-<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
+<!-- LKJ-F collector-free-closures accepted-target GQoJ8xYSsthbv6plISjAMXhyrCC8pPdG3L0ektnTJ1Q -->
+<!-- LKJ-F collector-free-deterministic-memory accepted-contract qduOBapx-N8ubw7Kja0itxVEzeW8jLBj1BtAURYGYjY -->
+<!-- LKJ-F collector-free-enums current ghgrMSKY7JxU77u_UWqV4PcaaH17crVtIp_0z8TjB9U -->
+<!-- LKJ-F collector-free-lists current Fla0rVdnSxpeQ8DkBKeGVpQQIXrvxMqS6JxDwjojd9g -->
+<!-- LKJ-F collector-free-products current 9rSXbpVS7GFJxUm2E6H5OVjhdiMtD0pLdJ4LMg1nkIA -->
+<!-- LKJ-F collector-free-runtime current yMpfhCmfeXJWMuBrWn6m0JRmecuar7mA6Mpo9W6_c3I -->
+<!-- LKJ-F collector-free-strings current 4Fa_RvgAWeY0yIP7fy93CWEa9pKSlRuK3NVdZVBVJo4 -->
+<!-- LKJ-F no-tracing-runtime current FWMY13I30geyQOA0b0DiqLAtyX3rWuYJeiLTRQmnOVE -->
 
 
 **Current contract and implementation.** No tracing object family, liveness

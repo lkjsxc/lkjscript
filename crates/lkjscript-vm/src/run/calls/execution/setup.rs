@@ -43,10 +43,60 @@ fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
     if frame.proto == u32::MAX {
         return false;
     }
-    vm.chunk
+    let Some(code) = vm
+        .chunk
         .protos()
         .get(frame.proto as usize)
-        .and_then(|proto| proto.code.get(frame.ip))
-        .copied()
-        == Some(Op::Return as u8)
+        .map(|proto| proto.code.as_slice())
+    else {
+        return false;
+    };
+    if code.get(frame.ip).copied() == Some(Op::Return as u8) {
+        return true;
+    }
+    forwarding_epilogue(code, frame.ip)
+}
+
+fn forwarding_epilogue(code: &[u8], mut ip: usize) -> bool {
+    let Some((load, slot, next)) = forwarding_store(code, ip) else {
+        return false;
+    };
+    ip = next;
+    loop {
+        if code.get(ip).copied() == Some(load as u8)
+            && code.get(ip.saturating_add(1)).copied() == Some(slot)
+            && code.get(ip.saturating_add(2)).copied() == Some(Op::Return as u8)
+        {
+            return true;
+        }
+        let Some(op) = code.get(ip).and_then(|byte| Op::from_byte(*byte)) else {
+            return false;
+        };
+        if !matches!(
+            op,
+            Op::ByteVectorPlaceEnd | Op::BytesPlaceEnd | Op::StructuralPlaceEnd
+        ) {
+            return false;
+        }
+        ip = ip.saturating_add(2);
+        if code.get(ip).copied() != Some(Op::StoreLocal as u8)
+            || code.get(ip.saturating_add(2)).copied() != Some(Op::Pop as u8)
+        {
+            return false;
+        }
+        ip = ip.saturating_add(3);
+    }
+}
+
+fn forwarding_store(code: &[u8], ip: usize) -> Option<(Op, u8, usize)> {
+    let op = code.get(ip).and_then(|byte| Op::from_byte(*byte))?;
+    let slot = *code.get(ip.checked_add(1)?)?;
+    match op {
+        Op::StoreUniqueLocal => Some((Op::TakeUniqueLocal, slot, ip.checked_add(2)?)),
+        Op::StoreStructuralLocal => Some((Op::TakeStructuralLocal, slot, ip.checked_add(2)?)),
+        Op::StoreLocal if code.get(ip.checked_add(2)?).copied() == Some(Op::Pop as u8) => {
+            Some((Op::LoadLocal, slot, ip.checked_add(3)?))
+        }
+        _ => None,
+    }
 }

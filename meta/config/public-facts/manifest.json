@@ -1,7 +1,7 @@
 {
   "schema": "lkjscript.public-facts",
   "contract": "c0b1013dfe8d5f80cd4ec6f4311322d72e8010dedff301a0ece298f6f12cfae1",
-  "platform_revision": 19,
+  "platform_revision": 20,
   "shards": [
     {
       "path": "affine-resource-handles--byte-text-ownership.json",
@@ -27,6 +27,11 @@
       "path": "enum-declarations--jit-proof-forced.json",
       "first": "enum-declarations",
       "last": "jit-proof-forced"
+    },
+    {
+      "path": "limit-inventory--limit-inventory.json",
+      "first": "limit-inventory",
+      "last": "limit-inventory"
     },
     {
       "path": "memory-obligations--modules-and-packages.json",

@@ -41,7 +41,7 @@ pub fn directories(
     budget: &mut Budget,
 ) {
     for dir in &audit.directories {
-        if !budget.charge(1, dir.path.len() as u64) {
+        if !budget.charge(1, 0) {
             break;
         }
         node(
@@ -72,7 +72,7 @@ pub fn directories(
 
 pub fn files(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget: &mut Budget) {
     for file in &audit.files {
-        if !budget.charge(1, file.path.len() as u64) {
+        if !budget.charge(1, 0) {
             break;
         }
         node(
@@ -98,7 +98,7 @@ pub fn files(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget
 
 pub fn capsules(audit: &Audit, nodes: &mut Vec<Node>, edges: &mut Vec<Edge>, budget: &mut Budget) {
     for capsule in &audit.capsules {
-        if !budget.charge(1, capsule.id.len() as u64) {
+        if !budget.charge(1, 0) {
             break;
         }
         let manifest = manifest(&capsule.root);

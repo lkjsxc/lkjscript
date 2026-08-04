@@ -3,7 +3,7 @@
 [Authority](semantic-core.md)
 
 ## Status
-<!-- LKJ-F numeric-conversions current N4c5ttSuiAHz_OcQuC3hi8JneGs0KnVL6E64XGSRrBQ -->
+<!-- LKJ-F numeric-conversions current 13DpH4F5yXKjmImAvd9g9H5y1B-eLK9c9AWplj7LTMo -->
 
 
 **Current.** Four explicit conversion operations and rejection of implicit

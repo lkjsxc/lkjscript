@@ -9,7 +9,7 @@
       "scope": [
         "repository"
       ],
-      "interface": "lkjscript-xtask structure context",
+      "interface": "complete repository graph with structured bounded context queries",
       "exclusions": [
         {
           "id": "complete-semantic-edges",
@@ -18,6 +18,10 @@
         {
           "id": "graph-authority",
           "interface": "Graph output is not type, proof, status, implementation, or evidence authority."
+        },
+        {
+          "id": "query-continuation",
+          "interface": "Continuation cursors are not Current; bounded results expose a deterministic frontier."
         },
         {
           "id": "rich-context-profiles",
@@ -46,7 +50,7 @@
           "path": "crates/lkjscript-xtask/src/structure/graph_tests/mod.rs",
           "class": "implementation-test",
           "contracts": [
-            "1543bef254b336a5f7e507744b9bc5e2277b0ce4760f0cfc092379fca6645e00"
+            "06e1affa81955d9856f0d1cdd593996abb8557d50cc2853f1f181578307009a0"
           ]
         }
       ],
@@ -56,9 +60,9 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": [
-        "1543bef254b336a5f7e507744b9bc5e2277b0ce4760f0cfc092379fca6645e00"
+        "06e1affa81955d9856f0d1cdd593996abb8557d50cc2853f1f181578307009a0"
       ]
     },
     {
@@ -94,7 +98,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -139,7 +143,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     },
     {
@@ -175,7 +179,7 @@
       ],
       "dependencies": [],
       "invalidated_by": [],
-      "platform_revision": 19,
+      "platform_revision": 20,
       "contracts": []
     }
   ]

@@ -34,7 +34,10 @@ pub use error::{
 pub use events::{
     StructuralEvent, StructuralEventKind, StructuralEventLog, StructuralValueRuntimeMetrics,
 };
-pub use limits::StructuralValueRuntimeLimits;
+pub use limits::{
+    StructuralValueRuntimeLimits, DEFAULT_STRUCTURAL_TREE_NODES,
+    STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
+};
 pub use model::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StaticArtifactPayload,
     StaticStructuralArtifact, StaticStructuralLeaf, StructuralDestinationKey, StructuralFieldPath,
@@ -80,6 +83,10 @@ impl StructuralValueRuntime {
 
     pub const fn metrics(&self) -> StructuralValueRuntimeMetrics {
         self.metrics
+    }
+
+    pub const fn domain_metrics(&self) -> super::StructuralRuntimeMetrics {
+        self.runtime.metrics()
     }
 
     pub const fn events(&self) -> &StructuralEventLog {

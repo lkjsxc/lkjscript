@@ -102,6 +102,7 @@ pub use structural::{
     StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics,
     StructuralViewKey, TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError,
     UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
+    DEFAULT_STRUCTURAL_TREE_NODES, STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
 };
 pub use validation::{
     bind_prepared_identity, validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity,

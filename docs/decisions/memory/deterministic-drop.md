@@ -1,7 +1,7 @@
 # Deterministic Drop Elaboration
 
 ## Status
-<!-- LKJ-F deterministic-drop accepted-contract 3x9ef1XNMfeqD8J9zudNzZhRsKS_iaOJU3iwBS-pD_M -->
+<!-- LKJ-F deterministic-drop accepted-contract Yi73fIsQ3N-BFCblFh-QeokbTeD4YXVCvNFAiD1FTg8 -->
 
 
 **Accepted contract with verified static, dead, conditional, and

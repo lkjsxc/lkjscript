@@ -53,23 +53,24 @@ pub(super) fn lower_direct_call(
     };
     let mut lowered_arguments = Vec::with_capacity(arguments.len());
     for (argument, consuming) in arguments.iter().zip(consuming) {
-        if !*consuming
+        let value = if !*consuming
             && matches!(
                 value_type(value_types, *argument)?,
                 ValueType::StructuralOwner(_)
             )
         {
-            lowered_arguments.push(copy_structural_call_argument(
+            copy_structural_call_argument(
                 function,
                 *argument,
                 block,
                 locals,
                 value_types,
                 builder,
-            )?);
+            )?
         } else {
-            lowered_arguments.push(read_value(builder, block, locals, *argument, function.id)?);
-        }
+            read_value(builder, block, locals, *argument, function.id)?
+        };
+        lowered_arguments.push(value);
     }
     if let Some(instantiation) = instantiation {
         for binding in &instantiation.memory_witnesses {

@@ -109,9 +109,19 @@ impl CleanupPlan {
                 }))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
+        let mut call_parameter_modes = BTreeMap::new();
+        for call in plan.calls.iter().filter(|call| call.function == function) {
+            if call_parameter_modes
+                .insert(call.expression.raw(), call.parameters.clone())
+                .is_some()
+            {
+                return Err(Error::msg("HIR memory plan duplicates a call expression"));
+            }
+        }
         Ok(Self {
             next_expression: function_plan.body.raw(),
             placement_routes,
+            call_parameter_modes,
             loan_ends,
             places,
             place_drop_classes,

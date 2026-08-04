@@ -1,7 +1,7 @@
 # Ordinary Owned Regions
 
 ## Status
-<!-- LKJ-F ordinary-regions current UdPHmFAbAd0OAgz1IkiJd3ZR6UnkaA0XERulWvHIxHs -->
+<!-- LKJ-F ordinary-regions current blBiKtRrU0hEc0HCqc0Nuj3ws62pPQGx7XsXS0pZCM8 -->
 
 
 **Current as a typed safe-core internal runtime domain.** Compiler planning and

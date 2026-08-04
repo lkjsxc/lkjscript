@@ -30,8 +30,8 @@ pub(super) use cleanup::{
     cleanup_failure_action, cleanup_failure_roots, export_return, prepare_exit, teardown,
 };
 pub(super) use locals::{
-    call_memory_witnesses, commit_call_arguments, initialize_call_places, prepare_return,
-    restore_handoffs,
+    call_memory_witnesses, cleanup_tail_copy_roots, commit_call_arguments, initialize_call_places,
+    prepare_return, restore_handoffs,
 };
 pub(super) use values::{
     copy_path, copy_string, export_plain_return, publish_string, semantic_snapshot,

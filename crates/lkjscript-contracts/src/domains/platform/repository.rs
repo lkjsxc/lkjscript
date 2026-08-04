@@ -1,7 +1,8 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, ContractItemKind};
 
 use super::super::{
-    name, AGENT_WORK_STATE, CAPSULE_MANIFEST, PUBLIC_FACTS, REPOSITORY_GRAPH, SEMANTIC_SOURCE,
+    name, AGENT_WORK_STATE, CAPSULE_MANIFEST, LIMIT_INVENTORY, PUBLIC_FACTS, REPOSITORY_GRAPH,
+    SEMANTIC_SOURCE,
 };
 
 pub(crate) fn repository_graph() -> ContractDescriptor {
@@ -13,22 +14,55 @@ pub(crate) fn repository_graph() -> ContractDescriptor {
             .fact(fact(
                 "input-identity",
                 "input identity",
-                "SHA-256 of canonical emitted graph closure and budget state",
+                "SHA-256 of complete canonical graph closure contract and revision",
             ))
             .fact(fact(
                 "nodes",
                 "nodes",
-                "bounded files capsules commands public facts and semantic entities",
+                "complete accepted files capsules commands public facts and semantic entities",
             ))
             .fact(fact(
                 "edges",
                 "edges",
-                "bounded dependency authority evidence projection and impact edges",
+                "complete retained dependency authority evidence projection and impact edges",
             ))
             .fact(fact(
                 "queries",
                 "query output",
-                "graph identity with exact serialized byte limit",
+                "graph identity structured completion frontier and exact serialized byte limit",
+            )),
+    )
+}
+
+pub(crate) fn limit_inventory() -> ContractDescriptor {
+    descriptor(LIMIT_INVENTORY).item(
+        ContractItem::new("inventory", ContractItemKind::Type)
+            .fact(fact("schema", "schema", "lkjscript.limit-inventory"))
+            .fact(fact("contract", "contract", "full ContractDigest"))
+            .fact(fact(
+                "identity",
+                "limit ID",
+                "stable lowercase unnumbered name",
+            ))
+            .fact(fact(
+                "taxonomy",
+                "class and unit",
+                "closed limit class unit scope and lifetime",
+            ))
+            .fact(fact(
+                "authority",
+                "authority",
+                "default profile safety maximum and lowerability",
+            ))
+            .fact(fact(
+                "failure",
+                "operation failure and atomicity",
+                "typed failure with no partial publication",
+            ))
+            .fact(fact(
+                "observability",
+                "metrics evidence source and wire",
+                "exact observability and required evidence",
             )),
     )
 }

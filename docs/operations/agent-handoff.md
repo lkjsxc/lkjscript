@@ -2,45 +2,44 @@
 
 ## Purpose
 
-Capture exact Current capability, accepted next contracts, sharp edges, and
-verification discipline for autonomous continuation.
+Capture exact Current capability, accepted next contracts, sharp edges, and verification for autonomous continuation.
 
 ## Status
-<!-- LKJ-F agent-work-state current zZjKRc-VC6Kog756utq95Lp9qp-777kO230LOHgrlDo -->
-<!-- LKJ-F collector-free-deterministic-memory accepted-contract rkjfKvq1DyedQHYLOyjWNWY6cFpyxhaJczuQ4sKqTpk -->
-<!-- LKJ-F collector-free-value-island accepted-contract EWyuvKK8qqTiLl5V4reOtDbMa5TFHvetTpt9jiwU64o -->
-<!-- LKJ-F compiler-selected-sealed-value-vertical current Z1BDJ1a9GkItEXgvYOReTEectW8UtdH2lCS-EGJyqQM -->
-<!-- LKJ-F deterministic-drop accepted-contract 3x9ef1XNMfeqD8J9zudNzZhRsKS_iaOJU3iwBS-pD_M -->
-<!-- LKJ-F documentation-authority accepted-contract 81b82OE4Zojd_1uy8ObShOosGjncoi--r2Ksh3kp3aE -->
-<!-- LKJ-F generation-safe-resources accepted-contract 8O8qZdjo1P070HkSVRoGF1uiUmfurgX9QUR39LSxvpk -->
-<!-- LKJ-F jit-auto-promotion accepted-selection -Qrh99Wliic18Iem5GSC_n5jB7iMak1iXIARYSJIcjI -->
-<!-- LKJ-F memory-obligations current O6vRxGZFx22cu1jAvqIzFLXEYqbWU2lgpID4BLggGQ0 -->
-<!-- LKJ-F memory-plan current N83612OzP36uXSfLw059mX4PXU092GhhfBkNXgIpqjY -->
-<!-- LKJ-F memory-tracing-ratchet superseded bdaumT2umNgHfR4PJEhamvu7kWz29TK0EFboRoK6HOg -->
-<!-- LKJ-F modules-and-packages current -WLVVqG-Eulxjxz99Mm4UfIl5Z_LCVypQfsAqLcRiA8 -->
-<!-- LKJ-F no-tracing-runtime current G3iFIfhkJeXDVrUevwng0sXnqvrZGdJwsIUz1qcii1Q -->
-<!-- LKJ-F public-fact-foundation current FRKXqrrhVO3Z0TXrTcxVFmUz5S3sChntrDlE3ykQzFM -->
-<!-- LKJ-F repository-graph-context current gEjOG-jfKyHf81iN7Mb1jeNORliJTFtPPc2QXgpJKt0 -->
-<!-- LKJ-F repository-topology current 4grjef-Dt9HiegyvGVss2RIRPiQKnSbeYGJrwQWqT4A -->
-<!-- LKJ-F residual-generic-compare-vertical current 99CeXYDFnc7vxFwUMwQH70BbTBRU1c10puE0OHg_l-U -->
-<!-- LKJ-F resource-profile-compiler current YGoyLZ9-lyrN4i-CgrshSF2zTZrg_obgHkXGecLH24w -->
-<!-- LKJ-F resource-profile-preallocation current mSMt-gglOr7P_dt0Ar0KTsJccrE5bNcovT4zciHx0Ig -->
-<!-- LKJ-F resource-profile-shared-ledger accepted-target 1pa9JN0jJ11EtZHNgqDL1l_wNIert1_4gEBMsPwuM74 -->
-<!-- LKJ-F semantic-core-target accepted-target O8JUCOa_fL8G7IHnFH6xSHZqv4VkzTRaMGiddFzuEuI -->
-<!-- LKJ-F semantic-resource-plane accepted-contract dt2A_KuS_WJMXDN2VfJ0cHGLJsSpzgTRkFAqjhRiwHY -->
-<!-- LKJ-F semantic-resource-runtime current AG9TS0lYLqMFpETkrEGMQLbw4yE5ozFdBqALzy4yvKU -->
-<!-- LKJ-F semantic-session current GaA_GN7xWh6Ae_7ZLtbi5ESPBHQCBhm7mNlwo9KBVDs -->
-<!-- LKJ-F semantic-source current GnFZks4AfR15wGCqhoO4NjGBjQs3VWvcDrOjadAZvKI -->
-<!-- LKJ-F typed-holes current 15-l9HXntoyIf1sTpMwBCjFPH2wYUzJXMGhz7ZoBzTU -->
-<!-- LKJ-F typed-vm-scalars current pq_CN6UwvrbtitwBC8w4qNKyazgupyvpmNq5l7GIYo0 -->
+<!-- LKJ-F agent-work-state current kv8wfXi4oar1nECmI1uii3FE-sbyD4FBGd_jdcq2eQs -->
+<!-- LKJ-F collector-free-deterministic-memory accepted-contract qduOBapx-N8ubw7Kja0itxVEzeW8jLBj1BtAURYGYjY -->
+<!-- LKJ-F collector-free-value-island accepted-contract 9UydN7ESMrGX7uGbPhXLdJUKhXlsy5HzC1Xh7HbjFYI -->
+<!-- LKJ-F compiler-selected-sealed-value-vertical current 9wHjUcYSsdsDVMIOFtZEsE2ycub8dUZ1LvgMnoCzdNI -->
+<!-- LKJ-F deterministic-drop accepted-contract Yi73fIsQ3N-BFCblFh-QeokbTeD4YXVCvNFAiD1FTg8 -->
+<!-- LKJ-F documentation-authority accepted-contract mNBp5F48YmWvCfUZWovZ5YKqvSnefIQTu8xE7sStxaQ -->
+<!-- LKJ-F generation-safe-resources accepted-contract y86E-iM-jpNexjLFzJuIoxysn5nwYtD0O-KdkfcEhvY -->
+<!-- LKJ-F jit-auto-promotion accepted-selection zvPhOHZBjXzGLYRXVcmcW30hKQQWAGq4xum1E7cnYLQ -->
+<!-- LKJ-F limit-inventory current c8woKdU31j7BiHTAlVYLEpwlLIPMMFnqmeL2JB0qL0c -->
+<!-- LKJ-F memory-obligations current RhDPXh1BofRCVqafSpSp-pXw7rn5mfuTXEcUBI1ibzk -->
+<!-- LKJ-F memory-plan current nwSDK6gZVIOJa-rMcAtZlRMgoIuYbkiHL6XLIWaMQSs -->
+<!-- LKJ-F memory-tracing-ratchet superseded kfkI9nQzsxyKaB4i-dzeHHo6MEoLl_fG6nhVD_3Cp-s -->
+<!-- LKJ-F modules-and-packages current LJeGtdRBgHrz4kXnti-F_9Fk0v6sQKIJjZ_8em0e17s -->
+<!-- LKJ-F no-tracing-runtime current FWMY13I30geyQOA0b0DiqLAtyX3rWuYJeiLTRQmnOVE -->
+<!-- LKJ-F public-fact-foundation current SGKIjH0dOrHd7llJKsJ7U-Og3PGjX1VflQ0CFAZXpy0 -->
+<!-- LKJ-F repository-graph-context current L2MF_Pl-BW4iKTMwicBENbJINEof5o3k_lb6TuVTKNA -->
+<!-- LKJ-F repository-topology current MvwIYzfDxIc0i40sruby05PvZoJWIoyemQnhWGz0cmE -->
+<!-- LKJ-F residual-generic-compare-vertical current eqYzVUhKfvvbx9cABxrV6TJ_gXiHswa5uYwrPeRIeFA -->
+<!-- LKJ-F resource-profile-compiler current rRu2TSdMkyoX8PTbJLRodbKczMwAnPSpqyKKFjABoEk -->
+<!-- LKJ-F resource-profile-preallocation current VzZaKt-3LYHzCT9EEfUGNrsAJ-ng0JE_c1PzQoi6VyA -->
+<!-- LKJ-F resource-profile-shared-ledger accepted-target AN6gJTC8sxvrlzcLfmusKvQtXSrnyFJH9iAXLzBx3w0 -->
+<!-- LKJ-F semantic-core-target accepted-target Jb4vqUsWsXSmWZJ6Wlj_lF2aY01hYKnLzBq3KCBF9_g -->
+<!-- LKJ-F semantic-resource-plane accepted-contract dDuJbyakzTSanrogdkkeaBTy85SoUEdkiSv9rdBRQOU -->
+<!-- LKJ-F semantic-resource-runtime current tT7XCYuarS8EOGklMU6F_aMBNJG_yAo9_t_7s5KeYS8 -->
+<!-- LKJ-F semantic-session current Oe1jdZPGBOXOXgGhBb7LjhjTgjzH4bvVwkBkIkiNwpA -->
+<!-- LKJ-F semantic-source current R1BAjTYdMXThlUGt_MkMwReONQapv5dBQKPp4afZH5g -->
+<!-- LKJ-F typed-holes current 9FFqKWQYNuKnRkoWFC6rLl07ZF039ZiV8cF62Je8x6M -->
+<!-- LKJ-F typed-vm-scalars current C1VP7M79Zi03E75dMS2NE11LnOZ2WF6kFxUMBAjaEzg -->
 
 
-Platform revision 19 has a Current strict public-fact foundation: 52 sharded
-facts bind positive interfaces, exclusions, authority, anchors, evidence,
-projections, and content-derived digests. Fact explain, context, and impact are
-Current. Complete command/example classification, evidence freshness,
-architecture derivation, and Historical-scope enforcement remain Accepted
-Contract work; documentation authority as a whole is not Current.
+Platform revision 20 has 53 strict public facts and a Current affected-limit inventory. Repository graph construction
+publishes the complete accepted 9,000-plus-node closure or typed exhaustion; queries expose structured completion and
+frontier rather than inheriting global truncation. Fact explain, context, and impact remain Current. Command/example
+classification, evidence freshness, architecture derivation, and Historical-scope enforcement remain Accepted Contract
+work; documentation authority as a whole is not Current.
 
 Repository topology and graph/context, bounded task state, exact modules and
 packages, canonical Semantic Source and local sessions, explicit capabilities,
@@ -123,13 +122,19 @@ copy-variable transport is not a native witness ABI. No collector, liveness
 map, collection service, barrier, collector configuration, or collector metric
 remains.
 
-The structural substrate uses nonwrapping domain/root generations, bounded
-fallible capacity, typed layout and semantic identities, ledger-only iterative
-release, sealed region-level ownership and weak upgrade, typed cyclic pools,
-and exact resource-plane homes. A compact session-private root table now binds
-64-bit slot/generation keys to complete typed roots, exact owner state, and
-stale-safe loans without deciding liveness. See the
-[focused evidence](../current-state/structural-memory-evidence.md).
+The structural substrate uses nonwrapping domain/root generations, fallible capacity, typed layout and semantic
+identities, iterative release, sealed region-level ownership, typed cyclic pools, and exact homes. The flat-image
+default
+accepts 65,536 semantic nodes below a 1,048,576 safety maximum and separate `u32` addressability. Core tests reuse one
+domain slot across 8,192 sequential publications; the all-tier language vertical builds and releases 32,767 nodes. See
+the [focused evidence](../current-state/structural-memory-evidence.md).
+
+The Brainfuck `Domains` failure was reproduced. Its general cause was physical structural copies for verified immutable
+call and operation operands retained by recursive frames. SSA, evaluator, and VM now preserve the borrow plan; VM
+checked
+tail forwarding reuses frames and releases dead copy roots. The 10-second diagnostic no longer reaches `Domains`, but
+the full automatic-tier workload later reaches `StackValues` because forced/native borrow ABI and native tail transfer
+remain incomplete. No domain ceiling was raised.
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
@@ -170,18 +175,16 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Close command/example classification, evidence freshness, architecture
-   derivation, and Historical-scope enforcement for the public-fact authority.
-2. Bind one semantic generic-requirement algebra and an exact residual codec
-   contract, then complete encode/decode through all four engines, package lock,
-   and fresh-process rehydration.
-3. Add residual list store/load and replace invocation-only structural-owner
-   lists with compiler-selected persistent sealed segments for the exact matrix.
-4. Carry static capture-free indirect generic callables with exact hidden
-   witness signatures through evaluator, VM, baseline, and proof tiers.
-5. Keep affine aggregates, captures, services, provider IPC, broader storage
-   domains, and non-Linux native acceptance outside this boundary.
+1. Complete forced-native `borrow-shared` structural ABI transport and verified native tail transfer, then rerun the
+   full
+   Brainfuck oracle workload without `Domains`, `StackValues`, fallback, or leaked obligations.
+2. Close command/example classification, evidence freshness, architecture derivation, and Historical-scope enforcement.
+3. Bind semantic generic requirements and residual codecs through all four engines, package lock, and rehydration.
+4. Add residual list store/load and compiler-selected persistent sealed segments for the exact accepted list matrix.
+5. Carry static capture-free indirect generic callables with exact hidden witnesses through all four tiers.
 
+Items 2-5 were displaced by direct structural and graph scale evidence; none is implied complete. Affine aggregates,
+captures, services/provider IPC, broader storage domains, and non-Linux native acceptance remain outside this boundary.
 This order is an implementation contract, not a Current capability claim.
 
 ## Change Discipline

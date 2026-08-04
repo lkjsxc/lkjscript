@@ -136,6 +136,7 @@ pub(in crate::ssa) fn is_owned_value(structural: &StructuralMemoryMetadata, ty: 
 pub(in crate::ssa) struct CleanupPlan {
     pub(in crate::ssa) next_expression: u32,
     pub(in crate::ssa) placement_routes: BTreeMap<u32, ActiveValuePlacement>,
+    pub(in crate::ssa) call_parameter_modes: BTreeMap<u32, Vec<MemoryParameterMode>>,
     pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) place_drop_classes: BTreeMap<SsaPlaceId, MemoryDropClass>,
