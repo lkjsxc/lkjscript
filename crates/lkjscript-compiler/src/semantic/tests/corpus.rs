@@ -12,10 +12,6 @@ fn tracked_sources_project_to_closed_schema_without_byte_changes() -> std::io::R
         &workspace.join("crates/lkjscript-app/tests/fixtures"),
         &mut files,
     )?;
-    collect_sources(
-        &workspace.join("meta/benchmarks/jit/pre-jit-workload"),
-        &mut files,
-    )?;
     files.sort();
     assert!(
         !files.is_empty(),

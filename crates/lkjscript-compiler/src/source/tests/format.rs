@@ -37,10 +37,6 @@ fn tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
         &workspace.join("crates/lkjscript-app/tests/fixtures"),
         &mut files,
     )?;
-    collect_sources(
-        &workspace.join("meta/benchmarks/jit/pre-jit-workload"),
-        &mut files,
-    )?;
     files.sort();
     assert!(
         !files.is_empty(),

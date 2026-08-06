@@ -12,7 +12,6 @@ COPY meta/platform-revision ./meta/platform-revision
 COPY docs ./docs
 COPY src ./src
 COPY meta/scripts ./meta/scripts
-COPY meta/benchmarks ./meta/benchmarks
 COPY meta/Dockerfile meta/docker-compose.yml ./meta/
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \

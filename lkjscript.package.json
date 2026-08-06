@@ -6,7 +6,6 @@
   "modules": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
-    "meta/benchmarks/jit/pre-jit-workload/kernel.lkjscript", "meta/benchmarks/jit/pre-jit-workload/main.lkjscript",
     "src/examples/bench/leibniz-loop.lkjscript", "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/io.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/bulk-bytes/roundtrip.lkjscript", "src/examples/bulk-bytes/support.lkjscript",
@@ -54,7 +53,7 @@
   "public": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
-    "meta/benchmarks/jit/pre-jit-workload/main.lkjscript", "src/examples/bench/main.lkjscript",
+    "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/durable-files/main.lkjscript", "src/examples/hello/main.lkjscript",
     "src/examples/http/hello.lkjscript", "src/examples/jit-optimizing/main.lkjscript",
@@ -138,10 +137,6 @@
 {
       "name": "polymorphic-transport-main",
       "module": "src/examples/polymorphic-transport/main.lkjscript"
-    },
-{
-      "name": "pre-jit-workload-main",
-      "module": "meta/benchmarks/jit/pre-jit-workload/main.lkjscript"
     },
 {
       "name": "sha256-main",
