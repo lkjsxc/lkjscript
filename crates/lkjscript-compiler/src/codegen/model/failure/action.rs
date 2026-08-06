@@ -1,6 +1,6 @@
 fn compile_failure_action(
     function: &Function,
-    slots: &HashMap<ValueId, u8>,
+    slots: &HashMap<ValueId, usize>,
     chunk: &Chunk,
     action: &SsaFailureCleanupAction,
 ) -> Result<BytecodeFailureCleanupAction> {
@@ -11,7 +11,8 @@ fn compile_failure_action(
             .ok_or_else(|| Error::msg("failure cleanup lost SSA local slot"))
     };
     let place = |place: lkjscript_ir::PlaceId| {
-        u8::try_from(place.raw()).map_err(|_| Error::msg("failure cleanup PlaceId exceeds u8"))
+        usize::try_from(place.raw())
+            .map_err(|_| Error::msg("failure cleanup PlaceId exceeds host usize"))
     };
     match action {
         SsaFailureCleanupAction::EndBorrow {

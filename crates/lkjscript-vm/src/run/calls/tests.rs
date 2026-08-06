@@ -3,6 +3,12 @@ use lkjscript_core::{validate_chunk, Chunk, ExecutionConfig, FunctionProto, Vali
 
 use crate::run::NoTier as NullJit;
 
+fn index_instruction(op: Op, index: u64) -> Vec<u8> {
+    let mut code = vec![op as u8];
+    code.extend_from_slice(&index.to_le_bytes());
+    code
+}
+
 #[test]
 fn tail_call_reuses_the_current_frame() {
     let mut chunk = Chunk::new();
@@ -33,7 +39,11 @@ fn tail_call_reuses_the_current_frame() {
         unique_places: 0,
         failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
-        code: vec![Op::LoadLocal as u8, 0, Op::Return as u8],
+        code: {
+            let mut code = index_instruction(Op::LoadLocal, 0);
+            code.push(Op::Return as u8);
+            code
+        },
     });
     chunk.protos.push(FunctionProto {
         name: "caller".into(),
@@ -73,6 +83,7 @@ fn tail_call_reuses_the_current_frame() {
     vm.frames.push(Frame {
         proto: 1,
         ip: 1,
+        instruction_offset: 0,
         stack_base: 0,
         locals_base: 0,
         unique_places: Vec::new(),
@@ -101,15 +112,13 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
     callee.locals = 2;
     callee.parameter_resources = vec![Some(lkjscript_core::ResourceKind::TcpListener)];
     callee.parameter_resource_places = vec![None];
-    callee.code = vec![
-        Op::LoadLocal as u8,
-        0,
-        Op::StoreLocal as u8,
-        1,
-        Op::Pop as u8,
-        Op::Unit as u8,
-        Op::Return as u8,
-    ];
+    callee.code = index_instruction(Op::LoadLocal, 0);
+    callee
+        .code
+        .extend_from_slice(&index_instruction(Op::StoreLocal, 1));
+    callee
+        .code
+        .extend_from_slice(&[Op::Pop as u8, Op::Unit as u8, Op::Return as u8]);
     chunk.protos.push(callee);
     let chunk = validate_chunk(chunk, &ValidationLimits::default())
         .expect("borrowed-resource call validates");
@@ -122,6 +131,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
     vm.frames.push(Frame {
         proto: u32::MAX,
         ip: 0,
+        instruction_offset: 0,
         stack_base: 0,
         locals_base: 0,
         unique_places: Vec::new(),
@@ -135,7 +145,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
 
     assert_eq!(vm.frames[1].borrowed_resources, vec![resource]);
     vm.push(resource);
-    vm.frames[1].ip = 3;
+    vm.frames[1].ip = 10;
     super::super::data::dispatch(&mut vm, Op::StoreLocal as u8)
         .expect("borrowed StoreLocal copies the view");
     assert_eq!(vm.peek().expect("copied view remains"), resource);

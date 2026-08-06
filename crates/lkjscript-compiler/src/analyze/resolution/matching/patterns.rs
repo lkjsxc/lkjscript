@@ -78,8 +78,7 @@ impl Resolver<'_> {
     }
 
     fn allocate_match_local(&mut self, name: String, ty: Type) -> Result<MatchLocal> {
-        let slot = u8::try_from(self.next_slot)
-            .map_err(|_| self.error("match needs more than 255 local slots"))?;
+        let slot = self.next_slot;
         self.next_slot = self
             .next_slot
             .checked_add(1)

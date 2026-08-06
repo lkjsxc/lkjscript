@@ -93,7 +93,11 @@ impl FunctionBuilder<'_> {
             previous.push((
                 binding.binding,
                 self.env.insert(binding.binding, value),
-                self.slots.insert(binding.binding, u16::from(binding.slot)),
+                self.slots.insert(
+                    binding.binding,
+                    u64::try_from(binding.slot)
+                        .map_err(|_| Error::msg("HIR local slot exceeds u64"))?,
+                ),
             ));
         }
         let result = self.lower_expr(body)?;

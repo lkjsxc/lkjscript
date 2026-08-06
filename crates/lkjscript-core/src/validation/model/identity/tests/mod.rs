@@ -30,7 +30,7 @@ fn canonical_known_vector_and_repeat_stability() {
     assert!(first == identity(&chunk));
     assert_eq!(
         hex(first),
-        "864658b46dfcabe59196d40c71745f6effa09767ab9a446da01a58aee2938bd4"
+        "f11aabe8c09a1d8a07554b2bd80612e7590af49dac904c90154751e404198758"
     );
 }
 #[test]

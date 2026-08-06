@@ -35,7 +35,7 @@ pub(in crate::run) fn initialize_call_places(
             ));
         }
         let target = places
-            .get_mut(usize::from(place))
+            .get_mut(place)
             .ok_or_else(|| Error::msg("structural call parameter place is out of range"))?;
         if !matches!(target, unique::RuntimePlace::Inactive) {
             return Err(Error::msg("duplicate call parameter owner place"));

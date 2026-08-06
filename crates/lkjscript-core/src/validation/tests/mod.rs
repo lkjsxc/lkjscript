@@ -10,6 +10,12 @@ fn unit_chunk() -> Chunk {
     chunk
 }
 
+fn index_instruction(op: Op, index: u64) -> Vec<u8> {
+    let mut code = vec![op as u8];
+    code.extend_from_slice(&index.to_le_bytes());
+    code
+}
+
 fn error(chunk: Chunk) -> String {
     validate_chunk(chunk, &ValidationLimits::default())
         .expect_err("chunk must fail validation")
@@ -27,3 +33,4 @@ mod signature_metadata;
 mod structural;
 mod types;
 mod unique;
+mod wide_operands;

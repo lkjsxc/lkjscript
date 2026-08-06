@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) fn compile_failure_cleanups(
     function: &Function,
-    slots: &HashMap<ValueId, u8>,
+    slots: &HashMap<ValueId, usize>,
     chunk: &Chunk,
 ) -> Result<(Vec<BytecodeFailureCleanupPlan>, Vec<u16>)> {
     let mut plans = Vec::new();
@@ -31,7 +31,7 @@ pub(super) fn compile_failure_cleanups(
 pub(super) fn compile_unentered_cleanup(
     function: &Function,
     instruction: &Instruction,
-    slots: &HashMap<ValueId, u8>,
+    slots: &HashMap<ValueId, usize>,
     chunk: &Chunk,
 ) -> Result<Vec<BytecodeFailureCleanupAction>> {
     let InstructionKind::Call { arguments, .. } = &instruction.kind else {

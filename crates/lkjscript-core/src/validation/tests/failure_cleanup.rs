@@ -9,13 +9,13 @@ fn failure_cleanup_metadata_is_bounded_exact_and_independently_checked() {
     chunk.main.emit_op_u16(Op::LoadConst, size.0);
     chunk.main.emit(Op::ByteVectorNew);
     chunk.main.emit_op_u8(Op::StoreUniqueLocal, 0);
-    chunk.main.emit_op_u16(Op::ByteVectorPlaceInit, 0);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
     let pop = u16::try_from(chunk.main.code.len()).expect("small cleanup fixture");
     chunk.main.emit(Op::Pop);
     let nop = u16::try_from(chunk.main.code.len()).expect("small cleanup fixture");
     chunk.main.emit(Op::Nop);
     let drop = u16::try_from(chunk.main.code.len()).expect("small cleanup fixture");
-    chunk.main.emit_op_u16(Op::ByteVectorDropPlace, 0);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorDropPlace, 0, 0);
     let after_drop = u16::try_from(chunk.main.code.len()).expect("small cleanup fixture");
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::ByteVectorPlaceEnd, 0);

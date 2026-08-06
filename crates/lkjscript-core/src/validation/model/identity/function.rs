@@ -30,15 +30,15 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
         code,
     } = value;
     out.string(name);
-    out.u8(*arity);
-    out.u8(*locals);
+    out.len(*arity);
+    out.len(*locals);
     out.option(memory_plan.as_ref(), |out, value| out.fixed(&value.bytes()));
     out.sequence(memory_witness_parameters, witness::parameter);
     out.sequence(call_witnesses, witness::call_site);
     out.sequence(parameter_structurals, |out, value| {
         out.option(value.as_ref(), |out, value| out.u16(value.raw()))
     });
-    options_u8(out, parameter_structural_places);
+    options_usize(out, parameter_structural_places);
     options_u16(out, parameter_type_variables);
     out.sequence(parameter_copy_kinds, |out, value| {
         out.option(value.as_ref(), |out, value| {
@@ -61,14 +61,14 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
     out.sequence(parameter_resources, |out, value| {
         out.option(value.as_ref(), |out, value| types::resource(out, *value))
     });
-    options_u8(out, parameter_resource_places);
+    options_usize(out, parameter_resource_places);
     out.option(return_resource.as_ref(), resource_return);
     out.sequence(parameter_uniques, |out, value| {
         out.option(value.as_ref(), |out, value| unique(out, *value))
     });
-    options_u8(out, parameter_unique_places);
+    options_usize(out, parameter_unique_places);
     out.option(return_unique.as_ref(), |out, value| unique(out, *value));
-    out.u8(*unique_places);
+    out.len(*unique_places);
     out.sequence(failure_cleanups, cleanup);
     out.sequence(failure_cleanup_ranges, cleanup_range);
     out.bytes(code);
@@ -81,20 +81,20 @@ fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
     match value {
         FailureCleanupAction::EndBorrow { local, place, kind } => {
             out.tag(0);
-            out.u8(*local);
-            out.u8(*place);
+            out.len(*local);
+            out.len(*place);
             unique(out, *kind);
         }
         FailureCleanupAction::DropUnique { local, place, kind } => {
             out.tag(1);
-            out.u8(*local);
-            option_u8(out, place.as_ref());
+            out.len(*local);
+            option_usize(out, place.as_ref());
             unique(out, *kind);
         }
         FailureCleanupAction::DropResource { local, place, kind } => {
             out.tag(2);
-            out.u8(*local);
-            option_u8(out, place.as_ref());
+            out.len(*local);
+            option_usize(out, place.as_ref());
             types::resource(out, *kind);
         }
         FailureCleanupAction::EndStructuralBorrow {
@@ -103,8 +103,8 @@ fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
             representation,
         } => {
             out.tag(3);
-            out.u8(*local);
-            out.u8(*place);
+            out.len(*local);
+            out.len(*place);
             out.u16(representation.raw());
         }
         FailureCleanupAction::DropStructural {
@@ -113,13 +113,13 @@ fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
             representation,
         } => {
             out.tag(4);
-            out.u8(*local);
-            option_u8(out, place.as_ref());
+            out.len(*local);
+            option_usize(out, place.as_ref());
             out.u16(representation.raw());
         }
         FailureCleanupAction::AbortStructuralDestination { local, destination } => {
             out.tag(5);
-            out.u8(*local);
+            out.len(*local);
             out.u16(destination.raw());
         }
     }
@@ -156,11 +156,11 @@ fn unique(out: &mut Encoder, value: UniqueValueKind) {
         UniqueValueKind::ByteSliceMut => 3,
     });
 }
-fn options_u8(out: &mut Encoder, values: &[Option<u8>]) {
-    out.sequence(values, |out, value| option_u8(out, value.as_ref()));
+fn options_usize(out: &mut Encoder, values: &[Option<usize>]) {
+    out.sequence(values, |out, value| option_usize(out, value.as_ref()));
 }
-fn option_u8(out: &mut Encoder, value: Option<&u8>) {
-    out.option(value, |out, value| out.u8(*value));
+fn option_usize(out: &mut Encoder, value: Option<&usize>) {
+    out.option(value, |out, value| out.len(*value));
 }
 fn options_u16(out: &mut Encoder, values: &[Option<u16>]) {
     out.sequence(values, |out, value| {

@@ -15,32 +15,32 @@ pub enum ResourceReturnKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FailureCleanupAction {
     EndBorrow {
-        local: u8,
-        place: u8,
+        local: usize,
+        place: usize,
         kind: UniqueValueKind,
     },
     DropUnique {
-        local: u8,
-        place: Option<u8>,
+        local: usize,
+        place: Option<usize>,
         kind: UniqueValueKind,
     },
     DropResource {
-        local: u8,
-        place: Option<u8>,
+        local: usize,
+        place: Option<usize>,
         kind: crate::ResourceKind,
     },
     EndStructuralBorrow {
-        local: u8,
-        place: u8,
+        local: usize,
+        place: usize,
         representation: crate::StructuralRepresentationId,
     },
     DropStructural {
-        local: u8,
-        place: Option<u8>,
+        local: usize,
+        place: Option<usize>,
         representation: crate::StructuralRepresentationId,
     },
     AbortStructuralDestination {
-        local: u8,
+        local: usize,
         destination: crate::StructuralDestinationId,
     },
 }

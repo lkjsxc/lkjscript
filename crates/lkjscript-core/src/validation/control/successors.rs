@@ -6,7 +6,7 @@ fn successors(
     instruction: DecodedInstruction,
 ) -> Result<Vec<usize>> {
     let target = || -> Result<usize> {
-        let offset = instruction.operand().map(usize::from).ok_or_else(|| {
+        let offset = instruction.operand().index().ok_or_else(|| {
             instruction_error(
                 proto,
                 instruction.op(),

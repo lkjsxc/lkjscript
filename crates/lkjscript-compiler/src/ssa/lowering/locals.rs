@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         binding: BindingId,
         place: hir::PlaceId,
-        slot: u8,
+        slot: usize,
         initial: &Expr,
         body: &Expr,
         origin: hir::SourceId,
@@ -17,7 +17,10 @@ impl FunctionBuilder<'_> {
         self.register_place(place, binding, place_ty)?;
         self.initialize_owned_place(binding, initial, origin)?;
         let previous_value = self.env.insert(binding, initial);
-        let previous_slot = self.slots.insert(binding, u16::from(slot));
+        let previous_slot = self.slots.insert(
+            binding,
+            u64::try_from(slot).map_err(|_| Error::msg("HIR local slot exceeds u64"))?,
+        );
         let result = self.lower_expr(body)?;
         if result.is_some() {
             self.end_owned_place(binding, origin)?;
@@ -30,7 +33,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_set_local(
         &mut self,
         target: BindingId,
-        slot: u8,
+        slot: usize,
         value: &Expr,
         origin: hir::SourceId,
     ) -> Result<Option<ValueId>> {
@@ -48,7 +51,10 @@ impl FunctionBuilder<'_> {
             self.initialize_owned_place(target, value, origin)?;
         }
         self.env.insert(target, value);
-        self.slots.insert(target, u16::from(slot));
+        self.slots.insert(
+            target,
+            u64::try_from(slot).map_err(|_| Error::msg("HIR local slot exceeds u64"))?,
+        );
         self.constant(SsaType::Unit, Constant::Unit, origin)
             .map(Some)
     }

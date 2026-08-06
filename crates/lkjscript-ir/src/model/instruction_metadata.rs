@@ -11,7 +11,7 @@ pub enum FailureBehavior {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrameLocal {
     pub binding: BindingId,
-    pub slot: u16,
+    pub slot: u64,
     pub value: ValueId,
 }
 

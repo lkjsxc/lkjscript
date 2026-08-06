@@ -24,15 +24,14 @@ impl Emitter<'_> {
             }
             CallTarget::Indirect(value) => self.load(*value)?,
         }
-        let arity = u8::try_from(arguments.len())
-            .map_err(|_| Error::msg("SSA call arity exceeds bytecode u8"))?;
+        let arity = arguments.len();
         if let Some(instantiation) = instantiation
             .as_ref()
             .filter(|item| !item.memory_witnesses.is_empty())
         {
             self.record_call_witness(target, instantiation)?;
         }
-        self.proto.emit_op_u8(Op::Call, arity);
+        self.emit_index(Op::Call, arity)?;
         Ok(())
     }
 

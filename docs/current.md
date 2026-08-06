@@ -66,6 +66,27 @@ admission ceiling and retains a fixed-size hashing working set. Prepared closure
 nonempty, nonzero, strictly ordered unique sequence, and canonical sequence lengths remain checked
 against their `u64` wire representation.
 
+Executable function arity and local slots now remain `usize` through HIR and code generation; SSA
+frame-state slots use `u64`, and bytecode prototypes, owner-place metadata, and failure-cleanup
+locals/places use host indexes. The one active bytecode format encodes local indexes, call argument
+counts, memory-witness ordinals, and single place indexes as fixed little-endian `u64`; instructions
+that name both a place and local encode two separate `u64` operands. Existing `u16` table,
+function-offset, jump, descriptor, field, and cleanup-range operands remain unchanged. Decoding
+classifies operands as no operand, `u16`, checked host index, or checked place/local pair, proves the
+complete operand is present, and rejects host-width overflow before validation or indexing. The VM
+uses checked frame arithmetic and fallible reservations, rejects a low stack host policy before
+wide frame allocation, tracks instruction starts independently of encoded length, and tail-forwards high local slots without two- or three-byte instruction assumptions.
+Generated production coverage compiles and executes 300 parameters, 300 arguments, and more than
+255 simultaneously live lexical locals, reads slot 299, agrees with the SSA evaluator, and proves
+that automatic execution remains on the generic VM route while forced native mode reports an
+unsupported signature. A larger generated stress case executes 1,024 parameters, arguments, and
+lexical locals through the VM and reads slot 1,023. A generated owned parameter in slot 299 also
+executes and cleans up. Direct
+validated-bytecode coverage executes unique local and place 299 and rejects equal-to-count,
+truncated, misaligned-jump, and malformed cleanup references. Prepared identity now records native
+transport specialization as an optional identity rather than substituting the semantic SSA identity
+when specialization is unavailable.
+
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
 diagnostics, transactions, and a local stdio session. It supplies an explicit limited aggregate
 source-byte policy at its untrusted boundary; the same policy checks staged transaction source
@@ -89,11 +110,17 @@ may build elsewhere, but no other host or native target is currently claimed as 
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function
-  code bytes, table entries, metadata bytes, and constant data during validation; compact bytecode
-  operands and indexes retain additional width ceilings. This identity cutover does not remove
-  those checks. Where they constrain trusted compiler output rather than an untrusted serialized
-  boundary, they remain follow-up validity and representation gaps, not host policy.
+  40,045 verifier steps. A source with 300 simultaneously owned byte-vector parameters currently
+  reaches the separate SSA ownership-CFG work ceiling of 131,072 before executable lowering, so a
+  production-source place above 255 is not yet claimed even though validated bytecode and the VM
+  execute place 299. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function code
+  bytes, table entries, metadata bytes, and constant data during validation. Function offsets,
+  jumps, failure-cleanup ranges and plan indexes, constants, globals, product/enum/structural tables,
+  product fields, enum substitutions, and several structural descriptors retain `u16` or `u8`
+  representation ceilings. HIR/SSA place identities and validator-synthetic owner identities remain
+  `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.
+  Where these constrain trusted compiler output rather than an untrusted
+  serialized boundary, they remain follow-up validity and representation gaps, not host policy.
 - Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
   including parts of type, trait, enum, semantic-schema, and transaction processing, still need
   explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input

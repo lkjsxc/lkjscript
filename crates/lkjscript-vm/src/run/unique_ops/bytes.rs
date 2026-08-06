@@ -129,7 +129,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(value);
         }
         Op::BytesBorrow => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let value = local(vm, slot)?;
             let owner = vm.unique.validate_any_owner(value)?;
             if value.as_bytes_key().is_none()
@@ -165,7 +165,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(Value::UNIT);
         }
         Op::BytesPlaceEnd => {
-            let place = usize::from(vm.read_u8()?);
+            let place = vm.read_index()?;
             let target = place_mut(vm, place)?;
             match *target {
                 unique::RuntimePlace::Active { owner: None, .. } => {

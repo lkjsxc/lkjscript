@@ -67,14 +67,12 @@ fn typed_resource_kinds_reject_cross_domain_bytecode() {
     chunk.required_capabilities = vec![crate::CapabilityKind::Stdio];
     chunk.main.arity = 1;
     chunk.main.locals = 1;
-    chunk.main.code = vec![
-        Op::LoadLocal as u8,
-        0,
-        0,
+    chunk.main.code = index_instruction(Op::LoadLocal, 0);
+    chunk.main.code.extend_from_slice(&[
         Op::StdinHandle as u8,
         Op::SysFsync as u8,
         Op::Return as u8,
-    ];
+    ]);
     let message = error(chunk);
     assert!(
         message.contains("typed resource kind mismatch"),
@@ -85,13 +83,11 @@ fn typed_resource_kinds_reject_cross_domain_bytecode() {
     escape.required_capabilities = vec![crate::CapabilityKind::Stdio];
     escape.main.arity = 1;
     escape.main.locals = 1;
-    escape.main.code = vec![
-        Op::LoadLocal as u8,
-        0,
-        0,
-        Op::StdinHandle as u8,
-        Op::Return as u8,
-    ];
+    escape.main.code = index_instruction(Op::LoadLocal, 0);
+    escape
+        .main
+        .code
+        .extend_from_slice(&[Op::StdinHandle as u8, Op::Return as u8]);
     let message = error(escape);
     assert!(message.contains("cannot escape from main"), "{message}");
 
@@ -99,17 +95,15 @@ fn typed_resource_kinds_reject_cross_domain_bytecode() {
     let message = error(live_local);
     assert!(message.contains("untransferred owner"), "{message}");
 
-    let duplicate = resource_parameter_chunk(vec![
-        Op::LoadLocal as u8,
-        0,
-        Op::Dup as u8,
-        Op::Return as u8,
-    ]);
+    let mut duplicate_code = index_instruction(Op::LoadLocal, 0);
+    duplicate_code.extend_from_slice(&[Op::Dup as u8, Op::Return as u8]);
+    let duplicate = resource_parameter_chunk(duplicate_code);
     let message = error(duplicate);
     assert!(message.contains("cannot forge a unique owner"), "{message}");
 
-    let mut borrowed =
-        resource_parameter_chunk(vec![Op::LoadLocal as u8, 0, Op::ResourceDrop as u8]);
+    let mut borrowed_code = index_instruction(Op::LoadLocal, 0);
+    borrowed_code.push(Op::ResourceDrop as u8);
+    let mut borrowed = resource_parameter_chunk(borrowed_code);
     borrowed.protos[0].parameter_resource_places[0] = None;
     borrowed.protos[0].unique_places = 0;
     assert!(error(borrowed).contains("borrowed resource cannot be consumed"));

@@ -15,7 +15,7 @@ impl Emitter<'_> {
             Some(StructuralLocalKind::Owner | StructuralLocalKind::OwnerRef)
         ) {
             let slot = self.slot(value)?;
-            self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, slot);
+            self.emit_index(Op::LoadStructuralOwnerLocal, slot)?;
             return Ok(());
         }
         self.load(value)
@@ -24,7 +24,7 @@ impl Emitter<'_> {
     pub(in crate::codegen) fn load(&mut self, value: ValueId) -> Result<()> {
         let slot = self.slot(value)?;
         if let Some(kind) = self.structural_local_kind(value)? {
-            self.proto.emit_op_u8(
+            self.emit_index(
                 match kind {
                     StructuralLocalKind::Owner | StructuralLocalKind::Destination => {
                         Op::TakeStructuralLocal
@@ -33,10 +33,10 @@ impl Emitter<'_> {
                     StructuralLocalKind::View => Op::LoadStructuralViewLocal,
                 },
                 slot,
-            );
+            )?;
             return Ok(());
         }
-        self.proto.emit_op_u8(
+        self.emit_index(
             match self.value_type(value)? {
                 SsaType::Bytes if self.borrowed_bytes_value(value)? => Op::LoadViewLocal,
                 SsaType::Bytes if !self.static_bytes_value(value)? => Op::TakeUniqueLocal,
@@ -45,43 +45,42 @@ impl Emitter<'_> {
                 _ => Op::LoadLocal,
             },
             slot,
-        );
+        )?;
         Ok(())
     }
 
     pub(in crate::codegen) fn store_result(&mut self, value: ValueId) -> Result<()> {
         let slot = self.slot(value)?;
         if self.structural_local_kind(value)?.is_some() {
-            self.proto.emit_op_u8(Op::StoreStructuralLocal, slot);
+            self.emit_index(Op::StoreStructuralLocal, slot)?;
             return Ok(());
         }
         match self.value_type(value)? {
             SsaType::Bytes if self.borrowed_bytes_value(value)? => {
-                self.proto.emit_op_u8(Op::StoreViewLocal, slot);
+                self.emit_index(Op::StoreViewLocal, slot)?;
             }
             SsaType::Bytes if !self.static_bytes_value(value)? => {
-                self.proto.emit_op_u8(Op::StoreUniqueLocal, slot);
+                self.emit_index(Op::StoreUniqueLocal, slot)?;
             }
-            SsaType::ByteVector => self.proto.emit_op_u8(Op::StoreUniqueLocal, slot),
+            SsaType::ByteVector => self.emit_index(Op::StoreUniqueLocal, slot)?,
             SsaType::ByteSlice | SsaType::ByteSliceMut => {
-                self.proto.emit_op_u8(Op::StoreViewLocal, slot);
+                self.emit_index(Op::StoreViewLocal, slot)?;
             }
             _ => {
-                self.proto.emit_op_u8(Op::StoreLocal, slot);
+                self.emit_index(Op::StoreLocal, slot)?;
                 self.proto.emit(Op::Pop);
             }
         }
         Ok(())
     }
 
-    pub(in crate::codegen) fn witness_parameter_ordinal(&self, parameter: &str) -> Result<u8> {
+    pub(in crate::codegen) fn witness_parameter_ordinal(&self, parameter: &str) -> Result<usize> {
         self.function
             .signature
             .type_parameters
             .iter()
             .position(|candidate| candidate == parameter)
-            .and_then(|index| u8::try_from(index).ok())
-            .ok_or_else(|| Error::msg("memory witness parameter ordinal exceeds u8"))
+            .ok_or_else(|| Error::msg("memory witness parameter is not declared"))
     }
 
     pub(in crate::codegen) fn value_type(&self, value: ValueId) -> Result<&SsaType> {
@@ -173,16 +172,6 @@ impl Emitter<'_> {
             .find(|metadata| metadata.id == place)
             .map(|metadata| metadata.ty == SsaType::ByteVector)
             .ok_or_else(|| Error::msg("SSA bytecode lowering lost a PlaceId"))
-    }
-
-    pub(in crate::codegen) fn place_slot(
-        &self,
-        place: lkjscript_ir::PlaceId,
-        value: ValueId,
-    ) -> Result<u16> {
-        let place = u8::try_from(place.raw())
-            .map_err(|_| Error::msg("byte-vector PlaceId exceeds bytecode u8"))?;
-        Ok((u16::from(place) << 8) | u16::from(self.slot(value)?))
     }
 }
 

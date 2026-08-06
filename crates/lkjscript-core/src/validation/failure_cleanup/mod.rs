@@ -82,7 +82,7 @@ pub(super) fn validate_at_offset(
 }
 
 fn borrowed_parameter(proto: &FunctionProto, index: usize) -> bool {
-    index < usize::from(proto.arity)
+    index < proto.arity
         && matches!(
             proto.parameter_uniques.get(index).copied().flatten(),
             Some(UniqueValueKind::ByteSlice | UniqueValueKind::ByteSliceMut)

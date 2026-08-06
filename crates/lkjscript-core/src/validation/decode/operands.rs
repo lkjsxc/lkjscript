@@ -31,7 +31,7 @@ pub(super) fn validate_instruction_operands(
             | Op::EndStructuralBorrowLocal
             | Op::LoadStructuralOwnerLocal => {
                 let index = operand_index(operand, proto, op, at)?;
-                if index >= usize::from(proto.locals) {
+                if index >= proto.locals {
                     return operand_error(proto, op, at, "local index out of range");
                 }
             }
@@ -44,19 +44,17 @@ pub(super) fn validate_instruction_operands(
             | Op::StructuralPlaceInit
             | Op::StructuralMove
             | Op::StructuralDropPlace => {
-                let packed = operand_index(operand, proto, op, at)?;
-                let slot = packed & usize::from(u8::MAX);
-                let place = packed >> u8::BITS;
-                if slot >= usize::from(proto.locals) {
+                let (place, slot) = operand_place_local(operand, proto, op, at)?;
+                if slot >= proto.locals {
                     return operand_error(proto, op, at, "unique local index out of range");
                 }
-                if place >= usize::from(proto.unique_places) {
+                if place >= proto.unique_places {
                     return operand_error(proto, op, at, "unique place index out of range");
                 }
             }
             Op::ByteVectorPlaceEnd | Op::BytesPlaceEnd | Op::StructuralPlaceEnd => {
                 let place = operand_index(operand, proto, op, at)?;
-                if place >= usize::from(proto.unique_places) {
+                if place >= proto.unique_places {
                     return operand_error(proto, op, at, "unique place index out of range");
                 }
             }
@@ -183,7 +181,7 @@ pub(super) fn validate_instruction_operands(
                 operand_index(operand, proto, op, at)?;
             }
             _ => {
-                if operand.is_some() {
+                if !operand.is_none() {
                     return operand_error(proto, op, at, "unexpected encoded operand");
                 }
             }

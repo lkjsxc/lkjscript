@@ -110,7 +110,7 @@ pub(in crate::ssa) fn construct_program(
                 builder.mark_entry_owner(binding_id);
             }
             let slot =
-                u16::try_from(index).map_err(|_| Error::msg("SSA parameter slot exceeds u16"))?;
+                u64::try_from(index).map_err(|_| Error::msg("SSA parameter slot exceeds u64"))?;
             builder.slots.insert(binding_id, slot);
         }
         builder.install_dynamic_owner_parameters(&function.params, function.origin)?;

@@ -6,7 +6,7 @@ fn print_chunk(required: lkjscript_core::CapabilityKind) -> lkjscript_core::Vali
     chunk.main.arity = 1;
     chunk.main.locals = 1;
     let text = chunk.add_const(Constant::Str("not emitted".into()));
-    chunk.main.emit_op_u16(Op::LoadLocal, 0);
+    chunk.main.emit_op_u64(Op::LoadLocal, 0);
     chunk.main.emit_op_u16(Op::LoadConst, text.0);
     chunk.main.emit(Op::Print);
     chunk.main.emit(Op::Return);
@@ -62,7 +62,7 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
     chunk.required_capabilities = vec![lkjscript_core::CapabilityKind::Clock];
     chunk.main.arity = 1;
     chunk.main.locals = 1;
-    chunk.main.emit_op_u16(Op::LoadLocal, 0);
+    chunk.main.emit_op_u64(Op::LoadLocal, 0);
     chunk.main.emit(Op::SysNowMs);
     chunk.main.emit(Op::Return);
     let clock = validate(chunk);
@@ -114,7 +114,7 @@ fn bytecode_cannot_use_one_capability_as_another() {
     chunk.main.arity = 1;
     chunk.main.locals = 1;
     let text = chunk.add_const(Constant::Str("not emitted".into()));
-    chunk.main.emit_op_u16(Op::LoadLocal, 0);
+    chunk.main.emit_op_u64(Op::LoadLocal, 0);
     chunk.main.emit_op_u16(Op::LoadConst, text.0);
     chunk.main.emit(Op::Print);
     chunk.main.emit(Op::Return);

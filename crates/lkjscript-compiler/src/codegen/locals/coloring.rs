@@ -6,7 +6,7 @@ pub(super) fn color_locals(
     chunk: &Chunk,
     value_types: HashMap<ValueId, SsaType>,
     interference: Vec<HashSet<ValueId>>,
-) -> Result<HashMap<ValueId, u8>> {
+) -> Result<HashMap<ValueId, usize>> {
     let entry = function
         .blocks
         .iter()
@@ -82,22 +82,13 @@ pub(super) fn color_locals(
         *destination = Some(color);
     }
 
-    if color_types.len() > usize::from(u8::MAX) {
-        return Err(Error::msg(format!(
-            "SSA function {} requires {} bytecode locals after liveness allocation; limit is 255",
-            function.name,
-            color_types.len()
-        )));
-    }
     let mut slots = HashMap::with_capacity(value_count);
     for (raw, color) in colors.into_iter().enumerate() {
         let value = ValueId::new(
             u32::try_from(raw).map_err(|_| Error::msg("SSA local ValueId exceeds u32"))?,
         );
         let color = color.ok_or_else(|| Error::msg("SSA value did not receive a local color"))?;
-        let slot =
-            u8::try_from(color).map_err(|_| Error::msg("SSA bytecode local color exceeds u8"))?;
-        slots.insert(value, slot);
+        slots.insert(value, color);
     }
     Ok(slots)
 }

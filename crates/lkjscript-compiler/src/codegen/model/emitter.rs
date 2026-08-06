@@ -4,7 +4,7 @@ pub(in crate::codegen) struct Emitter<'a> {
     pub(in crate::codegen) chunk: &'a mut Chunk,
     pub(in crate::codegen) globals: &'a HashMap<FunctionId, u16>,
     pub(in crate::codegen) function: &'a Function,
-    pub(in crate::codegen) slots: HashMap<ValueId, u8>,
+    pub(in crate::codegen) slots: HashMap<ValueId, usize>,
     pub(in crate::codegen) code_base: u16,
     pub(in crate::codegen) proto: FunctionProto,
     pub(in crate::codegen) block_offsets: HashMap<BlockId, u16>,

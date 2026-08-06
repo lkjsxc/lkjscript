@@ -32,7 +32,7 @@ pub(in crate::run) fn cleanup_failure_action<J: RuntimeTier>(
 fn cleanup_view<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     frame: usize,
-    local: u8,
+    local: usize,
     representation: StructuralRepresentationId,
 ) -> Result<()> {
     let index = cleanup_local_index(vm, frame, local)?;
@@ -55,8 +55,8 @@ fn cleanup_view<J: RuntimeTier>(
 fn cleanup_owner<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     frame: usize,
-    local: u8,
-    place: Option<u8>,
+    local: usize,
+    place: Option<usize>,
     representation: StructuralRepresentationId,
 ) -> Result<()> {
     let index = cleanup_local_index(vm, frame, local)?;
@@ -78,7 +78,7 @@ fn cleanup_owner<J: RuntimeTier>(
         if let Some(target) = vm
             .frames
             .get_mut(frame)
-            .and_then(|frame| frame.unique_places.get_mut(usize::from(place)))
+            .and_then(|frame| frame.unique_places.get_mut(place))
         {
             *target = unique::RuntimePlace::Active {
                 owner: None,
@@ -92,7 +92,7 @@ fn cleanup_owner<J: RuntimeTier>(
 fn cleanup_destination<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     frame: usize,
-    local: u8,
+    local: usize,
     destination: StructuralDestinationId,
 ) -> Result<()> {
     let index = cleanup_local_index(vm, frame, local)?;
@@ -112,10 +112,14 @@ fn cleanup_destination<J: RuntimeTier>(
     Ok(())
 }
 
-fn cleanup_local_index<J: RuntimeTier>(vm: &Vm<'_, J>, frame: usize, local: u8) -> Result<usize> {
+fn cleanup_local_index<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    frame: usize,
+    local: usize,
+) -> Result<usize> {
     vm.frames
         .get(frame)
-        .and_then(|frame| frame.locals_base.checked_add(usize::from(local)))
+        .and_then(|frame| frame.locals_base.checked_add(local))
         .ok_or_else(|| Error::msg("structural failure cleanup lost its frame local"))
 }
 

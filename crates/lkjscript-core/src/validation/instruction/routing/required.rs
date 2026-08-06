@@ -11,7 +11,7 @@ pub(super) fn stack(
         StackEffect::Fixed { required, .. } => Ok(required),
         StackEffect::Call => instruction
             .operand()
-            .map(usize::from)
+            .index()
             .and_then(|argc| argc.checked_add(1))
             .ok_or_else(|| {
                 instruction_error(
@@ -23,7 +23,7 @@ pub(super) fn stack(
             }),
         StackEffect::MakeProduct => instruction
             .operand()
-            .map(usize::from)
+            .index()
             .and_then(|index| chunk.products.get(index))
             .map(|product| product.fields.len())
             .ok_or_else(|| {
@@ -36,7 +36,7 @@ pub(super) fn stack(
             }),
         StackEffect::MakeEnum => instruction
             .operand()
-            .map(usize::from)
+            .index()
             .and_then(|index| chunk.enum_constructions.get(index))
             .and_then(|descriptor| {
                 chunk

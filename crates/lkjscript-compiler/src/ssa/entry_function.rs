@@ -70,7 +70,7 @@ pub(super) fn construct(
             builder.mark_entry_owner(binding);
         }
         let slot =
-            u16::try_from(index).map_err(|_| Error::msg("SSA main parameter slot exceeds u16"))?;
+            u64::try_from(index).map_err(|_| Error::msg("SSA main parameter slot exceeds u64"))?;
         builder.slots.insert(binding, slot);
     }
     if let Some(result) = builder.lower_expr(&program.main.body)? {

@@ -18,12 +18,14 @@ pub(super) fn verify(
     let semantic_ssa = verified_program_identity(ssa)
         .map_err(|error| Error::msg(error.to_string()))?
         .bytes();
-    let native_lowerable_ssa = match specialize_native_transport(ssa) {
-        Ok((native, _)) => verified_program_identity(&native)
-            .map_err(|error| Error::msg(error.to_string()))?
-            .bytes(),
-        Err(_) => semantic_ssa,
-    };
+    let native_specialization_ssa = specialize_native_transport(ssa)
+        .ok()
+        .map(|(native, _)| {
+            verified_program_identity(&native)
+                .map(|identity| identity.bytes())
+                .map_err(|error| Error::msg(error.to_string()))
+        })
+        .transpose()?;
     let reconstructed = PreparedProgramDescriptor {
         platform_revision: lkjscript_contracts::PLATFORM_REVISION,
         package_kind: provenance.kind,
@@ -34,7 +36,7 @@ pub(super) fn verify(
         memory_plan: plan.id.as_bytes(),
         witness_closure: provenance.witness_closure,
         semantic_ssa,
-        native_lowerable_ssa,
+        native_specialization_ssa,
         validated_bytecode: validated_bytecode_identity(bytecode)?.bytes(),
         contracts: reconstruct_contract_digests()?,
     };

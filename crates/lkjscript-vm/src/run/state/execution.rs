@@ -15,22 +15,40 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 self.inputs.capabilities
             )));
         }
+        if self.chunk.main().locals > self.config.max_stack_values {
+            return Err(Error::resource(
+                ResourceLimitKind::StackValues,
+                "VM entry frame exceeds the stack value limit",
+            ));
+        }
+        self.frames
+            .try_reserve(1)
+            .map_err(|_| Error::host("VM entry frame reservation failed"))?;
+        let mut unique_places = Vec::new();
+        unique_places
+            .try_reserve_exact(self.chunk.main().unique_places)
+            .map_err(|_| Error::host("VM entry unique-place reservation failed"))?;
+        unique_places.resize(
+            self.chunk.main().unique_places,
+            unique::RuntimePlace::Inactive,
+        );
         self.frames.push(Frame {
             proto: u32::MAX,
             ip: 0,
+            instruction_offset: 0,
             stack_base: 0,
             locals_base: 0,
-            unique_places: vec![
-                unique::RuntimePlace::Inactive;
-                usize::from(self.chunk.main().unique_places)
-            ],
+            unique_places,
             borrowed_resources: Vec::new(),
             memory_witnesses: Vec::new(),
         });
+        self.stack
+            .try_reserve(self.chunk.main().locals)
+            .map_err(|_| Error::host("VM entry locals reservation failed"))?;
         for kind in &self.inputs.capabilities {
             self.stack.push(Value::from_capability(*kind));
         }
-        for _ in self.inputs.capabilities.len()..usize::from(self.chunk.main().locals) {
+        for _ in self.inputs.capabilities.len()..self.chunk.main().locals {
             self.stack.push(Value::INVALID);
         }
         self.check_runtime_limits()?;
@@ -65,7 +83,10 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 return Err(error);
             }
             if let Some(error) = self.allocation_error.take() {
-                let failure_site = self.current_failure_offset().saturating_sub(1);
+                let failure_site = self
+                    .frames
+                    .last()
+                    .map_or(0, |frame| frame.instruction_offset);
                 self.restore_structural_handoffs();
                 self.execute_failure_unwind(failure_site, false);
                 return Err(error);
@@ -73,7 +94,10 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             let next_site = self.current_failure_offset();
             if self.is_failure_boundary(next_site) {
                 if let Err(error) = self.check_runtime_limits() {
-                    let failure_site = next_site.saturating_sub(1);
+                    let failure_site = self
+                        .frames
+                        .last()
+                        .map_or(0, |frame| frame.instruction_offset);
                     self.restore_structural_handoffs();
                     self.execute_failure_unwind(failure_site, false);
                     return Err(error);

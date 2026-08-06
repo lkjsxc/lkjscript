@@ -17,13 +17,13 @@ fn validate_plan(
             }
             FailureCleanupAction::DropResource { local, kind, .. } => {
                 if !matches!(
-                    state.locals.get(usize::from(*local)).copied().flatten(),
+                    state.locals.get(*local).copied().flatten(),
                     Some(Kind::Resource { kind: actual, .. }) if actual == *kind
                 ) {
                     return Err(Error::msg(format!(
                         "bytecode failure cleanup resource local has wrong kind: local {} is {:?}, expected {kind:?}",
                         local,
-                        state.locals.get(usize::from(*local)).copied().flatten()
+                        state.locals.get(*local).copied().flatten()
                     )));
                 }
                 *local
@@ -45,7 +45,7 @@ fn validate_plan(
                 *local
             }
             FailureCleanupAction::AbortStructuralDestination { local, destination } => {
-                let value = state.locals.get(usize::from(*local)).copied().flatten();
+                let value = state.locals.get(*local).copied().flatten();
                 let Some(Kind::StructuralDestination {
                     destination: actual,
                     identity,
@@ -84,8 +84,6 @@ fn validate_plan(
         else {
             continue;
         };
-        let place =
-            u8::try_from(place).map_err(|_| Error::msg("bytecode unique place exceeds u8"))?;
         let covered = plan.actions.iter().any(|action| {
             matches!(
                 action,
@@ -115,7 +113,7 @@ fn validate_plan(
                     local,
                     destination: actual,
                 } if actual == &destination.destination
-                    && state.locals.get(usize::from(*local)).copied().flatten()
+                    && state.locals.get(*local).copied().flatten()
                         == Some(Kind::StructuralDestination {
                             destination: destination.destination,
                             identity: *identity,

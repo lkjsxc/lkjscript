@@ -24,32 +24,30 @@ impl Emitter<'_> {
                 if instruction.ty == SsaType::Unit
                     && self.value_type(*value)? == &SsaType::ByteVector =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::ByteVectorPlaceInit, operand);
+                self.emit_place_local(Op::ByteVectorPlaceInit, *place, *value)?;
             }
             InstructionKind::PlaceInit { place, value }
                 if instruction.ty == SsaType::Unit
                     && self.value_type(*value)? == &SsaType::Bytes
                     && !self.static_bytes_value(*value)? =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::BytesPlaceInit, operand);
+                self.emit_place_local(Op::BytesPlaceInit, *place, *value)?;
             }
             InstructionKind::PlaceEnd { place }
                 if self.bytes_place(*place)? && !self.bytes_place_is_static(*place)? =>
             {
-                let place = u8::try_from(place.raw())
-                    .map_err(|_| Error::msg("bytes PlaceId exceeds bytecode u8"))?;
-                self.proto.emit_op_u8(Op::BytesPlaceEnd, place);
+                let place = usize::try_from(place.raw())
+                    .map_err(|_| Error::msg("bytes PlaceId exceeds host usize"))?;
+                self.emit_index(Op::BytesPlaceEnd, place)?;
             }
             InstructionKind::PlaceEnd { place } if self.byte_vector_place(*place)? => {
-                let place = u8::try_from(place.raw())
-                    .map_err(|_| Error::msg("byte-vector PlaceId exceeds bytecode u8"))?;
-                self.proto.emit_op_u8(Op::ByteVectorPlaceEnd, place);
+                let place = usize::try_from(place.raw())
+                    .map_err(|_| Error::msg("byte-vector PlaceId exceeds host usize"))?;
+                self.emit_index(Op::ByteVectorPlaceEnd, place)?;
             }
             InstructionKind::EndBorrow { value, .. } => {
                 let slot = self.slot(*value)?;
-                self.proto.emit_op_u8(Op::EndBorrowLocal, slot);
+                self.emit_index(Op::EndBorrowLocal, slot)?;
             }
             InstructionKind::Drop {
                 place, value, glue, ..
@@ -66,14 +64,12 @@ impl Emitter<'_> {
                 if self.value_type(*value)? == &SsaType::Bytes
                     && !self.static_bytes_value(*value)? =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::BytesMove, operand);
+                self.emit_place_local(Op::BytesMove, *place, *value)?;
             }
             InstructionKind::Move { place, value }
                 if self.value_type(*value)? == &SsaType::ByteVector =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::ByteVectorMove, operand);
+                self.emit_place_local(Op::ByteVectorMove, *place, *value)?;
             }
             InstructionKind::Borrow { kind, value, .. } => {
                 let slot = self.slot(*value)?;
@@ -85,7 +81,7 @@ impl Emitter<'_> {
                         lkjscript_ir::BorrowKind::Mutable => Op::ByteVectorBorrowMut,
                     }
                 };
-                self.proto.emit_op_u8(opcode, slot);
+                self.emit_index(opcode, slot)?;
             }
             InstructionKind::Move { value, .. } => self.load(*value)?,
             InstructionKind::PlaceInit { .. }

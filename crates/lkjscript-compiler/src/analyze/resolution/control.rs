@@ -92,8 +92,7 @@ impl Resolver<'_> {
                     "resource-bearing aggregates cannot be stored in this typed resource slice",
                 ));
             }
-            let slot = u8::try_from(self.next_slot)
-                .map_err(|_| self.error("let needs more than 255 bytecode local slots"))?;
+            let slot = self.next_slot;
             self.next_slot = self
                 .next_slot
                 .checked_add(1)

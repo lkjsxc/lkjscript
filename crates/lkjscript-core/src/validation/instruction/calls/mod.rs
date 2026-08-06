@@ -43,7 +43,7 @@ pub(super) fn apply(
                             "closure prototype index is out of range",
                         )
                     })?;
-                if usize::from(callee_proto.arity) != argc {
+                if callee_proto.arity != argc {
                     return Err(instruction_error(
                         proto,
                         op,

@@ -9,15 +9,15 @@ impl Emitter<'_> {
             self.proto.emit(Op::Unit);
             return Ok(());
         }
-        let operand = self.place_slot(place, value)?;
-        self.proto.emit_op_u16(
+        self.emit_place_local(
             if glue == DropGlueIdentity::ByteVector {
                 Op::ByteVectorDropPlace
             } else {
                 Op::BytesDropPlace
             },
-            operand,
-        );
+            place,
+            value,
+        )?;
         Ok(())
     }
 

@@ -2,12 +2,12 @@ use super::{Kind, State, UniquePlaceState};
 use crate::{Error, Result, UniqueValueKind};
 
 pub(super) fn validate_loan(
-    local: u8,
-    place: u8,
+    local: usize,
+    place: usize,
     kind: UniqueValueKind,
     state: &State,
 ) -> Result<()> {
-    let actual = state.locals.get(usize::from(local)).copied().flatten();
+    let actual = state.locals.get(local).copied().flatten();
     let owner = match (kind, actual) {
         (UniqueValueKind::Bytes, Some(Kind::BytesBorrow { owner, .. })) => owner,
         (
@@ -29,7 +29,7 @@ pub(super) fn validate_loan(
         _ => return Err(Error::msg("bytecode failure loan-end has wrong local kind")),
     };
     if !matches!(
-        state.unique_places.get(usize::from(place)),
+        state.unique_places.get(place),
         Some(UniquePlaceState::Active { owner: Some(actual), .. }) if *actual == owner
     ) {
         return Err(Error::msg(
@@ -40,12 +40,12 @@ pub(super) fn validate_loan(
 }
 
 pub(super) fn validate_unique_drop(
-    local: u8,
-    place: Option<u8>,
+    local: usize,
+    place: Option<usize>,
     kind: UniqueValueKind,
     state: &State,
 ) -> Result<()> {
-    let actual = state.locals.get(usize::from(local)).copied().flatten();
+    let actual = state.locals.get(local).copied().flatten();
     let owner = match (kind, actual) {
         (UniqueValueKind::Bytes, Some(Kind::Bytes(owner)))
         | (UniqueValueKind::ByteVector, Some(Kind::ByteVector(owner))) => owner,
@@ -57,7 +57,7 @@ pub(super) fn validate_unique_drop(
     };
     if let Some(place) = place {
         if !matches!(
-            state.unique_places.get(usize::from(place)),
+            state.unique_places.get(place),
             Some(UniquePlaceState::Active { owner: Some(actual), .. }) if *actual == owner
         ) {
             return Err(Error::msg(
@@ -75,12 +75,12 @@ pub(super) fn validate_unique_drop(
 }
 
 pub(super) fn validate_structural_loan(
-    local: u8,
-    place: u8,
+    local: usize,
+    place: usize,
     representation: crate::StructuralRepresentationId,
     state: &State,
 ) -> Result<()> {
-    let owner = match state.locals.get(usize::from(local)).copied().flatten() {
+    let owner = match state.locals.get(local).copied().flatten() {
         Some(Kind::StructuralView {
             representation: actual,
             owner,
@@ -93,7 +93,7 @@ pub(super) fn validate_structural_loan(
         }
     };
     if !matches!(
-        state.unique_places.get(usize::from(place)),
+        state.unique_places.get(place),
         Some(UniquePlaceState::Active { owner: Some(actual), .. }) if *actual == owner
     ) {
         return Err(Error::msg(
@@ -104,12 +104,12 @@ pub(super) fn validate_structural_loan(
 }
 
 pub(super) fn validate_structural_drop(
-    local: u8,
-    place: Option<u8>,
+    local: usize,
+    place: Option<usize>,
     representation: crate::StructuralRepresentationId,
     state: &State,
 ) -> Result<()> {
-    let owner = match state.locals.get(usize::from(local)).copied().flatten() {
+    let owner = match state.locals.get(local).copied().flatten() {
         Some(Kind::StructuralOwner {
             representation: actual,
             owner,
@@ -124,7 +124,7 @@ pub(super) fn validate_structural_drop(
     };
     if let Some(place) = place {
         if !matches!(
-            state.unique_places.get(usize::from(place)),
+            state.unique_places.get(place),
             Some(UniquePlaceState::Active { owner: Some(actual), .. }) if *actual == owner
         ) {
             return Err(Error::msg(format!(
@@ -134,7 +134,7 @@ pub(super) fn validate_structural_drop(
                 ),
                 owner,
                 place,
-                state.unique_places.get(usize::from(place)),
+                state.unique_places.get(place),
             )));
         }
     } else if state.unique_places.iter().any(|place| {
@@ -147,8 +147,8 @@ pub(super) fn validate_structural_drop(
     Ok(())
 }
 
-pub(super) fn local_owner(state: &State, local: u8) -> Option<u32> {
-    match state.locals.get(usize::from(local)).copied().flatten() {
+pub(super) fn local_owner(state: &State, local: usize) -> Option<u32> {
+    match state.locals.get(local).copied().flatten() {
         Some(Kind::Bytes(owner) | Kind::ByteVector(owner))
         | Some(Kind::StructuralOwner { owner, .. }) => Some(owner),
         _ => None,

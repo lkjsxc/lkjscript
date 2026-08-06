@@ -6,7 +6,7 @@ use cleanup::cleanup_values;
 pub(in crate::codegen) fn allocate_locals(
     function: &Function,
     chunk: &Chunk,
-) -> Result<HashMap<ValueId, u8>> {
+) -> Result<HashMap<ValueId, usize>> {
     let _entry = function
         .blocks
         .iter()

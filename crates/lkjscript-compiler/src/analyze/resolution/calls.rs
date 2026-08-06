@@ -63,8 +63,6 @@ impl Resolver<'_> {
                 actual: args.len(),
             }));
         }
-        let _arity = u8::try_from(args.len())
-            .map_err(|_| self.error(format!("{name}: too many call arguments")))?;
         let mut resolved_args = Vec::with_capacity(args.len());
         for argument in args {
             resolved_args.push(self.resolve_expr(argument)?);

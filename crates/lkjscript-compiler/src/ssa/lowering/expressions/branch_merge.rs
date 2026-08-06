@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         result_type: SsaType,
         expression_origin: hir::SourceId,
         incoming_env: BTreeMap<BindingId, ValueId>,
-        incoming_slots: BTreeMap<BindingId, u16>,
+        incoming_slots: BTreeMap<BindingId, u64>,
         mut then_result: BranchResult,
         mut else_result: BranchResult,
         mut then_value: ValueId,

@@ -25,8 +25,7 @@ impl Analyzer {
                 "typed resources cannot escape as a main result",
             ));
         }
-        let arity = u8::try_from(pending.param_names.len())
-            .map_err(|_| self.error(pending.origin, "main has too many capability parameters"))?;
+        let arity = pending.param_names.len();
         let mut params = Vec::with_capacity(pending.param_names.len());
         let mut scope = HashMap::new();
         let mut local_slots = HashMap::new();
@@ -36,8 +35,7 @@ impl Analyzer {
             .zip(&pending.param_types)
             .enumerate()
         {
-            let slot = u8::try_from(index)
-                .map_err(|_| self.error(pending.origin, "main capability slot exceeds u8"))?;
+            let slot = index;
             let id = self.add_binding(
                 name.clone(),
                 BindingKind::Parameter,
@@ -57,13 +55,13 @@ impl Analyzer {
                 HashSet::new(),
                 params.len(),
                 pending.return_type.clone(),
-            );
+            )?;
             let param_places = params
                 .iter()
                 .map(|parameter| resolver.place(*parameter))
                 .collect::<Result<Vec<_>>>()?;
             let body = resolver.resolve_expr(pending.body)?;
-            let local_count = resolver.local_count()?;
+            let local_count = resolver.local_count();
             (body, local_count, param_places)
         };
         if body.ty != Type::Never && body.ty != pending.return_type {
@@ -113,12 +111,7 @@ impl Analyzer {
                 "resource-bearing aggregates are unsupported function boundaries",
             ));
         }
-        let arity = u8::try_from(parsed.param_names.len()).map_err(|_| {
-            self.error(
-                origin,
-                "function has too many parameters for bytecode arity",
-            )
-        })?;
+        let arity = parsed.param_names.len();
         let mut params = Vec::with_capacity(parsed.param_names.len());
         let mut scope = HashMap::new();
         let mut local_slots = HashMap::new();
@@ -128,8 +121,6 @@ impl Analyzer {
             .zip(&parsed.param_types)
             .enumerate()
         {
-            let _slot = u8::try_from(index)
-                .map_err(|_| self.error(origin, "function has too many parameter local slots"))?;
             let id = self.add_binding(
                 name.clone(),
                 BindingKind::Parameter,
@@ -137,12 +128,7 @@ impl Analyzer {
                 Origin::Source(origin),
             )?;
             scope.insert(name.clone(), id);
-            local_slots.insert(
-                id,
-                u8::try_from(index).map_err(|_| {
-                    self.error(origin, "function has too many parameter local slots")
-                })?,
-            );
+            local_slots.insert(id, index);
             params.push(id);
         }
         let (body, local_count, param_places) = {
@@ -155,13 +141,13 @@ impl Analyzer {
                 type_variables,
                 params.len(),
                 parsed.signature_return.clone(),
-            );
+            )?;
             let param_places = params
                 .iter()
                 .map(|parameter| resolver.place(*parameter))
                 .collect::<Result<Vec<_>>>()?;
             let body = resolver.resolve_expr(parsed.body)?;
-            let local_count = resolver.local_count()?;
+            let local_count = resolver.local_count();
             (body, local_count, param_places)
         };
         if body.ty != Type::Never && !Type::unify_assignable(&body.ty, &parsed.signature_return) {

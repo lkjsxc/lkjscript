@@ -41,9 +41,9 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let call_offset = vm
                 .frames
                 .last()
-                .and_then(|frame| frame.ip.checked_sub(1))
+                .map(|frame| frame.instruction_offset)
                 .ok_or_else(|| Error::msg("call instruction offset is unavailable"))?;
-            let argc = vm.read_u8()?;
+            let argc = vm.read_index()?;
             call(vm, argc, call_offset)
         }
         x if x == Op::Return as u8 => {
@@ -87,6 +87,9 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .ok_or_else(|| Error::msg("no frame"))?;
         if ip >= code_len {
             return Err(Error::msg("function ended without Return"));
+        }
+        if let Some(frame) = self.frames.last_mut() {
+            frame.instruction_offset = ip;
         }
         let op = self.read_u8()?;
         dispatch::dispatch(self, op)

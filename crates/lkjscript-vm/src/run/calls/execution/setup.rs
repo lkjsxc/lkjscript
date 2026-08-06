@@ -2,8 +2,14 @@ fn initial_unique_places(
     proto: &lkjscript_core::FunctionProto,
     arguments: &[Value],
 ) -> Result<Vec<crate::run::unique::RuntimePlace>> {
-    let mut places =
-        vec![crate::run::unique::RuntimePlace::Inactive; usize::from(proto.unique_places)];
+    let mut places = Vec::new();
+    places
+        .try_reserve_exact(proto.unique_places)
+        .map_err(|_| Error::host("VM call unique-place reservation failed"))?;
+    places.resize(
+        proto.unique_places,
+        crate::run::unique::RuntimePlace::Inactive,
+    );
     for (index, place) in proto.parameter_unique_places.iter().copied().enumerate() {
         let Some(place) = place else {
             continue;
@@ -23,7 +29,7 @@ fn initial_unique_places(
             })
             .ok_or_else(|| Error::msg("call parameter lacks exact unique owner payload"))?;
         let target = places
-            .get_mut(usize::from(place))
+            .get_mut(place)
             .ok_or_else(|| Error::msg("byte-vector call parameter PlaceId is out of range"))?;
         if !matches!(target, crate::run::unique::RuntimePlace::Inactive) {
             return Err(Error::msg("duplicate byte-vector call parameter PlaceId"));
@@ -63,9 +69,12 @@ fn forwarding_epilogue(code: &[u8], mut ip: usize) -> bool {
     };
     ip = next;
     loop {
-        if code.get(ip).copied() == Some(load as u8)
-            && code.get(ip.saturating_add(1)).copied() == Some(slot)
-            && code.get(ip.saturating_add(2)).copied() == Some(Op::Return as u8)
+        if decode_index_instruction(code, ip)
+            .is_some_and(|(op, actual, next)| {
+                op == load
+                    && actual == slot
+                    && code.get(next).copied() == Some(Op::Return as u8)
+            })
         {
             return true;
         }
@@ -78,25 +87,47 @@ fn forwarding_epilogue(code: &[u8], mut ip: usize) -> bool {
         ) {
             return false;
         }
-        ip = ip.saturating_add(2);
-        if code.get(ip).copied() != Some(Op::StoreLocal as u8)
-            || code.get(ip.saturating_add(2)).copied() != Some(Op::Pop as u8)
-        {
+        let Some(next) = ip
+            .checked_add(1)
+            .and_then(|operand| operand.checked_add(op.operand_width()))
+            .filter(|next| *next <= code.len())
+        else {
+            return false;
+        };
+        ip = next;
+        let Some((store, _, next)) = decode_index_instruction(code, ip) else {
+            return false;
+        };
+        if store != Op::StoreLocal || code.get(next).copied() != Some(Op::Pop as u8) {
             return false;
         }
-        ip = ip.saturating_add(3);
+        let Some(next) = next.checked_add(1) else {
+            return false;
+        };
+        ip = next;
     }
 }
 
-fn forwarding_store(code: &[u8], ip: usize) -> Option<(Op, u8, usize)> {
-    let op = code.get(ip).and_then(|byte| Op::from_byte(*byte))?;
-    let slot = *code.get(ip.checked_add(1)?)?;
+fn forwarding_store(code: &[u8], ip: usize) -> Option<(Op, usize, usize)> {
+    let (op, slot, next) = decode_index_instruction(code, ip)?;
     match op {
-        Op::StoreUniqueLocal => Some((Op::TakeUniqueLocal, slot, ip.checked_add(2)?)),
-        Op::StoreStructuralLocal => Some((Op::TakeStructuralLocal, slot, ip.checked_add(2)?)),
-        Op::StoreLocal if code.get(ip.checked_add(2)?).copied() == Some(Op::Pop as u8) => {
-            Some((Op::LoadLocal, slot, ip.checked_add(3)?))
+        Op::StoreUniqueLocal => Some((Op::TakeUniqueLocal, slot, next)),
+        Op::StoreStructuralLocal => Some((Op::TakeStructuralLocal, slot, next)),
+        Op::StoreLocal if code.get(next).copied() == Some(Op::Pop as u8) => {
+            Some((Op::LoadLocal, slot, next.checked_add(1)?))
         }
         _ => None,
     }
+}
+
+fn decode_index_instruction(code: &[u8], ip: usize) -> Option<(Op, usize, usize)> {
+    let op = code.get(ip).and_then(|byte| Op::from_byte(*byte))?;
+    if op.operand_layout() != lkjscript_core::OperandLayout::Index {
+        return None;
+    }
+    let operand = ip.checked_add(1)?;
+    let next = operand.checked_add(op.operand_width())?;
+    let bytes: [u8; 8] = code.get(operand..next)?.try_into().ok()?;
+    let index = usize::try_from(u64::from_le_bytes(bytes)).ok()?;
+    Some((op, index, next))
 }

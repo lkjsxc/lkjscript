@@ -35,7 +35,7 @@ fn structural_failure_cleanup_checks_exact_action_identity() {
     proto.parameter_structural_places = vec![Some(0)];
     proto.unique_places = 1;
     proto.emit(Op::Nop);
-    proto.emit_op_u16(Op::StructuralDropPlace, 0);
+    proto.emit_op_u64_pair(Op::StructuralDropPlace, 0, 0);
     proto.emit(Op::Pop);
     proto.emit_op_u8(Op::StructuralPlaceEnd, 0);
     proto.emit(Op::Pop);

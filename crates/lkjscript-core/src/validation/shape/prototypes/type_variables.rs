@@ -5,14 +5,14 @@ pub(super) fn validate(
     category: &str,
 ) -> Result<()> {
     if !proto.parameter_type_variables.is_empty()
-        && proto.parameter_type_variables.len() != usize::from(proto.arity)
+        && proto.parameter_type_variables.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} type-variable parameter metadata does not match arity",
             proto.name
         )));
     }
-    for index in 0..usize::from(proto.arity) {
+    for index in 0..proto.arity {
         let variable = proto
             .parameter_type_variables
             .get(index)

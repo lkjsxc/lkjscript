@@ -41,7 +41,9 @@ pub use lkjscript_contracts::{sha256, MemoryWitnessOperation, Sha256};
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
 };
-pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
+pub use opcode::{
+    ControlFlow, DecodedInstruction, DecodedOperand, Op, OpInfo, OperandLayout, StackEffect,
+};
 pub use outcome::{
     decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
     CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionOutcomeCodecLimits,

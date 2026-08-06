@@ -24,13 +24,13 @@ pub enum Constant {
 #[derive(Debug, Clone)]
 pub struct FunctionProto {
     pub name: String,
-    pub arity: u8,
-    pub locals: u8,
+    pub arity: usize,
+    pub locals: usize,
     pub memory_plan: Option<crate::MemoryPlanId>,
     pub memory_witness_parameters: Vec<crate::MemoryWitnessParameter>,
     pub call_witnesses: Vec<crate::CallWitnessSite>,
     pub parameter_structurals: Vec<Option<crate::StructuralRepresentationId>>,
-    pub parameter_structural_places: Vec<Option<u8>>,
+    pub parameter_structural_places: Vec<Option<usize>>,
     pub parameter_type_variables: Vec<Option<u16>>,
     pub parameter_copy_kinds: Vec<Option<crate::StructuralKind>>,
     pub return_copy_kind: Option<crate::StructuralKind>,
@@ -39,12 +39,12 @@ pub struct FunctionProto {
     pub return_structural: Option<crate::StructuralRepresentationId>,
     pub return_type_variable: Option<u16>,
     pub parameter_resources: Vec<Option<crate::ResourceKind>>,
-    pub parameter_resource_places: Vec<Option<u8>>,
+    pub parameter_resource_places: Vec<Option<usize>>,
     pub return_resource: Option<ResourceReturnKind>,
     pub parameter_uniques: Vec<Option<UniqueValueKind>>,
-    pub parameter_unique_places: Vec<Option<u8>>,
+    pub parameter_unique_places: Vec<Option<usize>>,
     pub return_unique: Option<UniqueValueKind>,
-    pub unique_places: u8,
+    pub unique_places: usize,
     pub failure_cleanups: Vec<FailureCleanupPlan>,
     pub failure_cleanup_ranges: Vec<FailureCleanupRange>,
     pub code: Vec<u8>,
@@ -165,11 +165,11 @@ impl FunctionProto {
         self.code.push(op as u8);
     }
 
-    pub fn emit_u8(&mut self, b: u8) {
-        self.code.push(b);
+    pub fn emit_u16(&mut self, n: u16) {
+        self.code.extend_from_slice(&n.to_le_bytes());
     }
 
-    pub fn emit_u16(&mut self, n: u16) {
+    pub fn emit_u64(&mut self, n: u64) {
         self.code.extend_from_slice(&n.to_le_bytes());
     }
 
@@ -178,9 +178,20 @@ impl FunctionProto {
         self.emit_u16(n);
     }
 
+    #[cfg(test)]
     pub fn emit_op_u8(&mut self, op: Op, n: u8) {
+        self.emit_op_u64(op, u64::from(n));
+    }
+
+    pub fn emit_op_u64(&mut self, op: Op, n: u64) {
         self.emit(op);
-        self.emit_u8(n);
+        self.emit_u64(n);
+    }
+
+    pub fn emit_op_u64_pair(&mut self, op: Op, first: u64, second: u64) {
+        self.emit(op);
+        self.emit_u64(first);
+        self.emit_u64(second);
     }
 
     pub fn len(&self) -> usize {

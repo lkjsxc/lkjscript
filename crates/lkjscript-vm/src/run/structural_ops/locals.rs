@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
-    let slot = usize::from(vm.read_u8()?);
+    let slot = vm.read_index()?;
     match op {
         lkjscript_core::Op::StoreStructuralLocal => store(vm, slot),
         lkjscript_core::Op::TakeStructuralLocal => take(vm, slot),

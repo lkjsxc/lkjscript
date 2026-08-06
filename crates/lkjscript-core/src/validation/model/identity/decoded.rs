@@ -1,14 +1,33 @@
 use super::encoder::Encoder;
-use crate::{DecodedInstruction, Op};
+use crate::{DecodedInstruction, DecodedOperand, Op};
 
 pub(super) fn instructions(out: &mut Encoder, values: &[DecodedInstruction]) {
     out.sequence(values, |out, value| {
         out.offset(value.offset());
         out.offset(value.next_offset());
         op(out, value.op());
-        out.option(value.operand().as_ref(), |out, value| out.u16(*value));
+        operand(out, value.operand());
     });
 }
+fn operand(out: &mut Encoder, value: DecodedOperand) {
+    match value {
+        DecodedOperand::None => out.tag(0),
+        DecodedOperand::U16(value) => {
+            out.tag(1);
+            out.u16(value);
+        }
+        DecodedOperand::Index(value) => {
+            out.tag(2);
+            out.len(value);
+        }
+        DecodedOperand::PlaceLocal { place, local } => {
+            out.tag(3);
+            out.len(place);
+            out.len(local);
+        }
+    }
+}
+
 fn op(out: &mut Encoder, value: Op) {
     use Op::*;
     out.tag(match value {

@@ -16,7 +16,7 @@ impl MatchPlanId {
 pub struct MatchLocal {
     pub binding: BindingId,
     pub place: PlaceId,
-    pub slot: u8,
+    pub slot: usize,
     pub ty: Type,
 }
 

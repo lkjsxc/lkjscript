@@ -4,19 +4,18 @@ impl Emitter<'_> {
             InstructionKind::PlaceInit { place, value }
                 if self.structural_local_kind(*value)? == Some(StructuralLocalKind::Owner) =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::StructuralPlaceInit, operand);
+                self.emit_place_local(Op::StructuralPlaceInit, *place, *value)?;
             }
             InstructionKind::PlaceEnd { place } if self.structural_place(*place)? => {
-                let place = u8::try_from(place.raw())
-                    .map_err(|_| Error::msg("structural PlaceId exceeds bytecode u8"))?;
-                self.proto.emit_op_u8(Op::StructuralPlaceEnd, place);
+                let place = usize::try_from(place.raw())
+                    .map_err(|_| Error::msg("structural PlaceId exceeds host usize"))?;
+                self.emit_index(Op::StructuralPlaceEnd, place)?;
             }
             InstructionKind::EndBorrow { value, .. }
                 if self.structural_local_kind(*value)? == Some(StructuralLocalKind::View) =>
             {
                 let slot = self.slot(*value)?;
-                self.proto.emit_op_u8(Op::EndStructuralBorrowLocal, slot);
+                self.emit_index(Op::EndStructuralBorrowLocal, slot)?;
             }
             InstructionKind::Drop {
                 place,
@@ -24,21 +23,19 @@ impl Emitter<'_> {
                 glue: DropGlueIdentity::Structural(_),
                 ..
             } => {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::StructuralDropPlace, operand);
+                self.emit_place_local(Op::StructuralDropPlace, *place, *value)?;
             }
             InstructionKind::Move { place, value }
                 if self.structural_local_kind(*value)? == Some(StructuralLocalKind::Owner) =>
             {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::StructuralMove, operand);
+                self.emit_place_local(Op::StructuralMove, *place, *value)?;
             }
             InstructionKind::Borrow {
                 kind, value, ..
             } if structural_view_representation(self.chunk, self.value_type(*value)?).is_some() => {
                 let representation = structural_view_representation(self.chunk, self.value_type(*value)?)
                     .ok_or_else(|| Error::msg("structural borrow representation is missing"))?;
-                self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, self.slot(*value)?);
+                self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 self.proto.emit_op_u16(
                     match kind {
                         lkjscript_ir::BorrowKind::Shared => Op::StructuralBorrow,
@@ -111,7 +108,7 @@ impl Emitter<'_> {
                 value,
                 ..
             } => {
-                self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, self.slot(*value)?);
+                self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 let result_representation =
                     structural_view_representation(self.chunk, &instruction.ty);
                 let reference = intern_aggregate_field(
@@ -128,7 +125,7 @@ impl Emitter<'_> {
                 let representation =
                     structural_view_representation(self.chunk, self.value_type(*value)?)
                         .ok_or_else(|| Error::msg("structural tag representation is missing"))?;
-                self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, self.slot(*value)?);
+                self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 self.proto
                     .emit_op_u16(Op::StructuralAggregateTag, representation.raw());
             }
@@ -157,7 +154,7 @@ impl Emitter<'_> {
                 value,
                 ..
             } => {
-                self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, self.slot(*value)?);
+                self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 self.proto
                     .emit_op_u16(Op::StructuralStringUtf8View, representation.raw());
             }

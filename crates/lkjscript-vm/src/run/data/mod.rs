@@ -39,7 +39,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::LoadLocal as u8 => {
-            let slot = vm.read_u8()? as usize;
+            let slot = vm.read_index()?;
             let base = vm
                 .frames
                 .last()
@@ -47,7 +47,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
                 .locals_base;
             let value = vm
                 .stack
-                .get(base + slot)
+                .get(
+                    base.checked_add(slot)
+                        .ok_or_else(|| Error::msg("LoadLocal slot overflow"))?,
+                )
                 .copied()
                 .ok_or_else(|| Error::msg("LoadLocal slot out of range"))?;
             if value.is_invalid() {
@@ -57,7 +60,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::StoreLocal as u8 => {
-            let slot = vm.read_u8()? as usize;
+            let slot = vm.read_index()?;
             let base = vm
                 .frames
                 .last()
@@ -73,7 +76,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
                 || (value.as_resource().is_some() && !borrowed_resource);
             let target = vm
                 .stack
-                .get_mut(base + slot)
+                .get_mut(
+                    base.checked_add(slot)
+                        .ok_or_else(|| Error::msg("StoreLocal slot overflow"))?,
+                )
                 .ok_or_else(|| Error::msg("StoreLocal slot out of range"))?;
             if resource && !target.is_invalid() && *target != value {
                 return Err(Error::msg(

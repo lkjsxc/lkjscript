@@ -134,7 +134,7 @@ fn drop_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn place_end<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let place = usize::from(vm.read_u8()?);
+    let place = vm.read_index()?;
     let target = place_mut(vm, place)?;
     match *target {
         unique::RuntimePlace::Active { owner: None, .. } => {

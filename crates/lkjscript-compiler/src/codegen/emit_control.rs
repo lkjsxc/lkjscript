@@ -79,18 +79,18 @@ impl Emitter<'_> {
         for (parameter, argument) in target_block.parameters.iter().zip(arguments).rev() {
             let slot = self.slot(parameter.id)?;
             if self.structural_local_kind(*argument)?.is_some() {
-                self.proto.emit_op_u8(Op::StoreStructuralLocal, slot);
+                self.emit_index(Op::StoreStructuralLocal, slot)?;
                 continue;
             }
             match parameter.ty {
                 SsaType::Bytes | SsaType::ByteVector => {
-                    self.proto.emit_op_u8(Op::StoreUniqueLocal, slot);
+                    self.emit_index(Op::StoreUniqueLocal, slot)?;
                 }
                 SsaType::ByteSlice | SsaType::ByteSliceMut => {
-                    self.proto.emit_op_u8(Op::StoreViewLocal, slot);
+                    self.emit_index(Op::StoreViewLocal, slot)?;
                 }
                 _ => {
-                    self.proto.emit_op_u8(Op::StoreLocal, slot);
+                    self.emit_index(Op::StoreLocal, slot)?;
                     self.proto.emit(Op::Pop);
                 }
             }
@@ -122,10 +122,8 @@ impl Emitter<'_> {
             .type_parameters
             .iter()
             .position(|candidate| candidate == &requirement.parameter)
-            .and_then(|index| u8::try_from(index).ok())
-            .ok_or_else(|| Error::msg("memory witness parameter ordinal exceeds u8"))?;
-        self.proto
-            .emit_op_u8(Op::MemoryWitnessIndependentOwner, ordinal);
+            .ok_or_else(|| Error::msg("memory witness parameter is not declared"))?;
+        self.emit_index(Op::MemoryWitnessIndependentOwner, ordinal)?;
         Ok(())
     }
 

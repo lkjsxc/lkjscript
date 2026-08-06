@@ -75,10 +75,15 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
             &ExecutionConfig::default(),
         ))
     );
-    assert!(tail_program.bytecode().protos()[0]
-        .code
-        .windows(3)
-        .any(|bytes| bytes == [Op::Call as u8, 1, Op::Return as u8]));
+    let tail_instructions = tail_program
+        .bytecode()
+        .proto_instructions(0)
+        .expect("decoded tail function");
+    assert!(tail_instructions.windows(2).any(|instructions| {
+        instructions[0].op() == Op::Call
+            && instructions[0].operand().index() == Some(1)
+            && instructions[1].op() == Op::Return
+    }));
 
     let product = "product/\nname/\npair-state\n/name\nfields/\nfield/\nname/\nleft\n/name\ntype/\ni64\n/type\n/field\nfield/\nname/\nright\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nfield/\nwith-field/\nproduct-value/\npair-state\nfield/\nleft\n3\n/field\nfield/\nright\n4\n/field\n/product-value\nleft\n9\n/with-field\nleft\n/field\n/main\n";
     assert_eq!(

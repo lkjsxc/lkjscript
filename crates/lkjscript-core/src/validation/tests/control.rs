@@ -28,7 +28,9 @@ fn cfg_stack_local_return_and_fallthrough_are_checked() {
 
     let mut local = unit_chunk();
     local.main.locals = 1;
-    local.main.code = vec![Op::LoadLocal as u8, 0, Op::Return as u8];
+    local.main.code.clear();
+    local.main.emit_op_u64(Op::LoadLocal, 0);
+    local.main.emit(Op::Return);
     assert!(error(local).contains("not definitely initialized"));
 
     let mut fallthrough = unit_chunk();

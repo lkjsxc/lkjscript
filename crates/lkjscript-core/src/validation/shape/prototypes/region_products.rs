@@ -7,7 +7,7 @@ pub(super) fn validate(proto: &FunctionProto, category: &str) -> Result<()> {
         ));
     }
     if !proto.parameter_region_products.is_empty()
-        && proto.parameter_region_products.len() != usize::from(proto.arity)
+        && proto.parameter_region_products.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} region-product parameters do not match arity",

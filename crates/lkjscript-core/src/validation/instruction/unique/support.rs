@@ -7,14 +7,13 @@ pub(in crate::validation::instruction) fn place_and_slot(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<(usize, usize)> {
-    let packed = instruction.operand().ok_or_else(|| {
+    instruction.operand().place_local().ok_or_else(|| {
         error(
             proto,
             instruction,
             "byte-vector place/local operand is missing",
         )
-    })?;
-    Ok((usize::from(packed >> 8), usize::from(packed as u8)))
+    })
 }
 
 pub(super) fn local_owner(

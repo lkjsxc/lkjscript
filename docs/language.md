@@ -69,15 +69,33 @@ invalid.
 
 Canonical verified-SSA, validated-bytecode, and prepared-program identities are incrementally
 hashed without canonical-byte, append-count, prepared-descriptor-byte, or ordered-closure-entry
-ceilings. This changes no canonical bytes or digests. Prepared closure ordering, uniqueness,
-nonempty/nonzero rules, and checked `u64` canonical length encoding remain validation laws or wire
-representation boundaries.
+ceilings. Prepared closure ordering, uniqueness, nonempty/nonzero rules, and checked `u64`
+canonical length encoding remain validation laws or wire representation boundaries. Executable
+identity bytes changed with the active bytecode format, and prepared identity distinguishes an
+available native transport-specialization identity from no such specialization; it never substitutes
+the semantic SSA identity as a claim of native support.
+
+Function parameter counts, call argument counts, lexical local slots, owner slots, and executable
+places are not limited by a byte-sized language rule. HIR and code generation retain host indexes;
+SSA frame metadata retains `u64` slots. The active bytecode uses fixed little-endian `u64` local,
+argument-count, witness-ordinal, and place operands, with separate place and local operands when an
+instruction names both. Decoding rejects truncation and host-index overflow before indexing. The
+generic VM executes 300-parameter/argument programs with slot 299 and more than 255 simultaneously
+live lexical locals; a larger generated stress case executes 1,024 parameters, arguments, and
+lexical locals while reading slot 1,023. Native ABI ineligibility is specialization status:
+automatic mode uses the VM,
+and a forced native diagnostic may reject the signature.
 
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
 addressable representation boundaries. HIR memory planning still has table, shape, and
 verifier-work quotas. Bytecode `ValidationLimits` still cap encoded chunks, function code, tables,
-metadata, and constant data, while compact operands and indexes retain width ceilings. Other
-recursive type/trait/enum, structural-value, and executable-width ceilings also remain. These
+metadata, and constant data. `u16` function offsets, jumps, cleanup ranges and plan indexes,
+constants, globals, and product/enum/structural tables remain; product fields and enum substitutions
+retain byte-sized representations. HIR/SSA place identities and validator-synthetic owner
+identities still use `u32`, a separate representation gap above that range. A generated
+300-owned-parameter source currently reaches the separate SSA ownership-CFG work quota before
+executable lowering, although validated bytecode and the VM execute unique place 299. Other
+recursive type/trait/enum and structural-value ceilings also remain. These
 inherited ceilings are known defects, not permanent language rules. New work must remove the
 checks and repair the algorithms or representations rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
 overflow, and explicit untrusted-request policy must report typed failures without partial

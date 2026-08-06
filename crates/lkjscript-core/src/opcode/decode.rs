@@ -1,11 +1,40 @@
 use super::model::Op;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecodedOperand {
+    None,
+    U16(u16),
+    Index(usize),
+    PlaceLocal { place: usize, local: usize },
+}
+
+impl DecodedOperand {
+    pub const fn index(self) -> Option<usize> {
+        match self {
+            Self::U16(value) => Some(value as usize),
+            Self::Index(value) => Some(value),
+            Self::None | Self::PlaceLocal { .. } => None,
+        }
+    }
+
+    pub const fn place_local(self) -> Option<(usize, usize)> {
+        match self {
+            Self::PlaceLocal { place, local } => Some((place, local)),
+            Self::None | Self::U16(_) | Self::Index(_) => None,
+        }
+    }
+
+    pub const fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DecodedInstruction {
     offset: usize,
     next_offset: usize,
     op: Op,
-    operand: Option<u16>,
+    operand: DecodedOperand,
 }
 
 impl DecodedInstruction {
@@ -21,7 +50,7 @@ impl DecodedInstruction {
         self.op
     }
 
-    pub const fn operand(self) -> Option<u16> {
+    pub const fn operand(self) -> DecodedOperand {
         self.operand
     }
 
@@ -29,7 +58,7 @@ impl DecodedInstruction {
         offset: usize,
         next_offset: usize,
         op: Op,
-        operand: Option<u16>,
+        operand: DecodedOperand,
     ) -> Self {
         Self {
             offset,

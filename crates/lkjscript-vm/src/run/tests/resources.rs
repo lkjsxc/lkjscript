@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn call_frame_stack_policy_rejects_before_wide_local_allocation() {
+    let mut chunk = Chunk::new();
+    let mut function = chunk.main.clone();
+    function.name = "wide-frame".into();
+    function.locals = 300;
+    function.emit(Op::Unit);
+    function.emit(Op::Return);
+    chunk.protos.push(function);
+    let name = chunk.add_const(Constant::Proto(0));
+    chunk.main.emit_op_u16(Op::LoadConst, name.0);
+    chunk.main.emit_op_u16(Op::MakeClosure, 0);
+    chunk.main.emit_op_u64(Op::Call, 0);
+    chunk.main.emit(Op::Return);
+    let chunk = validate(chunk);
+    let mut policy = ExecutionConfig::default();
+    policy.max_stack_values = 10;
+    assert_eq!(
+        Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), policy,).run(),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+    );
+}
+
+#[test]
 fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     let returned = validated(&[Op::Unit, Op::Return]);
 
@@ -8,6 +31,24 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     stack.max_stack_values = 0;
     assert_eq!(
         Vm::new(&returned, NullJit, crate::ExecutionInputs::default(), stack).run(),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+    );
+
+    let mut wide_frame = Chunk::new();
+    wide_frame.main.locals = 300;
+    wide_frame.main.emit(Op::Unit);
+    wide_frame.main.emit(Op::Return);
+    let wide_frame = validate(wide_frame);
+    let mut narrow_policy = ExecutionConfig::default();
+    narrow_policy.max_stack_values = 1;
+    assert_eq!(
+        Vm::new(
+            &wide_frame,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            narrow_policy,
+        )
+        .run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
     );
 
@@ -70,7 +111,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     output_chunk.main.arity = 1;
     output_chunk.main.locals = 1;
     let text = output_chunk.add_const(Constant::Str("x".into()));
-    output_chunk.main.emit_op_u16(Op::LoadLocal, 0);
+    output_chunk.main.emit_op_u64(Op::LoadLocal, 0);
     output_chunk.main.emit_op_u16(Op::LoadConst, text.0);
     output_chunk.main.emit(Op::WriteStr);
     output_chunk.main.emit(Op::Return);
@@ -108,7 +149,7 @@ fn configured_handle_and_wall_limits_are_structured() {
     socket.required_capabilities = vec![lkjscript_core::CapabilityKind::Network];
     socket.main.arity = 1;
     socket.main.locals = 1;
-    socket.main.emit_op_u16(Op::LoadLocal, 0);
+    socket.main.emit_op_u64(Op::LoadLocal, 0);
     socket.main.emit(Op::SysSocket);
     let wait_after_success = socket.main.code.len();
     socket.main.emit_op_u16(
@@ -150,7 +191,7 @@ fn configured_handle_and_wall_limits_are_structured() {
     wait.main.arity = 1;
     wait.main.locals = 1;
     let duration = wait.add_const(Constant::I64(50));
-    wait.main.emit_op_u16(Op::LoadLocal, 0);
+    wait.main.emit_op_u64(Op::LoadLocal, 0);
     wait.main.emit_op_u16(Op::LoadConst, duration.0);
     wait.main.emit(Op::SysWaitMs);
     wait.main.emit(Op::Return);

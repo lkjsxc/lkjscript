@@ -10,10 +10,16 @@
    Ownership's aggregate expression pre-scan and memory planning's expression admission are
    removed; checked expression work remains telemetry. Next widen or segment `u32` source
    positions, spans, and snapshot-local node indexes, then address
-   product/HIR/memory-plan-table/SSA checks, remaining
-   recursive type/trait/enum paths, and compact executable widths in dependency-closed slices.
-   Completion requires just-beyond-old-boundary and substantially larger positive programs,
-   checked growth, and successful execution through the retained generic path.
+   product/HIR/memory-plan-table/SSA checks and remaining recursive type/trait/enum paths.
+   Byte-sized function arity, call argument, local, cleanup-local, and executable-place widths are
+   removed: one fixed-`u64` index/pair format now executes 300 parameters, arguments, live lexical
+   locals, and direct VM place 299, with checked decode and automatic VM fallback; a larger stress
+   case executes 1,024 parameters, arguments, and lexical locals. Next remove the
+   ownership-CFG work quota that blocks a 300-owned-parameter production-source place, then widen
+   or segment retained `u16` function offsets, jumps, cleanup ranges/plans, constants, globals,
+   product/enum/structural tables and descriptors, plus byte-sized product fields and enum
+   substitutions. Completion requires just-beyond-old-boundary and substantially larger positive
+   programs, checked growth, and successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte
    admission are removed. The untrusted Semantic Source boundary now supplies only an aggregate
    source-byte loader policy and applies it to staged transactions before publication. Continue

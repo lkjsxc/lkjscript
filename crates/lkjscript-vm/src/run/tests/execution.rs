@@ -103,6 +103,38 @@ fn returned_heap_values_own_their_storage() {
     ));
 }
 #[test]
+fn high_unique_local_and_place_execute_without_byte_narrowing() {
+    let mut chunk = Chunk::new();
+    chunk.main.locals = 300;
+    chunk.main.unique_places = 300;
+    let size = chunk.add_const(Constant::I64(1));
+    chunk.main.emit_op_u16(Op::LoadConst, size.0);
+    chunk.main.emit(Op::ByteVectorNew);
+    chunk.main.emit_op_u64(Op::StoreUniqueLocal, 299);
+    chunk
+        .main
+        .emit_op_u64_pair(Op::ByteVectorPlaceInit, 299, 299);
+    chunk.main.emit(Op::Pop);
+    chunk
+        .main
+        .emit_op_u64_pair(Op::ByteVectorDropPlace, 299, 299);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit_op_u64(Op::ByteVectorPlaceEnd, 299);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let chunk = validate(chunk);
+    let outcome = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
+    .run();
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.is_unit()));
+}
+
+#[test]
 fn removed_buffer_opcode_bytes_are_rejected_before_execution() {
     for removed in [66_u8, 67, 68, 69, 72, 73, 85, 191] {
         let mut chunk = Chunk::new();

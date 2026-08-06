@@ -5,8 +5,8 @@ mod metadata;
 mod model;
 mod stack;
 
-pub use decode::DecodedInstruction;
-pub use metadata::{ControlFlow, OpInfo, StackEffect};
+pub use decode::{DecodedInstruction, DecodedOperand};
+pub use metadata::{ControlFlow, OpInfo, OperandLayout, StackEffect};
 pub use model::Op;
 
 #[cfg(test)]

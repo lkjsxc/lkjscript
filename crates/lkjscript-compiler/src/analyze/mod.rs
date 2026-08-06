@@ -115,7 +115,7 @@ struct Resolver<'a> {
     analyzer: &'a mut Analyzer,
     origin: SourceId,
     scopes: Vec<HashMap<String, BindingId>>,
-    local_slots: HashMap<BindingId, u8>,
+    local_slots: HashMap<BindingId, usize>,
     local_places: HashMap<BindingId, PlaceId>,
     type_variables: HashSet<String>,
     next_slot: usize,

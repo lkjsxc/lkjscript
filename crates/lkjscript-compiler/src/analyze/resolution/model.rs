@@ -5,16 +5,22 @@ impl<'a> Resolver<'a> {
         analyzer: &'a mut Analyzer,
         origin: SourceId,
         function_scope: HashMap<String, BindingId>,
-        local_slots: HashMap<BindingId, u8>,
+        local_slots: HashMap<BindingId, usize>,
         type_variables: HashSet<String>,
         parameter_count: usize,
         return_type: Type,
-    ) -> Self {
+    ) -> Result<Self> {
         let local_places = local_slots
             .iter()
-            .map(|(binding, slot)| (*binding, PlaceId::new(u32::from(*slot))))
-            .collect();
-        Self {
+            .map(|(binding, slot)| {
+                u32::try_from(*slot)
+                    .map(|slot| (*binding, PlaceId::new(slot)))
+                    .map_err(|_| Error::msg("parameter ownership place exceeds u32"))
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
+        let next_place = u32::try_from(parameter_count)
+            .map_err(|_| Error::msg("parameter ownership place count exceeds u32"))?;
+        Ok(Self {
             analyzer,
             origin,
             scopes: vec![function_scope],
@@ -23,11 +29,11 @@ impl<'a> Resolver<'a> {
             type_variables,
             next_slot: parameter_count,
             max_slots: parameter_count,
-            next_place: u32::try_from(parameter_count).unwrap_or(u32::MAX),
+            next_place,
             return_type,
             loops: Vec::new(),
             next_loop: 0,
-        }
+        })
     }
 
     pub(in crate::analyze) fn place(&self, binding: BindingId) -> Result<PlaceId> {
@@ -59,9 +65,8 @@ impl<'a> Resolver<'a> {
         Ok(loan)
     }
 
-    pub(in crate::analyze) fn local_count(&self) -> Result<u8> {
-        u8::try_from(self.max_slots)
-            .map_err(|_| self.error("expression needs more than 255 bytecode local slots"))
+    pub(in crate::analyze) const fn local_count(&self) -> usize {
+        self.max_slots
     }
 
     pub(in crate::analyze) fn resolve_expr(&mut self, expression: &AstExpr) -> Result<Expr> {

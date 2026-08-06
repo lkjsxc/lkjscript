@@ -1,5 +1,5 @@
 #[cfg(test)]
-use super::{ControlFlow, Op, StackEffect};
+use super::{ControlFlow, Op, OperandLayout, StackEffect};
 
 #[test]
 fn every_known_opcode_has_truthful_metadata_and_round_trips() {
@@ -9,11 +9,17 @@ fn every_known_opcode_has_truthful_metadata_and_round_trips() {
         assert!(!seen[usize::from(byte)]);
         seen[usize::from(byte)] = true;
         assert_eq!(Op::from_byte(byte), Some(*op));
-        assert!(op.operand_width() <= 2);
+        assert!(op.operand_width() <= 16);
     }
     assert_eq!(Op::from_byte(21), None);
     assert_eq!(Op::from_byte(85), None);
     assert_eq!(Op::from_byte(145), None);
+    assert_eq!(Op::LoadLocal.operand_layout(), OperandLayout::Index);
+    assert_eq!(Op::Call.operand_layout(), OperandLayout::Index);
+    assert_eq!(
+        Op::StructuralPlaceInit.operand_layout(),
+        OperandLayout::PlaceLocal
+    );
     assert_eq!(Op::Jump.info().control, ControlFlow::Jump);
     assert_eq!(Op::Return.info().control, ControlFlow::Return);
     assert_eq!(Op::Call.info().stack, StackEffect::Call);

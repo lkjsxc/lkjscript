@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) fn validate(proto: &FunctionProto, category: &str) -> Result<()> {
     if !proto.parameter_copy_kinds.is_empty()
-        && proto.parameter_copy_kinds.len() != usize::from(proto.arity)
+        && proto.parameter_copy_kinds.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} copy parameter metadata does not match arity",

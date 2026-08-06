@@ -22,7 +22,7 @@ pub(super) fn apply(
         Op::LoadConst => {
             let constant = instruction
                 .operand()
-                .map(usize::from)
+                .index()
                 .and_then(|index| chunk.constants.get(index))
                 .ok_or_else(|| {
                     instruction_error(proto, op, instruction.offset(), "constant is missing")

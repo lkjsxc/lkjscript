@@ -10,7 +10,7 @@ fn unique_chunk() -> Chunk {
     chunk.main.emit_op_u16(Op::LoadConst, size.0);
     chunk.main.emit(Op::ByteVectorNew);
     chunk.main.emit_op_u8(Op::StoreUniqueLocal, 0);
-    chunk.main.emit_op_u16(Op::ByteVectorPlaceInit, 0);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::ByteVectorBorrowMut, 0);
     chunk.main.emit_op_u8(Op::StoreViewLocal, 1);
@@ -29,7 +29,7 @@ fn unique_chunk() -> Chunk {
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::EndBorrowLocal, 1);
     chunk.main.emit(Op::Pop);
-    chunk.main.emit_op_u16(Op::ByteVectorDropPlace, 0);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorDropPlace, 0, 0);
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::ByteVectorPlaceEnd, 0);
     chunk.main.emit(Op::Pop);
@@ -58,8 +58,8 @@ fn ordinary_dup_and_load_cannot_copy_unique_values() {
     let position = load
         .main
         .code
-        .windows(2)
-        .position(|bytes| bytes == [Op::LoadViewLocal as u8, 1])
+        .windows(9)
+        .position(|bytes| bytes == index_instruction(Op::LoadViewLocal, 1))
         .expect("view load opcode");
     load.main.code[position] = Op::LoadLocal as u8;
     assert!(error(load).contains("typed local opcodes"));
@@ -71,11 +71,10 @@ fn missing_end_borrow_and_drop_reject_before_execution() {
     let end = live_loan
         .main
         .code
-        .windows(2)
-        .rposition(|bytes| bytes == [Op::EndBorrowLocal as u8, 1])
+        .windows(9)
+        .rposition(|bytes| bytes == index_instruction(Op::EndBorrowLocal, 1))
         .expect("end-borrow opcode");
-    live_loan.main.code[end] = Op::Nop as u8;
-    live_loan.main.code.remove(end + 1);
+    live_loan.main.code.splice(end..end + 9, [Op::Nop as u8]);
     let message = error(live_loan);
     assert!(!message.is_empty());
 
@@ -86,7 +85,9 @@ fn missing_end_borrow_and_drop_reject_before_execution() {
     missing_drop.main.emit_op_u16(Op::LoadConst, size.0);
     missing_drop.main.emit(Op::ByteVectorNew);
     missing_drop.main.emit_op_u8(Op::StoreUniqueLocal, 0);
-    missing_drop.main.emit_op_u16(Op::ByteVectorPlaceInit, 0);
+    missing_drop
+        .main
+        .emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
     missing_drop.main.emit(Op::Pop);
     missing_drop.main.emit_op_u8(Op::ByteVectorPlaceEnd, 0);
     missing_drop.main.emit(Op::Return);
@@ -102,9 +103,9 @@ fn post_move_use_overlap_and_wrong_view_type_reject() {
     moved.main.emit_op_u16(Op::LoadConst, size.0);
     moved.main.emit(Op::ByteVectorNew);
     moved.main.emit_op_u8(Op::StoreUniqueLocal, 0);
-    moved.main.emit_op_u16(Op::ByteVectorPlaceInit, 0);
+    moved.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
     moved.main.emit(Op::Pop);
-    moved.main.emit_op_u16(Op::ByteVectorMove, 0);
+    moved.main.emit_op_u64_pair(Op::ByteVectorMove, 0, 0);
     moved.main.emit_op_u8(Op::StoreUniqueLocal, 1);
     moved.main.emit_op_u8(Op::ByteVectorBorrow, 0);
     moved.main.emit(Op::Return);
@@ -114,20 +115,20 @@ fn post_move_use_overlap_and_wrong_view_type_reject() {
     let first_store = overlap
         .main
         .code
-        .windows(2)
-        .position(|bytes| bytes == [Op::StoreViewLocal as u8, 1])
+        .windows(9)
+        .position(|bytes| bytes == index_instruction(Op::StoreViewLocal, 1))
         .expect("first view store");
     overlap.main.code.splice(
-        first_store + 2..first_store + 2,
-        [Op::ByteVectorBorrowMut as u8, 0],
+        first_store + 9..first_store + 9,
+        index_instruction(Op::ByteVectorBorrowMut, 0),
     );
     assert!(error(overlap).contains("conflicts with a live loan"));
     let mut wrong = unique_chunk();
     let borrow = wrong
         .main
         .code
-        .windows(2)
-        .position(|bytes| bytes == [Op::ByteVectorBorrowMut as u8, 0])
+        .windows(9)
+        .position(|bytes| bytes == index_instruction(Op::ByteVectorBorrowMut, 0))
         .expect("mutable borrow");
     wrong.main.code[borrow] = Op::ByteVectorBorrow as u8;
     assert!(error(wrong).contains("wrong or unused view type"));

@@ -23,8 +23,27 @@ pub enum ControlFlow {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperandLayout {
+    None,
+    U16,
+    Index,
+    PlaceLocal,
+}
+
+impl OperandLayout {
+    pub const fn byte_width(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::U16 => 2,
+            Self::Index => 8,
+            Self::PlaceLocal => 16,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpInfo {
-    pub operand_width: usize,
+    pub operand_layout: OperandLayout,
     pub stack: StackEffect,
     pub control: ControlFlow,
 }
@@ -32,18 +51,22 @@ pub struct OpInfo {
 impl Op {
     pub const fn info(self) -> OpInfo {
         OpInfo {
-            operand_width: operand_width(self),
+            operand_layout: operand_layout(self),
             stack: stack_effect(self),
             control: control_flow(self),
         }
     }
 
+    pub const fn operand_layout(self) -> OperandLayout {
+        operand_layout(self)
+    }
+
     pub const fn operand_width(self) -> usize {
-        operand_width(self)
+        operand_layout(self).byte_width()
     }
 }
 
-const fn operand_width(op: Op) -> usize {
+const fn operand_layout(op: Op) -> OperandLayout {
     match op {
         Op::LoadConst
         | Op::LoadGlobal
@@ -58,15 +81,6 @@ const fn operand_width(op: Op) -> usize {
         | Op::MakeEnum
         | Op::IsEnumVariant
         | Op::LoadEnumField
-        | Op::ByteVectorPlaceInit
-        | Op::ByteVectorMove
-        | Op::ByteVectorDropPlace
-        | Op::BytesPlaceInit
-        | Op::BytesMove
-        | Op::BytesDropPlace
-        | Op::StructuralPlaceInit
-        | Op::StructuralMove
-        | Op::StructuralDropPlace
         | Op::StructuralBorrow
         | Op::StructuralBorrowMut
         | Op::StructuralPublish
@@ -79,7 +93,7 @@ const fn operand_width(op: Op) -> usize {
         | Op::StructuralAggregateTag
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View
-        | Op::StructuralCopy => 2,
+        | Op::StructuralCopy => OperandLayout::U16,
         Op::LoadLocal
         | Op::StoreLocal
         | Op::Call
@@ -101,8 +115,17 @@ const fn operand_width(op: Op) -> usize {
         | Op::MemoryWitnessCompare
         | Op::MemoryWitnessDispose
         | Op::ByteVectorPlaceEnd
-        | Op::BytesPlaceEnd => 1,
-        _ => 0,
+        | Op::BytesPlaceEnd => OperandLayout::Index,
+        Op::ByteVectorPlaceInit
+        | Op::ByteVectorMove
+        | Op::ByteVectorDropPlace
+        | Op::BytesPlaceInit
+        | Op::BytesMove
+        | Op::BytesDropPlace
+        | Op::StructuralPlaceInit
+        | Op::StructuralMove
+        | Op::StructuralDropPlace => OperandLayout::PlaceLocal,
+        _ => OperandLayout::None,
     }
 }
 

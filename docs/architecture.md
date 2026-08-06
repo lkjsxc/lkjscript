@@ -16,6 +16,14 @@ which repeatedly adds heap-backed stack segments and therefore defines tuning ge
 a finite accepted depth. Recursive source and HIR ownership is dismantled by custom non-recursive
 destruction.
 
+Executable-width ownership is now explicit at each boundary: analyzer/HIR arity and local storage,
+codegen colors, and bytecode prototypes use host indexes; SSA frame-state slots use `u64` identity
+values. Bytecode operand metadata selects one of no operand, retained `u16`, fixed `u64` index, or
+two independent fixed `u64` place/local indexes. The decoder checks complete operands and host
+conversion before publishing `DecodedInstruction`; validators and the VM consume the typed decoded
+shape or the same fixed layout. Constants, globals, jumps, function offsets, cleanup ranges, and
+product/enum/structural descriptors remain a separate `u16`/`u8` cutover.
+
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot
 directly.
@@ -23,8 +31,12 @@ directly.
 ## Execution
 
 The default CLI mode is `auto`. It always has a validated generic VM route and may install native
-code for eligible groups. Baseline and optimizing selections remain available as diagnostic modes
-while the reset measures their representative value. They are not separate language definitions.
+code for eligible groups. A high arity or local count does not reject generic compilation: native
+preflight marks an unsupported signature ineligible, automatic execution stays in the VM, and a
+forced native diagnostic reports the unsupported signature. Prepared identity records native
+transport specialization as optional and does not equate semantic SSA identity with generated-code
+support. Baseline and optimizing selections remain available as diagnostic modes while the reset
+measures their representative value. They are not separate language definitions.
 The SSA evaluator remains useful as a semantic test oracle but is not the product source authority.
 
 No optimization result is allowed to reinterpret source semantics. Forced native modes must enter

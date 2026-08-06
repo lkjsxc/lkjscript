@@ -59,8 +59,8 @@ pub struct Main {
     pub param_places: Vec<PlaceId>,
     pub param_types: Vec<Type>,
     pub return_type: Type,
-    pub arity: u8,
-    pub local_count: u8,
+    pub arity: usize,
+    pub local_count: usize,
     pub body: Expr,
 }
 
@@ -71,8 +71,8 @@ pub struct Function {
     pub params: Vec<BindingId>,
     pub param_places: Vec<PlaceId>,
     pub bounds: Vec<TraitBound>,
-    pub arity: u8,
-    pub local_count: u8,
+    pub arity: usize,
+    pub local_count: usize,
     pub summary: EffectSet,
     pub body: Expr,
 }

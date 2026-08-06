@@ -7,7 +7,7 @@ pub(super) fn instruction_operand(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<usize> {
-    instruction.operand().map(usize::from).ok_or_else(|| {
+    instruction.operand().index().ok_or_else(|| {
         instruction_error(
             proto,
             instruction.op(),

@@ -16,15 +16,8 @@ pub(in crate::codegen) fn compile_function(
         .iter()
         .find(|block| block.id == function.entry)
         .ok_or_else(|| Error::msg("SSA function entry block is missing"))?;
-    let locals = u8::try_from(slots.len()).map_err(|_| {
-        Error::msg(format!(
-            "SSA function {} requires {} bytecode locals; limit is 255",
-            function.name,
-            slots.len()
-        ))
-    })?;
-    let arity = u8::try_from(function.signature.parameters.len())
-        .map_err(|_| Error::msg("SSA function arity exceeds bytecode u8"))?;
+    let locals = slots.len();
+    let arity = function.signature.parameters.len();
     let (failure_cleanups, failure_cleanup_map) =
         compile_failure_cleanups(function, &slots, chunk)?;
     let proto = FunctionProto {
@@ -68,8 +61,8 @@ pub(in crate::codegen) fn compile_function(
                 parameter
                     .owner_place
                     .map(|place| {
-                        u8::try_from(place.raw()).map_err(|_| {
-                            Error::msg("SSA structural parameter PlaceId exceeds bytecode u8")
+                        usize::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA structural parameter PlaceId exceeds host usize")
                         })
                     })
                     .transpose()
@@ -120,8 +113,8 @@ pub(in crate::codegen) fn compile_function(
                 parameter
                     .owner_place
                     .map(|place| {
-                        u8::try_from(place.raw()).map_err(|_| {
-                            Error::msg("SSA resource parameter PlaceId exceeds bytecode u8")
+                        usize::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA resource parameter PlaceId exceeds host usize")
                         })
                     })
                     .transpose()
@@ -145,16 +138,15 @@ pub(in crate::codegen) fn compile_function(
                 parameter
                     .owner_place
                     .map(|place| {
-                        u8::try_from(place.raw()).map_err(|_| {
-                            Error::msg("SSA parameter owner PlaceId exceeds bytecode u8")
+                        usize::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA parameter owner PlaceId exceeds host usize")
                         })
                     })
                     .transpose()
             })
             .collect::<Result<Vec<_>>>()?,
         return_unique: unique_value_kind(&function.signature.result),
-        unique_places: u8::try_from(function.places.len())
-            .map_err(|_| Error::msg("SSA unique place count exceeds bytecode u8"))?,
+        unique_places: function.places.len(),
         failure_cleanups,
         failure_cleanup_ranges: Vec::new(),
         code: Vec::new(),

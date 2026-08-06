@@ -126,12 +126,12 @@ fn emit_finished_product(chunk: &mut Chunk) {
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
     chunk.main.emit_op_u16(Op::StructuralDestinationFinish, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 1);
-    chunk.main.emit_op_u16(Op::StructuralPlaceInit, 1);
+    chunk.main.emit_op_u64_pair(Op::StructuralPlaceInit, 0, 1);
     chunk.main.emit(Op::Pop);
 }
 
 fn emit_product_cleanup(chunk: &mut Chunk) {
-    chunk.main.emit_op_u16(Op::StructuralDropPlace, 1);
+    chunk.main.emit_op_u64_pair(Op::StructuralDropPlace, 0, 1);
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::StructuralPlaceEnd, 0);
     chunk.main.emit(Op::Pop);

@@ -73,10 +73,17 @@ fn disassemble_function(
         let op = instruction.op();
         let operand = instruction.operand();
         let annotation = operand_annotation(chunk, op, operand);
-        if let Some(operand) = operand {
-            println!("  {offset:04} {op:?} {operand}{annotation}");
-        } else {
-            println!("  {offset:04} {op:?}");
+        match operand {
+            lkjscript_core::DecodedOperand::None => println!("  {offset:04} {op:?}"),
+            lkjscript_core::DecodedOperand::U16(operand) => {
+                println!("  {offset:04} {op:?} {operand}{annotation}");
+            }
+            lkjscript_core::DecodedOperand::Index(operand) => {
+                println!("  {offset:04} {op:?} {operand}{annotation}");
+            }
+            lkjscript_core::DecodedOperand::PlaceLocal { place, local } => {
+                println!("  {offset:04} {op:?} place={place} local={local}{annotation}");
+            }
         }
     }
     Ok(())
@@ -89,8 +96,12 @@ fn product_field(chunk: &ValidatedChunk, index: usize) -> Option<(&str, &str)> {
     Some((&product.name, field))
 }
 
-fn operand_annotation(chunk: &ValidatedChunk, op: Op, operand: Option<u16>) -> String {
-    let Some(index) = operand.map(usize::from) else {
+fn operand_annotation(
+    chunk: &ValidatedChunk,
+    op: Op,
+    operand: lkjscript_core::DecodedOperand,
+) -> String {
+    let Some(index) = operand.index() else {
         return String::new();
     };
     match op {
@@ -124,7 +135,8 @@ fn operand_annotation(chunk: &ValidatedChunk, op: Op, operand: Option<u16>) -> S
 #[allow(clippy::expect_used)]
 mod tests {
     use lkjscript_core::{
-        validate_chunk, Chunk, Op, ProductFieldRef, ProductId, ProductMetadata, ValidationLimits,
+        validate_chunk, Chunk, DecodedOperand, Op, ProductFieldRef, ProductId, ProductMetadata,
+        ValidationLimits,
     };
 
     use super::{operand_annotation, product_field, request};
@@ -167,11 +179,11 @@ mod tests {
         let chunk = validate_chunk(chunk, &ValidationLimits::default())
             .expect("product disassembly chunk validates");
         assert_eq!(
-            operand_annotation(&chunk, Op::MakeProduct, Some(0)),
+            operand_annotation(&chunk, Op::MakeProduct, DecodedOperand::U16(0)),
             " ; Point"
         );
         assert_eq!(
-            operand_annotation(&chunk, Op::LoadProductField, Some(0)),
+            operand_annotation(&chunk, Op::LoadProductField, DecodedOperand::U16(0)),
             " ; Point.x"
         );
         assert_eq!(product_field(&chunk, 0), Some(("Point", "x")));

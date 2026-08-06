@@ -1,7 +1,8 @@
 use super::*;
 
 pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::from(vm.read_u8()?);
+    let parameter = u16::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
     let binding = vm
         .frames
         .last()
@@ -33,7 +34,8 @@ pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::from(vm.read_u8()?);
+    let parameter = u16::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
     let binding = vm
         .frames
         .last()
@@ -76,7 +78,8 @@ pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub(super) fn independent_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::from(vm.read_u8()?);
+    let parameter = u16::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
     let binding = vm
         .frames
         .last()

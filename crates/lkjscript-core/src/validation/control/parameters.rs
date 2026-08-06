@@ -1,6 +1,14 @@
-fn initial_locals(chunk: &Chunk, proto: &FunctionProto, is_main: bool) -> Vec<Option<Kind>> {
-    let mut locals = vec![None; usize::from(proto.locals)];
-    for (index, slot) in locals.iter_mut().take(usize::from(proto.arity)).enumerate() {
+fn initial_locals(
+    chunk: &Chunk,
+    proto: &FunctionProto,
+    is_main: bool,
+) -> Result<Vec<Option<Kind>>> {
+    let mut locals = Vec::new();
+    locals
+        .try_reserve_exact(proto.locals)
+        .map_err(|_| Error::host("bytecode local-state reservation failed"))?;
+    locals.resize(proto.locals, None);
+    for (index, slot) in locals.iter_mut().take(proto.arity).enumerate() {
         let resource = proto
             .parameter_resources
             .get(index)
@@ -94,7 +102,7 @@ fn initial_locals(chunk: &Chunk, proto: &FunctionProto, is_main: bool) -> Vec<Op
             *slot = Some(Kind::Capability(*kind));
         }
     }
-    locals
+    Ok(locals)
 }
 
 fn copy_parameter_kind(kind: crate::StructuralKind) -> Option<Kind> {

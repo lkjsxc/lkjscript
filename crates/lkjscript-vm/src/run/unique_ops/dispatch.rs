@@ -48,7 +48,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(value);
         }
         Op::ByteVectorBorrow | Op::ByteVectorBorrowMut => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let owner = local(vm, slot)?;
             let word = vm.unique.validate_owner(owner)?;
             if !current_places(vm).iter().any(
@@ -60,7 +60,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(view);
         }
         Op::StoreUniqueLocal => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let value = vm.pop()?;
             vm.unique.validate_any_owner(value)?;
             if local(vm, slot).is_ok_and(|existing| existing.as_static_bytes().is_some()) {
@@ -69,7 +69,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             store_empty_local(vm, slot, value)?;
         }
         Op::StoreViewLocal => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let value = vm.pop()?;
             if !super::structural_ops::is_byte_view(vm, value) {
                 vm.unique.validate_any_view(value)?;
@@ -77,14 +77,14 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             store_empty_local(vm, slot, value)?;
         }
         Op::TakeUniqueLocal => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let value = local(vm, slot)?;
             vm.unique.ensure_any_unloaned(value)?;
             clear_local(vm, slot)?;
             vm.push(value);
         }
         Op::LoadViewLocal => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let value = local(vm, slot)?;
             if !super::structural_ops::is_byte_view(vm, value) {
                 vm.unique.validate_any_view(value)?;
@@ -117,7 +117,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(Value::UNIT);
         }
         Op::ByteVectorPlaceEnd => {
-            let place = usize::from(vm.read_u8()?);
+            let place = vm.read_index()?;
             let target = place_mut(vm, place)?;
             match *target {
                 unique::RuntimePlace::Active { owner: None, .. } => {
@@ -162,7 +162,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(Value::UNIT);
         }
         Op::EndBorrowLocal => {
-            let slot = usize::from(vm.read_u8()?);
+            let slot = vm.read_index()?;
             let view = local(vm, slot)?;
             if super::structural_ops::is_byte_view(vm, view) {
                 super::structural_ops::end_byte_view(vm, view)?;

@@ -5,7 +5,9 @@ fn structural_borrow_blocks_drop() {
     chunk.main.emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
     chunk.main.emit_op_u16(Op::StructuralBorrow, 1);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 2);
-    chunk.main.emit_op_u16(Op::StructuralDropPlace, 1);
+    chunk
+        .main
+        .emit_op_u64_pair(Op::StructuralDropPlace, 0, 1);
     chunk.main.emit(Op::Return);
     assert!(error(chunk).contains("live loan"));
 }
@@ -14,7 +16,7 @@ fn structural_borrow_blocks_drop() {
 fn structural_use_after_move_and_copy_attempt_fail_closed() {
     let mut moved = product_chunk();
     emit_finished_product(&mut moved);
-    moved.main.emit_op_u16(Op::StructuralMove, 1);
+    moved.main.emit_op_u64_pair(Op::StructuralMove, 0, 1);
     moved.main.emit_op_u8(Op::StoreStructuralLocal, 2);
     moved.main.emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
     moved.main.emit(Op::Return);
@@ -100,14 +102,9 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
     proto.parameter_structural_places = vec![None];
     proto.parameter_type_variables = vec![None];
     proto.return_structural = Some(crate::StructuralRepresentationId::new(3));
-    proto.code = vec![
-        Op::LoadStructuralOwnerLocal as u8,
-        0,
-        Op::StructuralAggregateFieldCopy as u8,
-        0,
-        0,
-        Op::Return as u8,
-    ];
+    proto.emit_op_u64(Op::LoadStructuralOwnerLocal, 0);
+    proto.emit_op_u16(Op::StructuralAggregateFieldCopy, 0);
+    proto.emit(Op::Return);
     chunk.protos.push(proto);
     chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
@@ -126,7 +123,9 @@ fn structural_owner_reference_blocks_owner_drop() {
     let mut chunk = product_chunk();
     emit_finished_product(&mut chunk);
     chunk.main.emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
-    chunk.main.emit_op_u16(Op::StructuralDropPlace, 1);
+    chunk
+        .main
+        .emit_op_u64_pair(Op::StructuralDropPlace, 0, 1);
     chunk.main.emit(Op::Return);
     assert!(error(chunk).contains("live loan"));
 }
@@ -163,7 +162,7 @@ fn inactive_enum_payload_is_rejected() {
         result_representation: None,
     }];
     emit_finished_product(&mut chunk);
-    chunk.main.emit_op_u16(Op::StructuralMove, 1);
+    chunk.main.emit_op_u64_pair(Op::StructuralMove, 0, 1);
     chunk
         .main
         .emit_op_u16(Op::StructuralAggregateConsumePayload, 0);

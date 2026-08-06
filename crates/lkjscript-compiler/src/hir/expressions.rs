@@ -460,13 +460,13 @@ pub enum ExprKind {
     MutableLocal {
         binding: BindingId,
         place: PlaceId,
-        slot: u8,
+        slot: usize,
         initial: Box<Expr>,
         body: Box<Expr>,
     },
     SetLocal {
         target: BindingId,
-        slot: u8,
+        slot: usize,
         value: Box<Expr>,
     },
     ProductValue {
@@ -522,7 +522,7 @@ pub struct LocalDefinition {
     pub binding: BindingId,
     pub place: PlaceId,
     pub static_bytes: bool,
-    pub slot: u8,
+    pub slot: usize,
     pub value: Expr,
 }
 
@@ -534,6 +534,6 @@ pub struct BindingRef {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindingStorage {
-    Local(u8),
+    Local(usize),
     Function,
 }

@@ -35,15 +35,37 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         };
         let byte = *code.get(ip).ok_or_else(|| Error::msg("ip out of range"))?;
         if let Some(frame) = self.frames.last_mut() {
-            frame.ip += 1;
+            frame.ip = frame
+                .ip
+                .checked_add(1)
+                .ok_or_else(|| Error::msg("instruction pointer overflow"))?;
         }
         Ok(byte)
     }
 
     pub(crate) fn read_u16(&mut self) -> Result<u16> {
-        let low = self.read_u8()? as u16;
-        let high = self.read_u8()? as u16;
+        let low = u16::from(self.read_u8()?);
+        let high = u16::from(self.read_u8()?);
         Ok(low | (high << 8))
+    }
+
+    pub(crate) fn read_u64(&mut self) -> Result<u64> {
+        let mut bytes = [0_u8; 8];
+        for byte in &mut bytes {
+            *byte = self.read_u8()?;
+        }
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    pub(crate) fn read_index(&mut self) -> Result<usize> {
+        usize::try_from(self.read_u64()?)
+            .map_err(|_| Error::msg("bytecode index exceeds host usize"))
+    }
+
+    pub(crate) fn read_place_local(&mut self) -> Result<(usize, usize)> {
+        let place = self.read_index()?;
+        let local = self.read_index()?;
+        Ok((place, local))
     }
 
     pub(crate) fn push(&mut self, value: Value) {

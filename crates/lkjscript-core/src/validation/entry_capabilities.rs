@@ -1,9 +1,7 @@
 use crate::{Chunk, Error, Result};
 
 pub(super) fn validate(chunk: &Chunk) -> Result<()> {
-    let required_arity = u8::try_from(chunk.required_capabilities.len())
-        .map_err(|_| Error::msg("bytecode capability arity exceeds u8"))?;
-    if chunk.main.arity != required_arity {
+    if chunk.main.arity != chunk.required_capabilities.len() {
         return Err(Error::msg(
             "bytecode main arity must equal its exact capability requirements",
         ));

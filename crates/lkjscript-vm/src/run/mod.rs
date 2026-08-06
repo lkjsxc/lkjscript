@@ -41,6 +41,7 @@ use calls::{call, car, cdr, make_closure};
 pub(crate) struct Frame {
     pub proto: u32,
     pub ip: usize,
+    pub instruction_offset: usize,
     pub stack_base: usize,
     pub locals_base: usize,
     pub unique_places: Vec<unique::RuntimePlace>,

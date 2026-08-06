@@ -57,8 +57,7 @@ impl Resolver<'_> {
         }
 
         let saved_slot = self.next_slot;
-        let slot = u8::try_from(self.next_slot)
-            .map_err(|_| self.error("var needs more than 255 bytecode local slots"))?;
+        let slot = self.next_slot;
         self.next_slot = self
             .next_slot
             .checked_add(1)

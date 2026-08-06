@@ -16,7 +16,7 @@ pub(super) fn apply(
         }
         Op::Car => {
             expect_pop(state, Kind::List, proto, instruction)?;
-            let representation = instruction.operand().ok_or_else(|| {
+            let representation = instruction.operand().index().ok_or_else(|| {
                 instruction_error(
                     proto,
                     op,
@@ -24,10 +24,19 @@ pub(super) fn apply(
                     "list-first element representation is missing",
                 )
             })?;
-            if representation == u16::MAX {
+            if representation == usize::from(u16::MAX) {
                 state.stack.push(Kind::Any);
             } else {
-                let representation = crate::StructuralRepresentationId::new(representation);
+                let representation = crate::StructuralRepresentationId::new(
+                    u16::try_from(representation).map_err(|_| {
+                        instruction_error(
+                            proto,
+                            op,
+                            instruction.offset(),
+                            "list-first representation exceeds u16",
+                        )
+                    })?,
+                );
                 let metadata = _chunk
                     .structural_representations
                     .get(representation.index())

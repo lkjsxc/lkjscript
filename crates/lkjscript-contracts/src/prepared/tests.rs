@@ -13,7 +13,7 @@ fn descriptor() -> PreparedProgramDescriptor {
         memory_plan: [5; 32],
         witness_closure: [6; 32],
         semantic_ssa: [7; 32],
-        native_lowerable_ssa: [8; 32],
+        native_specialization_ssa: Some([8; 32]),
         validated_bytecode: [9; 32],
         contracts: PreparedContractDigests {
             prepared_program: [10; 32],
@@ -35,11 +35,17 @@ fn descriptor_identity_is_known_and_field_sensitive() {
         .bytes();
     assert_eq!(
         crate::ContractDigest::from_bytes(identity).to_hex(),
-        "0e6f021ce67c44ec717eee4af3ca105b8218d64a9c596dd25ccdac56afc164c2"
+        "2d3119af8e284c6b7930c69e09b0962b696ce05acabfa6a8942d8f75bdf0e91c"
     );
     let mut forged = descriptor();
     forged.entry = [17; 32];
     assert!(forged.identity().expect("forged identity") != descriptor().identity().expect("base"));
+    let mut generic_only = descriptor();
+    generic_only.native_specialization_ssa = None;
+    assert!(
+        generic_only.identity().expect("generic-only identity")
+            != descriptor().identity().expect("specialized identity")
+    );
 }
 
 #[test]

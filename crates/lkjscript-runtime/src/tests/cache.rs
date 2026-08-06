@@ -137,14 +137,14 @@ fn capability_chunk(
     chunk.main.arity = 1;
     chunk.main.locals = 1;
     if output {
-        chunk.main.emit_op_u16(Op::LoadLocal, 0);
+        chunk.main.emit_op_u64(Op::LoadLocal, 0);
         chunk
             .constants
             .push(Constant::Str("provider-output".into()));
         chunk.main.emit_op_u16(Op::LoadConst, 0);
         chunk.main.emit(Op::Print);
     } else if capability == lkjscript_core::CapabilityKind::Arguments {
-        chunk.main.emit_op_u16(Op::LoadLocal, 0);
+        chunk.main.emit_op_u64(Op::LoadLocal, 0);
         chunk.main.emit(Op::Argc);
     } else {
         chunk.main.emit(Op::Unit);

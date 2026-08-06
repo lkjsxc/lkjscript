@@ -30,7 +30,7 @@ pub struct PreparedProgramDescriptor {
     pub memory_plan: [u8; 32],
     pub witness_closure: [u8; 32],
     pub semantic_ssa: [u8; 32],
-    pub native_lowerable_ssa: [u8; 32],
+    pub native_specialization_ssa: Option<[u8; 32]>,
     pub validated_bytecode: [u8; 32],
     pub contracts: PreparedContractDigests,
 }
@@ -51,7 +51,16 @@ impl PreparedProgramDescriptor {
             (7, self.memory_plan),
             (8, self.witness_closure),
             (9, self.semantic_ssa),
-            (10, self.native_lowerable_ssa),
+        ] {
+            out.tag(tag);
+            out.fixed(&value);
+        }
+        out.tag(10);
+        out.u8(u8::from(self.native_specialization_ssa.is_some()));
+        if let Some(value) = self.native_specialization_ssa {
+            out.fixed(&value);
+        }
+        for (tag, value) in [
             (11, self.validated_bytecode),
             (12, self.contracts.prepared_program),
             (13, self.contracts.runtime_calls),
@@ -79,7 +88,6 @@ impl PreparedProgramDescriptor {
             self.memory_plan,
             self.witness_closure,
             self.semantic_ssa,
-            self.native_lowerable_ssa,
             self.validated_bytecode,
             self.contracts.prepared_program,
             self.contracts.runtime_calls,
@@ -89,6 +97,9 @@ impl PreparedProgramDescriptor {
             self.contracts.runtime_control,
             self.contracts.process_outcome_codec,
         ] {
+            nonzero(value)?;
+        }
+        if let Some(value) = self.native_specialization_ssa {
             nonzero(value)?;
         }
         Ok(())

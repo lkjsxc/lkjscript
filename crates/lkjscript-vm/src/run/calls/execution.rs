@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) -> Result<()> {
+pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize) -> Result<()> {
     let callee = vm.pop()?;
     match callee.as_function() {
         Some(proto) => {
@@ -9,14 +9,14 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
                 .protos()
                 .get(proto as usize)
                 .ok_or_else(|| Error::msg("call proto index out of range"))?;
-            if argc as usize != p.arity as usize {
+            if argc != p.arity {
                 return Err(Error::msg(format!(
                     "arity mismatch for {}: got {argc}, want {}",
                     p.name, p.arity
                 )));
             }
             let locals = p.locals;
-            let argument_count = usize::from(argc);
+            let argument_count = argc;
             let args_start = vm
                 .stack
                 .len()
@@ -94,9 +94,29 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
                     }
                 }
             }
+            let tail_position = is_tail_position(vm);
+            let stack_base = if tail_position {
+                vm.frames.last().map_or(0, |frame| frame.stack_base)
+            } else {
+                args_start
+            };
+            let frame_end = stack_base
+                .checked_add(locals)
+                .ok_or_else(|| Error::msg("VM call frame size overflow"))?;
+            if frame_end > vm.config.max_stack_values {
+                return Err(Error::resource(
+                    lkjscript_core::ResourceLimitKind::StackValues,
+                    "VM call frame exceeds the stack value limit",
+                ));
+            }
             let arguments = vm
                 .stack
-                .get(args_start..args_start.saturating_add(argument_count))
+                .get(
+                    args_start
+                        ..args_start
+                            .checked_add(argument_count)
+                            .ok_or_else(|| Error::msg("call argument range overflow"))?,
+                )
                 .ok_or_else(|| Error::msg("call argument range is out of bounds"))?
                 .to_vec();
             let memory_witnesses = super::super::structural_ops::call_memory_witnesses(
@@ -126,7 +146,9 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
                 if value.as_resource().is_none() || vm.resources.is_borrowed_handle(value) {
                     continue;
                 }
-                let argument_slot = args_start.saturating_add(index);
+                let argument_slot = args_start
+                    .checked_add(index)
+                    .ok_or_else(|| Error::msg("call argument slot overflow"))?;
                 for (slot, candidate) in vm.stack.iter_mut().enumerate() {
                     if slot != argument_slot && *candidate == value {
                         *candidate = Value::INVALID;
@@ -142,19 +164,22 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
                 &mut unique_places,
             )?;
             super::super::structural_ops::commit_call_arguments(vm, &arguments, p)?;
-            if is_tail_position(vm) {
-                let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
+            if tail_position {
                 let args = vm.stack[args_start..].to_vec();
                 super::super::structural_ops::cleanup_tail_copy_roots(vm, args_start, &args)?;
                 vm.stack.truncate(stack_base);
+                vm.stack
+                    .try_reserve(args.len().max(locals))
+                    .map_err(|_| Error::host("VM tail-call frame reservation failed"))?;
                 vm.stack.extend_from_slice(&args);
-                while vm.stack.len() < stack_base + locals as usize {
+                while vm.stack.len() < frame_end {
                     vm.stack.push(Value::INVALID);
                 }
                 if let Some(frame) = vm.frames.last_mut() {
                     *frame = Frame {
                         proto,
                         ip: 0,
+                        instruction_offset: 0,
                         stack_base,
                         locals_base: stack_base,
                         unique_places,
@@ -164,12 +189,19 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) ->
                 }
                 return Ok(());
             }
-            while vm.stack.len() < args_start + locals as usize {
+            vm.stack
+                .try_reserve(frame_end.saturating_sub(vm.stack.len()))
+                .map_err(|_| Error::host("VM call frame reservation failed"))?;
+            while vm.stack.len() < frame_end {
                 vm.stack.push(Value::INVALID);
             }
+            vm.frames
+                .try_reserve(1)
+                .map_err(|_| Error::host("VM frame-stack reservation failed"))?;
             vm.frames.push(Frame {
                 proto,
                 ip: 0,
+                instruction_offset: 0,
                 stack_base: args_start,
                 locals_base: args_start,
                 unique_places,

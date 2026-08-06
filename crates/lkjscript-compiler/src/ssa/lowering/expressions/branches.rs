@@ -12,7 +12,7 @@ impl FunctionBuilder<'_> {
         result_type: SsaType,
         expression_origin: hir::SourceId,
         incoming_env: BTreeMap<BindingId, ValueId>,
-        incoming_slots: BTreeMap<BindingId, u16>,
+        incoming_slots: BTreeMap<BindingId, u64>,
         incoming_unplaced: Vec<ValueId>,
         then_result: BranchResult,
         else_result: BranchResult,
@@ -56,7 +56,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         branch: &mut BranchResult,
         values: &[ValueId],
-        slots: &BTreeMap<BindingId, u16>,
+        slots: &BTreeMap<BindingId, u64>,
         expression_origin: hir::SourceId,
     ) -> Result<()> {
         self.current = branch.1;
@@ -112,7 +112,7 @@ impl FunctionBuilder<'_> {
         branch: &mut BranchResult,
         value: ValueId,
         ty: &SsaType,
-        slots: &BTreeMap<BindingId, u16>,
+        slots: &BTreeMap<BindingId, u64>,
         expression_origin: hir::SourceId,
     ) -> Result<ValueId> {
         if branch.3.contains(&value) {

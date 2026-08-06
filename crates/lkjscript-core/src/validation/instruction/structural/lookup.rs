@@ -34,8 +34,14 @@ fn place_and_slot(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<(usize, usize)> {
-    let packed = instruction_operand(proto, instruction)?;
-    Ok((packed >> u8::BITS, packed & usize::from(u8::MAX)))
+    instruction.operand().place_local().ok_or_else(|| {
+        instruction_error(
+            proto,
+            instruction.op(),
+            instruction.offset(),
+            "structural place/local operand is missing",
+        )
+    })
 }
 
 fn local_owner(

@@ -22,7 +22,7 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_structurals.is_empty()
-        && proto.parameter_structurals.len() != usize::from(proto.arity)
+        && proto.parameter_structurals.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} structural parameter metadata does not match arity",
@@ -30,7 +30,7 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_structural_places.is_empty()
-        && proto.parameter_structural_places.len() != usize::from(proto.arity)
+        && proto.parameter_structural_places.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} structural owner-place metadata does not match arity",
@@ -51,7 +51,7 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_resources.is_empty()
-        && proto.parameter_resources.len() != usize::from(proto.arity)
+        && proto.parameter_resources.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} resource parameter metadata does not match arity",
@@ -59,7 +59,7 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_resource_places.is_empty()
-        && proto.parameter_resource_places.len() != usize::from(proto.arity)
+        && proto.parameter_resource_places.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} resource owner-place metadata does not match arity",
@@ -67,7 +67,7 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_uniques.is_empty()
-        && proto.parameter_uniques.len() != usize::from(proto.arity)
+        && proto.parameter_uniques.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} unique parameter metadata does not match arity",
@@ -75,14 +75,14 @@ fn validate_proto_shape(
         )));
     }
     if !proto.parameter_unique_places.is_empty()
-        && proto.parameter_unique_places.len() != usize::from(proto.arity)
+        && proto.parameter_unique_places.len() != proto.arity
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} owner-place parameter metadata does not match arity",
             proto.name
         )));
     }
-    for index in 0..usize::from(proto.arity) {
+    for index in 0..proto.arity {
         let structural = proto.parameter_structurals.get(index).copied().flatten();
         let structural_place = proto
             .parameter_structural_places
@@ -152,12 +152,12 @@ fn validate_proto_shape(
             )));
         }
     }
-    if usize::from(proto.arity) > proto.parameter_structural_places.len()
+    if proto.arity > proto.parameter_structural_places.len()
         && !proto.parameter_structural_places.is_empty()
     {
         return Err(Error::msg("bytecode structural parameter place metadata is truncated"));
     }
-    if usize::from(proto.arity) > proto.parameter_structurals.len()
+    if proto.arity > proto.parameter_structurals.len()
         && !proto.parameter_structurals.is_empty()
     {
         return Err(Error::msg("bytecode structural parameter metadata is truncated"));

@@ -9,7 +9,8 @@ fn scalar_call_metadata_rejects_wrong_argument_kind() {
     proto.arity = 1;
     proto.locals = 1;
     proto.parameter_copy_kinds = vec![Some(crate::StructuralKind::I64)];
-    proto.code = vec![Op::LoadLocal as u8, 0, Op::Return as u8];
+    proto.code = index_instruction(Op::LoadLocal, 0);
+    proto.code.push(Op::Return as u8);
     chunk.protos.push(proto);
     chunk.main.code.clear();
     chunk.main.emit(Op::Unit);

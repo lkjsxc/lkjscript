@@ -29,7 +29,11 @@ fn resource_call_and_return_metadata_is_enforced() {
         unique_places: 1,
         failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
-        code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
+        code: {
+            let mut code = index_instruction(Op::LoadLocal, 0);
+            code.push(Op::Return as u8);
+            code
+        },
     });
     call.main.code.clear();
     call.main.emit(Op::Unit);
@@ -72,7 +76,11 @@ fn resource_call_and_return_metadata_is_enforced() {
         unique_places: 0,
         failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
-        code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
+        code: {
+            let mut code = index_instruction(Op::LoadLocal, 0);
+            code.push(Op::Return as u8);
+            code
+        },
     });
     let message = error(returned);
     assert!(message.contains("return does not match"), "{message}");

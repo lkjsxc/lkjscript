@@ -1,8 +1,7 @@
 use super::super::*;
 
 pub(super) fn place_and_slot<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<(usize, usize)> {
-    let packed = vm.read_u16()?;
-    Ok((usize::from(packed >> 8), usize::from(packed as u8)))
+    vm.read_place_local()
 }
 
 pub(super) fn local<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<Value> {

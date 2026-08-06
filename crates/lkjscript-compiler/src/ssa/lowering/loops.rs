@@ -51,7 +51,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         target: LoopTarget,
         exit_env: BTreeMap<BindingId, ValueId>,
-        incoming_slots: BTreeMap<BindingId, u16>,
+        incoming_slots: BTreeMap<BindingId, u64>,
     ) -> Result<Option<ValueId>> {
         let result = self
             .block_mut(target.exit)?

@@ -12,7 +12,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 let offset = if index == top {
                     top_offset
                 } else {
-                    frame.ip.saturating_sub(1)
+                    frame.instruction_offset
                 };
                 let proto = if frame.proto == u32::MAX {
                     self.chunk.main()
@@ -80,7 +80,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
         let Some(index) = self
             .frames
             .get(frame)
-            .and_then(|frame| frame.locals_base.checked_add(usize::from(local)))
+            .and_then(|frame| frame.locals_base.checked_add(local))
         else {
             self.record_failure(subject, "VM failure cleanup lost its frame local".into());
             return;
@@ -113,7 +113,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
                     if let Some(target) = self
                         .frames
                         .get_mut(frame)
-                        .and_then(|frame| frame.unique_places.get_mut(usize::from(place)))
+                        .and_then(|frame| frame.unique_places.get_mut(place))
                     {
                         *target = unique::RuntimePlace::Inactive;
                     }

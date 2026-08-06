@@ -29,7 +29,7 @@ pub(super) fn validate_control_flow(
         }
     }
     let mut states = vec![None; instructions.len()];
-    let locals = initial_locals(chunk, proto, is_main);
+    let locals = initial_locals(chunk, proto, is_main)?;
     let globals = if is_main {
         vec![None; chunk.global_names.len()]
     } else if chunk.global_prototypes.is_empty() {
@@ -41,7 +41,11 @@ pub(super) fn validate_control_flow(
             .map(|prototype| prototype.map_or(Some(Kind::Any), |index| Some(Kind::Closure(index))))
             .collect()
     };
-    let mut unique_places = vec![UniquePlaceState::Inactive; usize::from(proto.unique_places)];
+    let mut unique_places = Vec::new();
+    unique_places
+        .try_reserve_exact(proto.unique_places)
+        .map_err(|_| Error::host("bytecode unique-place state reservation failed"))?;
+    unique_places.resize(proto.unique_places, UniquePlaceState::Inactive);
     for (index, place) in proto.parameter_unique_places.iter().copied().enumerate() {
         let Some(place) = place else {
             continue;
@@ -55,7 +59,7 @@ pub(super) fn validate_control_flow(
             }
         };
         let target = unique_places
-            .get_mut(usize::from(place))
+            .get_mut(place)
             .ok_or_else(|| Error::msg("bytecode parameter owner PlaceId is out of range"))?;
         if !matches!(target, UniquePlaceState::Inactive) {
             return Err(Error::msg("bytecode parameter owner PlaceId is duplicated"));
@@ -83,7 +87,7 @@ pub(super) fn validate_control_flow(
             }
         };
         let target = unique_places
-            .get_mut(usize::from(place))
+            .get_mut(place)
             .ok_or_else(|| Error::msg("bytecode structural parameter PlaceId is out of range"))?;
         if !matches!(target, UniquePlaceState::Inactive) {
             return Err(Error::msg(

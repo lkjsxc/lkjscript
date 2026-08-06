@@ -133,6 +133,6 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) active_loans: BTreeMap<SsaLoanId, ActiveLoan>,
     pub(in crate::ssa) unplaced_owners: Vec<ValueId>,
     pub(in crate::ssa) env: BTreeMap<BindingId, ValueId>,
-    pub(in crate::ssa) slots: BTreeMap<BindingId, u16>,
+    pub(in crate::ssa) slots: BTreeMap<BindingId, u64>,
     pub(in crate::ssa) loops: Vec<LoopTarget>,
 }

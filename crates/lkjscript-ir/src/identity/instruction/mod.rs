@@ -79,7 +79,7 @@ pub(super) fn frame_state(out: &mut Encoder, value: &FrameState) {
             value,
         } = value;
         out.u32(binding.raw());
-        out.u16(*slot);
+        out.u64(*slot);
         out.u32(value.raw());
     });
     ids(out, operand_stack);
