@@ -45,10 +45,14 @@ iterative work stacks. Remaining recursive expression analysis, HIR memory plann
 lowering call sites use localized repeatable heap-backed stack segments rather than a finite depth
 admission rule. Trusted validation, loading, package analysis, and compilation select an explicit
 unrestricted source-byte policy. Source files are read to EOF in checked, fallibly reserved chunks;
-metadata is a capacity and change-detection hint, not admission. Generated coverage compiles,
-validates, executes through the VM, and destroys a program with 8,192 nested `do` expressions on a
-256 KiB native thread stack. A nested product-match fixture reaches a physical marker depth above
-50, and malformed 8,192-deep mismatched and unclosed input produces deterministic diagnostics and
+metadata is a capacity and change-detection hint, not admission. Ownership analysis no longer
+pre-scans HIR merely to reject an aggregate expression count. HIR memory-plan expression work is
+checked observational `u64` telemetry rather than admission. Generated coverage compiles, creates
+a verified HIR memory plan, creates verified and normalized SSA, validates bytecode, executes
+through the VM, and destroys a program with 20,000 nested `do` expressions on a 256 KiB native
+thread stack. That fixture records exactly 20,001 memory-plan expressions, 20,003 entries, and
+40,045 verifier steps. A nested product-match fixture reaches a physical marker depth above 50,
+and malformed 8,192-deep mismatched and unclosed input produces deterministic diagnostics and
 drops partial trees on the same small stack. Other generated coverage compiles and executes a
 source 1,024 bytes beyond the former 16 MiB boundary and exercises the source authority with 65,537
 in-memory units. Checked accounting crosses 256 MiB; the exact 258 MiB compile-and-execute geometry
@@ -72,11 +76,16 @@ may build elsewhere, but no other host or native target is currently claimed as 
 ## Known gaps
 
 - Source spans, positions, and snapshot-local node indexes remain `u32`, so an individual source
-  or source tree beyond those addressable ranges fails at a representation boundary. HIR,
-  ownership, memory-plan, SSA, recursive type/trait/enum,
-  and structural-value paths retain other arbitrary count or recursion ceilings. Compact
-  executable bytecode operands and indexes retain width ceilings. These are follow-up validity and
-  representation gaps, not host policy.
+  or source tree beyond those addressable ranges fails at a representation boundary. HIR, SSA,
+  recursive type/trait/enum, and structural-value paths retain other arbitrary count or recursion
+  ceilings. HIR memory planning still has independently triggered quotas for functions, entries,
+  uses, loans, constants, calls, obligations, type nodes and edges, witnesses, aggregate shape,
+  destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
+  20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
+  constant and type
+  fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and 40,045 verifier
+  steps. Compact executable bytecode operands and indexes retain width ceilings. These are
+  follow-up validity and representation gaps, not host policy.
 - Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
   including parts of type, trait, enum, semantic-schema, and transaction processing, still need
   explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input

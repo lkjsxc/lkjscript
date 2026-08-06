@@ -1,4 +1,4 @@
-//! Mandatory bounded ownership analysis for the initial `byte-vector` safe island.
+//! Mandatory ownership analysis for the initial `byte-vector` safe island.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -9,8 +9,6 @@ use crate::hir::{
     Program,
 };
 use crate::types::Type;
-
-pub(crate) const OWNERSHIP_ANALYSIS_MAX_EXPRESSION_NODES: usize = 16_384;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct State {
@@ -35,7 +33,6 @@ enum UseContext {
 }
 
 pub(crate) fn check(program: &Program) -> Result<()> {
-    enforce_program_budget(program)?;
     for function in &program.functions {
         check_function(program, function)?;
     }
@@ -105,17 +102,12 @@ fn validate_declared_places(
     Ok(())
 }
 
-mod budget;
 mod checking;
 mod places;
 mod types;
 mod uses;
 
-use budget::*;
 use checking::*;
 use places::*;
 use types::*;
 use uses::*;
-
-#[cfg(test)]
-mod tests;

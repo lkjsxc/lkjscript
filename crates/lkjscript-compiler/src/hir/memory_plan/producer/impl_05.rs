@@ -142,12 +142,14 @@ impl<'a> Producer<'a> {
         )
     }
     fn charge_expressions(&mut self, amount: usize) -> Result<()> {
-        charge(
-            &mut self.work.expressions,
-            amount,
-            MAX_MEMORY_PLAN_EXPRESSIONS,
-            "expressions",
-        )
+        let amount = u64::try_from(amount)
+            .map_err(|_| Error::msg("HIR memory-plan expression charge exceeds u64"))?;
+        self.work.expressions = self
+            .work
+            .expressions
+            .checked_add(amount)
+            .ok_or_else(|| Error::msg("HIR memory-plan expression work overflow"))?;
+        Ok(())
     }
     fn charge_uses(&mut self, amount: usize) -> Result<()> {
         charge(&mut self.work.uses, amount, MAX_MEMORY_PLAN_USES, "uses")

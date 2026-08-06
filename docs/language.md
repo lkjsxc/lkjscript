@@ -61,14 +61,16 @@ aggregate-source, and 65,536 source-unit ceilings have been removed. Trusted sou
 loading, package analysis, and compilation are unrestricted by source-byte, source-unit, or source
 nesting policy. Parsing and the ordinary deep-expression compiler path grow stack storage on the
 heap and report parser reservation failure as host failure; depth does not grant or deny language
-validity. An untrusted Semantic Source request may apply an explicit aggregate source-byte policy;
+validity. Ownership analysis and HIR memory planning do not reject an aggregate HIR expression
+count; memory-plan expression work remains checked observational `u64` telemetry. An untrusted
+Semantic Source request may apply an explicit aggregate source-byte policy;
 exhausting that policy is a typed host resource failure and does not make the unchanged program
 invalid.
 
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
-addressable representation boundaries. Later HIR, ownership, memory-plan, SSA, recursive
-type/trait/enum, structural-value, and
-executable-width ceilings also remain. These inherited ceilings are known defects, not permanent
+addressable representation boundaries. Other HIR, memory-plan table and deterministic-work, SSA,
+recursive type/trait/enum, structural-value, and executable-width ceilings also remain. These
+inherited ceilings are known defects, not permanent
 language rules. New work must remove the checks and repair the algorithms or representations
 rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
 overflow, and explicit untrusted-request policy must report typed failures without partial

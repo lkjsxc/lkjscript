@@ -240,8 +240,10 @@ fn generated_flat_source() -> Result<String, std::fmt::Error> {
 #[test]
 fn deeply_nested_source_compiles_validates_executes_and_drops_on_a_small_stack(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    const DEPTH: usize = 8_192;
-    const RESULT: i64 = 8_192;
+    const DEPTH: usize = 20_000;
+    const HIR_EXPRESSIONS: u64 = 20_001;
+    const RESULT: i64 = 20_000;
+    const _: () = assert!(HIR_EXPRESSIONS > 16_384);
     let source = generated_nested_do_source(DEPTH, RESULT)?;
     let worker = std::thread::Builder::new()
         .name("deep-source-small-stack".into())
@@ -249,8 +251,15 @@ fn deeply_nested_source_compiles_validates_executes_and_drops_on_a_small_stack(
         .spawn(
             move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let program = compile_source(&source, "deep-source.lkjscript", &Limits::default())?;
-                if program.memory_plan().work.expressions < u64::try_from(DEPTH)? {
-                    return Err("deep forms disappeared before verified HIR memory planning".into());
+                if program.memory_plan().work.expressions != HIR_EXPRESSIONS {
+                    return Err(format!(
+                        "deep source produced {} HIR memory-plan expressions, expected {HIR_EXPRESSIONS}",
+                        program.memory_plan().work.expressions
+                    )
+                    .into());
+                }
+                if program.ssa().program().functions.is_empty() {
+                    return Err("deep source did not reach verified and normalized SSA".into());
                 }
                 let outcome = run_chunk(
                     program.bytecode(),

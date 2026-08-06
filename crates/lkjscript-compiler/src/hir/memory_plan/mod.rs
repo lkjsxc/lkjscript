@@ -18,7 +18,6 @@ pub(crate) fn memory_type_identity(ty: &MemoryType) -> Result<[u8; 32]> {
 }
 
 pub const MAX_MEMORY_PLAN_FUNCTIONS: u64 = 4_096;
-pub const MAX_MEMORY_PLAN_EXPRESSIONS: u64 = 16_384;
 pub const MAX_MEMORY_PLAN_ENTRIES: u64 = 65_536;
 pub const MAX_MEMORY_PLAN_USES: u64 = 65_536;
 pub const MAX_MEMORY_PLAN_LOANS: u64 = 16_384;
