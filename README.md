@@ -73,6 +73,7 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 
 ## Active documentation
 
+- [Documentation authority](docs/authority.md)
 - [Current implementation](docs/current.md)
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Current language semantics](docs/language.md)

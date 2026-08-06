@@ -1,545 +1,1031 @@
 # AGENTS.md
 
-## Scope and precedence
+## 1. Scope
 
 This file applies to the entire repository.
 
-Follow, in descending order of authority:
+All code, comments, diagnostics, documentation, tests, generated reference text, commit messages, and agent reports must be written in English unless a task explicitly requires another language for a user-facing artifact.
 
-1. The user's current request.
-2. This file.
-3. Executable behavior, tests, and machine-readable interfaces in the current checkout.
-4. The small active documentation set established by this file.
-5. Historical documents and Git history.
+The repository is in an architectural reset. Backward compatibility is not a requirement. Large deletions, direct cutovers, syntax replacement, representation replacement, crate consolidation, runtime replacement, and temporary reduction of provisional language surface are permitted when they produce a simpler and stronger system.
 
-The repository is in an architectural reset. Legacy status registries, digest markers,
-platform revisions, capsule manifests, repository graphs, evidence ledgers, and old
-handoff sequences are not higher authority than this file. Do not maintain obsolete
-machinery merely because that machinery requires its own maintenance. Delete or replace
-it when it obstructs the product direction below.
+Do not preserve an old mechanism because it is old, expensive, tested, documented, or widely referenced. Preserve it only when it remains part of the target product and earns its complexity.
 
-Never infer a requirement from an old document when it conflicts with the user's current
-request or this file. Record uncertainty explicitly and inspect the implementation.
+## 2. Authority by dimension
 
-## Mission
+There is no single linear authority order for every kind of claim. Different artifacts own different kinds of truth.
 
-Build `lkjscript` into an AI-primary, statically typed, memory-safe, high-performance
-language and runtime platform.
+### 2.1 Task and procedure authority
 
-The long-term source of truth should be a semantic program model that agents manipulate
-directly. Text is an import, export, debugging, review, and interoperability projection;
-it is not assumed to be the permanent authoritative representation.
+For what to do now and how to work:
 
-Optimize for the best long-term architecture rather than compatibility with the current
-prototype. Breaking changes, large deletions, crate consolidation, syntax replacement,
-IR replacement, and storage replacement are permitted when they produce a simpler and
-stronger system.
+1. explicit current task instructions;
+2. this `AGENTS.md`;
+3. narrower repository-local instructions only when they do not conflict with the first two.
 
-Correctness, security boundaries, and final performance matter. Process and documentation
-machinery are valuable only when they materially improve those outcomes.
+A current task may intentionally override existing architecture, tests, or documentation.
 
-## Priority order
+### 2.2 Intended product and semantic authority
 
-Unless the user gives a narrower priority, work in this order:
+The accepted normative specification owns intended externally visible language semantics and semantic-workspace behavior.
 
-1. Remove accidental complexity and obsolete machinery.
-2. Remove arbitrary language, compiler, repository, and representation ceilings.
-3. Establish small, truthful, executable documentation authority.
-4. Reduce the compiler and runtime to one coherent production path.
-5. Build the semantic program model and direct agent operations.
-6. Make compilation, incremental editing, startup, and execution fast on representative
-   workloads.
-7. Expand libraries, services, GUI, web, game, and distributed capabilities after the
-   foundations are credible.
+Until the normative specification exists, explicit current task instructions together with the mission and non-negotiable direction in this file define the target. Do not infer permanence from prototype code, tests, examples, or old prose merely because no replacement specification has been written yet.
 
-Choose the highest-priority coherent vertical slice that can be completed and verified.
-Do not start lower-priority feature work while a higher-priority architectural blocker is
-being preserved without evidence.
+Implementation, tests, and status prose may lag the specification. When they do, the mismatch is a documented implementation gap, not an automatic change to the intended semantics.
 
-## Product principles
+An accepted architecture decision may constrain implementation strategy. It does not silently amend the language specification. Update the owning specification in the same change when semantics change.
 
-### One active architecture
+### 2.3 Actual checkout behavior authority
 
-Maintain one active source model, one active semantic pipeline, one active set of runtime
-semantics, and one active roadmap.
+Executable code, tests, CLI definitions, schemas, and manifests own what the current checkout actually does.
 
-Do not create a permanent `v2`, shadow compiler, compatibility parser, dual-write path,
-parallel status system, or old/new runtime split. A temporary migration bridge is allowed
-only inside one atomic change and must have an explicit deletion point. Prefer direct
-cutovers because backward compatibility is not required.
+`docs/status.md` or its active equivalent summarizes actual behavior and known gaps. It must not claim behavior that the checkout does not implement.
 
-A tiered runtime may exist as one product path when measurement justifies it. Tiers must
-not become separate public language implementations that require every feature to be
-reimplemented several times. A small reference executor may exist for semantic testing,
-but it is not automatically a production engine or a feature-completeness obligation.
+Cargo metadata owns actual workspace membership and dependency edges. Architecture prose explains the graph; it does not override it.
 
-### Deletion before abstraction
+### 2.4 Performance authority
 
-When complexity comes from duplicated mechanisms, remove mechanisms before adding a new
-framework over them.
+A reproducible benchmark harness, its workload definition, measurement protocol, and compact recorded baseline own performance evidence.
+
+A slogan, microbenchmark, unrepeatable timing, or design document does not establish performance.
+
+### 2.5 Planning authority
+
+`docs/roadmap.md` owns ordering and intent only. It owns no implemented fact and no normative semantic rule.
+
+### 2.6 Historical authority
+
+Git history owns history.
+
+Obsolete documents, old handoff files, archived plans, platform revisions, digest markers, public-fact registries, evidence dossiers, and past test expectations do not override the active specification, current task, or current checkout.
+
+### 2.7 Conflict handling
+
+When artifacts conflict:
+
+1. identify the dimension of the claim;
+2. consult the artifact that owns that dimension;
+3. inspect executable evidence;
+4. update or delete stale artifacts in the same change;
+5. record a durable decision only when future reversal would otherwise repeat the same analysis.
+
+Never resolve a conflict by inventing another registry that attempts to make all facts globally authoritative.
+
+## 3. Mission
+
+Build `lkjscript` into an AI-primary, statically typed, memory-safe, high-performance language and runtime platform.
+
+The long-term authoritative source is a typed semantic program workspace. Text is an import, export, review, debugging, and interoperability projection. It is not assumed to be the permanent source of semantic identity.
+
+An AI agent should be able to:
+
+- inspect semantic entities and relationships;
+- query precise, revision-labelled context;
+- operate on incomplete but meaningful programs;
+- apply typed atomic edits;
+- receive semantic diffs and diagnostics;
+- compile complete semantic snapshots directly;
+- use deterministic local validation for every correctness decision.
+
+Humans must retain useful projections, reviewable semantic and textual diffs, understandable diagnostics, reproducible builds, and explicit architectural decisions.
+
+Final performance matters. Optimize agent interaction, edit latency, compilation, startup, execution, memory, code size, allocation, copying, and cache behavior as one product.
+
+## 4. Current priority order
+
+Unless the current task narrows the scope, work in this order:
+
+1. eradicate arbitrary validity-changing limits end to end;
+2. separate language validity from untrusted host resource policy;
+3. repair stack safety, representation widths, and poor scale complexity;
+4. delete residual overengineering and obsolete authority machinery;
+5. establish truthful documentation authority;
+6. measure and select one production execution path;
+7. make the semantic workspace the direct compiler input;
+8. add measured incremental recomputation;
+9. resume daemon, database, distributed, GUI, web, game, and broader platform work.
+
+Do not begin a lower-priority feature while preserving a higher-priority blocker without evidence that the blocker is outside the current dependency-closed slice.
+
+A completed narrow vertical is preferable to broad scaffolding.
+
+## 5. Non-goals
+
+The following are not product authorities or compatibility commitments:
+
+- Brainfuck support, completion, or benchmark success;
+- compatibility with current `.lkjscript` syntax;
+- compatibility with old bytecode, prepared programs, package artifacts, protocol messages, manifests, caches, or serialized snapshots;
+- preservation of platform revision numbers or digest ecosystems;
+- mandatory evaluator, VM, baseline-JIT, and optimizing-JIT parity;
+- source, compiler, runtime, or repository count quotas;
+- file-length, line-width, directory-width, or directory-depth policies;
+- a zero-dependency badge;
+- a proof certificate for every internal compiler transformation;
+- a distributed semantic database before the local semantic model works;
+- speculative scheduler, NUMA, process-cell, GUI, web, or remote-execution work that delays the language foundation;
+- a new abstraction whose main purpose is preserving an obsolete abstraction.
+
+Delete Brainfuck material when it costs anything meaningful to maintain. Do not add Brainfuck acceptance criteria.
+
+## 6. One active architecture
+
+Maintain one active:
+
+- semantic source model;
+- compiler pipeline;
+- language definition;
+- production runtime architecture;
+- documentation authority system;
+- roadmap.
+
+Do not create permanent:
+
+- `v2` trees;
+- shadow compilers;
+- compatibility parsers;
+- dual-write source authorities;
+- parallel old/new runtimes;
+- duplicate status systems;
+- old-path feature flags without a scheduled deletion in the same coherent migration.
+
+A temporary bridge is allowed only inside a direct cutover. Remove it before declaring the cutover complete.
+
+A small reference executor may remain as a semantic oracle. It is not automatically a public engine or a feature-parity obligation.
+
+## 7. Deletion before abstraction
+
+When complexity comes from duplicated mechanisms, delete mechanisms before adding a framework over them.
 
 Prefer:
 
-- deleting obsolete code over adding adapters;
+- deleting obsolete code over adapting it;
 - merging artificial crates over adding cross-crate contracts;
-- one ordinary data structure over multiple authenticated projections inside one trust
-  boundary;
+- one typed owner of a fact over several digested reconstructions;
 - direct tests over status markers;
-- generated reference data over hand-copied registries;
+- generated reference output over hand-copied registries;
 - Git history over an active archive hierarchy;
-- a measured generic path over many narrow special cases;
-- a clear failure over silent fallback or partial publication.
+- a generic correct path over many incomplete special cases;
+- a clear typed failure over truncation or silent fallback;
+- a mature dependency over a large custom subsystem when evidence favors it.
 
-Do not preserve code because it was expensive to build. Preserve it only when it remains
-useful under the current direction.
+Sunk cost is not evidence.
 
-### AI-primary, not AI-exclusive
+Do not move deleted architecture into `legacy/`, `archive/`, `compat/`, `v1/`, or an inactive feature. Delete it.
 
-Agents should be able to inspect, query, edit, validate, and compile programs through
-stable semantic operations. Humans should still be able to review meaningful projections,
-diffs, diagnostics, and decisions.
+## 8. AI-primary design
 
-AI-primary does not mean adding model calls to hard correctness gates. The compiler core,
-program model, transactions, queries, and validation must be deterministic and usable
-offline. Models may propose operations; deterministic machinery decides whether those
-operations are valid.
+AI-primary does not mean embedding model calls into the compiler.
 
-### Performance is empirical
+The semantic workspace, compiler, transaction engine, query engine, validation, and runtime must be deterministic and usable offline. Models may propose operations. Deterministic machinery accepts or rejects them.
 
-Do not justify architecture with slogans. Establish baselines, profile representative
-workloads, compare alternatives, and retain concise decisions.
+Optimize the agent interface for:
 
-Optimize end-to-end outcomes: cold and warm compilation, incremental recomputation,
-startup, execution latency and throughput, memory use, code size, allocation, copying,
-cache behavior, and agent interaction cost.
+- semantic locality rather than lexical proximity;
+- compact typed summaries;
+- stable identities;
+- batch operations;
+- selective expansion;
+- predictable schemas;
+- explicit legal-action queries;
+- low round-trip count;
+- pagination and continuation;
+- reproducible diagnostics;
+- failure atomicity.
 
-A microbenchmark can expose a mechanism, but it cannot by itself choose the architecture.
+Do not optimize for AI by hiding semantics in an opaque binary blob. Non-text authority still requires inspectable projections and stable typed APIs.
 
-## Explicit non-goals
+Do not dump a whole repository into model context when a dependency, type, ownership, or impact slice can answer the request.
 
-Do not use the following as roadmap authorities:
+## 9. Semantic validity and resource control
 
-- Brainfuck compatibility, completion, or benchmark success;
-- compatibility with current `.lkjscript` syntax or old artifacts;
-- preservation of platform revision numbers or digest-marker ecosystems;
-- mandatory evaluator, VM, baseline, and optimizing parity;
-- repository topology rules based on file lines, file bytes, line width, directory width,
-  directory depth, or arbitrary fan-out;
-- comprehensive proof or evidence dossiers for ordinary changes;
-- a distributed program database before the local semantic model works;
-- GUI, web framework, game engine, package network, or remote execution work that delays
-  the compiler and source foundations;
-- a new abstraction layer whose main purpose is to preserve an old abstraction layer.
+### 9.1 Arbitrary counts are not semantic laws
 
-Brainfuck material may remain only as low-cost historical or optional benchmark material.
-It must not block changes, determine semantics, require special runtime mechanisms, or
-appear in acceptance criteria. Delete it when its maintenance cost is nontrivial.
-
-## Language validity and resource control
-
-### Validity must not depend on arbitrary counts
-
-A semantically valid program must not become invalid merely because it has more than a
-project-selected number of:
+A semantically valid program must not become invalid merely because it exceeds a project-selected count of:
 
 - tokens;
+- bytes in an ordinary trusted source unit;
 - nested forms or nested types;
-- children or arguments;
+- children, arguments, parameters, or operands;
 - declarations or top-level forms;
-- fields, variants, parameters, patterns, or match arms;
-- files, directories, imports, or directory entries;
-- HIR expressions;
-- SSA blocks, values, edges, or frame states;
+- fields, variants, patterns, or match arms;
+- files, modules, imports, directories, or directory entries;
+- HIR expressions, functions, entries, uses, loans, calls, obligations, witnesses, or type nodes;
+- ownership states;
+- SSA functions, blocks, edges, values, frame states, or metadata;
 - specialization instances;
-- structural value nodes;
-- repository nodes, documentation facts, or graph edges.
+- structural types, layouts, representations, destinations, values, or dependencies;
+- task-graph nodes or scheduler work units;
+- diagnostics, query results, repository nodes, documentation facts, or graph edges.
 
-Do not “remove” a limit by raising its number, moving it to a different constant, renaming
-it a safety maximum, or applying the same ceiling through a profile. Delete the semantic
-restriction and repair the algorithm or representation that required it.
+Do not remove a limit by:
 
-### Use four distinct concepts
+- raising it;
+- changing its type;
+- moving it to a later phase;
+- renaming it;
+- hiding it in a profile;
+- labelling it a foundation or safety maximum;
+- making the default profile larger;
+- replacing a count with a deterministic work quota that rejects the same programs.
 
-Every remaining bound must belong to exactly one of these concepts:
+Delete the semantic restriction and repair the algorithm or representation.
 
-1. **Semantic law.** A property required by the language, such as type correctness,
-   capability access, ownership legality, or exhaustive matching. A semantic law is not a
-   size quota.
-2. **Unavoidable representation boundary.** A real boundary imposed by an integer width,
-   operating-system API, file format, address space, or other external representation.
-   Widen, segment, stream, or redesign before exposing it as an ordinary user limit.
-3. **Host or request resource policy.** A configurable operational budget for untrusted or
-   multi-tenant work, expressed in coarse resources such as bytes, memory, elapsed time,
-   output, concurrency, or cancellation. It does not change language meaning.
-4. **Internal implementation tuning or test geometry.** Private capacities, growth factors,
-   thresholds, and fixture sizes. These may change without becoming public contracts.
+### 9.2 Every remaining bound has one class
 
-Do not build another large taxonomy, positional ceiling table, or digest-bound profile
-system around this classification.
+Every bound must be classified as exactly one of:
 
-### Trusted local behavior
+1. **Semantic law**
+   Type correctness, effect legality, capability authority, ownership legality, exhaustive matching, valid control flow, or another rule about meaning. A semantic law is not a size quota.
 
-Ordinary trusted local compilation should not use project-selected count quotas. It should
-continue until success, cancellation, allocation failure, an unavoidable representation
-boundary, or another real host failure.
+2. **Unavoidable external representation boundary**
+   A real operating-system, ABI, address-space, file-format, or third-party boundary. Widen, segment, stream, or redesign before exposing it to ordinary programs. Keep it local to the boundary.
 
-Untrusted daemon and multi-tenant operations must accept explicit host policy. A program
-that exhausts a low policy must be able to succeed under a higher policy without changing
-its semantic validity or source representation.
+3. **Untrusted host or request policy**
+   Explicit operational limits over coarse resources such as input bytes, memory, output, elapsed time, cancellation, and concurrency. Policy controls a request; it does not redefine language validity.
 
-Resource exhaustion must be typed, attributable, cancellation-safe, and failure-atomic.
-Do not silently truncate programs, diagnostics, graphs, query results, generated code, or
-serialized authority. Paginate or stream views whose output may be large.
+4. **Private implementation tuning or test geometry**
+   Initial capacities, growth factors, thresholds, benchmark sizes, and cache policy. These are not public contracts and must not silently reject valid programs.
 
-### Scale-safe implementation
+Do not build another positional ceiling table, digest-bound profile system, or universal budget taxonomy around this classification.
 
-Replace recursive traversals that can follow user-controlled depth with explicit work
-stacks or otherwise demonstrably stack-safe algorithms. Use checked arithmetic, fallible
-allocation, and incremental or streaming processing where appropriate.
+### 9.3 Trusted local compilation
 
-Do not preallocate a published maximum. Grow from observed need, reserve fallibly, and
-measure peak memory.
+Trusted local compilation must not use finite project-selected count quotas.
 
-Use wide or segmented identifiers when program scale can exceed a narrow index. Internal
-compact IDs are welcome when overflow is checked and a scalable fallback exists; a narrow
-ID must not become an unexplained language ceiling.
+It continues until:
 
-## Semantic program model
+- success;
+- explicit cancellation;
+- allocation failure;
+- operating-system or I/O failure;
+- a genuine external representation failure;
+- another real host failure.
 
-### Authority
+Telemetry may count work. Telemetry does not grant or deny semantic validity.
 
-The long-term authority is a typed semantic program model, not a text parse tree with more
-metadata.
+### 9.4 Untrusted requests
 
-The model must represent program meaning independently of the current physical syntax,
-formatting, comments, trivia, source spans, and file layout. Text-related data belongs to
-projections and import/export attachments rather than semantic identity.
+Daemon, multi-tenant, remote, and adversarial requests must carry explicit host policy.
 
-### Identity
+Prefer one small policy containing only enforceable coarse resources. An unrestricted policy must be representable.
 
-Use stable logical identities for mutable program entities and edits. Names and source
-locations are attributes, not identity.
+The same program must be able to exhaust a low policy and succeed unchanged under a higher or unrestricted policy.
 
-Use content hashes selectively for immutable snapshots, immutable definitions, cached
-artifacts, and interchange verification. Do not content-address every mutable node,
-transaction, public fact, or prose fragment. Avoid cascades in which a small edit changes
-unrelated identities.
+Resource exhaustion must be:
 
-### Incomplete programs are valid editor states
+- typed;
+- attributable;
+- cancellation-safe;
+- failure-atomic;
+- non-poisoning to caches and prior snapshots;
+- distinct from a semantic error.
 
-The model must eventually support typed holes, unresolved references, ambiguous choices,
-conflict nodes, error nodes, and partially constructed declarations as first-class states.
+### 9.5 No truncation
 
-The editor or agent service should preserve as much type, effect, ownership, and capability
-information as can be determined. It must not require an agent to generate a complete text
-file before receiving semantic feedback.
+Never silently truncate:
 
-Incomplete program states are not executable releases, but they are valid transactional
-workspace states.
+- source;
+- declarations;
+- diagnostics;
+- semantic graphs;
+- query results;
+- diffs;
+- generated code;
+- serialization;
+- artifacts;
+- metrics claimed as complete.
 
-### Operations
+Stream, paginate, provide continuation, return an explicit partial-result marker, or fail.
 
-Prefer typed operations such as:
+## 10. Scale-safe implementation
 
-- create and delete entity;
-- insert, move, and replace node;
-- rename binding or declaration;
-- set typed field or reference;
-- rewire call or dependency;
-- introduce, refine, and fill hole;
+### 10.1 Stack safety
+
+User-controlled depth must not consume the native call stack without a demonstrated safe bound imposed by an external interface.
+
+Use explicit work stacks or otherwise stack-safe designs for:
+
+- parsing;
+- formatting and rendering;
+- AST or semantic traversal;
+- type traversal;
+- ownership analysis;
+- HIR and SSA lowering;
+- verification;
+- identity and hashing;
+- diagnostics;
+- serialization and deserialization;
+- destruction of deeply nested structures.
+
+Add deep generated tests.
+
+### 10.2 Arithmetic and allocation
+
+Use:
+
+- checked arithmetic for lengths, offsets, sizes, and work estimates;
+- fallible allocation and reservation where large user input is involved;
+- incremental or streaming processing when full materialization is unnecessary;
+- staged publication;
+- prompt release of temporary memory.
+
+Do not preallocate a published maximum.
+
+Do not use saturating arithmetic to conceal overflow in a value that controls identity, indexing, allocation, admission, or correctness. Saturation is acceptable only for explicitly approximate telemetry.
+
+### 10.3 Identifiers and encoded widths
+
+Use wide or segmented identifiers for user-scale program structures.
+
+Requirements:
+
+- public semantic IDs are not raw vector positions;
+- stable semantic identity is distinct from snapshot-local dense indexing;
+- every narrowing conversion is checked;
+- no `as u8`, `as u16`, or similar cast may silently wrap a user-scale value;
+- malformed encoded operands fail before indexing;
+- a compact encoding has a wide fallback;
+- representation overflow is not reported as semantic invalidity.
+
+Breaking the current bytecode and serialized formats is allowed and expected when necessary.
+
+### 10.4 Complexity
+
+Do not solve poor complexity by rejecting input.
+
+Look for:
+
+- repeated global scans;
+- nested linear lookups;
+- cloned whole-program structures;
+- duplicate serialization and hashing;
+- quadratic CFG and dominance work;
+- per-node heap allocation;
+- repeated string names where interned or direct IDs are appropriate;
+- duplicate witness and cleanup metadata;
+- always constructing all runtime representations.
+
+Profile before adding custom scheduling or parallelism.
+
+## 11. Semantic workspace authority
+
+### 11.1 Core model
+
+The target authority is a typed semantic workspace snapshot, not a text parse tree with extra metadata.
+
+Separate:
+
+- semantic entities and owned nodes;
+- reference and dependency edges;
+- presentation and source attachments;
+- derived analysis;
+- compiled artifacts;
+- cache state.
+
+Use an ownership or containment tree where the language has ownership, with explicit graph edges for references and dependencies. Do not assume that a universal graph database is required.
+
+### 11.2 Stable identity
+
+Use stable logical identities for mutable entities, bindings, and nodes.
+
+Identity must survive, where meaning permits:
+
+- rename;
+- movement;
+- formatting;
+- file regrouping;
+- unrelated edits;
+- projection changes.
+
+Names, paths, spans, source order, and formatting are attributes.
+
+Use generation, workspace namespace, revision preconditions, or equivalent checks to reject stale references.
+
+Use content hashes selectively for immutable snapshots, immutable definitions, artifacts, cache keys, and transfer integrity. Do not content-address every mutable node or make small edits cascade through unrelated identities.
+
+### 11.3 Incomplete programs
+
+The workspace must eventually represent as first-class states:
+
+- typed holes;
+- untyped holes;
+- unresolved references;
+- ambiguous choices;
+- type and effect mismatches;
+- missing fields, arms, parameters, or declarations;
+- import errors;
+- conflict nodes;
+- recovery nodes.
+
+Preserve all sound type, binding, effect, capability, and ownership information available around an error.
+
+Incomplete snapshots are valid editing states. They are not executable releases.
+
+### 11.4 Transactions
+
+Semantic edits are typed operations, not primarily text patches.
+
+Useful operations include:
+
+- create or delete entity;
+- insert, move, or replace node;
+- rename declaration or binding;
+- set a type, field, reference, effect, or capability;
+- rewire a call or dependency;
+- introduce, refine, or fill a hole;
 - apply a legal refactoring;
-- resolve conflict;
-- commit or abort transaction.
+- resolve a conflict;
+- commit or abort.
 
-Operations must carry a base revision or equivalent precondition, be failure-atomic, and
-return a semantic diff plus diagnostics. Avoid making textual patches the primary edit API.
+Every transaction must:
 
-### Queries
+- name a base revision or equivalent precondition;
+- validate operation shape and identities before publication;
+- apply atomically;
+- preserve the old snapshot on failure or cancellation;
+- publish one new revision on success;
+- return semantic diff, diagnostics, and invalidation information;
+- support batching.
 
-Provide deterministic queries for definitions, references, callers, callees, types,
-effects, capabilities, ownership, diagnostics, holes, legal actions, dependencies, and
-small context slices.
+A text patch is an importer into a transaction, not the foundational edit representation.
 
-Queries over large results must support pagination, continuation, filtering, and stable
-ordering. Do not require a complete repository graph to answer every local question.
+### 11.5 Queries
 
-### Projections
+Queries are deterministic and revision-labelled.
 
-Support multiple projections from the same model:
+Provide useful semantic queries for:
+
+- entity lookup;
+- qualified resolution;
+- definition and references;
+- callers and callees;
+- actual and expected type;
+- typing context;
+- effects and capabilities;
+- ownership, movement, and borrowing;
+- diagnostics;
+- hole context;
+- legal constructors and edits;
+- dependencies and impact;
+- search by name, type, operation, or capability;
+- concise semantic slices.
+
+Large result sets require stable order, filters, pagination, and continuation.
+
+Return compact headers and IDs first. Allow selective expansion. Never claim a truncated result is complete.
+
+### 11.6 Projections
+
+Support multiple projections from the same semantic authority:
 
 - concise human-readable text;
 - verbose diagnostic text;
-- structured debug and interchange forms;
-- semantic diffs;
-- IDE or visual views;
+- structured debug or interchange form;
+- semantic diff;
+- conventional text diff;
+- IDE and visual views;
 - compiled artifacts.
 
-The current line-oriented syntax may be retained temporarily as a bootstrap importer and
-renderer. It is not a compatibility promise and must not constrain the model schema.
+The current line-oriented syntax is a replaceable importer and renderer. It is not a compatibility promise.
 
-### Persistence and incrementality
+Formatting, comments, trivia, spans, and file placement do not own semantic identity.
 
-Start with the smallest persistence design that proves the semantics: an in-memory model
-and deterministic snapshot are sufficient for the first vertical slice.
+### 11.7 Direct compilation
 
-Add a transaction log, embedded database, or binary snapshot only when scale, crash
-recovery, or concurrency measurements justify it. Do not begin with a distributed store.
+The compiler consumes a complete semantic snapshot directly.
 
-Incremental computation should be query-driven and dependency-aware. Evaluate existing
-incremental-computation libraries as well as a small custom design. Select by correctness,
-maintenance cost, memory behavior, invalidation precision, and measured latency, not by a
-zero-dependency preference.
-
-## Compiler architecture
-
-### Preferred shape
-
-Converge toward this conceptual flow:
+The conceptual path is:
 
 ```text
-semantic program snapshot
-    -> name/type/effect/ownership analysis
-    -> canonical typed core IR
-    -> verified executable IR
+semantic workspace snapshot
+    -> name, type, effect, capability, and ownership analysis
+    -> canonical typed core
+    -> verified executable representation
     -> one production execution path
 ```
 
-Each boundary must have a clear responsibility. Do not independently reconstruct and hash
-the same facts at every layer inside one trusted process.
+Text import constructs or updates the semantic model. It must not remain a privileged sibling compiler path.
 
-The compiler should consume semantic model data directly. Text parsing should become an
-adapter that constructs or updates the model, not a privileged sibling authority.
+Tests must prove that direct semantic compilation does not render and reparse text.
 
-### Verification
+### 11.8 Persistence and collaboration
 
-Keep verification at genuine trust boundaries:
+Begin with in-memory immutable or copy-on-write snapshots.
 
-- untrusted source or semantic transaction input;
-- untrusted serialized IR or artifact input;
-- executable-memory installation and relocation;
-- process or daemon protocol boundaries;
-- capability and path boundaries;
-- unsafe host interfaces.
+Add a transaction log, embedded database, binary snapshot, CRDT, or distributed store only after measurements establish a need for crash recovery, retained scale, concurrent writers, or collaboration.
 
-Inside one trusted pipeline, prefer typed construction that makes invalid states hard to
-represent. Do not duplicate a producer with several “independent” reconstructors unless a
-real adversarial boundary or demonstrated bug class justifies the cost.
+Do not begin the semantic reset by building a distributed database.
 
-### Execution engines
+## 12. Compiler and IR architecture
 
-End the default rule that every language feature must be implemented independently in an
-evaluator, bytecode VM, baseline native tier, and optimizing native tier.
+### 12.1 Clear responsibilities
 
-Measure and choose a coherent production path. Possible outcomes include a VM with a
-measured native tier, direct native execution with a small reference executor, or another
-simpler design. Do not preselect an outcome solely to preserve existing code.
+Each representation boundary must have one clear responsibility.
 
-A generic execution path must handle ordinary valid programs. Optimization and
-specialization may improve it but must not turn unsupported specialization into a language
-rejection. Use heuristics, caching, and generic fallbacks rather than fixed specialization
-count ceilings.
+Do not independently reproduce the same semantic facts in source records, HIR witnesses, memory descriptors, SSA witnesses, bytecode metadata, contract registries, prepared descriptors, and runtime tables unless each copy serves a real boundary or measured backend need.
 
-Freeze or remove an optimizing tier that lacks representative benefit or creates a large
-feature cross-product. Optimization work resumes when profiling identifies a material
-bottleneck and a measurable candidate.
+Prefer typed construction that makes invalid internal states difficult to express.
 
-### Memory direction
+### 12.2 Verification boundaries
 
-Keep ordinary source free of lifetime names, retain/release operations, general `free`, raw
-pointers, and memory-engine selection.
+Keep rigorous verification at:
 
-The current product direction remains collector-free and non-tracing. Do not add a tracing
-fallback to avoid solving ownership, region, or representation problems unless the user
-explicitly changes direction.
+- untrusted text or semantic-operation input;
+- untrusted serialized workspace or artifact input;
+- package and path boundaries;
+- process and daemon messages;
+- capability grants;
+- persisted data;
+- executable IR or bytecode loaded from outside the process;
+- relocation and executable-memory installation;
+- FFI, SQLite, and operating-system interfaces.
 
-Prefer a small combination of static values, unique ownership, invocation or lexical
-regions, arenas, and coarse immutable sharing. Minimize per-node metadata, repeated witness
-records, owner copies, and cleanup plans. Cleanup authority should be established once and
-consumed consistently.
+Within one synchronous trusted compiler pipeline, do not repeatedly hash, serialize, reconstruct, and independently verify the same data without a demonstrated threat or bug model.
 
-Memory safety, deterministic cleanup where promised, and failure atomicity are mandatory.
-The internal mechanism may change radically when evidence supports a better design.
+### 12.3 Generic validity path
 
-## Repository architecture
+Every valid supported program needs a generic compilation and execution path.
 
-### Organize by semantic cohesion
+Optimization and specialization may improve it. They must not decide whether the program is valid.
 
-Files and directories may be as large or wide as their coherent responsibility requires.
-Split when it improves ownership, testing, navigation, compilation, or retrieval. Do not
-split to satisfy numeric topology policy.
+Unsupported specialization falls back to generic lowering. It does not become a count error.
 
-Remove mechanically numbered shards, `impl_XX` fragments, one-child directory ladders,
-and facade files that exist only because of old structural limits. Recombine related code
-before choosing new natural boundaries.
+### 12.4 Optimizations
 
-Avoid a monolith, but do not confuse many crates with modularity. A crate boundary is
-justified by at least one of:
+Add or keep an optimization when:
 
-- a real trust boundary;
+- profiling identifies a material bottleneck;
+- the transformation has a clear semantic contract;
+- validation or differential testing is adequate;
+- end-to-end benefit exceeds compile-time, memory, code-size, and maintenance cost.
+
+A proof-producing optimizer must justify its proof and reconstruction cost at a real trust boundary or by demonstrated reliability value.
+
+Freeze or delete optimizing machinery that lacks representative benefit.
+
+### 12.5 Representation count
+
+Do not add IR levels merely to make the architecture look sophisticated.
+
+Add a representation when it enables a distinct invariant, transformation class, target, or performance property that cannot be owned cleanly elsewhere.
+
+Remove a representation when it mainly mirrors another and forces repeated feature implementation.
+
+## 13. Runtime architecture
+
+### 13.1 One product path
+
+Select one coherent production execution architecture by measurement.
+
+A tiered runtime may be one product path when tiers are internal policy and share semantics. It must not become several public language implementations.
+
+Public CLI engine selection is diagnostic tooling at most, not a compatibility commitment.
+
+### 13.2 Reference executor
+
+A small interpreter or evaluator may remain for:
+
+- semantic differential testing;
+- compile-time evaluation where justified;
+- debugging;
+- tiny cold tasks when measured.
+
+It does not require complete product feature parity unless it is part of the selected production architecture.
+
+### 13.3 Backend selection
+
+Compare the custom backend with mature alternatives such as Cranelift and, only when justified, LLVM.
+
+Measure:
+
+- compile latency;
+- time to first result;
+- steady-state execution;
+- memory;
+- generated code size;
+- release binary size;
+- supported targets;
+- safety;
+- maintenance;
+- integration complexity.
+
+Do not retain custom code because it is custom. Do not adopt a dependency because it is popular.
+
+### 13.4 Avoid unconditional representation work
+
+Do not build bytecode, SSA snapshots, optimization certificates, native objects, and metadata tables on every execution when the selected path does not need them.
+
+Construct representations lazily or not at all according to the selected architecture.
+
+### 13.5 Runtime resource policy
+
+Execution time, memory, output, concurrency, and cancellation are host policy.
+
+They are not language validity.
+
+Long-running or nonterminating programs require cancellation and isolation at untrusted boundaries, not a hidden source-shape quota.
+
+## 14. Memory direction
+
+The current product direction is collector-free ordinary execution and non-tracing memory management.
+
+Do not introduce a tracing collector as a convenience fallback unless the user explicitly changes direction.
+
+Ordinary source should not expose:
+
+- named implementation lifetimes;
+- retain and release;
+- a general `free`;
+- raw pointers;
+- memory-engine selection;
+- backend-specific representation controls.
+
+Prefer a small coherent combination of:
+
+- immediate and static values;
+- unique or affine ownership;
+- lexical or invocation regions;
+- arenas for phase-local data;
+- coarse immutable sharing;
+- compiler-inserted cleanup.
+
+Establish cleanup authority once and consume it consistently.
+
+Minimize:
+
+- per-node metadata;
+- witness tables;
+- duplicate owner/place maps;
+- cleanup-plan duplication;
+- reference counting on fine-grained compiler structures;
+- copying between nearly identical representations.
+
+Memory safety, deterministic cleanup where promised, cancellation safety, and failure atomicity are mandatory. Internal mechanisms may change radically.
+
+## 15. Repository architecture
+
+### 15.1 Organize by cohesion
+
+Files and directories may be as large or wide as coherent responsibility requires.
+
+Split when it improves:
+
+- ownership;
+- testing;
+- navigation;
+- compilation isolation;
+- retrieval;
+- platform separation.
+
+Do not split to satisfy numeric topology policy.
+
+Remove:
+
+- numbered `impl_XX` and `helpers_XX` shards;
+- one-child directory ladders;
+- facade files that only include fragments;
+- artificial file boundaries inherited from old line or directory rules.
+
+Recombine first, then choose natural boundaries.
+
+### 15.2 Crate boundaries
+
+A crate boundary is justified by at least one of:
+
+- a real trust or unsafe boundary;
 - an independently useful library API;
-- a materially different platform or build target;
-- meaningful compile-time isolation;
-- ownership by a distinct subsystem with low coupling.
+- a materially different build target or platform;
+- measured compile-time isolation;
+- a distinct low-coupling subsystem.
 
-Merge crates whose primary purpose is to exchange internal contracts, digests, witnesses,
-or re-exports with each other.
+Many crates do not automatically mean modularity.
 
-### Dependencies
+Merge crates whose primary purpose is exchanging internal contracts, digests, witnesses, or re-exports.
 
-Third-party dependencies are permitted. Evaluate maintenance, security, portability,
-binary size, compile time, API stability, and runtime performance.
+### 15.3 Current reset hotspots
 
-Prefer a mature dependency when it removes substantial custom machinery or risk. Prefer
-owned code for a small performance-critical mechanism when measurement supports it.
+At the beginning of the reset, known high-priority areas included:
 
-Do not reject a dependency merely to preserve a zero-dependency claim. Do not add a large
-dependency without demonstrating its role.
+- `crates/lkjscript-core/src/limits.rs`;
+- `crates/lkjscript-core/src/profile/`;
+- `crates/lkjscript-core/src/budget/`;
+- `crates/lkjscript-compiler/src/budget/`;
+- source parser and scale tests;
+- ownership analysis;
+- `crates/lkjscript-compiler/src/hir/memory_plan/`;
+- SSA verification and structural witness limits;
+- bytecode operand and index widths;
+- proof-oriented optimization and scheduled discovery;
+- the syntax-shaped Semantic Source schema;
+- internal contract digests and prepared identities;
+- runtime engine multiplication;
+- speculative scheduler, process-cell, database, and daemon surface.
 
-### Unsafe code
+Verify current paths. When a hotspot is resolved, delete stale references to it rather than marking a permanent checklist complete.
 
-Keep unsafe code at narrow, named mechanism boundaries with safe caller contracts and
-focused tests. Use platform and standard-library facilities before custom unsafe code.
+### 15.4 Dependencies
 
-Do not spread unsafe code to save small amounts of time before profiling. Where unsafe code
-is performance-critical, compare it against a safe implementation and retain the reason.
+Third-party dependencies are allowed.
 
-## Documentation authority
+Evaluate:
 
-### Active documentation set
+- maintenance;
+- security;
+- portability;
+- compile time;
+- binary size;
+- runtime performance;
+- API stability;
+- replacement cost.
 
-Converge toward a small set such as:
+Prefer a mature dependency when it removes substantial custom machinery or risk. Prefer owned code for a small performance-critical mechanism when measurement supports it.
 
-- `README.md`: product identity, build, and first successful use;
-- `docs/current.md`: concise implemented capabilities and known gaps;
-- `docs/architecture.md`: active architecture and trust boundaries;
-- `docs/language.md`: current semantic language surface;
-- `docs/source-model.md`: semantic program model and editing contract;
-- `docs/roadmap.md`: ordered `Now`, `Next`, and `Later` work;
-- `docs/decisions/`: only durable decisions whose rationale remains useful.
+A zero-dependency claim is not a goal.
 
-Exact names may change, but the roles must remain few and non-overlapping.
+### 15.5 Unsafe code
 
-### Authority order
+Keep unsafe code in narrow named mechanism boundaries with:
 
-Use executable sources for facts whenever possible:
+- a documented safe caller contract;
+- explicit invariants;
+- focused tests;
+- malformed-input coverage;
+- sanitizer, Miri, fuzz, or property testing where useful.
 
-- Cargo metadata owns the crate graph;
-- CLI code and tests own commands;
-- schemas and types own wire structure;
-- compiler tests own accepted and rejected language behavior;
-- benchmark harnesses own measurement protocols;
-- generated references own exhaustive tables.
+Do not spread unsafe code to save unmeasured time.
 
-Prose explains intent and consequences. It must not copy large registries that can drift.
+## 16. Documentation authority
 
-### Remove documentation bureaucracy
+### 16.1 Active set
+
+Converge toward a small non-overlapping set:
+
+- `README.md` — identity, prerequisites, build, first successful use, links;
+- `docs/authority.md` — authority dimensions and conflict rules;
+- `docs/spec/language.md` — intended normative language semantics;
+- `docs/spec/workspace.md` — semantic workspace and agent-editing contract;
+- `docs/status.md` — actual implemented capability and known gaps;
+- `docs/architecture.md` — current topology, data flow, ownership, and trust boundaries;
+- `docs/performance.md` — benchmark methodology, compact baselines, active performance decisions;
+- `docs/roadmap.md` — `Now`, `Next`, and `Later`;
+- `docs/decisions/` — sparse durable decisions and supersessions.
+
+Exact names may change. Roles may not overlap.
+
+### 16.2 Document labels
+
+Every substantive document must make clear whether a statement is:
+
+- normative;
+- currently implemented;
+- target architecture;
+- experimental;
+- historical;
+- planned.
+
+Do not mix these categories without labels.
+
+### 16.3 Executable facts
+
+Use executable sources for exhaustive facts:
+
+- Cargo metadata for crate graph;
+- CLI definitions and tests for commands;
+- schemas and types for wire structure;
+- compiler tests for accepted and rejected semantics;
+- benchmark harnesses for measurement;
+- generated references for operation, opcode, capability, diagnostic, or schema tables.
+
+Prose explains intent, rationale, and consequences.
+
+### 16.4 Documentation checks
+
+Check:
+
+- internal links;
+- stale paths;
+- generated references;
+- executable examples;
+- code snippets where practical;
+- ownership of claims.
+
+Do not build a documentation system that hashes arbitrary prose and claims the hash proves correctness.
+
+### 16.5 Prohibited documentation bureaucracy
 
 Do not introduce or maintain:
 
 - digest markers embedded in prose;
-- platform revisions that must change for unrelated edits;
+- global platform revisions for unrelated changes;
 - hand-authored public-fact shards;
 - status closure graphs;
-- capsule manifests for ordinary directories;
-- evidence records for every narrow implementation commit;
-- architecture graphs that duplicate Cargo without generation;
-- agent checkpoints committed as product authority.
+- capsule manifests;
+- evidence records for every implementation commit;
+- architecture graphs manually duplicating Cargo;
+- committed agent checkpoints or scratch plans as product authority;
+- an active archive of superseded plans.
 
-Documentation checks should validate links, generated references, code examples, and a
-small number of explicit invariants. They must not claim to prove arbitrary surrounding
-prose.
+Use Git history.
 
-Execute documentation examples when practical. Keep raw benchmark output and transient
-audits in CI artifacts or `target/`; commit only compact baselines or decisions that serve
-future engineering.
+### 16.6 Decisions
 
-Historical material belongs in Git history. Retain a historical file only when it is
-actively useful and clearly separated from current guidance.
+Write an ADR only when the choice is durable, non-obvious, and expensive to rediscover.
 
-## Performance program
+An ADR includes:
 
-### Representative workloads
+- context;
+- options considered;
+- evidence;
+- decision;
+- consequences;
+- reversal condition;
+- status: proposed, accepted, or superseded.
 
-Maintain a compact suite covering:
+An ADR does not duplicate current status, specification, or implementation inventory.
 
-- programs substantially beyond every former source and IR boundary;
-- deep and wide semantic structures;
-- large declaration, product, enum, pattern, and generic workloads;
-- full and incremental compilation;
-- single-node and small-transaction edits;
-- name, type, effect, ownership, and exhaustiveness analysis;
-- numeric loops and function calls;
-- byte and streaming I/O;
-- aggregate construction, traversal, and cleanup;
-- allocation and region-heavy behavior;
-- warm daemon reuse and multiple applications;
-- at least one service-like workload.
+## 17. Performance discipline
 
-Brainfuck is not a required workload.
+### 17.1 Measure whole outcomes
 
-### Metrics
+Measure:
 
-Measure, as relevant:
+- agent query and transaction latency;
+- request and response bytes;
+- round trips;
+- cold and warm load;
+- from-scratch and incremental analysis;
+- executable lowering;
+- time to first result;
+- steady-state execution;
+- peak resident memory;
+- allocation count and bytes;
+- copies;
+- generated code size;
+- release binary size;
+- cache hit rate and retained memory;
+- failure and cancellation paths.
 
-- cold and warm wall time;
-- incremental p50, p95, and p99 latency;
-- peak and retained memory;
-- allocation count and allocated bytes;
-- copying and serialization bytes;
-- generated code and metadata size;
-- runtime throughput and tail latency;
-- startup and time to useful execution;
-- cache hit rate and invalidation breadth;
-- semantic edit success rate;
-- agent tokens, tool calls, invalid operations, and repair cycles.
+### 17.2 Representative workloads
 
-Keep benchmark configuration and environment visible. Do not discard unfavorable samples
-or move acceptance thresholds after observing results.
+Use a matrix covering:
 
-### Optimization discipline
+- small one-shot programs;
+- many small functions;
+- large functions and CFGs;
+- arithmetic and branches;
+- calls;
+- products, enums, and matching;
+- bytes, strings, lists, and allocation;
+- ownership and cleanup;
+- errors and early exits;
+- host boundaries;
+- generated scale;
+- realistic applications as the language supports them.
 
-Profile before optimizing. Prefer algorithmic and data-layout improvements before unsafe
-micro-optimization.
+Brainfuck is not required.
 
-Use contiguous or cache-conscious representations in hot paths where measurement supports
-them. Avoid forcing every semantic structure into a flat representation when segmentation
-or streaming scales better.
+### 17.3 Experimental method
 
-A regression gate should protect a demonstrated property, not freeze the prototype's
-architecture. Update or remove a benchmark when its workload no longer represents the
-product, while retaining the decision rationale.
+Before measuring:
 
-## Testing and validation
+- state the hypothesis;
+- define the workload;
+- define selection criteria;
+- define reversal conditions.
 
-### Test behavior, not bureaucracy
+During measurement:
 
-Tests should establish semantic behavior, safety properties, scale behavior, failure
-atomicity, and performance-relevant invariants.
+- use release builds;
+- record machine and compiler metadata;
+- use repeated runs;
+- report median and tail behavior;
+- isolate cold and warm cases;
+- avoid comparing paths with different semantics.
 
-When removing a former ceiling, add:
+After measurement:
 
-1. a fast test just beyond the old boundary;
-2. a substantially larger generated case in a scale suite;
-3. an overflow, allocation-failure, quota, or cancellation test where relevant;
-4. a check that low operational policy exhausts while higher or unrestricted local policy
-   accepts the same semantic program.
+- keep the harness;
+- store raw data in `target/` or CI artifacts;
+- commit only compact baselines and decisions;
+- remove losing architecture instead of maintaining permanent comparison parity.
 
-Fixture sizes are not new public limits.
+### 17.4 Regression policy
 
-### Differential testing
+Use noise-aware thresholds. Do not turn one noisy machine result into a hard semantic gate.
 
-Use differential testing when implementations are genuinely independent and the comparison
-has high defect-finding value. Do not keep several production engines solely to preserve a
-differential oracle.
+A performance regression may be accepted when it buys a larger correctness or architectural simplification, but the trade must be explicit and revisited.
 
-Property tests, fuzzing, sanitizers, Miri, model-based tests, and generated programs are
-valuable when they target risky boundaries. Run focused checks during development and the
-broad applicable suite before publication.
+## 18. Failure atomicity and determinism
 
-### Canonical local checks
+### 18.1 Failure atomicity
 
-During the reset, no legacy all-in-one command is automatically canonical. Establish a
-small transparent command set based on the current architecture, normally including:
+The following require staged construction and a single publication point:
+
+- semantic transactions;
+- compilation cache updates;
+- snapshot persistence;
+- package or artifact publication;
+- executable-memory registration;
+- runtime state replacement;
+- database updates;
+- control-store updates.
+
+On validation failure, cancellation, timeout, allocation failure, I/O failure, or backend failure, preserve the prior published state.
+
+### 18.2 Determinism
+
+Given the same semantic snapshot, explicit target, options, and capabilities:
+
+- analysis has stable meaning;
+- diagnostics and diffs have stable order;
+- serialization is deterministic where claimed;
+- parallel scheduling does not alter meaning;
+- cache state does not alter meaning;
+- selected runtime tiers do not alter semantics.
+
+A deadline may determine whether a request completes. It may not change the result of a completed request.
+
+## 19. Security boundaries
+
+Do not weaken genuine boundaries while removing internal ceremony.
+
+Retain or improve:
+
+- path containment;
+- symlink policy;
+- exact import resolution;
+- capability checks;
+- package and artifact validation;
+- process framing and authorization;
+- persisted-data validation;
+- W^X executable memory;
+- relocation checks;
+- generated-entry validation;
+- FFI contracts;
+- SQLite transaction safety;
+- operating-system error handling.
+
+Validate once at entry, then use typed internal data.
+
+## 20. Change protocol
+
+For every substantial task:
+
+1. inspect current instructions, worktree, branch, and recent history;
+2. read active authority documents and relevant code;
+3. identify the highest-priority dependency-closed problem;
+4. classify affected bounds and validation;
+5. state a testable hypothesis;
+6. run focused baseline tests;
+7. implement the simplest direct cutover;
+8. delete the old path and obsolete tests in the same change;
+9. add positive scale, semantic, failure, and boundary tests;
+10. profile when the change is performance-sensitive;
+11. update owning documentation;
+12. run the complete relevant verification;
+13. inspect the diff for duplicated architecture, stale paths, unchecked narrowing, and accidental compatibility;
+14. commit cohesively;
+15. report exact evidence and remaining risk.
+
+Do not spend the whole task planning. Do not start implementation before understanding the dependency chain. Balance both requirements by moving quickly from a bounded audit into a complete vertical.
+
+## 21. Tests
+
+Tests own semantic laws and boundary invariants, not prototype accidents.
+
+Preserve or add tests for:
+
+- type, effect, capability, ownership, and control semantics;
+- path and protocol boundaries;
+- malformed artifacts;
+- executable-memory safety;
+- failure atomicity;
+- cancellation;
+- deterministic diagnostics and diffs;
+- stable identities;
+- stale revisions;
+- direct semantic compilation;
+- positive scale beyond former boundaries;
+- differential execution;
+- selected runtime behavior.
+
+Delete or replace tests that canonize:
+
+- arbitrary counts;
+- old syntax compatibility;
+- old artifact bytes;
+- obsolete engine parity;
+- platform revision rituals;
+- digest-marker ecosystems;
+- repository shape rules.
+
+Generated fixtures are preferred for scale. Keep quick CI and opt-in stress geometry distinct.
+
+## 22. Verification
+
+Use focused commands during development.
+
+Before completion, run:
 
 ```sh
 cargo fmt --all -- --check
@@ -548,109 +1034,87 @@ cargo test --workspace --all-targets --locked
 cargo build --workspace --release --locked
 ```
 
-Add focused runtime, sanitizer, fuzz, documentation-example, and benchmark checks when the
-changed boundary warrants them. If an old `xtask` gate fails only because obsolete
-structure or status machinery was intentionally removed, replace the gate rather than
-repairing the obsolete machinery.
+Run retained Docker verification when available:
 
-Report exactly what ran, what failed, what was unavailable, and what remains untested.
+```sh
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+```
 
-## Working method
+Run additional relevant tools at boundaries:
 
-### Start from reality
+- generated scale suites;
+- differential tests;
+- fuzzing;
+- Miri;
+- ASan, LSan, and TSan;
+- property tests;
+- malformed decoder tests;
+- cancellation and allocation-failure tests;
+- release benchmarks;
+- documentation link and example checks.
 
-At the start of each substantial task:
+Never claim a command passed unless it was run after the final relevant change.
 
-1. Read this file and the user's request.
-2. Inspect `git status`, the current commit, Cargo metadata, active docs, and relevant code.
-3. Search for all definitions, consumers, tests, documentation, and generated artifacts of
-   the concept being changed.
-4. Reproduce the important current behavior or failure.
-5. Establish a focused baseline if performance or scale is involved.
-6. Select one coherent vertical slice and define its deletion and acceptance criteria.
+If a command fails for an environmental reason, report the exact command, output category, and unaffected evidence. Do not silently omit it.
 
-Do not assume handoff prose is current.
+## 23. Definition of done
 
-### Plan enough, then change the system
+A change is done only when:
 
-Use planning to expose dependencies and deletion opportunities. Do not spend an entire run
-building a planning hierarchy while leaving the architecture unchanged.
+- it solves the dependency-closed problem, not one symptom;
+- the old architecture is deleted rather than preserved beside the new;
+- semantic validity is not replaced by another arbitrary quota;
+- every remaining bound has a justified class;
+- user-scale narrowing is checked or redesigned;
+- failure leaves no partial publication;
+- focused positive and negative tests pass;
+- active documentation is truthful;
+- verification has been run;
+- the final report distinguishes implemented, measured, untested, and planned work.
 
-For a large objective, maintain a concise ordered roadmap and implement the highest-value
-coherent slice now. The repository should finish every run in a buildable, understandable
-state even when the overall reset is incomplete.
+For limit-removal work, completion additionally requires positive execution beyond former boundaries.
 
-### Make changes end to end
+For semantic-workspace work, completion additionally requires direct lowering without a text round trip.
 
-A coherent change includes every layer that still legitimately owns the behavior. It does
-not include obsolete layers merely because they once claimed ownership.
+For runtime-selection work, completion additionally requires representative measurements and deletion or demotion of losing product paths.
 
-Remove dead tests, documentation, registries, feature flags, aliases, and generated files in
-the same cut. Avoid commented-out code and permanent migration scaffolding.
+## 24. Prohibited patterns
 
-### Review continuously
+Do not add:
 
-After implementation:
+- “temporary” arbitrary maxima without a deletion in the same change;
+- public compiler profiles listing internal node categories;
+- unchecked integer narrowing;
+- silent truncation;
+- recursive user-depth traversal without stack-safety evidence;
+- count rejection as protection against poor complexity;
+- universal authority hashes inside one trusted process;
+- duplicate producer and verifier models without a real boundary;
+- compatibility layers by default;
+- `v2` architecture trees;
+- feature parity matrices for discarded engines;
+- numbered implementation shards;
+- speculative scheduler infrastructure without profiles;
+- source-spans or names as semantic identity;
+- full-repository agent context when a semantic slice is available;
+- model calls in correctness gates;
+- raw benchmark dumps or agent scratch state as permanent documentation.
 
-- inspect the diff for accidental compatibility paths and duplicated authority;
-- search for old symbols, numbers, statuses, and terminology;
-- compare code and documentation claims;
-- run focused and broad validation;
-- inspect binary size, compile time, or runtime metrics when materially affected;
-- check that the change reduced or at least did not gratuitously increase conceptual
-  complexity.
+## 25. Agent report
 
-### Git discipline
+A substantive final report must state:
 
-Respect concurrent user work. Do not discard unrelated modifications. Do not force-push,
-rewrite public history, or use destructive cleanup without explicit instruction.
+- starting and ending commits;
+- worktree and branch status;
+- architectural result;
+- deleted and merged components;
+- former limits crossed;
+- remaining bounds and their classification;
+- tests and benchmarks run;
+- performance results and environment;
+- documentation authority changes;
+- exact verification results;
+- known risks and untested boundaries;
+- next highest-priority dependency-closed work.
 
-Make coherent commits with descriptive messages. A commit may be large when it performs an
-atomic architectural cutover. Avoid sequences of authority-only commits that exist solely
-to synchronize digest machinery.
-
-Push only when the user's workflow requests it or existing task context clearly authorizes
-it. Report the exact commit and branch state when publication occurs.
-
-## Definition of done
-
-A change is done when all applicable statements are true:
-
-- the intended behavior exists in the active architecture;
-- obsolete paths and compatibility mechanisms are removed;
-- arbitrary count ceilings in scope are gone rather than enlarged;
-- user-controlled traversals are scale-safe;
-- errors are typed and failure-atomic;
-- the production path and any retained reference path agree where required;
-- documentation is concise, current, and does not duplicate machine authority;
-- focused tests cover success, failure, old-boundary regression, and scale;
-- representative performance was measured when architecture or hot paths changed;
-- applicable broad checks pass;
-- untested boundaries and remaining risks are explicit;
-- the next step follows from the active roadmap rather than an obsolete handoff.
-
-## Prohibited patterns
-
-Do not:
-
-- replace one unexplained limit with a larger unexplained limit;
-- make trusted local compilation subject to tiny fixed count profiles;
-- convert maintainability preferences into language validity rules;
-- split code by line count, directory width, or numbered shard policy;
-- add a second canonical source representation;
-- mirror provisional text syntax in the permanent semantic schema;
-- use source spans, names, formatting, or content hashes as the sole identity of mutable
-  entities;
-- silently truncate a graph, query, diagnostic set, output, or artifact;
-- claim a fallback path was not used without testing it;
-- require every feature in every experimental engine;
-- add an optimization-specific language rejection instead of a generic path;
-- duplicate facts across HIR, SSA, bytecode, runtime, and documentation without a trust
-  boundary;
-- maintain digest and status machinery solely to certify itself;
-- add compatibility aliases, editions, decoders, or dual formats without explicit user
-  direction;
-- let a toy workload determine language architecture;
-- start broad product features before the source, compiler, and runtime foundations are
-  coherent;
-- stop at analysis when a safe, high-value implementation slice can be completed.
+Do not report planned architecture as implemented. Do not conceal fallback, skipped validation, or unsupported scale.
