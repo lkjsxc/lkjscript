@@ -3,15 +3,14 @@ use super::*;
 #[test]
 fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {
     let source = "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\ndo/\n;; attached to zero\n-0.0\nstring-literal/\nλ\n\\/str\n/string-literal\n\n/do\n/main\n;; trailing";
-    let first = validate(source, "src/format.lkjscript", &Limits::default()).expect("parse");
+    let first = validate(source, "src/format.lkjscript").expect("parse");
     let formatted = first.format_single_source().expect("one source");
     assert!(formatted.ends_with('\n'));
     assert!(formatted.contains("-0.0\n"));
     assert!(formatted.contains("λ\n\\/str\n"));
     assert!(formatted.contains(";; attached to zero\n-0.0\n"));
     assert!(formatted.ends_with(";; trailing\n"));
-    let reparsed =
-        validate(&formatted, "src/format.lkjscript", &Limits::default()).expect("parse formatted");
+    let reparsed = validate(&formatted, "src/format.lkjscript").expect("parse formatted");
     let reformatted = reparsed.format_single_source().expect("one source");
     assert_eq!(formatted, reformatted);
     assert_eq!(
@@ -49,7 +48,7 @@ fn tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
             .expect("workspace source")
             .to_str()
             .expect("workspace source path must be UTF-8");
-        let tree = validate(&source, logical, &Limits::default())
+        let tree = validate(&source, logical)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         assert!(
             !source.starts_with("edition/\n") && !source.contains("\n/edition\n"),
@@ -63,8 +62,7 @@ fn tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
             "{}",
             path.display()
         );
-        let reparsed = validate(&formatted, logical, &Limits::default())
-            .expect("parse formatted corpus source");
+        let reparsed = validate(&formatted, logical).expect("parse formatted corpus source");
         assert_eq!(
             reparsed.format_single_source().as_deref(),
             Some(formatted.as_str()),

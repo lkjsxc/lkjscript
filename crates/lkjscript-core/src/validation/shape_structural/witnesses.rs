@@ -1,7 +1,6 @@
 fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
     let records = &chunk.memory_witnesses;
     let mut prior = None;
-    let mut edges = 0usize;
     let mut bytes = 0usize;
     let mut representations = HashSet::new();
     for record in records {
@@ -41,10 +40,6 @@ fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
                 "bytecode executable memory witness member identity is noncanonical"));
         }
         validate_witness_route(chunk, record)?;
-        edges = add(edges, record.dependencies.len(), "memory witness dependency work")?;
-        if edges > crate::MAX_MEMORY_WITNESS_DEPENDENCIES {
-            return Err(Error::msg("memory witness dependency limit exceeded"));
-        }
         bytes = add(bytes, witness_metadata_bytes(record)?, "memory witness metadata bytes")?;
     }
     Ok(bytes)
@@ -68,11 +63,23 @@ fn validate_witness_facts(record: &crate::InstalledMemoryWitness) -> Result<()> 
 }
 
 fn witness_metadata_bytes(record: &crate::InstalledMemoryWitness) -> Result<usize> {
-    Ok(160usize
-        .saturating_add(record.dependencies.len().saturating_mul(160))
-        .saturating_add(lkjscript_contracts::canonical_semantic_descriptor(
-            &record.facts.semantic).map_err(|error| Error::msg(error.to_string()))?.len())
-        .saturating_add(record.facts.operations.len()))
+    let dependency_bytes = record
+        .dependencies
+        .len()
+        .checked_mul(160)
+        .ok_or_else(|| Error::host("bytecode memory witness metadata byte size overflow"))?;
+    let descriptor_bytes = lkjscript_contracts::canonical_semantic_descriptor(
+        &record.facts.semantic,
+    )
+    .map_err(|error| Error::msg(error.to_string()))?
+    .len();
+    let bytes = add(160, dependency_bytes, "memory witness metadata byte size")?;
+    let bytes = add(bytes, descriptor_bytes, "memory witness metadata byte size")?;
+    add(
+        bytes,
+        record.facts.operations.len(),
+        "memory witness metadata byte size",
+    )
 }
 
 fn validate_witness_route(chunk: &Chunk, witness: &crate::InstalledMemoryWitness) -> Result<()> {

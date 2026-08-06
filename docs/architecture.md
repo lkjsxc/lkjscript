@@ -17,7 +17,11 @@ a finite accepted depth. Recursive source and HIR ownership is dismantled by cus
 destruction. SSA ownership verification admits wide semantic state without work or retained-cell
 budgets. Single-source worklist states move into block processing; join-capable states share
 copy-on-write ordered fact sets and maps, so unchanged CFG propagation does not copy whole states.
-Join comparison remains exact. Failure cleanup is a deterministic hash-consed arena in SSA and
+Join comparison remains exact. Bytecode validation separates well-formedness from resource policy:
+trusted compiler output and prepared binding select `ValidationPolicy::Unrestricted`, while an
+explicit untrusted artifact boundary may select a limited policy over only the checked total-byte
+observation. There is no finite default or per-table, metadata, cleanup-action, or constant-data
+admission policy. Failure cleanup is a deterministic hash-consed arena in SSA and
 bytecode: each node stores one action and an optional backward-only link, while instruction and
 range metadata store optional loan, unplaced-owner, and place roots. The fixed segmentation
 preserves cleanup order without reconnecting an unchanged owner segment whenever another segment
@@ -60,8 +64,8 @@ a synchronous generated entry or fail explicitly.
 Cargo metadata is the authority for workspace membership and dependency edges. Conceptual
 ownership is:
 
-- `lkjscript-core`: bytecode, values, limits/resource types, validation, and shared runtime
-  contracts;
+- `lkjscript-core`: bytecode, values, execution/resource policy types, validation, and shared
+  runtime contracts;
 - `lkjscript-compiler`: package/source loading, analysis, typed HIR, memory planning, SSA lowering,
   bytecode generation, and the bootstrap Semantic Source service;
 - `lkjscript-ir`: typed SSA model, verification, normalization, and evaluation;
@@ -94,8 +98,10 @@ Validation remains fail-closed where data or authority crosses:
 - relocation, W^X code installation, native entry, FFI, and SQLite/OS calls.
 
 Semantic Source request bytes, response bytes, session frame/cumulative bytes, request count, and
-cancellation are boundary-local host policy. Semantic node, hole, transaction, HIR, and SSA counts
-do not grant language validity.
+cancellation are boundary-local host policy. A caller accepting untrusted bytecode may likewise
+apply one explicit total-artifact-byte policy; malformed-bytecode validation is identical under
+limited and unrestricted modes. Semantic node, hole, transaction, HIR, SSA, bytecode-table,
+metadata, and constant counts do not grant language validity.
 
 Within one synchronous typed compiler pipeline, ordinary Rust ownership and opaque verified
 wrappers should replace repeated governance identities as later slices reach them.

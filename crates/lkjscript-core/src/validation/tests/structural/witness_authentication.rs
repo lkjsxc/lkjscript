@@ -105,7 +105,7 @@ fn witness_chunk() -> Chunk {
 #[test]
 fn bytecode_recomputes_executable_witness_identity() {
     let chunk = witness_chunk();
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("canonical executable witness validates");
 
     let mut changed = chunk.clone();

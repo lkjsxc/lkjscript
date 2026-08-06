@@ -1,14 +1,6 @@
 use crate::{Error, FunctionProto, Result};
 
 pub(super) fn validate(proto: &FunctionProto, category: &str) -> Result<()> {
-    if proto.memory_witness_parameters.len() > crate::MAX_MEMORY_WITNESS_PARAMETERS
-        || proto.call_witnesses.len() > crate::MAX_CALL_WITNESS_SITES
-    {
-        return Err(Error::msg(format!(
-            "bytecode {category} {} memory witness metadata exceeds bounds",
-            proto.name
-        )));
-    }
     let mut prior_parameter = None;
     for requirement in &proto.memory_witness_parameters {
         let used = proto
@@ -36,7 +28,6 @@ pub(super) fn validate(proto: &FunctionProto, category: &str) -> Result<()> {
             .map_err(|_| Error::msg("bytecode call witness offset exceeds host usize"))?;
         if prior_offset.is_some_and(|prior| prior >= site.offset)
             || proto.code.get(offset).copied() != Some(crate::Op::Call as u8)
-            || site.bindings.len() > crate::MAX_MEMORY_WITNESS_PARAMETERS
         {
             return Err(Error::msg(format!(
                 "bytecode {category} {} has noncanonical call witness sites",

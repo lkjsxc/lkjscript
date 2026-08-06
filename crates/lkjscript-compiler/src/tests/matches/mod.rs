@@ -20,12 +20,8 @@ fn bool_arm(value: bool, body: i64) -> String {
 #[test]
 fn bool_match_is_exhaustive_and_lowers_without_match_ssa() {
     let arms = format!("{}\n{}", bool_arm(false, 10), bool_arm(true, 20));
-    let compiled = compile_source(
-        &bool_match("true", &arms),
-        "bool-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile exhaustive Bool match");
+    let compiled = compile_source(&bool_match("true", &arms), "bool-match.lkjscript")
+        .expect("compile exhaustive Bool match");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(20)),
@@ -48,26 +44,18 @@ fn bool_match_is_exhaustive_and_lowers_without_match_ssa() {
 #[test]
 fn rejects_nonexhaustive_and_source_order_useless_arms() {
     let nonexhaustive = bool_match("true", &bool_arm(false, 0));
-    let error = compile_source(
-        &nonexhaustive,
-        "bool-nonexhaustive.lkjscript",
-        &Limits::default(),
-    )
-    .expect_err("missing true arm")
-    .to_string();
+    let error = compile_source(&nonexhaustive, "bool-nonexhaustive.lkjscript")
+        .expect_err("missing true arm")
+        .to_string();
     assert!(
         error.contains("canonical typed witness: bool::true"),
         "{error}"
     );
 
     let arms = format!("arm/\nwildcard/\n/wildcard\n0\n/arm\n{}", bool_arm(true, 1),);
-    let error = compile_source(
-        &bool_match("true", &arms),
-        "bool-useless.lkjscript",
-        &Limits::default(),
-    )
-    .expect_err("wildcard subsumes later arm")
-    .to_string();
+    let error = compile_source(&bool_match("true", &arms), "bool-useless.lkjscript")
+        .expect_err("wildcard subsumes later arm")
+        .to_string();
     assert!(error.contains("useless or subsumed match arm 1"), "{error}");
 }
 
@@ -92,12 +80,8 @@ fn enum_match_source() -> String {
 
 #[test]
 fn enum_variant_binding_has_instantiated_field_type() {
-    let compiled = compile_source(
-        &enum_match_source(),
-        "enum-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile exhaustive enum match");
+    let compiled = compile_source(&enum_match_source(), "enum-match.lkjscript")
+        .expect("compile exhaustive enum match");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(42)),

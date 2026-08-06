@@ -135,7 +135,7 @@ fn random_and_small_byte_chunks_never_panic() {
                 seed ^= seed << 5;
                 chunk.main.code.push(seed.to_le_bytes()[0]);
             }
-            let _result = validate_chunk(chunk, &ValidationLimits::default());
+            let _result = validate_chunk(chunk, ValidationPolicy::Unrestricted);
         }
     }
 }

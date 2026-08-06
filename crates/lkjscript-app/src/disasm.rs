@@ -2,13 +2,13 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use lkjscript_compiler::compile_path;
-use lkjscript_core::{DecodedInstruction, FunctionProto, Limits, Op, ValidatedChunk};
+use lkjscript_core::{DecodedInstruction, FunctionProto, Op, ValidatedChunk};
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let file = request(args)?;
     let source = PathBuf::from(file);
     lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
-    let program = compile_path(&source, &Limits::default()).map_err(|error| error.to_string())?;
+    let program = compile_path(&source).map_err(|error| error.to_string())?;
     disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)
 }
@@ -136,7 +136,7 @@ fn operand_annotation(
 mod tests {
     use lkjscript_core::{
         validate_chunk, Chunk, DecodedOperand, Op, ProductFieldRef, ProductId, ProductMetadata,
-        ValidationLimits,
+        ValidationPolicy,
     };
 
     use super::{operand_annotation, product_field, request};
@@ -176,7 +176,7 @@ mod tests {
         chunk.main.emit_op_u16(Op::MakeProduct, 0);
         chunk.main.emit_op_u16(Op::LoadProductField, 0);
         chunk.main.emit(Op::Return);
-        let chunk = validate_chunk(chunk, &ValidationLimits::default())
+        let chunk = validate_chunk(chunk, ValidationPolicy::Unrestricted)
             .expect("product disassembly chunk validates");
         assert_eq!(
             operand_annotation(&chunk, Op::MakeProduct, DecodedOperand::U16(0)),

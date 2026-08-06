@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use lkjscript_core::{Limits, Result};
+use lkjscript_core::Result;
 
 use crate::source::{
     load as loader, parse, validate as authority, SourceBytePolicy, SourceDiagnostic, SourceOrigin,
@@ -17,20 +17,15 @@ pub(crate) struct LoadMetrics {
 }
 
 /// Validate one canonical relative in-memory source unit.
-pub fn validate(
-    source: &str,
-    logical_path: &str,
-    limits: &Limits,
-) -> SourceResult<ValidatedSourceTree> {
+pub fn validate(source: &str, logical_path: &str) -> SourceResult<ValidatedSourceTree> {
     let origin = authority::validate_logical_source_path(logical_path)?;
-    validate_one_source(source, PathBuf::from(logical_path), origin, limits)
+    validate_one_source(source, PathBuf::from(logical_path), origin)
 }
 
 fn validate_one_source(
     source: &str,
     path: PathBuf,
     origin: SourceOrigin,
-    limits: &Limits,
 ) -> SourceResult<ValidatedSourceTree> {
     let source_len = u64::try_from(source.len()).map_err(|_| {
         SourceDiagnostic::host(
@@ -39,7 +34,7 @@ fn validate_one_source(
         )
     })?;
     SourceBytePolicy::Unrestricted.check_total(&origin, source_len)?;
-    let parsed = parse::parse_file(source, origin.clone(), path.clone(), limits)?;
+    let parsed = parse::parse_file(source, origin.clone(), path.clone())?;
     authority::finish_tree(path, origin, vec![parsed])
 }
 
@@ -47,35 +42,30 @@ fn validate_one_source(
 ///
 /// Files are returned in deterministic dependency-first DFS order; imports in
 /// each file are visited in source order. Loading uses an explicit stack.
-pub fn load(path: &Path, limits: &Limits) -> SourceResult<ValidatedSourceTree> {
-    loader::load_with_metrics(path, limits).map(|(tree, _)| tree)
+pub fn load(path: &Path) -> SourceResult<ValidatedSourceTree> {
+    loader::load_with_metrics(path).map(|(tree, _)| tree)
 }
 
-pub(crate) fn load_with_metrics(
-    path: &Path,
-    limits: &Limits,
-) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
-    loader::load_with_metrics(path, limits)
+pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
+    loader::load_with_metrics(path)
 }
 
 pub(crate) fn load_for_protocol(
     path: &Path,
-    limits: &Limits,
     byte_policy: SourceBytePolicy,
 ) -> SourceResult<ValidatedSourceTree> {
-    loader::load_with_byte_policy(path, limits, byte_policy).map(|(tree, _)| tree)
+    loader::load_with_byte_policy(path, byte_policy).map(|(tree, _)| tree)
 }
 
 pub(crate) fn validate_for_compiler(
     source: &str,
     logical_path: &str,
-    limits: &Limits,
 ) -> Result<ValidatedSourceTree> {
-    validate(source, logical_path, limits).map_err(SourceDiagnostic::into_core)
+    validate(source, logical_path).map_err(SourceDiagnostic::into_core)
 }
 
-pub(crate) fn load_for_compiler(path: &Path, limits: &Limits) -> Result<ValidatedSourceTree> {
-    load(path, limits).map_err(SourceDiagnostic::into_core)
+pub(crate) fn load_for_compiler(path: &Path) -> Result<ValidatedSourceTree> {
+    load(path).map_err(SourceDiagnostic::into_core)
 }
 
 pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
@@ -86,7 +76,6 @@ pub(crate) fn rebuild_staged_sources(
     sources: &[(PathBuf, SourceOrigin, String)],
     root: PathBuf,
     root_origin: SourceOrigin,
-    limits: &Limits,
     byte_policy: SourceBytePolicy,
 ) -> SourceResult<ValidatedSourceTree> {
     let mut aggregate_source_bytes = 0_u64;
@@ -109,12 +98,7 @@ pub(crate) fn rebuild_staged_sources(
         )
     })?;
     for (path, origin, source) in sources {
-        parsed.push(parse::parse_file(
-            source,
-            origin.clone(),
-            path.clone(),
-            limits,
-        )?);
+        parsed.push(parse::parse_file(source, origin.clone(), path.clone())?);
     }
     authority::finish_tree(root, root_origin, parsed)
 }
@@ -123,13 +107,12 @@ pub(crate) fn rebuild_staged_sources(
 pub(crate) fn validate_source_set_for_analysis(
     files: &[(&str, &str)],
     root: &str,
-    limits: &Limits,
 ) -> Result<ValidatedSourceTree> {
     let mut parsed = Vec::with_capacity(files.len());
     for (path, source) in files {
         let origin = SourceOrigin::in_memory(path);
         parsed.push(
-            parse::parse_file(source, origin, PathBuf::from(path), limits)
+            parse::parse_file(source, origin, PathBuf::from(path))
                 .map_err(SourceDiagnostic::into_core)?,
         );
     }

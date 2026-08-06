@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn exact_utf8_byte_line_column_spans_are_retained() {
     let source = unit_main("string-literal/\néλ\n/string-literal");
-    let tree = validate(&source, "src/utf8.lkjscript", &Limits::default()).expect("validate");
+    let tree = validate(&source, "src/utf8.lkjscript").expect("validate");
     let string = tree
         .nodes()
         .iter()
@@ -29,8 +29,8 @@ fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
             format!("{}/\n/{}", removed.old, removed.old)
         };
         let source = unit_main(&expression);
-        let error = validate(&source, "removed.lkjscript", &Limits::default())
-            .expect_err("removed spelling must be rejected");
+        let error =
+            validate(&source, "removed.lkjscript").expect_err("removed spelling must be rejected");
         let message = error.to_string();
         assert!(message.contains(removed.old), "{}: {message}", removed.old);
         assert!(
@@ -43,8 +43,7 @@ fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
 
 #[test]
 fn marker_diagnostics_have_stable_schema_spans_and_renderings() {
-    let mismatched =
-        validate("main/\n/wrong\n", "bad.lkjscript", &Limits::default()).expect_err("mismatch");
+    let mismatched = validate("main/\n/wrong\n", "bad.lkjscript").expect_err("mismatch");
     assert_eq!(mismatched.schema(), lkjscript_contracts::DIAGNOSTICS);
     assert_eq!(
         mismatched.contract(),
@@ -64,13 +63,11 @@ fn marker_diagnostics_have_stable_schema_spans_and_renderings() {
     assert!(compact.contains("related[0].origin=bad.lkjscript"));
     assert_eq!(compact, mismatched.render_compact_agent());
 
-    let unexpected =
-        validate("/main\n", "bad.lkjscript", &Limits::default()).expect_err("unexpected close");
+    let unexpected = validate("/main\n", "bad.lkjscript").expect_err("unexpected close");
     assert_eq!(unexpected.code(), "LKJ-SRC-UNMATCHED-MARKER");
     assert_eq!(unexpected.primary_span().byte_range(), 0..5);
 
-    let unclosed =
-        validate("main/\n", "bad.lkjscript", &Limits::default()).expect_err("unclosed open");
+    let unclosed = validate("main/\n", "bad.lkjscript").expect_err("unclosed open");
     assert_eq!(unclosed.code(), "LKJ-SRC-UNMATCHED-MARKER");
     assert_eq!(unclosed.primary_span().start().line(), 1);
 }
@@ -84,7 +81,7 @@ fn lexical_and_numeric_malformed_boundaries_are_rejected() {
         "main/\n/main\n",
         "def/\nname/\nx\n/name\nfn/\n/fn\n/def\n",
     ] {
-        assert!(validate(source, "bad.lkjscript", &Limits::default()).is_err());
+        assert!(validate(source, "bad.lkjscript").is_err());
     }
     for spelling in [
         "+1", "1e3", "1.", ".", "-.", "+.", ".5", "-.5", "+.5", "--1", "+-1", "1_000", "0x10",
@@ -92,28 +89,13 @@ fn lexical_and_numeric_malformed_boundaries_are_rejected() {
     ] {
         let source = unit_main(spelling);
         assert!(
-            validate(&source, "numeric.lkjscript", &Limits::default()).is_err(),
+            validate(&source, "numeric.lkjscript").is_err(),
             "accepted {spelling}"
         );
     }
-    assert!(validate(
-        &unit_main("-9223372036854775808"),
-        "min.lkjscript",
-        &Limits::default()
-    )
-    .is_ok());
-    assert!(validate(
-        &unit_main("9223372036854775807"),
-        "max.lkjscript",
-        &Limits::default()
-    )
-    .is_ok());
-    assert!(validate(
-        &unit_main("9223372036854775808"),
-        "overflow.lkjscript",
-        &Limits::default()
-    )
-    .is_err());
+    assert!(validate(&unit_main("-9223372036854775808"), "min.lkjscript").is_ok());
+    assert!(validate(&unit_main("9223372036854775807"), "max.lkjscript").is_ok());
+    assert!(validate(&unit_main("9223372036854775808"), "overflow.lkjscript").is_err());
 }
 
 #[test]
@@ -124,8 +106,7 @@ fn duplicate_same_unit_global_declarations_are_structured_errors() {
         named_def("same"),
         unit_main("unit")
     );
-    let error = validate(&source, "src/duplicate.lkjscript", &Limits::default())
-        .expect_err("duplicate key");
+    let error = validate(&source, "src/duplicate.lkjscript").expect_err("duplicate key");
     assert_eq!(error.code(), "LKJ-DECL-DUPLICATE");
     assert_eq!(error.related_spans().len(), 1);
     assert!(error
@@ -148,7 +129,7 @@ fn equal_names_in_distinct_modules_are_valid_source_identities() {
     )
     .expect("write root");
 
-    let tree = load(&root, &Limits::default()).expect("module-local names");
+    let tree = load(&root).expect("module-local names");
     let same = tree
         .declarations()
         .iter()

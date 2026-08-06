@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::{ExecutionConfig, Limits};
+use lkjscript_core::{ExecutionConfig};
 use lkjscript_ir::{evaluate, EvalConfig, InstructionKind};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -114,7 +114,7 @@ fn native_transport_specialization_fails_closed_for_residual_body() {
 fn cross_package_transport_witness_executes_in_all_four_tiers() {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../src/examples/polymorphic-transport/main.lkjscript");
-    let program = lkjscript_compiler::compile_path(&entry, &Limits::default())
+    let program = lkjscript_compiler::compile_path(&entry)
         .expect("compile locked cross-package generic consumer");
     assert_eq!(program.ssa().program().sources.len(), 2);
     let call = program

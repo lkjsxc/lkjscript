@@ -54,8 +54,7 @@ fn publication_failure_restores_every_original_byte() {
         bytes: file.bytes,
         sha256: file.sha256.clone(),
     };
-    let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
-        .expect("load publication tree");
+    let tree = crate::source::load(&root).expect("load publication tree");
     let mut staged = crate::semantic::transaction::stage(
         &tree,
         &[operation],
@@ -108,8 +107,7 @@ fn publication_rejects_changed_ancestor_without_touching_alias() {
         bytes: file.bytes,
         sha256: file.sha256.clone(),
     };
-    let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
-        .expect("load publication tree");
+    let tree = crate::source::load(&root).expect("load publication tree");
     let staged = crate::semantic::transaction::stage(
         &tree,
         &[operation],
@@ -168,8 +166,7 @@ fn prepared_journal_is_rolled_back_before_the_next_read() {
             sha256: file.sha256.clone(),
         })
         .collect();
-    let tree =
-        crate::source::load(&root, &lkjscript_core::Limits::default()).expect("load recovery tree");
+    let tree = crate::source::load(&root).expect("load recovery tree");
     let staged = crate::semantic::transaction::stage(
         &tree,
         &[operation],

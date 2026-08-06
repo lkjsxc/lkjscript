@@ -1,17 +1,13 @@
 #![allow(clippy::panic, clippy::unwrap_used)]
 
-use lkjscript_core::{Constant, Limits};
+use lkjscript_core::Constant;
 
 fn canonical_source(source: &str) -> String {
     source.to_string()
 }
 
-fn compile_source(
-    source: &str,
-    path: &str,
-    limits: &Limits,
-) -> lkjscript_core::Result<crate::ExecutableProgram> {
-    super::compile_source(&canonical_source(source), path, limits)
+fn compile_source(source: &str, path: &str) -> lkjscript_core::Result<crate::ExecutableProgram> {
+    super::compile_source(&canonical_source(source), path)
 }
 
 fn unit_main(body: &str) -> String {

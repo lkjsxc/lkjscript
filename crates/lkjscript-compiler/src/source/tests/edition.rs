@@ -5,8 +5,7 @@ const REMOVED_MARKER: &str = "edition/\n2\n/edition\n";
 #[test]
 fn canonical_source_is_marker_free_and_roundtrips() {
     let source = format!("\n;; canonical source\n{}", unit_main("unit"));
-    let tree =
-        validate(&source, "src/main.lkjscript", &Limits::default()).expect("canonical source");
+    let tree = validate(&source, "src/main.lkjscript").expect("canonical source");
     assert_eq!(
         tree.format_single_source().as_deref(),
         Some(source.as_str())
@@ -15,15 +14,13 @@ fn canonical_source_is_marker_free_and_roundtrips() {
         .nodes()
         .iter()
         .all(|node| node.kind() != NodeKind::Call || node.label() != Some("edition")));
-    crate::compile_source(&source, "src/main.lkjscript", &Limits::default())
-        .expect("canonical source compiles");
+    crate::compile_source(&source, "src/main.lkjscript").expect("canonical source compiles");
 }
 
 #[test]
 fn removed_edition_form_is_rejected_not_selected() {
     let source = format!("{REMOVED_MARKER}{}", unit_main("unit"));
-    let error = validate(&source, "src/main.lkjscript", &Limits::default())
-        .expect_err("removed edition form");
+    let error = validate(&source, "src/main.lkjscript").expect_err("removed edition form");
     assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
     assert!(!error.message().contains("select"));
 }
@@ -31,14 +28,10 @@ fn removed_edition_form_is_rejected_not_selected() {
 #[test]
 fn source_identity_changes_with_exact_bytes_and_logical_path() {
     let source = unit_main("unit");
-    let first = validate(&source, "src/main.lkjscript", &Limits::default()).expect("first");
-    let changed = validate(
-        &format!(";; comment\n{source}"),
-        "src/main.lkjscript",
-        &Limits::default(),
-    )
-    .expect("changed bytes");
-    let moved = validate(&source, "src/moved.lkjscript", &Limits::default()).expect("moved");
+    let first = validate(&source, "src/main.lkjscript").expect("first");
+    let changed =
+        validate(&format!(";; comment\n{source}"), "src/main.lkjscript").expect("changed bytes");
+    let moved = validate(&source, "src/moved.lkjscript").expect("moved");
     assert_ne!(first.revision(), changed.revision());
     assert_ne!(first.identity(), moved.identity());
     assert!(first.declarations()[0]
@@ -54,8 +47,7 @@ fn source_identity_changes_with_exact_bytes_and_logical_path() {
 fn exact_enum_declaration_shape_roundtrips_without_aliases() {
     let declaration = "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\nonly\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n";
     let source = format!("{declaration}{}", unit_main("unit"));
-    let tree = validate(&source, "src/main.lkjscript", &Limits::default())
-        .expect("exact enum declaration");
+    let tree = validate(&source, "src/main.lkjscript").expect("exact enum declaration");
     assert_eq!(
         tree.format_single_source().as_deref(),
         Some(source.as_str())
@@ -73,7 +65,7 @@ fn exact_enum_declaration_shape_roundtrips_without_aliases() {
         "enum/\nname/\nchoice\n/name\nvariants/\n/variants\n/enum\n",
         "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\nonly\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/field\n/fields\n/variant\n/variants\n/enum\n",
     ] {
-        let error = validate(malformed, "src/main.lkjscript", &Limits::default())
+        let error = validate(malformed, "src/main.lkjscript")
             .expect_err("empty variants and field aliases reject");
         assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
     }
@@ -92,7 +84,7 @@ fn canonical_import_closure_loads_without_language_selection() -> std::io::Resul
             unit_main("unit")
         ),
     )?;
-    let tree = load(&root, &Limits::default()).expect("canonical closure");
+    let tree = load(&root).expect("canonical closure");
     assert_eq!(tree.source_origins().len(), 2);
     Ok(())
 }

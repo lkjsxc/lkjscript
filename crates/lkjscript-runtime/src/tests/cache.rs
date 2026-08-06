@@ -150,13 +150,11 @@ fn capability_chunk(
         chunk.main.emit(Op::Unit);
     }
     chunk.main.emit(Op::Return);
-    let validated = validate_chunk(chunk, &ValidationLimits::default())?;
+    let validated = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let prepared = lkjscript_contracts::PreparedProgramIdentity::new(
         [(capability as u8).saturating_add(1); 32],
     )?;
     Ok(Arc::new(lkjscript_core::bind_prepared_identity(
-        validated,
-        prepared,
-        &ValidationLimits::default(),
+        validated, prepared,
     )?))
 }

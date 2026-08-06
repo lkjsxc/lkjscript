@@ -8,12 +8,12 @@ mod malformed;
 mod support;
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, OwnedValue};
+use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, OwnedValue};
 use lkjscript_vm::run_chunk;
 
 fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
     let source = format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n");
-    let program = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
+    let program = compile_source(&source, "numeric-contract.lkjscript")?;
     match run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),

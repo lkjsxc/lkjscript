@@ -1,5 +1,3 @@
-use lkjscript_core::ValidationLimits;
-
 use crate::source::{SourceOrigin, SourceResult, SourceSpan, Token, TokenKind};
 
 use super::lines::Line;
@@ -9,11 +7,7 @@ pub(super) struct Lexed {
     pub(super) trailing_trivia: Vec<String>,
 }
 
-pub(super) fn lex(
-    lines: &[Line<'_>],
-    origin: &SourceOrigin,
-    validation_limits: &ValidationLimits,
-) -> SourceResult<Lexed> {
+pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lexed> {
     let mut output = Vec::new();
     output.try_reserve(lines.len()).map_err(|_| {
         super::limits::allocation_error(origin, SourceSpan::zero(), "source token storage")
@@ -36,7 +30,7 @@ pub(super) fn lex(
                 std::mem::take(&mut pending_trivia),
             )?;
             if name == "bytes-literal" {
-                decode_bytes_literal(&mut text_tokens, origin, validation_limits)?;
+                decode_bytes_literal(&mut text_tokens, origin)?;
             }
             output.try_reserve(text_tokens.len()).map_err(|_| {
                 super::limits::allocation_error(
@@ -92,11 +86,7 @@ fn text_open_name(line: &str) -> Option<&'static str> {
     }
 }
 
-fn decode_bytes_literal(
-    tokens: &mut [Token],
-    origin: &SourceOrigin,
-    validation_limits: &ValidationLimits,
-) -> SourceResult<()> {
+fn decode_bytes_literal(tokens: &mut [Token], origin: &SourceOrigin) -> SourceResult<()> {
     let Some(Token {
         kind: TokenKind::Str(payload),
         span,
@@ -134,14 +124,10 @@ fn decode_bytes_literal(
         ));
     }
     let decoded_len = payload.len() / 2;
-    if decoded_len > validation_limits.max_constant_data_bytes {
-        return Err(super::limits::resource_error(
-            origin,
-            *span,
-            "bytes-literal decoded payload exceeds the constant-data byte limit",
-        ));
-    }
-    let mut bytes = Vec::with_capacity(decoded_len);
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(decoded_len).map_err(|_| {
+        super::limits::allocation_error(origin, *span, "decoded bytes-literal payload")
+    })?;
     for pair in payload.as_bytes().chunks_exact(2) {
         bytes.push((hex(pair[0]) << 4) | hex(pair[1]));
     }

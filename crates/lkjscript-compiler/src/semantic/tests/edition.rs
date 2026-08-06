@@ -1,13 +1,11 @@
 use crate::semantic::schema::{SemanticDeclarationKind, SemanticNodeKind};
 use crate::source::validate;
-use lkjscript_core::Limits;
 
 #[test]
 fn canonical_snapshot_has_no_language_generation_fields() {
     let source =
         ";; leading\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
-    let tree =
-        validate(source, "src/main.lkjscript", &Limits::default()).expect("canonical source");
+    let tree = validate(source, "src/main.lkjscript").expect("canonical source");
     let units = crate::semantic::tree::source_units(&tree);
     assert_eq!(units.len(), 1);
     assert_eq!(
@@ -34,7 +32,7 @@ fn generic_enum_nodes_identities_and_subtree_roundtrip_are_closed() {
         "/variant-field\n/fields\n/variant\n/variants\n/enum\n",
         "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
     );
-    let tree = validate(source, "src/main.lkjscript", &Limits::default()).expect("enum tree");
+    let tree = validate(source, "src/main.lkjscript").expect("enum tree");
     let declaration = tree
         .declarations()
         .iter()
@@ -73,8 +71,7 @@ fn generic_enum_nodes_identities_and_subtree_roundtrip_are_closed() {
     let complete = format!(
         "{enum_source}main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n"
     );
-    validate(&complete, "src/main.lkjscript", &Limits::default())
-        .expect("roundtripped enum validates");
+    validate(&complete, "src/main.lkjscript").expect("roundtripped enum validates");
 }
 
 #[test]

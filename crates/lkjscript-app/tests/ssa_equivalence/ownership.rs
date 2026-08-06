@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome};
 use lkjscript_vm::run_chunk;
 
@@ -19,7 +19,7 @@ fn byte_vector_borrows_moves_and_mutation_match_evaluator_and_vm() {
     );
 
     let marked = source.to_string();
-    let program = compile_source(&marked, "byte-vector-limits.lkjscript", &Limits::default())
+    let program = compile_source(&marked, "byte-vector-limits.lkjscript")
         .expect("compile byte-vector limits fixture");
     let eval_limits = EvalConfig {
         max_allocations: 0,

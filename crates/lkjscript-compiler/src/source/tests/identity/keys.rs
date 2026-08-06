@@ -9,8 +9,8 @@ fn declaration_keys_ignore_order_offsets_and_nonsemantic_trivia() {
         named_def("a"),
         unit_main("unit")
     );
-    let first = validate(&first, "src/keys.lkjscript", &Limits::default()).expect("first");
-    let second = validate(&second, "src/keys.lkjscript", &Limits::default()).expect("second");
+    let first = validate(&first, "src/keys.lkjscript").expect("first");
+    let second = validate(&second, "src/keys.lkjscript").expect("second");
     for name in ["a", "b", "$main"] {
         let left = first
             .declarations()
@@ -29,14 +29,8 @@ fn declaration_keys_ignore_order_offsets_and_nonsemantic_trivia() {
 
 #[test]
 fn exact_source_spelling_and_line_endings_change_revisions_and_reject_stale_nodes() {
-    let numeric_one =
-        validate(&unit_main("1.0"), "src/alias.lkjscript", &Limits::default()).expect("1.0");
-    let numeric_two = validate(
-        &unit_main("1.00"),
-        "src/alias.lkjscript",
-        &Limits::default(),
-    )
-    .expect("1.00");
+    let numeric_one = validate(&unit_main("1.0"), "src/alias.lkjscript").expect("1.0");
+    let numeric_two = validate(&unit_main("1.00"), "src/alias.lkjscript").expect("1.00");
     assert_ne!(numeric_one.revision(), numeric_two.revision());
     assert_eq!(
         numeric_one.format_single_source(),
@@ -50,8 +44,8 @@ fn exact_source_spelling_and_line_endings_change_revisions_and_reject_stale_node
 
     let lf = unit_main("unit");
     let crlf = lf.replace('\n', "\r\n");
-    let lf = validate(&lf, "src/endings.lkjscript", &Limits::default()).expect("LF");
-    let crlf = validate(&crlf, "src/endings.lkjscript", &Limits::default()).expect("CRLF");
+    let lf = validate(&lf, "src/endings.lkjscript").expect("LF");
+    let crlf = validate(&crlf, "src/endings.lkjscript").expect("CRLF");
     assert_ne!(lf.revision(), crlf.revision());
     assert_eq!(lf.format_single_source(), crlf.format_single_source());
     assert!(crlf.node(lf.nodes()[0].id()).is_err());
@@ -100,17 +94,13 @@ fn declaration_names_must_be_spellable_source_identifiers_before_keying() {
         "trait/\nname/\nuncallable;name\n/name\n/trait\n".into(),
     ];
     for source in sources {
-        let error = validate(&source, "src/name.lkjscript", &Limits::default())
-            .expect_err("uncallable declaration name");
+        let error =
+            validate(&source, "src/name.lkjscript").expect_err("uncallable declaration name");
         assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
     }
 
-    let callable = validate(
-        &named_def("callable-name"),
-        "src/name.lkjscript",
-        &Limits::default(),
-    )
-    .expect("spellable equals name");
+    let callable =
+        validate(&named_def("callable-name"), "src/name.lkjscript").expect("spellable equals name");
     assert_eq!(callable.declarations()[0].name(), "callable-name");
 }
 
@@ -121,14 +111,12 @@ fn distinct_source_units_cannot_share_one_logical_origin() {
         &named_def("first"),
         origin.clone(),
         PathBuf::from("host-a.lkjscript"),
-        &Limits::default(),
     )
     .expect("first source");
     let second = parser::parse_file(
         &named_def("second"),
         origin.clone(),
         PathBuf::from("host-b.lkjscript"),
-        &Limits::default(),
     )
     .expect("second source");
     let error = finish_tree(

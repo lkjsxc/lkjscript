@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 #[test]
@@ -17,12 +17,8 @@ fn conditional_resource_close_executes_exactly_once_in_vm() {
     std::fs::write(&path, b"resource").expect("create resource fixture");
     for flag in ["false", "true"] {
         let source = resource_source(&path, flag);
-        let program = compile_source(
-            &source,
-            "conditional-resource-cleanup.lkjscript",
-            &Limits::default(),
-        )
-        .expect("compile conditional resource cleanup");
+        let program = compile_source(&source, "conditional-resource-cleanup.lkjscript")
+            .expect("compile conditional resource cleanup");
         assert!(program.memory_plan().obligations.iter().any(|obligation| {
             obligation.drop_class
                 == Some(lkjscript_compiler::memory_plan::MemoryDropClass::Conditional)

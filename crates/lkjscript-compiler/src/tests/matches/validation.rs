@@ -5,7 +5,6 @@ fn forged_prelude_layout_identity_is_rejected_by_ssa_verification() {
     let compiled = compile_source(
         "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
         "forged-prelude.lkjscript",
-        &Limits::default(),
     )
     .expect("compile prelude-bearing program");
     let mut forged = compiled.ssa().program().clone();
@@ -28,12 +27,8 @@ fn i64_requires_and_uses_a_remainder_pattern() {
         "arm/\ni64-pattern/\n7\n/i64-pattern\n1\n/arm\n",
         "arm/\nbinding/\nname/\nother\n/name\n/binding\nother\n/arm",
     );
-    let compiled = compile_source(
-        &bool_match("9", arms),
-        "i64-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("I64 binding is the remainder");
+    let compiled = compile_source(&bool_match("9", arms), "i64-match.lkjscript")
+        .expect("I64 binding is the remainder");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(9)),

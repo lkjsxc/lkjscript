@@ -82,7 +82,7 @@ fn enum_chunk() -> Chunk {
 
 #[test]
 fn canonical_prelude_identity_accepts_only_its_exact_metadata() {
-    assert!(validate_chunk(prelude_option_chunk(), &ValidationLimits::default()).is_ok());
+    assert!(validate_chunk(prelude_option_chunk(), ValidationPolicy::Unrestricted).is_ok());
     let mut forged = prelude_option_chunk();
     forged.enums[0].layout = RuntimeLayoutId::new([9; 32]);
     assert!(error(forged).contains("invalid identity/name/layout"));

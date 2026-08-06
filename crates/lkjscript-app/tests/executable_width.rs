@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, Op, ResourceLimitKind};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Op, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, FailureCode, JitConfig, JitSession};
 use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
@@ -232,7 +232,6 @@ fn compile_wide() -> lkjscript_compiler::ExecutableProgram {
     compile_source(
         &wide_scalar_source(WIDE_COUNT),
         "generated-wide-executable.lkjscript",
-        &Limits::default(),
     )
     .expect("compile generated wide executable through HIR, memory plan, SSA, and bytecode")
 }
@@ -292,12 +291,8 @@ fn three_hundred_parameters_arguments_and_live_lexical_locals_execute_in_vm() {
 #[test]
 fn one_thousand_parameters_arguments_and_live_locals_execute_in_vm() {
     let source = wide_scalar_source(STRESS_COUNT);
-    let program = compile_source(
-        &source,
-        "wide-executable-stress.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile stress-width scalar source");
+    let program = compile_source(&source, "wide-executable-stress.lkjscript")
+        .expect("compile stress-width scalar source");
     let function = &program.bytecode().protos()[0];
     assert_eq!(function.arity, STRESS_COUNT);
     assert!(function.locals > usize::from(u8::MAX));
@@ -326,7 +321,6 @@ fn owned_parameter_above_byte_width_executes_and_cleans_up() {
     let program = compile_source(
         &wide_owned_parameter_source(WIDE_COUNT),
         "generated-wide-owned-parameter.lkjscript",
-        &Limits::default(),
     )
     .expect("compile wide owned parameter through the production pipeline");
     let function = program
@@ -356,12 +350,8 @@ fn owned_parameter_above_byte_width_executes_and_cleans_up() {
 
 fn assert_many_owned_arguments(count: usize) {
     let source = many_owned_arguments_source(count);
-    let program = compile_source(
-        &source,
-        "generated-many-owned-arguments.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile owned arguments through HIR, memory plan, SSA, and publication");
+    let program = compile_source(&source, "generated-many-owned-arguments.lkjscript")
+        .expect("compile owned arguments through HIR, memory plan, SSA, and publication");
     let function = program
         .bytecode()
         .protos()
@@ -501,7 +491,6 @@ fn generated_wide_jump_executes_both_source_branch_paths() {
     let program = compile_source(
         &wide_branch_source(BODY_UPDATES),
         "generated-wide-jump.lkjscript",
-        &Limits::default(),
     )
     .expect("compile and prepare a source branch beyond the former jump boundary");
     let function = program

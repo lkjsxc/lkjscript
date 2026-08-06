@@ -21,9 +21,7 @@ fn loader_rejects_symlink_import_escape() -> std::io::Result<()> {
             unit_main("unit")
         ),
     )?;
-    let error = load(&entry, &Limits::default())
-        .expect_err("symlink escape")
-        .to_string();
+    let error = load(&entry).expect_err("symlink escape").to_string();
     assert!(error.contains("escapes package roots"));
     Ok(())
 }
@@ -39,7 +37,7 @@ fn loader_rejects_fifo_as_non_regular_without_blocking() -> std::io::Result<()> 
     if !status.success() {
         return Err(std::io::Error::other("mkfifo failed"));
     }
-    let error = load(&fifo, &Limits::default()).expect_err("FIFO source must fail");
+    let error = load(&fifo).expect_err("FIFO source must fail");
     assert!(error.message().contains("not a regular file"));
     Ok(())
 }

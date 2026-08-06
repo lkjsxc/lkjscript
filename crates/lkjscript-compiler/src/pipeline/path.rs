@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use lkjscript_core::{validate_chunk, Limits, Result};
+use lkjscript_core::{validate_chunk, Result, ValidationPolicy};
 
 use crate::analyze::{analyze_program, analyze_program_without_effects};
 use crate::codegen::compile_program;
@@ -11,19 +11,16 @@ use crate::{CompileMetrics, ExecutableProgram};
 
 use super::common::{checked_memory_inventory, compile_analyzed};
 
-pub fn compile_path(path: &Path, limits: &Limits) -> Result<ExecutableProgram> {
-    compile_path_with_sources(path, limits).map(|(program, _)| program)
+pub fn compile_path(path: &Path) -> Result<ExecutableProgram> {
+    compile_path_with_sources(path).map(|(program, _)| program)
 }
 
-pub fn compile_path_with_metrics(
-    path: &Path,
-    limits: &Limits,
-) -> Result<(ExecutableProgram, CompileMetrics)> {
+pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, CompileMetrics)> {
     let total_started = Instant::now();
     crate::ensure_source_path(path)?;
     let package = crate::package::verify_for_compilation(path)?;
     let (program, loading) =
-        load_with_metrics(path, limits).map_err(crate::source::SourceDiagnostic::into_core)?;
+        load_with_metrics(path).map_err(crate::source::SourceDiagnostic::into_core)?;
     if let Some(root) = &package {
         crate::package::verify_loaded_sources(root, path, &program)?;
     }
@@ -50,7 +47,7 @@ pub fn compile_path_with_metrics(
     let (chunk, bytecode_links) = compile_program(&ssa)?;
     let bytecode_lowering = bytecode_started.elapsed();
     let validation_started = Instant::now();
-    let bytecode = validate_chunk(chunk, &limits.validation)?;
+    let bytecode = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let bytecode_validation = validation_started.elapsed();
     let provenance = match package {
         Some(root) => crate::package::program::locked(crate::package::prepared_facts(
@@ -65,7 +62,7 @@ pub fn compile_path_with_metrics(
         ),
     };
     let (prepared, ssa, bytecode) =
-        crate::package::program::bind(ssa, bytecode, &memory_plan, provenance, &limits.validation)?;
+        crate::package::program::bind(ssa, bytecode, &memory_plan, provenance)?;
     let executable = ExecutableProgram {
         prepared,
         bytecode,
@@ -92,13 +89,10 @@ pub fn compile_path_with_metrics(
     ))
 }
 
-pub fn compile_path_with_sources(
-    path: &Path,
-    limits: &Limits,
-) -> Result<(ExecutableProgram, Vec<PathBuf>)> {
+pub fn compile_path_with_sources(path: &Path) -> Result<(ExecutableProgram, Vec<PathBuf>)> {
     crate::ensure_source_path(path)?;
     let package = crate::package::verify_for_compilation(path)?;
-    let program = load_for_compiler(path, limits)?;
+    let program = load_for_compiler(path)?;
     if let Some(root) = &package {
         crate::package::verify_loaded_sources(root, path, &program)?;
     }
@@ -116,7 +110,7 @@ pub fn compile_path_with_sources(
         .module_scoped_projection()
         .map_err(crate::source::SourceDiagnostic::into_core)?;
     let analyzed = analyze_program(&projection)?;
-    let executable = compile_analyzed(&analyzed, limits, |plan| {
+    let executable = compile_analyzed(&analyzed, |plan| {
         Ok(match package {
             Some(root) => {
                 crate::package::program::locked(crate::package::prepared_facts(&root, path, plan)?)

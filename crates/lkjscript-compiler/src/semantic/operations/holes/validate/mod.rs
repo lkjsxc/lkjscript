@@ -7,8 +7,6 @@ pub(super) use witness_types::type_expression;
 
 use std::collections::BTreeSet;
 
-use lkjscript_core::Limits;
-
 use crate::semantic::schema::Expression;
 use crate::source::{SourceFile, ValidatedSourceTree};
 
@@ -112,7 +110,6 @@ fn rebuild(
         &sources,
         tree.root_path().to_path_buf(),
         tree.root_origin().clone(),
-        &Limits::default(),
         crate::source::SourceBytePolicy::Unrestricted,
     )
     .map_err(|failure| failure.render_human())

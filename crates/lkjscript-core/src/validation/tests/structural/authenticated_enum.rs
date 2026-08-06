@@ -71,7 +71,7 @@ fn returning_enum_chunk() -> (
         .main
         .emit_op_u16(Op::StructuralDestinationFinish, 0);
     chunk.main.emit(Op::Return);
-    let chunk = crate::validate_chunk(chunk, &crate::ValidationLimits::default())
+    let chunk = crate::validate_chunk(chunk, crate::ValidationPolicy::Unrestricted)
         .expect("validated enum return");
     let enum_type = chunk.structural_types()[0].runtime_type;
     let field_type = copy_field().runtime_type.expect("field type");

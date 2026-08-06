@@ -122,5 +122,5 @@ fn enum_by_id(chunk: &Chunk, id: crate::EnumId) -> Result<&crate::EnumMetadata> 
 
 fn add(left: usize, right: usize) -> Result<usize> {
     left.checked_add(right)
-        .ok_or_else(|| Error::msg("bytecode enum metadata byte size overflow"))
+        .ok_or_else(|| Error::host("bytecode enum metadata byte size overflow"))
 }

@@ -10,7 +10,7 @@ fn projected_program() -> lkjscript_ir::VerifiedProgram {
         "arms/\narm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
         "arm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nnone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
     );
-    compile_source(source, "enum-project.lkjscript", &Limits::default())
+    compile_source(source, "enum-project.lkjscript")
         .expect("compile structural enum projection")
         .ssa()
         .clone()
@@ -45,12 +45,8 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
 
 #[test]
 fn nullary_enum_is_differential_and_enters_generated_tiers() {
-    let compiled = compile_source(
-        &nullary_source(),
-        "enum-nullary.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile nullary enum");
+    let compiled =
+        compile_source(&nullary_source(), "enum-nullary.lkjscript").expect("compile nullary enum");
     let physical_tag = evaluator_owned(&compiled)
         .enum_physical_tag()
         .expect("evaluator returns structural nullary enum");
@@ -87,12 +83,8 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
 
 #[test]
 fn nested_generic_enum_uses_structural_storage_in_generated_tiers() {
-    let compiled = compile_source(
-        &nested_source(),
-        "enum-nested.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile nested generic enum");
+    let compiled = compile_source(&nested_source(), "enum-nested.lkjscript")
+        .expect("compile nested generic enum");
     let physical_tag = evaluator_owned(&compiled)
         .enum_physical_tag()
         .expect("evaluator returns nested structural enum");

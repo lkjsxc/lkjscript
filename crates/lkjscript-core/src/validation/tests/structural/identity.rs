@@ -3,7 +3,7 @@ fn structural_plan_identity_propagates_and_tamper_fails() {
     let mut chunk = product_chunk();
     emit_finished_product(&mut chunk);
     emit_product_cleanup(&mut chunk);
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("exact structural plan validates");
 
     chunk.main.memory_plan = Some(crate::MemoryPlanId::new([8; 32]));
@@ -51,7 +51,7 @@ fn region_product_contract_identity_tamper_is_rejected() {
         fields: vec!["value".into()],
         region_fields: vec![crate::RegionProductFieldKind::I64],
     });
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("canonical region-product identity validates");
     chunk.products[0].identity = crate::RuntimeLayoutId::new([3; 32]);
     assert!(error(chunk).contains("noncanonical region identity"));

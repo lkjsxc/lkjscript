@@ -23,12 +23,8 @@ fn two_payload_variants() -> String {
 #[test]
 fn structural_enum_bypasses_legacy_heap_allocation_limits() {
     let float_source = source().replace("i64", "f64").replace("42", "1.5");
-    let compiled = compile_source(
-        &float_source,
-        "enum-float-limit.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile F64 enum");
+    let compiled =
+        compile_source(&float_source, "enum-float-limit.lkjscript").expect("compile F64 enum");
     let execution = ExecutionConfig {
         max_allocations: 0,
         ..ExecutionConfig::default()
@@ -49,12 +45,8 @@ fn structural_enum_bypasses_legacy_heap_allocation_limits() {
 
 #[test]
 fn deterministic_enum_has_no_legacy_projection_or_construction_path() {
-    let compiled = compile_source(
-        &two_payload_variants(),
-        "enum-structural-only.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile two-variant enum");
+    let compiled = compile_source(&two_payload_variants(), "enum-structural-only.lkjscript")
+        .expect("compile two-variant enum");
     let instructions = compiled
         .ssa()
         .program()

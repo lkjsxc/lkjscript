@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lkjscript_core::Limits;
-
 #[test]
 fn tracked_sources_project_to_closed_schema_without_byte_changes() -> std::io::Result<()> {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -30,7 +28,7 @@ fn project_source(workspace: &Path, path: &Path) -> std::io::Result<()> {
         .expect("workspace source")
         .to_str()
         .expect("workspace source path must be UTF-8");
-    let tree = crate::source::validate(&source, logical, &Limits::default())
+    let tree = crate::source::validate(&source, logical)
         .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     assert_eq!(
         tree.format_single_source().as_deref(),

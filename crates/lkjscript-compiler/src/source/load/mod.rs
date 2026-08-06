@@ -8,8 +8,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use lkjscript_core::Limits;
-
 use crate::source::{
     api::LoadMetrics, validate::finish_tree, SourceBytePolicy, SourceFile, SourceOrigin,
     SourceResult, SourceSpan, ValidatedSourceTree,
@@ -28,7 +26,6 @@ pub(crate) use read::read_source_bytes;
 struct LoadState<'a> {
     package_root: &'a Path,
     installed_root: Option<&'a Path>,
-    limits: &'a Limits,
     loading: HashSet<PathBuf>,
     done: HashSet<PathBuf>,
     files: Vec<SourceFile>,
@@ -52,16 +49,12 @@ struct LoadFrame {
     reached_by: Option<(SourceOrigin, SourceSpan)>,
 }
 
-pub(crate) fn load_with_metrics(
-    path: &Path,
-    limits: &Limits,
-) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
-    load_with_byte_policy(path, limits, SourceBytePolicy::Unrestricted)
+pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
+    load_with_byte_policy(path, SourceBytePolicy::Unrestricted)
 }
 
 pub(crate) fn load_with_byte_policy(
     path: &Path,
-    limits: &Limits,
     byte_policy: SourceBytePolicy,
 ) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
     ensure_source_path(path)?;
@@ -76,7 +69,6 @@ pub(crate) fn load_with_byte_policy(
     let mut state = LoadState {
         package_root: &package_root,
         installed_root: None,
-        limits,
         loading: HashSet::new(),
         done: HashSet::new(),
         files: Vec::new(),

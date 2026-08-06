@@ -45,8 +45,9 @@ fn hand_built_nonstructural_enum_rejects_validation() {
     chunk.main.emit_op_u16(Op::MakeEnum, 0);
     chunk.main.emit_op_u16(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
-    let error = lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
-        .expect_err("enum construction without structural metadata rejects");
+    let error =
+        lkjscript_core::validate_chunk(chunk, lkjscript_core::ValidationPolicy::Unrestricted)
+            .expect_err("enum construction without structural metadata rejects");
     assert!(error
         .as_str()
         .contains("enum construction is unsupported without structural metadata"));

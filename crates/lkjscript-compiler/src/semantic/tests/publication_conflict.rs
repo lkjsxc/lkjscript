@@ -33,8 +33,7 @@ fn external_leaf_created_after_backup_is_preserved() {
         bytes: file.bytes,
         sha256: file.sha256.clone(),
     };
-    let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
-        .expect("load publication tree");
+    let tree = crate::source::load(&root).expect("load publication tree");
     let staged = crate::semantic::transaction::stage(
         &tree,
         &[operation],

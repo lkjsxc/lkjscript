@@ -40,7 +40,7 @@ fn unique_chunk() -> Chunk {
 
 #[test]
 fn exact_unique_family_validates_without_traced_byte_objects() {
-    validate_chunk(unique_chunk(), &ValidationLimits::default())
+    validate_chunk(unique_chunk(), ValidationPolicy::Unrestricted)
         .expect("exact unique byte-vector chunk validates");
 }
 

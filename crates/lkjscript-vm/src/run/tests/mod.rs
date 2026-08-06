@@ -2,7 +2,7 @@ use super::*;
 
 use lkjscript_core::{
     validate_chunk, Chunk, Constant, ExecutionConfig, ExecutionOutcome, Op, ResourceLimitKind,
-    ValidationLimits,
+    ValidationPolicy,
 };
 
 use super::{NoTier as NullJit, Vm};
@@ -16,7 +16,7 @@ fn validated(ops: &[Op]) -> lkjscript_core::ValidatedChunk {
 }
 
 fn validate(chunk: Chunk) -> lkjscript_core::ValidatedChunk {
-    validate_chunk(chunk, &ValidationLimits::default()).expect("test chunk validates")
+    validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("test chunk validates")
 }
 
 mod capabilities;

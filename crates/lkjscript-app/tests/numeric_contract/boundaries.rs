@@ -120,8 +120,8 @@ fn numeric_error_cases_are_stable_nominal_values_on_four_engines() {
 #[test]
 fn canonical_numeric_operations_require_exact_types_and_explicit_conversions() {
     let mixed = program("f64", "add/\n1\n2.0\n/add");
-    assert!(compile_source(&mixed, "mixed.lkjscript", &Limits::default()).is_err());
+    assert!(compile_source(&mixed, "mixed.lkjscript").is_err());
     let explicit =
         "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\nconvert-i64-to-f64-rounded/\n1\n/convert-i64-to-f64-rounded\n/main\n";
-    assert!(compile_source(explicit, "explicit.lkjscript", &Limits::default()).is_ok());
+    assert!(compile_source(explicit, "explicit.lkjscript").is_ok());
 }

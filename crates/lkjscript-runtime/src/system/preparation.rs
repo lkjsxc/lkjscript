@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use lkjscript_contracts::PreparedProgramIdentity;
-use lkjscript_core::{CapabilityKind, Limits, ValidatedChunk};
+use lkjscript_core::{CapabilityKind, ValidatedChunk};
 
 use crate::{ApplicationManifest, PackageContentId, RuntimeError};
 
@@ -27,7 +27,7 @@ pub(crate) fn prepare_isolated(
     if verified_root != package_root || content.as_bytes() != package.bytes() {
         return Err(process_error("parent package content identity mismatch"));
     }
-    let program = lkjscript_compiler::compile_path(entry, &Limits::default())
+    let program = lkjscript_compiler::compile_path(entry)
         .map_err(|error| process_error(error.to_string()))?;
     validate_grants(
         program.bytecode().required_capabilities(),

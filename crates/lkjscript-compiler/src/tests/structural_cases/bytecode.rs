@@ -16,12 +16,8 @@ fn product(field_type: &str, field_value: &str) -> String {
 
 #[test]
 fn deterministic_copy_product_executes_as_structural_bytecode() {
-    let compiled = compile_source(
-        &product("bool", "true"),
-        "deterministic-product.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile deterministic product");
+    let compiled = compile_source(&product("bool", "true"), "deterministic-product.lkjscript")
+        .expect("compile deterministic product");
     let product = compiled
         .ssa()
         .program()
@@ -78,7 +74,6 @@ fn region_product_cannot_escape_the_process_boundary() {
     let error = compile_source(
         &product("list/\ni64\n/list", "empty-list/\ni64\n/empty-list"),
         "escaping-region-product.lkjscript",
-        &Limits::default(),
     )
     .expect_err("region product process escape rejects");
     assert!(error
@@ -96,8 +91,8 @@ fn region_product_uses_exact_route_and_unresolved_enum_rejects() {
         "empty-list/\ni64\n/empty-list\n/list-prepend\n/field\n/product-value\nvalue\n/field\n",
         "/list-first\n/main\n",
     );
-    let product = compile_source(source, "region-product.lkjscript", &Limits::default())
-        .expect("compile region product");
+    let product =
+        compile_source(source, "region-product.lkjscript").expect("compile region product");
     assert!(product
         .ssa()
         .program()
@@ -123,7 +118,7 @@ fn region_product_uses_exact_route_and_unresolved_enum_rejects() {
         "variant-field/\nname/\nitems\n/name\nempty-list/\ni64\n/empty-list\n",
         "/variant-field\n/fields\n/variant-value\n/main\n",
     );
-    let error = compile_source(source, "unresolved-enum.lkjscript", &Limits::default())
+    let error = compile_source(source, "unresolved-enum.lkjscript")
         .expect_err("enum with an unresolved list witness rejects");
     assert!(error.to_string().contains("LKJ-MEM-ENUM-UNRESOLVED"));
 }

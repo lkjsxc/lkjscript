@@ -2,8 +2,6 @@ mod response;
 
 use std::path::Path;
 
-use lkjscript_core::Limits;
-
 use crate::semantic::codec::{error, PreparedResponse};
 use crate::semantic::operations;
 use crate::semantic::schema::{
@@ -32,8 +30,7 @@ pub(crate) fn execute_request(
         Ok(guard) => guard,
         Err(failure) => return prepare(error_response(None, request_charge, failure), None, None),
     };
-    let tree = match crate::source::load_for_protocol(root, &Limits::default(), source_byte_policy)
-    {
+    let tree = match crate::source::load_for_protocol(root, source_byte_policy) {
         Ok(tree) => tree,
         Err(failure) => {
             let diagnostic = operations::diagnostics::source_failure(&failure).map(Box::new);

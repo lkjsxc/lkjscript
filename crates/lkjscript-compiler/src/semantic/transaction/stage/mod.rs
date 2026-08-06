@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use lkjscript_core::Limits;
-
 use crate::semantic::codec::error;
 use crate::semantic::schema::{
     FilePrecondition, ProtocolError, ProtocolErrorCode, TransactionOperation,
@@ -66,7 +64,6 @@ pub(crate) fn stage(
         &rebuilt_sources,
         tree.root_path().to_path_buf(),
         tree.root_origin().clone(),
-        &Limits::default(),
         source_byte_policy,
     )
     .map_err(|failure| {

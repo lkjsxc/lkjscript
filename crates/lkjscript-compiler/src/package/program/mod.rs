@@ -11,7 +11,7 @@ use lkjscript_contracts::{
 };
 use lkjscript_core::{
     bind_prepared_identity as bind_bytecode, validated_bytecode_identity, Error, Result,
-    ValidatedChunk, ValidationLimits,
+    ValidatedChunk,
 };
 use lkjscript_ir::{
     bind_prepared_identity as bind_ssa, specialize_native_transport, verified_program_identity,
@@ -25,7 +25,6 @@ pub(crate) fn bind(
     bytecode: ValidatedChunk,
     memory_plan: &HirMemoryPlan,
     provenance: PreparationProvenance,
-    limits: &ValidationLimits,
 ) -> Result<(PreparedProgram, VerifiedProgram, ValidatedChunk)> {
     let semantic_ssa = verified_program_identity(&ssa)
         .map_err(|error| Error::msg(error.to_string()))?
@@ -57,7 +56,7 @@ pub(crate) fn bind(
         .identity()
         .map_err(|error| Error::msg(error.to_string()))?;
     let ssa = bind_ssa(ssa, identity).map_err(|error| Error::msg(error.to_string()))?;
-    let bytecode = bind_bytecode(bytecode, identity, limits)?;
+    let bytecode = bind_bytecode(bytecode, identity)?;
     verifier::verify(
         descriptor,
         identity,

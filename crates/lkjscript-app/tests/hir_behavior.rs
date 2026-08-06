@@ -1,12 +1,12 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::{compile_source, ExecutableProgram};
-use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue};
+use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Op, OwnedValue};
 use lkjscript_vm::run_chunk;
 
 fn compile(source: &str) -> lkjscript_core::Result<ExecutableProgram> {
     let source = source.to_string();
-    compile_source(&source, "hir-behavior.lkjscript", &Limits::default())
+    compile_source(&source, "hir-behavior.lkjscript")
 }
 
 fn returned(outcome: ExecutionOutcome) -> lkjscript_core::Result<OwnedValue> {

@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, OwnedValue, ResourceLimitKind};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, OwnedValue, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -47,8 +47,7 @@ fn source() -> String {
 
 #[test]
 fn source_construction_is_differential_on_evaluator_and_vm() {
-    let program = compile_source(&source(), "enum.lkjscript", &Limits::default())
-        .expect("compile enum construction");
+    let program = compile_source(&source(), "enum.lkjscript").expect("compile enum construction");
     let evaluated = evaluator_owned(&program);
     let physical_tag = evaluated
         .enum_physical_tag()
@@ -87,12 +86,8 @@ fn ordered_source() -> String {
 
 #[test]
 fn fields_evaluate_once_in_declaration_order() {
-    let program = compile_source(
-        &ordered_source(),
-        "enum-order.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile ordered enum fields");
+    let program = compile_source(&ordered_source(), "enum-order.lkjscript")
+        .expect("compile ordered enum fields");
     let evaluated = evaluator_owned(&program);
     assert_eq!(evaluated.enum_field_i64(0), Some(1));
     assert_eq!(evaluated.enum_field_i64(1), Some(2));
@@ -109,8 +104,8 @@ fn fields_evaluate_once_in_declaration_order() {
 
 #[test]
 fn logical_construction_exhausts_before_allocation_on_both_engines() {
-    let program = compile_source(&source(), "enum-limit.lkjscript", &Limits::default())
-        .expect("compile enum construction");
+    let program =
+        compile_source(&source(), "enum-limit.lkjscript").expect("compile enum construction");
     let evaluator = EvalConfig {
         max_logical_aggregate_constructions: 0,
         ..EvalConfig::default()
@@ -135,8 +130,8 @@ fn logical_construction_exhausts_before_allocation_on_both_engines() {
 
 #[test]
 fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
-    let program = compile_source(&source(), "enum-jit.lkjscript", &Limits::default())
-        .expect("compile enum construction");
+    let program =
+        compile_source(&source(), "enum-jit.lkjscript").expect("compile enum construction");
     let physical_tag = evaluator_owned(&program)
         .enum_physical_tag()
         .expect("evaluator returns structural enum tag");
@@ -170,8 +165,8 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
 
 #[test]
 fn forced_native_enum_reserves_logical_construction_before_allocation() {
-    let program = compile_source(&source(), "enum-jit-limit.lkjscript", &Limits::default())
-        .expect("compile enum construction");
+    let program =
+        compile_source(&source(), "enum-jit-limit.lkjscript").expect("compile enum construction");
     let execution = ExecutionConfig {
         max_logical_aggregate_constructions: 0,
         ..ExecutionConfig::default()

@@ -1,6 +1,5 @@
 fn measure_constants(
     chunk: &Chunk,
-    limits: &ValidationLimits,
     mut metadata_bytes: usize,
     mut encoded_bytes: usize,
 ) -> Result<(usize, usize)> {
@@ -11,11 +10,9 @@ fn measure_constants(
                 encoded_bytes = checked_add(encoded_bytes, 8, "encoded byte size")?;
             }
             Constant::Str(text) | Constant::Symbol(text) => {
-                check_constant_size(index, text.len(), limits)?;
                 encoded_bytes = checked_add(encoded_bytes, text.len(), "encoded byte size")?;
             }
             Constant::StaticBytes(bytes) => {
-                check_constant_size(index, bytes.len(), limits)?;
                 metadata_bytes = checked_add(metadata_bytes, 4, "metadata byte size")?;
                 encoded_bytes = checked_add(encoded_bytes, 4, "encoded byte size")?;
                 encoded_bytes = checked_add(encoded_bytes, bytes.len(), "encoded byte size")?;
@@ -34,14 +31,4 @@ fn measure_constants(
         }
     }
     Ok((metadata_bytes, encoded_bytes))
-}
-
-fn check_constant_size(index: usize, size: usize, limits: &ValidationLimits) -> Result<()> {
-    if size > limits.max_constant_data_bytes {
-        return Err(Error::msg(format!(
-            "constant {index} has {size} data bytes, limit {}",
-            limits.max_constant_data_bytes
-        )));
-    }
-    Ok(())
 }

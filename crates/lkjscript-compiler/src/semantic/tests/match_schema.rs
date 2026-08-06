@@ -41,12 +41,8 @@ fn semantic_match_nodes_roundtrip_closed_pattern_kinds() {
         "arm/\nwildcard/\n/wildcard\n1\n/arm\n",
         "/arms\n/match\n/main\n",
     );
-    let tree = crate::source::validate(
-        source,
-        "semantic-match.lkjscript",
-        &lkjscript_core::Limits::default(),
-    )
-    .expect("validate semantic match source");
+    let tree = crate::source::validate(source, "semantic-match.lkjscript")
+        .expect("validate semantic match source");
     let records = crate::semantic::tree::node_records(&tree);
     for expected in [
         crate::semantic::schema::SemanticNodeKind::Match,

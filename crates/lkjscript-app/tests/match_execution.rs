@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -33,8 +33,7 @@ fn single_evaluation_source() -> String {
 }
 
 fn assert_all_engines(source: &str, expected: i64) {
-    let program = compile_source(source, "match-engine.lkjscript", &Limits::default())
-        .expect("compile match source");
+    let program = compile_source(source, "match-engine.lkjscript").expect("compile match source");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(expected)),

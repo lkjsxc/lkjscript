@@ -93,9 +93,13 @@ signature or shape.
 
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
 addressable representation boundaries. HIR memory planning still has table, shape, and
-verifier-work quotas. Bytecode `ValidationLimits` still cap total encoded chunks, tables, metadata, and constant data;
-there is no separate per-function code-byte limit. `u16` constants, globals, and
-product/enum/structural tables remain, while product fields and enum substitutions retain byte-sized
+verifier-work quotas. Trusted bytecode validation is unrestricted by encoded-byte, table-entry,
+metadata-byte, constant-data-byte, and cleanup-node/range counts. An untrusted artifact caller may
+explicitly select `ValidationPolicy::Limited { max_total_bytes }`; this checks only one
+checked-arithmetic total-byte observation, reports byte-policy exhaustion separately from malformed
+bytecode, and does not alter validity under `Unrestricted`. Bytes literals have no project-selected
+size rule: decoding validates hexadecimal syntax and reserves storage fallibly. `u16` constants,
+globals, and product/enum/structural tables remain, while product fields and enum substitutions retain byte-sized
 representations. HIR and SSA place identities still use `u32`, a separate representation gap above
 that range. Validator-synthetic owner identity preserves instruction offsets and parameter indexes
 at host width. Other recursive type/trait/enum and structural-value ceilings also remain. These

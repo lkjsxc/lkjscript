@@ -118,7 +118,7 @@ fn bytecode_cannot_use_one_capability_as_another() {
     chunk.main.emit_op_u16(Op::LoadConst, text.0);
     chunk.main.emit(Op::Print);
     chunk.main.emit(Op::Return);
-    let error = validate_chunk(chunk, &ValidationLimits::default())
+    let error = validate_chunk(chunk, ValidationPolicy::Unrestricted)
         .expect_err("wrong capability operand")
         .to_string();
     assert!(error.contains("capability stdio"));

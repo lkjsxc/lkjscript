@@ -39,12 +39,8 @@ fn nested_product_matrix_is_complete_and_ordered() {
         product_arm(&bool_pattern(true), "wildcard/\n/wildcard", 2),
     ]
     .join("\n");
-    let compiled = compile_source(
-        &product_source(&arms),
-        "product-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("nested product matrix is exhaustive");
+    let compiled = compile_source(&product_source(&arms), "product-match.lkjscript")
+        .expect("nested product matrix is exhaustive");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(2)),
@@ -54,13 +50,9 @@ fn nested_product_matrix_is_complete_and_ordered() {
         "{arms}\n{}",
         product_arm(&bool_pattern(true), &bool_pattern(true), 3),
     );
-    let error = compile_source(
-        &product_source(&useless),
-        "product-useless.lkjscript",
-        &Limits::default(),
-    )
-    .expect_err("nested product arm is subsumed")
-    .to_string();
+    let error = compile_source(&product_source(&useless), "product-useless.lkjscript")
+        .expect_err("nested product arm is subsumed")
+        .to_string();
     assert!(error.contains("useless or subsumed match arm 3"), "{error}");
 }
 
@@ -78,12 +70,8 @@ fn enum_bool_source() -> String {
 
 #[test]
 fn nested_enum_payload_matrix_is_exhaustive_and_active() {
-    let compiled = compile_source(
-        &enum_bool_source(),
-        "enum-bool-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("nested enum payload match");
+    let compiled = compile_source(&enum_bool_source(), "enum-bool-match.lkjscript")
+        .expect("nested enum payload match");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(1)),
@@ -98,13 +86,9 @@ fn nested_product_witness_is_canonical_and_repeatable() {
     ]
     .join("\n");
     let compile = || {
-        compile_source(
-            &product_source(&arms),
-            "product-witness.lkjscript",
-            &Limits::default(),
-        )
-        .expect_err("missing true/true product")
-        .to_string()
+        compile_source(&product_source(&arms), "product-witness.lkjscript")
+            .expect_err("missing true/true product")
+            .to_string()
     };
     let first = compile();
     assert_eq!(first, compile());

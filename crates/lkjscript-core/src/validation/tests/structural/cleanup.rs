@@ -58,7 +58,7 @@ fn structural_failure_cleanup_checks_exact_action_identity() {
         unentered_plan: None,
     }];
     chunk.protos.push(proto);
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("exact structural failure cleanup validates");
     chunk.protos[0].failure_cleanups[0].action = crate::FailureCleanupAction::DropStructural {
         local: 0,

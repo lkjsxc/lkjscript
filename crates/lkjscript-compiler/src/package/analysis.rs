@@ -11,8 +11,8 @@ pub(super) struct ModuleAnalysis {
 }
 
 pub(super) fn module(root: &Path, id: &str) -> Result<ModuleAnalysis> {
-    let source = crate::source::load(&root.join(id), &lkjscript_core::Limits::default())
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
+    let source =
+        crate::source::load(&root.join(id)).map_err(crate::source::SourceDiagnostic::into_core)?;
     let root_file = source
         .files()
         .iter()

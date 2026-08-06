@@ -1,4 +1,4 @@
-use lkjscript_core::{validate_chunk, Error, Limits, Result};
+use lkjscript_core::{validate_chunk, Error, Result, ValidationPolicy};
 use lkjscript_ir::{derive_memory_inventory, verify_memory_inventory, SsaMemoryInventory};
 
 use crate::codegen::compile_program;
@@ -7,7 +7,6 @@ use crate::ExecutableProgram;
 
 pub(super) fn compile_analyzed(
     analyzed: &crate::hir::Program,
-    limits: &Limits,
     provenance: impl FnOnce(
         &crate::HirMemoryPlan,
     ) -> Result<crate::package::program::PreparationProvenance>,
@@ -17,10 +16,10 @@ pub(super) fn compile_analyzed(
     let memory_plan = memory_verified.plan().clone();
     let memory_inventory = checked_memory_inventory(&ssa)?;
     let (chunk, bytecode_links) = compile_program(&ssa)?;
-    let bytecode = validate_chunk(chunk, &limits.validation)?;
+    let bytecode = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let provenance = provenance(&memory_plan)?;
     let (prepared, ssa, bytecode) =
-        crate::package::program::bind(ssa, bytecode, &memory_plan, provenance, &limits.validation)?;
+        crate::package::program::bind(ssa, bytecode, &memory_plan, provenance)?;
     Ok(ExecutableProgram {
         prepared,
         bytecode,

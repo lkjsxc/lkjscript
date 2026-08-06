@@ -4,12 +4,11 @@ use super::{
     shape::validate_tables,
     ValidatedChunk,
 };
-use crate::{Chunk, Error, Result, ValidationLimits};
+use crate::{Chunk, Error, Result, ValidationPolicy};
 
 pub fn bind_prepared_identity(
     validated: ValidatedChunk,
     identity: lkjscript_contracts::PreparedProgramIdentity,
-    limits: &ValidationLimits,
 ) -> Result<ValidatedChunk> {
     if !identity.is_bound()
         || (validated.chunk.prepared_identity.is_bound()
@@ -21,11 +20,11 @@ pub fn bind_prepared_identity(
     }
     let mut chunk = validated.chunk;
     chunk.prepared_identity = identity;
-    validate_chunk(chunk, limits)
+    validate_chunk(chunk, ValidationPolicy::Unrestricted)
 }
 
-pub fn validate_chunk(chunk: Chunk, limits: &ValidationLimits) -> Result<ValidatedChunk> {
-    validate_tables(&chunk, limits)?;
+pub fn validate_chunk(chunk: Chunk, policy: ValidationPolicy) -> Result<ValidatedChunk> {
+    let total_bytes = validate_tables(&chunk)?;
     let main_instructions = decode_function(&chunk.main)?;
     let mut proto_instructions = Vec::new();
     proto_instructions
@@ -44,6 +43,7 @@ pub fn validate_chunk(chunk: Chunk, limits: &ValidationLimits) -> Result<Validat
         validate_instruction_operands(&chunk, proto, instructions)?;
         validate_control_flow(&chunk, proto, instructions, false)?;
     }
+    policy.check_total_bytes(total_bytes)?;
 
     Ok(ValidatedChunk {
         chunk,

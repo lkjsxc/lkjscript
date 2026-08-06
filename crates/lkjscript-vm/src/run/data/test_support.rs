@@ -35,6 +35,6 @@ pub(crate) fn test_chunk() -> ValidatedChunk {
             lkjscript_core::Op::Return as u8,
         ],
     });
-    lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
+    lkjscript_core::validate_chunk(chunk, lkjscript_core::ValidationPolicy::Unrestricted)
         .expect("VM unit-test chunk validates")
 }

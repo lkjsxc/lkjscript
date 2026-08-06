@@ -24,5 +24,5 @@ pub(super) fn metadata_bytes(chunk: &Chunk) -> Result<usize> {
         .name
         .len()
         .checked_add(chunk.required_capabilities.len())
-        .ok_or_else(|| Error::msg("bytecode metadata byte size overflow"))
+        .ok_or_else(|| Error::host("bytecode metadata byte size overflow"))
 }

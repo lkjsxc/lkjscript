@@ -156,7 +156,9 @@ fn outcome_from_error(error: Error) -> ExecutionOutcome {
         ErrorClass::Ordinary => ExecutionOutcome::Trapped(Trap::new(error.to_string())),
         ErrorClass::Deadline => ExecutionOutcome::DeadlineExceeded,
         ErrorClass::Resource(kind) => ExecutionOutcome::ResourceLimitExceeded(kind),
-        ErrorClass::Host => ExecutionOutcome::HostFailure(HostError::new(error.to_string())),
+        ErrorClass::BytecodePolicy | ErrorClass::Host => {
+            ExecutionOutcome::HostFailure(HostError::new(error.to_string()))
+        }
     }
 }
 

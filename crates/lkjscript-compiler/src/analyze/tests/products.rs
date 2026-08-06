@@ -26,9 +26,11 @@ fn nominal_products_remain_resolved_and_state_threadable() {
         .binding(*binding)
         .is_some_and(|binding| binding.name == "point")));
     let chunk = compile_hir(&program).expect("lower product state threading through SSA");
-    let validated =
-        lkjscript_core::validate_chunk(chunk.clone(), &lkjscript_core::ValidationLimits::default())
-            .expect("product state-threading bytecode validates");
+    let validated = lkjscript_core::validate_chunk(
+        chunk.clone(),
+        lkjscript_core::ValidationPolicy::Unrestricted,
+    )
+    .expect("product state-threading bytecode validates");
     let instructions = validated.main_instructions();
     assert!(instructions
         .iter()

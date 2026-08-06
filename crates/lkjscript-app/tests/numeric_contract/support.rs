@@ -8,8 +8,7 @@ pub(super) fn program(return_type: &str, expression: &str) -> String {
 
 pub(super) fn assert_scalar(source: &str, expected: Expected) {
     let rounded_i64 = source.contains("convert-i64-to-f64-rounded/");
-    let program = compile_source(source, "conversion.lkjscript", &Limits::default())
-        .expect("compile conversion");
+    let program = compile_source(source, "conversion.lkjscript").expect("compile conversion");
     assert_eval(
         evaluate_ssa(program.ssa(), &EvalConfig::default()),
         expected,
@@ -62,8 +61,7 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
 }
 
 pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
-    let program = compile_source(source, "inline-scalar.lkjscript", &Limits::default())
-        .expect("compile inline scalar");
+    let program = compile_source(source, "inline-scalar.lkjscript").expect("compile inline scalar");
     let eval_config = EvalConfig {
         max_allocations: 0,
         ..EvalConfig::default()

@@ -10,6 +10,7 @@ pub enum ErrorClass {
     Ordinary,
     Deadline,
     Resource(ResourceLimitKind),
+    BytecodePolicy,
     Host,
 }
 
@@ -40,6 +41,14 @@ impl Error {
         Self {
             message: message.into(),
             class: ErrorClass::Resource(kind),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn bytecode_policy(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            class: ErrorClass::BytecodePolicy,
         }
     }
 

@@ -194,9 +194,8 @@ fn metrics_collection_does_not_change_prepared_identity() {
     let (lock_path, lock) = create_lock(&root).unwrap();
     fs::write(lock_path, lock).unwrap();
     let entry = root.join("main.lkjscript");
-    let plain = crate::compile_path(&entry, &lkjscript_core::Limits::default()).unwrap();
-    let (measured, metrics) =
-        crate::compile_path_with_metrics(&entry, &lkjscript_core::Limits::default()).unwrap();
+    let plain = crate::compile_path(&entry).unwrap();
+    let (measured, metrics) = crate::compile_path_with_metrics(&entry).unwrap();
     assert_eq!(plain.prepared_identity(), measured.prepared_identity());
     assert_eq!(metrics.source_files, 1);
     fs::remove_dir_all(root).unwrap();

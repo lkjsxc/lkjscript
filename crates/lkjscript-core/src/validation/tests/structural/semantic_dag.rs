@@ -30,7 +30,7 @@ fn returning_product_chunk_from(
         .main
         .emit_op_u16(Op::StructuralDestinationFinish, 0);
     chunk.main.emit(Op::Return);
-    crate::validate_chunk(chunk, &crate::ValidationLimits::default())
+    crate::validate_chunk(chunk, crate::ValidationPolicy::Unrestricted)
         .expect("validated structural return")
 }
 
@@ -100,7 +100,7 @@ fn validated_structural_return_derives_exact_sealed_dag_shape() {
 
 #[test]
 fn validated_structural_return_requires_exact_return_metadata() {
-    let chunk = crate::validate_chunk(unit_chunk(), &crate::ValidationLimits::default())
+    let chunk = crate::validate_chunk(unit_chunk(), crate::ValidationPolicy::Unrestricted)
         .expect("validated unit chunk");
     let snapshot = crate::SemanticDagSnapshot::new(
         vec![crate::SemanticDagNode::new(

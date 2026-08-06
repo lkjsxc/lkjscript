@@ -1,4 +1,4 @@
-use lkjscript_core::{Limits, Result};
+use lkjscript_core::Result;
 
 mod blockers;
 mod bounds;
@@ -20,8 +20,8 @@ mod witnesses;
 #[test]
 fn executable_retains_dense_independently_verified_hir_memory_plan() -> Result<()> {
     let source = "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
-    let first = crate::compile_source(source, "memory-plan.lkjscript", &Limits::default())?;
-    let second = crate::compile_source(source, "memory-plan.lkjscript", &Limits::default())?;
+    let first = crate::compile_source(source, "memory-plan.lkjscript")?;
+    let second = crate::compile_source(source, "memory-plan.lkjscript")?;
     let plan = first.memory_plan();
     assert_eq!(plan.schema, super::HIR_MEMORY_PLAN_SCHEMA);
     assert_eq!(plan.id, second.memory_plan().id);
@@ -38,15 +38,11 @@ fn executable_retains_dense_independently_verified_hir_memory_plan() -> Result<(
 
 #[test]
 fn whole_place_drop_classes_are_pre_backend_and_identity_bearing() -> Result<()> {
-    let static_program = crate::compile_source(
-        &owned_main("unit", "unit"),
-        "memory-static-drop.lkjscript",
-        &Limits::default(),
-    )?;
+    let static_program =
+        crate::compile_source(&owned_main("unit", "unit"), "memory-static-drop.lkjscript")?;
     let dead_program = crate::compile_source(
         &owned_main("byte-vector", "move/\nb\n/move"),
         "memory-dead-drop.lkjscript",
-        &Limits::default(),
     )?;
     let static_obligation = static_program
         .memory_plan()
@@ -95,7 +91,6 @@ fn deterministic_byte_vector_uses_only_unique_structural_storage() -> Result<()>
     let program = crate::compile_source(
         &owned_main("byte-vector", "move/\nb\n/move"),
         "unique-byte-vector-plan.lkjscript",
-        &Limits::default(),
     )?;
     let entries: Vec<_> = program
         .memory_plan()
@@ -121,7 +116,7 @@ fn complete_numeric_scalars_are_planned_inline() -> Result<()> {
         "add/\n1.0\nconvert-i64-to-f64-rounded/\n2\n",
         "/convert-i64-to-f64-rounded\n/add\n/main\n"
     );
-    let program = crate::compile_source(source, "inline-scalars.lkjscript", &Limits::default())?;
+    let program = crate::compile_source(source, "inline-scalars.lkjscript")?;
     let mut scalar_entries = 0usize;
     for entry in &program.memory_plan().entries {
         if matches!(entry.ty, super::MemoryType::I64 | super::MemoryType::F64) {

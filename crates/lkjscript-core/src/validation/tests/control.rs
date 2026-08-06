@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn valid_minimal_chunk_is_opaque_and_decoded() {
-    let validated = validate_chunk(unit_chunk(), &ValidationLimits::default())
+    let validated = validate_chunk(unit_chunk(), ValidationPolicy::Unrestricted)
         .expect("minimal chunk validates");
     assert_eq!(validated.main_instructions().len(), 2);
     assert_eq!(validated.main_instructions()[0].op(), Op::Unit);

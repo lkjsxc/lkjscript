@@ -15,7 +15,7 @@ use crate::ssa::lower_program;
 
 fn parsed_program(files: &[(&str, &str)]) -> Result<ValidatedSourceTree> {
     let root = files.last().map_or("test.lkjscript", |(path, _)| *path);
-    validate_source_set_for_analysis(files, root, &lkjscript_core::Limits::default())
+    validate_source_set_for_analysis(files, root)
 }
 
 fn analyze_one(source: &str) -> Result<crate::hir::Program> {

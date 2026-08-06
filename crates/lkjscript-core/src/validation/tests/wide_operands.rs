@@ -61,7 +61,7 @@ fn high_place_chunk() -> Chunk {
 
 #[test]
 fn high_local_call_and_place_operands_validate_in_range_and_reject_equal_count() {
-    let call = validate_chunk(high_call_chunk(), &ValidationLimits::default())
+    let call = validate_chunk(high_call_chunk(), ValidationPolicy::Unrestricted)
         .expect("300-argument call validates");
     assert!(call
         .main_instructions()
@@ -74,7 +74,7 @@ fn high_local_call_and_place_operands_validate_in_range_and_reject_equal_count()
     assert!(error(bad_local).contains("local index out of range"));
 
     let mut bad_argc = high_call_chunk();
-    let validated = validate_chunk(bad_argc.clone(), &ValidationLimits::default())
+    let validated = validate_chunk(bad_argc.clone(), ValidationPolicy::Unrestricted)
         .expect("locate validated call");
     let call_offset = validated
         .main_instructions()
@@ -86,10 +86,10 @@ fn high_local_call_and_place_operands_validate_in_range_and_reject_equal_count()
         .copy_from_slice(&encoded(WIDE_COUNT + 1).to_le_bytes());
     assert!(error(bad_argc).contains("stack underflow"));
 
-    validate_chunk(high_place_chunk(), &ValidationLimits::default())
+    validate_chunk(high_place_chunk(), ValidationPolicy::Unrestricted)
         .expect("high place/local pair validates");
     let mut bad_place = high_place_chunk();
-    let validated = validate_chunk(bad_place.clone(), &ValidationLimits::default())
+    let validated = validate_chunk(bad_place.clone(), ValidationPolicy::Unrestricted)
         .expect("locate high place instruction");
     let place_offset = validated
         .main_instructions()
@@ -146,7 +146,7 @@ fn high_cleanup_local_and_place_metadata_are_checked_without_byte_narrowing() {
         },
         next: None,
     }];
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("high cleanup metadata validates in range");
 
     let mut bad_local = chunk.clone();

@@ -34,7 +34,7 @@ fn declarations_are_private_until_explicitly_exported() -> std::io::Result<()> {
             unit_main("helper/\n/helper")
         ),
     )?;
-    let error = crate::compile_path(&root, &Limits::default()).expect_err("private import");
+    let error = crate::compile_path(&root).expect_err("private import");
     assert!(error.to_string().contains("private or absent"));
     Ok(())
 }
@@ -56,7 +56,7 @@ fn exact_import_list_does_not_expose_other_public_names() -> std::io::Result<()>
             unit_main("secret/\n/secret")
         ),
     )?;
-    let error = crate::compile_path(&root, &Limits::default()).expect_err("unimported name");
+    let error = crate::compile_path(&root).expect_err("unimported name");
     assert!(error.to_string().contains("unknown call secret"));
     Ok(())
 }
@@ -101,7 +101,7 @@ fn equal_private_names_coexist_in_distinct_loaded_modules() -> std::io::Result<(
             unit_main("do/\nleft/\n/left\nright/\n/right\n/do")
         ),
     )?;
-    crate::compile_path(&root, &Limits::default()).expect("module-local duplicate names");
+    crate::compile_path(&root).expect("module-local duplicate names");
     Ok(())
 }
 
@@ -112,6 +112,6 @@ fn wildcard_import_is_rejected_by_the_source_grammar() {
         import("library.lkjscript", &["*"]),
         unit_main("unit")
     );
-    let error = validate(&source, "main.lkjscript", &Limits::default()).expect_err("wildcard");
+    let error = validate(&source, "main.lkjscript").expect_err("wildcard");
     assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
 }

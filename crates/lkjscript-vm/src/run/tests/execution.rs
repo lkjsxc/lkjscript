@@ -26,7 +26,7 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
     let zero = exit.add_const(Constant::I64(0));
     exit.main.emit_op_u16(Op::LoadConst, zero.0);
     exit.main.emit(Op::Exit);
-    let exit = validate_chunk(exit, &ValidationLimits::default()).expect("exit validates");
+    let exit = validate_chunk(exit, ValidationPolicy::Unrestricted).expect("exit validates");
     assert_eq!(
         Vm::new(
             &exit,
@@ -141,7 +141,7 @@ fn removed_buffer_opcode_bytes_are_rejected_before_execution() {
         chunk.main.code = vec![removed, Op::Return as u8];
         assert!(lkjscript_core::validate_chunk(
             chunk,
-            &lkjscript_core::ValidationLimits::default()
+            lkjscript_core::ValidationPolicy::Unrestricted
         )
         .is_err());
     }

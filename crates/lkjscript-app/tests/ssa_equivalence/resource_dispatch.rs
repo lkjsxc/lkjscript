@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalResourcePolicy};
 use lkjscript_vm::run_chunk;
 
@@ -21,12 +21,8 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
         ),
         path
     );
-    let program = compile_source(
-        &source,
-        "implicit-resource-drop.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile implicit resource close");
+    let program = compile_source(&source, "implicit-resource-drop.lkjscript")
+        .expect("compile implicit resource close");
     let evaluator_config = EvalConfig {
         capabilities: vec![lkjscript_core::CapabilityKind::FileSystem],
         ..EvalConfig::default()
@@ -62,7 +58,6 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
     let explicit_close = compile_source(
         &explicit_close_source,
         "explicit-evaluator-resource-close.lkjscript",
-        &Limits::default(),
     )
     .expect("compile explicit evaluator resource close");
     assert!(matches!(
@@ -87,12 +82,8 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
         "/capability\n/params\nunwrap-ok/\nis-terminal/\nstandard-input/\nstdio\n",
         "/standard-input\n/is-terminal\n/unwrap-ok\n/main\n"
     );
-    let stdin = compile_source(
-        stdin_source,
-        "evaluator-standard-input.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile evaluator standard input");
+    let stdin = compile_source(stdin_source, "evaluator-standard-input.lkjscript")
+        .expect("compile evaluator standard input");
     let stdin_config = EvalConfig {
         capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
         ..EvalConfig::default()
@@ -114,12 +105,8 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
         "/finalize-sqlite-statement\n/unwrap-ok\nunwrap-ok/\nclose-sqlite/\ndatabase\n",
         "/close-sqlite\n/unwrap-ok\n/do\n/let\n/let\n/main\n"
     );
-    let sqlite = compile_source(
-        sqlite_source,
-        "evaluator-fake-sqlite.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile evaluator fake SQLite lifecycle");
+    let sqlite = compile_source(sqlite_source, "evaluator-fake-sqlite.lkjscript")
+        .expect("compile evaluator fake SQLite lifecycle");
     let sqlite_config = EvalConfig {
         capabilities: vec![lkjscript_core::CapabilityKind::Sqlite],
         ..EvalConfig::default()

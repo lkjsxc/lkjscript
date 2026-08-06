@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome};
 use lkjscript_vm::run_chunk;
 
@@ -35,12 +35,8 @@ fn instruction_failure_closes_live_vm_resource_without_emergency_teardown() {
         &format!("do/\n{repeated_reads}unit\n/do\n/let\n/main\n"),
         1,
     );
-    let late = compile_source(
-        &late_source,
-        "instruction-resource-cleanup.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile instruction resource cleanup");
+    let late = compile_source(&late_source, "instruction-resource-cleanup.lkjscript")
+        .expect("compile instruction resource cleanup");
     let evaluator_config = EvalConfig {
         capabilities: vec![
             lkjscript_core::CapabilityKind::FileSystem,

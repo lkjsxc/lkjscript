@@ -8,7 +8,7 @@ const STDIO_MAIN: &str = concat!(
 
 #[test]
 fn exact_main_capability_reaches_ssa_and_bytecode() {
-    let program = compile_source(STDIO_MAIN, "capability.lkjscript", &Limits::default())
+    let program = compile_source(STDIO_MAIN, "capability.lkjscript")
         .expect("compile explicit capability main");
     assert_eq!(
         program.bytecode().required_capabilities(),
@@ -27,7 +27,7 @@ fn exact_main_capability_reaches_ssa_and_bytecode() {
 #[test]
 fn ambient_and_wrong_capability_calls_are_rejected() {
     let ambient = unit_main("print/\nstring-literal/\nhello\n/string-literal\n/print");
-    let error = compile_source(&ambient, "ambient.lkjscript", &Limits::default())
+    let error = compile_source(&ambient, "ambient.lkjscript")
         .expect_err("ambient print")
         .to_string();
     assert!(error.contains("expected 2 args, got 1"));
@@ -37,7 +37,7 @@ fn ambient_and_wrong_capability_calls_are_rejected() {
         "params/\narguments\ncapability/\narguments\n/capability\n/params\n",
         "print/\narguments\nstring-literal/\nhello\n/string-literal\n/print\n/main\n"
     );
-    let error = compile_source(wrong, "wrong-capability.lkjscript", &Limits::default())
+    let error = compile_source(wrong, "wrong-capability.lkjscript")
         .expect_err("wrong capability")
         .to_string();
     assert!(error.contains("not assignable"), "{error}");
@@ -49,7 +49,7 @@ fn duplicate_unsorted_and_forged_capabilities_are_rejected() {
         "inputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
         "inputs/\ncapability/\nstdio\n/capability\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
     );
-    assert!(compile_source(&duplicate, "duplicate.lkjscript", &Limits::default()).is_err());
+    assert!(compile_source(&duplicate, "duplicate.lkjscript").is_err());
 
     let unsorted = STDIO_MAIN
         .replace(
@@ -63,11 +63,11 @@ fn duplicate_unsorted_and_forged_capabilities_are_rejected() {
                 "arguments\ncapability/\narguments\n/capability"
             ),
         );
-    let error = compile_source(&unsorted, "unsorted.lkjscript", &Limits::default())
+    let error = compile_source(&unsorted, "unsorted.lkjscript")
         .expect_err("unsorted capabilities")
         .to_string();
     assert!(error.contains("sorted and unique"));
 
     let forged = STDIO_MAIN.replace("print/\nstdio", "print/\n7");
-    assert!(compile_source(&forged, "forged.lkjscript", &Limits::default()).is_err());
+    assert!(compile_source(&forged, "forged.lkjscript").is_err());
 }

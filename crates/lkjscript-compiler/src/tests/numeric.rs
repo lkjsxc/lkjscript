@@ -7,7 +7,7 @@ fn removed_numeric_vocabulary_and_non_binary_arithmetic_fail() {
     ] {
         let source =
             format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}\n/output\n/sig\n1\n/main\n");
-        let error = compile_source(&source, "removed-type.lkjscript", &Limits::default())
+        let error = compile_source(&source, "removed-type.lkjscript")
             .expect_err("uppercase numeric type must fail")
             .to_string();
         assert!(error.contains("lowercase ASCII kebab-case") || error.contains("is removed"));
@@ -15,7 +15,7 @@ fn removed_numeric_vocabulary_and_non_binary_arithmetic_fail() {
     for ty in ["i32", "u32", "u64", "f32", "i128"] {
         let source =
             format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}\n/output\n/sig\n1\n/main\n");
-        let error = compile_source(&source, "unsupported-type.lkjscript", &Limits::default())
+        let error = compile_source(&source, "unsupported-type.lkjscript")
             .expect_err("unsupported numeric width must fail")
             .to_string();
         assert!(error.contains("unsupported numeric type"), "{ty}: {error}");
@@ -47,10 +47,10 @@ fn removed_numeric_vocabulary_and_non_binary_arithmetic_fail() {
     ] {
         let source = unit_main(&format!("{name}/\n1\n2\n/{name}"));
         assert!(
-            compile_source(&source, "removed-op.lkjscript", &Limits::default()).is_err(),
+            compile_source(&source, "removed-op.lkjscript").is_err(),
             "accepted operator {name}"
         );
     }
     let variadic = unit_main("add/\n1\n2\n3\n/add");
-    assert!(compile_source(&variadic, "arity.lkjscript", &Limits::default()).is_err());
+    assert!(compile_source(&variadic, "arity.lkjscript").is_err());
 }

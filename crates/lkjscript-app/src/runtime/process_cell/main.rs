@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use lkjscript_core::{CapabilityKind, Limits};
+use lkjscript_core::CapabilityKind;
 
 mod provenance;
 use lkjscript_runtime::process_cell_protocol::{
@@ -133,8 +133,7 @@ fn prepare(bootstrap: &ProcessBootstrap) -> Result<lkjscript_compiler::Executabl
     if package.as_bytes() != bootstrap.package {
         return Err("worker package content identity mismatch".into());
     }
-    let program = lkjscript_compiler::compile_path(entry, &Limits::default())
-        .map_err(|error| error.to_string())?;
+    let program = lkjscript_compiler::compile_path(entry).map_err(|error| error.to_string())?;
     validate_grants(
         program.bytecode().required_capabilities(),
         &bootstrap.capabilities,

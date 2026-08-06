@@ -12,7 +12,7 @@ macro_rules! symbol_vm {
         symbol_chunk.main.emit(Op::Return);
         let symbol_chunk = lkjscript_core::validate_chunk(
             symbol_chunk,
-            &lkjscript_core::ValidationLimits::default(),
+            lkjscript_core::ValidationPolicy::Unrestricted,
         )
         .expect("symbol comparison chunk validates");
         let mut $name = Vm::new(

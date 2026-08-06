@@ -21,12 +21,8 @@ fn cleanup() -> &'static str {
 #[test]
 fn affine_handle_receives_exact_implicit_cleanup() {
     let source = handle_main("unit");
-    let program = compile_source(
-        &source,
-        "handle-implicit-drop.lkjscript",
-        &Limits::default(),
-    )
-    .expect("owned resource receives implicit cleanup");
+    let program = compile_source(&source, "handle-implicit-drop.lkjscript")
+        .expect("owned resource receives implicit cleanup");
     let drops: Vec<_> = program
         .ssa()
         .program()
@@ -62,7 +58,7 @@ fn affine_handle_rejects_double_drop_and_use_after_drop() {
     let double = handle_main(
         "do/\nunwrap-ok/\ndrop/\nreader\n/drop\n/unwrap-ok\nunwrap-ok/\ndrop/\nreader\n/drop\n/unwrap-ok\nunit\n/do",
     );
-    let error = compile_source(&double, "handle-double-drop.lkjscript", &Limits::default())
+    let error = compile_source(&double, "handle-double-drop.lkjscript")
         .expect_err("double drop")
         .to_string();
     assert!(error.contains("already moved or dropped"));
@@ -70,21 +66,16 @@ fn affine_handle_rejects_double_drop_and_use_after_drop() {
     let reused = handle_main(
         "do/\nunwrap-ok/\ndrop/\nreader\n/drop\n/unwrap-ok\nread-resource-byte/\nreader\n/read-resource-byte\nunit\n/do",
     );
-    let error = compile_source(
-        &reused,
-        "handle-use-after-drop.lkjscript",
-        &Limits::default(),
-    )
-    .expect_err("use after drop")
-    .to_string();
+    let error = compile_source(&reused, "handle-use-after-drop.lkjscript")
+        .expect_err("use after drop")
+        .to_string();
     assert!(error.contains("already moved or dropped"));
 }
 
 #[test]
 fn affine_handle_cleanup_reaches_verified_ssa() {
     let source = handle_main(cleanup());
-    let program = compile_source(&source, "handle-drop.lkjscript", &Limits::default())
-        .expect("explicit drop");
+    let program = compile_source(&source, "handle-drop.lkjscript").expect("explicit drop");
     let resource_drops: Vec<_> =
         program
             .ssa()
@@ -116,7 +107,7 @@ fn borrowed_stdin_handle_cannot_be_dropped_as_an_owned_local() {
     let source = stdio_unit_main(
         "unwrap-ok/\ndrop/\nstandard-input/\nstdio\n/standard-input\n/drop\n/unwrap-ok",
     );
-    let error = compile_source(&source, "borrowed-drop.lkjscript", &Limits::default())
+    let error = compile_source(&source, "borrowed-drop.lkjscript")
         .expect_err("borrowed handle drop")
         .to_string();
     assert!(error.contains("drop does not accept resource kind input-stream"));

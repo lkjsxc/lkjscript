@@ -4,13 +4,13 @@ mod fixtures;
 mod sensitivity;
 
 use super::*;
-use crate::{validate_chunk, Chunk, Op, ValidationLimits};
+use crate::{validate_chunk, Chunk, Op, ValidationPolicy};
 
 fn unit() -> ValidatedChunk {
     let mut chunk = Chunk::new();
     chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
-    validate_chunk(chunk, &ValidationLimits::default()).expect("unit chunk must validate")
+    validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("unit chunk must validate")
 }
 fn identity(value: &ValidatedChunk) -> ValidatedBytecodeIdentity {
     validated_bytecode_identity(value).expect("identity must compute")
@@ -39,18 +39,16 @@ fn prepared_binding_rejects_zero_and_stale_identity() {
     assert!(crate::bind_prepared_identity(
         validated.clone(),
         lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
-        &ValidationLimits::default(),
     )
     .is_err());
     let first = lkjscript_contracts::PreparedProgramIdentity::new([31; 32])
         .expect("first prepared identity");
     let second = lkjscript_contracts::PreparedProgramIdentity::new([32; 32])
         .expect("second prepared identity");
-    let bound = crate::bind_prepared_identity(validated, first, &ValidationLimits::default())
-        .expect("bind prepared bytecode");
+    let bound = crate::bind_prepared_identity(validated, first).expect("bind prepared bytecode");
     assert!(bound.require_prepared_identity(first).is_ok());
     assert!(bound.require_prepared_identity(second).is_err());
-    assert!(crate::bind_prepared_identity(bound, second, &ValidationLimits::default()).is_err());
+    assert!(crate::bind_prepared_identity(bound, second).is_err());
 }
 
 #[test]
@@ -62,7 +60,7 @@ fn exact_f64_bits_are_bound() {
             .push(crate::Constant::F64(f64::from_bits(bits)));
         chunk.main.emit(Op::Unit);
         chunk.main.emit(Op::Return);
-        validate_chunk(chunk, &ValidationLimits::default()).expect("f64 chunk must validate")
+        validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("f64 chunk must validate")
     }
     assert!(identity(&with(0)) != identity(&with(1_u64 << 63)));
     assert!(identity(&with(0x7ff8_0000_0000_0001)) != identity(&with(0x7ff8_0000_0000_0002)));

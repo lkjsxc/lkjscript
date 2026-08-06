@@ -3,8 +3,8 @@ use super::super::*;
 #[test]
 fn node_ids_are_dense_preorder_deterministic_and_revision_scoped() {
     let source = unit_main("do/\nunit\ntrue\n/do");
-    let first = validate(&source, "src/nodes.lkjscript", &Limits::default()).expect("first");
-    let again = validate(&source, "src/nodes.lkjscript", &Limits::default()).expect("again");
+    let first = validate(&source, "src/nodes.lkjscript").expect("first");
+    let again = validate(&source, "src/nodes.lkjscript").expect("again");
     assert_eq!(first.revision(), again.revision());
     for (index, node) in first.nodes().iter().enumerate() {
         assert_eq!(node.id().index() as usize, index);
@@ -16,12 +16,8 @@ fn node_ids_are_dense_preorder_deterministic_and_revision_scoped() {
     assert!(root.parent().is_none());
     assert!(!root.children().is_empty());
 
-    let changed = validate(
-        &unit_main("do/\nunit\nfalse\n/do"),
-        "src/nodes.lkjscript",
-        &Limits::default(),
-    )
-    .expect("changed");
+    let changed =
+        validate(&unit_main("do/\nunit\nfalse\n/do"), "src/nodes.lkjscript").expect("changed");
     let stale = changed.node(root.id()).expect_err("cross-revision lookup");
     assert_eq!(stale.actual_revision(), first.revision());
     assert_eq!(stale.expected_revision(), changed.revision());
@@ -38,12 +34,12 @@ fn public_validate_requires_canonical_relative_lkjscript_paths() {
         "src//aliased.lkjscript",
         ".hidden.lkjscript",
     ] {
-        let error = validate(&source, rejected, &Limits::default())
-            .expect_err("noncanonical logical path must be rejected");
+        let error =
+            validate(&source, rejected).expect_err("noncanonical logical path must be rejected");
         assert_eq!(error.code(), "LKJ-SRC-LOAD", "{rejected}");
     }
-    let accepted = validate(&source, "src/canonical.lkjscript", &Limits::default())
-        .expect("canonical relative logical path");
+    let accepted =
+        validate(&source, "src/canonical.lkjscript").expect("canonical relative logical path");
     assert_eq!(
         accepted.root_origin().logical_path(),
         "src/canonical.lkjscript"

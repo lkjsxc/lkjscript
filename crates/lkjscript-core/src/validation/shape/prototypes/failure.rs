@@ -1,18 +1,6 @@
 use super::*;
 
-pub(super) fn validate_failure_cleanup_shape(
-    proto: &FunctionProto,
-    category: &str,
-    limits: &ValidationLimits,
-) -> Result<()> {
-    if proto.failure_cleanups.len() > limits.max_table_entries
-        || proto.failure_cleanup_ranges.len() > limits.max_table_entries
-    {
-        return Err(Error::msg(format!(
-            "bytecode {category} {} failure-cleanup table exceeds limit",
-            proto.name
-        )));
-    }
+pub(super) fn validate_failure_cleanup_shape(proto: &FunctionProto) -> Result<()> {
     let mut seen = HashSet::new();
     for (index, node) in proto.failure_cleanups.iter().enumerate() {
         if node
@@ -113,13 +101,13 @@ pub(super) fn failure_metadata_bytes(proto: &FunctionProto) -> Result<usize> {
         .failure_cleanups
         .len()
         .checked_mul(std::mem::size_of::<crate::FailureCleanupNode>())
-        .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
+        .ok_or_else(|| Error::host("bytecode failure-cleanup metadata size overflow"))?;
     let range_bytes = proto
         .failure_cleanup_ranges
         .len()
         .checked_mul(std::mem::size_of::<crate::FailureCleanupRange>())
-        .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
+        .ok_or_else(|| Error::host("bytecode failure-cleanup metadata size overflow"))?;
     node_bytes
         .checked_add(range_bytes)
-        .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))
+        .ok_or_else(|| Error::host("bytecode failure-cleanup metadata size overflow"))
 }

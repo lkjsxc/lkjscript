@@ -46,12 +46,8 @@ fn match_source() -> &'static str {
 
 #[test]
 fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers() {
-    let compiled = compile_source(
-        tree_source(),
-        "recursive-tree.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile finite recursive tree");
+    let compiled = compile_source(tree_source(), "recursive-tree.lkjscript")
+        .expect("compile finite recursive tree");
     let evaluated = evaluator_owned(&compiled);
     assert_eq!(evaluated.snapshot_object_count(), 5);
     let ExecutionOutcome::Returned(vm) = run_chunk(
@@ -90,12 +86,8 @@ fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers(
 
 #[test]
 fn recursive_branch_match_runs_on_evaluator_and_vm() {
-    let compiled = compile_source(
-        match_source(),
-        "recursive-tree-match.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile recursive branch match");
+    let compiled = compile_source(match_source(), "recursive-tree-match.lkjscript")
+        .expect("compile recursive branch match");
     assert_eq!(
         evaluate(compiled.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(42)),

@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
-use crate::{FunctionProto, Op, ProductFieldRef, ProductMetadata, ValidationLimits};
+use crate::{FunctionProto, Op, ProductFieldRef, ProductMetadata, ValidationPolicy};
 
 fn unit_chunk() -> Chunk {
     let mut chunk = Chunk::new();
@@ -17,7 +17,7 @@ fn index_instruction(op: Op, index: u64) -> Vec<u8> {
 }
 
 fn error(chunk: Chunk) -> String {
-    validate_chunk(chunk, &ValidationLimits::default())
+    validate_chunk(chunk, ValidationPolicy::Unrestricted)
         .expect_err("chunk must fail validation")
         .to_string()
 }

@@ -139,11 +139,7 @@ fn compiler_selects_sealed_per_value_and_verifier_rejects_mutation() -> Result<(
         .any(|placement| placement.route == MemoryValueRoute::LastUseMove));
     let source =
         include_str!("../../../../../lkjscript-app/tests/fixtures/sealed-placement.lkjscript");
-    let compiled = crate::compile_source(
-        source,
-        "sealed-placement.lkjscript",
-        &lkjscript_core::Limits::default(),
-    )?;
+    let compiled = crate::compile_source(source, "sealed-placement.lkjscript")?;
     let representations = &compiled.ssa().program().memory.representations;
     assert!(representations.iter().any(|item| {
         item.category == lkjscript_ir::StructuralValueCategory::Owner

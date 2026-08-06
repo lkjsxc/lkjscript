@@ -2,7 +2,7 @@ use std::error::Error;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Arc;
 
-use lkjscript_core::{validate_chunk, Chunk, Constant, ExecutionOutcome, Op, ValidationLimits};
+use lkjscript_core::{validate_chunk, Chunk, Constant, ExecutionOutcome, Op, ValidationPolicy};
 
 use super::*;
 
@@ -23,13 +23,11 @@ fn chunk(trap: bool) -> Result<Arc<lkjscript_core::ValidatedChunk>, Box<dyn Erro
         chunk.main.emit(Op::Unit);
         chunk.main.emit(Op::Return);
     }
-    let validated = validate_chunk(chunk, &ValidationLimits::default())?;
+    let validated = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let prepared =
         lkjscript_contracts::PreparedProgramIdentity::new([if trap { 2 } else { 1 }; 32])?;
     Ok(Arc::new(lkjscript_core::bind_prepared_identity(
-        validated,
-        prepared,
-        &ValidationLimits::default(),
+        validated, prepared,
     )?))
 }
 

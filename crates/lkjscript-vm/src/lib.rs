@@ -40,7 +40,7 @@ pub fn run_chunk_auto(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
-    use lkjscript_core::{validate_chunk, Chunk, Constant, ExecutionOutcome, Op, ValidationLimits};
+    use lkjscript_core::{validate_chunk, Chunk, Constant, ExecutionOutcome, Op, ValidationPolicy};
 
     use super::run_chunk;
 
@@ -52,7 +52,7 @@ mod tests {
             .push(Constant::Str("explicit SSA trap".into()));
         chunk.main.emit_op_u16(Op::LoadConst, 0);
         chunk.main.emit(Op::Trap);
-        let chunk = validate_chunk(chunk, &ValidationLimits::default()).expect("validate trap");
+        let chunk = validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("validate trap");
         match run_chunk(
             &chunk,
             &crate::ExecutionInputs::default(),

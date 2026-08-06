@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use lkjscript_compiler::{compile_path, compile_path_with_metrics, CompileMetrics};
-use lkjscript_core::{ExecutionConfig, Limits};
+use lkjscript_core::ExecutionConfig;
 use lkjscript_jit::JitConfig;
 
 use crate::engine;
@@ -22,10 +22,10 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
         lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
-        compile_path_with_metrics(&source, &Limits::default()).map_err(|error| error.to_string())?
+        compile_path_with_metrics(&source).map_err(|error| error.to_string())?
     } else {
         (
-            compile_path(&source, &Limits::default()).map_err(|error| error.to_string())?,
+            compile_path(&source).map_err(|error| error.to_string())?,
             CompileMetrics::default(),
         )
     };

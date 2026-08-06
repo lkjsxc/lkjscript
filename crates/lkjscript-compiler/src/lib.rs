@@ -101,8 +101,6 @@ pub(crate) fn ensure_source_path(path: &Path) -> lkjscript_core::Result<()> {
     source::ensure_source_path_for_compiler(path)
 }
 
-pub use lkjscript_core::Limits as CompileLimits;
-
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests;

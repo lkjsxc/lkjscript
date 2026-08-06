@@ -24,11 +24,6 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
                 fields
             }
         };
-        if fields.len() > MAX_STRUCTURAL_LAYOUT_FIELDS {
-            return Err(Error::msg(
-                "bytecode structural layout field count exceeds the exact bound",
-            ));
-        }
         for field in fields {
             validate_field(chunk, field)?;
             bytes = add(bytes, 59, "structural metadata byte size")?;

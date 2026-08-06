@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -13,7 +13,7 @@ fn main_source(result: &str, body: &str) -> String {
 }
 
 fn assert_i64_all(source: &str, expected: i64) {
-    let program = compile_source(source, "never-control.lkjscript", &Limits::default())
+    let program = compile_source(source, "never-control.lkjscript")
         .expect("compile canonical control source");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
@@ -94,8 +94,7 @@ fn value_trap_is_exact_in_all_engines() {
     let source = format!(
         "{E2}def/\nname/\nfail\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\ntrap/\nformat-i64/\nbit-or/\nn\n0\n/bit-or\n/format-i64\n/trap\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nfail/\n7\n/fail\n/main\n"
     );
-    let program = compile_source(&source, "trap-control.lkjscript", &Limits::default())
-        .expect("compile value trap");
+    let program = compile_source(&source, "trap-control.lkjscript").expect("compile value trap");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Trapped("7".into()),
@@ -143,8 +142,7 @@ fn exit_is_structured_in_all_engines() {
         "i64",
         "let/\nbind/\ntext\nformat-i64/\n9\n/format-i64\n/bind\nexit/\n23\n/exit\n/let",
     );
-    let program = compile_source(&source, "exit-control.lkjscript", &Limits::default())
-        .expect("compile exit control");
+    let program = compile_source(&source, "exit-control.lkjscript").expect("compile exit control");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Exited(23),
@@ -193,6 +191,6 @@ fn never_storage_and_illegal_control_are_rejected() {
         format!("{E2}enum/\nname/\nboxed\n/name\nforall/\nt\n/forall\nvariants/\nvariant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\nvariant-value/\ntype/\nboxed/\nnever\n/boxed\n/type\nvariant/\nempty\n/variant\nfields/\n/fields\n/variant-value\n1\n/do\n/main\n"),
     ];
     for source in invalid {
-        assert!(compile_source(&source, "invalid-never.lkjscript", &Limits::default()).is_err());
+        assert!(compile_source(&source, "invalid-never.lkjscript").is_err());
     }
 }

@@ -64,7 +64,16 @@ source 1,024 bytes beyond the former 16 MiB boundary and exercises the source au
 in-memory units. Checked accounting crosses 256 MiB; the exact 258 MiB compile-and-execute geometry
 is retained as an opt-in stress test and has not been run as part of normal verification. Compile
 metrics are observational phase timings and source-file counts only. Package manifests and
-prepared-program identities likewise do not carry compiler-profile identity. Canonical
+prepared-program identities likewise do not carry compiler-profile identity. Trusted compiler
+output and prepared-identity rebinding now validate bytecode with an explicit unrestricted mode:
+there is no finite default, total encoded-byte ceiling, physical-table count ceiling, metadata-byte
+ceiling, or per-constant data ceiling. The boundary-local `ValidationPolicy::Limited` variant checks
+only one checked total-byte observation and reports a distinct bytecode-policy failure; the same
+chunk remains valid under `Unrestricted`. Bytes-literal decoding checks exact lowercase hexadecimal
+syntax and reserves decoded storage fallibly without a constant-size admission rule. Generated
+coverage validates a chunk carrying more than 16 MiB of constant data under unrestricted mode,
+rejects it under a deliberately low byte policy, and compiles and executes `bytes-length` through
+the VM for a literal one byte beyond the former 1 MiB constant limit. Canonical
 verified-SSA, validated-bytecode, and prepared-program identity bytes stream directly into one
 incremental SHA-256 implementation owned by `lkjscript-contracts` and re-exported by core. Identity
 construction has no canonical-byte, append-count, prepared-descriptor-byte, or ordered-closure-entry
@@ -135,10 +144,10 @@ may build elsewhere, but no other host or native target is currently claimed as 
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. Bytecode `ValidationLimits` still cap total encoded chunk bytes, physical
-  table entries, metadata bytes, and constant data during validation; there is no separate
-  per-function code-byte validity limit. The 300- and 1,024-owner production geometries stay below
-  the remaining physical cleanup-node/range limits after sharing. Constants, globals,
+  40,045 verifier steps. Bytecode validation has no project-selected encoded-size, physical-table,
+  metadata-size, constant-size, or cleanup-node/range count admission. An explicit limited policy
+  at an untrusted artifact boundary may reject only the checked total-byte observation; trusted
+  compilation and prepared binding use unrestricted validation. Constants, globals,
   product/enum/structural tables, product fields, enum substitutions, and several structural
   descriptors retain `u16` or `u8` representation ceilings. HIR and SSA place identities remain
   `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.

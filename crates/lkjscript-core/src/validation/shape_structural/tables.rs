@@ -1,48 +1,4 @@
-fn validate_table_limits(chunk: &Chunk, limits: &ValidationLimits) -> Result<()> {
-    let lengths = [
-        ("witness groups", chunk.memory_witness_groups.len(), crate::MAX_MEMORY_WITNESS_GROUPS),
-        ("witnesses", chunk.memory_witnesses.len(), crate::MAX_MEMORY_WITNESSES),
-        ("types", chunk.structural_types.len(), MAX_STRUCTURAL_TYPES),
-        (
-            "layouts",
-            chunk.structural_layouts.len(),
-            MAX_STRUCTURAL_LAYOUTS,
-        ),
-        (
-            "representations",
-            chunk.structural_representations.len(),
-            MAX_STRUCTURAL_REPRESENTATIONS,
-        ),
-        (
-            "destinations",
-            chunk.structural_destinations.len(),
-            MAX_STRUCTURAL_DESTINATIONS,
-        ),
-        (
-            "destination fields",
-            chunk.structural_destination_fields.len(),
-            MAX_STRUCTURAL_OPERATION_REFS,
-        ),
-        (
-            "aggregate fields",
-            chunk.structural_aggregate_fields.len(),
-            MAX_STRUCTURAL_OPERATION_REFS,
-        ),
-        (
-            "payloads",
-            chunk.structural_payloads.len(),
-            MAX_STRUCTURAL_OPERATION_REFS,
-        ),
-    ];
-    for (name, length, hard_limit) in lengths {
-        let limit = hard_limit.min(limits.max_table_entries);
-        if length > limit {
-            return Err(Error::msg(format!(
-                "bytecode structural {name} table has {length} entries, limit {limit}",
-            )));
-        }
-    }
-
+fn validate_table_shape(chunk: &Chunk) -> Result<()> {
     let carries_structural = !chunk.memory_witness_groups.is_empty()
         || !chunk.memory_witnesses.is_empty()
         || !chunk.structural_types.is_empty()

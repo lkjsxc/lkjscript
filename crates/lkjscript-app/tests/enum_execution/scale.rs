@@ -41,7 +41,6 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
     let program = compile_source(
         borrowed_string_call_source(),
         "borrowed-string-call.lkjscript",
-        &Limits::default(),
     )
     .expect("compile borrowed string call");
     let copies = program
@@ -97,12 +96,8 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
 
 #[test]
 fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
-    let program = compile_source(
-        &structural_scale_source(),
-        "structural-scale.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile structural scale source");
+    let program = compile_source(&structural_scale_source(), "structural-scale.lkjscript")
+        .expect("compile structural scale source");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(7))

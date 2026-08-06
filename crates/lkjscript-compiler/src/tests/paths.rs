@@ -19,7 +19,7 @@ fn filesystem_main(path_expression: &str) -> String {
 #[test]
 fn filesystem_operations_require_path_instead_of_str() {
     let source = filesystem_main("string-literal/\n/tmp/rejected-string-path\n/string-literal");
-    let error = compile_source(&source, "string-path.lkjscript", &Limits::default())
+    let error = compile_source(&source, "string-path.lkjscript")
         .expect_err("Str pathname must fail")
         .to_string();
     assert!(error.contains("arg type string not assignable to path"));
@@ -31,8 +31,7 @@ fn explicit_path_construction_reaches_verified_ssa() {
         "unwrap-ok/\nconvert-string-to-path/\nstring-literal/\n/tmp/verified-path\n/string-literal\n",
         "/convert-string-to-path\n/unwrap-ok"
     ));
-    let program = compile_source(&source, "path.lkjscript", &Limits::default())
-        .expect("explicit Path program");
+    let program = compile_source(&source, "path.lkjscript").expect("explicit Path program");
     let operations: Vec<_> = program
         .ssa()
         .program()
@@ -76,16 +75,14 @@ fn public_in_memory_apis_require_canonical_relative_lkjscript_paths() {
         "legacy.lkjml",
     ] {
         assert!(
-            validate_source(&source, rejected, &Limits::default()).is_err(),
+            validate_source(&source, rejected).is_err(),
             "validate_source accepted {rejected}"
         );
         assert!(
-            compile_source(&source, rejected, &Limits::default()).is_err(),
+            compile_source(&source, rejected).is_err(),
             "compile_source accepted {rejected}"
         );
     }
-    validate_source(&source, "src/canonical.lkjscript", &Limits::default())
-        .expect("validate canonical logical path");
-    compile_source(&source, "src/canonical.lkjscript", &Limits::default())
-        .expect("compile canonical logical path");
+    validate_source(&source, "src/canonical.lkjscript").expect("validate canonical logical path");
+    compile_source(&source, "src/canonical.lkjscript").expect("compile canonical logical path");
 }

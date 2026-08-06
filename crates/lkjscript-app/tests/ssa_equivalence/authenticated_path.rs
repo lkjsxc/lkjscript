@@ -1,7 +1,7 @@
 use crate::oracle::main_source;
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{
-    Limits, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLimits,
     StructuralSnapshotLimits,
 };
@@ -15,8 +15,8 @@ fn compiler_authenticates_path_rehydration() {
             "/tmp/authenticated\n/string-literal\n/convert-string-to-path\n/unwrap-ok",
         ),
     );
-    let program = compile_source(&source, "authenticated-path.lkjscript", &Limits::default())
-        .expect("compile path return");
+    let program =
+        compile_source(&source, "authenticated-path.lkjscript").expect("compile path return");
     let chunk = program.bytecode();
     let path_type = chunk
         .structural_types()

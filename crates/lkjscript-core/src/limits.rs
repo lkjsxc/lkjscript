@@ -1,4 +1,4 @@
-//! Language, bytecode-validation, and execution budgets.
+//! Language representation constants and execution policy.
 
 use std::time::Duration;
 
@@ -10,35 +10,6 @@ pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
 pub const MAX_BYTE_STORAGE_BYTES: usize = 1_000_000;
 /// Maximum bytes transferred by one bulk file or socket operation.
 pub const MAX_BULK_IO_BYTES: usize = 64 * 1024;
-
-pub const MAX_CHUNK_ENCODED_BYTES: usize = 16 * 1024 * 1024;
-pub const MAX_BYTECODE_TABLE_ENTRIES: usize = 65_535;
-pub const MAX_BYTECODE_METADATA_BYTES: usize = 16 * 1024 * 1024;
-pub const MAX_CONSTANT_DATA_BYTES: usize = 1024 * 1024;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ValidationLimits {
-    pub max_encoded_bytes: usize,
-    pub max_table_entries: usize,
-    pub max_metadata_bytes: usize,
-    pub max_constant_data_bytes: usize,
-}
-
-impl Default for ValidationLimits {
-    fn default() -> Self {
-        Self {
-            max_encoded_bytes: MAX_CHUNK_ENCODED_BYTES,
-            max_table_entries: MAX_BYTECODE_TABLE_ENTRIES,
-            max_metadata_bytes: MAX_BYTECODE_METADATA_BYTES,
-            max_constant_data_bytes: MAX_CONSTANT_DATA_BYTES,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Limits {
-    pub validation: ValidationLimits,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionConfig {
@@ -84,9 +55,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_spec_consts() {
-        let lim = Limits::default();
-        assert_eq!(lim.validation, ValidationLimits::default());
+    fn language_constants_match_implemented_representations() {
         assert_eq!(MAX_PRODUCT_FIELDS, 15);
         assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);
         assert_eq!(MAX_BYTE_STORAGE_BYTES, 1_000_000);

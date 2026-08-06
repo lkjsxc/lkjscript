@@ -1,13 +1,11 @@
 use crate::{
     Chunk, Error, Result, StructuralDestinationMetadata, StructuralFieldMetadata,
     StructuralFieldRoute, StructuralLayoutKind, StructuralRepresentationMetadata,
-    StructuralValueCategory, ValidationLimits, MAX_STRUCTURAL_DESTINATIONS, MAX_STRUCTURAL_LAYOUTS,
-    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    StructuralValueCategory,
 };
 
-pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize> {
-    validate_table_limits(chunk, limits)?;
+pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
+    validate_table_shape(chunk)?;
     let mut bytes = validate_witness_groups(chunk)?;
     bytes = add(
         bytes,
@@ -35,11 +33,13 @@ pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize
             ));
         }
         validate_destination(chunk, destination)?;
-        bytes = add(
-            bytes,
-            9_usize.saturating_add(destination.fields.len().saturating_mul(59)),
-            "structural metadata byte size",
-        )?;
+        let field_bytes = destination
+            .fields
+            .len()
+            .checked_mul(59)
+            .ok_or_else(|| Error::host("bytecode structural metadata byte size overflow"))?;
+        bytes = add(bytes, 9, "structural metadata byte size")?;
+        bytes = add(bytes, field_bytes, "structural metadata byte size")?;
     }
     validate_operation_references(chunk, bytes)
 }

@@ -37,6 +37,13 @@ fn validate_witness_groups(chunk: &Chunk) -> Result<usize> {
     }
     lkjscript_contracts::validate_executable_memory_witness_groups(&contracts)
         .map_err(|error| Error::msg(error.to_string()))?;
-    Ok(groups.iter().fold(0usize, |sum, group|
-        sum.saturating_add(64).saturating_add(group.members.len().saturating_mul(64))))
+    groups.iter().try_fold(0usize, |bytes, group| {
+        let member_bytes = group
+            .members
+            .len()
+            .checked_mul(64)
+            .ok_or_else(|| Error::host("bytecode memory witness group byte size overflow"))?;
+        let bytes = add(bytes, 64, "memory witness group byte size")?;
+        add(bytes, member_bytes, "memory witness group byte size")
+    })
 }

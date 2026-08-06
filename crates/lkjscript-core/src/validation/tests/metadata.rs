@@ -100,7 +100,7 @@ fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
     valid.main.emit_op_u16(Op::LoadConst, 0);
     valid.main.emit(Op::Trap);
     let validated =
-        validate_chunk(valid, &ValidationLimits::default()).expect("explicit trap validates");
+        validate_chunk(valid, ValidationPolicy::Unrestricted).expect("explicit trap validates");
     assert_eq!(validated.main_instructions()[1].op(), Op::Trap);
 
     let mut wrong = Chunk::new();
@@ -111,46 +111,38 @@ fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
 }
 
 #[test]
-fn configured_total_byte_table_metadata_and_constant_limits_are_enforced() {
-    let encoded_limits = ValidationLimits {
-        max_encoded_bytes: 1,
-        ..ValidationLimits::default()
-    };
-    assert!(validate_chunk(unit_chunk(), &encoded_limits)
-        .expect_err("encoded limit")
-        .to_string()
-        .contains("encoded bytecode"));
+fn unrestricted_validation_crosses_former_chunk_limit_and_low_byte_policy_is_typed() {
+    let mut chunk = unit_chunk();
+    chunk.constants.push(Constant::StaticBytes(
+        vec![0; 16 * 1024 * 1024 + 1].into_boxed_slice(),
+    ));
 
-    let mut table = unit_chunk();
-    table.constants.push(Constant::I64(1));
-    let table_limits = ValidationLimits {
-        max_table_entries: 0,
-        ..ValidationLimits::default()
-    };
-    assert!(validate_chunk(table, &table_limits)
-        .expect_err("table limit")
-        .to_string()
-        .contains("table"));
+    let policy_error = validate_chunk(
+        chunk.clone(),
+        ValidationPolicy::Limited {
+            max_total_bytes: 1024,
+        },
+    )
+    .expect_err("low untrusted artifact byte policy must fail");
+    assert_eq!(policy_error.class(), crate::ErrorClass::BytecodePolicy);
+    assert!(policy_error.to_string().contains("total encoded bytes"));
 
-    let metadata_limits = ValidationLimits {
-        max_metadata_bytes: 0,
-        ..ValidationLimits::default()
-    };
-    assert!(validate_chunk(unit_chunk(), &metadata_limits)
-        .expect_err("metadata limit")
-        .to_string()
-        .contains("metadata"));
+    validate_chunk(chunk, ValidationPolicy::Unrestricted)
+        .expect("trusted unrestricted validation must cross the former 16 MiB limit");
+}
 
-    let mut data = unit_chunk();
-    data.constants.push(Constant::Str("x".into()));
-    let data_limits = ValidationLimits {
-        max_constant_data_bytes: 0,
-        ..ValidationLimits::default()
-    };
-    assert!(validate_chunk(data, &data_limits)
-        .expect_err("constant data limit")
-        .to_string()
-        .contains("constant 0"));
+#[test]
+fn malformed_bytecode_failure_is_identical_under_low_and_unrestricted_policy() {
+    let mut malformed = unit_chunk();
+    malformed.global_names.push("same".into());
+    malformed.global_names.push("same".into());
+
+    let unrestricted = validate_chunk(malformed.clone(), ValidationPolicy::Unrestricted)
+        .expect_err("duplicate global metadata must fail");
+    let limited = validate_chunk(malformed, ValidationPolicy::Limited { max_total_bytes: 0 })
+        .expect_err("malformed bytecode must fail before artifact policy");
+    assert_eq!(limited, unrestricted);
+    assert_eq!(limited.class(), crate::ErrorClass::Ordinary);
 }
 
 #[test]

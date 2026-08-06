@@ -26,7 +26,7 @@ fn conversion(program: &mut lkjscript_ir::Program) -> &mut lkjscript_ir::Instruc
 
 #[test]
 fn malformed_conversion_operand_and_result_types_fail_closed() {
-    let compiled = compile_source(EXACT, "malformed-conversion.lkjscript", &Limits::default())
+    let compiled = compile_source(EXACT, "malformed-conversion.lkjscript")
         .expect("compile conversion fixture");
     let mut wrong_operation = compiled.ssa().program().clone();
     let instruction = conversion(&mut wrong_operation);
@@ -43,8 +43,8 @@ fn malformed_conversion_operand_and_result_types_fail_closed() {
 
 #[test]
 fn malformed_numeric_error_identity_layout_and_cases_fail_closed() {
-    let compiled = compile_source(EXACT, "malformed-error.lkjscript", &Limits::default())
-        .expect("compile conversion fixture");
+    let compiled =
+        compile_source(EXACT, "malformed-error.lkjscript").expect("compile conversion fixture");
     let mut missing = compiled.ssa().program().clone();
     missing
         .enums
@@ -99,8 +99,8 @@ fn source_lowers_to_exactly_four_distinct_ssa_conversion_kinds() {
         let source = format!(
             "main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}\n/output\n/sig\n{expression}\n/main\n"
         );
-        let compiled = compile_source(&source, "four-kinds.lkjscript", &Limits::default())
-            .expect("compile conversion kind");
+        let compiled =
+            compile_source(&source, "four-kinds.lkjscript").expect("compile conversion kind");
         let kind = compiled
             .ssa()
             .program()

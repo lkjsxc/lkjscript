@@ -18,8 +18,8 @@ fn locked_generic_history_transports_4096_nested_lists_in_all_tiers() {
 fn run_workload() {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../src/examples/polymorphic-transport/history-workload.lkjscript");
-    let program = lkjscript_compiler::compile_path(&entry, &lkjscript_core::Limits::default())
-        .expect("compile locked nested history workload");
+    let program =
+        lkjscript_compiler::compile_path(&entry).expect("compile locked nested history workload");
     let mut eval_config = EvalConfig::default();
     eval_config.max_frames = 8_192;
     let evaluated = evaluate(program.ssa(), &eval_config);

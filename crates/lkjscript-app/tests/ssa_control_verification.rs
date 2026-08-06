@@ -1,7 +1,6 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::Limits;
 use lkjscript_ir::{verify, BlockId, Terminator, ValueId};
 
 const SIMPLE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n";
@@ -11,8 +10,7 @@ const TWO_TRAPS: &str = "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\nbool\n/input
 
 #[test]
 fn forged_trap_operand_type_fails_closed() {
-    let compiled = compile_source(SIMPLE, "forged-trap.lkjscript", &Limits::default())
-        .expect("compile fixture");
+    let compiled = compile_source(SIMPLE, "forged-trap.lkjscript").expect("compile fixture");
     let mut forged = compiled.ssa().program().clone();
     forged.functions[0].blocks[0].terminator = Terminator::Trap {
         value: ValueId::new(0),
@@ -25,8 +23,8 @@ fn forged_trap_operand_type_fails_closed() {
 
 #[test]
 fn non_dominating_trap_value_fails_closed() {
-    let compiled = compile_source(TWO_TRAPS, "trap-dominance.lkjscript", &Limits::default())
-        .expect("compile trap branches");
+    let compiled =
+        compile_source(TWO_TRAPS, "trap-dominance.lkjscript").expect("compile trap branches");
     let mut forged = compiled.ssa().program().clone();
     let values: Vec<_> = forged.functions[0]
         .blocks
@@ -49,8 +47,7 @@ fn non_dominating_trap_value_fails_closed() {
 
 #[test]
 fn stale_control_target_and_block_arguments_fail_closed() {
-    let compiled =
-        compile_source(LOOP, "stale-control.lkjscript", &Limits::default()).expect("compile loop");
+    let compiled = compile_source(LOOP, "stale-control.lkjscript").expect("compile loop");
     let mut stale_target = compiled.ssa().program().clone();
     stale_target.functions[0].blocks[0].terminator = Terminator::Branch {
         target: BlockId::new(u32::MAX),

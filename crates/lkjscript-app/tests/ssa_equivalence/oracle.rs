@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, OwnedValue};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, OwnedValue};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_vm::run_chunk;
 
@@ -65,7 +65,7 @@ pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
         marked = source.to_string();
         &marked
     };
-    let program = compile_source(source, name, &Limits::default()).expect("compile SSA fixture");
+    let program = compile_source(source, name).expect("compile SSA fixture");
     let evaluated = evaluator_outcome(evaluate(program.ssa(), &EvalConfig::default()));
     let executed = vm_outcome(run_chunk(
         program.bytecode(),

@@ -11,7 +11,10 @@
    removed; checked expression work remains telemetry. Next widen or segment `u32` source
    positions, spans, and snapshot-local node indexes, then address
    product/HIR/memory-plan-table/SSA checks and remaining recursive type/trait/enum paths.
-   Byte-sized function arity, call argument, local, cleanup-local, and executable-place widths are
+   Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
+   constant-data-byte, or cleanup-node/range count admission; a boundary-local limited validator
+   checks only total artifact bytes and has no finite default. Byte-sized function arity, call
+   argument, local, cleanup-local, and executable-place widths are
    removed: one fixed-`u64` index/pair format now executes 300 parameters, arguments, live lexical
    locals, and direct VM place 299, with checked decode and automatic VM fallback; a larger stress
    case executes 1,024 parameters, arguments, and lexical locals. Branch targets use the same fixed
@@ -27,7 +30,7 @@
    retained `u16` constants, globals, product/enum/structural tables and descriptors, plus byte-sized
    product fields and enum substitutions. Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
-   subject to the general bytecode table and metadata validation boundary. Completion requires
+   unrestricted by the removed general bytecode table and metadata admission. Completion requires
    just-beyond-old-boundary and substantially larger positive programs, checked growth, and
    successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte

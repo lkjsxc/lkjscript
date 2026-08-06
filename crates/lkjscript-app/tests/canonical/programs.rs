@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, Limits};
+use lkjscript_core::ExecutionConfig;
 use lkjscript_jit::{execute_forced, JitConfig};
 
 pub fn compile(source: &str, name: &str) -> lkjscript_compiler::ExecutableProgram {
@@ -10,7 +10,7 @@ pub fn compile(source: &str, name: &str) -> lkjscript_compiler::ExecutableProgra
         marked = source.to_string();
         &marked
     };
-    compile_source(source, name, &Limits::default()).expect("compile JIT source fixture")
+    compile_source(source, name).expect("compile JIT source fixture")
 }
 
 pub fn forced(source: &str, name: &str) -> lkjscript_jit::JitExecution {

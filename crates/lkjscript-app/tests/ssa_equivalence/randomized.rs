@@ -1,6 +1,5 @@
 use crate::oracle::{compare_source, evaluator_outcome, main_source};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::Limits;
 use lkjscript_ir::{evaluate, optimize, EvalConfig, EvalOutcome, OptimizationLimits, RuntimeOp};
 
 struct Generator(u64);
@@ -81,8 +80,8 @@ fn evaluator_reports_host_operations_as_explicitly_unsupported() {
         "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
         "print/\nstdio\nstring-literal/\nnot emitted\n/string-literal\n/print\n/main\n"
     );
-    let program = compile_source(source, "unsupported-host.lkjscript", &Limits::default())
-        .expect("compile host operation");
+    let program =
+        compile_source(source, "unsupported-host.lkjscript").expect("compile host operation");
     assert_eq!(
         evaluate(
             program.ssa(),
@@ -107,8 +106,8 @@ fn bounded_randomized_type_correct_scalar_programs_match() {
         let source = main_source(return_type, &expression);
         let name = format!("random-{index}.lkjscript");
         let expected = compare_source(&source, &name);
-        let program = compile_source(&source, &name, &Limits::default())
-            .expect("compile randomized optimization input");
+        let program =
+            compile_source(&source, &name).expect("compile randomized optimization input");
         let optimized = optimize(program.ssa(), OptimizationLimits::default())
             .expect("proof-optimize randomized scalar program");
         assert_eq!(

@@ -97,7 +97,7 @@ pub(super) fn load_frame(
         .saturating_add(loading_started.elapsed());
 
     let parsing_started = Instant::now();
-    let parsed = parse::parse_file(source, origin.clone(), canonical.clone(), state.limits)?;
+    let parsed = parse::parse_file(source, origin.clone(), canonical.clone())?;
     if !is_root
         && parsed
             .forms

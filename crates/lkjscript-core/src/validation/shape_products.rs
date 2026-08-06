@@ -189,5 +189,5 @@ fn validate_region_graph(chunk: &Chunk) -> Result<()> {
 
 fn checked_add(left: usize, right: usize) -> Result<usize> {
     left.checked_add(right)
-        .ok_or_else(|| Error::msg("bytecode metadata byte size overflow"))
+        .ok_or_else(|| Error::host("bytecode metadata byte size overflow"))
 }

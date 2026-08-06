@@ -62,7 +62,7 @@ fn exact_bytes<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: Value) -> Result<Vec<u
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lkjscript_core::{validate_chunk, Chunk, ExecutionConfig, ValidationLimits};
+    use lkjscript_core::{validate_chunk, Chunk, ExecutionConfig, ValidationPolicy};
 
     use crate::run::NoTier;
 
@@ -70,7 +70,7 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.main.emit(Op::Unit);
         chunk.main.emit(Op::Return);
-        validate_chunk(chunk, &ValidationLimits::default()).expect("unit chunk")
+        validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("unit chunk")
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Pure language core: values, validated bytecode, limits, and outcomes.
+//! Pure language core: values, validated bytecode, execution policy, and outcomes.
 
 mod bytecode;
 mod error;
@@ -34,9 +34,8 @@ pub use bytecode::{
 };
 pub use error::{Error, ErrorClass, Result};
 pub use limits::{
-    ExecutionConfig, Limits, ValidationLimits, MAX_BULK_IO_BYTES, MAX_BYTECODE_METADATA_BYTES,
-    MAX_BYTECODE_TABLE_ENTRIES, MAX_BYTE_STORAGE_BYTES, MAX_CHUNK_ENCODED_BYTES,
-    MAX_CONSTANT_DATA_BYTES, MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
+    ExecutionConfig, MAX_BULK_IO_BYTES, MAX_BYTE_STORAGE_BYTES, MAX_LIST_EQUAL_STEPS,
+    MAX_PRODUCT_FIELDS,
 };
 pub use lkjscript_contracts::{sha256, MemoryWitnessOperation, Sha256};
 pub use numeric_conversion::{
@@ -94,6 +93,6 @@ pub use structural::{
 };
 pub use validation::{
     bind_prepared_identity, validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity,
-    ValidatedChunk,
+    ValidatedChunk, ValidationPolicy,
 };
 pub use value::{CapabilityKind, ResourceKind, Value};

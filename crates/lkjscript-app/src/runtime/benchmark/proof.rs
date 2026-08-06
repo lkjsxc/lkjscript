@@ -2,12 +2,12 @@ use std::error::Error;
 use std::time::Instant;
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, Limits};
+use lkjscript_core::ExecutionConfig;
 use lkjscript_jit::{execute_optimizing, JitConfig};
 
 pub(super) fn run(samples: usize) -> Result<(), Box<dyn Error>> {
     let source = include_str!("../../../tests/fixtures/optimizing-loop.lkjscript");
-    let program = compile_source(source, "proof-benchmark.lkjscript", &Limits::default())?;
+    let program = compile_source(source, "proof-benchmark.lkjscript")?;
     println!(concat!(
         "proof-workers\tsamples\tp50-ns\tp95-ns\tp99-ns\t",
         "certificate-records\tcertificate-bytes\tnative-entries\tvm-fallbacks"

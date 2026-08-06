@@ -41,8 +41,7 @@ fn loader_uses_explicit_dependency_first_dfs_in_one_wide_directory() -> std::io:
         ),
     )?;
 
-    let tree = load(&root, &Limits::default())
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let tree = load(&root).map_err(|error| std::io::Error::other(error.to_string()))?;
     assert_eq!(tree.files().len(), DEPTH + 1);
     assert_eq!(tree.files()[0].path, paths[DEPTH - 1].canonicalize()?);
     assert_eq!(tree.files()[DEPTH].path, root.canonicalize()?);
@@ -65,7 +64,7 @@ fn loader_cycle_diagnostic_retains_deterministic_related_import_spans() -> std::
     )?;
     fs::write(&first, exact_import("second.lkjscript", "cycle"))?;
     fs::write(&second, exact_import("main.lkjscript", "cycle"))?;
-    let error = load(&root, &Limits::default()).expect_err("import cycle");
+    let error = load(&root).expect_err("import cycle");
     assert_eq!(error.code(), "LKJ-SRC-LOAD");
     assert_eq!(error.primary_span().start().line(), 2);
     assert_eq!(error.related_spans().len(), 2);
@@ -90,8 +89,7 @@ fn loader_retains_logical_origin_separate_from_canonical_host_path() -> std::io:
             unit_main("unit")
         ),
     )?;
-    let tree = load(&root, &Limits::default())
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let tree = load(&root).map_err(|error| std::io::Error::other(error.to_string()))?;
     assert_eq!(tree.source_origins().len(), 2);
     for origin in tree.source_origins() {
         assert!(!origin.logical_path().starts_with('/'));
@@ -117,8 +115,7 @@ fn loader_accepts_wide_directories_and_imported_declarations() -> std::io::Resul
     for index in 0..16 {
         fs::write(wide.0.join(format!("asset-{index}")), "")?;
     }
-    let tree = load(&entry, &Limits::default())
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let tree = load(&entry).map_err(|error| std::io::Error::other(error.to_string()))?;
     assert_eq!(tree.files().len(), 1);
 
     let declarations = TempDir::new("imported-declarations")?;
@@ -136,8 +133,7 @@ fn loader_accepts_wide_directories_and_imported_declarations() -> std::io::Resul
             unit_main("unit")
         ),
     )?;
-    let tree = load(&root, &Limits::default())
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let tree = load(&root).map_err(|error| std::io::Error::other(error.to_string()))?;
     assert_eq!(tree.source_origins().len(), 2);
     assert_eq!(tree.declarations().len(), 4);
     Ok(())

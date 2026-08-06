@@ -108,23 +108,16 @@ fn same_source_fails_under_low_loader_policy_and_loads_unrestricted() {
     fs::write(&root, &source).expect("write boundary source");
     let source_bytes = u64::try_from(source.len()).expect("fixture length");
 
-    let failure = super::load::load_with_byte_policy(
-        &root,
-        &Limits::default(),
-        SourceBytePolicy::limited(source_bytes - 1),
-    )
-    .expect_err("low untrusted byte policy");
+    let failure =
+        super::load::load_with_byte_policy(&root, SourceBytePolicy::limited(source_bytes - 1))
+            .expect_err("low untrusted byte policy");
     assert_eq!(failure.category().as_str(), "resource-limit");
     assert!(failure
         .message()
         .contains("category=aggregate-source-bytes"));
 
-    let (tree, _) = super::load::load_with_byte_policy(
-        &root,
-        &Limits::default(),
-        SourceBytePolicy::Unrestricted,
-    )
-    .expect("same source loads without boundary policy");
+    let (tree, _) = super::load::load_with_byte_policy(&root, SourceBytePolicy::Unrestricted)
+        .expect("same source loads without boundary policy");
     assert_eq!(tree.files().len(), 1);
 }
 
@@ -138,7 +131,7 @@ fn source_authority_accepts_more_than_65_536_in_memory_units() {
         .iter()
         .map(|path| (path.as_str(), ""))
         .collect::<Vec<_>>();
-    let tree = validate_source_set_for_analysis(&files, &paths[0], &Limits::default())
+    let tree = validate_source_set_for_analysis(&files, &paths[0])
         .expect("source authority has no source-unit validity ceiling");
     assert_eq!(tree.files().len(), SOURCE_UNITS);
 }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lkjscript_compiler::{compile_path, compile_source, validate_source};
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
@@ -66,7 +66,7 @@ fn wide_source_directory_compiles_and_executes_through_the_generic_path(
         "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n42\n/main\n",
     )?;
 
-    let program = compile_path(&source, &Limits::default())?;
+    let program = compile_path(&source)?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
@@ -91,7 +91,7 @@ fn trusted_source_above_16_mib_compiles_to_validated_bytecode_and_executes(
     assert_eq!(fs::metadata(&source)?.len(), u64::try_from(SOURCE_BYTES)?);
 
     // ExecutableProgram exposes bytecode only after compiler-side validation.
-    let program = compile_path(&source, &Limits::default())?;
+    let program = compile_path(&source)?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
@@ -125,7 +125,7 @@ fn trusted_import_closure_above_256_mib_compiles_and_executes(
     write_source_with_trailing_trivia(&library, library_prefix, SOURCE_BYTES_PER_UNIT)?;
     assert!(fs::metadata(&root)?.len() + fs::metadata(&library)?.len() > 256 * 1024 * 1024);
 
-    let program = compile_path(&root, &Limits::default())?;
+    let program = compile_path(&root)?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
@@ -250,7 +250,7 @@ fn deeply_nested_source_compiles_validates_executes_and_drops_on_a_small_stack(
         .stack_size(256 * 1024)
         .spawn(
             move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-                let program = compile_source(&source, "deep-source.lkjscript", &Limits::default())?;
+                let program = compile_source(&source, "deep-source.lkjscript")?;
                 if program.memory_plan().work.expressions != HIR_EXPRESSIONS {
                     return Err(format!(
                         "deep source produced {} HIR memory-plan expressions, expected {HIR_EXPRESSIONS}",
@@ -301,12 +301,8 @@ fn malformed_deep_source_is_deterministic_and_drops_partial_trees_on_a_small_sta
                 ] {
                     let source = generated_deep_malformed_source(DEPTH, mismatched);
                     let diagnose = || {
-                        validate_source(
-                            &source,
-                            "malformed-deep-source.lkjscript",
-                            &Limits::default(),
-                        )
-                        .map_err(|error| error.to_string())
+                        validate_source(&source, "malformed-deep-source.lkjscript")
+                            .map_err(|error| error.to_string())
                     };
                     let first = diagnose().err().ok_or_else(|| {
                         std::io::Error::other("malformed deep source unexpectedly validated")
@@ -336,7 +332,7 @@ fn nested_match_markers_beyond_the_former_physical_depth_execute(
     const DEPTH: usize = 16;
     const RESULT: i64 = 4_040;
     let source = generated_nested_match_source(DEPTH, RESULT)?;
-    let program = compile_source(&source, "nested-match-scale.lkjscript", &Limits::default())?;
+    let program = compile_source(&source, "nested-match-scale.lkjscript")?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
@@ -360,7 +356,7 @@ fn flat_source_beyond_former_quotas_compiles_validates_and_executes(
     assert!(source.lines().count() > 384);
 
     // ExecutableProgram exposes bytecode only after compiler-side validation.
-    let program = compile_source(&source, "source-scale.lkjscript", &Limits::default())?;
+    let program = compile_source(&source, "source-scale.lkjscript")?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),

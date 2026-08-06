@@ -6,7 +6,7 @@ fn byte_vector_slice_accepts_nll_mutation_move_and_return() {
         "let/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\ndo/\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nbyte-slice-length/\nr\n/byte-slice-length\n/let\nlet/\nbind/\nm\nborrow-mut/\nb\n/borrow-mut\n/bind\ndo/\nbyte-slice-mut-set-byte/\nm\n0\n65\n/byte-slice-mut-set-byte\nmove/\nb\n/move\n/do\n/let\n/do\n/let",
         "byte-vector",
     );
-    let program = compile_source(&source, "owned-valid.lkjscript", &Limits::default())
+    let program = compile_source(&source, "owned-valid.lkjscript")
         .expect("valid byte-vector ownership island");
     let instructions: Vec<_> = program
         .ssa()
@@ -37,31 +37,19 @@ fn byte_vector_slice_accepts_nll_mutation_move_and_return() {
         "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nlet/\nbind/\nr1\nborrow/\nb\n/borrow\n/bind\nbind/\nr2\nborrow/\nb\n/borrow\n/bind\ndo/\nbyte-slice-length/\nr1\n/byte-slice-length\nbyte-slice-length/\nr2\n/byte-slice-length\n/do\n/let\n/let",
         "i64",
     );
-    compile_source(
-        &shared_pair,
-        "owned-shared-pair.lkjscript",
-        &Limits::default(),
-    )
-    .expect("overlapping shared loans must be accepted");
+    compile_source(&shared_pair, "owned-shared-pair.lkjscript")
+        .expect("overlapping shared loans must be accepted");
 
     let equal_branch = ownership_source(
         "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nif/\ntrue\nmove/\nb\n/move\nmove/\nb\n/move\n/if\n/let",
         "byte-vector",
     );
-    compile_source(
-        &equal_branch,
-        "owned-equal-branch.lkjscript",
-        &Limits::default(),
-    )
-    .expect("equal branch move states must join");
+    compile_source(&equal_branch, "owned-equal-branch.lkjscript")
+        .expect("equal branch move states must join");
 
     let conditional_owner = conditional_cleanup_source();
-    let conditional = compile_source(
-        &conditional_owner,
-        "owned-conditional-cleanup.lkjscript",
-        &Limits::default(),
-    )
-    .expect("branch-specific whole-place cleanup must compile");
+    let conditional = compile_source(&conditional_owner, "owned-conditional-cleanup.lkjscript")
+        .expect("branch-specific whole-place cleanup must compile");
     assert!(conditional
         .memory_plan()
         .obligations
@@ -93,20 +81,12 @@ fn byte_vector_slice_accepts_nll_mutation_move_and_return() {
         "if/\ntrue\nlet/\nbind/\na\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nmove/\na\n/move\n/let\nlet/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\nmove/\nb\n/move\n/let\n/if",
         "byte-vector",
     );
-    compile_source(
-        &branch_local_result,
-        "owned-branch-local-result.lkjscript",
-        &Limits::default(),
-    )
-    .expect("transferred branch-local owners must canonicalize at the result join");
+    compile_source(&branch_local_result, "owned-branch-local-result.lkjscript")
+        .expect("transferred branch-local owners must canonicalize at the result join");
 
     let constant_false_loop = ownership_source("while/\nfalse\nunit\n/while", "unit");
-    compile_source(
-        &constant_false_loop,
-        "constant-false-loop.lkjscript",
-        &Limits::default(),
-    )
-    .expect("branch simplification must clear a stale loop-header marker");
+    compile_source(&constant_false_loop, "constant-false-loop.lkjscript")
+        .expect("branch simplification must clear a stale loop-header marker");
 }
 
 fn conditional_cleanup_source() -> String {
@@ -128,8 +108,8 @@ fn static_byte_cleanup_covers_normal_and_explicit_trap_paths() {
         "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nunit\n/let",
         "unit",
     );
-    let program = compile_source(&normal, "drop-normal.lkjscript", &Limits::default())
-        .expect("static byte owner cleanup");
+    let program =
+        compile_source(&normal, "drop-normal.lkjscript").expect("static byte owner cleanup");
     let main = program.ssa().program().functions.last().expect("main SSA");
     assert!(main
         .blocks
@@ -150,8 +130,8 @@ fn static_byte_cleanup_covers_normal_and_explicit_trap_paths() {
         "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\ntrap/\nstring-literal/\nstop\n/string-literal\n/trap\n/let",
         "unit",
     );
-    let program = compile_source(&trapped, "drop-trap.lkjscript", &Limits::default())
-        .expect("trap edge byte owner cleanup");
+    let program =
+        compile_source(&trapped, "drop-trap.lkjscript").expect("trap edge byte owner cleanup");
     let main = program.ssa().program().functions.last().expect("main SSA");
     let trap_block = main
         .blocks
@@ -178,7 +158,7 @@ fn byte_vector_slice_rejects_affine_and_alias_failures() {
     ];
     for (body, result, diagnostic) in cases {
         let source = ownership_source(body, result);
-        let error = compile_source(&source, "owned-invalid.lkjscript", &Limits::default())
+        let error = compile_source(&source, "owned-invalid.lkjscript")
             .expect_err("invalid ownership source must fail")
             .to_string();
         assert!(error.contains(diagnostic), "{diagnostic}: {error}");

@@ -1,6 +1,6 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{
-    Limits, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
     StructuralLimits, StructuralSnapshotLimits, StructuralType, StructuralTypeKind,
 };
@@ -37,7 +37,7 @@ fn compiler_authenticates_result_path_rehydration() {
 }
 
 fn exercise(source: &str, name: &str, active: &str, child_kind: StructuralKind, bytes: &[u8]) {
-    let program = compile_source(source, name, &Limits::default()).expect("compile enum return");
+    let program = compile_source(source, name).expect("compile enum return");
     let chunk = program.bytecode();
     let returned = chunk.main().return_structural.expect("structural return");
     let representation = &chunk.structural_representations()[returned.index()];

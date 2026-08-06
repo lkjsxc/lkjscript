@@ -62,5 +62,5 @@ fn layout_fields(
 
 fn add(left: usize, right: usize, category: &str) -> Result<usize> {
     left.checked_add(right)
-        .ok_or_else(|| Error::msg(format!("bytecode {category} overflow")))
+        .ok_or_else(|| Error::host(format!("bytecode {category} overflow")))
 }

@@ -52,7 +52,7 @@ fn failure_cleanup_metadata_is_shared_exact_and_independently_checked() {
             unentered_plan: None,
         },
     ];
-    validate_chunk(chunk.clone(), &ValidationLimits::default())
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
         .expect("exact shared failure cleanup validates");
 
     let mut missing = chunk.clone();

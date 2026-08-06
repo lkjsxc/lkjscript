@@ -7,7 +7,8 @@ fn returned_symbol_retains_text_after_artifact_release() {
         let symbol = chunk.add_const(Constant::Symbol("retained-symbol".into()));
         chunk.main.emit_op_u16(Op::LoadConst, symbol.0);
         chunk.main.emit(Op::Return);
-        let chunk = validate_chunk(chunk, &ValidationLimits::default()).expect("symbol validates");
+        let chunk =
+            validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("symbol validates");
         let config = ExecutionConfig {
             max_heap_bytes: 0,
             max_allocations: 0,

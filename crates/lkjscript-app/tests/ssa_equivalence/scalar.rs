@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, evaluator_outcome, main_source, vm_outcome, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, Limits, Op};
+use lkjscript_core::{ExecutionConfig, Op};
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_vm::run_chunk;
 
@@ -61,12 +61,8 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
 
     let tail_recursion = "def/\nname/\ncount-down\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\nn\ncount-down/\nsubtract/\nn\n1\n/subtract\n/count-down\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ncount-down/\n100\n/count-down\n/main\n";
     let tail_recursion = tail_recursion.to_string();
-    let tail_program = compile_source(
-        &tail_recursion,
-        "tail-recursion.lkjscript",
-        &Limits::default(),
-    )
-    .expect("compile tail recursion");
+    let tail_program = compile_source(&tail_recursion, "tail-recursion.lkjscript")
+        .expect("compile tail recursion");
     assert_eq!(
         evaluator_outcome(evaluate(tail_program.ssa(), &EvalConfig::default())),
         vm_outcome(run_chunk(

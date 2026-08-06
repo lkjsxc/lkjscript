@@ -54,8 +54,7 @@ fn semantic_boundary_limits_source_that_trusted_loader_accepts_unchanged() {
     assert_eq!(source.len(), SOURCE_BYTES);
     std::fs::write(&root, &source).expect("write boundary source");
 
-    crate::source::load(&root, &lkjscript_core::Limits::default())
-        .expect("trusted loader is explicitly unrestricted");
+    crate::source::load(&root).expect("trusted loader is explicitly unrestricted");
     let limited = response(
         &crate::semantic::execute(&request(&root, "{\"kind\":\"snapshot\"}"))
             .expect("typed boundary response"),
@@ -98,8 +97,7 @@ fn staged_transaction_obeys_boundary_bytes_before_publication() {
         bytes: file.bytes,
         sha256: file.sha256.clone(),
     };
-    let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
-        .expect("trusted source load");
+    let tree = crate::source::load(&root).expect("trusted source load");
     let failure = match crate::semantic::transaction::stage(
         &tree,
         &[operation],

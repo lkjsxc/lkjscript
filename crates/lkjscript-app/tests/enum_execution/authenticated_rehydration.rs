@@ -1,6 +1,6 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{
-    Limits, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
     StructuralLimits, StructuralSnapshotLimits, StructuralType,
 };
@@ -17,7 +17,7 @@ fn compiler_authenticates_general_enum_rehydration() {
         "string-literal/\nauthenticated-enum\n/string-literal\n/variant-field\n",
         "/fields\n/variant-value\n/main\n",
     );
-    let program = compile_source(source, "authenticated-enum.lkjscript", &Limits::default())
+    let program = compile_source(source, "authenticated-enum.lkjscript")
         .expect("compile immutable general enum");
     let chunk = program.bytecode();
     let enum_type = chunk

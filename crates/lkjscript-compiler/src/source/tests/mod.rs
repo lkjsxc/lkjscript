@@ -5,8 +5,6 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use lkjscript_core::Limits;
-
 use super::{
     load, parse as parser, validate, validate::finish_tree, validate_source_set_for_analysis,
     DeclarationKind, NodeKind, SourceBytePolicy, SourceOrigin,

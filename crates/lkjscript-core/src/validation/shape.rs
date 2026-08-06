@@ -1,28 +1,8 @@
 use std::collections::HashSet;
 
-use crate::{Chunk, Constant, Error, FunctionProto, Result, ValidationLimits};
+use crate::{Chunk, Constant, Error, FunctionProto, Result};
 
-pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Result<()> {
-    let tables = [
-        ("constants", chunk.constants.len()),
-        ("prototypes", chunk.protos.len()),
-        ("globals", chunk.global_names.len()),
-        ("required capabilities", chunk.required_capabilities.len()),
-        ("products", chunk.products.len()),
-        ("product field descriptors", chunk.product_fields.len()),
-        ("enums", chunk.enums.len()),
-        ("enum constructors", chunk.enum_constructions.len()),
-        ("enum variants", chunk.enum_variants.len()),
-        ("enum fields", chunk.enum_fields.len()),
-    ];
-    for (name, length) in tables {
-        if length > limits.max_table_entries {
-            return Err(Error::msg(format!(
-                "bytecode {name} table has {length} entries, limit {}",
-                limits.max_table_entries
-            )));
-        }
-    }
+pub(super) fn validate_tables(chunk: &Chunk) -> Result<usize> {
     super::entry_capabilities::validate(chunk)?;
     if !chunk.global_prototypes.is_empty()
         && chunk.global_prototypes.len() != chunk.global_names.len()
@@ -41,7 +21,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             ));
         }
     }
-    validate_proto_shape(&chunk.main, "main", limits)?;
+    validate_proto_shape(&chunk.main, "main")?;
     if chunk.main.return_resource.is_some() {
         return Err(Error::msg(
             "bytecode main cannot declare a typed resource return",
@@ -80,7 +60,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
 
     let mut function_names = HashSet::with_capacity(chunk.protos.len());
     for proto in &chunk.protos {
-        validate_proto_shape(proto, "prototype", limits)?;
+        validate_proto_shape(proto, "prototype")?;
         if proto.name.is_empty() {
             return Err(Error::msg("bytecode prototype has an empty name"));
         }
@@ -109,7 +89,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
 
     metadata_bytes = checked_add(
         metadata_bytes,
-        super::shape_structural::validate(chunk, limits)?,
+        super::shape_structural::validate(chunk)?,
         "metadata byte size",
     )?;
 
@@ -119,22 +99,9 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         "metadata byte size",
     )?;
 
-    (metadata_bytes, encoded_bytes) =
-        measure_constants(chunk, limits, metadata_bytes, encoded_bytes)?;
+    (metadata_bytes, encoded_bytes) = measure_constants(chunk, metadata_bytes, encoded_bytes)?;
 
-    if metadata_bytes > limits.max_metadata_bytes {
-        return Err(Error::msg(format!(
-            "bytecode metadata has {metadata_bytes} bytes, limit {}",
-            limits.max_metadata_bytes
-        )));
-    }
-    if encoded_bytes > limits.max_encoded_bytes {
-        return Err(Error::msg(format!(
-            "encoded bytecode has {encoded_bytes} bytes, limit {}",
-            limits.max_encoded_bytes
-        )));
-    }
-    Ok(())
+    checked_add(metadata_bytes, encoded_bytes, "total encoded byte size")
 }
 
 include!("shape/constants.rs");
@@ -143,5 +110,5 @@ include!("shape/prototypes.rs");
 
 fn checked_add(left: usize, right: usize, category: &str) -> Result<usize> {
     left.checked_add(right)
-        .ok_or_else(|| Error::msg(format!("bytecode {category} overflow")))
+        .ok_or_else(|| Error::host(format!("bytecode {category} overflow")))
 }
