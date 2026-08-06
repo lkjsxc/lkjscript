@@ -24,7 +24,10 @@
    ineligible. SSA ownership work and retained state-cell quotas are removed; generated coverage
    verifies 44,000 owned parameters and places,
    132,000 state cells per block, 264,000 cells under the former aggregate retained-state
-   accounting across propagation, and exact cleanup. SSA and bytecode cleanup now use wide,
+   accounting across propagation, and exact cleanup. SSA CFG verification no longer rejects at
+   4,096 blocks or a fixed CFG-work total: indexed adjacency, iterative DFS/SCC traversal,
+   reverse-postorder immediate dominators, and dominator-tree intervals verify 10,000-block linear,
+   branch/merge, and cyclic generated CFGs. SSA and bytecode cleanup now use wide,
    backward-only hash-consed node arenas with segmented roots; a 300-owned-parameter/argument source
    publishes and runs with 315,450 logical actions represented by 1,200 physical nodes. Constants,
    globals, and prototype references now use fixed-`u64` operands and metadata with checked host

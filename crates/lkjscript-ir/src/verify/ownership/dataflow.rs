@@ -7,9 +7,9 @@ pub(crate) fn verify_ownership_facts(
     program: &Program,
     function: &Function,
     types: &[SsaType],
+    cfg: &ControlFlowGraph,
 ) -> crate::Result<()> {
     let entry = collect_ownership_provenance(function)?;
-    let reachable = reachable(function)?;
     for block in &function.blocks {
         let has_loop_action = block.instructions.iter().any(|instruction| {
             matches!(
@@ -17,12 +17,12 @@ pub(crate) fn verify_ownership_facts(
                 InstructionKind::Move { .. } | InstructionKind::Borrow { .. }
             )
         });
-        if has_loop_action && block_is_cyclic(function, block.id)? {
+        if has_loop_action && cfg.is_cyclic(block.id)? {
             return fail(
                 "SSA loop ownership state must be invariant; Move and Borrow are unavailable in loop cycles",
             );
         }
-        if reachable.contains(&block.id) {
+        if cfg.is_reachable(block.id)? {
             continue;
         }
         let has_ownership = block.parameters.iter().any(|parameter| {

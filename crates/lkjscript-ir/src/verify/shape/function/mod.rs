@@ -74,12 +74,6 @@ pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::
     if function.blocks.is_empty() {
         return fail(format!("SSA function {} has no blocks", function.name));
     }
-    if function.blocks.len() > SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION {
-        return fail(format!(
-            "SSA function {} exceeds {SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION} blocks",
-            function.name
-        ));
-    }
     if function
         .entry
         .index()
@@ -116,23 +110,23 @@ pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::
         }
     }
     verify_failure_cleanup_shape(program, function, &types)?;
-    verify_ownership_facts(program, function, &types)?;
+    let cfg = ControlFlowGraph::build(function)?;
+    verify_ownership_facts(program, function, &types, &cfg)?;
+    let active_enum = super::active_enum::Graph::build(function, &cfg, types.len())?;
+    let block_context = BlockVerificationContext {
+        program,
+        function,
+        types: &types,
+        definitions: &definitions,
+        dominators: cfg.dominators(),
+        active_enum: &active_enum,
+        type_parameters: &type_parameters,
+    };
 
-    let predecessors = predecessors(function)?;
-    let dominators = dominators(function, &predecessors)?;
-    let reachable = reachable(function)?;
     for block in &function.blocks {
-        verify_block(
-            program,
-            function,
-            block,
-            &types,
-            &definitions,
-            &dominators,
-            &type_parameters,
-        )?;
+        verify_block(&block_context, block)?;
     }
-    verify_loops(function, &dominators, &reachable)?;
+    verify_loops(function, &cfg)?;
     Ok(())
 }
 
@@ -141,7 +135,5 @@ pub(crate) struct Definition {
     pub(crate) block: BlockId,
     pub(crate) instruction: Option<usize>,
 }
-
-pub(crate) type Dominators = Vec<Vec<u64>>;
 
 include!("failure_cleanup.rs");

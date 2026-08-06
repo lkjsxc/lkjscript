@@ -1,36 +1,42 @@
-use super::graph::{charge, find_instruction};
+use super::graph::{visit, Graph, Observation};
 use super::ActiveVariant;
-use crate::{Function, InstructionKind, ValueId};
+use crate::{InstructionKind, ValueId};
 use std::collections::HashSet;
 
 pub(super) fn value(
-    function: &Function,
-    candidate: ValueId,
+    graph: &Graph<'_>,
+    mut candidate: ValueId,
     active: ActiveVariant,
-    visited: &mut HashSet<ValueId>,
-    work: &mut usize,
+    observation: &mut Observation,
 ) -> crate::Result<bool> {
-    charge(work)?;
-    if !visited.insert(candidate) {
-        return Ok(false);
-    }
-    let Some(definition) = find_instruction(function, candidate) else {
-        return Ok(false);
-    };
-    Ok(match definition.kind {
-        InstructionKind::EnumValue {
-            enum_id,
-            variant,
-            layout,
-            ..
-        } => {
-            ActiveVariant {
+    let mut visited = HashSet::new();
+    loop {
+        observation.observe()?;
+        if !visit(
+            &mut visited,
+            candidate,
+            "SSA active-variant universal visited allocation failed",
+        )? {
+            return Ok(false);
+        }
+        let Some(definition) = graph.instruction(candidate) else {
+            return Ok(false);
+        };
+        match definition.kind {
+            InstructionKind::EnumValue {
                 enum_id,
                 variant,
                 layout,
-            } == active
+                ..
+            } => {
+                return Ok(ActiveVariant {
+                    enum_id,
+                    variant,
+                    layout,
+                } == active);
+            }
+            InstructionKind::Copy(source) => candidate = source,
+            _ => return Ok(false),
         }
-        InstructionKind::Copy(source) => value(function, source, active, visited, work)?,
-        _ => false,
-    })
+    }
 }

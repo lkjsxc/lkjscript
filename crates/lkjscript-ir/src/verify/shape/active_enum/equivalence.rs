@@ -1,99 +1,118 @@
-use super::graph::{charge, edge_argument, find_instruction, incoming};
-use crate::{Function, InstructionKind, ValueId};
+use super::graph::{push, visit, Graph, Observation};
+use crate::{InstructionKind, ValueId};
 use std::collections::HashSet;
 
 pub(super) fn equivalent(
-    function: &Function,
+    graph: &Graph<'_>,
     left: ValueId,
     right: ValueId,
-    visited: &mut HashSet<(ValueId, ValueId)>,
-    work: &mut usize,
+    observation: &mut Observation,
 ) -> crate::Result<bool> {
-    charge(work)?;
-    if left == right {
-        return Ok(true);
-    }
-    if !visited.insert((left, right)) {
-        return Ok(false);
-    }
-    if let Some(arguments) = parameter_arguments(function, left)? {
-        for argument in arguments {
-            if !equivalent(function, argument, right, visited, work)? {
-                return Ok(false);
+    let mut visited = HashSet::new();
+    let mut pending = Vec::new();
+    push(
+        &mut pending,
+        (left, right),
+        "SSA active-variant equivalence worklist allocation failed",
+    )?;
+    while let Some((left, right)) = pending.pop() {
+        observation.observe()?;
+        if left == right {
+            continue;
+        }
+        if !visit(
+            &mut visited,
+            (left, right),
+            "SSA active-variant equivalence visited allocation failed",
+        )? {
+            return Ok(false);
+        }
+        if let Some((block, index)) = graph.parameter(left) {
+            let predecessors = graph.predecessors(block)?;
+            if !predecessors.is_empty() {
+                for predecessor in predecessors.iter().rev() {
+                    push(
+                        &mut pending,
+                        (graph.edge_argument(*predecessor, block, index)?, right),
+                        "SSA active-variant equivalence worklist allocation failed",
+                    )?;
+                }
+                continue;
             }
         }
-        return Ok(true);
-    }
-    if let Some(arguments) = parameter_arguments(function, right)? {
-        for argument in arguments {
-            if !equivalent(function, left, argument, visited, work)? {
-                return Ok(false);
+        if let Some((block, index)) = graph.parameter(right) {
+            let predecessors = graph.predecessors(block)?;
+            if !predecessors.is_empty() {
+                for predecessor in predecessors.iter().rev() {
+                    push(
+                        &mut pending,
+                        (left, graph.edge_argument(*predecessor, block, index)?),
+                        "SSA active-variant equivalence worklist allocation failed",
+                    )?;
+                }
+                continue;
             }
         }
-        return Ok(true);
-    }
-    let left_kind = find_instruction(function, left).map(|item| &item.kind);
-    let right_kind = find_instruction(function, right).map(|item| &item.kind);
-    match (left_kind, right_kind) {
-        (Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. }), _) => {
-            equivalent(function, *value, right, visited, work)
-        }
-        (_, Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. })) => {
-            equivalent(function, left, *value, visited, work)
-        }
-        (
-            Some(InstructionKind::ProductField {
-                product: lp,
-                field: lf,
-                value: lv,
-            }),
-            Some(InstructionKind::ProductField {
-                product: rp,
-                field: rf,
-                value: rv,
-            }),
-        ) if lp == rp && lf == rf => equivalent(function, *lv, *rv, visited, work),
-        (
-            Some(InstructionKind::EnumField {
-                enum_id: le,
-                variant: lv,
-                field: lf,
-                field_index: lfi,
-                layout: ll,
-                value: li,
-            }),
-            Some(InstructionKind::EnumField {
-                enum_id: re,
-                variant: rv,
-                field: rf,
-                field_index: rfi,
-                layout: rl,
-                value: ri,
-            }),
-        ) if le == re && lv == rv && lf == rf && lfi == rfi && ll == rl => {
-            equivalent(function, *li, *ri, visited, work)
-        }
-        _ => Ok(false),
-    }
-}
-
-fn parameter_arguments(function: &Function, value: ValueId) -> crate::Result<Option<Vec<ValueId>>> {
-    for block in &function.blocks {
-        if let Some(index) = block
-            .parameters
-            .iter()
-            .position(|parameter| parameter.id == value)
-        {
-            let predecessors = incoming(function, block.id);
-            if predecessors.is_empty() {
-                return Ok(None);
+        let left_kind = graph.instruction(left).map(|item| &item.kind);
+        let right_kind = graph.instruction(right).map(|item| &item.kind);
+        let next = match (left_kind, right_kind) {
+            (
+                Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. }),
+                _,
+            ) => Some((*value, right)),
+            (
+                _,
+                Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. }),
+            ) => Some((left, *value)),
+            (
+                Some(InstructionKind::ProductField {
+                    product: left_product,
+                    field: left_field,
+                    value: left_value,
+                }),
+                Some(InstructionKind::ProductField {
+                    product: right_product,
+                    field: right_field,
+                    value: right_value,
+                }),
+            ) if left_product == right_product && left_field == right_field => {
+                Some((*left_value, *right_value))
             }
-            return predecessors
-                .into_iter()
-                .map(|predecessor| edge_argument(predecessor, block.id, index))
-                .collect::<crate::Result<Vec<_>>>()
-                .map(Some);
-        }
+            (
+                Some(InstructionKind::EnumField {
+                    enum_id: left_enum,
+                    variant: left_variant,
+                    field: left_field,
+                    field_index: left_field_index,
+                    layout: left_layout,
+                    value: left_value,
+                }),
+                Some(InstructionKind::EnumField {
+                    enum_id: right_enum,
+                    variant: right_variant,
+                    field: right_field,
+                    field_index: right_field_index,
+                    layout: right_layout,
+                    value: right_value,
+                }),
+            ) if left_enum == right_enum
+                && left_variant == right_variant
+                && left_field == right_field
+                && left_field_index == right_field_index
+                && left_layout == right_layout =>
+            {
+                Some((*left_value, *right_value))
+            }
+            _ => None,
+        };
+        let Some(next) = next else {
+            return Ok(false);
+        };
+        push(
+            &mut pending,
+            next,
+            "SSA active-variant equivalence worklist allocation failed",
+        )?;
     }
-    Ok(None)
+    Ok(true)
 }

@@ -1,86 +1,88 @@
-use super::graph::{charge, edge_argument, find_instruction, incoming};
-use crate::{Block, Function, InstructionKind, ValueId};
+use super::graph::{push, visit, Graph, Observation};
+use crate::{BlockId, InstructionKind, ValueId};
 use std::collections::HashSet;
 
-pub(super) fn true_predecessors<'a>(
-    function: &'a Function,
-    block: &'a Block,
+pub(super) fn true_predecessors(
+    graph: &Graph<'_>,
+    block: BlockId,
     condition: ValueId,
     value: ValueId,
-    work: &mut usize,
-) -> crate::Result<Option<Vec<(&'a Block, ValueId)>>> {
-    let Some(index) = block
-        .parameters
-        .iter()
-        .position(|parameter| parameter.id == condition)
-    else {
+    observation: &mut Observation,
+) -> crate::Result<Option<Vec<(BlockId, ValueId)>>> {
+    let Some((condition_block, condition_index)) = graph.parameter(condition) else {
         return Ok(None);
     };
-    let value_index = block
-        .parameters
-        .iter()
-        .position(|parameter| parameter.id == value);
+    if condition_block != block {
+        return Ok(None);
+    }
+    let value_index = graph
+        .parameter(value)
+        .filter(|(value_block, _)| *value_block == block)
+        .map(|(_, index)| index);
+    let predecessors = graph.predecessors(block)?;
     let mut possible = Vec::new();
-    for predecessor in incoming(function, block.id) {
-        let condition_argument = edge_argument(predecessor, block.id, index)?;
-        if definitely_false(function, condition_argument, &mut HashSet::new(), work)? {
+    possible
+        .try_reserve_exact(predecessors.len())
+        .map_err(|_| {
+            crate::IrError::new("SSA active-variant boolean predecessor allocation failed")
+        })?;
+    for predecessor in predecessors {
+        let condition_argument = graph.edge_argument(*predecessor, block, condition_index)?;
+        if definitely_false(graph, condition_argument, observation)? {
             continue;
         }
         let argument = match value_index {
-            Some(value_index) => edge_argument(predecessor, block.id, value_index)?,
+            Some(value_index) => graph.edge_argument(*predecessor, block, value_index)?,
             None => value,
         };
-        possible.push((predecessor, argument));
+        possible.push((*predecessor, argument));
     }
     Ok(Some(possible))
 }
 
 fn definitely_false(
-    function: &Function,
+    graph: &Graph<'_>,
     value: ValueId,
-    visited: &mut HashSet<ValueId>,
-    work: &mut usize,
+    observation: &mut Observation,
 ) -> crate::Result<bool> {
-    charge(work)?;
-    if !visited.insert(value) {
-        return Ok(false);
-    }
-    if let Some(arguments) = parameter_arguments(function, value)? {
-        for argument in arguments {
-            if !definitely_false(function, argument, visited, work)? {
-                return Ok(false);
+    let mut visited = HashSet::new();
+    let mut pending = Vec::new();
+    push(
+        &mut pending,
+        value,
+        "SSA active-variant boolean worklist allocation failed",
+    )?;
+    while let Some(value) = pending.pop() {
+        observation.observe()?;
+        if !visit(
+            &mut visited,
+            value,
+            "SSA active-variant boolean visited allocation failed",
+        )? {
+            return Ok(false);
+        }
+        if let Some((block, index)) = graph.parameter(value) {
+            let predecessors = graph.predecessors(block)?;
+            if !predecessors.is_empty() {
+                for predecessor in predecessors.iter().rev() {
+                    push(
+                        &mut pending,
+                        graph.edge_argument(*predecessor, block, index)?,
+                        "SSA active-variant boolean worklist allocation failed",
+                    )?;
+                }
+                continue;
             }
         }
-        return Ok(true);
-    }
-    Ok(
-        match find_instruction(function, value).map(|item| &item.kind) {
-            Some(InstructionKind::Constant(crate::Constant::Bool(false))) => true,
-            Some(InstructionKind::Copy(source)) => {
-                definitely_false(function, *source, visited, work)?
-            }
-            _ => false,
-        },
-    )
-}
-
-fn parameter_arguments(function: &Function, value: ValueId) -> crate::Result<Option<Vec<ValueId>>> {
-    for block in &function.blocks {
-        if let Some(index) = block
-            .parameters
-            .iter()
-            .position(|parameter| parameter.id == value)
-        {
-            let predecessors = incoming(function, block.id);
-            if predecessors.is_empty() {
-                return Ok(None);
-            }
-            let mut arguments = Vec::with_capacity(predecessors.len());
-            for predecessor in predecessors {
-                arguments.push(edge_argument(predecessor, block.id, index)?);
-            }
-            return Ok(Some(arguments));
+        match graph.instruction(value).map(|item| &item.kind) {
+            Some(InstructionKind::Constant(crate::Constant::Bool(false))) => {}
+            Some(InstructionKind::Copy(source)) => push(
+                &mut pending,
+                *source,
+                "SSA active-variant boolean worklist allocation failed",
+            )?,
+            _ => return Ok(false),
         }
     }
-    Ok(None)
+    Ok(true)
 }

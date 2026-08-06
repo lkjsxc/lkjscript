@@ -147,31 +147,7 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
 }
 
 #[test]
-fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() {
-    let function = Function {
-        id: FunctionId::new(1),
-        name: "too-many-blocks".into(),
-        signature: Signature::monomorphic(Vec::new(), SsaType::Unit),
-        places: Vec::new(),
-        failure_cleanups: Vec::new(),
-        effects: EffectSet::MAY_TRAP,
-        entry: BlockId::new(0),
-        blocks: (0..=crate::SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION)
-            .map(|index| Block {
-                id: BlockId::new(index as u32),
-                parameters: Vec::new(),
-                instructions: Vec::new(),
-                terminator: Terminator::Trap {
-                    value: ValueId::new(0),
-                },
-                metadata: block_metadata(),
-            })
-            .collect(),
-        origin: Origin::SYNTHETIC,
-    };
-    let error = verify(ownership_program(function)).expect_err("CFG block count must be bounded");
-    assert!(error.to_string().contains("exceeds 4096 blocks"), "{error}");
-
+fn ownership_verifier_rejects_nested_function_laundering() {
     let mut nested_function = one_block_program();
     *nested_function.functions[0].signature.result =
         SsaType::List(Box::new(SsaType::Function(Box::new(

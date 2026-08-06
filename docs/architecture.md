@@ -17,7 +17,11 @@ a finite accepted depth. Recursive source and HIR ownership is dismantled by cus
 destruction. SSA ownership verification admits wide semantic state without work or retained-cell
 budgets. Single-source worklist states move into block processing; join-capable states share
 copy-on-write ordered fact sets and maps, so unchanged CFG propagation does not copy whole states.
-Join comparison remains exact. Bytecode validation separates well-formedness from resource policy:
+Join comparison remains exact. SSA control-flow verification indexes sorted successor and
+predecessor adjacency once, uses iterative DFS/SCC worklists, computes immediate dominators in
+reverse-postorder, and publishes dominator-tree intervals for constant-time dominance queries.
+Neither block count nor CFG work is a validity rule. Active-enum provenance consumes the same
+indexed graph and preindexed values through explicit visited worklists. Bytecode validation separates well-formedness from resource policy:
 trusted compiler output and prepared binding select `ValidationPolicy::Unrestricted`, while an
 explicit untrusted artifact boundary may select a limited policy over only the checked total-byte
 observation. There is no finite default or per-table, metadata, cleanup-action, or constant-data

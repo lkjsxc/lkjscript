@@ -61,7 +61,4 @@ pub use specialize::{
     MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_DECLARATION,
     MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_PACKAGE,
 };
-pub use verify::{
-    bind_prepared_identity, verify, VerifiedProgram, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,
-    SSA_VERIFY_MAX_CFG_WORK,
-};
+pub use verify::{bind_prepared_identity, verify, VerifiedProgram};

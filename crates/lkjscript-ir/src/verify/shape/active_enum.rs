@@ -4,10 +4,12 @@ mod graph;
 mod universal;
 
 use crate::verify::*;
-use crate::{Block, BlockId, Function, InstructionKind, RuntimeLayoutId, ValueId, VariantId};
+use crate::{Block, BlockId, InstructionKind, RuntimeLayoutId, ValueId, VariantId};
 use equivalence::equivalent;
-use graph::{charge, edge_argument, find_instruction, incoming};
+use graph::{push, visit, Observation};
 use std::collections::HashSet;
+
+pub(super) use graph::Graph;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct ActiveVariant {
@@ -16,9 +18,22 @@ pub(super) struct ActiveVariant {
     layout: RuntimeLayoutId,
 }
 
+#[derive(Clone, Copy)]
+enum ProvenanceTask {
+    Entry {
+        block: BlockId,
+        value: ValueId,
+    },
+    Edge {
+        predecessor: BlockId,
+        target: BlockId,
+        value: ValueId,
+    },
+}
+
 pub(super) fn projection(
     program: &crate::Program,
-    function: &Function,
+    graph: &Graph<'_>,
     block: &Block,
     instruction: &crate::Instruction,
 ) -> crate::Result<()> {
@@ -37,24 +52,16 @@ pub(super) fn projection(
         variant,
         layout,
     };
-    let mut work = 0_usize;
+    let mut observation = Observation::default();
     if matches!(
-        find_instruction(function, value).map(|item| &item.kind),
+        graph.instruction(value).map(|item| &item.kind),
         Some(InstructionKind::EnumValue { .. })
-    ) && !universal::value(function, value, active, &mut HashSet::new(), &mut work)?
+    ) && !universal::value(graph, value, active, &mut observation)?
     {
         return fail("SSA inactive enum projection rejected before access");
     }
-    let mut visited = HashSet::new();
-    if active_at_entry(
-        program,
-        function,
-        block.id,
-        value,
-        active,
-        &mut visited,
-        &mut work,
-    )? || universal::value(function, value, active, &mut HashSet::new(), &mut work)?
+    if active_at_entry(program, graph, block.id, value, active, &mut observation)?
+        || universal::value(graph, value, active, &mut observation)?
     {
         Ok(())
     } else {
@@ -70,134 +77,141 @@ pub(super) fn projection(
 
 fn active_at_entry(
     program: &crate::Program,
-    function: &Function,
+    graph: &Graph<'_>,
     block: BlockId,
     value: ValueId,
     active: ActiveVariant,
-    visited: &mut HashSet<(BlockId, ValueId, ActiveVariant)>,
-    work: &mut usize,
+    observation: &mut Observation,
 ) -> crate::Result<bool> {
-    charge(work)?;
-    if !visited.insert((block, value, active)) {
-        return Ok(false);
-    }
-    let current = block_by_id(function, block)?;
-    if let Some(index) = current
-        .parameters
-        .iter()
-        .position(|parameter| parameter.id == value)
-    {
-        let predecessors = incoming(function, block);
-        if predecessors.is_empty() {
-            return Ok(false);
-        }
-        for predecessor in predecessors {
-            let argument = edge_argument(predecessor, block, index)?;
-            if !active_on_edge(
-                program,
-                function,
-                predecessor,
-                block,
-                argument,
-                active,
-                visited,
-                work,
-            )? {
-                return Ok(false);
+    let mut visited = HashSet::new();
+    let mut pending = Vec::new();
+    push(
+        &mut pending,
+        ProvenanceTask::Entry { block, value },
+        "SSA active-variant provenance worklist allocation failed",
+    )?;
+    while let Some(task) = pending.pop() {
+        match task {
+            ProvenanceTask::Entry { block, value } => {
+                observation.observe()?;
+                if !visit(
+                    &mut visited,
+                    (block, value, active),
+                    "SSA active-variant provenance visited allocation failed",
+                )? {
+                    return Ok(false);
+                }
+                if let Some((parameter_block, index)) = graph.parameter(value) {
+                    if parameter_block == block {
+                        let predecessors = graph.predecessors(block)?;
+                        if predecessors.is_empty() {
+                            return Ok(false);
+                        }
+                        for predecessor in predecessors.iter().rev() {
+                            push(
+                                &mut pending,
+                                ProvenanceTask::Edge {
+                                    predecessor: *predecessor,
+                                    target: block,
+                                    value: graph.edge_argument(*predecessor, block, index)?,
+                                },
+                                "SSA active-variant provenance worklist allocation failed",
+                            )?;
+                        }
+                        continue;
+                    }
+                }
+                if universal::value(graph, value, active, observation)? {
+                    continue;
+                }
+                let predecessors = graph.predecessors(block)?;
+                if predecessors.is_empty() {
+                    return Ok(false);
+                }
+                for predecessor in predecessors.iter().rev() {
+                    push(
+                        &mut pending,
+                        ProvenanceTask::Edge {
+                            predecessor: *predecessor,
+                            target: block,
+                            value,
+                        },
+                        "SSA active-variant provenance worklist allocation failed",
+                    )?;
+                }
             }
-        }
-        return Ok(true);
-    }
-    if universal::value(function, value, active, &mut HashSet::new(), work)? {
-        return Ok(true);
-    }
-    let predecessors = incoming(function, block);
-    if predecessors.is_empty() {
-        return Ok(false);
-    }
-    for predecessor in predecessors {
-        if !active_on_edge(
-            program,
-            function,
-            predecessor,
-            block,
-            value,
-            active,
-            visited,
-            work,
-        )? {
-            return Ok(false);
+            ProvenanceTask::Edge {
+                predecessor,
+                target,
+                value,
+            } => {
+                observation.observe()?;
+                let predecessor_block = graph.block(predecessor)?;
+                if let crate::Terminator::ConditionalBranch {
+                    condition,
+                    true_target,
+                    ..
+                } = predecessor_block.terminator
+                {
+                    if true_target == target {
+                        if condition_tests_variant(
+                            program,
+                            graph,
+                            condition,
+                            value,
+                            active,
+                            observation,
+                        )? {
+                            continue;
+                        }
+                        if let Some(possible) = boolean::true_predecessors(
+                            graph,
+                            predecessor,
+                            condition,
+                            value,
+                            observation,
+                        )? {
+                            if possible.is_empty() {
+                                return Ok(false);
+                            }
+                            for (source, argument) in possible.into_iter().rev() {
+                                push(
+                                    &mut pending,
+                                    ProvenanceTask::Edge {
+                                        predecessor: source,
+                                        target: predecessor,
+                                        value: argument,
+                                    },
+                                    "SSA active-variant provenance worklist allocation failed",
+                                )?;
+                            }
+                            continue;
+                        }
+                    }
+                }
+                push(
+                    &mut pending,
+                    ProvenanceTask::Entry {
+                        block: predecessor,
+                        value,
+                    },
+                    "SSA active-variant provenance worklist allocation failed",
+                )?;
+            }
         }
     }
     Ok(true)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn active_on_edge(
-    program: &crate::Program,
-    function: &Function,
-    predecessor: &Block,
-    target: BlockId,
-    value: ValueId,
-    active: ActiveVariant,
-    visited: &mut HashSet<(BlockId, ValueId, ActiveVariant)>,
-    work: &mut usize,
-) -> crate::Result<bool> {
-    charge(work)?;
-    if let crate::Terminator::ConditionalBranch {
-        condition,
-        true_target,
-        ..
-    } = predecessor.terminator
-    {
-        if true_target == target {
-            if condition_tests_variant(program, function, condition, value, active, work)? {
-                return Ok(true);
-            }
-            if let Some(possible) =
-                boolean::true_predecessors(function, predecessor, condition, value, work)?
-            {
-                if possible.is_empty() {
-                    return Ok(false);
-                }
-                for (source, argument) in possible {
-                    if !active_on_edge(
-                        program,
-                        function,
-                        source,
-                        predecessor.id,
-                        argument,
-                        active,
-                        visited,
-                        work,
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                return Ok(true);
-            }
-        }
-    }
-    active_at_entry(
-        program,
-        function,
-        predecessor.id,
-        value,
-        active,
-        visited,
-        work,
-    )
-}
-
 fn condition_tests_variant(
     program: &crate::Program,
-    function: &Function,
+    graph: &Graph<'_>,
     condition: ValueId,
     value: ValueId,
     active: ActiveVariant,
-    work: &mut usize,
+    observation: &mut Observation,
 ) -> crate::Result<bool> {
-    let Some(test) = find_instruction(function, condition) else {
+    let Some(test) = graph.instruction(condition) else {
         return Ok(false);
     };
     if let InstructionKind::EnumIsVariant {
@@ -212,7 +226,7 @@ fn condition_tests_variant(
             variant,
             layout,
         } == active
-            && equivalent(function, tested, value, &mut HashSet::new(), work)?);
+            && equivalent(graph, tested, value, observation)?);
     }
     let InstructionKind::Runtime {
         operation: crate::RuntimeOp::EqualValue,
@@ -243,17 +257,17 @@ fn condition_tests_variant(
     };
     for (tag_value, constant_value) in [(*left, *right), (*right, *left)] {
         let Some(InstructionKind::AggregateTag { value: tested, .. }) =
-            find_instruction(function, tag_value).map(|item| &item.kind)
+            graph.instruction(tag_value).map(|item| &item.kind)
         else {
             continue;
         };
         if !matches!(
-            find_instruction(function, constant_value).map(|item| &item.kind),
+            graph.instruction(constant_value).map(|item| &item.kind),
             Some(InstructionKind::Constant(crate::Constant::I64(tag))) if *tag == expected_tag
         ) {
             continue;
         }
-        if equivalent(function, *tested, value, &mut HashSet::new(), work)? {
+        if equivalent(graph, *tested, value, observation)? {
             return Ok(true);
         }
     }

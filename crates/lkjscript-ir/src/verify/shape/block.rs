@@ -3,15 +3,29 @@ use std::collections::HashMap;
 use crate::verify::*;
 use crate::{Block, Function, Program, SsaType, ValueId};
 
+pub(crate) struct BlockVerificationContext<'a> {
+    pub(crate) program: &'a Program,
+    pub(crate) function: &'a Function,
+    pub(crate) types: &'a [SsaType],
+    pub(crate) definitions: &'a HashMap<ValueId, Definition>,
+    pub(crate) dominators: &'a Dominators,
+    pub(crate) active_enum: &'a super::active_enum::Graph<'a>,
+    pub(crate) type_parameters: &'a [&'a str],
+}
+
 pub(crate) fn verify_block(
-    program: &Program,
-    function: &Function,
+    context: &BlockVerificationContext<'_>,
     block: &Block,
-    types: &[SsaType],
-    definitions: &HashMap<ValueId, Definition>,
-    dominators: &Dominators,
-    type_parameters: &[&str],
 ) -> crate::Result<()> {
+    let BlockVerificationContext {
+        program,
+        function,
+        types,
+        definitions,
+        dominators,
+        active_enum,
+        type_parameters,
+    } = context;
     let frame_context = FrameVerificationContext {
         program,
         function,
@@ -36,7 +50,7 @@ pub(crate) fn verify_block(
         if let Some(frame) = &instruction.metadata.frame_state {
             verify_frame_state(&frame_context, block.id, Some(index), frame)?;
         }
-        super::active_enum::projection(program, function, block, instruction)?;
+        super::active_enum::projection(program, active_enum, block, instruction)?;
         verify_instruction(program, function, instruction, types, type_parameters)?;
     }
     for operand in block.terminator.operands() {

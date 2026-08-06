@@ -13,10 +13,7 @@ mod substitution;
 mod traits;
 mod types;
 
-pub use api::{
-    bind_prepared_identity, verify, VerifiedProgram, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,
-    SSA_VERIFY_MAX_CFG_WORK,
-};
+pub use api::{bind_prepared_identity, verify, VerifiedProgram};
 pub(crate) use api::{
     TRAIT_VERIFY_MAX_DEPTH, TRAIT_VERIFY_MAX_WORK, TYPE_VERIFY_MAX_DEPTH, TYPE_VERIFY_MAX_WORK,
 };

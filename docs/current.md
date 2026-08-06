@@ -50,7 +50,16 @@ pre-scans HIR merely to reject an aggregate expression count. HIR memory-plan ex
 checked observational `u64` telemetry rather than admission. SSA ownership verification likewise
 has no ownership-work or retained-state-cell admission ceiling. Its worklist moves single-source
 states and shares copy-on-write state across joins, while exact predecessor-state equality and all
-ownership cleanup rules remain enforced. Generated SSA coverage verifies 44,000 owned resource
+ownership cleanup rules remain enforced. SSA CFG verification has no per-function block or
+verification-work admission ceiling. It indexes deterministic successor and predecessor lists once,
+uses explicit-stack DFS and SCC traversal, derives immediate dominators in reverse-postorder with
+the Cooper-Harvey-Kennedy algorithm, and answers dominance through dominator-tree intervals rather
+than dense per-block bitsets. Active-enum provenance uses the same predecessor index plus
+preindexed values and explicit visited worklists; its checked step count is observation only.
+Generated raw SSA coverage verifies 10,000-block linear, branch/merge, and cyclic functions and
+rejects malformed high-block dominance and target edges. An ignored release stress test compiles
+source into more than 4,096 SSA blocks, publishes bytecode, and executes the result through the VM.
+Generated SSA coverage verifies 44,000 owned resource
 parameters and places with 132,000 active-place, owner, and affine state cells per block, 264,000
 cells under the former aggregate retained-state accounting across a two-block propagation, one
 44,000-argument consuming call, and exact cleanup of every place. Generated coverage compiles, creates
@@ -177,8 +186,9 @@ may build elsewhere, but no other host or native target is currently claimed as 
   HIR memory-plan table identities and HIR/SSA place identities remain `u32`, a separate above-`u32`
   representation gap rather than the removed executable byte width.
   Validator-synthetic ownership identity no longer narrows bytecode positions or parameter indexes
-  to `u32`; it uses tagged instruction offsets and parameter indexes at host width. Where the
-  remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,
+  to `u32`; it uses tagged instruction offsets and parameter indexes at host width. SSA block and
+  value identities still use `u32`; this is an external representation gap distinct from the removed
+  4,096-block verifier admission rule. Where the remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,
   they remain follow-up validity and representation gaps, not host policy.
 - Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
   including parts of type, trait, enum, semantic-schema, and transaction processing, still need
