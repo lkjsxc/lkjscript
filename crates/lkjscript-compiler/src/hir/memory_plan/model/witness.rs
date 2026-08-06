@@ -131,7 +131,7 @@ pub struct MemoryWitnessFacts {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryWitnessGroupMember {
     pub witness: MemoryWitnessId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub semantic_identity: [u8; 32],
 }
 
@@ -146,7 +146,7 @@ pub struct MemoryWitnessGroup {
 pub struct MemoryWitness {
     pub id: MemoryWitnessId,
     pub group: MemoryWitnessGroupId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub facts: MemoryWitnessFacts,
 }
 
@@ -160,7 +160,7 @@ impl MemoryWitness {
 
 pub(crate) fn memory_witness_id(
     group: MemoryWitnessGroupId,
-    ordinal: u16,
+    ordinal: u64,
     semantic_identity: [u8; 32],
 ) -> MemoryWitnessId {
     MemoryWitnessId::from_bytes(lkjscript_contracts::executable_memory_witness_member_id(

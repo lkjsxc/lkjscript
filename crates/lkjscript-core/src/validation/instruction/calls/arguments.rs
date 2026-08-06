@@ -4,7 +4,7 @@ fn validate_structural_arguments(
     arguments: &[Kind],
     caller: &FunctionProto,
     instruction: DecodedInstruction,
-) -> Result<Vec<(u16, crate::StructuralRepresentationId)>> {
+) -> Result<Vec<(u64, crate::StructuralRepresentationId)>> {
     let mut consuming_owners = Vec::new();
     let mut variables = Vec::new();
     for (index, actual) in arguments.iter().copied().enumerate() {

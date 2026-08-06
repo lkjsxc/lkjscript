@@ -12,7 +12,11 @@ pub(super) fn validate_local_scc(
     for (source, member) in group.members.iter().enumerate() {
         for edge in &member.dependencies {
             if let ExecutableMemoryWitnessTarget::LocalMember(target) = edge.target {
-                let target = usize::from(target);
+                let target = usize::try_from(target).map_err(|_| {
+                    ExecutableMemoryWitnessGroupError(
+                        "local memory witness ordinal exceeds host usize",
+                    )
+                })?;
                 if target >= group.members.len() {
                     return fail("local memory witness ordinal is invalid");
                 }

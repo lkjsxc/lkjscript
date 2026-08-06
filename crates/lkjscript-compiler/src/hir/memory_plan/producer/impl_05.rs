@@ -43,6 +43,24 @@ impl<'a> Producer<'a> {
         let fact = self.type_planner.fact(type_fact)?.clone();
         let (mode, execution, execution_cutover) = memory_mode(ty, &fact, effects, escape)?;
         let owns_glue = fact.mode != MemoryAggregateMode::Copy;
+        let drop_path = owns_glue.then_some(fact.drop_path).flatten();
+        let expression_index = match &subject {
+            MemorySubject::Expression {
+                expression,
+                parent,
+                child_index,
+                ..
+            } => Some((*expression, *parent, *child_index)),
+            _ => None,
+        };
+        let place_index = match &subject {
+            MemorySubject::Place {
+                function,
+                binding,
+                place,
+            } => Some(((*function, *binding), *place)),
+            _ => None,
+        };
         self.entries.push(MemoryPlanEntry {
             id,
             subject,
@@ -54,12 +72,29 @@ impl<'a> Producer<'a> {
             destination: None,
             copy_share: fact.copy_share,
             borrow_scope: None,
-            drop_path: owns_glue.then_some(fact.drop_path).flatten(),
+            drop_path,
             execution,
             execution_cutover,
             origin,
             drop_glue: owns_glue.then_some(fact.drop_glue).flatten(),
         });
+        if let Some((expression, parent, child_index)) = expression_index {
+            if self.expression_entries.insert(expression, id).is_some() {
+                return Err(Error::msg("HIR memory-plan expression entry index is duplicated"));
+            }
+            if let Some(parent) = parent {
+                let children = self.child_entries.entry(parent).or_default();
+                children
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR memory-plan child index allocation failed"))?;
+                children.push((child_index, expression, drop_path));
+            }
+        }
+        if let Some((key, place)) = place_index {
+            if self.places_by_binding.insert(key, place).is_some() {
+                return Err(Error::msg("HIR memory-plan place binding index is duplicated"));
+            }
+        }
         Ok(id)
     }
     fn next_expression(&mut self) -> Result<MemoryExpressionId> {
@@ -72,21 +107,32 @@ impl<'a> Producer<'a> {
         Ok(id)
     }
     fn finish_loans(&mut self) -> Result<()> {
+        let mut loads_by_binding: BTreeMap<(MemoryFunctionId, u32), Vec<MemoryExpressionId>> =
+            BTreeMap::new();
+        for usage in &self.uses {
+            if usage.kind == MemoryUseKind::Load {
+                let expressions = loads_by_binding
+                    .entry((usage.function, usage.binding))
+                    .or_default();
+                expressions
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR memory-plan loan-use index allocation failed"))?;
+                expressions.push(usage.expression);
+            }
+        }
+        for expressions in loads_by_binding.values_mut() {
+            expressions.sort_unstable();
+        }
         for loan in &mut self.loans {
             let (semantic_uses, end_after) = if let Some(binding) = loan.binding {
-                let matching: Vec<_> = self
-                    .uses
-                    .iter()
-                    .filter(|item| {
-                        item.function == loan.function
-                            && item.binding == binding
-                            && item.kind == MemoryUseKind::Load
-                            && item.expression > loan.expression
-                    })
-                    .collect();
-                let last_use = matching.last().map(|item| item.expression).ok_or_else(|| {
-                    Error::msg("HIR memory-plan loan has no semantic reference use")
-                })?;
+                let expressions = loads_by_binding
+                    .get(&(loan.function, binding))
+                    .ok_or_else(|| Error::msg("HIR memory-plan loan has no semantic reference use"))?;
+                let first = expressions.partition_point(|expression| *expression <= loan.expression);
+                let matching = &expressions[first..];
+                let last_use = *matching
+                    .last()
+                    .ok_or_else(|| Error::msg("HIR memory-plan loan has no semantic reference use"))?;
                 let end_after = self
                     .expression_parents
                     .get(&last_use)
@@ -96,8 +142,8 @@ impl<'a> Producer<'a> {
                         Error::msg("HIR memory-plan reference use has no complete call expression")
                     })?;
                 (
-                    u32::try_from(matching.len())
-                        .map_err(|_| Error::msg("HIR memory-plan loan use count exceeds u32"))?,
+                    u64::try_from(matching.len())
+                        .map_err(|_| Error::msg("HIR memory-plan loan use count exceeds u64"))?,
                     end_after,
                 )
             } else {
@@ -129,12 +175,7 @@ impl<'a> Producer<'a> {
             .ok_or_else(|| Error::msg("HIR memory-plan references unknown binding"))
     }
     fn charge_functions(&mut self, amount: usize) -> Result<()> {
-        charge(
-            &mut self.work.functions,
-            amount,
-            MAX_MEMORY_PLAN_FUNCTIONS,
-            "functions",
-        )
+        observe(&mut self.work.functions, amount, "functions")
     }
     fn charge_entries(&mut self, amount: usize) -> Result<()> {
         observe(&mut self.work.entries, amount, "entries")
@@ -150,23 +191,18 @@ impl<'a> Producer<'a> {
         Ok(())
     }
     fn charge_uses(&mut self, amount: usize) -> Result<()> {
-        charge(&mut self.work.uses, amount, MAX_MEMORY_PLAN_USES, "uses")
+        observe(&mut self.work.uses, amount, "uses")
     }
     fn charge_loans(&mut self, amount: usize) -> Result<()> {
-        charge(&mut self.work.loans, amount, MAX_MEMORY_PLAN_LOANS, "loans")
+        observe(&mut self.work.loans, amount, "loans")
     }
     fn charge_constants(&mut self, amount: usize) -> Result<()> {
         observe(&mut self.work.constants, amount, "constants")
     }
     fn charge_calls(&mut self, amount: usize) -> Result<()> {
-        charge(&mut self.work.calls, amount, MAX_MEMORY_PLAN_CALLS, "calls")
+        observe(&mut self.work.calls, amount, "calls")
     }
     fn charge_obligations(&mut self, amount: usize) -> Result<()> {
-        charge(
-            &mut self.work.obligations,
-            amount,
-            MAX_MEMORY_PLAN_OBLIGATIONS,
-            "obligations",
-        )
+        observe(&mut self.work.obligations, amount, "obligations")
     }
 }

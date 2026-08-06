@@ -157,7 +157,7 @@ impl<'a> Producer<'a> {
             },
         )?;
         if owns_obligation {
-            let type_fact = self.entries.get(entry.index().unwrap_or(usize::MAX))
+            let type_fact = entry.index().and_then(|index| self.entries.get(index))
                 .ok_or_else(|| Error::msg("whole-place entry is missing"))?.type_fact;
             let fact = self.type_planner.fact(type_fact)?.clone();
             if fact.mode != MemoryAggregateMode::Copy {

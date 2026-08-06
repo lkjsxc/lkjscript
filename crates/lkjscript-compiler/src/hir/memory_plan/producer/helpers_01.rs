@@ -121,11 +121,16 @@ fn memory_type_inner(ty: &Type) -> MemoryType {
 
 fn destination_shape(
     program: &hir::Program,
+    products_by_id: &HashMap<hir::ProductId, usize>,
+    enums_by_id: &HashMap<hir::EnumId, usize>,
     expression: &Expr,
 ) -> Result<(u32, Option<MemoryActivePayload>)> {
     match &expression.kind {
         ExprKind::ProductValue { product, fields } => {
-            let declared = program.products.iter().find(|item| item.id == *product)
+            let declared = products_by_id
+                .get(product)
+                .and_then(|index| program.products.get(*index))
+                .filter(|item| item.id == *product)
                 .ok_or_else(|| Error::msg("aggregate destination lost product declaration"))?;
             if declared.fields.len() != fields.len() {
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION product fields"));
@@ -133,7 +138,10 @@ fn destination_shape(
             Ok((index_u32(fields.len())?, None))
         }
         ExprKind::EnumValue { enum_id, variant, fields, .. } => {
-            let declared = program.enums.iter().find(|item| item.id == *enum_id)
+            let declared = enums_by_id
+                .get(enum_id)
+                .and_then(|index| program.enums.get(*index))
+                .filter(|item| item.id == *enum_id)
                 .and_then(|item| item.variants.iter().find(|item| item.id == *variant))
                 .ok_or_else(|| Error::msg("aggregate destination lost active enum payload"))?;
             if declared.fields.len() != fields.len() {

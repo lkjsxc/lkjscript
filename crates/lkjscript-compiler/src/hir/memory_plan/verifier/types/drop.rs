@@ -2,7 +2,7 @@ use super::*;
 
 impl VerifiedTypes<'_> {
     pub(crate) fn expected_drop(
-        &self,
+        &mut self,
         ty: &Type,
         derived: &VerifiedDerived,
     ) -> Result<(Option<MemoryDropGlueId>, Option<MemoryDropPathId>)> {
@@ -15,33 +15,26 @@ impl VerifiedTypes<'_> {
         {
             return Ok((verified_leaf_glue(ty), None));
         }
-        let path_raw = u32::try_from(
-            self.expected
-                .iter()
-                .filter(|item| item.path.is_some())
-                .count(),
-        )
-        .map_err(|_| Error::msg("memory verifier drop path identity exceeds u32"))?;
-        if u64::from(path_raw) >= MAX_MEMORY_PLAN_DROP_PATHS {
-            return Err(Error::msg(
-                "memory verifier drop paths exceed bounded maximum",
-            ));
-        }
+        let path_raw = self.drop_paths;
         let path = MemoryDropPathId::new(path_raw);
         let expected_path = MemoryDropPathPlan {
             id: path,
             ty: verified_memory_type(ty),
             branches: self.expected_branches(ty)?,
         };
-        if self.plan.drop_paths.get(path.index().unwrap_or(usize::MAX)) != Some(&expected_path) {
+        if path
+            .index()
+            .and_then(|index| self.plan.drop_paths.get(index))
+            != Some(&expected_path)
+        {
             return Err(Error::msg(
                 "independent memory verifier rejected recursive drop path",
             ));
         }
-        let base = 2_u32
+        let base = 2_u64
             .checked_add(
-                u32::try_from(ResourceKind::ALL.len())
-                    .map_err(|_| Error::msg("resource count exceeds u32"))?,
+                u64::try_from(ResourceKind::ALL.len())
+                    .map_err(|_| Error::msg("resource count exceeds u64"))?,
             )
             .ok_or_else(|| Error::msg("drop glue identity overflow"))?;
         let glue = MemoryDropGlueId::new(
@@ -63,11 +56,19 @@ impl VerifiedTypes<'_> {
             kind,
             drop_path: Some(path),
         };
-        if self.plan.drop_glues.get(glue.index().unwrap_or(usize::MAX)) != Some(&expected_glue) {
+        if glue
+            .index()
+            .and_then(|index| self.plan.drop_glues.get(index))
+            != Some(&expected_glue)
+        {
             return Err(Error::msg(
                 "independent memory verifier rejected structural drop glue",
             ));
         }
+        self.drop_paths = self
+            .drop_paths
+            .checked_add(1)
+            .ok_or_else(|| Error::msg("memory verifier drop-path telemetry overflow"))?;
         Ok((Some(glue), Some(path)))
     }
 
@@ -78,12 +79,7 @@ impl VerifiedTypes<'_> {
                 actions: Vec::new(),
             }]),
             Type::Product(name) => {
-                let item = self
-                    .program
-                    .products
-                    .iter()
-                    .find(|item| item.name == *name)
-                    .ok_or_else(|| Error::msg("memory verifier drop lost product"))?;
+                let item = self.product_definition(name)?;
                 let mut actions = Vec::new();
                 for (index, field) in item.fields.iter().enumerate().rev() {
                     if let Some(glue) = self
@@ -116,12 +112,7 @@ impl VerifiedTypes<'_> {
         id: [u8; 32],
         arguments: &[Type],
     ) -> Result<Vec<MemoryDropBranch>> {
-        let item = self
-            .program
-            .enums
-            .iter()
-            .find(|item| item.id.bytes() == id)
-            .ok_or_else(|| Error::msg("memory verifier drop lost enum"))?;
+        let item = self.enum_definition(id)?;
         let substitutions: HashMap<_, _> = item
             .type_parameters
             .iter()

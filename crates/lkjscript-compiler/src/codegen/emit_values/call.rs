@@ -83,14 +83,18 @@ impl Emitter<'_> {
             .substitutions
             .iter()
             .position(|item| item.parameter == binding.parameter)
-            .and_then(|index| u16::try_from(index).ok())
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| Error::msg("call witness parameter exceeds u64"))?
             .ok_or_else(|| Error::msg("call witness parameter is stale"))?;
         let witness = self
             .chunk
             .memory_witnesses
             .binary_search_by_key(&binding.witness.bytes(), |item| item.id.bytes())
             .ok()
-            .and_then(|index| u16::try_from(index).ok())
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|_| Error::msg("call witness index exceeds u64"))?
             .ok_or_else(|| Error::msg("call witness is not installed"))?;
         Ok(lkjscript_core::MemoryWitnessBinding { parameter, witness })
     }

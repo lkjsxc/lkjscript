@@ -13,5 +13,6 @@ mod ownership_scale;
 mod passes;
 mod verification_cfg_scale;
 mod verification_generics;
+mod verification_region_product_scale;
 mod verification_shape;
 mod verification_traits;

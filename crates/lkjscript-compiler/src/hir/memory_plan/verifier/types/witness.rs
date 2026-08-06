@@ -11,10 +11,9 @@ impl VerifiedTypes<'_> {
         drop_path: Option<MemoryDropPathId>,
     ) -> Result<MemoryWitnessId> {
         let index = MemoryTypeFactId::new(index_u32(self.expected.len())?);
-        let actual = self
-            .plan
-            .witnesses
-            .get(index.index().unwrap_or(usize::MAX))
+        let actual = index
+            .index()
+            .and_then(|index| self.plan.witnesses.get(index))
             .ok_or_else(|| Error::msg("HIR memory plan omitted a reconstructed witness"))?;
         let semantic = self.verified_semantic_descriptor(ty)?;
         let expected_dependencies = self.verified_witness_dependencies(ty)?;
@@ -102,19 +101,17 @@ impl VerifiedTypes<'_> {
     }
 
     fn verified_witness_glue(&self, id: MemoryDropGlueId) -> Result<MemoryDropGlueKind> {
-        self.plan
-            .drop_glues
-            .get(id.index().unwrap_or(usize::MAX))
+        id.index()
+            .and_then(|index| self.plan.drop_glues.get(index))
             .filter(|item| item.id == id)
             .map(|item| item.kind.clone())
             .ok_or_else(|| Error::msg("memory verifier witness glue is missing"))
     }
 
     fn verified_witness_path(&self, id: MemoryDropPathId) -> Result<Vec<MemoryWitnessDropBranch>> {
-        let path = self
-            .plan
-            .drop_paths
-            .get(id.index().unwrap_or(usize::MAX))
+        let path = id
+            .index()
+            .and_then(|index| self.plan.drop_paths.get(index))
             .filter(|item| item.id == id)
             .ok_or_else(|| Error::msg("memory verifier witness path is missing"))?;
         path.branches

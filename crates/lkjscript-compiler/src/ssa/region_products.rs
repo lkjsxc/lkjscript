@@ -25,10 +25,5 @@ pub(in crate::ssa) fn lower_region_products(
     }
     output.sort_by_key(|item| item.product);
     output.dedup_by_key(|item| item.product);
-    if output.len() > lkjscript_ir::MAX_REGION_PRODUCTS {
-        return Err(Error::msg(
-            "region product metadata exceeds bounded maximum",
-        ));
-    }
     Ok(output)
 }

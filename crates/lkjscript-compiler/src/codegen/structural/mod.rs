@@ -40,8 +40,11 @@ pub(in crate::codegen) fn structural_destination(
     let active_variant = active_variant.map(|variant| BytecodeVariantId::new(variant.bytes()));
     chunk
         .structural_destinations
-        .iter()
-        .find(|item| item.representation == representation && item.active_variant == active_variant)
+        .binary_search_by(|item| {
+            (item.representation, item.active_variant).cmp(&(representation, active_variant))
+        })
+        .ok()
+        .and_then(|index| chunk.structural_destinations.get(index))
         .map(|item| item.id)
         .ok_or_else(|| Error::msg("SSA destination has no exact bytecode metadata"))
 }

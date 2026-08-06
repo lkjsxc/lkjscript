@@ -1,4 +1,21 @@
 fn install_structural_destinations(chunk: &mut Chunk) -> Result<()> {
+    let mut owners = HashMap::new();
+    for item in &chunk.structural_representations {
+        if item.category == BytecodeStructuralValueCategory::Owner {
+            let key = (
+                item.type_id,
+                item.witness,
+                item.witness_group,
+                item.witness_member,
+                item.layout,
+                item.storage,
+                item.route,
+            );
+            if owners.insert(key, item.id).is_some() {
+                return Err(Error::msg("structural owner representation is ambiguous"));
+            }
+        }
+    }
     let representations: Vec<_> = chunk
         .structural_representations
         .iter()
@@ -6,26 +23,23 @@ fn install_structural_destinations(chunk: &mut Chunk) -> Result<()> {
         .copied()
         .collect();
     for representation in representations {
-        let owner_representation = chunk
-            .structural_representations
-            .iter()
-            .find(|item| {
-                item.type_id == representation.type_id
-                    && item.witness == representation.witness
-                    && item.witness_group == representation.witness_group
-                    && item.witness_member == representation.witness_member
-                    && item.layout == representation.layout
-                    && item.category == BytecodeStructuralValueCategory::Owner
-                    && item.storage == representation.storage
-                    && item.route == representation.route
-            })
-            .map(|item| item.id)
+        let owner_representation = owners
+            .get(&(
+                representation.type_id,
+                representation.witness,
+                representation.witness_group,
+                representation.witness_member,
+                representation.layout,
+                representation.storage,
+                representation.route,
+            ))
+            .copied()
             .ok_or_else(|| Error::msg("structural destination has no owner representation"))?;
         let layout = chunk
             .structural_layouts
             .get(representation.layout.index())
             .ok_or_else(|| Error::msg("structural destination layout is missing"))?;
-        let candidates: Vec<(Option<BytecodeVariantId>, Vec<StructuralFieldMetadata>)> =
+        let mut candidates: Vec<(Option<BytecodeVariantId>, Vec<StructuralFieldMetadata>)> =
             match &layout.kind {
                 BytecodeStructuralLayoutKind::String | BytecodeStructuralLayoutKind::Path => {
                     vec![(None, Vec::new())]
@@ -38,6 +52,7 @@ fn install_structural_destinations(chunk: &mut Chunk) -> Result<()> {
                     .map(|variant| (Some(variant.variant), variant.fields.clone()))
                     .collect(),
             };
+        candidates.sort_by_key(|(active_variant, _)| *active_variant);
         for (active_variant, fields) in candidates {
             let raw = u64::try_from(chunk.structural_destinations.len())
                 .map_err(|_| Error::msg("bytecode structural destination index exceeds u64"))?;

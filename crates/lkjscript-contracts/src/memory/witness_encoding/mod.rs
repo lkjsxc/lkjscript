@@ -39,7 +39,7 @@ fn encode_dependency(output: &mut Encoder, dependency: &ExecutableMemoryWitnessD
     match dependency.target {
         ExecutableMemoryWitnessTarget::LocalMember(ordinal) => {
             output.byte(0);
-            output.u16(ordinal);
+            output.u64(ordinal);
         }
         ExecutableMemoryWitnessTarget::ExternalMember { group, member } => {
             output.byte(1);
@@ -79,7 +79,7 @@ fn encode_role(output: &mut Encoder, role: &ExecutableMemoryWitnessRole) {
         ExecutableMemoryWitnessRole::TypeArgument { constructor, index } => {
             output.byte(3);
             output.bytes(constructor);
-            output.u16(*index);
+            output.u64(*index);
         }
     }
 }
@@ -108,7 +108,11 @@ impl Encoder {
     }
 
     fn sequence_len(&mut self, value: usize) {
-        self.u64(u64::try_from(value).unwrap_or(u64::MAX));
+        let value = match u64::try_from(value) {
+            Ok(value) => value,
+            Err(_) => unreachable!("host usize exceeds canonical u64 length"),
+        };
+        self.u64(value);
     }
 
     fn bytes(&mut self, value: &[u8]) {

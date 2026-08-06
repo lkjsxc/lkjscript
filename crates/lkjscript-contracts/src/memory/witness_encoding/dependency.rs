@@ -15,13 +15,13 @@ pub enum ExecutableMemoryWitnessRole {
     },
     TypeArgument {
         constructor: [u8; 32],
-        index: u16,
+        index: u64,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExecutableMemoryWitnessTarget {
-    LocalMember(u16),
+    LocalMember(u64),
     ExternalMember { group: [u8; 32], member: [u8; 32] },
 }
 

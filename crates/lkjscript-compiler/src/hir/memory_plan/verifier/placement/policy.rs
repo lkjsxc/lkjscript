@@ -1,60 +1,71 @@
-fn verified_independent_owners(
+fn verified_index_independent_owners(
     facts: &Facts<'_>,
-    function: MemoryFunctionId,
-    binding: BindingId,
-) -> u32 {
-    facts.expressions.iter()
-        .filter(|parent| parent.function == function)
-        .filter(|parent| matches!(parent.expression.kind, hir::ExprKind::Call { .. }))
-        .map(|parent| facts.expressions.iter()
-            .filter(|child| child.parent == Some(parent.id))
-            .filter(|child| matches!(&child.expression.kind,
-                hir::ExprKind::Load(reference) if reference.binding == binding))
-            .count())
-        .max()
-        .and_then(|count| u32::try_from(count).ok())
-        .unwrap_or(1)
-        .max(1)
-}
-
-fn verified_branch_divergence(
-    facts: &Facts<'_>,
-    function: MemoryFunctionId,
-    binding: BindingId,
-) -> bool {
-    let mut branches = BTreeSet::new();
-    for fact in facts.expressions.iter().filter(|fact| fact.function == function) {
-        if !matches!(&fact.expression.kind,
-            hir::ExprKind::Load(reference)
-            | hir::ExprKind::Move { binding: reference, .. } if reference.binding == binding)
-        {
+) -> Result<HashMap<(MemoryFunctionId, BindingId), u64>> {
+    let mut call_counts: HashMap<(MemoryExpressionId, BindingId), u64> = HashMap::new();
+    let mut output = HashMap::new();
+    for fact in &facts.expressions {
+        let hir::ExprKind::Load(reference) = &fact.expression.kind else {
+            continue;
+        };
+        let Some(parent_id) = fact.parent else {
+            continue;
+        };
+        let Some(parent) = facts.expression(parent_id) else {
+            continue;
+        };
+        if !matches!(parent.expression.kind, hir::ExprKind::Call { .. }) {
             continue;
         }
-        if let Some(branch) = verified_enclosing_if_branch(facts, fact) {
-            branches.insert(branch);
-        }
+        let count = call_counts
+            .entry((parent_id, reference.binding))
+            .or_default();
+        *count = count
+            .checked_add(1)
+            .ok_or_else(|| Error::msg("verified independent-owner count overflow"))?;
+        let maximum = output
+            .entry((fact.function, reference.binding))
+            .or_insert(1);
+        *maximum = (*maximum).max(*count);
     }
-    branches.contains(&1) && branches.contains(&2)
+    Ok(output)
 }
 
-fn verified_enclosing_if_branch(
+fn verified_index_branch_divergence(
     facts: &Facts<'_>,
-    fact: &ExprFact<'_>,
-) -> Option<u32> {
-    let mut child = fact;
-    while let Some(parent_id) = child.parent {
-        let parent = facts.expressions.iter().find(|candidate| candidate.id == parent_id)?;
-        if matches!(parent.expression.kind, hir::ExprKind::If { .. }) {
-            return Some(child.child_index);
+) -> HashMap<(MemoryFunctionId, BindingId), bool> {
+    let mut branches: HashMap<(MemoryFunctionId, BindingId), u8> = HashMap::new();
+    for fact in &facts.expressions {
+        let binding = match &fact.expression.kind {
+            hir::ExprKind::Load(reference)
+            | hir::ExprKind::Move { binding: reference, .. } => reference.binding,
+            _ => continue,
+        };
+        let mut child = fact;
+        while let Some(parent_id) = child.parent {
+            let Some(parent) = facts.expression(parent_id) else {
+                break;
+            };
+            if matches!(parent.expression.kind, hir::ExprKind::If { .. }) {
+                let bit = match child.child_index {
+                    1 => 1,
+                    2 => 2,
+                    _ => 0,
+                };
+                *branches.entry((fact.function, binding)).or_default() |= bit;
+                break;
+            }
+            child = parent;
         }
-        child = parent;
     }
-    None
+    branches
+        .into_iter()
+        .map(|(key, branches)| (key, branches == 3))
+        .collect()
 }
 
 fn verified_sealed_selected(
     witness: &MemoryWitness,
-    independent: u32,
+    independent: u64,
     nodes: u64,
     bytes: u64,
     dependencies: usize,
@@ -90,7 +101,7 @@ fn verified_affine_or_resource(ty: &MemoryType) -> bool {
 fn verified_route(
     fact: &ExprFact<'_>,
     last_use: bool,
-    independent: u32,
+    independent: u64,
     nodes: u64,
     bytes: u64,
     sealed: bool,

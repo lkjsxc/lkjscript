@@ -6,7 +6,7 @@ pub struct MemoryLoanPlan {
     pub expression: MemoryExpressionId,
     pub binding: Option<u32>,
     pub kind: MemoryBorrowKind,
-    pub semantic_uses: u32,
+    pub semantic_uses: u64,
     pub end_after: MemoryExpressionId,
     pub entry: MemoryEntryId,
 }

@@ -17,17 +17,6 @@ pub(crate) fn memory_type_identity(ty: &MemoryType) -> Result<[u8; 32]> {
     encoding::compute_type_id(ty)
 }
 
-pub const MAX_MEMORY_PLAN_FUNCTIONS: u64 = 4_096;
-pub const MAX_MEMORY_PLAN_USES: u64 = 65_536;
-pub const MAX_MEMORY_PLAN_LOANS: u64 = 16_384;
-pub const MAX_MEMORY_PLAN_CALLS: u64 = 16_384;
-pub const MAX_MEMORY_PLAN_OBLIGATIONS: u64 = 32_768;
-pub const MAX_MEMORY_WITNESS_PARAMETERS: u64 = 16;
-pub const MAX_MEMORY_WITNESS_ARGUMENTS: u64 = 16;
-pub const MAX_MEMORY_PLAN_DESTINATIONS: u64 = 16_384;
-pub const MAX_MEMORY_PLAN_BORROW_SCOPES: u64 = 16_384;
-pub const MAX_MEMORY_PLAN_DROP_PATHS: u64 = 32_768;
-
 /// Opaque proof that one exact HIR program has a complete independently
 /// verified memory plan. SSA construction accepts only this wrapper.
 pub(crate) struct MemoryVerifiedHir<'a> {

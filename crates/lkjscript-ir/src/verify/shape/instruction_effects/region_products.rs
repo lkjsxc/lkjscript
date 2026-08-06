@@ -4,9 +4,6 @@ use crate::verify::*;
 use crate::Program;
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
-    if program.region_products.len() > crate::MAX_REGION_PRODUCTS {
-        return fail("SSA region product metadata exceeds bounded maximum");
-    }
     let mut seen = HashSet::new();
     for region in &program.region_products {
         if !seen.insert(region.product) || !region.identity.is_resolved() {
@@ -74,7 +71,9 @@ fn verify_acyclic(program: &Program) -> crate::Result<()> {
             };
             let target = indexes[&target];
             edges[source].push(target);
-            indegree[target] = indegree[target].saturating_add(1);
+            indegree[target] = indegree[target]
+                .checked_add(1)
+                .ok_or_else(|| crate::IrError::new("SSA region product indegree overflow"))?;
         }
     }
     let mut ready: VecDeque<_> = indegree
@@ -84,9 +83,13 @@ fn verify_acyclic(program: &Program) -> crate::Result<()> {
         .collect();
     let mut visited = 0_usize;
     while let Some(source) = ready.pop_front() {
-        visited = visited.saturating_add(1);
+        visited = visited
+            .checked_add(1)
+            .ok_or_else(|| crate::IrError::new("SSA region product visit count overflow"))?;
         for target in &edges[source] {
-            indegree[*target] = indegree[*target].saturating_sub(1);
+            indegree[*target] = indegree[*target]
+                .checked_sub(1)
+                .ok_or_else(|| crate::IrError::new("SSA region product indegree underflow"))?;
             if indegree[*target] == 0 {
                 ready.push_back(*target);
             }

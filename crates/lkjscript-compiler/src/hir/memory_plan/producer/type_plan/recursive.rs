@@ -22,8 +22,8 @@ impl TypePlanner<'_> {
         let mut affine_path = None;
         for declaration in keys {
             let substitutions =
-                recursive_substitutions(self.program, &declaration, key, arguments)?;
-            for (field, path) in recursive_fields(self.program, &declaration)? {
+                self.recursive_substitutions(&declaration, key, arguments)?;
+            for (field, path) in self.recursive_fields(&declaration)? {
                 let field = field.subst(&substitutions);
                 if declaration_key(&field).and_then(|item| self.graph.component(&item))
                     == Some(component)
@@ -92,7 +92,7 @@ impl TypePlanner<'_> {
             };
             if derived.closure.class == MemoryClosureClass::IllegalDomainBridge {
                 return Err(closure_error(
-                    &recursive_root_type(self.program, key, arguments)?,
+                    &self.recursive_root_type(key, arguments)?,
                     &derived.closure,
                 ));
             }

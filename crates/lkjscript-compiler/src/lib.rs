@@ -44,11 +44,14 @@ pub struct CompileMetrics {
     pub parsing: Duration,
     pub hir_analysis: Duration,
     pub effect_analysis: Duration,
+    pub memory_planning: Duration,
     pub ssa_construction: Duration,
     pub ssa_verification: Duration,
     pub normalization: Duration,
+    pub memory_inventory: Duration,
     pub bytecode_lowering: Duration,
     pub bytecode_validation: Duration,
+    pub preparation: Duration,
     pub source_files: usize,
 }
 

@@ -27,13 +27,13 @@ pub(super) fn verify_entries(plan: &HirMemoryPlan) -> Result<()> {
             let expected = if entry.mode.domain == MemoryDomain::Static {
                 None
             } else {
-                Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32))
+                Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u64))
             };
             if entry.drop_glue != expected {
                 return Err(Error::msg("bytes memory plan has wrong drop glue"));
             }
         } else if let MemoryType::Resource(kind) = entry.ty {
-            let expected = MemoryDropGlueId::new(1 + u32::from(kind as u8));
+            let expected = MemoryDropGlueId::new(1 + u64::from(kind as u8));
             if entry.drop_glue != Some(expected) {
                 return Err(Error::msg("resource memory plan has wrong drop glue"));
             }

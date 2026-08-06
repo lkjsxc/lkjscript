@@ -84,28 +84,31 @@ impl Producer<'_> {
     }
 
     fn add_destination(&mut self, expression: &Expr, expression_id: MemoryExpressionId) -> Result<()> {
-        if u64::try_from(self.destinations.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_DESTINATIONS {
-            return Err(Error::msg("HIR memory-plan destinations exceed bounded maximum"));
-        }
-        let entry_id = self.entries.iter().find_map(|entry| match entry.subject {
-            MemorySubject::Expression { expression, .. } if expression == expression_id => Some(entry.id),
-            _ => None,
-        }).ok_or_else(|| Error::msg("aggregate destination lost expression entry"))?;
+        let entry_id = *self
+            .expression_entries
+            .get(&expression_id)
+            .ok_or_else(|| Error::msg("aggregate destination lost expression entry"))?;
         let entry_index = entry_id.index().ok_or_else(|| Error::msg("aggregate entry exceeds usize"))?;
         let type_fact = self.entries[entry_index].type_fact;
         let fact = self.type_planner.fact(type_fact)?.clone();
-        let mut children: Vec<_> = self.entries.iter().filter_map(|entry| match entry.subject {
-            MemorySubject::Expression { expression, parent: Some(parent), child_index, .. }
-                if parent == expression_id => Some((child_index, expression, entry.drop_path)),
-            _ => None,
-        }).collect();
+        let mut children = self
+            .child_entries
+            .remove(&expression_id)
+            .unwrap_or_default();
         children.sort_by_key(|item| item.0);
-        let (field_count, active_payload) = destination_shape(self.program, expression)?;
-        if children.len() != usize::try_from(field_count).unwrap_or(usize::MAX) {
+        let (field_count, active_payload) = destination_shape(
+            self.program,
+            &self.products_by_id,
+            &self.enums_by_id,
+            expression,
+        )?;
+        let field_count_index = usize::try_from(field_count)
+            .map_err(|_| Error::msg("destination field count exceeds host usize"))?;
+        if children.len() != field_count_index {
             return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION field count mismatch"));
         }
-        let id = MemoryDestinationId::new(u32::try_from(self.destinations.len())
-            .map_err(|_| Error::msg("HIR memory-plan destination identity exceeds u32"))?);
+        let id = MemoryDestinationId::new(u64::try_from(self.destinations.len())
+            .map_err(|_| Error::msg("HIR memory-plan destination identity exceeds u64"))?);
         let initialized_order: Vec<u32> = (0..field_count).collect();
         let fields = children.into_iter().map(|(index, expression, drop_path)| {
             MemoryDestinationField { index, expression, drop_path }

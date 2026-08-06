@@ -2,9 +2,38 @@ use std::collections::BTreeSet;
 
 use super::*;
 
-pub(super) fn checked_estimate(program: &hir::Program, expression: &Expr) -> Result<(u64, u64)> {
+pub(super) struct EstimateIndex<'a> {
+    products: HashMap<&'a str, &'a hir::ProductDefinition>,
+    enums: HashMap<hir::EnumId, &'a hir::EnumDefinition>,
+}
+
+impl<'a> EstimateIndex<'a> {
+    pub(super) fn new(program: &'a hir::Program) -> Result<Self> {
+        let mut products = HashMap::new();
+        let mut enums = HashMap::new();
+        products
+            .try_reserve(program.products.len())
+            .map_err(|_| Error::host("value placement product index allocation failed"))?;
+        enums
+            .try_reserve(program.enums.len())
+            .map_err(|_| Error::host("value placement enum index allocation failed"))?;
+        for product in &program.products {
+            if products.insert(product.name.as_str(), product).is_some() {
+                return Err(Error::msg("value placement product name is duplicated"));
+            }
+        }
+        for enumeration in &program.enums {
+            if enums.insert(enumeration.id, enumeration).is_some() {
+                return Err(Error::msg("value placement enum identity is duplicated"));
+            }
+        }
+        Ok(Self { products, enums })
+    }
+}
+
+pub(super) fn checked_estimate(index: &EstimateIndex<'_>, expression: &Expr) -> Result<(u64, u64)> {
     let mut active = BTreeSet::new();
-    let (nodes, mut bytes) = estimate_type(program, &expression.ty, &mut active)?;
+    let (nodes, mut bytes) = estimate_type(index, &expression.ty, &mut active)?;
     match &expression.kind {
         ExprKind::LitStr(value) => bytes = checked_len(value.len())?,
         ExprKind::LitBytes(value) => bytes = checked_len(value.len())?,
@@ -14,7 +43,7 @@ pub(super) fn checked_estimate(program: &hir::Program, expression: &Expr) -> Res
 }
 
 fn estimate_type(
-    program: &hir::Program,
+    index: &EstimateIndex<'_>,
     ty: &Type,
     active: &mut BTreeSet<String>,
 ) -> Result<(u64, u64)> {
@@ -28,41 +57,41 @@ fn estimate_type(
         Type::Symbol | Type::ByteSlice | Type::ByteSliceMut => Ok((0, 16)),
         Type::Str | Type::Bytes | Type::Path | Type::ByteVector | Type::List(_) => Ok((1, 0)),
         Type::Param(_) => Ok((0, 0)),
-        Type::Product(name) => estimate_product(program, name, active),
-        Type::Enum { id, .. } => estimate_enum(program, *id, active),
+        Type::Product(name) => estimate_product(index, name, active),
+        Type::Enum { id, .. } => estimate_enum(index, *id, active),
     }
 }
 
 fn estimate_product(
-    program: &hir::Program,
+    index: &EstimateIndex<'_>,
     name: &str,
     active: &mut BTreeSet<String>,
 ) -> Result<(u64, u64)> {
     if !active.insert(name.into()) {
         return Ok((0, 0));
     }
-    let product = program
+    let product = index
         .products
-        .iter()
-        .find(|product| product.name == name)
+        .get(name)
+        .copied()
         .ok_or_else(|| Error::msg("value placement lost product estimate metadata"))?;
     let mut total = (1_u64, 0_u64);
     for field in &product.fields {
-        total = add_estimate(total, estimate_type(program, &field.ty, active)?)?;
+        total = add_estimate(total, estimate_type(index, &field.ty, active)?)?;
     }
     active.remove(name);
     Ok(total)
 }
 
 fn estimate_enum(
-    program: &hir::Program,
+    index: &EstimateIndex<'_>,
     id: hir::EnumId,
     active: &mut BTreeSet<String>,
 ) -> Result<(u64, u64)> {
-    let definition = program
+    let definition = index
         .enums
-        .iter()
-        .find(|definition| definition.id == id)
+        .get(&id)
+        .copied()
         .ok_or_else(|| Error::msg("value placement lost enum estimate metadata"))?;
     if !active.insert(definition.name.clone()) {
         return Ok((0, 0));
@@ -71,7 +100,7 @@ fn estimate_enum(
     for variant in &definition.variants {
         let mut estimate = (1_u64, 2_u64);
         for field in &variant.fields {
-            estimate = add_estimate(estimate, estimate_type(program, &field.ty, active)?)?;
+            estimate = add_estimate(estimate, estimate_type(index, &field.ty, active)?)?;
         }
         if estimate.0 > largest.0 || estimate.1 > largest.1 {
             largest = (largest.0.max(estimate.0), largest.1.max(estimate.1));

@@ -20,22 +20,49 @@ pub(crate) struct VerifiedTypes<'a> {
     pub(crate) program: &'a hir::Program,
     pub(crate) plan: &'a HirMemoryPlan,
     pub(crate) graph: VerifiedDeclarationGraph,
+    pub(crate) product_indices: HashMap<String, usize>,
+    pub(crate) enum_indices: HashMap<[u8; 32], usize>,
     pub(crate) memo: HashMap<Type, MemoryTypeFactId>,
     pub(crate) expected: Vec<VerifiedExpectedType>,
     pub(crate) fields: u64,
     pub(crate) variants: u64,
+    pub(crate) drop_paths: u64,
 }
 
 impl<'a> VerifiedTypes<'a> {
     pub(crate) fn new(program: &'a hir::Program, plan: &'a HirMemoryPlan) -> Result<Self> {
+        let mut product_indices = HashMap::new();
+        product_indices
+            .try_reserve(program.products.len())
+            .map_err(|_| Error::host("memory verifier product-name index allocation failed"))?;
+        for (index, product) in program.products.iter().enumerate() {
+            if product_indices
+                .insert(product.name.clone(), index)
+                .is_some()
+            {
+                return Err(Error::msg("memory verifier product names are not unique"));
+            }
+        }
+        let mut enum_indices = HashMap::new();
+        enum_indices
+            .try_reserve(program.enums.len())
+            .map_err(|_| Error::host("memory verifier enum index allocation failed"))?;
+        for (index, enumeration) in program.enums.iter().enumerate() {
+            if enum_indices.insert(enumeration.id.bytes(), index).is_some() {
+                return Err(Error::msg("memory verifier enum identities are not unique"));
+            }
+        }
         Ok(Self {
             program,
             plan,
             graph: VerifiedDeclarationGraph::new(program)?,
+            product_indices,
+            enum_indices,
             memo: HashMap::new(),
             expected: Vec::new(),
             fields: 0,
             variants: 0,
+            drop_paths: 0,
         })
     }
 
@@ -80,10 +107,9 @@ impl<'a> VerifiedTypes<'a> {
         }
         let id = MemoryTypeFactId::new(index_u32(self.expected.len())?);
         let (glue, path) = self.expected_drop(ty, &derived)?;
-        let fact = self
-            .plan
-            .type_facts
-            .get(id.index().unwrap_or(usize::MAX))
+        let fact = id
+            .index()
+            .and_then(|index| self.plan.type_facts.get(index))
             .ok_or_else(|| Error::msg("HIR memory plan omitted a reconstructed type fact"))?;
         let root = if derived.closure.class == MemoryClosureClass::RegionClosed {
             MemoryRootProjection::None
@@ -124,6 +150,22 @@ impl<'a> VerifiedTypes<'a> {
         Ok(id)
     }
 
+    pub(crate) fn product_definition(&self, name: &str) -> Result<&hir::ProductDefinition> {
+        self.product_indices
+            .get(name)
+            .and_then(|index| self.program.products.get(*index))
+            .filter(|product| product.name == name)
+            .ok_or_else(|| Error::msg("memory verifier lost product"))
+    }
+
+    pub(crate) fn enum_definition(&self, id: [u8; 32]) -> Result<&hir::EnumDefinition> {
+        self.enum_indices
+            .get(&id)
+            .and_then(|index| self.program.enums.get(*index))
+            .filter(|enumeration| enumeration.id.bytes() == id)
+            .ok_or_else(|| Error::msg("memory verifier lost enum"))
+    }
+
     pub(crate) fn expected(&self, id: MemoryTypeFactId) -> Result<&VerifiedExpectedType> {
         id.index()
             .and_then(|index| self.expected.get(index))
@@ -133,48 +175,44 @@ impl<'a> VerifiedTypes<'a> {
     pub(crate) fn verify_totals(&mut self) -> Result<()> {
         self.close_recursive_members()?;
         verify_witness_groups(self.plan)?;
-        let type_nodes = u64::try_from(self.expected.len()).unwrap_or(u64::MAX);
-        let drop_paths = u64::try_from(
-            self.expected
-                .iter()
-                .filter(|item| item.path.is_some())
-                .count(),
-        )
-        .unwrap_or(u64::MAX);
-        let witnesses = u64::try_from(self.plan.witnesses.len()).unwrap_or(u64::MAX);
+        let type_nodes = u64::try_from(self.expected.len())
+            .map_err(|_| Error::msg("memory verifier type count exceeds u64"))?;
+        let witnesses = u64::try_from(self.plan.witnesses.len())
+            .map_err(|_| Error::msg("memory verifier witness count exceeds u64"))?;
+        let witness_groups = u64::try_from(self.plan.witness_groups.len())
+            .map_err(|_| Error::msg("memory verifier witness-group count exceeds u64"))?;
         let unique_witnesses: BTreeSet<_> =
             self.plan.witnesses.iter().map(|item| item.id).collect();
-        let group_edges = self
-            .plan
-            .witnesses
-            .iter()
-            .try_fold(0u64, |sum, witness| {
-                sum.checked_add(u64::try_from(witness.facts.dependencies.len()).ok()?)
-            })
-            .unwrap_or(u64::MAX);
+        let group_edges = self.plan.witnesses.iter().try_fold(0u64, |sum, witness| {
+            let dependencies = u64::try_from(witness.facts.dependencies.len())
+                .map_err(|_| Error::msg("memory witness dependency count exceeds u64"))?;
+            sum.checked_add(dependencies)
+                .ok_or_else(|| Error::msg("memory witness dependency count overflow"))
+        })?;
+        let drop_paths = usize::try_from(self.drop_paths)
+            .map_err(|_| Error::msg("memory verifier drop-path count exceeds host usize"))?;
+        let expected_glues = ResourceKind::ALL
+            .len()
+            .checked_add(2)
+            .and_then(|count| count.checked_add(drop_paths))
+            .ok_or_else(|| Error::msg("memory verifier drop-glue count overflow"))?;
         if witnesses != type_nodes
             || unique_witnesses.len() != self.plan.witnesses.len()
-            || drop_paths > MAX_MEMORY_PLAN_DROP_PATHS
             || self.plan.type_facts.len() != self.expected.len()
-            || self.plan.drop_paths.len() != usize::try_from(drop_paths).unwrap_or(usize::MAX)
-            || self.plan.drop_glues.len()
-                != ResourceKind::ALL
-                    .len()
-                    .saturating_add(2)
-                    .saturating_add(usize::try_from(drop_paths).unwrap_or(usize::MAX))
+            || self.plan.drop_paths.len() != drop_paths
+            || self.plan.drop_glues.len() != expected_glues
             || self.plan.work.type_nodes != type_nodes
             || self.plan.work.witnesses != witnesses
-            || self.plan.work.witness_groups
-                != u64::try_from(self.plan.witness_groups.len()).unwrap_or(u64::MAX)
+            || self.plan.work.witness_groups != witness_groups
             || self.plan.work.witness_group_edges != group_edges
             || self.plan.work.type_edges != self.graph.edges
             || self.plan.work.scc_work != self.graph.scc_work
             || self.plan.work.aggregate_fields != self.fields
             || self.plan.work.aggregate_variants != self.variants
-            || self.plan.work.drop_paths != drop_paths
+            || self.plan.work.drop_paths != self.drop_paths
         {
             return Err(Error::msg(
-                "independent memory verifier rejected bounded type work/tables",
+                "independent memory verifier rejected exact type work/tables",
             ));
         }
         Ok(())

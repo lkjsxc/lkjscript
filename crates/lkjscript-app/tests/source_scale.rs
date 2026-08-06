@@ -4,7 +4,9 @@ use std::io::Write as IoWrite;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use lkjscript_compiler::{compile_path, compile_source, validate_source};
+use lkjscript_compiler::{
+    compile_path, compile_path_with_metrics, compile_source, validate_source,
+};
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
@@ -494,5 +496,164 @@ fn flat_source_beyond_former_quotas_compiles_validates_and_executes(
         other => return Err(format!("flat source program did not return: {other:?}").into()),
     };
     assert_eq!(value.as_i64(), Some(EXPECTED_RESULT));
+    Ok(())
+}
+
+fn generated_many_functions_source(functions: usize) -> Result<String, std::fmt::Error> {
+    let mut source = String::new();
+    for index in 0..functions {
+        write!(
+            source,
+            concat!(
+                "def/\nname/\nwide-function-{index}\n/name\nfn/\nsig/\ninputs/\n/inputs\n",
+                "output/\ni64\n/output\n/sig\nparams/\n/params\n{index}\n/fn\n/def\n"
+            ),
+            index = index,
+        )?;
+    }
+    write!(
+        source,
+        concat!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+            "wide-function-{0}/\n/wide-function-{0}\n/main\n"
+        ),
+        functions - 1,
+    )?;
+    Ok(source)
+}
+
+fn generated_borrow_calls_source(calls: usize) -> Result<String, std::fmt::Error> {
+    let mut source = String::from(concat!(
+        "def/\nname/\nobserve-wide-borrow\n/name\nfn/\nsig/\ninputs/\nstring\n/inputs\n",
+        "output/\nunit\n/output\n/sig\nparams/\nvalue\nstring\n/params\nunit\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\n",
+        "text\nempty-string/\n/empty-string\n/bind\ndo/\n"
+    ));
+    for _ in 0..calls {
+        source.push_str("observe-wide-borrow/\ntext\n/observe-wide-borrow\n");
+    }
+    source.push_str("42\n/do\n/let\n/main\n");
+    Ok(source)
+}
+
+fn generated_wide_transport_source(width: usize) -> Result<String, std::fmt::Error> {
+    let mut source = String::from("def/\nname/\nwide-transport\n/name\nfn/\nforall/\n");
+    for index in 0..width {
+        writeln!(source, "t-{index}")?;
+    }
+    source.push_str("/forall\nsig/\ninputs/\n");
+    for index in 0..width {
+        writeln!(source, "t-{index}")?;
+    }
+    source.push_str("/inputs\noutput/\nt-0\n/output\n/sig\nparams/\n");
+    for index in 0..width {
+        writeln!(source, "value-{index}")?;
+        writeln!(source, "t-{index}")?;
+    }
+    source.push_str(concat!(
+        "/params\nvalue-0\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nwide-transport/\n"
+    ));
+    for index in 0..width {
+        writeln!(source, "{index}")?;
+    }
+    source.push_str("/wide-transport\n/main\n");
+    Ok(source)
+}
+
+#[test]
+fn seventeen_witness_arguments_cross_hir_ssa_validated_bytecode_and_vm(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const WIDTH: usize = 17;
+    let source = generated_wide_transport_source(WIDTH)?;
+    let program = compile_source(&source, "wide-memory-witness-transport.lkjscript")?;
+    assert_eq!(
+        program.memory_plan().functions[0]
+            .signature
+            .witness_parameters
+            .len(),
+        WIDTH,
+    );
+    assert_eq!(
+        program.memory_plan().calls[0].witness_arguments.len(),
+        WIDTH
+    );
+    assert_eq!(
+        program.ssa().program().functions[0]
+            .signature
+            .memory_witness_parameters
+            .len(),
+        WIDTH,
+    );
+    assert_eq!(
+        program.bytecode().protos()[0]
+            .memory_witness_parameters
+            .len(),
+        WIDTH
+    );
+    assert_eq!(
+        program.bytecode().main().call_witnesses[0].bindings.len(),
+        WIDTH
+    );
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("wide witness transport did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(0));
+    Ok(())
+}
+
+#[test]
+#[ignore = "opt-in release 4,097-function production-pipeline stress geometry"]
+fn four_thousand_ninety_seven_functions_compile_validate_and_execute_in_vm(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const FUNCTIONS: usize = 4_097;
+    let source = generated_many_functions_source(FUNCTIONS)?;
+    let program = compile_source(&source, "wide-functions.lkjscript")?;
+    assert_eq!(program.bytecode().protos().len(), FUNCTIONS);
+    assert_eq!(program.memory_plan().work.functions, 4_098);
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("wide function program did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(4_096));
+    Ok(())
+}
+
+#[test]
+#[ignore = "opt-in release 16,385-call and borrow-scope production-pipeline stress geometry"]
+fn sixteen_thousand_three_hundred_eighty_five_calls_and_borrow_scopes_execute_in_vm(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const CALLS: usize = 16_385;
+    let source = generated_borrow_calls_source(CALLS)?;
+    let directory = TempDir::new()?;
+    let path = directory.0.join("wide-borrow-calls.lkjscript");
+    fs::write(&path, source)?;
+    let (program, metrics) = compile_path_with_metrics(&path)?;
+    eprintln!("wide borrow-call compile metrics: {metrics:?}");
+    assert!(program.memory_plan().calls.len() >= CALLS);
+    assert_eq!(program.memory_plan().borrow_scopes.len(), CALLS);
+    assert!(program.memory_plan().work.calls >= 16_385);
+    assert_eq!(program.memory_plan().work.borrow_scopes, 16_385);
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("wide borrow-call program did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(42));
     Ok(())
 }

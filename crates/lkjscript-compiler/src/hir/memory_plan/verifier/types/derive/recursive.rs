@@ -22,8 +22,8 @@ impl VerifiedTypes<'_> {
         let mut affine_path = None;
         for declaration in keys {
             let substitutions =
-                verified_recursive_substitutions(self.program, &declaration, key, arguments)?;
-            for (field, path) in verified_recursive_fields(self.program, &declaration)? {
+                self.verified_recursive_substitutions(&declaration, key, arguments)?;
+            for (field, path) in self.verified_recursive_fields(&declaration)? {
                 let field = field.subst(&substitutions);
                 if verified_key(&field).and_then(|item| self.graph.component(&item))
                     == Some(component)

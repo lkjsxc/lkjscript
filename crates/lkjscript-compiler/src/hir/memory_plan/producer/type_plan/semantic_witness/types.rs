@@ -26,14 +26,7 @@ impl TypePlanner<'_> {
             Type::Symbol => S::Primitive(P::Symbol),
             Type::Capability(kind) => S::Capability(*kind),
             Type::Resource(kind) => S::Resource(*kind),
-            Type::Product(name) => S::Product(
-                self.program
-                    .products
-                    .iter()
-                    .find(|item| item.name == *name)
-                    .ok_or_else(|| Error::msg("semantic type lost product identity"))?
-                    .identity,
-            ),
+            Type::Product(name) => S::Product(self.product(name)?.identity),
             Type::Enum { id, arguments, .. } => S::Enum {
                 identity: id.bytes(),
                 arguments: arguments

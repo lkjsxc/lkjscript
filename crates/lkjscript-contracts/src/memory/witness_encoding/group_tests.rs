@@ -39,7 +39,7 @@ fn recursive_pair(local: bool) -> Vec<ExecutableMemoryWitnessGroup> {
     }
     members.sort_by_key(|member| member.semantic_identity);
     for (ordinal, member) in members.iter_mut().enumerate() {
-        member.ordinal = u16::try_from(ordinal).expect("ordinal");
+        member.ordinal = u64::try_from(ordinal).expect("ordinal");
     }
     if local {
         for index in 0..members.len() {
@@ -50,7 +50,7 @@ fn recursive_pair(local: bool) -> Vec<ExecutableMemoryWitnessGroup> {
             members[index].dependencies.push(ExecutableMemoryWitnessDependency {
                 role: requirement.0,
                 target: ExecutableMemoryWitnessTarget::LocalMember(
-                    u16::try_from(target).expect("target ordinal")),
+                    u64::try_from(target).expect("target ordinal")),
             });
         }
         let id = executable_memory_witness_group_id(true, &members);
@@ -136,8 +136,12 @@ fn witness_groups_cross_the_former_total_count_boundary() {
 #[test]
 fn malformed_ordinal_reorder_and_forged_id_reject() {
     let mut ordinal = recursive_pair(true);
-    ordinal[0].members[0].dependencies[0].target = ExecutableMemoryWitnessTarget::LocalMember(9);
+    ordinal[0].members[0].dependencies[0].target =
+        ExecutableMemoryWitnessTarget::LocalMember(u64::MAX);
     assert!(validate_executable_memory_witness_groups(&ordinal).is_err());
+    let mut impossible_member = singleton_group();
+    impossible_member.members[0].ordinal = u64::MAX;
+    assert!(validate_executable_memory_witness_groups(&[impossible_member]).is_err());
     let mut reordered = recursive_pair(true);
     reordered[0].members.swap(0, 1);
     assert!(validate_executable_memory_witness_groups(&reordered).is_err());

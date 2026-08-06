@@ -10,12 +10,7 @@ impl VerifiedTypes<'_> {
                 self.verified_dependency(root, element, R::ListElement, &mut output)?;
             }
             Type::Product(name) => {
-                let item = self
-                    .program
-                    .products
-                    .iter()
-                    .find(|item| item.name == *name)
-                    .ok_or_else(|| Error::msg("memory verifier witness lost product"))?;
+                let item = self.product_definition(name)?;
                 for field in &item.fields {
                     self.verified_dependency(
                         root,
@@ -30,12 +25,7 @@ impl VerifiedTypes<'_> {
                 }
             }
             Type::Enum { id, arguments, .. } => {
-                let item = self
-                    .program
-                    .enums
-                    .iter()
-                    .find(|item| item.id == *id)
-                    .ok_or_else(|| Error::msg("memory verifier witness lost enum"))?;
+                let item = self.enum_definition(id.bytes())?;
                 if arguments.len() != item.type_parameters.len() {
                     return Err(Error::msg("memory verifier witness enum arity mismatch"));
                 }
@@ -45,8 +35,8 @@ impl VerifiedTypes<'_> {
                         argument,
                         R::TypeArgument {
                             constructor: id.bytes(),
-                            index: u16::try_from(index).map_err(|_| {
-                                Error::msg("memory verifier type argument order overflow")
+                            index: u64::try_from(index).map_err(|_| {
+                                Error::msg("memory verifier type argument order exceeds u64")
                             })?,
                         },
                         &mut output,

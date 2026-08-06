@@ -8,14 +8,7 @@ impl TypePlanner<'_> {
         while let Some(ty) = pending.pop_front() {
             match ty {
                 Type::Product(name) => {
-                    let item = self
-                        .program
-                        .products
-                        .iter()
-                        .find(|item| item.name == *name)
-                        .ok_or_else(|| {
-                            Error::msg("semantic closure lost product declaration")
-                        })?;
+                    let item = self.product(name)?;
                     if declarations.contains_key(&item.identity) {
                         continue;
                     }
@@ -43,12 +36,7 @@ impl TypePlanner<'_> {
                 }
                 Type::Enum { id, arguments, .. } => {
                     pending.extend(arguments);
-                    let item = self
-                        .program
-                        .enums
-                        .iter()
-                        .find(|item| item.id == *id)
-                        .ok_or_else(|| Error::msg("semantic closure lost enum declaration"))?;
+                    let item = self.enumeration(id.bytes())?;
                     if declarations.contains_key(&id.bytes()) {
                         continue;
                     }

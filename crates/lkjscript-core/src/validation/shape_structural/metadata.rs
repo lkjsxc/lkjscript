@@ -1,6 +1,7 @@
 fn validate_representation(
     chunk: &Chunk,
     representation: &StructuralRepresentationMetadata,
+    witness_members: &HashMap<MemoryWitnessId, (MemoryWitnessGroupId, u64)>,
 ) -> Result<()> {
     let ty = chunk
         .structural_types
@@ -12,11 +13,9 @@ fn validate_representation(
             "bytecode structural representation has stale type/witness metadata",
         ));
     }
-    if let Some(witness) = chunk.memory_witnesses.iter()
-        .find(|item| item.id == representation.witness)
-    {
-        if witness.group != representation.witness_group
-            || witness.ordinal != representation.witness_member
+    if let Some((group, ordinal)) = witness_members.get(&representation.witness) {
+        if *group != representation.witness_group
+            || *ordinal != representation.witness_member
         {
             return Err(Error::msg(
                 "bytecode structural representation group/member is stale",
@@ -26,19 +25,6 @@ fn validate_representation(
         return Err(Error::msg(
             "bytecode structural representation witness is missing",
         ));
-    }
-    if chunk.structural_representations.iter().any(|item| {
-        item.id != representation.id
-            && item.type_id == representation.type_id
-            && item.witness == representation.witness
-            && item.witness_group == representation.witness_group
-            && item.witness_member == representation.witness_member
-            && item.layout == representation.layout
-            && item.category == representation.category
-            && item.storage == representation.storage
-            && item.route == representation.route
-    }) {
-        return Err(Error::msg("bytecode structural representation tuple is duplicated"));
     }
     let valid_storage = matches!(
         (representation.category, representation.storage),

@@ -21,9 +21,9 @@ pub(super) fn is_static_bytes(entry: &MemoryPlanEntry, facts: &Facts<'_>) -> boo
         | MemorySubject::Constant { expression, .. } => expression,
         _ => return false,
     };
-    facts.expressions.iter().any(|item| {
-        item.id == expression && matches!(item.expression.kind, hir::ExprKind::LitBytes(_))
-    })
+    facts
+        .expression(expression)
+        .is_some_and(|item| matches!(item.expression.kind, hir::ExprKind::LitBytes(_)))
 }
 
 pub(super) fn expected_entry_escape(

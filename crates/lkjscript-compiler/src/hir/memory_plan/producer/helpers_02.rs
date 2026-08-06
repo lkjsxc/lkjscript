@@ -143,11 +143,11 @@ fn allocation_failure(effects: u16) -> MemoryAllocationFailure {
 }
 
 pub(crate) const fn resource_glue(kind: ResourceKind) -> MemoryDropGlueId {
-    MemoryDropGlueId::new(1 + kind as u32)
+    MemoryDropGlueId::new(1 + kind as u64)
 }
 
 const fn bytes_glue() -> MemoryDropGlueId {
-    MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32)
+    MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u64)
 }
 
 fn execution_cutover(ty: &Type) -> Option<MemoryExecutionCutover> {

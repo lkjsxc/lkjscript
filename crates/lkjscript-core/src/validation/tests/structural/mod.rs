@@ -132,6 +132,39 @@ fn emit_finished_product(chunk: &mut Chunk) {
     chunk.main.emit(Op::Pop);
 }
 
+#[test]
+#[ignore = "opt-in release structural operation-reference scale geometry"]
+fn structural_operation_references_cross_the_former_limit() -> Result<()> {
+    const REFERENCES: u64 = 65_537;
+
+    let mut chunk = product_chunk();
+    let fields: Vec<_> = (0..REFERENCES).map(|_| copy_field()).collect();
+    chunk.products[0].fields = (0..REFERENCES)
+        .map(|index| format!("field-{index}"))
+        .collect();
+    let crate::StructuralLayoutKind::Product {
+        fields: layout_fields,
+        ..
+    } = &mut chunk.structural_layouts[0].kind
+    else {
+        unreachable!("product fixture must retain a product layout");
+    };
+    *layout_fields = fields.clone();
+    chunk.structural_destinations[0].fields = fields;
+    chunk.structural_destination_fields = (0..REFERENCES)
+        .map(|field| crate::StructuralDestinationFieldRef {
+            destination: crate::StructuralDestinationId::new(0),
+            field,
+        })
+        .collect();
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+
+    let validated = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
+    assert_eq!(validated.structural_destination_fields().len(), 65_537);
+    Ok(())
+}
+
 fn emit_product_cleanup(chunk: &mut Chunk) {
     chunk.main.emit_op_u64_pair(Op::StructuralDropPlace, 0, 1);
     chunk.main.emit(Op::Pop);

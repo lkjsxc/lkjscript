@@ -144,8 +144,8 @@ pub(crate) fn verified_copy_share(ty: &Type, item: &VerifiedDerived) -> MemoryCo
 pub(crate) fn verified_leaf_glue(ty: &Type) -> Option<MemoryDropGlueId> {
     match ty {
         Type::ByteVector => Some(MemoryDropGlueId::new(0)),
-        Type::Bytes => Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32)),
-        Type::Resource(kind) => Some(MemoryDropGlueId::new(1 + *kind as u32)),
+        Type::Bytes => Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u64)),
+        Type::Resource(kind) => Some(MemoryDropGlueId::new(1 + *kind as u64)),
         _ => None,
     }
 }

@@ -41,15 +41,17 @@ impl TypePlanner<'_> {
         let semantic_identity = lkjscript_contracts::semantic_type_closure_hash(&facts.semantic)
             .map_err(|error| Error::msg(error.to_string()))?;
         let id = MemoryWitnessId::from_bytes(semantic_identity);
-        if self.witnesses.iter().any(|item| item.id == id) {
+        if self.witness_indices.contains_key(&id) {
             return Err(Error::msg("HIR memory-plan produced a duplicate semantic witness"));
         }
+        let index = self.witnesses.len();
         self.witnesses.push(MemoryWitness {
             id,
             group: MemoryWitnessGroupId::from_bytes([0; 32]),
-            ordinal: u16::MAX,
+            ordinal: u64::MAX,
             facts,
         });
+        self.witness_indices.insert(id, index);
         Ok(id)
     }
 
@@ -84,15 +86,15 @@ impl TypePlanner<'_> {
 
 
     fn witness_glue(&self, id: MemoryDropGlueId) -> Result<MemoryDropGlueKind> {
-        self.glues
-            .get(id.index().unwrap_or(usize::MAX))
+        id.index()
+            .and_then(|index| self.glues.get(index))
             .filter(|item| item.id == id)
             .map(|item| item.kind.clone())
             .ok_or_else(|| Error::msg("memory witness drop glue is missing"))
     }
 
     fn witness_path(&self, id: MemoryDropPathId) -> Result<Vec<MemoryWitnessDropBranch>> {
-        let path = self.drop_paths.get(id.index().unwrap_or(usize::MAX))
+        let path = id.index().and_then(|index| self.drop_paths.get(index))
             .filter(|item| item.id == id)
             .ok_or_else(|| Error::msg("memory witness drop path is missing"))?;
         path.branches.iter().map(|branch| Ok(MemoryWitnessDropBranch {

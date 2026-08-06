@@ -2,7 +2,7 @@ fn call_return_kind(
     chunk: &Chunk,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
-    structural_variables: &[(u16, crate::StructuralRepresentationId)],
+    structural_variables: &[(u64, crate::StructuralRepresentationId)],
     memory_witnesses: &[crate::MemoryWitnessBinding],
 ) -> Result<Kind> {
     if let Some(representation) = proto.return_structural {
@@ -21,9 +21,17 @@ fn call_return_kind(
                         "generic return is missing its hidden memory witness",
                     )
                 })?;
+            let witness_index = usize::try_from(binding.witness).map_err(|_| {
+                instruction_error(
+                    proto,
+                    instruction.op(),
+                    instruction.offset(),
+                    "generic return memory witness slot exceeds host usize",
+                )
+            })?;
             let witness = chunk
                 .memory_witnesses
-                .get(usize::from(binding.witness))
+                .get(witness_index)
                 .ok_or_else(|| {
                     instruction_error(
                         proto,

@@ -9,24 +9,21 @@ pub use identity::{
 };
 pub use witness::{
     MemoryWitnessDescriptor, MemoryWitnessGroupDescriptor, MemoryWitnessGroupMember,
-    MAX_MEMORY_WITNESS_PARAMETERS,
 };
-
-pub const MAX_REGION_PRODUCTS: usize = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RegionProductMetadata {
     pub product: ProductId,
     pub identity: RuntimeLayoutId,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StructuralValueCategory {
     Owner,
     View,
     Destination,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StructuralStorage {
     Inline,
     Static,
@@ -91,7 +88,7 @@ pub struct StructuralRepresentationMetadata {
     pub type_id: StructuralTypeId,
     pub witness: MemoryWitnessId,
     pub witness_group: MemoryWitnessGroupId,
-    pub witness_member: u16,
+    pub witness_member: u64,
     pub layout: StructuralLayoutId,
     pub category: StructuralValueCategory,
     pub storage: StructuralStorage,

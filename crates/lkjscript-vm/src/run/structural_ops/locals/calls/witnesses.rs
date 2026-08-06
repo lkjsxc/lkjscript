@@ -35,7 +35,10 @@ pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
         let witness = vm
             .chunk
             .memory_witnesses()
-            .get(usize::from(binding.witness))
+            .get(
+                usize::try_from(binding.witness)
+                    .map_err(|_| Error::msg("generic call witness slot exceeds host usize"))?,
+            )
             .ok_or_else(|| Error::msg("generic call witness slot is invalid"))?;
         if binding.parameter != requirement.parameter {
             return Err(Error::msg("generic call witness parameter is stale"));

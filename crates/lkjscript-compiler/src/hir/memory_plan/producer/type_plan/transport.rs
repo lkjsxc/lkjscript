@@ -64,9 +64,6 @@ fn memory_witness_parameters(
             });
         }
     }
-    if u64::try_from(output.len()).unwrap_or(u64::MAX) > MAX_MEMORY_WITNESS_PARAMETERS {
-        return Err(Error::msg("HIR memory witness parameters exceed 16"));
-    }
     Ok(output)
 }
 
@@ -143,9 +140,6 @@ fn memory_witness_arguments(
             parameter: parameter.parameter.clone(),
             witness: planner.fact(fact)?.witness,
         });
-    }
-    if u64::try_from(output.len()).unwrap_or(u64::MAX) > MAX_MEMORY_WITNESS_ARGUMENTS {
-        return Err(Error::msg("HIR memory witness arguments exceed 16"));
     }
     Ok(output)
 }

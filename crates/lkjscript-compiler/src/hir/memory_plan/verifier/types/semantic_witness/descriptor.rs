@@ -8,14 +8,7 @@ impl VerifiedTypes<'_> {
         while let Some(ty) = pending.pop_front() {
             match ty {
                 Type::Product(name) => {
-                    let item = self
-                        .program
-                        .products
-                        .iter()
-                        .find(|item| item.name == *name)
-                        .ok_or_else(|| {
-                            Error::msg("memory verifier semantic closure lost product")
-                        })?;
+                    let item = self.product_definition(name)?;
                     if declarations.contains_key(&item.identity) {
                         continue;
                     }
@@ -43,14 +36,7 @@ impl VerifiedTypes<'_> {
                 }
                 Type::Enum { id, arguments, .. } => {
                     pending.extend(arguments);
-                    let item = self
-                        .program
-                        .enums
-                        .iter()
-                        .find(|item| item.id == *id)
-                        .ok_or_else(|| {
-                            Error::msg("memory verifier semantic closure lost enum")
-                        })?;
+                    let item = self.enum_definition(id.bytes())?;
                     if declarations.contains_key(&id.bytes()) {
                         continue;
                     }

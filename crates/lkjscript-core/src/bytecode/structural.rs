@@ -1,8 +1,5 @@
 use super::{EnumId, ProductId, RuntimeLayoutId, VariantId};
 
-pub const MAX_STRUCTURAL_DESTINATIONS: usize = 65_536;
-pub const MAX_STRUCTURAL_OPERATION_REFS: usize = 65_536;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MemoryPlanId([u8; 32]);
 
@@ -57,7 +54,23 @@ macro_rules! structural_id {
 structural_id!(StructuralTypeId);
 structural_id!(StructuralLayoutId);
 structural_id!(StructuralRepresentationId);
-structural_id!(StructuralDestinationId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct StructuralDestinationId(u64);
+
+impl StructuralDestinationId {
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+
+    pub fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StructuralValueCategory {
@@ -158,7 +171,7 @@ pub struct StructuralRepresentationMetadata {
     pub type_id: StructuralTypeId,
     pub witness: MemoryWitnessId,
     pub witness_group: super::MemoryWitnessGroupId,
-    pub witness_member: u16,
+    pub witness_member: u64,
     pub layout: StructuralLayoutId,
     pub category: StructuralValueCategory,
     pub storage: StructuralStorage,

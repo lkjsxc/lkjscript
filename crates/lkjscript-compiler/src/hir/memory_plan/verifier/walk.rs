@@ -11,6 +11,9 @@ pub(super) struct ExprFact<'a> {
 
 pub(super) struct Facts<'a> {
     pub expressions: Vec<ExprFact<'a>>,
+    pub children: HashMap<(MemoryExpressionId, u32), usize>,
+    pub uses_by_binding: HashMap<(MemoryFunctionId, u32), Vec<usize>>,
+    pub loads_by_binding: HashMap<(MemoryFunctionId, u32), Vec<usize>>,
     pub bodies: Vec<super::super::MemoryExpressionId>,
     pub parameters: u64,
     pub places: u64,
@@ -22,9 +25,44 @@ pub(super) struct Facts<'a> {
     pub steps: u64,
 }
 
+impl<'a> Facts<'a> {
+    pub(super) fn expression(&self, id: MemoryExpressionId) -> Option<&ExprFact<'a>> {
+        id.index()
+            .and_then(|index| self.expressions.get(index))
+            .filter(|fact| fact.id == id)
+    }
+
+    pub(super) fn child(
+        &self,
+        parent: MemoryExpressionId,
+        child_index: u32,
+    ) -> Option<&ExprFact<'a>> {
+        self.children
+            .get(&(parent, child_index))
+            .and_then(|index| self.expressions.get(*index))
+    }
+
+    pub(super) fn binding_use_indices(&self, function: MemoryFunctionId, binding: u32) -> &[usize] {
+        self.uses_by_binding
+            .get(&(function, binding))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub(super) fn binding_loads(&self, function: MemoryFunctionId, binding: u32) -> &[usize] {
+        self.loads_by_binding
+            .get(&(function, binding))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+}
+
 pub(super) fn collect(program: &hir::Program) -> Result<Facts<'_>> {
     let mut facts = Facts {
         expressions: Vec::new(),
+        children: HashMap::new(),
+        uses_by_binding: HashMap::new(),
+        loads_by_binding: HashMap::new(),
         bodies: Vec::new(),
         parameters: 0,
         places: 0,
@@ -79,6 +117,7 @@ fn walk_inner<'a>(
     facts: &mut Facts<'a>,
 ) -> Result<super::super::MemoryExpressionId> {
     let id = super::super::MemoryExpressionId::new(index_u32(facts.expressions.len())?);
+    let expression_index = facts.expressions.len();
     facts.expressions.push(ExprFact {
         id,
         function,
@@ -86,6 +125,49 @@ fn walk_inner<'a>(
         parent,
         child_index,
     });
+    if let Some(parent) = parent {
+        if facts
+            .children
+            .insert((parent, child_index), expression_index)
+            .is_some()
+        {
+            return Err(Error::msg(
+                "memory verifier expression child index is duplicated",
+            ));
+        }
+    }
+    let binding = match &expression.kind {
+        ExprKind::Load(reference)
+        | ExprKind::Move {
+            binding: reference, ..
+        }
+        | ExprKind::Borrow {
+            binding: reference, ..
+        }
+        | ExprKind::BorrowBytes {
+            binding: reference, ..
+        } => Some(reference.binding.raw()),
+        _ => None,
+    };
+    if let Some(binding) = binding {
+        let uses = facts
+            .uses_by_binding
+            .entry((function, binding))
+            .or_default();
+        uses.try_reserve(1)
+            .map_err(|_| Error::host("memory verifier binding-use index allocation failed"))?;
+        uses.push(expression_index);
+        if matches!(expression.kind, ExprKind::Load(_)) {
+            let loads = facts
+                .loads_by_binding
+                .entry((function, binding))
+                .or_default();
+            loads
+                .try_reserve(1)
+                .map_err(|_| Error::host("memory verifier binding-load index allocation failed"))?;
+            loads.push(expression_index);
+        }
+    }
     add(&mut facts.steps, 1)?;
     match &expression.kind {
         ExprKind::LitI64(_)

@@ -46,8 +46,9 @@ pub fn semantic_dependency_requirements(
                 output.push((
                     ExecutableMemoryWitnessRole::TypeArgument {
                         constructor: *identity,
-                        index: u16::try_from(index)
-                            .map_err(|_| SemanticContractError("type argument index overflow"))?,
+                        index: u64::try_from(index).map_err(|_| {
+                            SemanticContractError("type argument index exceeds u64")
+                        })?,
                     },
                     argument.clone(),
                 ));

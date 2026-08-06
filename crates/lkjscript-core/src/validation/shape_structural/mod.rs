@@ -1,7 +1,9 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
-    Chunk, Error, Result, StructuralDestinationMetadata, StructuralFieldMetadata,
-    StructuralFieldRoute, StructuralLayoutKind, StructuralRepresentationMetadata,
-    StructuralValueCategory,
+    Chunk, Error, MemoryWitnessGroupId, MemoryWitnessId, Result, StructuralDestinationMetadata,
+    StructuralFieldMetadata, StructuralFieldRoute, StructuralLayoutKind,
+    StructuralRepresentationMetadata, StructuralValueCategory,
 };
 
 pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
@@ -17,17 +19,41 @@ pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
         validate_layouts_and_types(chunk)?,
         "structural metadata bytes",
     )?;
+    let witness_members: HashMap<_, _> = chunk
+        .memory_witnesses
+        .iter()
+        .map(|item| (item.id, (item.group, item.ordinal)))
+        .collect();
+    let mut representation_tuples = HashSet::new();
+    representation_tuples
+        .try_reserve(chunk.structural_representations.len())
+        .map_err(|_| Error::host("bytecode structural representation index allocation failed"))?;
     for (index, representation) in chunk.structural_representations.iter().enumerate() {
         if representation.id.index() != index {
             return Err(Error::msg(
                 "bytecode structural RepresentationIds are not dense",
             ));
         }
-        validate_representation(chunk, representation)?;
+        let unique = representation_tuples.insert((
+            representation.type_id,
+            representation.witness,
+            representation.witness_group,
+            representation.witness_member,
+            representation.layout,
+            representation.category,
+            representation.storage,
+            representation.route,
+        ));
+        if !unique {
+            return Err(Error::msg(
+                "bytecode structural representation tuple is duplicated",
+            ));
+        }
+        validate_representation(chunk, representation, &witness_members)?;
         bytes = add(bytes, 8, "structural metadata byte size")?;
     }
     for (index, destination) in chunk.structural_destinations.iter().enumerate() {
-        if destination.id.index() != index {
+        if destination.id.index() != Some(index) {
             return Err(Error::msg(
                 "bytecode structural DestinationIds are not dense",
             ));

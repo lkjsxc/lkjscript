@@ -13,9 +13,6 @@ pub(crate) fn verify_witness_parameters(
     signature: &Signature,
     type_parameters: &[&str],
 ) -> crate::Result<()> {
-    if signature.memory_witness_parameters.len() > crate::MAX_MEMORY_WITNESS_PARAMETERS {
-        return fail("SSA function has too many hidden memory witness parameters");
-    }
     let mut prior = None;
     for requirement in &signature.memory_witness_parameters {
         let position = type_parameters

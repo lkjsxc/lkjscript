@@ -29,9 +29,9 @@ pub(super) fn verify_obligations(program: &hir::Program, plan: &HirMemoryPlan) -
             _ => {}
         }
     }
-    if expected.len() != plan.obligations.len()
-        || plan.work.obligations != u64::try_from(expected.len()).unwrap_or(u64::MAX)
-    {
+    let expected_count = u64::try_from(expected.len())
+        .map_err(|_| Error::msg("memory obligation count exceeds u64"))?;
+    if expected.len() != plan.obligations.len() || plan.work.obligations != expected_count {
         return Err(Error::msg("whole-value obligation coverage/work mismatch"));
     }
     let mut seen = BTreeSet::new();

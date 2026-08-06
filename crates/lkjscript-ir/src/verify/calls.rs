@@ -105,12 +105,14 @@ pub(crate) fn verify_call_compatibility(
         if owner_required && representation.is_none() {
             return fail("SSA generic call owner witness lacks representation");
         }
+        let member_index = usize::try_from(descriptor.ordinal)
+            .map_err(|_| IrError::new("SSA generic call witness ordinal exceeds host usize"))?;
         let member = program
             .memory
             .witness_groups
             .iter()
             .find(|group| group.id == descriptor.group)
-            .and_then(|group| group.members.get(usize::from(descriptor.ordinal)))
+            .and_then(|group| group.members.get(member_index))
             .filter(|member| {
                 member.witness == descriptor.id && member.ordinal == descriptor.ordinal
             })

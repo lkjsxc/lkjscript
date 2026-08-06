@@ -15,9 +15,6 @@ impl MemoryWitnessGroupId {
     }
 }
 
-pub const MAX_MEMORY_WITNESS_PARAMETERS: usize = 16;
-pub const MAX_CALL_WITNESS_SITES: usize = 65_536;
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MemoryWitnessValueKind {
     Unit,
@@ -32,7 +29,7 @@ pub enum MemoryWitnessValueKind {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct InstalledMemoryWitnessGroupMember {
     pub witness: MemoryWitnessId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub semantic_identity: [u8; 32],
 }
 
@@ -47,7 +44,7 @@ pub struct InstalledMemoryWitnessGroup {
 pub struct InstalledMemoryWitness {
     pub id: MemoryWitnessId,
     pub group: MemoryWitnessGroupId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub facts: lkjscript_contracts::ExecutableMemoryWitnessFacts,
     pub dependencies: Vec<lkjscript_contracts::ExecutableMemoryWitnessDependency>,
     pub value_kind: MemoryWitnessValueKind,
@@ -55,14 +52,14 @@ pub struct InstalledMemoryWitness {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MemoryWitnessParameter {
-    pub parameter: u16,
+    pub parameter: u64,
     pub operations: Vec<lkjscript_contracts::MemoryWitnessOperation>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct MemoryWitnessBinding {
-    pub parameter: u16,
-    pub witness: u16,
+    pub parameter: u64,
+    pub witness: u64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

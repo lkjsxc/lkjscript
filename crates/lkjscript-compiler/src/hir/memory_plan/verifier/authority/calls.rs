@@ -6,11 +6,31 @@ pub(super) fn verify_authority_calls(
     facts: &Facts<'_>,
     types: &mut VerifiedTypes<'_>,
 ) -> Result<()> {
-    let calls: BTreeMap<_, _> = plan
-        .calls
-        .iter()
-        .map(|call| (call.expression, call))
-        .collect();
+    let mut function_indices = HashMap::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if function_indices.insert(function.binding, index).is_some() {
+            return Err(Error::msg("HIR direct-call function binding is duplicated"));
+        }
+    }
+    let mut calls = BTreeMap::new();
+    for call in &plan.calls {
+        if calls.insert(call.expression, call).is_some() {
+            return Err(Error::msg("HIR call plan expression is duplicated"));
+        }
+    }
+    let mut places = BTreeMap::new();
+    for entry in &plan.entries {
+        if let MemorySubject::Place {
+            function,
+            place,
+            binding,
+        } = entry.subject
+        {
+            if places.insert((function, binding), place).is_some() {
+                return Err(Error::msg("HIR call source place is duplicated"));
+            }
+        }
+    }
     let mut expected_scopes = BTreeMap::new();
     for fact in &facts.expressions {
         let call_expression = matches!(
@@ -27,10 +47,8 @@ pub(super) fn verify_authority_calls(
             return Err(Error::msg("stale HIR call plan"));
         }
         let (target, witness_arguments, parameters, result, direct, arguments) =
-            verified_call_signature(program, plan, fact, types)?;
-        if u64::try_from(call.witness_arguments.len()).unwrap_or(u64::MAX)
-            > MAX_MEMORY_WITNESS_ARGUMENTS
-            || call.function != fact.function
+            verified_call_signature(program, plan, &function_indices, fact, types)?;
+        if call.function != fact.function
             || call.target != target
             || call.witness_arguments != witness_arguments
             || call.parameters != parameters
@@ -51,17 +69,8 @@ pub(super) fn verify_authority_calls(
             match (expected, call.borrow_scopes[index]) {
                 (None, None) => {}
                 (Some((binding, kind)), Some(id)) if direct => {
-                    let place = plan
-                        .entries
-                        .iter()
-                        .find_map(|entry| match entry.subject {
-                            MemorySubject::Place {
-                                function,
-                                place,
-                                binding: item,
-                            } if function == fact.function && item == binding => Some(place),
-                            _ => None,
-                        })
+                    let place = *places
+                        .get(&(fact.function, binding))
                         .ok_or_else(|| Error::msg("inferred call borrow lost source place"))?;
                     let expected = MemoryBorrowScopePlan {
                         id,
@@ -95,27 +104,36 @@ fn verify_scope_records(
     plan: &HirMemoryPlan,
     expected: &BTreeMap<MemoryBorrowScopeId, MemoryBorrowScopePlan>,
 ) -> Result<()> {
-    if expected.len() != plan.borrow_scopes.len()
-        || plan.work.borrow_scopes != u64::try_from(expected.len()).unwrap_or(u64::MAX)
-        || u64::try_from(expected.len()).unwrap_or(u64::MAX) > MAX_MEMORY_PLAN_BORROW_SCOPES
-    {
+    let expected_count = u64::try_from(expected.len())
+        .map_err(|_| Error::msg("borrow-scope record count exceeds u64"))?;
+    if expected.len() != plan.borrow_scopes.len() || plan.work.borrow_scopes != expected_count {
         return Err(Error::msg(
             "direct-call borrow scope coverage/work mismatch",
         ));
     }
     for (index, scope) in plan.borrow_scopes.iter().enumerate() {
-        if scope.id.raw() != index_u32(index)? || expected.get(&scope.id) != Some(scope) {
+        if scope.id.raw() != index_u64(index)? || expected.get(&scope.id) != Some(scope) {
             return Err(Error::msg(
                 "independent verifier rejected dense borrow-scope record",
             ));
         }
     }
+    let mut scopes_by_expression = BTreeMap::new();
+    for (id, scope) in expected {
+        if scopes_by_expression
+            .insert(scope.source_expression, *id)
+            .is_some()
+        {
+            return Err(Error::msg("call borrow source expression is duplicated"));
+        }
+    }
     for entry in &plan.entries {
-        let scope = expected.iter().find_map(|(id, scope)| {
-            matches!(entry.subject, MemorySubject::Expression { expression, .. }
-                if expression == scope.source_expression)
-            .then_some(*id)
-        });
+        let scope = match entry.subject {
+            MemorySubject::Expression { expression, .. } => {
+                scopes_by_expression.get(&expression).copied()
+            }
+            _ => None,
+        };
         if entry.borrow_scope != scope {
             return Err(Error::msg(
                 "memory entry direct-call borrow identity mismatch",

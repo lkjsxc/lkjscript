@@ -14,7 +14,7 @@ pub fn canonical_executable_memory_witness_group_descriptor(
     output.boolean(recursive);
     output.sequence_len(members.len());
     for member in members {
-        output.u16(member.ordinal);
+        output.u64(member.ordinal);
         output.bytes(&member.semantic_identity);
         encode_facts(&mut output, &member.facts, &member.dependencies);
     }
@@ -32,13 +32,13 @@ pub fn executable_memory_witness_group_id(
 
 pub fn executable_memory_witness_member_id(
     group: [u8; 32],
-    ordinal: u16,
+    ordinal: u64,
     semantic_identity: [u8; 32],
 ) -> [u8; 32] {
     let mut output = Encoder::new();
     output.bytes(MEMBER_DOMAIN);
     output.bytes(&group);
-    output.u16(ordinal);
+    output.u64(ordinal);
     output.bytes(&semantic_identity);
     crate::sha256(&output.finish())
 }

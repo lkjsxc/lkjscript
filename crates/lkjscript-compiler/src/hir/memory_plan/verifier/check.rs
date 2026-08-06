@@ -10,8 +10,12 @@ pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()>
         .and_then(|value| value.checked_add(facts.constants))
         .and_then(|value| value.checked_add(facts.calls))
         .ok_or_else(|| Error::msg("HIR memory verifier entry count overflow"))?;
-    if plan.work.functions != u64::try_from(facts.bodies.len()).unwrap_or(u64::MAX)
-        || plan.work.expressions != u64::try_from(facts.expressions.len()).unwrap_or(u64::MAX)
+    let functions = u64::try_from(facts.bodies.len())
+        .map_err(|_| Error::msg("HIR memory verifier function count exceeds u64"))?;
+    let expressions = u64::try_from(facts.expressions.len())
+        .map_err(|_| Error::msg("HIR memory verifier expression count exceeds u64"))?;
+    if plan.work.functions != functions
+        || plan.work.expressions != expressions
         || plan.work.entries != expected_entries
         || plan.work.uses != facts.uses
         || plan.work.loans != facts.loans

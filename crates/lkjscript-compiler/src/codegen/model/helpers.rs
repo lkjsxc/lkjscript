@@ -82,7 +82,7 @@ fn copy_parameter_kind(ty: &SsaType) -> Option<lkjscript_core::StructuralKind> {
     })
 }
 
-fn type_variable(signature: &lkjscript_ir::Signature, ty: &SsaType) -> Result<Option<u16>> {
+fn type_variable(signature: &lkjscript_ir::Signature, ty: &SsaType) -> Result<Option<u64>> {
     let SsaType::TypeParameter(name) = ty else {
         return Ok(None);
     };
@@ -91,7 +91,7 @@ fn type_variable(signature: &lkjscript_ir::Signature, ty: &SsaType) -> Result<Op
         .iter()
         .position(|candidate| candidate == name)
         .map(|index| {
-            u16::try_from(index).map_err(|_| Error::msg("SSA type-variable index exceeds u16"))
+            u64::try_from(index).map_err(|_| Error::msg("SSA type-variable index exceeds u64"))
         })
         .transpose()
 }

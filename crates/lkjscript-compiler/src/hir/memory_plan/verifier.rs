@@ -59,7 +59,12 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
 }
 
 fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> {
-    if plan.functions.len() != program.functions.len().saturating_add(1) {
+    let function_count = program
+        .functions
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| Error::msg("HIR memory verifier function count overflow"))?;
+    if plan.functions.len() != function_count {
         return Err(Error::msg("HIR memory plan does not cover every function"));
     }
     for (index, function) in program.functions.iter().enumerate() {
@@ -96,23 +101,35 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
 }
 
 fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
-    if plan.drop_glues.len() < ResourceKind::ALL.len().saturating_add(2)
+    let base_glues = ResourceKind::ALL
+        .len()
+        .checked_add(2)
+        .ok_or_else(|| Error::msg("HIR memory-plan base drop-glue count overflow"))?;
+    if plan.drop_glues.len() < base_glues
         || plan.drop_glues.first().map(|glue| glue.kind.clone())
             != Some(MemoryDropGlueKind::ByteVector)
     {
         return Err(Error::msg("HIR memory-plan drop-glue table is incomplete"));
     }
     for (index, kind) in ResourceKind::ALL.into_iter().enumerate() {
-        let expected = MemoryDropGlueId::new(1 + u32::from(kind as u8));
-        let glue = plan.drop_glues.get(index.saturating_add(1));
+        let expected = MemoryDropGlueId::new(1 + u64::from(kind as u8));
+        let glue_index = index
+            .checked_add(1)
+            .ok_or_else(|| Error::msg("HIR memory-plan resource glue index overflow"))?;
+        let glue = plan.drop_glues.get(glue_index);
         if glue.map(|glue| (glue.id, glue.kind.clone()))
             != Some((expected, MemoryDropGlueKind::Resource(kind)))
         {
             return Err(Error::msg("HIR memory-plan resource drop glue mismatch"));
         }
     }
-    let bytes_id = MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32);
-    let bytes = plan.drop_glues.get(bytes_id.index().unwrap_or(usize::MAX));
+    let bytes_id = MemoryDropGlueId::new(
+        1 + u64::try_from(ResourceKind::ALL.len())
+            .map_err(|_| Error::msg("resource count exceeds u64"))?,
+    );
+    let bytes = bytes_id
+        .index()
+        .and_then(|index| plan.drop_glues.get(index));
     if bytes.map(|glue| (glue.id, glue.kind.clone())) != Some((bytes_id, MemoryDropGlueKind::Bytes))
     {
         return Err(Error::msg("HIR memory-plan bytes drop glue mismatch"));
@@ -122,4 +139,8 @@ fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
 
 fn index_u32(index: usize) -> Result<u32> {
     u32::try_from(index).map_err(|_| Error::msg("HIR memory verifier index exceeds u32"))
+}
+
+fn index_u64(index: usize) -> Result<u64> {
+    u64::try_from(index).map_err(|_| Error::msg("HIR memory verifier index exceeds u64"))
 }

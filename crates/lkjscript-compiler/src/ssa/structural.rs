@@ -6,6 +6,16 @@ pub(in crate::ssa) fn lower_structural_memory(
     plan: &HirMemoryPlan,
     products: &HashMap<String, ProductId>,
 ) -> Result<StructuralMemoryMetadata> {
+    let product_definitions: HashMap<_, _> = program
+        .products
+        .iter()
+        .map(|product| (product.name.as_str(), product))
+        .collect();
+    let enum_definitions: HashMap<_, _> = program
+        .enums
+        .iter()
+        .map(|enumeration| (enumeration.id.bytes(), enumeration))
+        .collect();
     let mut memory = StructuralMemoryMetadata::default();
     for fact in &plan.type_facts {
         if fact.closure.class != MemoryClosureClass::Deterministic
@@ -29,7 +39,7 @@ pub(in crate::ssa) fn lower_structural_memory(
             u64::try_from(memory.layouts.len())
                 .map_err(|_| Error::msg("structural layout table exceeds u64"))?,
         );
-        let kind = layout_kind(program, &fact.ty, products)?;
+        let kind = layout_kind(&product_definitions, &enum_definitions, &fact.ty, products)?;
         let identity = match &kind {
             StructuralLayoutKind::Enum { runtime_layout, .. } => *runtime_layout,
             StructuralLayoutKind::String
@@ -52,6 +62,12 @@ pub(in crate::ssa) fn lower_structural_memory(
                 MemoryAggregateMode::Affine => StructuralTypeMode::Affine,
             },
         });
+    }
+    memory.types.sort_by(|left, right| left.ty.cmp(&right.ty));
+    for (index, item) in memory.types.iter_mut().enumerate() {
+        item.id = StructuralTypeId::new(
+            u64::try_from(index).map_err(|_| Error::msg("structural type table exceeds u64"))?,
+        );
     }
     install_value_representations(&mut memory, plan, products)?;
     install_memory_witnesses(&mut memory, plan, products)?;

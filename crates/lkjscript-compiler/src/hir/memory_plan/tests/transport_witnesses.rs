@@ -1,6 +1,6 @@
 use super::super::*;
 use super::fixtures::{derive, fact, verify_forged};
-use super::transport_fixture::generic_copy_product_program;
+use super::transport_fixture::{generic_copy_product_program, wide_transport_program};
 use crate::hir;
 use lkjscript_core::{Error, Result};
 
@@ -184,15 +184,17 @@ fn malformed_transport_substitutions_and_signatures_use_exact_errors() -> Result
         error(&nested),
         "HIR memory witness parameter has a nested operational use"
     );
-    let mut excessive = generic_copy_product_program();
-    let vars: Vec<_> = (0..17).map(|index| format!("t-{index}")).collect();
-    excessive.bindings[2].ty = hir::Type::Forall {
-        vars: vars.clone(),
-        body: Box::new(hir::Type::Fn {
-            params: vars.iter().cloned().map(hir::Type::Param).collect(),
-            ret: Box::new(hir::Type::Unit),
-        }),
-    };
-    assert_eq!(error(&excessive), "HIR memory witness parameters exceed 16");
+    Ok(())
+}
+
+#[test]
+fn seventeen_transport_witness_parameters_and_arguments_are_preserved() -> Result<()> {
+    const WIDTH: usize = 17;
+    let program = wide_transport_program(WIDTH);
+    let mut plan = derive(&program)?;
+    assert_eq!(plan.functions[0].signature.witness_parameters.len(), WIDTH);
+    let call = direct_call(&mut plan)?.clone();
+    assert_eq!(call.witness_arguments.len(), WIDTH);
+    assert_eq!(call.witness_arguments[WIDTH - 1].parameter, "t-16");
     Ok(())
 }

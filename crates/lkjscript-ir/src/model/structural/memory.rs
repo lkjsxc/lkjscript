@@ -22,7 +22,23 @@ impl StructuralMemoryMetadata {
     }
 
     pub fn type_for(&self, ty: &SsaType) -> Option<&StructuralTypeMetadata> {
-        self.types.iter().find(|item| &item.ty == ty)
+        self.types
+            .binary_search_by(|item| item.ty.cmp(ty))
+            .ok()
+            .and_then(|index| self.types.get(index))
+    }
+
+    fn representations_for(
+        &self,
+        type_id: StructuralTypeId,
+    ) -> &[StructuralRepresentationMetadata] {
+        let start = self
+            .representations
+            .partition_point(|item| item.type_id < type_id);
+        let end = self
+            .representations
+            .partition_point(|item| item.type_id <= type_id);
+        self.representations.get(start..end).unwrap_or(&[])
     }
 
     pub fn representation(
@@ -32,9 +48,10 @@ impl StructuralMemoryMetadata {
         storage: StructuralStorage,
     ) -> Option<StructuralRepresentationId> {
         let type_id = self.type_for(ty)?.id;
-        let mut candidates = self.representations.iter().filter(|item| {
-            item.type_id == type_id && item.category == category && item.storage == storage
-        });
+        let mut candidates = self
+            .representations_for(type_id)
+            .iter()
+            .filter(|item| item.category == category && item.storage == storage);
         let selected = candidates.next()?;
         candidates.next().is_none().then_some(selected.id)
     }
@@ -47,11 +64,8 @@ impl StructuralMemoryMetadata {
         storage: StructuralStorage,
     ) -> Option<StructuralRepresentationId> {
         let type_id = self.type_for(ty)?.id;
-        let mut candidates = self.representations.iter().filter(|item| {
-            item.type_id == type_id
-                && item.route == route
-                && item.category == category
-                && item.storage == storage
+        let mut candidates = self.representations_for(type_id).iter().filter(|item| {
+            item.route == route && item.category == category && item.storage == storage
         });
         let selected = candidates.next()?;
         candidates.next().is_none().then_some(selected.id)

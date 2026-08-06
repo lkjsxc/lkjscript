@@ -165,7 +165,10 @@ impl<'a> Producer<'a> {
     }
 
     fn new(program: &'a hir::Program) -> Result<Self> {
-        let mut function_ids = HashMap::with_capacity(program.functions.len());
+        let mut function_ids = HashMap::new();
+        function_ids
+            .try_reserve(program.functions.len())
+            .map_err(|_| Error::host("HIR memory-plan function index allocation failed"))?;
         for (index, function) in program.functions.iter().enumerate() {
             let raw = u32::try_from(index)
                 .map_err(|_| Error::msg("HIR memory-plan function count exceeds u32"))?;
@@ -174,9 +177,29 @@ impl<'a> Producer<'a> {
                     "HIR memory-plan producer found duplicate function binding"));
             }
         }
+        let mut products_by_id = HashMap::new();
+        products_by_id
+            .try_reserve(program.products.len())
+            .map_err(|_| Error::host("HIR memory-plan product index allocation failed"))?;
+        for (index, product) in program.products.iter().enumerate() {
+            if products_by_id.insert(product.id, index).is_some() {
+                return Err(Error::msg("HIR memory-plan producer found duplicate product identity"));
+            }
+        }
+        let mut enums_by_id = HashMap::new();
+        enums_by_id
+            .try_reserve(program.enums.len())
+            .map_err(|_| Error::host("HIR memory-plan enum index allocation failed"))?;
+        for (index, enumeration) in program.enums.iter().enumerate() {
+            if enums_by_id.insert(enumeration.id, index).is_some() {
+                return Err(Error::msg("HIR memory-plan producer found duplicate enum identity"));
+            }
+        }
         let mut producer = Self {
             program, type_planner: TypePlanner::new(program)?, function_ids,
             signatures: Vec::new(), functions: Vec::new(), entries: Vec::new(),
+            expression_entries: HashMap::new(), child_entries: HashMap::new(),
+            places_by_binding: HashMap::new(), products_by_id, enums_by_id,
             uses: Vec::new(), loans: Vec::new(), constants: Vec::new(), calls: Vec::new(),
             obligations: Vec::new(), destinations: Vec::new(), borrow_scopes: Vec::new(),
             current_function: MemoryFunctionId::new(0), next_expression: 0, next_place: 0,

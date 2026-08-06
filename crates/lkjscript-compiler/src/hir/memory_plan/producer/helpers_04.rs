@@ -21,9 +21,10 @@ impl Producer<'_> {
         if matches!(obligation.kind, MemoryObligationKind::EndBorrow) {
             return Ok(None);
         }
-        let entry = self
-            .entries
-            .get(obligation.entry.index().unwrap_or(usize::MAX))
+        let entry = obligation
+            .entry
+            .index()
+            .and_then(|index| self.entries.get(index))
             .ok_or_else(|| Error::msg("HIR drop obligation entry is missing"))?;
         let MemorySubject::Place { binding, .. } = entry.subject else {
             return Err(Error::msg("HIR drop obligation does not name a whole place"));
@@ -167,19 +168,21 @@ impl Producer<'_> {
                 || fact.mode != MemoryAggregateMode::ImmutableValue) {
             return Ok(());
         }
-        if u64::try_from(self.borrow_scopes.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_BORROW_SCOPES {
-            return Err(Error::msg("HIR memory-plan borrow scopes exceed bounded maximum"));
-        }
-        let place = self.entries.iter().find_map(|entry| match entry.subject {
-            MemorySubject::Place { function, place, binding }
-                if function == self.current_function && binding == reference.binding.raw() => Some(place),
-            _ => None,
-        }).ok_or_else(|| Error::msg("inferred direct-call borrow lost source place"))?;
-        let id = MemoryBorrowScopeId::new(u32::try_from(self.borrow_scopes.len())
-            .map_err(|_| Error::msg("HIR memory-plan borrow scope identity exceeds u32"))?);
-        let entry = self.entries.iter_mut().find(|entry| matches!(entry.subject,
-            MemorySubject::Expression { expression: item, .. } if item == expression))
+        let place = *self
+            .places_by_binding
+            .get(&(self.current_function, reference.binding.raw()))
+            .ok_or_else(|| Error::msg("inferred direct-call borrow lost source place"))?;
+        let id = MemoryBorrowScopeId::new(u64::try_from(self.borrow_scopes.len())
+            .map_err(|_| Error::msg("HIR memory-plan borrow scope identity exceeds u64"))?);
+        let entry_id = *self
+            .expression_entries
+            .get(&expression)
             .ok_or_else(|| Error::msg("inferred direct-call borrow lost argument entry"))?;
+        let entry = entry_id
+            .index()
+            .and_then(|index| self.entries.get_mut(index))
+            .filter(|entry| entry.id == entry_id)
+            .ok_or_else(|| Error::msg("inferred direct-call borrow argument entry is stale"))?;
         entry.borrow_scope = Some(id);
         entry.copy_share = if kind == MemoryBorrowKind::Shared {
             MemoryCopySharePlan::BorrowShared

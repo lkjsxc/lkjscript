@@ -60,7 +60,8 @@ fn lower_memory_type_inner(
 }
 
 fn layout_kind(
-    program: &hir::Program,
+    product_definitions: &HashMap<&str, &hir::ProductDefinition>,
+    enum_definitions: &HashMap<[u8; 32], &hir::EnumDefinition>,
     ty: &MemoryType,
     products: &HashMap<String, ProductId>,
 ) -> Result<StructuralLayoutKind> {
@@ -68,10 +69,9 @@ fn layout_kind(
         MemoryType::String => Ok(StructuralLayoutKind::String),
         MemoryType::Path => Ok(StructuralLayoutKind::Path),
         MemoryType::Product(name) => {
-            let product = program
-                .products
-                .iter()
-                .find(|item| item.name == *name)
+            let product = product_definitions
+                .get(name.as_str())
+                .copied()
                 .ok_or_else(|| Error::msg("structural layout lost product definition"))?;
             Ok(StructuralLayoutKind::Product {
                 product: *products
@@ -85,10 +85,9 @@ fn layout_kind(
             })
         }
         MemoryType::Enum { id, arguments, .. } => {
-            let item = program
-                .enums
-                .iter()
-                .find(|item| item.id.bytes() == *id)
+            let item = enum_definitions
+                .get(id)
+                .copied()
                 .ok_or_else(|| Error::msg("structural layout lost enum definition"))?;
             if item.type_parameters.len() != arguments.len() {
                 return Err(Error::msg("structural enum substitution arity mismatch"));

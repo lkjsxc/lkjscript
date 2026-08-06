@@ -69,9 +69,9 @@ fn destination_field_init(
             "destination field metadata does not match its value",
         );
     }
-    let metadata = chunk
-        .structural_destinations
-        .get(destination.index())
+    let metadata = destination
+        .index()
+        .and_then(|index| chunk.structural_destinations.get(index))
         .ok_or_else(|| {
             instruction_error(
                 proto,

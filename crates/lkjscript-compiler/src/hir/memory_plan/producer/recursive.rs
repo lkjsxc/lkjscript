@@ -36,20 +36,25 @@ impl Producer<'_> {
     }
 }
 
+impl TypePlanner<'_> {
 fn recursive_fields(
-    program: &hir::Program,
+    &self,
     key: &DeclarationKey,
 ) -> Result<Vec<(Type, MemoryTypePathElement)>> {
     match key {
         DeclarationKey::Product(name) => {
-            let item = program.products.iter().find(|item| item.name == *name)
+            let item = self.product_indices.get(name)
+                .and_then(|index| self.program.products.get(*index))
+                .filter(|item| item.name == *name)
                 .ok_or_else(|| Error::msg("recursive memory plan lost product"))?;
             item.fields.iter().enumerate().map(|(index, field)| Ok((field.ty.clone(),
                 MemoryTypePathElement::ProductField { index: index_u32(index)?,
                     name: field.name.clone() }))).collect()
         }
         DeclarationKey::Enum(id) => {
-            let item = program.enums.iter().find(|item| item.id.bytes() == *id)
+            let item = self.enum_indices.get(id)
+                .and_then(|index| self.program.enums.get(*index))
+                .filter(|item| item.id.bytes() == *id)
                 .ok_or_else(|| Error::msg("recursive memory plan lost enum"))?;
             let mut fields = Vec::new();
             for (variant_index, variant) in item.variants.iter().enumerate() {
@@ -66,14 +71,16 @@ fn recursive_fields(
 }
 
 fn recursive_substitutions(
-    program: &hir::Program,
+    &self,
     declaration: &DeclarationKey,
     root: &DeclarationKey,
     arguments: &[Type],
 ) -> Result<HashMap<String, Type>> {
     if declaration != root { return Ok(HashMap::new()); }
     let DeclarationKey::Enum(id) = declaration else { return Ok(HashMap::new()); };
-    let item = program.enums.iter().find(|item| item.id.bytes() == *id)
+    let item = self.enum_indices.get(id)
+        .and_then(|index| self.program.enums.get(*index))
+        .filter(|item| item.id.bytes() == *id)
         .ok_or_else(|| Error::msg("recursive memory plan lost enum substitution"))?;
     if item.type_parameters.len() != arguments.len() {
         return Err(Error::msg("recursive memory enum substitution arity mismatch"));
@@ -82,16 +89,19 @@ fn recursive_substitutions(
 }
 
 fn recursive_root_type(
-    program: &hir::Program,
+    &self,
     key: &DeclarationKey,
     arguments: &[Type],
 ) -> Result<Type> {
     match key {
         DeclarationKey::Product(name) => Ok(Type::Product(name.clone())),
         DeclarationKey::Enum(id) => {
-            let item = program.enums.iter().find(|item| item.id.bytes() == *id)
+            let item = self.enum_indices.get(id)
+                .and_then(|index| self.program.enums.get(*index))
+                .filter(|item| item.id.bytes() == *id)
                 .ok_or_else(|| Error::msg("recursive memory plan lost enum identity"))?;
             Ok(Type::Enum { id: item.id, name: item.name.clone(), arguments: arguments.to_vec() })
         }
     }
+}
 }

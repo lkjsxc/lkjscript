@@ -44,7 +44,7 @@ pub use model::{
     StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
     StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound, TraitId, TraitMetadata,
     TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VariantFieldId,
-    VariantId, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
+    VariantId,
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,

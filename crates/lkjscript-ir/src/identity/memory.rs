@@ -44,7 +44,7 @@ pub(super) fn structural_memory(out: &mut Encoder, value: &StructuralMemoryMetad
         out.u64(type_id.raw());
         out.fixed(&witness.bytes());
         out.fixed(&witness_group.bytes());
-        out.u16(*witness_member);
+        out.u64(*witness_member);
         out.u64(layout.raw());
         category_value(out, *category);
         storage_value(out, *storage);

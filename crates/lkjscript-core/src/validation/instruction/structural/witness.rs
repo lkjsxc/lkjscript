@@ -3,8 +3,8 @@ fn witness_compare(
     instruction: DecodedInstruction,
     state: &mut State,
 ) -> Result<()> {
-    let parameter = u16::try_from(instruction_operand(proto, instruction)?)
-        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(instruction_operand(proto, instruction)?)
+        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u64"))?;
     let requirement = proto
         .memory_witness_parameters
         .iter()
@@ -38,8 +38,8 @@ fn witness_dispose(
     instruction: DecodedInstruction,
     state: &mut State,
 ) -> Result<()> {
-    let parameter = u16::try_from(instruction_operand(proto, instruction)?)
-        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(instruction_operand(proto, instruction)?)
+        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u64"))?;
     let requirement = proto
         .memory_witness_parameters
         .iter()
@@ -70,8 +70,8 @@ fn witness_independent_owner(
     instruction: DecodedInstruction,
     state: &mut State,
 ) -> Result<()> {
-    let parameter = u16::try_from(instruction_operand(proto, instruction)?)
-        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(instruction_operand(proto, instruction)?)
+        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u64"))?;
     let requirement = proto.memory_witness_parameters.iter()
         .find(|requirement| requirement.parameter == parameter)
         .ok_or_else(|| instruction_error(

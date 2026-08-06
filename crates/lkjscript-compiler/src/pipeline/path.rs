@@ -39,16 +39,21 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
     let effects_started = Instant::now();
     crate::effects::infer(&mut analyzed);
     let effect_analysis = effects_started.elapsed();
+    let memory_started = Instant::now();
     let memory_verified = crate::memory_plan::verify_hir_memory(&analyzed)?;
+    let memory_planning = memory_started.elapsed();
     let (ssa, ssa_metrics) = lower_program_with_metrics(&memory_verified)?;
     let memory_plan = memory_verified.plan().clone();
+    let inventory_started = Instant::now();
     let memory_inventory = checked_memory_inventory(&ssa)?;
+    let memory_inventory_time = inventory_started.elapsed();
     let bytecode_started = Instant::now();
     let (chunk, bytecode_links) = compile_program(&ssa)?;
     let bytecode_lowering = bytecode_started.elapsed();
     let validation_started = Instant::now();
     let bytecode = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let bytecode_validation = validation_started.elapsed();
+    let preparation_started = Instant::now();
     let provenance = match package {
         Some(root) => crate::package::program::locked(crate::package::prepared_facts(
             &root,
@@ -63,6 +68,7 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
     };
     let (prepared, ssa, bytecode) =
         crate::package::program::bind(ssa, bytecode, &memory_plan, provenance)?;
+    let preparation = preparation_started.elapsed();
     let executable = ExecutableProgram {
         prepared,
         bytecode,
@@ -79,11 +85,14 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
             parsing: loading.parsing,
             hir_analysis,
             effect_analysis,
+            memory_planning,
             ssa_construction: ssa_metrics.construction,
             ssa_verification: ssa_metrics.verification,
             normalization: ssa_metrics.normalization,
+            memory_inventory: memory_inventory_time,
             bytecode_lowering,
             bytecode_validation,
+            preparation,
             source_files,
         },
     ))

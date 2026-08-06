@@ -13,9 +13,14 @@
    semantic-descriptor, structural metadata table, and type-SCC work ceilings are removed.
    Canonical memoized auto-trait solving handles cyclic nominal obligations coinductively, and
    generated coverage crosses 512 nested source types and 8,192 nested raw SSA types on a 256 KiB
-   stack. Next widen or segment `u32` source positions, spans, and snapshot-local node indexes, then
-   address the remaining HIR/SSA identity and unrelated function/use/loan/call/obligation,
-   destination, borrow-scope, drop-path, and witness-arity ceilings.
+   stack. HIR memory-plan function/use/loan/call/obligation, destination, borrow-scope, drop-path,
+   witness parameter/argument, SSA region-product, and executable structural
+   destination/operation-reference admission quotas are now removed end to end. Producer telemetry
+   and independent verifier totals are checked observational `u64` equality. Generated coverage
+   crosses 4,096 functions, 65,536 uses, 16,384 loans/calls/borrow scopes, 32,768 obligations/drop
+   paths, 16 witness parameters/arguments, 16,384 region products, and 16,384 structural
+   destinations/operation references. Next widen or segment `u32` source positions, spans,
+   snapshot-local node indexes, remaining HIR IDs, and SSA function/block/value/place identities.
    Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
    constant-data-byte, or cleanup-node/range count admission; a boundary-local limited validator
    checks only total artifact bytes and has no finite default. Byte-sized function arity, call
@@ -47,8 +52,10 @@
    representation table ceilings are removed; generated coverage verifies 32,769 HIR declarations
    with more than 65,536 SCC steps, 16,385 executable witness groups, and semantic descriptors past
    the former declaration, type-node, edge, and 16 MiB byte boundaries. Per-call witness arity,
-   recursive-group `u16` ordinals, structural destination/operation-reference counts, and HIR/SSA
-   identity widths remain.
+   recursive-group ordinals, region products, structural destination/operation-reference counts,
+   and related witness transport now use unrestricted vectors plus wide checked identities where
+   identities cross a boundary. Remaining HIR/SSA `u32` identities and pre-existing core
+   structural type/layout/representation host-lookup sentinels remain.
    Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
    unrestricted by the removed general bytecode table and metadata admission. Completion requires

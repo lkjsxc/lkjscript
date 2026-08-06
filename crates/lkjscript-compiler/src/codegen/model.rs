@@ -36,7 +36,9 @@ pub(in crate::codegen) fn compile_function(
                     .type_parameters
                     .iter()
                     .position(|name| name == &requirement.parameter)
-                    .and_then(|index| u16::try_from(index).ok())
+                    .map(u64::try_from)
+                    .transpose()
+                    .map_err(|_| Error::msg("SSA memory witness parameter exceeds u64"))?
                     .ok_or_else(|| Error::msg("SSA memory witness parameter is not canonical"))?;
                 Ok(lkjscript_core::MemoryWitnessParameter {
                     parameter,

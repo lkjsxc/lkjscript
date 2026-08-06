@@ -49,10 +49,12 @@ impl NativeWitnessCatalog {
                 ));
             }
             let value_type = native_witness_type(program, witness)?;
+            let member = u16::try_from(witness.ordinal)
+                .map_err(|_| witness_error("native witness member exceeds u16"))?;
             entries.push(NativeWitnessEntry {
                 slot,
                 group: witness.group,
-                member: witness.ordinal,
+                member,
                 representation: representation.id,
                 value_type,
                 storage: representation.storage,

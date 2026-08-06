@@ -39,7 +39,7 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
         out.option(value.as_ref(), |out, value| out.u64(value.raw()))
     });
     options_usize(out, parameter_structural_places);
-    options_u16(out, parameter_type_variables);
+    options_u64(out, parameter_type_variables);
     out.sequence(parameter_copy_kinds, |out, value| {
         out.option(value.as_ref(), |out, value| {
             types::structural_kind(out, *value)
@@ -57,7 +57,7 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
     out.option(return_structural.as_ref(), |out, value| {
         out.u64(value.raw())
     });
-    out.option(return_type_variable.as_ref(), |out, value| out.u16(*value));
+    out.option(return_type_variable.as_ref(), |out, value| out.u64(*value));
     out.sequence(parameter_resources, |out, value| {
         out.option(value.as_ref(), |out, value| types::resource(out, *value))
     });
@@ -167,8 +167,8 @@ fn options_usize(out: &mut Encoder, values: &[Option<usize>]) {
 fn option_usize(out: &mut Encoder, value: Option<&usize>) {
     out.option(value, |out, value| out.len(*value));
 }
-fn options_u16(out: &mut Encoder, values: &[Option<u16>]) {
+fn options_u64(out: &mut Encoder, values: &[Option<u64>]) {
     out.sequence(values, |out, value| {
-        out.option(value.as_ref(), |out, value| out.u16(*value))
+        out.option(value.as_ref(), |out, value| out.u64(*value))
     });
 }

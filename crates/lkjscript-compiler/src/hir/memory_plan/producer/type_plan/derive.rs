@@ -64,17 +64,7 @@ impl TypePlanner<'_> {
 
     fn derive_product(&mut self, name: &str) -> Result<DerivedType> {
         let key = DeclarationKey::Product(name.to_owned());
-        let definition = self
-            .program
-            .products
-            .iter()
-            .find(|item| item.name == name)
-            .cloned()
-            .ok_or_else(|| {
-                Error::msg(format!(
-                    "HIR memory plan references unknown product {name}"
-                ))
-            })?;
+        let definition = self.product(name)?.clone();
         self.charge_fields(definition.fields.len())?;
         if self.graph.is_recursive(&key) {
             return self.derive_recursive(&key, &[]);
@@ -107,13 +97,7 @@ impl TypePlanner<'_> {
 
     fn derive_enum(&mut self, id: [u8; 32], arguments: &[Type]) -> Result<DerivedType> {
         let key = DeclarationKey::Enum(id);
-        let definition = self
-            .program
-            .enums
-            .iter()
-            .find(|item| item.id.bytes() == id)
-            .cloned()
-            .ok_or_else(|| Error::msg("HIR memory plan references unknown enum"))?;
+        let definition = self.enumeration(id)?.clone();
         if definition.type_parameters.len() != arguments.len() {
             return Err(Error::msg(
                 "HIR memory-plan enum substitution arity mismatch",

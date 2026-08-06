@@ -67,9 +67,6 @@ pub(super) fn verified_witness_parameters(
             });
         }
     }
-    if u64::try_from(output.len()).unwrap_or(u64::MAX) > MAX_MEMORY_WITNESS_PARAMETERS {
-        return Err(Error::msg("memory verifier witness parameters exceed 16"));
-    }
     Ok(output)
 }
 
@@ -135,9 +132,6 @@ pub(super) fn verified_witness_arguments(
             parameter: parameter.parameter.clone(),
             witness: types.expected(id)?.witness,
         });
-    }
-    if u64::try_from(output.len()).unwrap_or(u64::MAX) > MAX_MEMORY_WITNESS_ARGUMENTS {
-        return Err(Error::msg("memory verifier witness arguments exceed 16"));
     }
     Ok(output)
 }

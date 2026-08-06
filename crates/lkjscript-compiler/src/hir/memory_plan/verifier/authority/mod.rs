@@ -95,9 +95,7 @@ fn verify_authority_signatures(
             });
         }
         let result = verified_result_mode(types, callable_result(&binding.ty)?)?;
-        if u64::try_from(actual.witness_parameters.len()).unwrap_or(u64::MAX)
-            > MAX_MEMORY_WITNESS_PARAMETERS
-            || actual.witness_parameters != witness_parameters
+        if actual.witness_parameters != witness_parameters
             || actual.parameters != parameters
             || actual.result != result
         {

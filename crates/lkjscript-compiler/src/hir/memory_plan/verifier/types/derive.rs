@@ -66,13 +66,7 @@ impl VerifiedTypes<'_> {
 
     fn product(&mut self, name: &str) -> Result<VerifiedDerived> {
         let key = VerifiedDeclarationKey::Product(name.to_owned());
-        let item = self
-            .program
-            .products
-            .iter()
-            .find(|item| item.name == name)
-            .cloned()
-            .ok_or_else(|| Error::msg("memory verifier lost product"))?;
+        let item = self.product_definition(name)?.clone();
         verified_observe(&mut self.fields, item.fields.len())?;
         if self.graph.is_recursive(&key) {
             return self.recursive(&key, &[]);
@@ -104,13 +98,7 @@ impl VerifiedTypes<'_> {
 
     fn enum_type(&mut self, id: [u8; 32], arguments: &[Type]) -> Result<VerifiedDerived> {
         let key = VerifiedDeclarationKey::Enum(id);
-        let item = self
-            .program
-            .enums
-            .iter()
-            .find(|item| item.id.bytes() == id)
-            .cloned()
-            .ok_or_else(|| Error::msg("memory verifier lost enum"))?;
+        let item = self.enum_definition(id)?.clone();
         if item.type_parameters.len() != arguments.len() {
             return Err(Error::msg("memory verifier enum arity mismatch"));
         }

@@ -17,10 +17,12 @@ pub fn validate_executable_memory_witness_groups(
         validate_member_order(group)?;
         validate_local_scc(group)?;
         for member in &group.members {
-            if member_index
-                .insert(member.id, (index, usize::from(member.ordinal)))
-                .is_some()
-            {
+            let ordinal = usize::try_from(member.ordinal).map_err(|_| {
+                ExecutableMemoryWitnessGroupError(
+                    "memory witness member ordinal exceeds host usize",
+                )
+            })?;
+            if member_index.insert(member.id, (index, ordinal)).is_some() {
                 return fail("memory witness member belongs to multiple groups");
             }
         }
@@ -75,7 +77,10 @@ fn validate_member_order(
         return fail("memory witness recursive group classification is invalid");
     }
     for (index, member) in group.members.iter().enumerate() {
-        if member.ordinal != u16::try_from(index).unwrap_or(u16::MAX)
+        let expected_ordinal = u64::try_from(index).map_err(|_| {
+            ExecutableMemoryWitnessGroupError("memory witness member index exceeds u64")
+        })?;
+        if member.ordinal != expected_ordinal
             || index > 0 && group.members[index - 1].semantic_identity >= member.semantic_identity
             || member.semantic_identity != member.facts.semantic_type
         {
@@ -107,9 +112,18 @@ fn validate_member(
         }
         let target = match dependency.target {
             ExecutableMemoryWitnessTarget::LocalMember(ordinal) => {
-                let target = group.members.get(usize::from(ordinal)).ok_or(
-                    ExecutableMemoryWitnessGroupError("local memory witness ordinal is invalid"),
-                )?;
+                let ordinal = usize::try_from(ordinal).map_err(|_| {
+                    ExecutableMemoryWitnessGroupError(
+                        "local memory witness ordinal exceeds host usize",
+                    )
+                })?;
+                let target =
+                    group
+                        .members
+                        .get(ordinal)
+                        .ok_or(ExecutableMemoryWitnessGroupError(
+                            "local memory witness ordinal is invalid",
+                        ))?;
                 if target.facts.semantic.root != expected {
                     return fail("local memory witness edge type is invalid");
                 }

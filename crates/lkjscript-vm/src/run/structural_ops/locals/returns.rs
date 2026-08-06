@@ -19,7 +19,11 @@ pub(in crate::run) fn prepare_return<J: RuntimeTier>(
                         .iter()
                         .find(|binding| binding.parameter == variable)
                 })
-                .and_then(|binding| vm.chunk.memory_witnesses().get(usize::from(binding.witness)))
+                .and_then(|binding| {
+                    usize::try_from(binding.witness)
+                        .ok()
+                        .and_then(|index| vm.chunk.memory_witnesses().get(index))
+                })
                 .and_then(|witness| match witness.value_kind {
                     lkjscript_core::MemoryWitnessValueKind::Structural(representation) => {
                         Some(representation)
@@ -102,7 +106,9 @@ fn structural_value_matches_copy_representation<J: RuntimeTier>(
     let dynamic_owner = mode == Some(lkjscript_core::StructuralTypeMode::Immutable)
         && vm.frames.last().is_some_and(|frame| {
             frame.memory_witnesses.iter().any(|binding| {
-                vm.chunk.memory_witnesses().get(usize::from(binding.witness))
+                usize::try_from(binding.witness)
+                    .ok()
+                    .and_then(|index| vm.chunk.memory_witnesses().get(index))
                     .is_some_and(|witness| {
                         witness.facts.operations.contains(
                             &lkjscript_core::MemoryWitnessOperation::IndependentOwner,

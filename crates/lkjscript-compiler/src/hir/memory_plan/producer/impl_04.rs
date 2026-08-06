@@ -37,9 +37,9 @@ impl<'a> Producer<'a> {
         )?;
         if matches!(ty, Type::Bytes) {
             for entry_id in [expression_entry, constant_entry] {
-                let entry = self
-                    .entries
-                    .get_mut(entry_id.index().unwrap_or(usize::MAX))
+                let entry = entry_id
+                    .index()
+                    .and_then(|index| self.entries.get_mut(index))
                     .ok_or_else(|| Error::msg("static bytes memory entry is missing"))?;
                 entry.mode.multiplicity = MemoryMultiplicity::Copy;
                 entry.mode.aliasing = MemoryAliasing::StaticShared;

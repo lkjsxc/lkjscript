@@ -11,9 +11,12 @@ impl Producer<'_> {
         self.work.witness_groups = u64::try_from(groups.len())
             .map_err(|_| Error::msg("HIR memory-plan witness groups exceed u64"))?;
         self.work.witness_group_edges = self.type_planner.witnesses.iter()
-            .try_fold(0u64, |sum, witness| sum.checked_add(
-                u64::try_from(witness.facts.dependencies.len()).ok()?))
-            .ok_or_else(|| Error::msg("HIR memory-plan witness group edge work overflow"))?;
+            .try_fold(0u64, |sum, witness| {
+                let dependencies = u64::try_from(witness.facts.dependencies.len())
+                    .map_err(|_| Error::msg("HIR memory-plan witness dependency count exceeds u64"))?;
+                sum.checked_add(dependencies)
+                    .ok_or_else(|| Error::msg("HIR memory-plan witness group edge work overflow"))
+            })?;
         Ok(groups)
     }
 }
@@ -51,12 +54,12 @@ impl TypePlanner<'_> {
         }
         groups.sort_by_key(|members| semantic_ids[members[0]]);
         let mut group_of = vec![0usize; count];
-        let mut ordinal = vec![0u16; count];
+        let mut ordinal = vec![0u64; count];
         for (group, members) in groups.iter().enumerate() {
             for (position, member) in members.iter().enumerate() {
                 group_of[*member] = group;
-                ordinal[*member] = u16::try_from(position)
-                    .map_err(|_| Error::msg("memory witness group ordinal exceeds u16"))?;
+                ordinal[*member] = u64::try_from(position)
+                    .map_err(|_| Error::msg("memory witness group ordinal exceeds u64"))?;
             }
         }
         let old_ids: Vec<_> = self.witnesses.iter().map(|item| item.id).collect();
@@ -112,7 +115,7 @@ impl TypePlanner<'_> {
                 self.graph.component(key) == Some(component)).cloned().collect();
             for key in keys {
                 let member_arguments = if key == root { arguments } else { &[] };
-                let member = recursive_root_type(self.program, &key, member_arguments)?;
+                let member = self.recursive_root_type(&key, member_arguments)?;
                 self.intern(&member)?;
             }
         }
@@ -122,7 +125,7 @@ impl TypePlanner<'_> {
 
 #[allow(clippy::too_many_arguments)]
 fn finish_group(
-    group: usize, groups: &[Vec<usize>], group_of: &[usize], ordinals: &[u16],
+    group: usize, groups: &[Vec<usize>], group_of: &[usize], ordinals: &[u64],
     semantic_ids: &[[u8; 32]], witnesses: &mut [MemoryWitness], states: &mut [u8],
     group_ids: &mut [MemoryWitnessGroupId],
 ) -> Result<()> {
@@ -133,7 +136,7 @@ fn finish_group(
 
 #[allow(clippy::too_many_arguments)]
 fn finish_group_inner(
-    group: usize, groups: &[Vec<usize>], group_of: &[usize], ordinals: &[u16],
+    group: usize, groups: &[Vec<usize>], group_of: &[usize], ordinals: &[u64],
     semantic_ids: &[[u8; 32]], witnesses: &mut [MemoryWitness], states: &mut [u8],
     group_ids: &mut [MemoryWitnessGroupId],
 ) -> Result<()> {

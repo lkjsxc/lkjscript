@@ -3,7 +3,7 @@ use super::{ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessFacts};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutableMemoryWitnessGroupMember {
     pub id: [u8; 32],
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub semantic_identity: [u8; 32],
     pub facts: ExecutableMemoryWitnessFacts,
     pub dependencies: Vec<ExecutableMemoryWitnessDependency>,

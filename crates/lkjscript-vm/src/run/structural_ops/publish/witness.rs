@@ -1,8 +1,8 @@
 use super::*;
 
 pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::try_from(vm.read_index()?)
-        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory compare witness parameter exceeds u64"))?;
     let binding = vm
         .frames
         .last()
@@ -16,7 +16,10 @@ pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let witness = vm
         .chunk
         .memory_witnesses()
-        .get(usize::from(binding.witness))
+        .get(
+            usize::try_from(binding.witness)
+                .map_err(|_| Error::msg("memory compare witness slot exceeds host usize"))?,
+        )
         .ok_or_else(|| Error::msg("memory compare witness slot is stale"))?;
     if witness
         .facts
@@ -34,8 +37,8 @@ pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::try_from(vm.read_index()?)
-        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory dispose witness parameter exceeds u64"))?;
     let binding = vm
         .frames
         .last()
@@ -49,7 +52,10 @@ pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let witness = vm
         .chunk
         .memory_witnesses()
-        .get(usize::from(binding.witness))
+        .get(
+            usize::try_from(binding.witness)
+                .map_err(|_| Error::msg("memory dispose witness slot exceeds host usize"))?,
+        )
         .ok_or_else(|| Error::msg("memory dispose witness slot is stale"))?;
     if witness
         .facts
@@ -78,8 +84,8 @@ pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub(super) fn independent_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let parameter = u16::try_from(vm.read_index()?)
-        .map_err(|_| Error::msg("memory witness parameter exceeds u16"))?;
+    let parameter = u64::try_from(vm.read_index()?)
+        .map_err(|_| Error::msg("memory independent-owner witness parameter exceeds u64"))?;
     let binding = vm
         .frames
         .last()
@@ -90,11 +96,13 @@ pub(super) fn independent_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()
                 .find(|binding| binding.parameter == parameter)
         })
         .ok_or_else(|| Error::msg("memory independent-owner witness is missing"))?;
-    let witness = vm
-        .chunk
-        .memory_witnesses()
-        .get(usize::from(binding.witness))
-        .ok_or_else(|| Error::msg("memory independent-owner witness slot is stale"))?;
+    let witness =
+        vm.chunk
+            .memory_witnesses()
+            .get(usize::try_from(binding.witness).map_err(|_| {
+                Error::msg("memory independent-owner witness slot exceeds host usize")
+            })?)
+            .ok_or_else(|| Error::msg("memory independent-owner witness slot is stale"))?;
     if witness
         .facts
         .operations

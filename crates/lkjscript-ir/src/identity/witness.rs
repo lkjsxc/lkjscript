@@ -17,7 +17,7 @@ pub(super) fn descriptor(out: &mut Encoder, value: &MemoryWitnessDescriptor) {
     } = value;
     out.fixed(&id.bytes());
     out.fixed(&group.bytes());
-    out.u16(*ordinal);
+    out.u64(*ordinal);
     facts_value(out, id.bytes(), *ordinal, facts, dependencies);
     ty(out, value_ty);
     out.option(representation.as_ref(), |out, value| out.u64(value.raw()));
@@ -26,7 +26,7 @@ pub(super) fn descriptor(out: &mut Encoder, value: &MemoryWitnessDescriptor) {
 pub(super) fn facts_value(
     out: &mut Encoder,
     id: [u8; 32],
-    ordinal: u16,
+    ordinal: u64,
     facts: &ExecutableMemoryWitnessFacts,
     dependencies: &[ExecutableMemoryWitnessDependency],
 ) {
@@ -148,7 +148,7 @@ pub(super) fn group(out: &mut Encoder, value: &crate::MemoryWitnessGroupDescript
             semantic_identity,
         } = member;
         out.fixed(&witness.bytes());
-        out.u16(*ordinal);
+        out.u64(*ordinal);
         out.fixed(semantic_identity);
     });
 }

@@ -88,7 +88,7 @@ pub(super) fn representation(out: &mut Encoder, value: &StructuralRepresentation
     out.u64(type_id.raw());
     out.fixed(&witness.bytes());
     out.fixed(&witness_group.bytes());
-    out.u16(*witness_member);
+    out.u64(*witness_member);
     out.u64(layout.raw());
     out.tag(match category {
         StructuralValueCategory::Owner => 0,

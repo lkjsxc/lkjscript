@@ -27,8 +27,23 @@ field dependency disproves it. Enum recursion and HIR memory-plan type graphs us
 worklists. Producer and independent-verifier graph construction iterate declaration storage once
 and resolve edges through indexes rather than repeatedly scanning all declarations. Type-node,
 graph-edge, witness/group/dependency, structural metadata table, semantic descriptor, and type-SCC
-work counts are not admission rules. Checked telemetry and allocation
-failure remain explicit.
+work counts are not admission rules. HIR memory-plan function/use/loan/call/obligation,
+witness-arity, destination, borrow-scope, drop-path, SSA region-product, and executable structural
+reference quotas are also gone. Producer accounting is checked observational `u64` telemetry; the
+independent verifier reconstructs exact totals and equality without an admission comparison.
+Memory witness parameters/bindings and group ordinals, local witness dependency targets, HIR
+destination/borrow-scope/drop-path/drop-glue IDs, and executable structural destination IDs use
+`u64` with checked host conversion. Placement retains only two private seal-selection thresholds;
+when they are not met, the total generic placement route is selected. They do not reject a program.
+
+The memory-plan producer indexes expression entries, destination children, source places, direct
+functions, declaration metadata, binding loads, and loan uses. Placement precomputes binding-use,
+independent-owner, branch-divergence, and aggregate-estimate indexes. The independent verifier
+builds separate expression/child/use/load, call/place/scope, loan-entry, destination-child,
+declaration, witness, and drop-path indexes and still reconstructs authority rather than trusting
+producer indexes. SSA lowering and bytecode installation use indexed witness, placement, owner,
+layout, and structural-destination routes. Deterministic vectors remain canonical; hash indexes are
+lookup accelerators only. Checked telemetry and allocation failure remain explicit.
 
 SSA control-flow verification indexes sorted successor and
 predecessor adjacency once, uses iterative DFS/SCC worklists, computes immediate dominators in

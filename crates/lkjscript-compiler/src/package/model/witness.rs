@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct LockedWitnessGroupMember {
     pub member: String,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub semantic_identity: String,
 }
 
@@ -34,7 +34,7 @@ pub enum LockedWitnessDependencyRole {
     },
     TypeArgument {
         constructor: String,
-        index: u16,
+        index: u64,
     },
 }
 

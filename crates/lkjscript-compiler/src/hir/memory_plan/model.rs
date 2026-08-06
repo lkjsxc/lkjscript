@@ -25,6 +25,27 @@ macro_rules! dense_id {
     };
 }
 
+macro_rules! wide_dense_id {
+    ($name:ident) => {
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+        pub struct $name(u64);
+
+        impl $name {
+            pub(crate) const fn new(raw: u64) -> Self {
+                Self(raw)
+            }
+
+            pub const fn raw(self) -> u64 {
+                self.0
+            }
+
+            pub fn index(self) -> Option<usize> {
+                usize::try_from(self.0).ok()
+            }
+        }
+    };
+}
+
 dense_id!(MemoryFunctionId);
 dense_id!(MemoryExpressionId);
 dense_id!(MemoryEntryId);
@@ -32,11 +53,11 @@ dense_id!(MemoryUseId);
 dense_id!(MemoryConstantId);
 dense_id!(MemoryCallId);
 dense_id!(MemoryObligationId);
-dense_id!(MemoryDropGlueId);
 dense_id!(MemoryTypeFactId);
-dense_id!(MemoryDestinationId);
-dense_id!(MemoryBorrowScopeId);
-dense_id!(MemoryDropPathId);
+wide_dense_id!(MemoryDropGlueId);
+wide_dense_id!(MemoryDestinationId);
+wide_dense_id!(MemoryBorrowScopeId);
+wide_dense_id!(MemoryDropPathId);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MemoryPlanId([u8; 32]);

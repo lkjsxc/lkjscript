@@ -1,6 +1,9 @@
 impl<'a> Producer<'a> {
     fn run(mut self) -> Result<HirMemoryPlan> {
-        self.charge_functions(self.program.functions.len().saturating_add(1))?;
+        let function_count = self.program.functions.len()
+            .checked_add(1)
+            .ok_or_else(|| Error::msg("HIR memory-plan function count overflow"))?;
+        self.charge_functions(function_count)?;
         for (index, function) in self.program.functions.iter().enumerate() {
             let id = MemoryFunctionId::new(
                 u32::try_from(index)

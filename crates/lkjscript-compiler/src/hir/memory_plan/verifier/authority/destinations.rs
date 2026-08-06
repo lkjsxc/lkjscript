@@ -6,34 +6,60 @@ pub(super) fn verify_destinations(
     facts: &Facts<'_>,
     types: &VerifiedTypes<'_>,
 ) -> Result<()> {
+    let mut entries_by_expression = BTreeMap::new();
+    let mut children_by_parent: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    for entry in &plan.entries {
+        if let MemorySubject::Expression {
+            expression,
+            parent,
+            child_index,
+            ..
+        } = entry.subject
+        {
+            if entries_by_expression.insert(expression, entry).is_some() {
+                return Err(Error::msg(
+                    "memory destination expression entry is duplicated",
+                ));
+            }
+            if let Some(parent) = parent {
+                children_by_parent.entry(parent).or_default().push((
+                    child_index,
+                    expression,
+                    entry.drop_path,
+                ));
+            }
+        }
+    }
+    let product_indices: HashMap<_, _> = program
+        .products
+        .iter()
+        .enumerate()
+        .map(|(index, product)| (product.id, index))
+        .collect();
+    let enum_indices: HashMap<_, _> = program
+        .enums
+        .iter()
+        .enumerate()
+        .map(|(index, enumeration)| (enumeration.id, index))
+        .collect();
     for (index, destination) in plan.destinations.iter().enumerate() {
-        if destination.id.raw() != index_u32(index)? {
+        if destination.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory destinations are not dense"));
         }
         let fact = facts
-            .expressions
-            .iter()
-            .find(|item| item.id == destination.expression)
+            .expression(destination.expression)
             .ok_or_else(|| Error::msg("memory destination lost construction expression"))?;
-        let entry = expression_entry(plan, destination.expression)?;
+        let entry = entries_by_expression
+            .get(&destination.expression)
+            .copied()
+            .ok_or_else(|| Error::msg("memory authority lost expression entry"))?;
         let type_fact = types.expected(entry.type_fact)?;
-        let mut children: Vec<_> = plan
-            .entries
-            .iter()
-            .filter_map(|entry| match entry.subject {
-                MemorySubject::Expression {
-                    expression,
-                    parent: Some(parent),
-                    child_index,
-                    ..
-                } if parent == destination.expression => {
-                    Some((child_index, expression, entry.drop_path))
-                }
-                _ => None,
-            })
-            .collect();
+        let mut children = children_by_parent
+            .remove(&destination.expression)
+            .unwrap_or_default();
         children.sort_by_key(|item| item.0);
-        let (field_count, active_payload) = verified_destination_shape(program, fact.expression)?;
+        let (field_count, active_payload) =
+            verified_destination_shape(program, &product_indices, &enum_indices, fact.expression)?;
         let fields = children
             .into_iter()
             .map(|(index, expression, drop_path)| MemoryDestinationField {
@@ -90,9 +116,9 @@ pub(super) fn verify_destinations(
             )
         })
         .count();
-    if plan.destinations.len() != constructions
-        || plan.work.destinations != u64::try_from(constructions).unwrap_or(u64::MAX)
-    {
+    let construction_count = u64::try_from(constructions)
+        .map_err(|_| Error::msg("memory destination count exceeds u64"))?;
+    if plan.destinations.len() != constructions || plan.work.destinations != construction_count {
         return Err(Error::msg("memory destination coverage/work mismatch"));
     }
     for entry in &plan.entries {
@@ -110,29 +136,18 @@ pub(super) fn verify_destinations(
     Ok(())
 }
 
-fn expression_entry(
-    plan: &HirMemoryPlan,
-    expression: MemoryExpressionId,
-) -> Result<&MemoryPlanEntry> {
-    plan.entries
-        .iter()
-        .find(|entry| {
-            matches!(entry.subject,
-        MemorySubject::Expression { expression: item, .. } if item == expression)
-        })
-        .ok_or_else(|| Error::msg("memory authority lost expression entry"))
-}
-
 fn verified_destination_shape(
     program: &hir::Program,
+    product_indices: &HashMap<hir::ProductId, usize>,
+    enum_indices: &HashMap<hir::EnumId, usize>,
     expression: &hir::Expr,
 ) -> Result<(u32, Option<MemoryActivePayload>)> {
     match &expression.kind {
         hir::ExprKind::ProductValue { product, fields } => {
-            let declared = program
-                .products
-                .iter()
-                .find(|item| item.id == *product)
+            let declared = product_indices
+                .get(product)
+                .and_then(|index| program.products.get(*index))
+                .filter(|item| item.id == *product)
                 .ok_or_else(|| Error::msg("memory verifier lost destination product"))?;
             if declared.fields.len() != fields.len() {
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION product fields"));
@@ -145,10 +160,10 @@ fn verified_destination_shape(
             fields,
             ..
         } => {
-            let declared = program
-                .enums
-                .iter()
-                .find(|item| item.id == *enum_id)
+            let declared = enum_indices
+                .get(enum_id)
+                .and_then(|index| program.enums.get(*index))
+                .filter(|item| item.id == *enum_id)
                 .and_then(|item| item.variants.iter().find(|item| item.id == *variant))
                 .ok_or_else(|| Error::msg("memory verifier lost active enum payload"))?;
             if declared.fields.len() != fields.len() {

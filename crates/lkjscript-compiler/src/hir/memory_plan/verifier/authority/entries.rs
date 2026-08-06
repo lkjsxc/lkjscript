@@ -10,9 +10,7 @@ pub(super) fn authority_entry_type<'a>(
         | MemorySubject::Loan { expression, .. }
         | MemorySubject::Constant { expression, .. }
         | MemorySubject::Call { expression, .. } => facts
-            .expressions
-            .iter()
-            .find(|item| item.id == expression)
+            .expression(expression)
             .map(|item| &item.expression.ty)
             .ok_or_else(|| Error::msg("memory authority entry lost expression type")),
         MemorySubject::Parameter {

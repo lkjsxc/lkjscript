@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 fn validate_witness_groups(chunk: &Chunk) -> Result<usize> {
     let groups = &chunk.memory_witness_groups;
     let mut prior = None;

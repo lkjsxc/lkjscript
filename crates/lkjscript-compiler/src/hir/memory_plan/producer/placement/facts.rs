@@ -126,9 +126,11 @@ pub(super) fn expression_binding(
 }
 
 fn local_binding(facts: &[PlacementFact<'_>], fact: &PlacementFact<'_>) -> Option<BindingId> {
-    let parent = facts
-        .iter()
-        .find(|candidate| Some(candidate.id) == fact.parent)?;
+    let parent_id = fact.parent?;
+    let parent = parent_id
+        .index()
+        .and_then(|index| facts.get(index))
+        .filter(|candidate| candidate.id == parent_id)?;
     let ExprKind::Let { bindings, .. } = &parent.expression.kind else {
         return None;
     };

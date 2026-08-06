@@ -12,6 +12,7 @@ type VerifiedCall<'a> = (
 pub(super) fn verified_call_signature<'a>(
     program: &'a hir::Program,
     plan: &HirMemoryPlan,
+    function_indices: &HashMap<BindingId, usize>,
     fact: &ExprFact<'a>,
     types: &mut VerifiedTypes<'_>,
 ) -> Result<VerifiedCall<'a>> {
@@ -22,12 +23,14 @@ pub(super) fn verified_call_signature<'a>(
             instantiation,
         } => match callee.storage {
             hir::BindingStorage::Function => {
-                let (target, target_function) = program
-                    .functions
-                    .iter()
-                    .enumerate()
-                    .find(|(_, item)| item.binding == callee.binding)
+                let target = *function_indices
+                    .get(&callee.binding)
                     .ok_or_else(|| Error::msg("memory verifier lost direct call target"))?;
+                let target_function = program
+                    .functions
+                    .get(target)
+                    .filter(|function| function.binding == callee.binding)
+                    .ok_or_else(|| Error::msg("memory verifier direct call target is stale"))?;
                 let signature = &plan
                     .function(MemoryFunctionId::new(index_u32(target)?))
                     .ok_or_else(|| Error::msg("memory verifier lost direct signature"))?
@@ -162,9 +165,7 @@ pub(super) fn child_fact<'a>(
 ) -> Result<&'a ExprFact<'a>> {
     let index = index_u32(index)?;
     facts
-        .expressions
-        .iter()
-        .find(|item| item.parent == Some(parent) && item.child_index == index)
+        .child(parent, index)
         .ok_or_else(|| Error::msg("memory call lost argument expression"))
 }
 

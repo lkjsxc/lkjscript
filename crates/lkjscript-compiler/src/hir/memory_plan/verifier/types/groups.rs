@@ -1,6 +1,12 @@
 use super::*;
 
 pub(super) fn verify_witness_groups(plan: &HirMemoryPlan) -> Result<()> {
+    let mut witnesses_by_id = HashMap::new();
+    for witness in &plan.witnesses {
+        if witnesses_by_id.insert(witness.id, witness).is_some() {
+            return Err(Error::msg("HIR memory witness identity is duplicated"));
+        }
+    }
     let mut covered = BTreeSet::new();
     let groups = plan
         .witness_groups
@@ -10,8 +16,9 @@ pub(super) fn verify_witness_groups(plan: &HirMemoryPlan) -> Result<()> {
                 .members
                 .iter()
                 .map(|member| {
-                    let witness = plan
-                        .witness(member.witness)
+                    let witness = witnesses_by_id
+                        .get(&member.witness)
+                        .copied()
                         .ok_or_else(|| Error::msg("HIR memory witness group member is missing"))?;
                     let semantic_identity =
                         lkjscript_contracts::semantic_type_closure_hash(&witness.facts.semantic)

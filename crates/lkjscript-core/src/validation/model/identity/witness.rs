@@ -16,14 +16,14 @@ pub(super) fn installed(out: &mut Encoder, value: &InstalledMemoryWitness) {
     } = value;
     out.fixed(&id.bytes());
     out.fixed(&group.bytes());
-    out.u16(*ordinal);
+    out.u64(*ordinal);
     facts_value(out, id.bytes(), *ordinal, facts, dependencies);
     witness_kind(out, *value_kind);
 }
 fn facts_value(
     out: &mut Encoder,
     id: [u8; 32],
-    ordinal: u16,
+    ordinal: u64,
     facts: &ExecutableMemoryWitnessFacts,
     dependencies: &[ExecutableMemoryWitnessDependency],
 ) {
@@ -143,7 +143,7 @@ pub(super) fn group(out: &mut Encoder, value: &InstalledMemoryWitnessGroup) {
             semantic_identity,
         } = member;
         out.fixed(&witness.bytes());
-        out.u16(*ordinal);
+        out.u64(*ordinal);
         out.fixed(semantic_identity);
     });
 }
@@ -166,7 +166,7 @@ pub(super) fn parameter(out: &mut Encoder, value: &MemoryWitnessParameter) {
         parameter,
         operations,
     } = value;
-    out.u16(*parameter);
+    out.u64(*parameter);
     out.sequence(operations, |out, value| {
         types::witness_operation(out, *value)
     });
@@ -181,7 +181,7 @@ pub(super) fn call_site(out: &mut Encoder, value: &CallWitnessSite) {
     out.u64(*callee);
     out.sequence(bindings, |out, value| {
         let MemoryWitnessBinding { parameter, witness } = value;
-        out.u16(*parameter);
-        out.u16(*witness);
+        out.u64(*parameter);
+        out.u64(*witness);
     });
 }

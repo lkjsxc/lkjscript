@@ -51,9 +51,17 @@ fn validate_memory_witness_arguments(
         .iter()
         .zip(&site.bindings)
     {
+        let witness_index = usize::try_from(binding.witness).map_err(|_| {
+            instruction_error(
+                caller,
+                instruction.op(),
+                instruction.offset(),
+                "generic call witness slot exceeds host usize",
+            )
+        })?;
         let witness = chunk
             .memory_witnesses
-            .get(usize::from(binding.witness))
+            .get(witness_index)
             .ok_or_else(|| {
                 instruction_error(
                     caller,

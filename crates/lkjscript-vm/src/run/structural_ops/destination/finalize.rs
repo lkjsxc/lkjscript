@@ -66,9 +66,8 @@ fn destination_metadata(
     chunk: &ValidatedChunk,
     id: StructuralDestinationId,
 ) -> Result<&StructuralDestinationMetadata> {
-    chunk
-        .structural_destinations()
-        .get(id.index())
+    id.index()
+        .and_then(|index| chunk.structural_destinations().get(index))
         .filter(|item| item.id == id)
         .ok_or_else(|| Error::msg("structural destination metadata is stale"))
 }

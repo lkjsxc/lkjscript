@@ -37,22 +37,22 @@ pub(super) fn verify_dense(plan: &HirMemoryPlan) -> Result<()> {
         }
     }
     for (index, item) in plan.destinations.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan destinations are not dense"));
         }
     }
     for (index, item) in plan.borrow_scopes.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan borrow scopes are not dense"));
         }
     }
     for (index, item) in plan.drop_paths.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan drop paths are not dense"));
         }
     }
     for (index, item) in plan.drop_glues.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan drop glues are not dense"));
         }
     }

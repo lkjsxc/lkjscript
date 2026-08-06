@@ -1,23 +1,57 @@
 use crate::memory_plan::{MemoryDomain, MemoryValueCategory};
 use crate::ssa::*;
 
+type RepresentationKey = (
+    StructuralTypeId,
+    MemoryWitnessId,
+    MemoryWitnessGroupId,
+    u64,
+    StructuralLayoutId,
+    StructuralValueCategory,
+    StructuralStorage,
+    [u8; 32],
+);
+
 pub(super) fn install_value_representations(
     memory: &mut StructuralMemoryMetadata,
     plan: &HirMemoryPlan,
     products: &HashMap<String, ProductId>,
 ) -> Result<()> {
+    let mut representation_keys = HashSet::new();
+    let mut facts_by_witness = HashMap::new();
+    for fact in &plan.type_facts {
+        if facts_by_witness.insert(fact.witness, fact).is_some() {
+            return Err(Error::msg("structural type fact witness is duplicated"));
+        }
+    }
+    let mut witnesses_by_id = HashMap::new();
+    for witness in &plan.witnesses {
+        if witnesses_by_id.insert(witness.id, witness).is_some() {
+            return Err(Error::msg("structural witness identity is duplicated"));
+        }
+    }
+    let mut placements_by_type = HashMap::new();
+    for placement in &plan.value_placements {
+        let placements: &mut Vec<_> = placements_by_type.entry(placement.type_fact).or_default();
+        placements
+            .try_reserve(1)
+            .map_err(|_| Error::host("structural placement index allocation failed"))?;
+        placements.push(placement);
+    }
     let types = memory.types.clone();
     for structural in types {
-        let fact = plan
-            .type_facts
-            .iter()
-            .find(|fact| {
-                fact.witness.as_bytes() == structural.witness.bytes()
-                    && lower_memory_type(&fact.ty, products).ok().as_ref() == Some(&structural.ty)
+        let fact = facts_by_witness
+            .get(&crate::memory_plan::MemoryWitnessId::from_bytes(
+                structural.witness.bytes(),
+            ))
+            .copied()
+            .filter(|fact| {
+                lower_memory_type(&fact.ty, products).ok().as_ref() == Some(&structural.ty)
             })
             .ok_or_else(|| Error::msg("structural representation lost exact type fact"))?;
-        let witness = plan
-            .witness(fact.witness)
+        let witness = witnesses_by_id
+            .get(&fact.witness)
+            .copied()
             .ok_or_else(|| Error::msg("structural representation lost witness member"))?;
         let unique = fallback_route(
             fact.witness,
@@ -27,6 +61,7 @@ pub(super) fn install_value_representations(
         )?;
         push_representation(
             memory,
+            &mut representation_keys,
             &structural,
             witness,
             StructuralValueCategory::Owner,
@@ -35,6 +70,7 @@ pub(super) fn install_value_representations(
         )?;
         push_representation(
             memory,
+            &mut representation_keys,
             &structural,
             witness,
             StructuralValueCategory::Destination,
@@ -49,21 +85,19 @@ pub(super) fn install_value_representations(
         )?;
         push_representation(
             memory,
+            &mut representation_keys,
             &structural,
             witness,
             StructuralValueCategory::View,
             StructuralStorage::BorrowedView,
             borrowed,
         )?;
-        for placement in plan
-            .value_placements
-            .iter()
-            .filter(|item| item.type_fact == fact.id)
-        {
+        for placement in placements_by_type.get(&fact.id).into_iter().flatten() {
             let storage = lower_storage(placement.storage)?;
             let category = lower_category(placement.category);
             push_representation(
                 memory,
+                &mut representation_keys,
                 &structural,
                 witness,
                 category,
@@ -73,6 +107,7 @@ pub(super) fn install_value_representations(
             if placement.category == MemoryValueCategory::Owner {
                 push_representation(
                     memory,
+                    &mut representation_keys,
                     &structural,
                     witness,
                     StructuralValueCategory::Destination,
@@ -82,28 +117,47 @@ pub(super) fn install_value_representations(
             }
         }
     }
+    memory.representations.sort_by_key(|item| {
+        (
+            item.type_id,
+            item.category,
+            item.storage,
+            item.route,
+            item.witness,
+            item.witness_group,
+            item.witness_member,
+            item.layout,
+        )
+    });
+    for (index, item) in memory.representations.iter_mut().enumerate() {
+        item.id = StructuralRepresentationId::new(
+            u64::try_from(index)
+                .map_err(|_| Error::msg("structural representation table exceeds u64"))?,
+        );
+    }
     Ok(())
 }
 
 fn push_representation(
     memory: &mut StructuralMemoryMetadata,
+    keys: &mut HashSet<RepresentationKey>,
     ty: &StructuralTypeMetadata,
     witness: &crate::memory_plan::MemoryWitness,
     category: StructuralValueCategory,
     storage: StructuralStorage,
     route: [u8; 32],
 ) -> Result<()> {
-    let duplicate = memory.representations.iter().any(|item| {
-        item.type_id == ty.id
-            && item.witness == ty.witness
-            && item.witness_group.bytes() == witness.group.as_bytes()
-            && item.witness_member == witness.ordinal
-            && item.layout == ty.layout
-            && item.category == category
-            && item.storage == storage
-            && item.route == route
-    });
-    if duplicate {
+    let group = MemoryWitnessGroupId::new(witness.group.as_bytes());
+    if !keys.insert((
+        ty.id,
+        ty.witness,
+        group,
+        witness.ordinal,
+        ty.layout,
+        category,
+        storage,
+        route,
+    )) {
         return Ok(());
     }
     let id = StructuralRepresentationId::new(
@@ -116,7 +170,7 @@ fn push_representation(
             id,
             type_id: ty.id,
             witness: ty.witness,
-            witness_group: lkjscript_ir::MemoryWitnessGroupId::new(witness.group.as_bytes()),
+            witness_group: group,
             witness_member: witness.ordinal,
             layout: ty.layout,
             category,

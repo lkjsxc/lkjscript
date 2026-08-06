@@ -19,6 +19,12 @@ struct Producer<'a> {
     signatures: Vec<FunctionMemorySignature>,
     functions: Vec<FunctionMemoryPlan>,
     entries: Vec<MemoryPlanEntry>,
+    expression_entries: HashMap<MemoryExpressionId, MemoryEntryId>,
+    child_entries:
+        HashMap<MemoryExpressionId, Vec<(u32, MemoryExpressionId, Option<MemoryDropPathId>)>>,
+    places_by_binding: HashMap<(MemoryFunctionId, u32), u32>,
+    products_by_id: HashMap<hir::ProductId, usize>,
+    enums_by_id: HashMap<hir::EnumId, usize>,
     uses: Vec<MemoryUse>,
     loans: Vec<MemoryLoanPlan>,
     constants: Vec<MemoryConstantPlan>,

@@ -27,8 +27,6 @@ pub use bytecode::{
     StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
     StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata, StructuralTypeMode,
     StructuralValueCategory, StructuralVariantLayout, UniqueValueKind, VariantFieldId, VariantId,
-    MAX_CALL_WITNESS_SITES, MAX_MEMORY_WITNESS_PARAMETERS, MAX_STRUCTURAL_DESTINATIONS,
-    MAX_STRUCTURAL_OPERATION_REFS,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use limits::{

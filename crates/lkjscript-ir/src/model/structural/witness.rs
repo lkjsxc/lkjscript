@@ -1,11 +1,9 @@
 use super::*;
 
-pub const MAX_MEMORY_WITNESS_PARAMETERS: usize = 16;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryWitnessGroupMember {
     pub witness: MemoryWitnessId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub semantic_identity: [u8; 32],
 }
 
@@ -20,7 +18,7 @@ pub struct MemoryWitnessGroupDescriptor {
 pub struct MemoryWitnessDescriptor {
     pub id: MemoryWitnessId,
     pub group: MemoryWitnessGroupId,
-    pub ordinal: u16,
+    pub ordinal: u64,
     pub facts: lkjscript_contracts::ExecutableMemoryWitnessFacts,
     pub ty: SsaType,
     pub dependencies: Vec<lkjscript_contracts::ExecutableMemoryWitnessDependency>,

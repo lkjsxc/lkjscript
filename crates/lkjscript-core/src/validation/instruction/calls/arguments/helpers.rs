@@ -1,4 +1,4 @@
-fn independent_owner_parameter(callee: &FunctionProto, variable: u16) -> bool {
+fn independent_owner_parameter(callee: &FunctionProto, variable: u64) -> bool {
     callee
         .memory_witness_parameters
         .iter()
@@ -12,7 +12,7 @@ fn independent_owner_parameter(callee: &FunctionProto, variable: u16) -> bool {
         })
 }
 
-fn witness_observer_parameter(callee: &FunctionProto, variable: u16) -> bool {
+fn witness_observer_parameter(callee: &FunctionProto, variable: u64) -> bool {
     callee
         .memory_witness_parameters
         .iter()
@@ -25,8 +25,8 @@ fn witness_observer_parameter(callee: &FunctionProto, variable: u16) -> bool {
 }
 
 fn bind_structural_variable(
-    variables: &mut Vec<(u16, crate::StructuralRepresentationId)>,
-    variable: u16,
+    variables: &mut Vec<(u64, crate::StructuralRepresentationId)>,
+    variable: u64,
     representation: crate::StructuralRepresentationId,
 ) -> bool {
     if let Some((_, existing)) = variables.iter().find(|(index, _)| *index == variable) {

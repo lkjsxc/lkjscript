@@ -68,13 +68,35 @@ formatting, clone, equality, hashing, and destruction paths use explicit worklis
 heap-backed stack segments. Auto-trait solvers canonicalize type nodes, memoize obligations, and
 compute a deterministic coinductive greatest fixed point, including nominal cycles; enum recursion
 validation likewise uses graph worklists rather than depth fuel. HIR memory planning and executable
-witness validation no longer cap type facts, type-graph edges, semantic descriptor nodes/bytes,
-witnesses, witness groups/dependencies, structural metadata tables, or deterministic type-SCC work.
-Checked `u64` work observations and checked allocation/identity conversions remain. Generated HIR
-coverage derives and independently verifies a 32,769-declaration graph whose SCC observation
-crosses 65,536 steps. Contract coverage validates 16,385 independent executable witness groups and
-semantic descriptors with 16,385 reachable declarations, 65,537 fields/type edges, and more than
-16 MiB of canonical input.
+witness validation no longer cap functions, uses, loans, calls, obligations, witness parameters or
+arguments, destinations, borrow scopes, drop paths, type facts, type-graph edges, semantic
+descriptor nodes/bytes, witnesses, witness groups/dependencies, structural metadata tables,
+region-product metadata, or deterministic type-SCC work. Producer accounting and independent
+verifier reconstruction use checked observational `u64` totals and require exact equality; they do
+not compare a program count with an admission maximum. Memory witness parameters, bindings,
+group ordinals, local dependency targets, HIR destination/borrow-scope/drop-path/drop-glue IDs, and
+bytecode structural destination IDs use `u64` with checked host indexing. The two retained seal
+thresholds select a total generic placement fallback and cannot reject a program. Uses, loan ends,
+direct calls, expression entries, source places, destination children, borrow scopes, drop paths,
+declaration metadata, and structural destination metadata are preindexed instead of repeatedly
+scanning complete tables. Generated HIR coverage derives and independently verifies 65,537 uses
+and loans, more than 32,768 obligations, and 32,769 destinations/drop paths. A 16,385-destination
+structural geometry reaches verified SSA and unrestricted validated bytecode; separate unrestricted
+validator coverage accepts 65,537 destination-field operation references. Generated region-product coverage
+verifies 16,385 records. Contract coverage validates 16,385 independent executable witness groups
+and semantic descriptors with 16,385 reachable declarations, 65,537 fields/type edges, and more
+than 16 MiB of canonical input. Full-source production tests compile 4,097 helper functions through
+HIR, SSA, validated bytecode, and VM execution; compile and execute 16,385 direct calls with 16,385
+inferred borrow scopes; and transport 17 hidden witness parameters and arguments through the same
+path. The VM remains valid when compact native tables decline a large group. On the local
+20-logical-CPU AMD Ryzen 9 9955HX host with 32 GiB RAM and `rustc 1.96.0`, release test bodies took
+3.60 s for 4,097 functions, 333.24 s for 16,385 calls/scopes, 9.91 s for the HIR use/loan/obligation
+and destination/drop-path geometry, 27.24 s for 16,385 structural destinations through validated
+bytecode, 0.01 s for 65,537 validated operation references, and 0.02 s for 16,385 verified SSA
+region products. The call/scope run peaked at approximately 30.4 GiB process-tree RSS. Its compiler
+metrics attributed 140 ms to memory planning, 59.44 s to bytecode validation, and 261.05 s to
+preparation, so those downstream phases and peak memory remain measured scale problems rather than
+reasons to restore an admission quota.
 
 Generated coverage compiles, creates
 a verified HIR memory plan, creates verified and normalized SSA, validates bytecode, executes
@@ -186,29 +208,22 @@ may build elsewhere, but no other host or native target is currently claimed as 
 
 ## Known gaps
 
-- Source spans, positions, and snapshot-local node indexes remain `u32`, so an individual source
-  or source tree beyond those addressable ranges fails at a representation boundary. HIR
-  memory-plan entry, constant, type, witness, and whole-verifier work counts are checked
-  observational telemetry. Independently triggered quotas remain for functions, uses, loans,
-  calls, obligations, witness parameter/argument arity, destinations, borrow scopes, and drop
-  paths. SSA region-product metadata and bytecode structural destination/operation-reference
-  tables retain count ceilings. A recursive executable witness group also retains a checked `u16`
-  member ordinal representation boundary, distinct from the removed total witness/group quotas. The
-  20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
-  constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. Bytecode validation has no project-selected encoded-size, physical-table,
-  metadata-size, constant-size, or cleanup-node/range count admission. An explicit limited policy
-  at an untrusted artifact boundary may reject only the checked total-byte observation; trusted
-  compilation and prepared binding use unrestricted validation. Constant, global, prototype, and
-  nominal aggregate executable references are fixed-`u64`. Compact `u8`/`u16` fields remain only
-  inside native optimization plans and are checked eligibility conditions with generic VM fallback.
-  HIR memory-plan table identities and HIR/SSA place identities remain `u32`, a separate above-`u32`
-  representation gap rather than the removed executable byte width.
-  Validator-synthetic ownership identity no longer narrows bytecode positions or parameter indexes
-  to `u32`; it uses tagged instruction offsets and parameter indexes at host width. SSA block and
-  value identities still use `u32`; this is an external representation gap distinct from the removed
-  4,096-block verifier admission rule. Where the remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,
-  they remain follow-up validity and representation gaps, not host policy.
+- Source spans, positions, binding/place/loan IDs, and snapshot-local node indexes remain `u32`,
+  so source structures beyond those addressable ranges fail at a representation boundary. HIR
+  function, expression, entry, use, constant, call, obligation, and type-fact IDs also remain
+  `u32`; HIR destination, borrow-scope, drop-path, and drop-glue IDs are now wide. SSA function,
+  block, value, binding, trait, implementation, place, and loan identities remain `u32`. These are
+  actual source/IR representation gaps, not count policies or semantic laws. Core structural type,
+  layout, and representation IDs carry `u64`, but some existing host lookup helpers still map an
+  unrepresentable ID to a failed lookup sentinel instead of returning a typed host-width error;
+  structural destination and memory-witness paths use checked conversion. Compact native witness,
+  aggregate, and cleanup fields remain checked specialization eligibility boundaries; automatic
+  execution retains the validated generic VM route when native planning declines a shape.
+  Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
+  constant-size, cleanup-node/range, witness, region-product, or structural-operation table
+  admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
+  trusted compilation and prepared binding use unrestricted validation. VM `ExecutionConfig`
+  remains explicit runtime host policy over execution resources rather than language validity.
 - Type and SSA type ownership, identity, verification, trait solving, and the ordinary memory-plan
   and lowering path have deep-stack coverage. Other recursive semantic-operation, transaction,
   runtime structural-value, and specialization paths still need explicit work-stack conversion or

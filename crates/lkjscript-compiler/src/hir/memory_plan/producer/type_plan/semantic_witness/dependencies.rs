@@ -10,12 +10,7 @@ impl TypePlanner<'_> {
                 self.producer_dependency(root, element, R::ListElement, &mut output)?;
             }
             Type::Product(name) => {
-                let item = self
-                    .program
-                    .products
-                    .iter()
-                    .find(|item| item.name == *name)
-                    .ok_or_else(|| Error::msg("witness roles lost product"))?;
+                let item = self.product(name)?;
                 for field in &item.fields {
                     self.producer_dependency(
                         root,
@@ -30,12 +25,7 @@ impl TypePlanner<'_> {
                 }
             }
             Type::Enum { id, arguments, .. } => {
-                let item = self
-                    .program
-                    .enums
-                    .iter()
-                    .find(|item| item.id == *id)
-                    .ok_or_else(|| Error::msg("witness roles lost enum"))?;
+                let item = self.enumeration(id.bytes())?;
                 if arguments.len() != item.type_parameters.len() {
                     return Err(Error::msg("witness enum argument arity mismatch"));
                 }
@@ -45,8 +35,8 @@ impl TypePlanner<'_> {
                         argument,
                         R::TypeArgument {
                             constructor: id.bytes(),
-                            index: u16::try_from(index)
-                                .map_err(|_| Error::msg("type argument order overflow"))?,
+                            index: u64::try_from(index)
+                                .map_err(|_| Error::msg("type argument order exceeds u64"))?,
                         },
                         &mut output,
                     )?;

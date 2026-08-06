@@ -163,6 +163,6 @@ pub struct MemoryBorrowScopePlan {
     pub binding: u32,
     pub place: u32,
     pub kind: MemoryBorrowKind,
-    pub semantic_uses: u32,
+    pub semantic_uses: u64,
     pub end_after: MemoryExpressionId,
 }

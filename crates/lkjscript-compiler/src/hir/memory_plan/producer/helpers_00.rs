@@ -1,16 +1,3 @@
-fn charge(slot: &mut u64, amount: usize, limit: u64, label: &str) -> Result<()> {
-    let amount = u64::try_from(amount)
-        .map_err(|_| Error::msg(format!("HIR memory-plan {label} charge exceeds u64")))?;
-    *slot = slot
-        .checked_add(amount)
-        .ok_or_else(|| Error::msg(format!("HIR memory-plan {label} work overflow")))?;
-    if *slot > limit {
-        return Err(Error::msg(format!(
-            "HIR memory-plan {label} work exceeds {limit}"
-        )));
-    }
-    Ok(())
-}
 fn observe(slot: &mut u64, amount: usize, label: &str) -> Result<()> {
     let amount = u64::try_from(amount)
         .map_err(|_| Error::msg(format!("HIR memory-plan {label} observation exceeds u64")))?;
@@ -18,6 +5,23 @@ fn observe(slot: &mut u64, amount: usize, label: &str) -> Result<()> {
         .checked_add(amount)
         .ok_or_else(|| Error::msg(format!("HIR memory-plan {label} observation overflow")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod observational_accounting_tests {
+    use super::*;
+
+    #[test]
+    fn observational_accounting_reports_real_u64_overflow() -> Result<()> {
+        let mut observed = u64::MAX;
+        let error = match observe(&mut observed, 1, "test") {
+            Err(error) => error,
+            Ok(()) => return Err(Error::msg("u64 telemetry overflow was not reported")),
+        };
+        assert_eq!(error.to_string(), "HIR memory-plan test observation overflow");
+        assert_eq!(observed, u64::MAX);
+        Ok(())
+    }
 }
 fn index_u32(index: usize) -> Result<u32> {
     u32::try_from(index).map_err(|_| Error::msg("HIR memory-plan child index exceeds u32"))
