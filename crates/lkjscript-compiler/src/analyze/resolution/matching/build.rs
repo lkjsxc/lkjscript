@@ -29,6 +29,12 @@ impl Resolver<'_> {
                     },
                 );
                 for field in fields {
+                    if matches!(
+                        field.pattern,
+                        MatchPattern::Wildcard { .. } | MatchPattern::Binding { .. }
+                    ) {
+                        continue;
+                    }
                     let projected =
                         self.enum_projection(*enum_id, *variant, *layout, field, value.clone())?;
                     let nested = self.match_condition(&field.pattern, projected)?;
@@ -40,14 +46,19 @@ impl Resolver<'_> {
                 product, fields, ..
             } => {
                 let mut condition = self.expression(Type::Bool, ExprKind::LitBool(true));
-                for (index, field) in fields.iter().enumerate() {
-                    let field_index = u8::try_from(index)
-                        .map_err(|_| self.error("product match field index exceeds u8"))?;
+                for field in fields {
+                    if matches!(field.pattern, MatchPattern::Wildcard { .. }) {
+                        continue;
+                    }
+                    let projection = field
+                        .projection
+                        .as_ref()
+                        .ok_or_else(|| self.error("non-wildcard product field lacks projection"))?;
                     let projected = self.expression(
-                        field.projection.ty.clone(),
+                        projection.ty.clone(),
                         ExprKind::ProductField {
                             product: *product,
-                            field: field_index,
+                            field: field.field_index,
                             value: Box::new(value.clone()),
                         },
                     );
@@ -78,37 +89,41 @@ impl Resolver<'_> {
                 ..
             } => {
                 for field in fields.iter().rev() {
+                    if matches!(field.pattern, MatchPattern::Wildcard { .. }) {
+                        continue;
+                    }
+                    let projection = field
+                        .projection
+                        .as_ref()
+                        .ok_or_else(|| self.error("non-wildcard enum field lacks projection"))?;
                     let projected =
                         self.enum_projection(*enum_id, *variant, *layout, field, value.clone())?;
-                    body = self.match_success(
-                        &field.pattern,
-                        self.match_load(&field.projection),
-                        body,
-                    )?;
-                    body = self.local_scope(&field.projection, projected, body);
+                    body = self.match_success(&field.pattern, self.match_load(projection), body)?;
+                    body = self.local_scope(projection, projected, body);
                 }
                 Ok(body)
             }
             MatchPattern::Product {
                 product, fields, ..
             } => {
-                for (index, field) in fields.iter().enumerate().rev() {
-                    let field_index = u8::try_from(index)
-                        .map_err(|_| self.error("product match field index exceeds u8"))?;
+                for field in fields.iter().rev() {
+                    if matches!(field.pattern, MatchPattern::Wildcard { .. }) {
+                        continue;
+                    }
+                    let projection = field
+                        .projection
+                        .as_ref()
+                        .ok_or_else(|| self.error("non-wildcard product field lacks projection"))?;
                     let projected = self.expression(
-                        field.projection.ty.clone(),
+                        projection.ty.clone(),
                         ExprKind::ProductField {
                             product: *product,
-                            field: field_index,
+                            field: field.field_index,
                             value: Box::new(value.clone()),
                         },
                     );
-                    body = self.match_success(
-                        &field.pattern,
-                        self.match_load(&field.projection),
-                        body,
-                    )?;
-                    body = self.local_scope(&field.projection, projected, body);
+                    body = self.match_success(&field.pattern, self.match_load(projection), body)?;
+                    body = self.local_scope(projection, projected, body);
                 }
                 Ok(body)
             }

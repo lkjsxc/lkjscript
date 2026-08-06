@@ -91,8 +91,8 @@ fn disassemble_function(
 
 fn product_field(chunk: &ValidatedChunk, index: usize) -> Option<(&str, &str)> {
     let field_ref = chunk.product_fields().get(index)?;
-    let product = chunk.products().get(field_ref.product.index())?;
-    let field = product.fields.get(usize::from(field_ref.field))?;
+    let product = chunk.products().get(field_ref.product.index()?)?;
+    let field = product.fields.get(usize::try_from(field_ref.field).ok()?)?;
     Some((&product.name, field))
 }
 
@@ -173,17 +173,17 @@ mod tests {
             field: 0,
         });
         chunk.main.emit(Op::Unit);
-        chunk.main.emit_op_u16(Op::MakeProduct, 0);
-        chunk.main.emit_op_u16(Op::LoadProductField, 0);
+        chunk.main.emit_op_u64(Op::MakeProduct, 0);
+        chunk.main.emit_op_u64(Op::LoadProductField, 0);
         chunk.main.emit(Op::Return);
         let chunk = validate_chunk(chunk, ValidationPolicy::Unrestricted)
             .expect("product disassembly chunk validates");
         assert_eq!(
-            operand_annotation(&chunk, Op::MakeProduct, DecodedOperand::U16(0)),
+            operand_annotation(&chunk, Op::MakeProduct, DecodedOperand::Index(0)),
             " ; Point"
         );
         assert_eq!(
-            operand_annotation(&chunk, Op::LoadProductField, DecodedOperand::U16(0)),
+            operand_annotation(&chunk, Op::LoadProductField, DecodedOperand::Index(0)),
             " ; Point.x"
         );
         assert_eq!(product_field(&chunk, 0), Some(("Point", "x")));

@@ -65,7 +65,11 @@ impl JitValueServices<'_> {
                 let field = u16::from(*field);
                 let value = self
                     .region_products
-                    .field(key, lkjscript_core::RuntimeLayoutId::new(identity), field)
+                    .field(
+                        key,
+                        lkjscript_core::RuntimeLayoutId::new(identity),
+                        usize::from(field),
+                    )
                     .copied()
                     .map_err(|error| self.region_product_error(error))?;
                 self.native_from_value(value, result_type)
@@ -92,7 +96,7 @@ impl JitValueServices<'_> {
                     .update(
                         key,
                         lkjscript_core::RuntimeLayoutId::new(identity),
-                        u16::from(*field),
+                        usize::from(*field),
                         replacement,
                     )
                     .map_err(|error| self.region_product_error(error))?;

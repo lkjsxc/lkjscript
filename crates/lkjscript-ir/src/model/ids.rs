@@ -22,16 +22,16 @@ macro_rules! dense_id {
 dense_id!(FunctionId, u32);
 dense_id!(BlockId, u32);
 dense_id!(ValueId, u32);
-dense_id!(ProductId, u16);
+dense_id!(ProductId, u64);
 dense_id!(BindingId, u32);
 dense_id!(TraitId, u32);
 dense_id!(ImplId, u32);
 dense_id!(PlaceId, u32);
 dense_id!(LoanId, u32);
 dense_id!(FailureCleanupId, u64);
-dense_id!(StructuralTypeId, u16);
-dense_id!(StructuralLayoutId, u16);
-dense_id!(StructuralRepresentationId, u16);
+dense_id!(StructuralTypeId, u64);
+dense_id!(StructuralLayoutId, u64);
+dense_id!(StructuralRepresentationId, u64);
 
 macro_rules! stable_id {
     ($name:ident) => {

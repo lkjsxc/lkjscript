@@ -2,7 +2,7 @@ impl Evaluator<'_> {
     fn destination_field_type(
         &self,
         destination: &EvalStructuralDestination,
-        field: u16,
+        field: usize,
     ) -> Result<crate::SsaType, Flow> {
         let memory = &self.program.program().memory;
         let value_type = memory
@@ -19,7 +19,7 @@ impl Evaluator<'_> {
             .get(value_type.layout.index().unwrap_or(usize::MAX))
             .filter(|item| item.id == value_type.layout)
             .ok_or_else(|| Flow::Trap("destination layout metadata is stale".into()))?;
-        let index = usize::from(field);
+        let index = field;
         match &layout.kind {
             crate::StructuralLayoutKind::Product { fields, .. } => fields.get(index),
             crate::StructuralLayoutKind::Enum { variants, .. } => destination

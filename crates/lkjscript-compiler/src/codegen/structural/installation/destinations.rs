@@ -39,8 +39,8 @@ fn install_structural_destinations(chunk: &mut Chunk) -> Result<()> {
                     .collect(),
             };
         for (active_variant, fields) in candidates {
-            let raw = u16::try_from(chunk.structural_destinations.len())
-                .map_err(|_| Error::msg("bytecode structural destinations exceed u16"))?;
+            let raw = u64::try_from(chunk.structural_destinations.len())
+                .map_err(|_| Error::msg("bytecode structural destination index exceeds u64"))?;
             chunk
                 .structural_destinations
                 .push(StructuralDestinationMetadata {

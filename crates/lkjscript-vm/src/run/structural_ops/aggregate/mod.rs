@@ -18,7 +18,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
 }
 
 fn tag<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let expected_representation = StructuralRepresentationId::new(vm.read_u16()?);
+    let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let source = vm.pop()?;
     let (owner, record) = invocation(vm)?.owner(source)?;
     require_owner_representation(vm.chunk, record, expected_representation)?;
@@ -29,12 +29,14 @@ fn tag<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let StructuralNodeView::Enum { tag, .. } = node.payload() else {
         return Err(Error::msg("structural aggregate tag expects enum payload"));
     };
-    vm.push(Value::from_i64(i64::from(tag)));
+    vm.push(Value::from_i64(i64::try_from(tag).map_err(|_| {
+        Error::msg("enum tag exceeds i64 observation width")
+    })?));
     Ok(())
 }
 
 fn consume_payload<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let index = usize::from(vm.read_u16()?);
+    let index = vm.read_index()?;
     let reference = *vm
         .chunk
         .structural_payloads()
@@ -88,7 +90,7 @@ fn consume_payload<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn string_utf8_view<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let view_representation = StructuralRepresentationId::new(vm.read_u16()?);
+    let view_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected =
         representation_type(vm.chunk, view_representation, StructuralValueCategory::View)?;
     if expected.kind != StructuralKind::String {

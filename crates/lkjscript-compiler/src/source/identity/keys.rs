@@ -62,7 +62,7 @@ pub(crate) fn declaration_key_bytes(
 pub(crate) fn product_field_identity(
     parent: [u8; 32],
     name: &str,
-    source_order: u16,
+    source_order: u64,
 ) -> Result<[u8; 32], IdentityEncodingError> {
     let mut exact = Vec::new();
     let order = source_order.to_be_bytes();

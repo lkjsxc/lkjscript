@@ -63,7 +63,7 @@ pub enum SemanticPayload {
     ByteVector(Vec<u8>),
     Product(SemanticChildren),
     Enum {
-        tag: u16,
+        tag: u64,
         active_payload: SemanticChildren,
     },
 }
@@ -149,18 +149,18 @@ private_key!(StructuralDestinationKey);
 private_key!(StructuralViewKey);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StructuralFieldPath(Vec<u16>);
+pub struct StructuralFieldPath(Vec<usize>);
 
 impl StructuralFieldPath {
     pub const fn root() -> Self {
         Self(Vec::new())
     }
 
-    pub fn new(fields: Vec<u16>) -> Self {
+    pub fn new(fields: Vec<usize>) -> Self {
         Self(fields)
     }
 
-    pub fn as_slice(&self) -> &[u16] {
+    pub fn as_slice(&self) -> &[usize] {
         &self.0
     }
 }

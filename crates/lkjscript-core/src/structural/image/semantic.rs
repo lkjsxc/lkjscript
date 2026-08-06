@@ -82,7 +82,7 @@ fn push_fields<'a>(
     visited: u32,
     limits: StructuralValueRuntimeLimits,
 ) -> Result<(), StructuralValueError> {
-    if fields.len() > usize::from(limits.max_fields) {
+    if fields.len() > limits.max_fields {
         return Err(StructuralValueError::LimitExceeded(
             StructuralValueLimit::Fields,
         ));

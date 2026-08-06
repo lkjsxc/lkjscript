@@ -7,8 +7,8 @@ use super::{
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DestinationCleanupReport {
     pub sequence: u64,
-    pub initialized_fields: u16,
-    pub cleanup_order: Vec<u16>,
+    pub initialized_fields: usize,
+    pub cleanup_order: Vec<usize>,
     pub nodes_released: u32,
     pub bytes_released: u64,
 }

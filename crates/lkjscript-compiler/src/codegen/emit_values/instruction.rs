@@ -101,10 +101,19 @@ impl Emitter<'_> {
                 }
                 let opcode = runtime_opcode(*operation);
                 if *operation == RuntimeOp::Car {
-                    let representation =
-                        structural_owner_representation(self.chunk, &instruction.ty)
-                            .map_or(u16::MAX, |representation| representation.raw());
-                    self.proto.try_emit_op_u16(opcode, representation)?;
+                    let representation = structural_owner_representation(
+                        self.chunk,
+                        &instruction.ty,
+                    )
+                    .map(|representation| {
+                        representation
+                            .raw()
+                            .checked_add(1)
+                            .ok_or_else(|| Error::msg("list element representation index overflow"))
+                    })
+                    .transpose()?
+                    .unwrap_or(0);
+                    self.proto.try_emit_op_u64(opcode, representation)?;
                 } else {
                     self.proto.try_emit(opcode)?;
                 }

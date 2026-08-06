@@ -47,7 +47,7 @@ impl Evaluator<'_> {
 pub(super) fn destination_fields(
     facts: &RepresentationFacts,
     active_variant: Option<VariantId>,
-) -> Result<(Option<u16>, Vec<crate::SsaType>), Flow> {
+) -> Result<(Option<u64>, Vec<crate::SsaType>), Flow> {
     match (&facts.layout, active_variant) {
         (crate::StructuralLayoutKind::Product { fields, .. }, None) => Ok((None, fields.clone())),
         (crate::StructuralLayoutKind::Enum { variants, .. }, Some(active)) => variants
@@ -67,9 +67,9 @@ pub(super) fn destination_fields(
 pub(super) fn aggregate_field_type(
     facts: &RepresentationFacts,
     value: &EvalValue,
-    field: u16,
+    field: usize,
 ) -> Result<crate::SsaType, Flow> {
-    let index = usize::from(field);
+    let index = field;
     match &facts.layout {
         crate::StructuralLayoutKind::Product { fields, .. } => fields.get(index).cloned(),
         crate::StructuralLayoutKind::Enum { variants, .. } => {

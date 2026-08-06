@@ -13,7 +13,7 @@ pub struct StructuralValueRuntimeLimits {
     pub max_views: u32,
     pub max_tree_nodes: u32,
     pub max_tree_depth: u16,
-    pub max_fields: u16,
+    pub max_fields: usize,
     pub max_payload_bytes: u64,
     pub max_events: u32,
     pub max_cleanup_reports: u32,
@@ -30,12 +30,11 @@ impl StructuralValueRuntimeLimits {
             self.max_views,
             self.max_tree_nodes,
             u32::from(self.max_tree_depth),
-            u32::from(self.max_fields),
             self.max_events,
             self.max_cleanup_reports,
             self.max_generation,
         ];
-        if values.contains(&0) || self.max_payload_bytes == 0 {
+        if values.contains(&0) || self.max_fields == 0 || self.max_payload_bytes == 0 {
             return Err(StructuralValueError::InvalidLimits);
         }
         if self.max_objects > self.domains.max_domains {

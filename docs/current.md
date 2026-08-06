@@ -92,9 +92,14 @@ and bytecode-link prototype references carry `u64`, with checked conversion befo
 Constant and global interning use hash-backed lookup with insertion-order vectors; floating-point
 keys use exact bits, and string/bytes keys own their data, so canonical order never depends on hash
 iteration. Bytecode function, block, and instruction links, call-witness instruction offsets,
-cleanup node identities, and cleanup range offsets are also `u64`. Product, enum, and structural
-tables, descriptors, and fields remain `u16` or `u8`. Decoding classifies operands as no operand,
-retained `u16`, checked host index, or checked place/local pair,
+cleanup node identities, and cleanup range offsets are also `u64`. Nominal product IDs, product
+and enum field indexes, enum variant source orders and physical tags, enum substitutions, and
+product/enum/structural table and descriptor references use `u64`; every host index conversion is
+checked. The 15-field product and 255-variant/field enum admission rules are removed, as is the
+aggregate structural-layout-field admission total. Product, enum, and structural descriptor
+interners use insertion-ordered vectors plus hash indexes rather than repeated linear interning
+scans. Decoding classifies operands as no operand, retained `u16`, checked host index, or checked
+place/local pair,
 proves the complete operand is present, and rejects host-width overflow before validation or
 indexing. The VM
 uses checked frame arithmetic and fallible reservations, rejects a low stack host policy before
@@ -110,8 +115,13 @@ focused chunk test owns direct wide-operand execution evidence. Generated produc
 compiles and executes 300 parameters, 300 arguments, and more than 255 simultaneously live lexical
 locals, reads slot 299, agrees with the SSA evaluator, and proves
 that automatic execution remains on the generic VM route while forced native mode reports an
-unsupported signature. A larger generated stress case executes 1,024 parameters, arguments, and
-lexical locals through the VM and reads slot 1,023. A separate 1,024-owned-parameter and argument
+unsupported signature. Generated nominal aggregate coverage constructs and updates a 300-field
+product, projects field 299, and exhaustively matches a 300-variant enum whose final variant has
+300 fields. It verifies a physical tag above 255, executes the high payload field and high tag
+through validated VM bytecode, rejects malformed high field/tag references before indexing, and
+confirms that compact native aggregate ineligibility falls back to the VM in automatic mode. A
+larger generated stress case executes 1,024 parameters, arguments, and lexical locals through the
+VM and reads slot 1,023. A separate 1,024-owned-parameter and argument
 source emits 115,754 bytes in main, validates and prepares that executable, executes exact cleanup
 through the VM, and confirms that automatic execution retains the generic VM fallback when native
 cleanup expansion is ineligible. A generated owned parameter in slot 299 also executes and cleans
@@ -161,11 +171,11 @@ may build elsewhere, but no other host or native target is currently claimed as 
   40,045 verifier steps. Bytecode validation has no project-selected encoded-size, physical-table,
   metadata-size, constant-size, or cleanup-node/range count admission. An explicit limited policy
   at an untrusted artifact boundary may reject only the checked total-byte observation; trusted
-  compilation and prepared binding use unrestricted validation. Constant, global, and prototype
-  executable references are fixed-`u64`; product/enum/structural tables, product fields, enum
-  substitutions, and several structural descriptors retain `u16` or `u8` representation
-  ceilings. HIR memory-plan table identities and HIR/SSA place identities remain
-  `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.
+  compilation and prepared binding use unrestricted validation. Constant, global, prototype, and
+  nominal aggregate executable references are fixed-`u64`. Compact `u8`/`u16` fields remain only
+  inside native optimization plans and are checked eligibility conditions with generic VM fallback.
+  HIR memory-plan table identities and HIR/SSA place identities remain `u32`, a separate above-`u32`
+  representation gap rather than the removed executable byte width.
   Validator-synthetic ownership identity no longer narrows bytecode positions or parameter indexes
   to `u32`; it uses tagged instruction offsets and parameter indexes at host width. Where the
   remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,

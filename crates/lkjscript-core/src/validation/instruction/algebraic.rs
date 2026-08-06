@@ -43,9 +43,17 @@ pub(super) fn apply(
         Op::LoadProductField => {
             let descriptor = product_descriptor(chunk, proto, instruction)?;
             let product = pop(state, proto, instruction)?;
+            let product_index = descriptor.product.index().ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "ProductId exceeds host index width",
+                )
+            })?;
             let region = chunk
                 .products
-                .get(descriptor.product.index())
+                .get(product_index)
                 .is_some_and(|metadata| metadata.region);
             if !region {
                 return Err(instruction_error(
@@ -56,10 +64,18 @@ pub(super) fn apply(
                 ));
             }
             expect_product(product, descriptor.product, true, proto, instruction)?;
+            let field_index = usize::try_from(descriptor.field).map_err(|_| {
+                instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "product field exceeds host index width",
+                )
+            })?;
             let result = chunk
                 .products
-                .get(descriptor.product.index())
-                .and_then(|metadata| metadata.region_fields.get(usize::from(descriptor.field)))
+                .get(product_index)
+                .and_then(|metadata| metadata.region_fields.get(field_index))
                 .copied()
                 .and_then(region_field_kind)
                 .unwrap_or(Kind::Any);
@@ -69,9 +85,17 @@ pub(super) fn apply(
             let descriptor = product_descriptor(chunk, proto, instruction)?;
             let replacement = pop(state, proto, instruction)?;
             let product = pop(state, proto, instruction)?;
+            let product_index = descriptor.product.index().ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "ProductId exceeds host index width",
+                )
+            })?;
             let region = chunk
                 .products
-                .get(descriptor.product.index())
+                .get(product_index)
                 .is_some_and(|metadata| metadata.region);
             if !region {
                 return Err(instruction_error(
@@ -83,10 +107,18 @@ pub(super) fn apply(
             }
             expect_product(product, descriptor.product, true, proto, instruction)?;
             {
+                let field_index = usize::try_from(descriptor.field).map_err(|_| {
+                    instruction_error(
+                        proto,
+                        op,
+                        instruction.offset(),
+                        "product field exceeds host index width",
+                    )
+                })?;
                 let field = chunk
                     .products
-                    .get(descriptor.product.index())
-                    .and_then(|metadata| metadata.region_fields.get(usize::from(descriptor.field)))
+                    .get(product_index)
+                    .and_then(|metadata| metadata.region_fields.get(field_index))
                     .copied()
                     .ok_or_else(|| {
                         instruction_error(

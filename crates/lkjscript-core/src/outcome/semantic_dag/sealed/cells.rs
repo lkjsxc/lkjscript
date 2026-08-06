@@ -15,7 +15,7 @@ pub(super) enum SealedDagNodePayload {
         fields: u32,
     },
     Enum {
-        tag: u16,
+        tag: u64,
         first: u32,
         fields: u32,
     },

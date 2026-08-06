@@ -75,7 +75,7 @@ pub enum SemanticDagPayload {
     Bytes(Vec<u8>),
     Product(Vec<SemanticDagNodeId>),
     Enum {
-        tag: u16,
+        tag: u64,
         fields: Vec<SemanticDagNodeId>,
     },
     EmptyList,

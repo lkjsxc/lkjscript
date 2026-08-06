@@ -55,7 +55,9 @@ impl Evaluator<'_> {
         let expected = self.structural_type(&facts.ty)?;
         let node = self.explicit_structural_node(value(values, source)?, expected)?;
         match node.payload() {
-            StructuralNodeView::Enum { tag, .. } => Ok(EvalValue::I64(i64::from(tag))),
+            StructuralNodeView::Enum { tag, .. } => i64::try_from(tag)
+                .map(EvalValue::I64)
+                .map_err(|_| Flow::Trap("enum tag exceeds i64 observation width".into())),
             _ => Err(Flow::Trap("aggregate tag expects structural enum".into())),
         }
     }
@@ -66,11 +68,13 @@ impl Evaluator<'_> {
         values: &[Option<EvalValue>],
         source: ValueId,
         representation: crate::StructuralRepresentationId,
-        field: u16,
+        field: u64,
     ) -> Result<EvalValue, Flow> {
         let facts =
             self.representation_facts(representation, crate::StructuralValueCategory::View)?;
         let root_type = self.structural_type(&facts.ty)?;
+        let field = usize::try_from(field)
+            .map_err(|_| Flow::Trap("aggregate field exceeds host width".into()))?;
         let expected_ty = aggregate_field_type(&facts, value(values, source)?, field)?;
         if expected_ty != instruction.ty {
             return Err(Flow::Trap("aggregate field borrow type mismatch".into()));

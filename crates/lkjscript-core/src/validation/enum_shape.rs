@@ -24,14 +24,15 @@ pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
         bytes = add(bytes, definition.name.len())?;
         let mut tags = HashSet::new();
         let mut names = HashSet::new();
-        for variant in &definition.variants {
-            if !variant.id.is_resolved()
+        for (source_order, variant) in definition.variants.iter().enumerate() {
+            if u64::try_from(source_order).ok() != Some(variant.source_order)
+                || !variant.id.is_resolved()
                 || variant.name.is_empty()
                 || !variant_ids.insert(variant.id)
                 || !names.insert(variant.name.as_str())
                 || !tags.insert(variant.physical_tag)
-                || usize::from(variant.physical_tag) >= definition.variants.len()
-                || variant.fields.len() > crate::MAX_PRODUCT_FIELDS
+                || usize::try_from(variant.physical_tag)
+                    .map_or(true, |tag| tag >= definition.variants.len())
             {
                 return Err(Error::msg("bytecode enum variant metadata is malformed"));
             }
@@ -60,8 +61,7 @@ fn validate_constructions(chunk: &Chunk) -> Result<()> {
     for descriptor in &chunk.enum_constructions {
         let definition = enum_by_id(chunk, descriptor.enum_id)?;
         if definition.layout != descriptor.layout
-            || usize::from(descriptor.substitution_arity)
-                != usize::from(definition.type_parameter_count)
+            || descriptor.substitution_arity != definition.type_parameter_count
             || !definition
                 .variants
                 .iter()

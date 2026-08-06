@@ -82,7 +82,14 @@ fn destination_field_init(
         })?;
     let expected = metadata
         .fields
-        .get(usize::from(reference.field))
+        .get(usize::try_from(reference.field).map_err(|_| {
+            instruction_error(
+                proto,
+                instruction.op(),
+                instruction.offset(),
+                "destination field exceeds host index width",
+            )
+        })?)
         .ok_or_else(|| {
             instruction_error(
                 proto,
@@ -105,7 +112,14 @@ fn destination_field_init(
         })?;
     let initialized = current
         .initialized
-        .get_mut(usize::from(reference.field))
+        .get_mut(usize::try_from(reference.field).map_err(|_| {
+            instruction_error(
+                proto,
+                instruction.op(),
+                instruction.offset(),
+                "destination field exceeds host index width",
+            )
+        })?)
         .ok_or_else(|| {
             instruction_error(
                 proto,

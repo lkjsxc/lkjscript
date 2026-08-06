@@ -5,8 +5,8 @@ pub(in crate::codegen) fn install_enum_metadata(
     program: &lkjscript_ir::Program,
 ) -> Result<()> {
     for definition in &program.enums {
-        let type_parameter_count = u8::try_from(definition.type_parameters.len())
-            .map_err(|_| Error::msg("enum substitution arity exceeds bytecode u8"))?;
+        let type_parameter_count = u64::try_from(definition.type_parameters.len())
+            .map_err(|_| Error::msg("enum substitution arity exceeds u64"))?;
         chunk.enums.push(BytecodeEnumMetadata {
             id: BytecodeEnumId::new(definition.id.bytes()),
             name: definition.name.clone(),
@@ -18,6 +18,7 @@ pub(in crate::codegen) fn install_enum_metadata(
                 .map(|variant| BytecodeEnumVariantMetadata {
                     id: BytecodeVariantId::new(variant.id.bytes()),
                     name: variant.name.clone(),
+                    source_order: variant.source_order,
                     physical_tag: variant.physical_tag,
                     fields: variant
                         .fields
@@ -40,19 +41,15 @@ pub(in crate::codegen) fn intern_enum_construction(
     variant: lkjscript_ir::VariantId,
     layout: lkjscript_ir::RuntimeLayoutId,
     substitution_arity: usize,
-) -> Result<u16> {
+) -> Result<u64> {
     let descriptor = EnumConstructionRef {
         enum_id: BytecodeEnumId::new(enum_id.bytes()),
         variant: BytecodeVariantId::new(variant.bytes()),
         layout: BytecodeLayoutId::new(layout.bytes()),
-        substitution_arity: u8::try_from(substitution_arity)
-            .map_err(|_| Error::msg("enum substitution arity exceeds u8"))?,
+        substitution_arity: u64::try_from(substitution_arity)
+            .map_err(|_| Error::msg("enum substitution arity exceeds u64"))?,
     };
-    intern(
-        &mut chunk.enum_constructions,
-        descriptor,
-        "enum construction",
-    )
+    chunk.intern_enum_construction(descriptor)
 }
 
 pub(in crate::codegen) fn intern_enum_variant(
@@ -60,13 +57,13 @@ pub(in crate::codegen) fn intern_enum_variant(
     enum_id: lkjscript_ir::EnumId,
     variant: lkjscript_ir::VariantId,
     layout: lkjscript_ir::RuntimeLayoutId,
-) -> Result<u16> {
+) -> Result<u64> {
     let descriptor = EnumVariantRef {
         enum_id: BytecodeEnumId::new(enum_id.bytes()),
         variant: BytecodeVariantId::new(variant.bytes()),
         layout: BytecodeLayoutId::new(layout.bytes()),
     };
-    intern(&mut chunk.enum_variants, descriptor, "enum variant")
+    chunk.intern_enum_variant(descriptor)
 }
 
 pub(in crate::codegen) fn intern_enum_field(
@@ -77,23 +74,12 @@ pub(in crate::codegen) fn intern_enum_field(
         lkjscript_ir::VariantFieldId,
     ),
     layout: lkjscript_ir::RuntimeLayoutId,
-) -> Result<u16> {
+) -> Result<u64> {
     let descriptor = EnumFieldRef {
         enum_id: BytecodeEnumId::new(ids.0.bytes()),
         variant: BytecodeVariantId::new(ids.1.bytes()),
         field: BytecodeVariantFieldId::new(ids.2.bytes()),
         layout: BytecodeLayoutId::new(layout.bytes()),
     };
-    intern(&mut chunk.enum_fields, descriptor, "enum field")
-}
-
-fn intern<T: Copy + PartialEq>(table: &mut Vec<T>, descriptor: T, name: &str) -> Result<u16> {
-    if let Some(index) = table.iter().position(|existing| *existing == descriptor) {
-        return u16::try_from(index)
-            .map_err(|_| Error::msg(format!("{name} descriptor exceeds u16")));
-    }
-    let index = u16::try_from(table.len())
-        .map_err(|_| Error::msg(format!("too many {name} descriptors")))?;
-    table.push(descriptor);
-    Ok(index)
+    chunk.intern_enum_field(descriptor)
 }

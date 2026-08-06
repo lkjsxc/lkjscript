@@ -14,7 +14,7 @@ fn authenticated_enum_validates_active_variant_and_round_trips() {
     runtime.release(owner).expect("release enum");
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
 
-    let wrong_tag = enum_snapshot(enum_type, field_type, 9);
+    let wrong_tag = enum_snapshot(enum_type, field_type, 300);
     let failure = runtime
         .rehydrate_authenticated_return(&chunk, wrong_tag)
         .expect_err("unknown physical tag rejected");
@@ -40,11 +40,13 @@ fn returning_enum_chunk() -> (
         variants: vec![
             crate::StructuralVariantLayout {
                 variant: first,
+                source_order: 0,
                 physical_tag: 0,
                 fields: vec![copy_field()],
             },
             crate::StructuralVariantLayout {
                 variant: second,
+                source_order: 1,
                 physical_tag: 1,
                 fields: Vec::new(),
             },
@@ -62,16 +64,16 @@ fn returning_enum_chunk() -> (
         .expect("add value constant");
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationCreate, 0);
+        .emit_op_u64(Op::StructuralDestinationCreate, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
     chunk.main.emit_op_u64(Op::LoadConst, value.0);
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationFieldInit, 0);
+        .emit_op_u64(Op::StructuralDestinationFieldInit, 0);
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationFinish, 0);
+        .emit_op_u64(Op::StructuralDestinationFinish, 0);
     chunk.main.emit(Op::Return);
     let chunk = crate::validate_chunk(chunk, crate::ValidationPolicy::Unrestricted)
         .expect("validated enum return");
@@ -83,7 +85,7 @@ fn returning_enum_chunk() -> (
 fn enum_snapshot(
     enum_type: crate::StructuralType,
     field_type: crate::StructuralType,
-    tag: u16,
+    tag: u64,
 ) -> crate::SemanticDagSnapshot {
     crate::SemanticDagSnapshot::new(
         vec![

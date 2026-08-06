@@ -24,11 +24,11 @@ pub(super) fn ty(out: &mut Encoder, value: &SsaType) {
         }
         SsaType::StructuralDestination(id) => {
             out.tag(13);
-            out.u16(id.raw());
+            out.u64(id.raw());
         }
         SsaType::Product(id) => {
             out.tag(14);
-            out.u16(id.raw());
+            out.u64(id.raw());
         }
         SsaType::Enum { id, arguments } => {
             out.tag(15);

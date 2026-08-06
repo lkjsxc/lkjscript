@@ -48,6 +48,7 @@ pub(crate) fn exact_enum_instruction_kind_equal(
                 enum_id: left_enum,
                 variant: left_variant,
                 field: left_field,
+                field_index: left_field_index,
                 layout: left_layout,
                 value: left_value,
             },
@@ -55,6 +56,7 @@ pub(crate) fn exact_enum_instruction_kind_equal(
                 enum_id: right_enum,
                 variant: right_variant,
                 field: right_field,
+                field_index: right_field_index,
                 layout: right_layout,
                 value: right_value,
             },
@@ -62,6 +64,7 @@ pub(crate) fn exact_enum_instruction_kind_equal(
             left_enum == right_enum
                 && left_variant == right_variant
                 && left_field == right_field
+                && left_field_index == right_field_index
                 && left_layout == right_layout
                 && left_value == right_value
         }

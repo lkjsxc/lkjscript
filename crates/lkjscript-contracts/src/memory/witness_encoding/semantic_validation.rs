@@ -59,7 +59,7 @@ fn validate_declaration(value: &SemanticDeclaration) -> Result<(), E> {
             for (index, field) in item.fields.iter().enumerate() {
                 if field.identity == [0; 32]
                     || !fields.insert(field.identity)
-                    || usize::from(field.source_order) != index
+                    || u64::try_from(index).ok() != Some(field.source_order)
                 {
                     return Err(E(
                         "product semantic fields require unique identities and exact source order",
@@ -72,7 +72,7 @@ fn validate_declaration(value: &SemanticDeclaration) -> Result<(), E> {
             for (vi, variant) in item.variants.iter().enumerate() {
                 if variant.identity == [0; 32]
                     || !variants.insert(variant.identity)
-                    || usize::from(variant.source_order) != vi
+                    || u64::try_from(vi).ok() != Some(variant.source_order)
                 {
                     return Err(E(
                         "enum variants require unique identities and exact source order",
@@ -82,7 +82,7 @@ fn validate_declaration(value: &SemanticDeclaration) -> Result<(), E> {
                 for (fi, field) in variant.fields.iter().enumerate() {
                     if field.identity == [0; 32]
                         || !fields.insert(field.identity)
-                        || usize::from(field.source_order) != fi
+                        || u64::try_from(fi).ok() != Some(field.source_order)
                     {
                         return Err(E(
                             "enum fields require unique identities and exact source order",

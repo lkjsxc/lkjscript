@@ -93,7 +93,7 @@ fn field_projection_input<J: RuntimeTier>(
     lkjscript_core::StructuralType,
     lkjscript_core::StructuralType,
 )> {
-    let index = usize::from(vm.read_u16()?);
+    let index = vm.read_index()?;
     let reference = *vm
         .chunk
         .structural_aggregate_fields()
@@ -114,7 +114,7 @@ fn borrow_field<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     owner: lkjscript_core::StructuralValueKey,
     root_type: lkjscript_core::StructuralType,
-    field: u16,
+    field: u64,
     expected: lkjscript_core::StructuralType,
 ) -> Result<lkjscript_core::StructuralViewKey> {
     invocation_mut(vm)?
@@ -123,7 +123,8 @@ fn borrow_field<J: RuntimeTier>(
             owner,
             root_type,
             StructuralProjection::Field {
-                path: StructuralFieldPath::new(vec![field]),
+                path: StructuralFieldPath::new(vec![usize::try_from(field)
+                    .map_err(|_| Error::msg("structural field exceeds host index width"))?]),
                 expected,
             },
             false,

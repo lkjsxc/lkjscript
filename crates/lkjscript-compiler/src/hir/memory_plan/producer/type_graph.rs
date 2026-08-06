@@ -36,9 +36,6 @@ impl DeclarationGraph {
             sum.checked_add(u64::try_from(item.len()).map_err(|_| Error::msg("type edge count exceeds u64"))?)
                 .ok_or_else(|| Error::msg("type edge count overflow"))
         })?;
-        if edges > MAX_MEMORY_PLAN_TYPE_EDGES {
-            return Err(Error::msg("HIR memory-plan type graph exceeds bounded edges"));
-        }
         let (components, recursive, scc_work) = components(&adjacency)?;
         Ok(Self { keys, index, components, recursive, edges, scc_work })
     }

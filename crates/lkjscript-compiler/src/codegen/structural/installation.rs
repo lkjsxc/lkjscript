@@ -90,6 +90,7 @@ pub(in crate::codegen) fn install_structural_metadata(
                     .map(|variant| {
                         Ok(BytecodeStructuralVariantLayout {
                             variant: BytecodeVariantId::new(variant.variant.bytes()),
+                            source_order: variant.source_order,
                             physical_tag: variant.physical_tag,
                             fields: variant
                                 .fields

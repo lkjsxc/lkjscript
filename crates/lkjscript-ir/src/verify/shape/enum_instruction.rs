@@ -29,6 +29,7 @@ pub(super) fn verify(
             enum_id,
             variant,
             field,
+            field_index,
             layout,
             value,
         } => projection(
@@ -36,6 +37,7 @@ pub(super) fn verify(
             instruction,
             types,
             (*enum_id, *variant, *field),
+            *field_index,
             *layout,
             *value,
         ),
@@ -66,26 +68,33 @@ fn projection(
     instruction: &Instruction,
     types: &[SsaType],
     ids: (crate::EnumId, crate::VariantId, crate::VariantFieldId),
+    field_index: u64,
     layout: crate::RuntimeLayoutId,
     value: ValueId,
 ) -> crate::Result<EffectSet> {
     let definition = enum_by_id(program, ids.0)?;
     check_layout(definition, layout)?;
     let selected = variant_by_id(definition, ids.1)?;
-    let field = selected
-        .fields
-        .iter()
-        .find(|candidate| candidate.id == ids.2)
-        .ok_or_else(|| crate::IrError::new("SSA resource-result projection field mismatch"))?;
+    let field = usize::try_from(field_index)
+        .ok()
+        .and_then(|index| selected.fields.get(index))
+        .filter(|candidate| candidate.id == ids.2)
+        .ok_or_else(|| crate::IrError::new("SSA enum projection field index/identity mismatch"))?;
     let input = value_type(types, value)?;
     let SsaType::Enum { arguments, .. } = input else {
         return fail("SSA resource-result projection input is not enum");
     };
     let expected = substitute(&field.ty, &definition.type_parameters, arguments);
-    if !is_resource_result(input, ids.0) || instruction.ty != expected {
-        return fail("SSA resource-result projection identity/substitution/type mismatch");
+    if instruction.ty != expected {
+        return fail("SSA enum projection identity/substitution/type mismatch");
     }
-    Ok(EffectSet::READS_MEMORY)
+    if program.memory.type_for(input).is_some() {
+        Ok(EffectSet::READS_MEMORY.union(EffectSet::ALLOCATES))
+    } else if is_resource_result(input, ids.0) {
+        Ok(EffectSet::READS_MEMORY)
+    } else {
+        fail("SSA enum projection lacks structural or resource-adapter metadata")
+    }
 }
 
 fn is_resource_result(ty: &SsaType, enum_id: crate::EnumId) -> bool {

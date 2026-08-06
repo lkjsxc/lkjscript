@@ -34,7 +34,7 @@ impl NumericError {
         crate::numeric_variant(self.index())
     }
 
-    pub const fn physical_tag(self) -> u16 {
+    pub const fn physical_tag(self) -> u64 {
         match self {
             Self::NonFinite => 0,
             Self::OutOfRange => 3,

@@ -48,7 +48,7 @@ pub(super) fn lower_structural_instruction(
         } => {
             let (aggregate, storage, initialized) =
                 catalog.destination(function, *destination)?;
-            if initialized != *field {
+            if u64::from(initialized) != *field {
                 return Err(invalid_structural(
                     "destination field initialization is out of order",
                 ));
@@ -61,7 +61,8 @@ pub(super) fn lower_structural_instruction(
                 lkjscript_native::StructuralOperation::DestinationInitialize {
                     aggregate,
                     storage,
-                    field: *field,
+                    field: u16::try_from(*field)
+                        .map_err(|_| invalid_structural("destination field exceeds native eligibility"))?,
                 },
                 arguments,
             );
@@ -103,7 +104,27 @@ pub(super) fn lower_structural_instruction(
             return lower_field_projection(
                 function,
                 instruction,
-                u16::from(*field),
+                u16::try_from(*field)
+                    .map_err(|_| invalid_structural("product field exceeds native eligibility"))?,
+                *value,
+                root,
+                false,
+                block,
+                locals,
+                value_types,
+                catalog,
+                builder,
+            );
+        }
+        InstructionKind::EnumField {
+            field_index, value, ..
+        } => {
+            let root = structural_type(catalog, source_type(function, *value)?)?;
+            return lower_field_projection(
+                function,
+                instruction,
+                u16::try_from(*field_index)
+                    .map_err(|_| invalid_structural("enum field exceeds native eligibility"))?,
                 *value,
                 root,
                 false,
@@ -126,7 +147,8 @@ pub(super) fn lower_structural_instruction(
             return lower_field_projection(
                 function,
                 instruction,
-                *field,
+                u16::try_from(*field)
+                    .map_err(|_| invalid_structural("aggregate field exceeds native eligibility"))?,
                 *value,
                 root,
                 true,

@@ -35,10 +35,10 @@ pub(super) fn equivalent(
     let left_kind = find_instruction(function, left).map(|item| &item.kind);
     let right_kind = find_instruction(function, right).map(|item| &item.kind);
     match (left_kind, right_kind) {
-        (Some(InstructionKind::Copy(value)), _) => {
+        (Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. }), _) => {
             equivalent(function, *value, right, visited, work)
         }
-        (_, Some(InstructionKind::Copy(value))) => {
+        (_, Some(InstructionKind::Copy(value) | InstructionKind::StructuralCopy { value, .. })) => {
             equivalent(function, left, *value, visited, work)
         }
         (
@@ -58,6 +58,7 @@ pub(super) fn equivalent(
                 enum_id: le,
                 variant: lv,
                 field: lf,
+                field_index: lfi,
                 layout: ll,
                 value: li,
             }),
@@ -65,10 +66,11 @@ pub(super) fn equivalent(
                 enum_id: re,
                 variant: rv,
                 field: rf,
+                field_index: rfi,
                 layout: rl,
                 value: ri,
             }),
-        ) if le == re && lv == rv && lf == rf && ll == rl => {
+        ) if le == re && lv == rv && lf == rf && lfi == rfi && ll == rl => {
             equivalent(function, *li, *ri, visited, work)
         }
         _ => Ok(false),

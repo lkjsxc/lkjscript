@@ -39,16 +39,6 @@ impl Analyzer {
                         ));
                     }
                 }
-                if parsed.variants.len() > MAX_ENUM_VARIANTS {
-                    return Err(self.error(
-                        source,
-                        format!(
-                            "enum {}: too many variants ({} > {MAX_ENUM_VARIANTS})",
-                            parsed.name,
-                            parsed.variants.len()
-                        ),
-                    ));
-                }
                 let declaration = program
                     .declarations()
                     .iter()
@@ -121,15 +111,6 @@ impl Analyzer {
                             format!("enum {}: duplicate variant {variant_name}", parsed.name),
                         ));
                     }
-                    if field_forms.len() > MAX_VARIANT_FIELDS {
-                        return Err(self.error(
-                            source,
-                            format!(
-                                "enum {} variant {variant_name}: too many fields",
-                                parsed.name
-                            ),
-                        ));
-                    }
                     let variant_id = VariantId::new(crate::source::enum_member_identity(
                         id.bytes(),
                         "variant",
@@ -150,8 +131,8 @@ impl Analyzer {
                     variants.push(EnumVariant {
                         id: variant_id,
                         name: variant_name,
-                        source_order: u16::try_from(variant_order)
-                            .map_err(|_| self.error(source, "variant order exceeds u16"))?,
+                        source_order: u64::try_from(variant_order)
+                            .map_err(|_| self.error(source, "variant order exceeds u64"))?,
                         fields,
                     });
                 }

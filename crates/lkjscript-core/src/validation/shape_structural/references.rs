@@ -1,7 +1,9 @@
 fn validate_operation_references(chunk: &Chunk, mut bytes: usize) -> Result<usize> {
     for reference in &chunk.structural_destination_fields {
         let destination = lookup_destination(chunk, reference.destination)?;
-        if usize::from(reference.field) >= destination.fields.len() {
+        if usize::try_from(reference.field)
+            .map_or(true, |field| field >= destination.fields.len())
+        {
             return Err(Error::msg(
                 "bytecode structural destination-field reference is out of range",
             ));
@@ -16,7 +18,11 @@ fn validate_operation_references(chunk: &Chunk, mut bytes: usize) -> Result<usiz
             ));
         }
         let expected = layout_fields(chunk, representation.layout, reference.active_variant)?;
-        if expected.get(usize::from(reference.field)) != Some(&reference.result) {
+        if usize::try_from(reference.field)
+            .ok()
+            .and_then(|field| expected.get(field))
+            != Some(&reference.result)
+        {
             return Err(Error::msg(
                 "bytecode structural aggregate-field result metadata is stale",
             ));

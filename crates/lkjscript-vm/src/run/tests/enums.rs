@@ -21,6 +21,7 @@ fn hand_built_nonstructural_enum_rejects_validation() {
         variants: vec![EnumVariantMetadata {
             id: variant,
             name: "Value".into(),
+            source_order: 0,
             physical_tag: 0,
             fields: vec![EnumFieldMetadata {
                 id: field,
@@ -42,8 +43,8 @@ fn hand_built_nonstructural_enum_rejects_validation() {
     });
     chunk.constants.push(Constant::I64(42));
     chunk.main.emit_op_u64(Op::LoadConst, 0);
-    chunk.main.emit_op_u16(Op::MakeEnum, 0);
-    chunk.main.emit_op_u16(Op::LoadEnumField, 0);
+    chunk.main.emit_op_u64(Op::MakeEnum, 0);
+    chunk.main.emit_op_u64(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
     let error =
         lkjscript_core::validate_chunk(chunk, lkjscript_core::ValidationPolicy::Unrestricted)

@@ -3,7 +3,7 @@ fn structural_borrow_blocks_drop() {
     let mut chunk = product_chunk();
     emit_finished_product(&mut chunk);
     chunk.main.emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
-    chunk.main.emit_op_u16(Op::StructuralBorrow, 1);
+    chunk.main.emit_op_u64(Op::StructuralBorrow, 1);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 2);
     chunk
         .main
@@ -33,7 +33,7 @@ fn structural_use_after_move_and_copy_attempt_fail_closed() {
     affine_copy
         .main
         .emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
-    affine_copy.main.emit_op_u16(Op::StructuralCopy, 0);
+    affine_copy.main.emit_op_u64(Op::StructuralCopy, 0);
     affine_copy.main.emit(Op::Return);
     assert!(error(affine_copy).contains("cannot duplicate an affine owner"));
 }
@@ -103,7 +103,7 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
     proto.parameter_type_variables = vec![None];
     proto.return_structural = Some(crate::StructuralRepresentationId::new(3));
     proto.emit_op_u64(Op::LoadStructuralOwnerLocal, 0);
-    proto.emit_op_u16(Op::StructuralAggregateFieldCopy, 0);
+    proto.emit_op_u64(Op::StructuralAggregateFieldCopy, 0);
     proto.emit(Op::Return);
     chunk.protos.push(proto);
     chunk.main.emit(Op::Unit);
@@ -116,6 +116,20 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
         message.contains("copy field target is not copy-mode"),
         "{message}"
     );
+}
+
+#[test]
+fn malformed_wide_aggregate_field_reference_is_rejected_before_indexing() {
+    let mut chunk = product_chunk();
+    chunk.structural_aggregate_fields = vec![crate::StructuralAggregateFieldRef {
+        representation: crate::StructuralRepresentationId::new(1),
+        active_variant: None,
+        field: 300,
+        result: copy_field(),
+        result_representation: None,
+    }];
+    let message = error(chunk);
+    assert!(message.contains("aggregate-field result metadata is stale"), "{message}");
 }
 
 #[test]
@@ -142,11 +156,13 @@ fn inactive_enum_payload_is_rejected() {
         variants: vec![
             crate::StructuralVariantLayout {
                 variant: first,
+                source_order: 0,
                 physical_tag: 0,
                 fields: vec![copy_field()],
             },
             crate::StructuralVariantLayout {
                 variant: second,
+                source_order: 1,
                 physical_tag: 1,
                 fields: vec![copy_field()],
             },
@@ -165,7 +181,7 @@ fn inactive_enum_payload_is_rejected() {
     chunk.main.emit_op_u64_pair(Op::StructuralMove, 0, 1);
     chunk
         .main
-        .emit_op_u16(Op::StructuralAggregateConsumePayload, 0);
+        .emit_op_u64(Op::StructuralAggregateConsumePayload, 0);
     chunk.main.emit(Op::Return);
     let message = error(chunk);
     assert!(message.contains("inactive variant"), "{message}");

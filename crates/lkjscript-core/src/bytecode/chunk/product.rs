@@ -22,19 +22,19 @@ pub fn runtime_product_contract_identity(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProductId(u16);
+pub struct ProductId(u64);
 
 impl ProductId {
-    pub const fn new(raw: u16) -> Self {
+    pub const fn new(raw: u64) -> Self {
         Self(raw)
     }
 
-    pub const fn raw(self) -> u16 {
+    pub const fn raw(self) -> u64 {
         self.0
     }
 
-    pub const fn index(self) -> usize {
-        self.0 as usize
+    pub fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
     }
 }
 
@@ -61,5 +61,5 @@ pub struct ProductMetadata {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProductFieldRef {
     pub product: ProductId,
-    pub field: u8,
+    pub field: u64,
 }

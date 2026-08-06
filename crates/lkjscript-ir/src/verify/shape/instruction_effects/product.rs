@@ -39,7 +39,10 @@ fn expected_product_instruction_effects(
             if !has_product_storage(program, *product) {
                 return fail("SSA product field has no deterministic storage metadata");
             }
-            let Some(field_metadata) = metadata.fields.get(usize::from(*field)) else {
+            let Some(field_metadata) = usize::try_from(*field)
+                .ok()
+                .and_then(|field| metadata.fields.get(field))
+            else {
                 return fail("SSA product field index is out of range");
             };
             if value_type(types, *value)? != &SsaType::Product(*product)
@@ -67,7 +70,10 @@ fn expected_product_instruction_effects(
             if !has_product_storage(program, *product) {
                 return fail("SSA product update has no deterministic storage metadata");
             }
-            let Some(field_metadata) = metadata.fields.get(usize::from(*field)) else {
+            let Some(field_metadata) = usize::try_from(*field)
+                .ok()
+                .and_then(|field| metadata.fields.get(field))
+            else {
                 return fail("SSA replacement field index is out of range");
             };
             if value_type(types, *value)? != &SsaType::Product(*product)

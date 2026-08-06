@@ -94,62 +94,35 @@ fn enum_variant_binding_has_instantiated_field_type() {
         .flat_map(|function| &function.blocks)
         .flat_map(|block| &block.instructions)
         .find_map(|instruction| match instruction.kind {
-            InstructionKind::AggregateConsumePayload {
-                representation,
-                variant,
-                ..
-            } => Some((representation, variant)),
+            InstructionKind::EnumField {
+                enum_id, variant, ..
+            } => Some((enum_id, variant)),
             _ => None,
         })
-        .expect("match emits guarded structural payload projection");
-    let type_id = forged
-        .memory
-        .representations
-        .iter()
-        .find(|item| item.id == projected.0)
-        .map(|item| item.type_id)
-        .expect("projection representation type");
-    let layout_id = forged
-        .memory
-        .types
-        .iter()
-        .find(|item| item.id == type_id)
-        .map(|item| item.layout)
-        .expect("projection structural type layout");
+        .expect("match emits a guarded enum field projection");
     let wrong_variant = forged
-        .memory
-        .layouts
+        .enums
         .iter()
-        .find(|layout| layout.id == layout_id)
-        .and_then(|layout| match &layout.kind {
-            lkjscript_ir::StructuralLayoutKind::Enum { variants, .. } => {
-                variants.iter().find(|item| item.variant != projected.1)
-            }
-            _ => None,
+        .find(|definition| definition.id == projected.0)
+        .and_then(|definition| {
+            definition
+                .variants
+                .iter()
+                .find(|variant| variant.id != projected.1)
         })
-        .map(|item| item.variant)
+        .map(|variant| variant.id)
         .expect("matched enum has another variant");
     let field = forged
         .functions
         .iter_mut()
         .flat_map(|function| &mut function.blocks)
         .flat_map(|block| &mut block.instructions)
-        .find(|instruction| {
-            matches!(
-                instruction.kind,
-                InstructionKind::AggregateConsumePayload { .. }
-            )
-        })
-        .expect("match emits guarded structural payload projection");
-    let InstructionKind::AggregateConsumePayload { variant, .. } = &mut field.kind else {
+        .find(|instruction| matches!(instruction.kind, InstructionKind::EnumField { .. }))
+        .expect("match emits a guarded enum field projection");
+    let InstructionKind::EnumField { variant, .. } = &mut field.kind else {
         unreachable!()
     };
     *variant = wrong_variant;
     let error = verify(forged).expect_err("forged active field must fail closed");
-    assert!(
-        error
-            .to_string()
-            .contains("wrong owner or payload identity"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("enum projection"), "{error}");
 }

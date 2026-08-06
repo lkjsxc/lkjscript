@@ -22,12 +22,12 @@ pub(in crate::ssa) fn lower_structural_memory(
         }
         let ty = lower_memory_type(&fact.ty, products)?;
         let type_id = StructuralTypeId::new(
-            u16::try_from(memory.types.len())
-                .map_err(|_| Error::msg("structural type table exceeds u16"))?,
+            u64::try_from(memory.types.len())
+                .map_err(|_| Error::msg("structural type table exceeds u64"))?,
         );
         let layout_id = StructuralLayoutId::new(
-            u16::try_from(memory.layouts.len())
-                .map_err(|_| Error::msg("structural layout table exceeds u16"))?,
+            u64::try_from(memory.layouts.len())
+                .map_err(|_| Error::msg("structural layout table exceeds u64"))?,
         );
         let kind = layout_kind(program, &fact.ty, products)?;
         let identity = match &kind {

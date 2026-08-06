@@ -22,7 +22,7 @@ impl NumericError {
         }
     }
 
-    pub(super) const fn physical_tag(self) -> u16 {
+    pub(super) const fn physical_tag(self) -> u64 {
         match self {
             Self::NonFinite => 0,
             Self::OutOfRange => 3,

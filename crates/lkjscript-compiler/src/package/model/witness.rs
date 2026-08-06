@@ -23,14 +23,14 @@ pub enum LockedWitnessDependencyRole {
     ProductField {
         product: String,
         field: String,
-        source_order: u16,
+        source_order: u64,
     },
     EnumVariantField {
         enumeration: String,
         variant: String,
         field: String,
-        variant_source_order: u16,
-        field_source_order: u16,
+        variant_source_order: u64,
+        field_source_order: u64,
     },
     TypeArgument {
         constructor: String,

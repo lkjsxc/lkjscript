@@ -43,7 +43,7 @@ impl Encoder {
     fn bool(&mut self, value: bool) {
         self.byte(u8::from(value));
     }
-    fn u16(&mut self, value: u16) {
+    fn u64(&mut self, value: u64) {
         self.0.extend_from_slice(&value.to_be_bytes());
     }
     fn len(&mut self, value: usize) -> Result<(), E> {
@@ -130,7 +130,7 @@ impl Encoder {
                 self.len(item.fields.len())?;
                 for field in &item.fields {
                     self.bytes(&field.identity)?;
-                    self.u16(field.source_order);
+                    self.u64(field.source_order);
                     self.ty(&field.ty)?;
                 }
             }
@@ -141,11 +141,11 @@ impl Encoder {
                 self.len(item.variants.len())?;
                 for variant in &item.variants {
                     self.bytes(&variant.identity)?;
-                    self.u16(variant.source_order);
+                    self.u64(variant.source_order);
                     self.len(variant.fields.len())?;
                     for field in &variant.fields {
                         self.bytes(&field.identity)?;
-                        self.u16(field.source_order);
+                        self.u64(field.source_order);
                         self.bool(field.indirect);
                         self.ty(&field.ty)?;
                     }

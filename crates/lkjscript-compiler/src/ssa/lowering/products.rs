@@ -26,7 +26,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_product_field(
         &mut self,
         product: ProductId,
-        field: u8,
+        field: u64,
         value: &Expr,
         ty: SsaType,
         origin: hir::SourceId,
@@ -61,7 +61,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_product_update(
         &mut self,
         product: ProductId,
-        field: u8,
+        field: u64,
         value: &Expr,
         replacement: &Expr,
         origin: hir::SourceId,
@@ -80,7 +80,9 @@ impl FunctionBuilder<'_> {
                 ));
             }
             let fields = self.structural_product_fields(item)?.to_vec();
-            if usize::from(field) >= fields.len() {
+            let field = usize::try_from(field)
+                .map_err(|_| Error::msg("structural product field exceeds host width"))?;
+            if field >= fields.len() {
                 return Err(Error::msg(
                     "structural product update field is out of range",
                 ));
@@ -90,7 +92,7 @@ impl FunctionBuilder<'_> {
                 .try_reserve_exact(fields.len())
                 .map_err(|_| Error::msg("structural product update allocation failed"))?;
             for (index, field_ty) in fields.into_iter().enumerate() {
-                if index == usize::from(field) {
+                if index == field {
                     rebuilt.push(replacement);
                 } else {
                     rebuilt.push(self.append(
@@ -98,8 +100,8 @@ impl FunctionBuilder<'_> {
                         InstructionKind::ProductField {
                             product,
                             field:
-                                u8::try_from(index).map_err(|_| {
-                                    Error::msg("structural product field exceeds u8")
+                                u64::try_from(index).map_err(|_| {
+                                    Error::msg("structural product field exceeds u64")
                                 })?,
                             value,
                         },

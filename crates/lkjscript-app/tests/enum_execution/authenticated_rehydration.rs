@@ -65,7 +65,7 @@ fn compiler_authenticates_general_enum_rehydration() {
     let mut malformed_nodes = expected.nodes().to_vec();
     if let Some(root) = malformed_nodes.last_mut() {
         root.payload = SemanticDagPayload::Enum {
-            tag: u16::MAX,
+            tag: u64::MAX,
             fields: vec![SemanticDagNodeId::new(0)],
         };
     }

@@ -10,7 +10,7 @@ pub(super) fn product(out: &mut Encoder, value: &ProductMetadata) {
         fields,
         region_fields,
     } = value;
-    out.u16(id.raw());
+    out.u64(id.raw());
     out.fixed(&identity.bytes());
     out.bool(*region);
     out.string(name);
@@ -26,14 +26,14 @@ fn region_field(out: &mut Encoder, value: &RegionProductFieldKind) {
         RegionProductFieldKind::List => out.tag(4),
         RegionProductFieldKind::Product(id) => {
             out.tag(5);
-            out.u16(id.raw());
+            out.u64(id.raw());
         }
     }
 }
 pub(super) fn product_field(out: &mut Encoder, value: &ProductFieldRef) {
     let ProductFieldRef { product, field } = value;
-    out.u16(product.raw());
-    out.u8(*field);
+    out.u64(product.raw());
+    out.u64(*field);
 }
 pub(super) fn enumeration(out: &mut Encoder, value: &EnumMetadata) {
     let EnumMetadata {
@@ -45,18 +45,20 @@ pub(super) fn enumeration(out: &mut Encoder, value: &EnumMetadata) {
     } = value;
     out.fixed(&id.bytes());
     out.string(name);
-    out.u8(*type_parameter_count);
+    out.u64(*type_parameter_count);
     out.fixed(&layout.bytes());
     out.sequence(variants, |out, value| {
         let EnumVariantMetadata {
             id,
             name,
+            source_order,
             physical_tag,
             fields,
         } = value;
         out.fixed(&id.bytes());
         out.string(name);
-        out.u16(*physical_tag);
+        out.u64(*source_order);
+        out.u64(*physical_tag);
         out.sequence(fields, |out, value| {
             let EnumFieldMetadata { id, name } = value;
             out.fixed(&id.bytes());
@@ -72,7 +74,7 @@ pub(super) fn enum_construction(out: &mut Encoder, value: &EnumConstructionRef) 
         substitution_arity,
     } = value;
     enum_ref(out, *enum_id, *variant, *layout);
-    out.u8(*substitution_arity);
+    out.u64(*substitution_arity);
 }
 pub(super) fn enum_variant(out: &mut Encoder, value: &EnumVariantRef) {
     let EnumVariantRef {

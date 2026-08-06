@@ -44,7 +44,7 @@ fn facts() -> ExecutableMemoryWitnessFacts {
     }
 }
 
-fn dependency(byte: u8, source_order: u16) -> ExecutableMemoryWitnessDependency {
+fn dependency(byte: u8, source_order: u64) -> ExecutableMemoryWitnessDependency {
     ExecutableMemoryWitnessDependency {
         role: ExecutableMemoryWitnessRole::ProductField {
             product: [9; 32],

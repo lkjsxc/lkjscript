@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn field(identity: u8, order: u16, ty: SemanticType) -> SemanticProductField {
+fn field(identity: u8, order: u64, ty: SemanticType) -> SemanticProductField {
     SemanticProductField {
         identity: [identity; 32],
         source_order: order,

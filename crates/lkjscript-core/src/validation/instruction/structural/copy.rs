@@ -5,8 +5,8 @@ fn structural_copy(
     state: &mut State,
 ) -> Result<()> {
     let representation = crate::StructuralRepresentationId::new(
-        u16::try_from(instruction_operand(proto, instruction)?)
-            .map_err(|_| crate::Error::msg("structural copy representation exceeds u16"))?,
+        u64::try_from(instruction_operand(proto, instruction)?)
+            .map_err(|_| crate::Error::msg("structural copy representation exceeds u64"))?,
     );
     let input = pop(state, proto, instruction)?;
     let actual = match input {

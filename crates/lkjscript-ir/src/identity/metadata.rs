@@ -8,7 +8,7 @@ pub(super) fn source(out: &mut Encoder, value: &SourceMetadata) {
 }
 pub(super) fn product(out: &mut Encoder, value: &ProductMetadata) {
     let ProductMetadata { id, name, fields } = value;
-    out.u16(id.raw());
+    out.u64(id.raw());
     out.string(name);
     out.sequence(fields, |out, value| {
         let ProductField { name, ty: value_ty } = value;
@@ -31,12 +31,14 @@ pub(super) fn enumeration(out: &mut Encoder, value: &EnumMetadata) {
         let EnumVariantMetadata {
             id,
             name,
+            source_order,
             physical_tag,
             fields,
         } = value;
         out.fixed(&id.bytes());
         out.string(name);
-        out.u16(*physical_tag);
+        out.u64(*source_order);
+        out.u64(*physical_tag);
         out.sequence(fields, |out, value| {
             let EnumFieldMetadata {
                 id,
@@ -85,7 +87,7 @@ pub(super) fn implementation(out: &mut Encoder, value: &ImplMetadata) {
     } = value;
     out.u32(id.raw());
     out.u32(trait_id.raw());
-    out.u16(product.raw());
+    out.u64(product.raw());
     out.u32(*source);
 }
 pub(super) fn effects(out: &mut Encoder, value: EffectSet) {

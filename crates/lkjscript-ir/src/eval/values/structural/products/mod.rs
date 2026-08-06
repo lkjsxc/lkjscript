@@ -36,13 +36,7 @@ impl Evaluator<'_> {
             .zip(structural_fields)
             .enumerate()
         {
-            let field = match u16::try_from(index) {
-                Ok(field) => field,
-                Err(_) => {
-                    self.abort_structural_destination(destination);
-                    return Err(Flow::Resource("structural fields".into()));
-                }
-            };
+            let field = index;
             let transferred = matches!(ty, SsaType::Bytes | SsaType::ByteVector);
             let semantic = if transferred {
                 let owned = match take_value(values, *source) {
@@ -101,7 +95,7 @@ impl Evaluator<'_> {
     pub(crate) fn structural_product_field(
         &mut self,
         product: ProductId,
-        field: u8,
+        field: u64,
         input: &EvalValue,
     ) -> Result<EvalValue, Flow> {
         let root_type = self.structural_type(&SsaType::Product(product))?;
@@ -110,8 +104,10 @@ impl Evaluator<'_> {
             return Err(Flow::Trap("product field identity mismatch".into()));
         }
         let fields = super::product_fields(self.program.program(), product).map_err(Flow::Trap)?;
+        let field = usize::try_from(field)
+            .map_err(|_| Flow::Trap("product field exceeds host width".into()))?;
         let ty = fields
-            .get(usize::from(field))
+            .get(field)
             .ok_or_else(|| Flow::Trap("product field out of bounds".into()))?;
         if *ty == SsaType::ByteVector {
             return Err(Flow::Trap(
@@ -119,13 +115,13 @@ impl Evaluator<'_> {
             ));
         }
         let expected = self.structural_type(ty)?;
-        self.copy_projected(owner, root_type, u16::from(field), expected)
+        self.copy_projected(owner, root_type, field, expected)
     }
 
     pub(crate) fn structural_with_product_field(
         &mut self,
         product: ProductId,
-        field: u8,
+        field: u64,
         input: &EvalValue,
         replacement: &EvalValue,
     ) -> Result<EvalValue, Flow> {
@@ -151,18 +147,13 @@ impl Evaluator<'_> {
             .runtime
             .begin_product(root_type, structural_fields.clone())
             .map_err(map_structural_error)?;
-        for (index, expected) in structural_fields.into_iter().enumerate() {
-            let field_index = match u16::try_from(index) {
-                Ok(field) => field,
-                Err(_) => {
-                    self.abort_structural_destination(destination);
-                    return Err(Flow::Resource("structural fields".into()));
-                }
-            };
-            let semantic = if index == usize::from(field) {
+        let replacement_field = usize::try_from(field)
+            .map_err(|_| Flow::Trap("product field exceeds host width".into()))?;
+        for (field_index, expected) in structural_fields.into_iter().enumerate() {
+            let semantic = if field_index == replacement_field {
                 self.copy_semantic(replacement, expected)
             } else {
-                self.projected_semantic(owner, root_type, index, expected)
+                self.projected_semantic(owner, root_type, field_index, expected)
             };
             let semantic = match semantic {
                 Ok(value) => value,

@@ -64,6 +64,7 @@ fn enum_instructions_are_unsupported_without_structural_operations() {
                 enum_id: EnumId::new([1; 32]),
                 variant: VariantId::new([2; 32]),
                 field: VariantFieldId::new([3; 32]),
+                field_index: 0,
                 layout: RuntimeLayoutId::new([6; 32]),
                 value: ValueId::new(0),
             },

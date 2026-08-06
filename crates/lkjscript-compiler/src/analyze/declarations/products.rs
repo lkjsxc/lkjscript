@@ -18,15 +18,6 @@ impl Analyzer {
                 }
                 let (product_name, field_forms) =
                     product_declaration(args).map_err(|message| self.error(source, message))?;
-                if field_forms.len() > MAX_PRODUCT_FIELDS {
-                    return Err(self.error(
-                        source,
-                        format!(
-                            "product {product_name}: too many fields ({} > {MAX_PRODUCT_FIELDS})",
-                            field_forms.len()
-                        ),
-                    ));
-                }
                 let product = self
                     .product_names
                     .get(&product_name)
@@ -91,8 +82,8 @@ impl Analyzer {
                             ),
                         ));
                     }
-                    let source_order = u16::try_from(field_order)
-                        .map_err(|_| self.error(source, "product field order exceeds u16"))?;
+                    let source_order = u64::try_from(field_order)
+                        .map_err(|_| self.error(source, "product field order exceeds u64"))?;
                     let field_identity =
                         crate::source::product_field_identity(identity, &field_name, source_order)
                             .map_err(|_| {
@@ -110,7 +101,7 @@ impl Analyzer {
                         ty,
                     });
                 }
-                if product.index() != self.products.len() {
+                if product.index() != Some(self.products.len()) {
                     return Err(self.error(source, "product declaration order is inconsistent"));
                 }
                 self.products.push(ProductDefinition {
@@ -178,7 +169,9 @@ impl Analyzer {
             .copied()
             .ok_or_else(|| Error::msg(format!("unknown product type {name}")))?;
         self.products
-            .get(id.index())
+            .get(id.index().ok_or_else(|| {
+                Error::msg(format!("ProductId for {name} exceeds host index width"))
+            })?)
             .filter(|product| product.id == id)
             .ok_or_else(|| Error::msg(format!("missing HIR product metadata for {name}")))
     }

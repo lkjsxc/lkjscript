@@ -28,7 +28,7 @@ stable_id!(RuntimeLayoutId);
 pub struct EnumMetadata {
     pub id: EnumId,
     pub name: String,
-    pub type_parameter_count: u8,
+    pub type_parameter_count: u64,
     pub layout: RuntimeLayoutId,
     pub variants: Vec<EnumVariantMetadata>,
 }
@@ -37,7 +37,8 @@ pub struct EnumMetadata {
 pub struct EnumVariantMetadata {
     pub id: VariantId,
     pub name: String,
-    pub physical_tag: u16,
+    pub source_order: u64,
+    pub physical_tag: u64,
     pub fields: Vec<EnumFieldMetadata>,
 }
 
@@ -52,7 +53,7 @@ pub struct EnumConstructionRef {
     pub enum_id: EnumId,
     pub variant: VariantId,
     pub layout: RuntimeLayoutId,
-    pub substitution_arity: u8,
+    pub substitution_arity: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

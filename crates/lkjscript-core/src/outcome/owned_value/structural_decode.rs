@@ -73,7 +73,7 @@ fn decode_structural_node(
                     "structural enum must contain one active payload section",
                 ));
             }
-            let tag = input.u16()?;
+            let tag = input.u64()?;
             let active_payload = decode_structural_fields(input, budget, depth)?.into();
             (
                 SemanticPayload::Enum {

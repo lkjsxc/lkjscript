@@ -32,7 +32,8 @@ pub struct EnumMetadata {
 pub struct EnumVariantMetadata {
     pub id: VariantId,
     pub name: String,
-    pub physical_tag: u16,
+    pub source_order: u64,
+    pub physical_tag: u64,
     pub fields: Vec<EnumFieldMetadata>,
 }
 

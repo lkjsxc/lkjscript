@@ -101,8 +101,8 @@ impl Analyzer {
             fields.push(EnumVariantField {
                 id,
                 name,
-                source_order: u16::try_from(order)
-                    .map_err(|_| self.error(source, "field order exceeds u16"))?,
+                source_order: u64::try_from(order)
+                    .map_err(|_| self.error(source, "field order exceeds u64"))?,
                 indirect: contains_enum_type(&ty),
                 ty,
             });

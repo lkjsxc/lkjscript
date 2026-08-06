@@ -55,7 +55,7 @@ impl OwnedValue {
         })
     }
 
-    pub fn enum_physical_tag(&self) -> Option<u16> {
+    pub fn enum_physical_tag(&self) -> Option<u64> {
         if let Some(value) = self.as_structural() {
             return match &value.payload {
                 SemanticPayload::Enum { tag, .. } => Some(*tag),

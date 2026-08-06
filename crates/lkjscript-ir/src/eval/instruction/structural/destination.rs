@@ -81,7 +81,7 @@ impl Evaluator<'_> {
         &mut self,
         values: &mut [Option<EvalValue>],
         destination_id: ValueId,
-        field: u16,
+        field: u64,
         source: ValueId,
     ) -> Result<EvalValue, Flow> {
         let destination_value = take_value(values, destination_id)?;
@@ -109,10 +109,12 @@ impl Evaluator<'_> {
     fn initialize_destination_source(
         &mut self,
         destination: &EvalStructuralDestination,
-        field: u16,
+        field: u64,
         values: &mut [Option<EvalValue>],
         source: ValueId,
     ) -> Result<(), Flow> {
+        let field = usize::try_from(field)
+            .map_err(|_| Flow::Trap("destination field exceeds host width".into()))?;
         let expected_ty = self.destination_field_type(destination, field)?;
         let expected = self.structural_type(&expected_ty)?;
         if let EvalValue::StructuralOwner(owner) = value(values, source)? {

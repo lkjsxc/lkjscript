@@ -17,6 +17,7 @@ pub(super) struct ActiveVariant {
 }
 
 pub(super) fn projection(
+    program: &crate::Program,
     function: &Function,
     block: &Block,
     instruction: &crate::Instruction,
@@ -45,8 +46,15 @@ pub(super) fn projection(
         return fail("SSA inactive enum projection rejected before access");
     }
     let mut visited = HashSet::new();
-    if active_at_entry(function, block.id, value, active, &mut visited, &mut work)?
-        || universal::value(function, value, active, &mut HashSet::new(), &mut work)?
+    if active_at_entry(
+        program,
+        function,
+        block.id,
+        value,
+        active,
+        &mut visited,
+        &mut work,
+    )? || universal::value(function, value, active, &mut HashSet::new(), &mut work)?
     {
         Ok(())
     } else {
@@ -61,6 +69,7 @@ pub(super) fn projection(
 }
 
 fn active_at_entry(
+    program: &crate::Program,
     function: &Function,
     block: BlockId,
     value: ValueId,
@@ -85,6 +94,7 @@ fn active_at_entry(
         for predecessor in predecessors {
             let argument = edge_argument(predecessor, block, index)?;
             if !active_on_edge(
+                program,
                 function,
                 predecessor,
                 block,
@@ -106,14 +116,25 @@ fn active_at_entry(
         return Ok(false);
     }
     for predecessor in predecessors {
-        if !active_on_edge(function, predecessor, block, value, active, visited, work)? {
+        if !active_on_edge(
+            program,
+            function,
+            predecessor,
+            block,
+            value,
+            active,
+            visited,
+            work,
+        )? {
             return Ok(false);
         }
     }
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn active_on_edge(
+    program: &crate::Program,
     function: &Function,
     predecessor: &Block,
     target: BlockId,
@@ -130,24 +151,8 @@ fn active_on_edge(
     } = predecessor.terminator
     {
         if true_target == target {
-            if let Some(test) = find_instruction(function, condition) {
-                if let InstructionKind::EnumIsVariant {
-                    enum_id,
-                    variant,
-                    layout,
-                    value: tested,
-                } = test.kind
-                {
-                    if (ActiveVariant {
-                        enum_id,
-                        variant,
-                        layout,
-                    }) == active
-                        && equivalent(function, tested, value, &mut HashSet::new(), work)?
-                    {
-                        return Ok(true);
-                    }
-                }
+            if condition_tests_variant(program, function, condition, value, active, work)? {
+                return Ok(true);
             }
             if let Some(possible) =
                 boolean::true_predecessors(function, predecessor, condition, value, work)?
@@ -157,6 +162,7 @@ fn active_on_edge(
                 }
                 for (source, argument) in possible {
                     if !active_on_edge(
+                        program,
                         function,
                         source,
                         predecessor.id,
@@ -172,5 +178,84 @@ fn active_on_edge(
             }
         }
     }
-    active_at_entry(function, predecessor.id, value, active, visited, work)
+    active_at_entry(
+        program,
+        function,
+        predecessor.id,
+        value,
+        active,
+        visited,
+        work,
+    )
+}
+
+fn condition_tests_variant(
+    program: &crate::Program,
+    function: &Function,
+    condition: ValueId,
+    value: ValueId,
+    active: ActiveVariant,
+    work: &mut usize,
+) -> crate::Result<bool> {
+    let Some(test) = find_instruction(function, condition) else {
+        return Ok(false);
+    };
+    if let InstructionKind::EnumIsVariant {
+        enum_id,
+        variant,
+        layout,
+        value: tested,
+    } = test.kind
+    {
+        return Ok(ActiveVariant {
+            enum_id,
+            variant,
+            layout,
+        } == active
+            && equivalent(function, tested, value, &mut HashSet::new(), work)?);
+    }
+    let InstructionKind::Runtime {
+        operation: crate::RuntimeOp::EqualValue,
+        arguments,
+        ..
+    } = &test.kind
+    else {
+        return Ok(false);
+    };
+    let [left, right] = arguments.as_slice() else {
+        return Ok(false);
+    };
+    let Some(expected_tag) = program
+        .enums
+        .iter()
+        .find(|definition| {
+            definition.id == active.enum_id && definition.layout.identity == active.layout
+        })
+        .and_then(|definition| {
+            definition
+                .variants
+                .iter()
+                .find(|variant| variant.id == active.variant)
+        })
+        .and_then(|variant| i64::try_from(variant.physical_tag).ok())
+    else {
+        return Ok(false);
+    };
+    for (tag_value, constant_value) in [(*left, *right), (*right, *left)] {
+        let Some(InstructionKind::AggregateTag { value: tested, .. }) =
+            find_instruction(function, tag_value).map(|item| &item.kind)
+        else {
+            continue;
+        };
+        if !matches!(
+            find_instruction(function, constant_value).map(|item| &item.kind),
+            Some(InstructionKind::Constant(crate::Constant::I64(tag))) if *tag == expected_tag
+        ) {
+            continue;
+        }
+        if equivalent(function, *tested, value, &mut HashSet::new(), work)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

@@ -60,7 +60,7 @@ fn encode_role(output: &mut Encoder, role: &ExecutableMemoryWitnessRole) {
             output.byte(1);
             output.bytes(product);
             output.bytes(field);
-            output.u16(*source_order);
+            output.u64(*source_order);
         }
         ExecutableMemoryWitnessRole::EnumVariantField {
             enumeration,
@@ -73,8 +73,8 @@ fn encode_role(output: &mut Encoder, role: &ExecutableMemoryWitnessRole) {
             output.bytes(enumeration);
             output.bytes(variant);
             output.bytes(field);
-            output.u16(*variant_source_order);
-            output.u16(*field_source_order);
+            output.u64(*variant_source_order);
+            output.u64(*field_source_order);
         }
         ExecutableMemoryWitnessRole::TypeArgument { constructor, index } => {
             output.byte(3);

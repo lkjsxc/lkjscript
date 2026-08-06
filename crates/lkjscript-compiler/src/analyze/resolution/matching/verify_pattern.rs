@@ -54,13 +54,23 @@ pub(super) fn pattern(
                 .collect();
             for (field, declared) in fields.iter().zip(&selected.fields) {
                 let field_ty = declared.ty.subst(&substitutions);
-                if field.name != declared.name || field.projection.ty != field_ty {
+                if field.name != declared.name || field.field_index != declared.source_order {
                     return Err(Error::msg(
                         "variant pattern field identity/type/order is stale",
                     ));
                 }
-                local(program, origin, &field.projection, locals, places)?;
-                pattern_child(program, origin, &field.pattern, &field_ty, locals, places)?;
+                match (&field.projection, &field.pattern) {
+                    (None, MatchPattern::Wildcard { .. }) => {}
+                    (Some(projection), pattern) if projection.ty == field_ty => {
+                        local(program, origin, projection, locals, places)?;
+                        pattern_child(program, origin, pattern, &field_ty, locals, places)?;
+                    }
+                    _ => {
+                        return Err(Error::msg(
+                            "variant pattern wildcard/projection metadata is stale",
+                        ))
+                    }
+                }
             }
             Ok(())
         }
@@ -81,20 +91,23 @@ pub(super) fn pattern(
                 return Err(Error::msg("product pattern field count is stale"));
             }
             for (field, declared) in fields.iter().zip(&definition.fields) {
-                if field.name != declared.name || field.projection.ty != declared.ty {
+                if field.name != declared.name || field.field_index != declared.source_order {
                     return Err(Error::msg(
                         "product pattern field identity/type/order is stale",
                     ));
                 }
-                local(program, origin, &field.projection, locals, places)?;
-                pattern_child(
-                    program,
-                    origin,
-                    &field.pattern,
-                    &declared.ty,
-                    locals,
-                    places,
-                )?;
+                match (&field.projection, &field.pattern) {
+                    (None, MatchPattern::Wildcard { .. }) => {}
+                    (Some(projection), pattern) if projection.ty == declared.ty => {
+                        local(program, origin, projection, locals, places)?;
+                        pattern_child(program, origin, pattern, &declared.ty, locals, places)?;
+                    }
+                    _ => {
+                        return Err(Error::msg(
+                            "product pattern wildcard/projection metadata is stale",
+                        ))
+                    }
+                }
             }
             Ok(())
         }

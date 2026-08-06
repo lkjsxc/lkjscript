@@ -73,8 +73,12 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
             ));
         }
         let mut edges = (1..plan.arms.len())
-            .map(|item| MatchEdgeTarget::Arm(u16::try_from(item).unwrap_or(u16::MAX)))
-            .collect::<Vec<_>>();
+            .map(|item| {
+                u64::try_from(item)
+                    .map(MatchEdgeTarget::Arm)
+                    .map_err(|_| Error::msg("match arm index exceeds u64"))
+            })
+            .collect::<Result<Vec<_>>>()?;
         edges.extend([MatchEdgeTarget::Default, MatchEdgeTarget::Unreachable]);
         if plan.edges != edges {
             return Err(Error::msg("match plan default/unreachable edges are stale"));

@@ -45,8 +45,12 @@ impl Resolver<'_> {
         );
         let (tests, projections, bindings) = super::plan::flatten_plan(&planned);
         let mut edges = (1..planned.len())
-            .map(|index| MatchEdgeTarget::Arm(u16::try_from(index).unwrap_or(u16::MAX)))
-            .collect::<Vec<_>>();
+            .map(|index| {
+                u64::try_from(index)
+                    .map(MatchEdgeTarget::Arm)
+                    .map_err(|_| self.error("match arm index exceeds u64"))
+            })
+            .collect::<Result<Vec<_>>>()?;
         edges.extend([MatchEdgeTarget::Default, MatchEdgeTarget::Unreachable]);
         self.analyzer.match_plans.push(MatchPlan {
             id: plan_id,

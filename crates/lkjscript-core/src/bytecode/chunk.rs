@@ -147,6 +147,20 @@ pub struct Chunk {
     indexed_constants: usize,
     global_indexes: HashMap<String, GlobalId>,
     indexed_globals: usize,
+    product_field_indexes: HashMap<ProductFieldRef, u64>,
+    indexed_product_fields: usize,
+    enum_construction_indexes: HashMap<crate::EnumConstructionRef, u64>,
+    indexed_enum_constructions: usize,
+    enum_variant_indexes: HashMap<crate::EnumVariantRef, u64>,
+    indexed_enum_variants: usize,
+    enum_field_indexes: HashMap<crate::EnumFieldRef, u64>,
+    indexed_enum_fields: usize,
+    structural_destination_field_indexes: HashMap<crate::StructuralDestinationFieldRef, u64>,
+    indexed_structural_destination_fields: usize,
+    structural_aggregate_field_indexes: HashMap<crate::StructuralAggregateFieldRef, u64>,
+    indexed_structural_aggregate_fields: usize,
+    structural_payload_indexes: HashMap<crate::StructuralPayloadRef, u64>,
+    indexed_structural_payloads: usize,
 }
 
 impl Default for Chunk {
@@ -211,6 +225,20 @@ impl Chunk {
             indexed_constants: 0,
             global_indexes: HashMap::new(),
             indexed_globals: 0,
+            product_field_indexes: HashMap::new(),
+            indexed_product_fields: 0,
+            enum_construction_indexes: HashMap::new(),
+            indexed_enum_constructions: 0,
+            enum_variant_indexes: HashMap::new(),
+            indexed_enum_variants: 0,
+            enum_field_indexes: HashMap::new(),
+            indexed_enum_fields: 0,
+            structural_destination_field_indexes: HashMap::new(),
+            indexed_structural_destination_fields: 0,
+            structural_aggregate_field_indexes: HashMap::new(),
+            indexed_structural_aggregate_fields: 0,
+            structural_payload_indexes: HashMap::new(),
+            indexed_structural_payloads: 0,
         }
     }
 
@@ -285,6 +313,88 @@ impl Chunk {
         Ok(id)
     }
 
+    pub fn intern_product_field(&mut self, descriptor: ProductFieldRef) -> Result<u64> {
+        intern_descriptor(
+            &mut self.product_fields,
+            &mut self.product_field_indexes,
+            &mut self.indexed_product_fields,
+            descriptor,
+            "product field",
+        )
+    }
+
+    pub fn intern_enum_construction(
+        &mut self,
+        descriptor: crate::EnumConstructionRef,
+    ) -> Result<u64> {
+        intern_descriptor(
+            &mut self.enum_constructions,
+            &mut self.enum_construction_indexes,
+            &mut self.indexed_enum_constructions,
+            descriptor,
+            "enum construction",
+        )
+    }
+
+    pub fn intern_enum_variant(&mut self, descriptor: crate::EnumVariantRef) -> Result<u64> {
+        intern_descriptor(
+            &mut self.enum_variants,
+            &mut self.enum_variant_indexes,
+            &mut self.indexed_enum_variants,
+            descriptor,
+            "enum variant",
+        )
+    }
+
+    pub fn intern_enum_field(&mut self, descriptor: crate::EnumFieldRef) -> Result<u64> {
+        intern_descriptor(
+            &mut self.enum_fields,
+            &mut self.enum_field_indexes,
+            &mut self.indexed_enum_fields,
+            descriptor,
+            "enum field",
+        )
+    }
+
+    pub fn intern_structural_destination_field(
+        &mut self,
+        descriptor: crate::StructuralDestinationFieldRef,
+    ) -> Result<u64> {
+        intern_descriptor(
+            &mut self.structural_destination_fields,
+            &mut self.structural_destination_field_indexes,
+            &mut self.indexed_structural_destination_fields,
+            descriptor,
+            "structural destination field",
+        )
+    }
+
+    pub fn intern_structural_aggregate_field(
+        &mut self,
+        descriptor: crate::StructuralAggregateFieldRef,
+    ) -> Result<u64> {
+        intern_descriptor(
+            &mut self.structural_aggregate_fields,
+            &mut self.structural_aggregate_field_indexes,
+            &mut self.indexed_structural_aggregate_fields,
+            descriptor,
+            "structural aggregate field",
+        )
+    }
+
+    pub fn intern_structural_payload(
+        &mut self,
+        descriptor: crate::StructuralPayloadRef,
+    ) -> Result<u64> {
+        intern_descriptor(
+            &mut self.structural_payloads,
+            &mut self.structural_payload_indexes,
+            &mut self.indexed_structural_payloads,
+            descriptor,
+            "structural payload",
+        )
+    }
+
     fn rebuild_constant_indexes(&mut self) -> Result<()> {
         if self.indexed_constants == self.constants.len() {
             return Ok(());
@@ -324,6 +434,44 @@ impl Chunk {
         self.indexed_globals = self.global_names.len();
         Ok(())
     }
+}
+
+fn intern_descriptor<T: Copy + Eq + std::hash::Hash>(
+    table: &mut Vec<T>,
+    indexes: &mut HashMap<T, u64>,
+    indexed: &mut usize,
+    descriptor: T,
+    name: &str,
+) -> Result<u64> {
+    if *indexed != table.len() {
+        let mut rebuilt = HashMap::new();
+        rebuilt
+            .try_reserve(table.len())
+            .map_err(|_| Error::host(format!("bytecode {name} index allocation failed")))?;
+        for (index, item) in table.iter().copied().enumerate() {
+            rebuilt.entry(item).or_insert(
+                u64::try_from(index)
+                    .map_err(|_| Error::host(format!("bytecode {name} index exceeds u64")))?,
+            );
+        }
+        *indexes = rebuilt;
+        *indexed = table.len();
+    }
+    if let Some(index) = indexes.get(&descriptor).copied() {
+        return Ok(index);
+    }
+    let index = u64::try_from(table.len())
+        .map_err(|_| Error::host(format!("bytecode {name} index exceeds u64")))?;
+    table
+        .try_reserve(1)
+        .map_err(|_| Error::host(format!("bytecode {name} table allocation failed")))?;
+    indexes
+        .try_reserve(1)
+        .map_err(|_| Error::host(format!("bytecode {name} index allocation failed")))?;
+    table.push(descriptor);
+    indexes.insert(descriptor, index);
+    *indexed = table.len();
+    Ok(index)
 }
 
 impl FunctionProto {

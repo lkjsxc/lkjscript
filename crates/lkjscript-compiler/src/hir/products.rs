@@ -12,7 +12,7 @@ pub struct ProductDefinition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductField {
     pub identity: [u8; 32],
-    pub source_order: u16,
+    pub source_order: u64,
     pub name: String,
     pub ty: Type,
 }

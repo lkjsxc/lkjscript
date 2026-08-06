@@ -36,7 +36,7 @@ impl Emitter<'_> {
                 let representation = structural_view_representation(self.chunk, self.value_type(*value)?)
                     .ok_or_else(|| Error::msg("structural borrow representation is missing"))?;
                 self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
-                self.proto.try_emit_op_u16(
+                self.proto.try_emit_op_u64(
                     match kind {
                         lkjscript_ir::BorrowKind::Shared => Op::StructuralBorrow,
                         lkjscript_ir::BorrowKind::Mutable => Op::StructuralBorrowMut,
@@ -47,7 +47,7 @@ impl Emitter<'_> {
             InstructionKind::StructuralPublish { representation, value } => {
                 self.load(*value)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralPublish, representation.raw())?;
+                    .try_emit_op_u64(Op::StructuralPublish, representation.raw())?;
             }
             InstructionKind::DestinationCreate {
                 representation,
@@ -55,7 +55,7 @@ impl Emitter<'_> {
             } => {
                 let destination = structural_destination(self.chunk, *representation, *active_variant)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralDestinationCreate, destination.raw())?;
+                    .try_emit_op_u64(Op::StructuralDestinationCreate, destination.raw())?;
             }
             InstructionKind::DestinationFieldInit {
                 destination,
@@ -67,19 +67,19 @@ impl Emitter<'_> {
                 self.load(*value)?;
                 let reference = intern_destination_field(self.chunk, metadata, *field)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralDestinationFieldInit, reference)?;
+                    .try_emit_op_u64(Op::StructuralDestinationFieldInit, reference)?;
             }
             InstructionKind::DestinationFinish { destination } => {
                 let metadata = self.destination_metadata_for_value(*destination)?;
                 self.load(*destination)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralDestinationFinish, metadata.raw())?;
+                    .try_emit_op_u64(Op::StructuralDestinationFinish, metadata.raw())?;
             }
             InstructionKind::DestinationAbort { destination } => {
                 let metadata = self.destination_metadata_for_value(*destination)?;
                 self.load(*destination)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralDestinationAbort, metadata.raw())?;
+                    .try_emit_op_u64(Op::StructuralDestinationAbort, metadata.raw())?;
             }
             InstructionKind::ProductField { field, value, .. }
                 if structural_view_representation(self.chunk, self.value_type(*value)?).is_some() =>
@@ -95,12 +95,39 @@ impl Emitter<'_> {
                 let reference = intern_aggregate_field_for_representation(
                     self.chunk,
                     representation,
-                    u16::from(*field),
+                    None,
+                    *field,
                     &instruction.ty,
                     result_representation,
                 )?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralAggregateFieldCopy, reference)?;
+                    .try_emit_op_u64(Op::StructuralAggregateFieldCopy, reference)?;
+            }
+            InstructionKind::EnumField {
+                variant,
+                field_index,
+                value,
+                ..
+            } if structural_view_representation(self.chunk, self.value_type(*value)?).is_some() =>
+            {
+                let representation =
+                    structural_view_representation(self.chunk, self.value_type(*value)?)
+                        .ok_or_else(|| {
+                            Error::msg("structural enum-field representation is missing")
+                        })?;
+                self.load_observed_structural(*value)?;
+                let result_representation =
+                    structural_owner_representation(self.chunk, &instruction.ty);
+                let reference = intern_aggregate_field_for_representation(
+                    self.chunk,
+                    representation,
+                    Some(BytecodeVariantId::new(variant.bytes())),
+                    *field_index,
+                    &instruction.ty,
+                    result_representation,
+                )?;
+                self.proto
+                    .try_emit_op_u64(Op::StructuralAggregateFieldCopy, reference)?;
             }
             InstructionKind::AggregateFieldBorrow {
                 representation,
@@ -119,7 +146,7 @@ impl Emitter<'_> {
                     result_representation,
                 )?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralAggregateFieldBorrow, reference)?;
+                    .try_emit_op_u64(Op::StructuralAggregateFieldBorrow, reference)?;
             }
             InstructionKind::AggregateTag { value, .. } => {
                 let representation =
@@ -127,7 +154,7 @@ impl Emitter<'_> {
                         .ok_or_else(|| Error::msg("structural tag representation is missing"))?;
                 self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralAggregateTag, representation.raw())?;
+                    .try_emit_op_u64(Op::StructuralAggregateTag, representation.raw())?;
             }
             InstructionKind::AggregateConsumePayload {
                 representation,
@@ -147,7 +174,7 @@ impl Emitter<'_> {
                     result_representation,
                 )?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralAggregateConsumePayload, reference)?;
+                    .try_emit_op_u64(Op::StructuralAggregateConsumePayload, reference)?;
             }
             InstructionKind::StringUtf8View {
                 representation,
@@ -156,12 +183,12 @@ impl Emitter<'_> {
             } => {
                 self.emit_index(Op::LoadStructuralOwnerLocal, self.slot(*value)?)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralStringUtf8View, representation.raw())?;
+                    .try_emit_op_u64(Op::StructuralStringUtf8View, representation.raw())?;
             }
             InstructionKind::StructuralCopy { representation, value } => {
                 self.load_observed_structural(*value)?;
                 self.proto
-                    .try_emit_op_u16(Op::StructuralCopy, representation.raw())?;
+                    .try_emit_op_u64(Op::StructuralCopy, representation.raw())?;
             }
             _ => return Ok(false),
         }

@@ -60,9 +60,6 @@ impl VerifiedDeclarationGraph {
             )
             .ok_or_else(|| Error::msg("verifier type edge overflow"))
         })?;
-        if edges > MAX_MEMORY_PLAN_TYPE_EDGES {
-            return Err(Error::msg("memory verifier type edges exceed maximum"));
-        }
         let (components, recursive, scc_work) = verified_components(&adjacency)?;
         Ok(Self {
             keys,

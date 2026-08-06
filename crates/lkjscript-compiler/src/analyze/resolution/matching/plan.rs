@@ -96,12 +96,14 @@ fn flatten_fields(
             return;
         };
         path.push(index);
-        projections.push(MatchProjection {
-            arm,
-            path: path.clone(),
-            local: field.projection.clone(),
-            active_variant: active,
-        });
+        if let Some(local) = &field.projection {
+            projections.push(MatchProjection {
+                arm,
+                path: path.clone(),
+                local: local.clone(),
+                active_variant: active,
+            });
+        }
         flatten_pattern(
             arm,
             &field.pattern,

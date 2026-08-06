@@ -127,11 +127,11 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::Car as u8 => {
-            let representation = vm.read_u16()?;
+            let representation = vm.read_u64()?;
             car(
                 vm,
-                (representation != u16::MAX)
-                    .then(|| lkjscript_core::StructuralRepresentationId::new(representation)),
+                (representation != 0)
+                    .then(|| lkjscript_core::StructuralRepresentationId::new(representation - 1)),
             )
         }
         x if x == Op::Cdr as u8 => cdr(vm),

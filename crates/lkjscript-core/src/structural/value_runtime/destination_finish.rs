@@ -78,8 +78,7 @@ impl StructuralValueRuntime {
         key: StructuralDestinationKey,
     ) -> Result<DestinationCleanupReport, StructuralValueError> {
         let mut record = self.retire_destination(key)?;
-        let initialized_fields = u16::try_from(record.order.len())
-            .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let initialized_fields = record.order.len();
         record.order.reverse();
         let mut report = DestinationCleanupReport {
             sequence: self.cleanup_sequence,
@@ -90,7 +89,7 @@ impl StructuralValueRuntime {
         };
         self.cleanup_sequence = self.cleanup_sequence.saturating_add(1);
         for &field in &report.cleanup_order {
-            let index = usize::from(field);
+            let index = field;
             let image = record.values[index]
                 .take()
                 .ok_or(StructuralValueError::InvariantViolation)?;
@@ -110,7 +109,7 @@ impl StructuralValueRuntime {
         self.record(
             StructuralEventKind::DestinationAbort,
             key.slot(),
-            u64::from(report.initialized_fields),
+            u64::try_from(report.initialized_fields).unwrap_or(u64::MAX),
         );
         self.record(
             StructuralEventKind::DestinationCleanup,
@@ -154,7 +153,7 @@ impl StructuralValueRuntime {
     pub(super) fn preflight_root_field(
         &mut self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         root_key: StructuralValueKey,
         expected: super::StructuralType,
     ) -> Result<(), StructuralValueError> {

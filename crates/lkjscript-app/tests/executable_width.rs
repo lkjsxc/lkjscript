@@ -10,6 +10,120 @@ const WIDE_COUNT: usize = 300;
 const STRESS_COUNT: usize = 1_024;
 const WIDE_CONSTANT_COUNT: usize = 65_537;
 
+fn wide_product_source(count: usize) -> String {
+    let mut source = String::from("product/\nname/\nwide-product\n/name\nfields/\n");
+    for index in 0..count {
+        source.push_str(&format!(
+            "field/\nname/\nf{index}\n/name\ntype/\ni64\n/type\n/field\n"
+        ));
+    }
+    source.push_str("/fields\n/product\n");
+    source.push_str(concat!(
+        "def/\nname/\nread-high-product\n/name\nfn/\nsig/\ninputs/\n/inputs\n",
+        "output/\ni64\n/output\n/sig\nparams/\n/params\nlet/\nbind/\nvalue\n",
+        "product-value/\nwide-product\n",
+    ));
+    for index in 0..count {
+        source.push_str(&format!("field/\nf{index}\n{index}\n/field\n"));
+    }
+    source.push_str("/product-value\n/bind\nfield/\nwith-field/\nvalue\n");
+    source.push_str(&format!(
+        "f{}\n777\n/with-field\nf{}\n/field\n/let\n/fn\n/def\n",
+        count - 1,
+        count - 1
+    ));
+    source.push_str(concat!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "read-high-product/\n/read-high-product\n/main\n",
+    ));
+    source
+}
+
+fn wide_enum_declaration(variants: usize, fields: usize) -> String {
+    let mut source = String::from("enum/\nname/\nwide-enum\n/name\nvariants/\n");
+    for variant in 0..variants {
+        source.push_str(&format!("variant/\nname/\nv{variant}\n/name\nfields/\n"));
+        if variant + 1 == variants {
+            for field in 0..fields {
+                source.push_str(&format!(
+                    "variant-field/\nname/\nf{field}\n/name\ntype/\ni64\n/type\n/variant-field\n"
+                ));
+            }
+        }
+        source.push_str("/fields\n/variant\n");
+    }
+    source.push_str("/variants\n/enum\n");
+    source
+}
+
+fn wide_enum_match_source(variants: usize, fields: usize) -> String {
+    let mut source = wide_enum_declaration(variants, fields);
+    source.push_str(concat!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nwide-enum/\n/wide-enum\n/type\nvariant/\n",
+    ));
+    source.push_str(&format!("v{}\n/variant\nfields/\n", variants - 1));
+    for field in 0..fields {
+        source.push_str(&format!(
+            "variant-field/\nname/\nf{field}\n/name\n{field}\n/variant-field\n"
+        ));
+    }
+    source.push_str("/fields\n/variant-value\narms/\n");
+    for variant in std::iter::once(variants - 1).chain(0..variants - 1) {
+        source.push_str("arm/\nvariant-pattern/\ntype/\nwide-enum/\n/wide-enum\n/type\nvariant/\n");
+        source.push_str(&format!("v{variant}\n/variant\nfields/\n"));
+        if variant + 1 == variants {
+            for field in 0..fields {
+                source.push_str(&format!("variant-field-pattern/\nname/\nf{field}\n/name\n"));
+                if field + 1 == fields {
+                    source.push_str("binding/\nname/\nhigh\n/name\n/binding\n");
+                } else {
+                    source.push_str("wildcard/\n/wildcard\n");
+                }
+                source.push_str("/variant-field-pattern\n");
+            }
+        }
+        source.push_str("/fields\n/variant-pattern\n");
+        if variant + 1 == variants {
+            source.push_str("high\n");
+        } else {
+            source.push_str("-1\n");
+        }
+        source.push_str("/arm\n");
+    }
+    source.push_str("/arms\n/match\n/main\n");
+    source
+}
+
+fn wide_enum_value_source(
+    declaration: &str,
+    variant: &str,
+    wide_variant: bool,
+    fields: usize,
+) -> String {
+    let mut source = declaration.to_owned();
+    source.push_str(concat!(
+        "def/\nname/\nselect-wide-enum\n/name\nfn/\nsig/\ninputs/\n/inputs\n",
+        "output/\nwide-enum/\n/wide-enum\n/output\n/sig\nparams/\n/params\n",
+        "variant-value/\ntype/\nwide-enum/\n/wide-enum\n/type\nvariant/\n",
+    ));
+    source.push_str(variant);
+    source.push_str("\n/variant\nfields/\n");
+    if wide_variant {
+        for field in 0..fields {
+            source.push_str(&format!(
+                "variant-field/\nname/\nf{field}\n/name\n{field}\n/variant-field\n"
+            ));
+        }
+    }
+    source.push_str(concat!(
+        "/fields\n/variant-value\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nwide-enum/\n/wide-enum\n/output\n/sig\n",
+        "select-wide-enum/\n/select-wide-enum\n/main\n",
+    ));
+    source
+}
+
 fn wide_scalar_source(count: usize) -> String {
     let mut lines = vec![
         "def".to_string() + "/",
@@ -255,6 +369,142 @@ fn returned_i64(outcome: ExecutionOutcome) -> i64 {
         ExecutionOutcome::Returned(value) => value.as_i64().expect("returned I64"),
         other => panic!("wide executable did not return: {other:?}"),
     }
+}
+
+#[test]
+fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
+    let program = compile_source(
+        &wide_product_source(WIDE_COUNT),
+        "generated-wide-product.lkjscript",
+    )
+    .expect("compile wide product through HIR, memory plan, SSA, and prepared bytecode");
+    assert!(program.prepared_identity().is_bound());
+    assert_eq!(program.bytecode().products()[0].fields.len(), WIDE_COUNT);
+    assert!(program
+        .bytecode()
+        .structural_destination_fields()
+        .iter()
+        .any(|reference| reference.field == 299));
+    assert!(program
+        .bytecode()
+        .structural_aggregate_fields()
+        .iter()
+        .any(|reference| reference.field == 299));
+    assert!((0..program.bytecode().protos().len())
+        .filter_map(|index| program.bytecode().proto_instructions(index))
+        .flatten()
+        .any(|instruction| {
+            instruction.op() == Op::StructuralDestinationFieldInit
+                && instruction
+                    .operand()
+                    .index()
+                    .is_some_and(|index| index > usize::from(u8::MAX))
+        }));
+    assert_eq!(
+        returned_i64(run_chunk(
+            program.bytecode(),
+            &ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        )),
+        777
+    );
+
+    let session = JitSession::new_auto(
+        program.ssa(),
+        program.bytecode_links(),
+        JitConfig {
+            auto_threshold: 1,
+            ..JitConfig::default()
+        },
+    );
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert_eq!(returned_i64(outcome), 777);
+    assert!(stats.vm_fallbacks > 0);
+}
+
+#[test]
+fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm() {
+    let source = wide_enum_match_source(WIDE_COUNT, WIDE_COUNT);
+    let program = compile_source(&source, "generated-wide-enum-match.lkjscript")
+        .expect("compile wide enum through exhaustive matching and prepared bytecode");
+    assert!(program.prepared_identity().is_bound());
+    let variants = program
+        .bytecode()
+        .structural_layouts()
+        .iter()
+        .find_map(|layout| match &layout.kind {
+            lkjscript_core::StructuralLayoutKind::Enum { variants, .. }
+                if variants.len() == WIDE_COUNT =>
+            {
+                Some(variants.as_slice())
+            }
+            _ => None,
+        })
+        .expect("wide enum structural metadata");
+    assert_eq!(variants.len(), WIDE_COUNT);
+    assert!(variants
+        .iter()
+        .any(|variant| variant.fields.len() == WIDE_COUNT));
+    assert!(variants
+        .iter()
+        .any(|variant| variant.physical_tag > u64::from(u8::MAX)));
+    assert_eq!(
+        returned_i64(run_chunk(
+            program.bytecode(),
+            &ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        )),
+        i64::try_from(WIDE_COUNT - 1).expect("wide field value fits i64")
+    );
+
+    let high = variants
+        .iter()
+        .filter(|variant| variant.physical_tag > u64::from(u8::MAX))
+        .max_by_key(|variant| variant.physical_tag)
+        .expect("high physical tag");
+    let high_name = format!("v{}", high.source_order);
+    let declaration = wide_enum_declaration(WIDE_COUNT, WIDE_COUNT);
+    let high_source = wide_enum_value_source(
+        &declaration,
+        &high_name,
+        high_name == format!("v{}", WIDE_COUNT - 1),
+        WIDE_COUNT,
+    );
+    let high_program = compile_source(&high_source, "generated-wide-enum-match.lkjscript")
+        .expect("compile high-tag enum construction");
+    let ExecutionOutcome::Returned(value) = run_chunk(
+        high_program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
+        panic!("VM must return the high-tag enum")
+    };
+    assert_eq!(value.enum_physical_tag(), Some(high.physical_tag));
+
+    let session = JitSession::new_auto(
+        high_program.ssa(),
+        high_program.bytecode_links(),
+        JitConfig {
+            auto_threshold: 1,
+            ..JitConfig::default()
+        },
+    );
+    let (outcome, stats) = run_chunk_auto(
+        high_program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    let ExecutionOutcome::Returned(value) = outcome else {
+        panic!("auto execution must return the high-tag enum")
+    };
+    assert_eq!(value.enum_physical_tag(), Some(high.physical_tag));
+    assert!(stats.vm_fallbacks > 0);
 }
 
 #[test]

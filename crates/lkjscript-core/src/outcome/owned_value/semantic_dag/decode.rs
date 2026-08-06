@@ -78,7 +78,7 @@ fn decode_semantic_dag_payload(
             SemanticDagPayload::Product(decode_semantic_dag_fields(input, budget)?)
         }
         SemanticDagKind::Enum => SemanticDagPayload::Enum {
-            tag: input.u16()?,
+            tag: input.u64()?,
             fields: decode_semantic_dag_fields(input, budget)?,
         },
         SemanticDagKind::EmptyList => SemanticDagPayload::EmptyList,

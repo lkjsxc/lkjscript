@@ -73,11 +73,7 @@ impl VerifiedTypes<'_> {
             .find(|item| item.name == name)
             .cloned()
             .ok_or_else(|| Error::msg("memory verifier lost product"))?;
-        verified_add(
-            &mut self.fields,
-            item.fields.len(),
-            MAX_MEMORY_PLAN_AGGREGATE_FIELDS,
-        )?;
+        verified_observe(&mut self.fields, item.fields.len())?;
         if self.graph.is_recursive(&key) {
             return self.recursive(&key, &[]);
         }
@@ -118,15 +114,10 @@ impl VerifiedTypes<'_> {
         if item.type_parameters.len() != arguments.len() {
             return Err(Error::msg("memory verifier enum arity mismatch"));
         }
-        verified_add(
-            &mut self.variants,
-            item.variants.len(),
-            MAX_MEMORY_PLAN_AGGREGATE_VARIANTS,
-        )?;
-        verified_add(
+        verified_observe(&mut self.variants, item.variants.len())?;
+        verified_observe(
             &mut self.fields,
             item.variants.iter().map(|v| v.fields.len()).sum(),
-            MAX_MEMORY_PLAN_AGGREGATE_FIELDS,
         )?;
         if self.graph.is_recursive(&key) {
             return self.recursive(&key, arguments);

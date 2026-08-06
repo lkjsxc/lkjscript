@@ -25,7 +25,7 @@ use lkjscript_core::{
     CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumFieldRef, EnumId, EnumVariantRef,
     Error, ErrorClass, ExecutionConfig, ExecutionOutcome, FailureCleanupAction, HostError, Op,
     ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
-    MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
+    MAX_LIST_EQUAL_STEPS,
 };
 #[cfg(feature = "jit")]
 use lkjscript_jit::{

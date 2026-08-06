@@ -49,33 +49,23 @@ pub(in crate::codegen) fn structural_destination(
 pub(in crate::codegen) fn intern_destination_field(
     chunk: &mut Chunk,
     destination: StructuralDestinationId,
-    field: u16,
-) -> Result<u16> {
+    field: u64,
+) -> Result<u64> {
     let reference = StructuralDestinationFieldRef { destination, field };
-    if let Some(index) = chunk
-        .structural_destination_fields
-        .iter()
-        .position(|item| *item == reference)
-    {
-        return u16::try_from(index)
-            .map_err(|_| Error::msg("structural destination-field index exceeds u16"));
-    }
-    let index = u16::try_from(chunk.structural_destination_fields.len())
-        .map_err(|_| Error::msg("structural destination-field table exceeds u16"))?;
-    chunk.structural_destination_fields.push(reference);
-    Ok(index)
+    chunk.intern_structural_destination_field(reference)
 }
 
 pub(in crate::codegen) fn intern_aggregate_field(
     chunk: &mut Chunk,
     representation: lkjscript_ir::StructuralRepresentationId,
-    field: u16,
+    field: u64,
     result: &SsaType,
     result_representation: Option<BytecodeStructuralRepresentationId>,
-) -> Result<u16> {
+) -> Result<u64> {
     intern_aggregate_field_for_representation(
         chunk,
         BytecodeStructuralRepresentationId::new(representation.raw()),
+        None,
         field,
         result,
         result_representation,
@@ -85,10 +75,11 @@ pub(in crate::codegen) fn intern_aggregate_field(
 pub(in crate::codegen) fn intern_aggregate_field_for_representation(
     chunk: &mut Chunk,
     representation: BytecodeStructuralRepresentationId,
-    field: u16,
+    requested_variant: Option<BytecodeVariantId>,
+    field: u64,
     result: &SsaType,
     result_representation: Option<BytecodeStructuralRepresentationId>,
-) -> Result<u16> {
+) -> Result<u64> {
     let metadata = chunk
         .structural_representations
         .get(representation.index())
@@ -97,18 +88,31 @@ pub(in crate::codegen) fn intern_aggregate_field_for_representation(
         .structural_layouts
         .get(metadata.layout.index())
         .ok_or_else(|| Error::msg("aggregate field layout is missing"))?;
-    let active_variant = match &layout.kind {
-        BytecodeStructuralLayoutKind::Enum { variants, .. } if variants.len() == 1 => {
+    let active_variant = match (&layout.kind, requested_variant) {
+        (BytecodeStructuralLayoutKind::Enum { variants, .. }, Some(requested))
+            if variants.iter().any(|variant| variant.variant == requested) =>
+        {
+            Some(requested)
+        }
+        (BytecodeStructuralLayoutKind::Enum { variants, .. }, None) if variants.len() == 1 => {
             Some(variants[0].variant)
         }
-        BytecodeStructuralLayoutKind::Enum { .. } => {
+        (BytecodeStructuralLayoutKind::Enum { .. }, _) => {
             return Err(Error::msg(
                 "aggregate enum field borrow requires exact active payload metadata",
             ))
         }
-        BytecodeStructuralLayoutKind::String
-        | BytecodeStructuralLayoutKind::Path
-        | BytecodeStructuralLayoutKind::Product { .. } => None,
+        (
+            BytecodeStructuralLayoutKind::String
+            | BytecodeStructuralLayoutKind::Path
+            | BytecodeStructuralLayoutKind::Product { .. },
+            None,
+        ) => None,
+        _ => {
+            return Err(Error::msg(
+                "aggregate product field unexpectedly names an enum variant",
+            ))
+        }
     };
     let reference = StructuralAggregateFieldRef {
         representation,
@@ -117,18 +121,7 @@ pub(in crate::codegen) fn intern_aggregate_field_for_representation(
         result: structural_field_from_chunk(chunk, result)?,
         result_representation,
     };
-    if let Some(index) = chunk
-        .structural_aggregate_fields
-        .iter()
-        .position(|item| *item == reference)
-    {
-        return u16::try_from(index)
-            .map_err(|_| Error::msg("structural aggregate-field index exceeds u16"));
-    }
-    let index = u16::try_from(chunk.structural_aggregate_fields.len())
-        .map_err(|_| Error::msg("structural aggregate-field table exceeds u16"))?;
-    chunk.structural_aggregate_fields.push(reference);
-    Ok(index)
+    chunk.intern_structural_aggregate_field(reference)
 }
 
 pub(in crate::codegen) fn intern_payload(
@@ -137,25 +130,14 @@ pub(in crate::codegen) fn intern_payload(
     variant: lkjscript_ir::VariantId,
     result: &SsaType,
     result_representation: Option<BytecodeStructuralRepresentationId>,
-) -> Result<u16> {
+) -> Result<u64> {
     let reference = StructuralPayloadRef {
         representation,
         variant: BytecodeVariantId::new(variant.bytes()),
         result: structural_field_from_chunk(chunk, result)?,
         result_representation,
     };
-    if let Some(index) = chunk
-        .structural_payloads
-        .iter()
-        .position(|item| *item == reference)
-    {
-        return u16::try_from(index)
-            .map_err(|_| Error::msg("structural payload index exceeds u16"));
-    }
-    let index = u16::try_from(chunk.structural_payloads.len())
-        .map_err(|_| Error::msg("structural payload table exceeds u16"))?;
-    chunk.structural_payloads.push(reference);
-    Ok(index)
+    chunk.intern_structural_payload(reference)
 }
 
 include!("metadata.rs");

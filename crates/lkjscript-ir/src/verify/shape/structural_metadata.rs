@@ -8,8 +8,7 @@ mod witnesses;
 
 use crate::{
     Program, SsaType, StructuralLayoutKind, StructuralStorage, StructuralValueCategory,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
@@ -40,13 +39,12 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
     {
         return fail("SSA structural metadata exceeds bounded table limits");
     }
-    let mut field_work = 0usize;
     for (index, layout) in memory.layouts.iter().enumerate() {
         if layout.id.index() != Some(index) || !layout.identity.is_resolved() {
             return fail("SSA structural layouts require dense IDs and stable identities");
         }
-        let fields = match &layout.kind {
-            StructuralLayoutKind::String | StructuralLayoutKind::Path => 0,
+        match &layout.kind {
+            StructuralLayoutKind::String | StructuralLayoutKind::Path => {}
             StructuralLayoutKind::Product { product, fields } => {
                 let declared = product_by_id(program, *product)?;
                 if declared
@@ -57,7 +55,6 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                 {
                     return fail("SSA structural product layout does not match exact field types");
                 }
-                fields.len()
             }
             StructuralLayoutKind::Enum {
                 enum_id,
@@ -70,7 +67,6 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                 {
                     return fail("SSA structural enum layout identity or variant count is stale");
                 }
-                let mut count = 0usize;
                 for variant in variants {
                     let exact = declared
                         .variants
@@ -79,23 +75,14 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                         .ok_or_else(|| {
                             crate::IrError::new("SSA structural enum variant is stale")
                         })?;
-                    if exact.physical_tag != variant.physical_tag
+                    if exact.source_order != variant.source_order
+                        || exact.physical_tag != variant.physical_tag
                         || exact.fields.len() != variant.fields.len()
                     {
                         return fail("SSA structural active-payload layout is stale");
                     }
-                    count = count
-                        .checked_add(variant.fields.len())
-                        .ok_or_else(|| crate::IrError::new("SSA structural field work overflow"))?;
                 }
-                count
             }
-        };
-        field_work = field_work
-            .checked_add(fields)
-            .ok_or_else(|| crate::IrError::new("SSA structural field work overflow"))?;
-        if field_work > MAX_STRUCTURAL_LAYOUT_FIELDS {
-            return fail("SSA structural layout fields exceed bounded maximum");
         }
     }
     let mut exact_types = HashSet::new();

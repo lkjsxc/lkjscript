@@ -92,6 +92,16 @@ fn closure_error(ty: &Type, closure: &MemoryClosureFact) -> Error {
     ))
 }
 
+pub(super) fn checked_observe(slot: &mut u64, amount: usize, label: &str) -> Result<()> {
+    *slot = slot
+        .checked_add(
+            u64::try_from(amount)
+                .map_err(|_| Error::msg(format!("HIR memory-plan {label} exceeds u64")))?,
+        )
+        .ok_or_else(|| Error::msg(format!("HIR memory-plan {label} telemetry overflow")))?;
+    Ok(())
+}
+
 pub(super) fn bounded_add(slot: &mut u64, amount: usize, limit: u64, label: &str) -> Result<()> {
     *slot = slot.checked_add(u64::try_from(amount)
         .map_err(|_| Error::msg(format!("HIR memory-plan {label} charge exceeds u64")))?)
@@ -123,7 +133,6 @@ impl TypePlanner<'_> {
         {
             return Ok((leaf_glue(ty), None));
         }
-        bounded_add(&mut self.fields, 0, MAX_MEMORY_PLAN_AGGREGATE_FIELDS, "aggregate fields")?;
         if u64::try_from(self.drop_paths.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_DROP_PATHS {
             return Err(Error::msg("HIR memory-plan drop paths exceed bounded maximum"));
         }

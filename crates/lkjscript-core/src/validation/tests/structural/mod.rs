@@ -117,16 +117,16 @@ fn emit_finished_product(chunk: &mut Chunk) {
     let value = chunk
         .add_const(crate::Constant::I64(11))
         .expect("add value constant");
-    chunk.main.emit_op_u16(Op::StructuralDestinationCreate, 0);
+    chunk.main.emit_op_u64(Op::StructuralDestinationCreate, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
     chunk.main.emit_op_u64(Op::LoadConst, value.0);
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationFieldInit, 0);
+        .emit_op_u64(Op::StructuralDestinationFieldInit, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
-    chunk.main.emit_op_u16(Op::StructuralDestinationFinish, 0);
+    chunk.main.emit_op_u64(Op::StructuralDestinationFinish, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 1);
     chunk.main.emit_op_u64_pair(Op::StructuralPlaceInit, 0, 1);
     chunk.main.emit(Op::Pop);

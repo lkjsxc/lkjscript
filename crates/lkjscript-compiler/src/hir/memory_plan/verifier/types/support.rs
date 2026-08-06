@@ -150,14 +150,11 @@ pub(crate) fn verified_leaf_glue(ty: &Type) -> Option<MemoryDropGlueId> {
     }
 }
 
-pub(crate) fn verified_add(slot: &mut u64, amount: usize, limit: u64) -> Result<()> {
+pub(crate) fn verified_observe(slot: &mut u64, amount: usize) -> Result<()> {
     *slot = slot
         .checked_add(
             u64::try_from(amount).map_err(|_| Error::msg("memory verifier work exceeds u64"))?,
         )
-        .ok_or_else(|| Error::msg("memory verifier aggregate work overflow"))?;
-    if *slot > limit {
-        return Err(Error::msg("memory verifier aggregate work exceeds maximum"));
-    }
+        .ok_or_else(|| Error::msg("memory verifier aggregate telemetry overflow"))?;
     Ok(())
 }

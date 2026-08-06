@@ -101,6 +101,7 @@ fn layout_kind(
                 .map(|variant| {
                     Ok(StructuralVariantLayout {
                         variant: lkjscript_ir::VariantId::new(variant.id.bytes()),
+                        source_order: variant.source_order,
                         physical_tag: variant_physical_tag(item, variant.id)?,
                         fields: variant
                             .fields
@@ -124,12 +125,12 @@ fn layout_kind(
     }
 }
 
-fn variant_physical_tag(item: &hir::EnumDefinition, id: hir::VariantId) -> Result<u16> {
+fn variant_physical_tag(item: &hir::EnumDefinition, id: hir::VariantId) -> Result<u64> {
     let mut ids: Vec<_> = item.variants.iter().map(|variant| variant.id).collect();
     ids.sort_by_key(|variant| variant.bytes());
     ids.iter()
         .position(|candidate| *candidate == id)
-        .and_then(|index| u16::try_from(index).ok())
+        .and_then(|index| u64::try_from(index).ok())
         .ok_or_else(|| Error::msg("structural enum physical tag is missing"))
 }
 

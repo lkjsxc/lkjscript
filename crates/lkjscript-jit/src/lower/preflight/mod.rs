@@ -164,11 +164,9 @@ pub(super) fn preflight_function(
                     );
                 }
                 InstructionKind::ProductValue { .. }
-                | InstructionKind::ProductField { .. }
                 | InstructionKind::WithProductField { .. }
                 | InstructionKind::EnumValue { .. }
                 | InstructionKind::EnumIsVariant { .. }
-                | InstructionKind::EnumField { .. }
                     if domain == LoweringDomain::StructuralIsland =>
                 {
                     return unsupported_operation(
@@ -176,9 +174,24 @@ pub(super) fn preflight_function(
                         "legacy aggregate operation in structural group",
                     );
                 }
-                InstructionKind::ProductValue { .. }
-                | InstructionKind::ProductField { .. }
-                | InstructionKind::WithProductField { .. } => {}
+                InstructionKind::ProductValue { product, fields } => {
+                    if u32::try_from(product.raw()).is_err() || u8::try_from(fields.len()).is_err()
+                    {
+                        return unsupported_operation(
+                            function.id,
+                            "native product construction exceeds compact aggregate eligibility",
+                        );
+                    }
+                }
+                InstructionKind::ProductField { product, field, .. }
+                | InstructionKind::WithProductField { product, field, .. } => {
+                    if u32::try_from(product.raw()).is_err() || u8::try_from(*field).is_err() {
+                        return unsupported_operation(
+                            function.id,
+                            "native product projection exceeds compact aggregate eligibility",
+                        );
+                    }
+                }
                 InstructionKind::EnumValue { .. }
                 | InstructionKind::EnumIsVariant { .. }
                 | InstructionKind::EnumField { .. } => {

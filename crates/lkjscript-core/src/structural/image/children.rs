@@ -151,7 +151,7 @@ impl<'a> IntoIterator for &'a mut SemanticChildren {
 #[derive(Clone, Copy)]
 enum Aggregate {
     Product,
-    Enum(u16),
+    Enum(u64),
 }
 
 enum CloneTask<'a> {

@@ -68,7 +68,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             active_variant,
         } => {
             out.tag(9);
-            out.u16(representation.raw());
+            out.u64(representation.raw());
             out.option(active_variant.as_ref(), |out, value| {
                 out.fixed(&value.bytes())
             });
@@ -80,7 +80,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(10);
             out.u32(destination.raw());
-            out.u16(*field);
+            out.u64(*field);
             out.u32(value.raw());
         }
         InstructionKind::DestinationFinish { destination } => {
@@ -99,10 +99,10 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             value,
         } => {
             out.tag(13);
-            out.u16(representation.raw());
+            out.u64(representation.raw());
             out.u32(place.raw());
             out.u32(loan.raw());
-            out.u16(*field);
+            out.u64(*field);
             out.u32(value.raw());
         }
         InstructionKind::AggregateTag {
@@ -119,7 +119,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             value,
         } => {
             out.tag(15);
-            out.u16(representation.raw());
+            out.u64(representation.raw());
             out.option(place.as_ref(), |out, value| out.u32(value.raw()));
             out.fixed(&variant.bytes());
             out.u32(value.raw());
@@ -131,7 +131,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             value,
         } => {
             out.tag(16);
-            out.u16(representation.raw());
+            out.u64(representation.raw());
             out.u32(place.raw());
             out.u32(loan.raw());
             out.u32(value.raw());

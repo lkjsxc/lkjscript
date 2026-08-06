@@ -20,36 +20,27 @@ fn legacy_product() -> Chunk {
 #[test]
 fn legacy_product_bytecode_operations_are_removed() {
     let mut construction = legacy_product();
-    construction.main.code = vec![
-        Op::Unit as u8,
-        Op::MakeProduct as u8,
-        0,
-        0,
-        Op::Return as u8,
-    ];
+    construction.main.code.clear();
+    construction.main.emit(Op::Unit);
+    construction.main.emit_op_u64(Op::MakeProduct, 0);
+    construction.main.emit(Op::Return);
     assert!(error(construction)
         .contains("product construction requires structural or invocation-region metadata"));
 
     let mut projection = legacy_product();
-    projection.main.code = vec![
-        Op::Unit as u8,
-        Op::LoadProductField as u8,
-        0,
-        0,
-        Op::Return as u8,
-    ];
+    projection.main.code.clear();
+    projection.main.emit(Op::Unit);
+    projection.main.emit_op_u64(Op::LoadProductField, 0);
+    projection.main.emit(Op::Return);
     assert!(error(projection)
         .contains("product projection requires structural or invocation-region metadata"));
 
     let mut update = legacy_product();
-    update.main.code = vec![
-        Op::Unit as u8,
-        Op::Unit as u8,
-        Op::WithProductField as u8,
-        0,
-        0,
-        Op::Return as u8,
-    ];
+    update.main.code.clear();
+    update.main.emit(Op::Unit);
+    update.main.emit(Op::Unit);
+    update.main.emit_op_u64(Op::WithProductField, 0);
+    update.main.emit(Op::Return);
     assert!(
         error(update).contains("product update requires structural or invocation-region metadata")
     );

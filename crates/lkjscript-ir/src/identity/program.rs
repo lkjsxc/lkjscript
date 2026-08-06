@@ -17,7 +17,7 @@ pub(super) fn encode_program(out: &mut Encoder, value: &Program) {
     memory::structural_memory(out, memory_value);
     out.sequence(region_products, |out, value| {
         let crate::RegionProductMetadata { product, identity } = value;
-        out.u16(product.raw());
+        out.u64(product.raw());
         out.fixed(&identity.bytes());
     });
     out.sequence(sources, metadata::source);

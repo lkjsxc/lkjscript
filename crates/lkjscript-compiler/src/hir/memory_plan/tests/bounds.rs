@@ -5,10 +5,7 @@ use lkjscript_core::Result;
 fn aggregate_authority_budgets_accept_exact_and_reject_plus_one() -> Result<()> {
     for (name, maximum) in [
         ("type nodes", MAX_MEMORY_PLAN_TYPE_NODES),
-        ("type edges", MAX_MEMORY_PLAN_TYPE_EDGES),
         ("SCC work", MAX_MEMORY_PLAN_SCC_WORK),
-        ("aggregate fields", MAX_MEMORY_PLAN_AGGREGATE_FIELDS),
-        ("aggregate variants", MAX_MEMORY_PLAN_AGGREGATE_VARIANTS),
         ("destinations", MAX_MEMORY_PLAN_DESTINATIONS),
         ("borrow scopes", MAX_MEMORY_PLAN_BORROW_SCOPES),
         ("drop paths", MAX_MEMORY_PLAN_DROP_PATHS),

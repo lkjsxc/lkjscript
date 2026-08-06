@@ -46,7 +46,7 @@ pub enum SemanticType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticProductField {
     pub identity: [u8; 32],
-    pub source_order: u16,
+    pub source_order: u64,
     pub ty: SemanticType,
 }
 
@@ -59,7 +59,7 @@ pub struct SemanticProductDeclaration {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticEnumVariantField {
     pub identity: [u8; 32],
-    pub source_order: u16,
+    pub source_order: u64,
     pub ty: SemanticType,
     pub indirect: bool,
 }
@@ -67,7 +67,7 @@ pub struct SemanticEnumVariantField {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticEnumVariant {
     pub identity: [u8; 32],
-    pub source_order: u16,
+    pub source_order: u64,
     pub fields: Vec<SemanticEnumVariantField>,
 }
 

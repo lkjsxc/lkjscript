@@ -35,10 +35,6 @@ impl Encoder {
         Ok(())
     }
 
-    pub(crate) fn u16(&mut self, value: u16) -> Result<()> {
-        self.fixed(&value.to_le_bytes())
-    }
-
     pub(crate) fn u32(&mut self, value: u32) -> Result<()> {
         self.fixed(&value.to_le_bytes())
     }
@@ -112,10 +108,6 @@ impl<'a> Decoder<'a> {
 
     pub(crate) fn u8(&mut self) -> Result<u8> {
         Ok(self.take(1)?[0])
-    }
-
-    pub(crate) fn u16(&mut self) -> Result<u16> {
-        Ok(u16::from_le_bytes(self.take(2)?.try_into().map_err(|_| Error::msg("u16"))?))
     }
 
     pub(crate) fn u32(&mut self) -> Result<u32> {

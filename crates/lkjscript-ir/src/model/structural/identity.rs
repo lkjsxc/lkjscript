@@ -113,8 +113,8 @@ fn fingerprint(mut state: u64, ty: &SsaType) -> u64 {
     match ty {
         SsaType::Capability(kind) => mix(state, *kind as u64),
         SsaType::Resource(kind) => mix(state, *kind as u64),
-        SsaType::StructuralDestination(id) => mix(state, u64::from(id.raw())),
-        SsaType::Product(id) => mix(state, u64::from(id.raw())),
+        SsaType::StructuralDestination(id) => mix(state, id.raw()),
+        SsaType::Product(id) => mix(state, id.raw()),
         SsaType::Enum { id, arguments } => {
             state = fingerprint_bytes(state, &id.bytes());
             arguments.iter().fold(state, fingerprint)

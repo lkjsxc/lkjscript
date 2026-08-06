@@ -156,7 +156,7 @@ fn witness_kind(out: &mut Encoder, value: MemoryWitnessValueKind) {
         MemoryWitnessValueKind::List => out.tag(4),
         MemoryWitnessValueKind::Structural(id) => {
             out.tag(5);
-            out.u16(id.raw());
+            out.u64(id.raw());
         }
         MemoryWitnessValueKind::Unsupported => out.tag(6),
     }

@@ -21,16 +21,16 @@ fn returning_product_chunk_from(
         .expect("add value constant");
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationCreate, 0);
+        .emit_op_u64(Op::StructuralDestinationCreate, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
     chunk.main.emit_op_u64(Op::LoadConst, value.0);
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationFieldInit, 0);
+        .emit_op_u64(Op::StructuralDestinationFieldInit, 0);
     chunk
         .main
-        .emit_op_u16(Op::StructuralDestinationFinish, 0);
+        .emit_op_u64(Op::StructuralDestinationFinish, 0);
     chunk.main.emit(Op::Return);
     crate::validate_chunk(chunk, crate::ValidationPolicy::Unrestricted)
         .expect("validated structural return")

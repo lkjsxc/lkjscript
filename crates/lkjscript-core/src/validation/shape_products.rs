@@ -1,11 +1,11 @@
 use std::collections::{HashSet, VecDeque};
 
-use crate::{Chunk, Error, Result, MAX_PRODUCT_FIELDS};
+use crate::{Chunk, Error, Result};
 
 pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize> {
     let mut product_names = HashSet::with_capacity(chunk.products.len());
     for (index, product) in chunk.products.iter().enumerate() {
-        if product.id.index() != index {
+        if product.id.index() != Some(index) {
             return Err(Error::msg(format!(
                 "product metadata index {index} has inconsistent ProductId {}",
                 product.id.raw()
@@ -61,12 +61,6 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 )
             })?;
         metadata_bytes = checked_add(metadata_bytes, region_bytes)?;
-        if product.fields.len() > MAX_PRODUCT_FIELDS {
-            return Err(Error::msg(format!(
-                "product metadata {} exceeds field limit {MAX_PRODUCT_FIELDS}",
-                product.name
-            )));
-        }
         metadata_bytes = checked_add(metadata_bytes, product.name.len())?;
         let mut fields = HashSet::with_capacity(product.fields.len());
         for field in &product.fields {
@@ -98,7 +92,9 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
         {
             let valid = chunk
                 .products
-                .get(id.index())
+                .get(id.index().ok_or_else(|| {
+                    Error::msg("region-product signature ProductId exceeds host index width")
+                })?)
                 .is_some_and(|product| product.id == id && product.region);
             if !valid {
                 return Err(Error::msg(
@@ -112,7 +108,11 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
     for (index, field_ref) in chunk.product_fields.iter().copied().enumerate() {
         let product = chunk
             .products
-            .get(field_ref.product.index())
+            .get(field_ref.product.index().ok_or_else(|| {
+                Error::msg(format!(
+                    "product field descriptor {index} ProductId exceeds host index width"
+                ))
+            })?)
             .ok_or_else(|| {
                 Error::msg(format!(
                     "product field descriptor {index} has an unknown ProductId {}",
@@ -125,7 +125,7 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 field_ref.product.raw()
             )));
         }
-        if usize::from(field_ref.field) >= product.fields.len() {
+        if usize::try_from(field_ref.field).map_or(true, |field| field >= product.fields.len()) {
             return Err(Error::msg(format!(
                 "product field descriptor {index} field {} is out of range",
                 field_ref.field
@@ -152,28 +152,45 @@ fn validate_region_graph(chunk: &Chunk) -> Result<()> {
             };
             let valid = chunk
                 .products
-                .get(target.index())
+                .get(target.index().ok_or_else(|| {
+                    Error::msg("region-product dependency ProductId exceeds host index width")
+                })?)
                 .is_some_and(|metadata| metadata.id == *target && metadata.region);
             if !valid {
                 return Err(Error::msg(
                     "region-product field references non-region product metadata",
                 ));
             }
-            edges[product.id.index()].push(target.index());
-            indegree[target.index()] = indegree[target.index()].saturating_add(1);
+            let product_index = product
+                .id
+                .index()
+                .ok_or_else(|| Error::msg("region-product ProductId exceeds host index width"))?;
+            let target_index = target
+                .index()
+                .ok_or_else(|| Error::msg("region-product ProductId exceeds host index width"))?;
+            edges[product_index].push(target_index);
+            indegree[target_index] = indegree[target_index]
+                .checked_add(1)
+                .ok_or_else(|| Error::host("region-product graph indegree overflow"))?;
         }
     }
     let mut ready: VecDeque<_> = chunk
         .products
         .iter()
-        .filter(|product| product.region && indegree[product.id.index()] == 0)
-        .map(|product| product.id.index())
+        .filter_map(|product| {
+            let index = product.id.index()?;
+            (product.region && indegree.get(index).copied() == Some(0)).then_some(index)
+        })
         .collect();
     let mut visited = 0_usize;
     while let Some(source) = ready.pop_front() {
-        visited = visited.saturating_add(1);
+        visited = visited
+            .checked_add(1)
+            .ok_or_else(|| Error::host("region-product graph visit count overflow"))?;
         for target in &edges[source] {
-            indegree[*target] = indegree[*target].saturating_sub(1);
+            indegree[*target] = indegree[*target]
+                .checked_sub(1)
+                .ok_or_else(|| Error::msg("region-product graph indegree underflow"))?;
             if indegree[*target] == 0 {
                 ready.push_back(*target);
             }

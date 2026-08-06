@@ -39,7 +39,9 @@ impl Evaluator<'_> {
                             self.region_product_field(*product, *field, *key)
                         }
                         EvalValue::Product(actual, fields) if actual == product => fields
-                            .get(usize::from(*field))
+                            .get(usize::try_from(*field).map_err(|_| {
+                                Flow::Trap("product field exceeds host width".into())
+                            })?)
                             .ok_or_else(|| Flow::Trap("product field out of bounds".into()))
                             .and_then(clone_plain_eval_value),
                         _ => Err(Flow::Trap("product field identity mismatch".into())),
@@ -64,7 +66,7 @@ impl Evaluator<'_> {
     fn with_product_field(
         &mut self,
         product: ProductId,
-        field: u8,
+        field: u64,
         input: &EvalValue,
         replacement: &EvalValue,
     ) -> Result<EvalValue, Flow> {
@@ -88,7 +90,9 @@ impl Evaluator<'_> {
             for value in fields {
                 copied.push(clone_plain_eval_value(value)?);
             }
-            let Some(slot) = copied.get_mut(usize::from(field)) else {
+            let field = usize::try_from(field)
+                .map_err(|_| Flow::Trap("product field exceeds host width".into()))?;
+            let Some(slot) = copied.get_mut(field) else {
                 return Err(Flow::Trap("product replacement field out of bounds".into()));
             };
             *slot = replacement;
@@ -117,7 +121,9 @@ impl Evaluator<'_> {
         for value in fields {
             copied.push(clone_plain_eval_value(value)?);
         }
-        let Some(slot) = copied.get_mut(usize::from(field)) else {
+        let field = usize::try_from(field)
+            .map_err(|_| Flow::Trap("product field exceeds host width".into()))?;
+        let Some(slot) = copied.get_mut(field) else {
             return Err(Flow::Trap("product replacement field out of bounds".into()));
         };
         *slot = clone_plain_eval_value(replacement)?;
@@ -149,12 +155,17 @@ impl Evaluator<'_> {
     fn region_product_field(
         &self,
         product: ProductId,
-        field: u8,
+        field: u64,
         key: lkjscript_core::RegionProductKey,
     ) -> Result<EvalValue, Flow> {
         let identity = self.region_product_identity(product)?;
         self.region_products
-            .field(key, identity, u16::from(field))
+            .field(
+                key,
+                identity,
+                usize::try_from(field)
+                    .map_err(|_| Flow::Trap("product field exceeds host width".into()))?,
+            )
             .map_err(region_product_error)
             .and_then(clone_plain_eval_value)
     }

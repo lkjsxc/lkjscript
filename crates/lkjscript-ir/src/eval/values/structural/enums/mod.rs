@@ -51,12 +51,11 @@ impl Evaluator<'_> {
             } else {
                 self.copy_semantic(value(values, *source)?, expected)?
             };
-            if let Err(failure) = self.structural.runtime.initialize_node(
-                destination,
-                u16::try_from(index)
-                    .map_err(|_| Flow::Resource("structural enum fields".into()))?,
-                semantic,
-            ) {
+            if let Err(failure) =
+                self.structural
+                    .runtime
+                    .initialize_node(destination, index, semantic)
+            {
                 if transferred {
                     let restored = self.semantic_to_eval(failure.value)?;
                     super::restore_slot(values, *source, restored)?;
@@ -129,12 +128,11 @@ impl Evaluator<'_> {
                     return Err(flow);
                 }
             };
-            if let Err(failure) = self.structural.runtime.initialize_node(
-                destination,
-                u16::try_from(index)
-                    .map_err(|_| Flow::Resource("structural enum fields".into()))?,
-                semantic,
-            ) {
+            if let Err(failure) =
+                self.structural
+                    .runtime
+                    .initialize_node(destination, index, semantic)
+            {
                 let restored = self.semantic_to_eval(failure.value)?;
                 payload.insert(0, restored);
                 self.abort_structural_destination(destination);

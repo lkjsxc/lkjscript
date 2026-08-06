@@ -66,7 +66,7 @@ pub(super) fn lower_instruction(
         {
             structural::lower_borrow(function, *kind, *value, block, locals, layouts, builder)?
         }
-        InstructionKind::ProductField { value, .. }
+        InstructionKind::ProductField { value, .. } | InstructionKind::EnumField { value, .. }
             if layouts
                 .structural()
                 .selected(structural::source_type(function, *value)?) =>

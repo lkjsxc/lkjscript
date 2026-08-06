@@ -58,7 +58,7 @@ pub enum InstructionKind {
     },
     DestinationFieldInit {
         destination: ValueId,
-        field: u16,
+        field: u64,
         value: ValueId,
     },
     DestinationFinish {
@@ -71,7 +71,7 @@ pub enum InstructionKind {
         representation: StructuralRepresentationId,
         place: PlaceId,
         loan: LoanId,
-        field: u16,
+        field: u64,
         value: ValueId,
     },
     AggregateTag {
@@ -139,12 +139,12 @@ pub enum InstructionKind {
     },
     ProductField {
         product: ProductId,
-        field: u8,
+        field: u64,
         value: ValueId,
     },
     WithProductField {
         product: ProductId,
-        field: u8,
+        field: u64,
         value: ValueId,
         replacement: ValueId,
     },
@@ -164,6 +164,7 @@ pub enum InstructionKind {
         enum_id: EnumId,
         variant: VariantId,
         field: VariantFieldId,
+        field_index: u64,
         layout: RuntimeLayoutId,
         value: ValueId,
     },

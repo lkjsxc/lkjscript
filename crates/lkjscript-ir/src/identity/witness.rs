@@ -20,7 +20,7 @@ pub(super) fn descriptor(out: &mut Encoder, value: &MemoryWitnessDescriptor) {
     out.u16(*ordinal);
     facts_value(out, id.bytes(), *ordinal, facts, dependencies);
     ty(out, value_ty);
-    out.option(representation.as_ref(), |out, value| out.u16(value.raw()));
+    out.option(representation.as_ref(), |out, value| out.u64(value.raw()));
 }
 
 pub(super) fn facts_value(

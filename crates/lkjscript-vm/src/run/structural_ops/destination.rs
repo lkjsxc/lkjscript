@@ -19,7 +19,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
 
 fn create<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     charge_construction(vm)?;
-    let id = StructuralDestinationId::new(vm.read_u16()?);
+    let id = StructuralDestinationId::new(vm.read_u64()?);
     let metadata = destination_metadata(vm.chunk, id)?.clone();
     let value_type = representation_type(
         vm.chunk,
@@ -74,7 +74,7 @@ fn create<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn initialize<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let reference_index = usize::from(vm.read_u16()?);
+    let reference_index = vm.read_index()?;
     let reference = vm
         .chunk
         .structural_destination_fields()
@@ -90,20 +90,22 @@ fn initialize<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         ));
     }
     let metadata = destination_metadata(vm.chunk, reference.destination)?;
+    let field_index = usize::try_from(reference.field)
+        .map_err(|_| Error::msg("structural destination field exceeds host index width"))?;
     let field = *metadata
         .fields
-        .get(usize::from(reference.field))
+        .get(field_index)
         .ok_or_else(|| Error::msg("structural destination field is out of range"))?;
     match field.route {
         StructuralFieldRoute::Copy => invocation_mut(vm)?
             .runtime
-            .initialize_value(destination_key, reference.field, source)
+            .initialize_value(destination_key, field_index, source)
             .map_err(map_value_error)?,
         StructuralFieldRoute::Structural(_) => {
-            initialize_structural_owner(vm, destination_key, reference.field, source, field)?;
+            initialize_structural_owner(vm, destination_key, field_index, source, field)?;
         }
         StructuralFieldRoute::Unique => {
-            initialize_unique_owner(vm, destination_key, reference.field, source, field)?;
+            initialize_unique_owner(vm, destination_key, field_index, source, field)?;
         }
         StructuralFieldRoute::Resource => {
             return Err(Error::msg(

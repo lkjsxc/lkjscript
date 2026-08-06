@@ -3,7 +3,6 @@ use super::{EnumId, ProductId, RuntimeLayoutId, VariantId};
 pub const MAX_STRUCTURAL_TYPES: usize = 16_384;
 pub const MAX_STRUCTURAL_LAYOUTS: usize = 16_384;
 pub const MAX_STRUCTURAL_REPRESENTATIONS: usize = 65_536;
-pub const MAX_STRUCTURAL_LAYOUT_FIELDS: usize = 65_536;
 pub const MAX_STRUCTURAL_DESTINATIONS: usize = 65_536;
 pub const MAX_STRUCTURAL_OPERATION_REFS: usize = 65_536;
 
@@ -40,19 +39,19 @@ impl MemoryWitnessId {
 macro_rules! structural_id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-        pub struct $name(u16);
+        pub struct $name(u64);
 
         impl $name {
-            pub const fn new(raw: u16) -> Self {
+            pub const fn new(raw: u64) -> Self {
                 Self(raw)
             }
 
-            pub const fn raw(self) -> u16 {
+            pub const fn raw(self) -> u64 {
                 self.0
             }
 
-            pub const fn index(self) -> usize {
-                self.0 as usize
+            pub fn index(self) -> usize {
+                usize::try_from(self.0).unwrap_or(usize::MAX)
             }
         }
     };
@@ -144,7 +143,8 @@ pub enum StructuralLayoutKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructuralVariantLayout {
     pub variant: VariantId,
-    pub physical_tag: u16,
+    pub source_order: u64,
+    pub physical_tag: u64,
     pub fields: Vec<StructuralFieldMetadata>,
 }
 

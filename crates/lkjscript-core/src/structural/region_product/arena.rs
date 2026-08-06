@@ -97,10 +97,10 @@ impl<T> RegionProductArena<T> {
         &self,
         key: RegionProductKey,
         identity: crate::RuntimeLayoutId,
-        field: u16,
+        field: usize,
     ) -> Result<&T, RegionProductError> {
         self.fields(key, identity)?
-            .get(usize::from(field))
+            .get(field)
             .ok_or(RegionProductError::FieldOutOfRange)
     }
 
@@ -149,11 +149,11 @@ impl<T: Copy> RegionProductArena<T> {
         &mut self,
         key: RegionProductKey,
         identity: crate::RuntimeLayoutId,
-        field: u16,
+        field: usize,
         replacement: T,
     ) -> Result<RegionProductKey, RegionProductError> {
         let current = self.fields(key, identity)?;
-        if usize::from(field) >= current.len() {
+        if field >= current.len() {
             return Err(RegionProductError::FieldOutOfRange);
         }
         let mut fields = Vec::new();
@@ -161,7 +161,7 @@ impl<T: Copy> RegionProductArena<T> {
             .try_reserve_exact(current.len())
             .map_err(|_| RegionProductError::HostAllocation)?;
         fields.extend_from_slice(current);
-        fields[usize::from(field)] = replacement;
+        fields[field] = replacement;
         self.publish(identity, fields)
     }
 }

@@ -74,6 +74,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_enum_field(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
+        field_index: u64,
         layout: hir::RuntimeLayoutId,
         input: &Expr,
         ty: SsaType,
@@ -82,7 +83,7 @@ impl FunctionBuilder<'_> {
         let Some(value) = self.lower_expr(input)? else {
             return Ok(None);
         };
-        self.append_enum_field(ids, layout, value, ty, origin)
+        self.append_enum_field(ids, field_index, layout, value, ty, origin)
             .map(Some)
     }
 }

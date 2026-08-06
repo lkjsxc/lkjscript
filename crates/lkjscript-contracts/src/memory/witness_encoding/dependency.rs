@@ -4,14 +4,14 @@ pub enum ExecutableMemoryWitnessRole {
     ProductField {
         product: [u8; 32],
         field: [u8; 32],
-        source_order: u16,
+        source_order: u64,
     },
     EnumVariantField {
         enumeration: [u8; 32],
         variant: [u8; 32],
         field: [u8; 32],
-        variant_source_order: u16,
-        field_source_order: u16,
+        variant_source_order: u64,
+        field_source_order: u64,
     },
     TypeArgument {
         constructor: [u8; 32],

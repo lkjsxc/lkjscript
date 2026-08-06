@@ -65,10 +65,16 @@ impl Resolver<'_> {
                 )));
             }
             let field_ty = declared.ty.subst(&substitutions);
-            let projection = self.allocate_hidden_match_local(field_ty.clone())?;
+            let wildcard = matches!(nested, AstExpr::Call { name, .. } if name == "wildcard");
+            let projection = if wildcard {
+                None
+            } else {
+                Some(self.allocate_hidden_match_local(field_ty.clone())?)
+            };
             let pattern = self.parse_match_pattern(nested, &field_ty)?;
             fields.push(MatchFieldPattern {
                 name,
+                field_index: declared.source_order,
                 projection,
                 pattern,
             });
@@ -124,10 +130,16 @@ impl Resolver<'_> {
                     declared.name,
                 )));
             }
-            let projection = self.allocate_hidden_match_local(declared.ty.clone())?;
+            let wildcard = matches!(nested, AstExpr::Call { name, .. } if name == "wildcard");
+            let projection = if wildcard {
+                None
+            } else {
+                Some(self.allocate_hidden_match_local(declared.ty.clone())?)
+            };
             let pattern = self.parse_match_pattern(nested, &declared.ty)?;
             fields.push(MatchFieldPattern {
                 name: field_name,
+                field_index: declared.source_order,
                 projection,
                 pattern,
             });

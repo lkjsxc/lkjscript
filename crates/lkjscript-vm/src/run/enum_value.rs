@@ -39,12 +39,12 @@ fn field_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<EnumFieldRe
 }
 
 fn make_enum<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let _index = vm.read_u16()?;
+    let _index = vm.read_u64()?;
     Err(Error::msg("legacy enum construction is removed"))
 }
 
 fn is_variant<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let index = usize::from(vm.read_u16()?);
+    let index = vm.read_index()?;
     let descriptor = variant_ref(vm, index)?;
     let definition = definition(vm, descriptor.enum_id)?;
     let _selected = variant(definition, descriptor.variant)?;
@@ -68,18 +68,20 @@ fn is_variant<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn load_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let descriptor_index = usize::from(vm.read_u16()?);
+    let descriptor_index = vm.read_index()?;
     let descriptor = field_ref(vm, descriptor_index)?;
     let definition = definition(vm, descriptor.enum_id)?;
     let selected = variant(definition, descriptor.variant)?;
     if descriptor.layout != definition.layout {
         return Err(Error::msg("enum projection layout mismatch"));
     }
-    let index = selected
+    if !selected
         .fields
         .iter()
-        .position(|field| field.id == descriptor.field)
-        .ok_or_else(|| Error::msg("enum projection field identity mismatch"))?;
+        .any(|field| field.id == descriptor.field)
+    {
+        return Err(Error::msg("enum projection field identity mismatch"));
+    }
     let value = vm.pop()?;
     let projected = if let Some(projected) = structural_ops::adapter_take_field(
         vm,
@@ -88,9 +90,6 @@ fn load_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         descriptor.layout,
         descriptor.variant,
     )? {
-        if index != 0 {
-            return Err(Error::msg("aggregate adapter field identity mismatch"));
-        }
         super::ext_ops::clear_resource_aliases(vm, value);
         projected
     } else {

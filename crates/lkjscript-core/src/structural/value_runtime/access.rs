@@ -147,7 +147,7 @@ impl StructuralValueRuntime {
     pub fn initialize_value(
         &mut self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         value: Value,
     ) -> Result<(), StructuralValueError> {
         let expected = self.expected_field(key, field)?;

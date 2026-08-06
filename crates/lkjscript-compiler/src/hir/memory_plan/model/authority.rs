@@ -134,7 +134,7 @@ pub struct MemoryDestinationField {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryActivePayload {
     pub variant: [u8; 32],
-    pub source_order: u16,
+    pub source_order: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

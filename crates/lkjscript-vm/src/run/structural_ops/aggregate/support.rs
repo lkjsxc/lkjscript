@@ -81,7 +81,7 @@ fn physical_tag(
     chunk: &ValidatedChunk,
     value_type: StructuralType,
     variant: VariantId,
-) -> Result<u16> {
+) -> Result<u64> {
     let ty = chunk
         .structural_types()
         .iter()

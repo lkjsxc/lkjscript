@@ -103,7 +103,7 @@ fn validate_children(
     used: &mut [bool],
     limits: StructuralValueRuntimeLimits,
 ) -> Result<(), StructuralValueError> {
-    if range.len() > u32::from(limits.max_fields) {
+    if usize::try_from(range.len()).map_or(true, |fields| fields > limits.max_fields) {
         return Err(StructuralValueError::LimitExceeded(
             StructuralValueLimit::Fields,
         ));

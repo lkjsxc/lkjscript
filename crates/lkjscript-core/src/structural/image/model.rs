@@ -55,7 +55,7 @@ pub enum StructuralNodePayload {
     Static(StaticStructuralLeaf),
     Bytes(CheckedU32Range),
     Product(CheckedU32Range),
-    Enum { tag: u16, fields: CheckedU32Range },
+    Enum { tag: u64, fields: CheckedU32Range },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -77,7 +77,7 @@ pub enum StructuralNodeView<'a> {
     Static(StaticStructuralLeaf),
     Bytes(&'a [u8]),
     Product(&'a [LocalNodeId]),
-    Enum { tag: u16, fields: &'a [LocalNodeId] },
+    Enum { tag: u64, fields: &'a [LocalNodeId] },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -138,14 +138,14 @@ impl<'a> StructuralNode<'a> {
         self.image.nodes[self.id.get() as usize].value_type
     }
 
-    pub fn child(self, field: u16) -> Option<Self> {
+    pub fn child(self, field: usize) -> Option<Self> {
         let fields = match self.payload() {
             StructuralNodeView::Product(fields) | StructuralNodeView::Enum { fields, .. } => fields,
             StructuralNodeView::Inline(_)
             | StructuralNodeView::Static(_)
             | StructuralNodeView::Bytes(_) => return None,
         };
-        self.image.node(*fields.get(usize::from(field))?)
+        self.image.node(*fields.get(field)?)
     }
 
     pub fn payload(self) -> StructuralNodeView<'a> {

@@ -36,7 +36,7 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
     out.sequence(memory_witness_parameters, witness::parameter);
     out.sequence(call_witnesses, witness::call_site);
     out.sequence(parameter_structurals, |out, value| {
-        out.option(value.as_ref(), |out, value| out.u16(value.raw()))
+        out.option(value.as_ref(), |out, value| out.u64(value.raw()))
     });
     options_usize(out, parameter_structural_places);
     options_u16(out, parameter_type_variables);
@@ -49,13 +49,13 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
         types::structural_kind(out, *value)
     });
     out.sequence(parameter_region_products, |out, value| {
-        out.option(value.as_ref(), |out, value| out.u16(value.raw()))
+        out.option(value.as_ref(), |out, value| out.u64(value.raw()))
     });
     out.option(return_region_product.as_ref(), |out, value| {
-        out.u16(value.raw())
+        out.u64(value.raw())
     });
     out.option(return_structural.as_ref(), |out, value| {
-        out.u16(value.raw())
+        out.u64(value.raw())
     });
     out.option(return_type_variable.as_ref(), |out, value| out.u16(*value));
     out.sequence(parameter_resources, |out, value| {
@@ -106,7 +106,7 @@ fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
             out.tag(3);
             out.len(*local);
             out.len(*place);
-            out.u16(representation.raw());
+            out.u64(representation.raw());
         }
         FailureCleanupAction::DropStructural {
             local,
@@ -116,12 +116,12 @@ fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
             out.tag(4);
             out.len(*local);
             option_usize(out, place.as_ref());
-            out.u16(representation.raw());
+            out.u64(representation.raw());
         }
         FailureCleanupAction::AbortStructuralDestination { local, destination } => {
             out.tag(5);
             out.len(*local);
-            out.u16(destination.raw());
+            out.u64(destination.raw());
         }
     }
 }

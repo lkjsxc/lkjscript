@@ -83,6 +83,7 @@ fn enum_unwrap(
         enum_id: identity.0,
         variant: VariantId::new(variant),
         field: VariantFieldId::new(field),
+        field_index: 0,
         layout: identity.1,
         value,
         trap: trap.into(),

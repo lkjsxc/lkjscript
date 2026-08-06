@@ -134,7 +134,9 @@ impl LayoutInterner {
             SsaType::Bool => Some(ValueType::Bool.layout_identity()),
             SsaType::I64 => Some(ValueType::I64.layout_identity()),
             SsaType::F64 => Some(ValueType::F64.layout_identity()),
-            SsaType::Product(product) => Some(LayoutIdentity::product(u32::from(product.raw()))),
+            SsaType::Product(product) => u32::try_from(product.raw())
+                .ok()
+                .map(LayoutIdentity::product),
             SsaType::Str | SsaType::Path | SsaType::List(_) | SsaType::Enum { .. } => {
                 self.identities.get(ty).copied()
             }

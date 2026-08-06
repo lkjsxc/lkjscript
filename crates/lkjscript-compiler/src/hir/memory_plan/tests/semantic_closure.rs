@@ -66,7 +66,7 @@ fn product_field_roles_are_complete_ordered_and_identity_bearing() {
         };
         assert_eq!(product, root.identity);
         assert_eq!(field, root.fields[index].identity);
-        assert_eq!(usize::from(source_order), index);
+        assert_eq!(usize::try_from(source_order).ok(), Some(index));
         assert!(matches!(
             dependency.target,
             lkjscript_contracts::ExecutableMemoryWitnessTarget::ExternalMember { .. }

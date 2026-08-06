@@ -81,14 +81,14 @@ fn owner_view_and_destination_metadata_are_opcode_checked() {
         .add_const(crate::Constant::I64(0))
         .expect("add product constant");
     owner.main.emit_op_u64(Op::LoadConst, product.0);
-    owner.main.emit_op_u16(Op::StructuralPublish, 1);
+    owner.main.emit_op_u64(Op::StructuralPublish, 1);
     owner.main.emit(Op::Return);
     assert!(error(owner).contains("owner representation"));
 
     let mut view = product_chunk();
     emit_finished_product(&mut view);
     view.main.emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
-    view.main.emit_op_u16(Op::StructuralBorrow, 0);
+    view.main.emit_op_u64(Op::StructuralBorrow, 0);
     view.main.emit(Op::Return);
     assert!(error(view).contains("view representation"));
 
@@ -107,14 +107,14 @@ fn destination_double_init_and_incomplete_finish_fail_closed() {
     let value = double
         .add_const(crate::Constant::I64(1))
         .expect("add value constant");
-    double.main.emit_op_u16(Op::StructuralDestinationCreate, 0);
+    double.main.emit_op_u64(Op::StructuralDestinationCreate, 0);
     double.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     for _ in 0..2 {
         double.main.emit_op_u8(Op::TakeStructuralLocal, 0);
         double.main.emit_op_u64(Op::LoadConst, value.0);
         double
             .main
-            .emit_op_u16(Op::StructuralDestinationFieldInit, 0);
+            .emit_op_u64(Op::StructuralDestinationFieldInit, 0);
         double.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     }
     double.main.emit(Op::Unit);
@@ -124,10 +124,10 @@ fn destination_double_init_and_incomplete_finish_fail_closed() {
     let mut incomplete = product_chunk();
     incomplete
         .main
-        .emit_op_u16(Op::StructuralDestinationCreate, 0);
+        .emit_op_u64(Op::StructuralDestinationCreate, 0);
     incomplete
         .main
-        .emit_op_u16(Op::StructuralDestinationFinish, 0);
+        .emit_op_u64(Op::StructuralDestinationFinish, 0);
     incomplete.main.emit(Op::Return);
     assert!(error(incomplete).contains("destination finish is incomplete"));
 }

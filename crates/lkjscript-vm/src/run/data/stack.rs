@@ -43,12 +43,6 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         Ok(byte)
     }
 
-    pub(crate) fn read_u16(&mut self) -> Result<u16> {
-        let low = u16::from(self.read_u8()?);
-        let high = u16::from(self.read_u8()?);
-        Ok(low | (high << 8))
-    }
-
     pub(crate) fn read_u64(&mut self) -> Result<u64> {
         let mut bytes = [0_u8; 8];
         for byte in &mut bytes {

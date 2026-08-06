@@ -169,9 +169,8 @@ impl Analyzer {
                         ),
                     ));
                 }
-                let raw = u16::try_from(self.product_names.len()).map_err(|_| {
-                    self.error(source, "too many product declarations for ProductId")
-                })?;
+                let raw = u64::try_from(self.product_names.len())
+                    .map_err(|_| self.error(source, "product declaration index exceeds u64"))?;
                 self.product_names.insert(product_name, ProductId::new(raw));
             }
         }

@@ -102,6 +102,7 @@ pub(super) fn enumeration() -> EnumMetadata {
         variants: vec![EnumVariantMetadata {
             id: VariantId::new([6; 32]),
             name: "only".into(),
+            source_order: 0,
             physical_tag: 0,
             fields: vec![EnumFieldMetadata {
                 id: VariantFieldId::new([7; 32]),

@@ -50,8 +50,8 @@ impl FunctionBuilder<'_> {
             expression_origin,
         )?;
         for (index, value) in fields.into_iter().enumerate() {
-            let field = u16::try_from(index)
-                .map_err(|_| Error::msg("structural destination field exceeds u16"))?;
+            let field = u64::try_from(index)
+                .map_err(|_| Error::msg("structural destination field exceeds u64"))?;
             destination = self.append(
                 destination_ty.clone(),
                 InstructionKind::DestinationFieldInit {
@@ -139,7 +139,11 @@ impl FunctionBuilder<'_> {
         variants
             .iter()
             .find(|candidate| candidate.variant == variant)
-            .map(|candidate| i64::from(candidate.physical_tag))
+            .map(|candidate| {
+                i64::try_from(candidate.physical_tag)
+                    .map_err(|_| Error::msg("structural enum tag exceeds i64 observation width"))
+            })
+            .transpose()?
             .ok_or_else(|| Error::msg("structural enum test has unknown active variant"))
     }
 }

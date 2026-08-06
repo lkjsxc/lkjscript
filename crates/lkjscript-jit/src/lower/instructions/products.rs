@@ -21,7 +21,8 @@ pub(super) fn lower_product_instruction(
                 block,
                 heap_descriptor(
                     HeapOperation::ProductValue {
-                        product: u32::from(product.raw()),
+                        product: u32::try_from(product.raw())
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
                         fields: u8::try_from(fields.len())
                             .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
                     },
@@ -41,8 +42,10 @@ pub(super) fn lower_product_instruction(
                 block,
                 heap_descriptor(
                     HeapOperation::ProductField {
-                        product: u32::from(product.raw()),
-                        field: *field,
+                        product: u32::try_from(product.raw())
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
+                        field: u8::try_from(*field)
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
                         field_type: value_type(value_types, instruction.id)?,
                     },
                     vec![value_type(value_types, *value)?],
@@ -63,8 +66,10 @@ pub(super) fn lower_product_instruction(
                 block,
                 heap_descriptor(
                     HeapOperation::WithProductField {
-                        product: u32::from(product.raw()),
-                        field: *field,
+                        product: u32::try_from(product.raw())
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
+                        field: u8::try_from(*field)
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
                         field_type: value_type(value_types, *replacement)?,
                     },
                     vec![

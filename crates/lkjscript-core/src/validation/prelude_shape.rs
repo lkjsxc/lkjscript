@@ -88,7 +88,7 @@ pub(super) fn valid(definition: &EnumMetadata) -> bool {
 fn header(
     definition: &EnumMetadata,
     name: &str,
-    arity: u8,
+    arity: u64,
     variants: usize,
     layout: [u8; 32],
 ) -> bool {
@@ -102,7 +102,7 @@ fn variant(
     definition: &EnumMetadata,
     id: [u8; 32],
     name: &str,
-    tag: u16,
+    tag: u64,
     fields: &[([u8; 32], &str)],
 ) -> bool {
     definition.variants.iter().any(|item| {
@@ -120,7 +120,7 @@ fn variant_names(
     definition: &EnumMetadata,
     id: [u8; 32],
     name: &str,
-    tag: u16,
+    tag: u64,
     fields: &[&str],
 ) -> bool {
     definition.variants.iter().any(|item| {

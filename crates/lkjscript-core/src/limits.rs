@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 /// Maximum fields in one nominal product declaration.
-pub const MAX_PRODUCT_FIELDS: usize = 15;
 /// Maximum entry comparisons performed by one structural list equality.
 pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
 /// Maximum bytes owned by one language buffer.
@@ -56,7 +55,6 @@ mod tests {
 
     #[test]
     fn language_constants_match_implemented_representations() {
-        assert_eq!(MAX_PRODUCT_FIELDS, 15);
         assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);
         assert_eq!(MAX_BYTE_STORAGE_BYTES, 1_000_000);
         assert_eq!(MAX_BULK_IO_BYTES, 64 * 1024);

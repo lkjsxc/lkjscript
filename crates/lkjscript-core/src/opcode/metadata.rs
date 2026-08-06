@@ -68,26 +68,6 @@ impl Op {
 
 const fn operand_layout(op: Op) -> OperandLayout {
     match op {
-        Op::Car
-        | Op::MakeProduct
-        | Op::LoadProductField
-        | Op::WithProductField
-        | Op::MakeEnum
-        | Op::IsEnumVariant
-        | Op::LoadEnumField
-        | Op::StructuralBorrow
-        | Op::StructuralBorrowMut
-        | Op::StructuralPublish
-        | Op::StructuralDestinationCreate
-        | Op::StructuralDestinationFieldInit
-        | Op::StructuralDestinationFinish
-        | Op::StructuralDestinationAbort
-        | Op::StructuralAggregateFieldBorrow
-        | Op::StructuralAggregateFieldCopy
-        | Op::StructuralAggregateTag
-        | Op::StructuralAggregateConsumePayload
-        | Op::StructuralStringUtf8View
-        | Op::StructuralCopy => OperandLayout::U16,
         Op::Jump
         | Op::JumpIfFalse
         | Op::LoadConst
@@ -115,7 +95,27 @@ const fn operand_layout(op: Op) -> OperandLayout {
         | Op::MemoryWitnessCompare
         | Op::MemoryWitnessDispose
         | Op::ByteVectorPlaceEnd
-        | Op::BytesPlaceEnd => OperandLayout::Index,
+        | Op::BytesPlaceEnd
+        | Op::Car
+        | Op::MakeProduct
+        | Op::LoadProductField
+        | Op::WithProductField
+        | Op::MakeEnum
+        | Op::IsEnumVariant
+        | Op::LoadEnumField
+        | Op::StructuralBorrow
+        | Op::StructuralBorrowMut
+        | Op::StructuralPublish
+        | Op::StructuralDestinationCreate
+        | Op::StructuralDestinationFieldInit
+        | Op::StructuralDestinationFinish
+        | Op::StructuralDestinationAbort
+        | Op::StructuralAggregateFieldBorrow
+        | Op::StructuralAggregateFieldCopy
+        | Op::StructuralAggregateTag
+        | Op::StructuralAggregateConsumePayload
+        | Op::StructuralStringUtf8View
+        | Op::StructuralCopy => OperandLayout::Index,
         Op::ByteVectorPlaceInit
         | Op::ByteVectorMove
         | Op::ByteVectorDropPlace

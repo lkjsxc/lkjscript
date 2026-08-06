@@ -36,7 +36,7 @@ pub(crate) fn verify_block(
         if let Some(frame) = &instruction.metadata.frame_state {
             verify_frame_state(&frame_context, block.id, Some(index), frame)?;
         }
-        super::active_enum::projection(function, block, instruction)?;
+        super::active_enum::projection(program, function, block, instruction)?;
         verify_instruction(program, function, instruction, types, type_parameters)?;
     }
     for operand in block.terminator.operands() {

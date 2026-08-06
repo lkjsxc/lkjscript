@@ -3,6 +3,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_enum_unwrap(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
+        field_index: u64,
         _layout: hir::RuntimeLayoutId,
         input: &Expr,
         trap: &str,
@@ -25,7 +26,16 @@ impl FunctionBuilder<'_> {
         }
         if resource_result_adapter(ids.0, &owner_ty) {
             return self
-                .lower_resource_result_unwrap(ids, _layout, input, trap, ty, source, value)
+                .lower_resource_result_unwrap(
+                    ids,
+                    field_index,
+                    _layout,
+                    input,
+                    trap,
+                    ty,
+                    source,
+                    value,
+                )
                 .map(Some);
         }
         Err(Error::msg(
@@ -37,6 +47,7 @@ impl FunctionBuilder<'_> {
     fn lower_resource_result_unwrap(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
+        field_index: u64,
         layout: hir::RuntimeLayoutId,
         input: &Expr,
         trap: &str,
@@ -111,55 +122,31 @@ impl FunctionBuilder<'_> {
                 .find(|candidate| *candidate == value)
                 .unwrap_or(value)
         };
-        self.append_enum_field(ids, layout, value, ty, source)
+        self.append_enum_field(ids, field_index, layout, value, ty, source)
     }
 
     fn append_enum_field(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
+        field_index: u64,
         _layout: hir::RuntimeLayoutId,
         value: ValueId,
         ty: SsaType,
         source: hir::SourceId,
     ) -> Result<ValueId> {
         let owner_ty = self.value_type(value)?.clone();
-        if let Some(type_fact) = self.structural.type_for(&owner_ty) {
-            let variant = lkjscript_ir::VariantId::new(ids.1.bytes());
-            let layout = self
-                .structural
-                .layouts
-                .get(type_fact.layout.index().unwrap_or(usize::MAX))
-                .ok_or_else(|| Error::msg("structural enum field layout is missing"))?;
-            let single_payload = matches!(
-                &layout.kind,
-                StructuralLayoutKind::Enum { variants, .. }
-                    if variants.iter().any(|item| item.variant == variant && item.fields.len() == 1)
-            );
-            if !single_payload {
-                return Err(Error::msg(
-                    "structural enum field projection requires one exact payload field",
-                ));
-            }
-            let representation =
-                self.structural_representation(&owner_ty, StructuralValueCategory::Owner)?;
-            let copied = self.append(
-                owner_ty.clone(),
-                InstructionKind::StructuralCopy {
-                    representation,
-                    value,
-                },
-                EffectSet::ALLOCATES,
-                source,
-            )?;
+        if self.structural.type_for(&owner_ty).is_some() {
             return self.append(
                 ty,
-                InstructionKind::AggregateConsumePayload {
-                    representation,
-                    place: None,
-                    variant,
-                    value: copied,
+                InstructionKind::EnumField {
+                    enum_id: lkjscript_ir::EnumId::new(ids.0.bytes()),
+                    variant: lkjscript_ir::VariantId::new(ids.1.bytes()),
+                    field: lkjscript_ir::VariantFieldId::new(ids.2.bytes()),
+                    field_index,
+                    layout: lkjscript_ir::RuntimeLayoutId::new(_layout.bytes()),
+                    value,
                 },
-                EffectSet::PURE,
+                EffectSet::READS_MEMORY.union(EffectSet::ALLOCATES),
                 source,
             );
         }
@@ -170,6 +157,7 @@ impl FunctionBuilder<'_> {
                     enum_id: lkjscript_ir::EnumId::new(ids.0.bytes()),
                     variant: lkjscript_ir::VariantId::new(ids.1.bytes()),
                     field: lkjscript_ir::VariantFieldId::new(ids.2.bytes()),
+                    field_index,
                     layout: lkjscript_ir::RuntimeLayoutId::new(_layout.bytes()),
                     value,
                 },

@@ -15,12 +15,14 @@ fn prelude_option_chunk() -> Chunk {
             EnumVariantMetadata {
                 id: VariantId::new(crate::OPTION_NONE_ID),
                 name: "none".into(),
+                source_order: 0,
                 physical_tag: 1,
                 fields: Vec::new(),
             },
             EnumVariantMetadata {
                 id: VariantId::new(crate::OPTION_SOME_ID),
                 name: "some".into(),
+                source_order: 1,
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new(crate::OPTION_VALUE_ID),
@@ -48,12 +50,14 @@ fn enum_chunk() -> Chunk {
             EnumVariantMetadata {
                 id: a,
                 name: "a".into(),
+                source_order: 0,
                 physical_tag: 1,
                 fields: Vec::new(),
             },
             EnumVariantMetadata {
                 id: b,
                 name: "b".into(),
+                source_order: 1,
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: field,
@@ -74,8 +78,8 @@ fn enum_chunk() -> Chunk {
         field,
         layout,
     });
-    chunk.main.emit_op_u16(Op::MakeEnum, 0);
-    chunk.main.emit_op_u16(Op::LoadEnumField, 0);
+    chunk.main.emit_op_u64(Op::MakeEnum, 0);
+    chunk.main.emit_op_u64(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
     chunk
 }

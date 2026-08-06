@@ -31,8 +31,9 @@ fn lower_enum(
             Ok(EnumVariantMetadata {
                 id: lkjscript_ir::VariantId::new(variant.id.bytes()),
                 name: variant.name.clone(),
-                physical_tag: u16::try_from(tag)
-                    .map_err(|_| Error::msg("enum physical tag exceeds u16"))?,
+                source_order: variant.source_order,
+                physical_tag: u64::try_from(tag)
+                    .map_err(|_| Error::msg("enum physical tag exceeds u64"))?,
                 fields: variant
                     .fields
                     .iter()

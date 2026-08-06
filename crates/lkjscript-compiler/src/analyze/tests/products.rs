@@ -49,28 +49,19 @@ fn nominal_products_remain_resolved_and_state_threadable() {
 
 #[test]
 fn product_field_boundaries_and_import_origins_remain_stable() {
-    let mut fifteen = String::from("product/\nname/\nwide\n/name\nfields/\n");
-    for index in 0..15 {
-        fifteen.push_str(&format!(
+    let mut wide = String::from("product/\nname/\nwide\n/name\nfields/\n");
+    for index in 0..300 {
+        wide.push_str(&format!(
             "field/\nname/\nf{index}\n/name\ntype/\ni64\n/type\n/field\n"
         ));
     }
-    fifteen.push_str(concat!(
+    wide.push_str(concat!(
         "/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\n",
         "output/\nunit\n/output\n/sig\nunit\n/main\n",
     ));
-    assert_eq!(
-        analyze_one(&fifteen).expect("15 fields").products[0]
-            .fields
-            .len(),
-        15
-    );
-    let sixteen = fifteen.replacen(
-        "/fields\n/product\n",
-        "field/\nname/\nf15\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
-        1,
-    );
-    assert!(analysis_error(&sixteen).contains("too many fields"));
+    let wide = analyze_one(&wide).expect("300 product fields");
+    assert_eq!(wide.products[0].fields.len(), 300);
+    assert_eq!(wide.products[0].fields[299].source_order, 299);
 
     let dependency = concat!(
         "def/\nname/\nanswer\n/name\nfn/\nsig/\ninputs/\n/inputs\n",

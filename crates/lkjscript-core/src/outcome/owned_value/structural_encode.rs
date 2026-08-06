@@ -47,7 +47,7 @@ fn encode_structural_node(out: &mut Encoder, value: &SemanticValue) -> Result<()
         } => {
             out.u8(7)?;
             out.u8(1)?;
-            out.u16(*tag)?;
+            out.u64(*tag)?;
             encode_structural_fields(out, active_payload)
         }
     }

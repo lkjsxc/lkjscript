@@ -1,11 +1,9 @@
 impl TypePlanner<'_> {
     fn charge_fields(&mut self, amount: usize) -> Result<()> {
-        bounded_add(&mut self.fields, amount, MAX_MEMORY_PLAN_AGGREGATE_FIELDS,
-            "aggregate fields")
+        checked_observe(&mut self.fields, amount, "aggregate fields")
     }
     fn charge_variants(&mut self, amount: usize) -> Result<()> {
-        bounded_add(&mut self.variants, amount, MAX_MEMORY_PLAN_AGGREGATE_VARIANTS,
-            "aggregate variants")
+        checked_observe(&mut self.variants, amount, "aggregate variants")
     }
 }
 

@@ -20,7 +20,7 @@ impl JitStructuralRuntime {
             self.last_resource = Some(ResourceLimitKind::HeapBytes);
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
-        fields.extend_from_slice(projection.path());
+        fields.extend(projection.path().iter().copied().map(usize::from));
         let path = StructuralFieldPath::new(fields);
         let projection = match projection.kind() {
             StructuralProjectionKind::Field => StructuralProjection::Field { path, expected },
@@ -80,7 +80,7 @@ impl JitStructuralRuntime {
         let StructuralNodeView::Enum { tag, .. } = node.payload() else {
             return Err(NativeServiceError::Trap);
         };
-        Ok(i64::from(tag))
+        i64::try_from(tag).map_err(|_| NativeServiceError::Trap)
     }
 
     pub(super) fn owned_tag(
@@ -96,7 +96,7 @@ impl JitStructuralRuntime {
         let StructuralNodeView::Enum { tag, .. } = node.payload() else {
             return Err(NativeServiceError::Trap);
         };
-        Ok(i64::from(tag))
+        i64::try_from(tag).map_err(|_| NativeServiceError::Trap)
     }
 
     pub(super) fn length(

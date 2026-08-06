@@ -52,10 +52,10 @@ impl StructuralValueRuntime {
     pub(super) fn expected_field(
         &self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
     ) -> Result<StructuralType, StructuralValueError> {
         let record = self.destination(key)?;
-        let index = usize::from(field);
+        let index = field;
         let value = record
             .values
             .get(index)
@@ -69,11 +69,11 @@ impl StructuralValueRuntime {
     pub(super) fn preflight_field_type(
         &self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         actual: StructuralType,
     ) -> Result<(), StructuralValueError> {
         let record = self.destination(key)?;
-        let index = usize::from(field);
+        let index = field;
         let expected = *record
             .field_types
             .get(index)

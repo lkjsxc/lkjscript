@@ -41,8 +41,13 @@ metadata selects one of no operand, retained `u16`, fixed `u64` index, or two in
 layout. Bytecode links, call-witness instruction offsets, cleanup roots, and cleanup range offsets
 use canonical `u64` values with checked host conversion. Validator ownership tracking keeps
 instruction offsets and parameter indexes in tagged host-width identities rather than narrowing
-them to `u32`. Product/enum/structural table, descriptor, and field operands remain the separate
-`u16`/`u8` cutover.
+them to `u32`. Nominal product/enum identities, source-order values, physical enum tags,
+aggregate field indexes, and product/enum/structural bytecode table and descriptor references use
+`u64` with checked host conversion. Aggregate descriptor interners pair insertion-order vectors
+with hash indexes, avoiding repeated whole-table scans without making hash iteration canonical.
+The native planner retains compact `u8`/`u16` aggregate fields only as a private specialization
+eligibility format; checked preflight declines wider shapes and automatic execution uses validated
+VM bytecode.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot

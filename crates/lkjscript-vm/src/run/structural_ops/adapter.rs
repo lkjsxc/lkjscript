@@ -95,7 +95,7 @@ struct AdapterRecord {
     enum_id: EnumId,
     layout: RuntimeLayoutId,
     variant: VariantId,
-    physical_tag: u16,
+    physical_tag: u64,
     payload: AdapterPayload,
 }
 

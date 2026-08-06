@@ -133,9 +133,10 @@ impl<'a> Producer<'a> {
         owns_obligation: bool,
     ) -> Result<MemoryEntryId> {
         if place != self.next_place {
-            return Err(Error::msg(
-                "HIR memory-plan producer requires dense per-function PlaceIds",
-            ));
+            return Err(Error::msg(format!(
+                "HIR memory-plan producer requires dense per-function PlaceIds: expected {}, got {place}",
+                self.next_place,
+            )));
         }
         self.next_place = self
             .next_place

@@ -8,7 +8,7 @@ use metadata::*;
 use region::*;
 
 fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let product = ProductId::new(vm.read_u16()?);
+    let product = ProductId::new(vm.read_u64()?);
     let (field_count, identity, routes) = {
         let metadata = product_metadata(vm, product)?;
         if !metadata.region {
@@ -47,7 +47,7 @@ fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let descriptor = vm.read_u16()? as usize;
+    let descriptor = vm.read_index()?;
     let field_ref = product_field_ref(vm, descriptor)?;
     let identity = {
         let metadata = product_metadata(vm, field_ref.product)?;
@@ -64,14 +64,19 @@ fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .region_products
         .as_ref()
         .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
-        .field(key, identity, u16::from(field_ref.field))
+        .field(
+            key,
+            identity,
+            usize::try_from(field_ref.field)
+                .map_err(|_| Error::msg("product field index exceeds host width"))?,
+        )
         .map_err(region_product_error)?;
     vm.push(field);
     Ok(())
 }
 
 fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let descriptor = vm.read_u16()? as usize;
+    let descriptor = vm.read_index()?;
     let field_ref = product_field_ref(vm, descriptor)?;
     let (identity, route) = {
         let metadata = product_metadata(vm, field_ref.product)?;
@@ -84,7 +89,10 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             metadata.identity,
             metadata
                 .region_fields
-                .get(usize::from(field_ref.field))
+                .get(
+                    usize::try_from(field_ref.field)
+                        .map_err(|_| Error::msg("product field index exceeds host width"))?,
+                )
                 .copied(),
         )
     };
@@ -109,7 +117,13 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .region_products
         .as_mut()
         .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
-        .update(key, identity, u16::from(field_ref.field), replacement)
+        .update(
+            key,
+            identity,
+            usize::try_from(field_ref.field)
+                .map_err(|_| Error::msg("product field index exceeds host width"))?,
+            replacement,
+        )
         .map_err(region_product_error)?;
     vm.region_product_allocations = vm.region_product_allocations.saturating_add(1);
     vm.push(Value::from_region_product(updated));

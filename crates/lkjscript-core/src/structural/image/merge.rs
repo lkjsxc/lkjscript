@@ -9,12 +9,12 @@ use super::{
 impl StructuralImage {
     pub(crate) fn merge(
         value_type: StructuralType,
-        enum_tag: Option<u16>,
+        enum_tag: Option<u64>,
         children: &[&StructuralImage],
         facts: TreeFacts,
         limits: StructuralValueRuntimeLimits,
     ) -> Result<Self, StructuralValueError> {
-        if children.len() > usize::from(limits.max_fields) {
+        if children.len() > limits.max_fields {
             return Err(StructuralValueError::LimitExceeded(
                 StructuralValueLimit::Fields,
             ));

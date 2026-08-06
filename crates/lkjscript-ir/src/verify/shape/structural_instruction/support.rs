@@ -71,9 +71,10 @@ fn destination_type(
 fn aggregate_field(
     program: &Program,
     type_id: crate::StructuralTypeId,
-    field: u16,
+    field: u64,
 ) -> crate::Result<&SsaType> {
-    let index = usize::from(field);
+    let index = usize::try_from(field)
+        .map_err(|_| crate::IrError::new("SSA aggregate field exceeds host width"))?;
     match &structural_layout(program, type_id)?.kind {
         StructuralLayoutKind::Product { fields, .. } => fields
             .get(index)
@@ -101,9 +102,10 @@ fn destination_field<'program>(
     function: &Function,
     destination: crate::ValueId,
     type_id: crate::StructuralTypeId,
-    field: u16,
+    field: u64,
 ) -> crate::Result<&'program SsaType> {
-    let index = usize::from(field);
+    let index = usize::try_from(field)
+        .map_err(|_| crate::IrError::new("SSA destination field exceeds host width"))?;
     match &structural_layout(program, type_id)?.kind {
         StructuralLayoutKind::Product { fields, .. } => fields
             .get(index)

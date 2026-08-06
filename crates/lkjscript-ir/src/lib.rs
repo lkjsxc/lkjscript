@@ -46,7 +46,7 @@ pub use model::{
     TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VariantFieldId,
     VariantId, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES, MAX_MEMORY_WITNESS_GROUPS,
     MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS,
-    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
+    MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,

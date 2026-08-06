@@ -39,7 +39,11 @@ impl StructuralCatalog {
                     .find(|variant| variant.variant == active)
                     .ok_or_else(|| invalid_structural("structural enum variant is absent"))?;
                 (
-                    lkjscript_native::StructuralAggregateKind::Enum(variant.physical_tag),
+                    lkjscript_native::StructuralAggregateKind::Enum(
+                        u16::try_from(variant.physical_tag).map_err(|_| {
+                            invalid_structural("structural enum tag exceeds native eligibility")
+                        })?,
+                    ),
                     variant.fields.as_slice(),
                     Some(active.bytes()),
                 )
@@ -113,7 +117,7 @@ impl StructuralCatalog {
                 destination, field, ..
             } => {
                 let (aggregate, storage, initialized) = self.destination(function, destination)?;
-                if field != initialized {
+                if field != u64::from(initialized) {
                     return Err(invalid_structural(
                         "structural destination fields are not initialized in order",
                     ));

@@ -23,7 +23,6 @@ pub struct RegionProductMetadata {
 }
 pub const MAX_STRUCTURAL_LAYOUTS: usize = 16_384;
 pub const MAX_STRUCTURAL_REPRESENTATIONS: usize = 65_536;
-pub const MAX_STRUCTURAL_LAYOUT_FIELDS: usize = 65_536;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StructuralValueCategory {
@@ -79,7 +78,8 @@ pub enum StructuralLayoutKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuralVariantLayout {
     pub variant: VariantId,
-    pub physical_tag: u16,
+    pub source_order: u64,
+    pub physical_tag: u64,
     pub fields: Vec<SsaType>,
 }
 

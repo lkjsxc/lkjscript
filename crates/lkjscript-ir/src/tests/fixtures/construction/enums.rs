@@ -9,6 +9,7 @@ pub(crate) fn enum_metadata() -> EnumMetadata {
             EnumVariantMetadata {
                 id: VariantId::new([2; 32]),
                 name: "a".into(),
+                source_order: 0,
                 physical_tag: 1,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new([3; 32]),
@@ -20,6 +21,7 @@ pub(crate) fn enum_metadata() -> EnumMetadata {
             EnumVariantMetadata {
                 id: VariantId::new([4; 32]),
                 name: "b".into(),
+                source_order: 1,
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new([5; 32]),

@@ -47,10 +47,18 @@ impl Evaluator<'_> {
                 enum_id,
                 variant,
                 field,
+                field_index,
                 layout,
                 value: input,
             } => self.enum_field(
-                function, values, *input, *enum_id, *variant, *field, *layout,
+                function,
+                values,
+                *input,
+                *enum_id,
+                *variant,
+                *field,
+                *field_index,
+                *layout,
             ),
             _ => Err(Flow::Trap("enum instruction dispatch mismatch".into())),
         }
@@ -108,6 +116,7 @@ impl Evaluator<'_> {
         enum_id: EnumId,
         variant: VariantId,
         field: crate::VariantFieldId,
+        field_index: u64,
         layout: RuntimeLayoutId,
     ) -> Result<EvalValue, Flow> {
         let ty = function_value_type(function, input)?;
@@ -121,6 +130,9 @@ impl Evaluator<'_> {
         let (selected, _, _) =
             enum_variant(self.program.program(), ty, variant).map_err(Flow::Trap)?;
         let index = enum_field_index(selected, field).map_err(Flow::Trap)?;
+        if u64::try_from(index).ok() != Some(field_index) {
+            return Err(Flow::Trap("enum field index/identity mismatch".into()));
+        }
         if aggregate_mode(self.program.program(), self.config.structural_limits, ty)
             .map_err(Flow::Trap)?
             == AggregateMode::ResourceAdapter

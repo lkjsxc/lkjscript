@@ -21,10 +21,10 @@ pub(super) fn structural_memory(out: &mut Encoder, value: &StructuralMemoryMetad
             layout,
             mode,
         } = value;
-        out.u16(id.raw());
+        out.u64(id.raw());
         out.fixed(&witness.bytes());
         ty(out, value_ty);
-        out.u16(layout.raw());
+        out.u64(layout.raw());
         structural_type_mode(out, *mode);
     });
     out.sequence(layouts, structural_layout);
@@ -40,12 +40,12 @@ pub(super) fn structural_memory(out: &mut Encoder, value: &StructuralMemoryMetad
             storage,
             route,
         } = value;
-        out.u16(id.raw());
-        out.u16(type_id.raw());
+        out.u64(id.raw());
+        out.u64(type_id.raw());
         out.fixed(&witness.bytes());
         out.fixed(&witness_group.bytes());
         out.u16(*witness_member);
-        out.u16(layout.raw());
+        out.u64(layout.raw());
         category_value(out, *category);
         storage_value(out, *storage);
         out.fixed(route);
@@ -54,14 +54,14 @@ pub(super) fn structural_memory(out: &mut Encoder, value: &StructuralMemoryMetad
 
 fn structural_layout(out: &mut Encoder, value: &StructuralLayoutMetadata) {
     let StructuralLayoutMetadata { id, identity, kind } = value;
-    out.u16(id.raw());
+    out.u64(id.raw());
     out.fixed(&identity.bytes());
     match kind {
         StructuralLayoutKind::String => out.tag(0),
         StructuralLayoutKind::Path => out.tag(1),
         StructuralLayoutKind::Product { product, fields } => {
             out.tag(2);
-            out.u16(product.raw());
+            out.u64(product.raw());
             out.sequence(fields, ty);
         }
         StructuralLayoutKind::Enum {
@@ -75,11 +75,13 @@ fn structural_layout(out: &mut Encoder, value: &StructuralLayoutMetadata) {
             out.sequence(variants, |out, value| {
                 let StructuralVariantLayout {
                     variant,
+                    source_order,
                     physical_tag,
                     fields,
                 } = value;
                 out.fixed(&variant.bytes());
-                out.u16(*physical_tag);
+                out.u64(*source_order);
+                out.u64(*physical_tag);
                 out.sequence(fields, ty);
             });
         }
@@ -139,8 +141,8 @@ fn structural_glue(out: &mut Encoder, value: StructuralDropGlueIdentity) {
                 StructuralDropGlueIdentity::Path { .. } => 1,
                 _ => 4,
             });
-            out.u16(type_id.raw());
-            out.u16(layout.raw());
+            out.u64(type_id.raw());
+            out.u64(layout.raw());
         }
         StructuralDropGlueIdentity::Product {
             type_id,
@@ -148,9 +150,9 @@ fn structural_glue(out: &mut Encoder, value: StructuralDropGlueIdentity) {
             layout,
         } => {
             out.tag(2);
-            out.u16(type_id.raw());
-            out.u16(product.raw());
-            out.u16(layout.raw());
+            out.u64(type_id.raw());
+            out.u64(product.raw());
+            out.u64(layout.raw());
         }
         StructuralDropGlueIdentity::Enum {
             type_id,
@@ -159,9 +161,9 @@ fn structural_glue(out: &mut Encoder, value: StructuralDropGlueIdentity) {
             runtime_layout,
         } => {
             out.tag(3);
-            out.u16(type_id.raw());
+            out.u64(type_id.raw());
             out.fixed(&enum_id.bytes());
-            out.u16(layout.raw());
+            out.u64(layout.raw());
             out.fixed(&runtime_layout.bytes());
         }
     }

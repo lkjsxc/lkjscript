@@ -7,10 +7,10 @@ impl Evaluator<'_> {
         &mut self,
         owner: lkjscript_core::StructuralValueKey,
         root_type: lkjscript_core::StructuralType,
-        field: u16,
+        field: usize,
         expected: lkjscript_core::StructuralType,
     ) -> Result<EvalValue, Flow> {
-        let semantic = self.projected_semantic(owner, root_type, usize::from(field), expected)?;
+        let semantic = self.projected_semantic(owner, root_type, field, expected)?;
         self.semantic_to_eval(semantic)
     }
 
@@ -21,7 +21,6 @@ impl Evaluator<'_> {
         field: usize,
         expected: lkjscript_core::StructuralType,
     ) -> Result<lkjscript_core::SemanticValue, Flow> {
-        let field = u16::try_from(field).map_err(|_| Flow::Resource("structural fields".into()))?;
         let view = self
             .structural
             .runtime

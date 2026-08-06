@@ -8,7 +8,7 @@ pub(super) fn install_structural_type(
     if !program.memory.plan.is_resolved() {
         program.memory.plan = MemoryPlanId::new([1; 32]);
     }
-    let index = u16::try_from(program.memory.types.len()).unwrap_or(u16::MAX);
+    let index = u64::try_from(program.memory.types.len()).unwrap_or(u64::MAX);
     let type_id = StructuralTypeId::new(index);
     let layout = StructuralLayoutId::new(index);
     program.memory.layouts.push(StructuralLayoutMetadata {
@@ -38,7 +38,7 @@ pub(super) fn install_structural_type(
             StructuralStorage::UniqueStructural,
         ),
     ] {
-        let id = u16::try_from(program.memory.representations.len()).unwrap_or(u16::MAX);
+        let id = u64::try_from(program.memory.representations.len()).unwrap_or(u64::MAX);
         program
             .memory
             .representations

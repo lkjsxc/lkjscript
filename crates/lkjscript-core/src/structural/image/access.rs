@@ -45,7 +45,7 @@ impl StructuralImage {
                 _ => return Err(StructuralValueError::InvalidFieldPath),
             };
             id = *Self::range(&self.fields, range)
-                .and_then(|fields| fields.get(usize::from(field)))
+                .and_then(|fields| fields.get(field))
                 .ok_or(StructuralValueError::InvalidFieldPath)?;
         }
         Ok(id)

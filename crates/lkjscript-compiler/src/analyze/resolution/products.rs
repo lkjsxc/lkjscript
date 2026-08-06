@@ -91,8 +91,8 @@ impl Resolver<'_> {
                     product.name
                 ))
             })?;
-        let field_index = u8::try_from(field_index)
-            .map_err(|_| self.error("product field index does not fit u8"))?;
+        let field_index = u64::try_from(field_index)
+            .map_err(|_| self.error("product field index exceeds u64"))?;
         Ok(self.expression(
             field.ty.clone(),
             ExprKind::ProductField {
@@ -135,8 +135,8 @@ impl Resolver<'_> {
                     product.name
                 ))
             })?;
-        let field_index = u8::try_from(field_index)
-            .map_err(|_| self.error("product field index does not fit u8"))?;
+        let field_index = u64::try_from(field_index)
+            .map_err(|_| self.error("product field index exceeds u64"))?;
         let replacement = self.resolve_expr(replacement_expression)?;
         if !Type::unify_assignable(&replacement.ty, &field.ty) {
             return Err(self.error(format!(

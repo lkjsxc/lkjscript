@@ -42,7 +42,7 @@ fn encode_semantic_dag_payload(out: &mut Encoder, value: &SemanticDagPayload) ->
         | SemanticDagPayload::Bytes(bytes) => out.bytes(bytes),
         SemanticDagPayload::Product(fields) => encode_semantic_dag_fields(out, fields),
         SemanticDagPayload::Enum { tag, fields } => {
-            out.u16(*tag)?;
+            out.u64(*tag)?;
             encode_semantic_dag_fields(out, fields)
         }
         SemanticDagPayload::EmptyList => Ok(()),

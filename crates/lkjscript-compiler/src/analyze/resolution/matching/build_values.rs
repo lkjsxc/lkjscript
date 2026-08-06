@@ -20,17 +20,22 @@ impl Resolver<'_> {
             .iter()
             .find(|item| item.id == variant)
             .ok_or_else(|| self.error("match lowering lost VariantId"))?;
-        let declared = selected
-            .fields
-            .iter()
-            .find(|item| item.name == field.name)
+        let declared = usize::try_from(field.field_index)
+            .ok()
+            .and_then(|index| selected.fields.get(index))
+            .filter(|item| item.name == field.name)
             .ok_or_else(|| self.error("match lowering lost variant field"))?;
+        let projection = field
+            .projection
+            .as_ref()
+            .ok_or_else(|| self.error("wildcard field requested a projection"))?;
         Ok(self.expression(
-            field.projection.ty.clone(),
+            projection.ty.clone(),
             ExprKind::EnumField {
                 enum_id,
                 variant,
                 field: declared.id,
+                field_index: field.field_index,
                 layout,
                 value: Box::new(value),
             },

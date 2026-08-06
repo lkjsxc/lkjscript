@@ -127,7 +127,13 @@ pub(super) fn lower_type(
                 )
             })?;
             Ok(ValueType::Reference(ReferenceType::RegionProduct(
-                LayoutIdentity::product(u32::from(product.raw())),
+                LayoutIdentity::product(u32::try_from(product.raw()).map_err(|_| {
+                    LoweringError::new(
+                        LoweringFailureCode::UnsupportedType,
+                        Some(function),
+                        "ProductId exceeds native eligibility",
+                    )
+                })?),
                 identity,
             )))
         }

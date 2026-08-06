@@ -33,9 +33,6 @@ impl Encoder {
     pub(super) fn bool(&mut self, value: bool) {
         self.append(&[u8::from(value)]);
     }
-    pub(super) fn u8(&mut self, value: u8) {
-        self.append(&[value]);
-    }
     pub(super) fn u16(&mut self, value: u16) {
         self.append(&value.to_be_bytes());
     }

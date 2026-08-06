@@ -154,7 +154,7 @@ fn variant(
     definition.variants.iter().any(|item| {
         item.id.bytes() == id
             && item.name == name
-            && item.physical_tag == tag
+            && item.physical_tag == u64::from(tag)
             && item.fields.len() == fields.len()
             && item
                 .fields

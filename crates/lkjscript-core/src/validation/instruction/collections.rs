@@ -24,16 +24,16 @@ pub(super) fn apply(
                     "list-first element representation is missing",
                 )
             })?;
-            if representation == usize::from(u16::MAX) {
+            if representation == 0 {
                 state.stack.push(Kind::Any);
             } else {
                 let representation = crate::StructuralRepresentationId::new(
-                    u16::try_from(representation).map_err(|_| {
+                    u64::try_from(representation - 1).map_err(|_| {
                         instruction_error(
                             proto,
                             op,
                             instruction.offset(),
-                            "list-first representation exceeds u16",
+                            "list-first representation exceeds u64",
                         )
                     })?,
                 );

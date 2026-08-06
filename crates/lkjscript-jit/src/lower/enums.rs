@@ -49,6 +49,7 @@ pub(super) fn preflight_enum_instruction(
             field,
             layout,
             value,
+            ..
         } => {
             let definition = enum_definition(program, function.id, *enum_id)?;
             let selected = enum_variant(definition, function.id, *variant)?;

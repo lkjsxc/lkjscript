@@ -10,7 +10,7 @@ use super::{
 #[derive(Debug)]
 pub(super) enum DestinationShape {
     Product,
-    Enum(u16),
+    Enum(u64),
 }
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub(super) struct DestinationRecord {
     pub field_types: Vec<StructuralType>,
     pub values: Vec<Option<StructuralImage>>,
     pub facts: Vec<Option<TreeFacts>>,
-    pub order: Vec<u16>,
+    pub order: Vec<usize>,
     pub total: TreeFacts,
 }
 
@@ -49,7 +49,7 @@ impl StructuralValueRuntime {
     pub fn begin_enum(
         &mut self,
         value_type: StructuralType,
-        tag: u16,
+        tag: u64,
         active_payload: Vec<StructuralType>,
     ) -> Result<StructuralDestinationKey, StructuralValueError> {
         if value_type.kind != StructuralKind::Enum {
@@ -64,7 +64,7 @@ impl StructuralValueRuntime {
         shape: DestinationShape,
         field_types: Vec<StructuralType>,
     ) -> Result<StructuralDestinationKey, StructuralValueError> {
-        if field_types.len() > usize::from(self.limits.max_fields) {
+        if field_types.len() > self.limits.max_fields {
             return Err(StructuralValueError::LimitExceeded(
                 StructuralValueLimit::Fields,
             ));
@@ -95,7 +95,7 @@ impl StructuralValueRuntime {
     pub fn initialize_node(
         &mut self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         value: SemanticValue,
     ) -> Result<(), StructuralInitializationFailure> {
         if let Err(error) = self.preflight_field_type(key, field, value.value_type) {
@@ -131,7 +131,7 @@ impl StructuralValueRuntime {
     pub(super) fn preflight_field(
         &self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         actual: StructuralType,
         facts: TreeFacts,
     ) -> Result<(), StructuralValueError> {
@@ -157,7 +157,7 @@ impl StructuralValueRuntime {
     pub(super) fn initialize_image(
         &mut self,
         key: StructuralDestinationKey,
-        field: u16,
+        field: usize,
         image: StructuralImage,
         facts: TreeFacts,
     ) -> Result<(), Box<(StructuralValueError, StructuralImage)>> {
@@ -171,7 +171,7 @@ impl StructuralValueRuntime {
         let Some(total) = record.total.checked_add(facts) else {
             return Err(Box::new((StructuralValueError::ArithmeticOverflow, image)));
         };
-        let index = usize::from(field);
+        let index = field;
         record.values[index] = Some(image);
         record.facts[index] = Some(facts);
         record.order.push(field);
@@ -184,7 +184,7 @@ impl StructuralValueRuntime {
         self.record(
             StructuralEventKind::Initialize,
             key.slot(),
-            u64::from(field),
+            u64::try_from(field).unwrap_or(u64::MAX),
         );
         Ok(())
     }

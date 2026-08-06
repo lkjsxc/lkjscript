@@ -149,7 +149,10 @@ fn variant(id: [u8; 32], name: &str, fields: Vec<EnumVariantField>, order: usize
     EnumVariant {
         id: VariantId::new(id),
         name: name.into(),
-        source_order: u16::try_from(order).unwrap_or(u16::MAX),
+        source_order: match u64::try_from(order) {
+            Ok(order) => order,
+            Err(_) => unreachable!("host usize is wider than u64"),
+        },
         fields,
     }
 }
@@ -158,7 +161,7 @@ fn derived_field(
     kind: SystemErrorKind,
     name: &str,
     ty: Type,
-    source_order: u16,
+    source_order: u64,
 ) -> EnumVariantField {
     let id = crate::source::enum_member_identity(kind.variant_id(), "field", name);
     let mut field = field(id, name, ty, true);

@@ -30,9 +30,13 @@
    globals, and prototype references now use fixed-`u64` operands and metadata with checked host
    indexing; focused chunks execute index 65,536 for all three tables, and a release stress source
    crosses 65,535 distinct HIR scalar constants. HIR memory-plan entry, constant, and verifier-work
-   admission is removed in that production vertical. Next remove retained `u16`
-   product/enum/structural tables and descriptors, plus byte-sized product fields and enum
-   substitutions. Bytecode links, call-witness offsets, cleanup range
+   admission is removed in that production vertical. The nominal aggregate vertical now removes
+   the 15-field product and 255-variant/field enum admission rules; product/enum/structural tables,
+   descriptors, field indexes, source orders, physical tags, and enum substitutions use `u64` with
+   checked host conversion. Generated 300-field products and 300-variant enums with a 300-field
+   payload execute through validated VM bytecode, and private compact native shapes decline to the
+   VM in automatic mode. Next remove remaining unrelated witness, structural-table, and
+   HIR/SSA-identity ceilings. Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
    unrestricted by the removed general bytecode table and metadata admission. Completion requires
    just-beyond-old-boundary and substantially larger positive programs, checked growth, and

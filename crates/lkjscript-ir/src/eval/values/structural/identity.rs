@@ -33,7 +33,7 @@ pub(crate) fn structural_type(program: &Program, ty: &SsaType) -> Result<Structu
                 .ok_or_else(|| "evaluator structural enum metadata is missing".to_owned())?;
             fingerprint_bytes(0x9c2a_45d1_76e8_03bf, &definition.layout.identity.bytes())
         }
-        SsaType::Product(id) => mix(fingerprint_tag(0xe55a_7341_0a0f_b861, 12), id.raw() as u64),
+        SsaType::Product(id) => mix(fingerprint_tag(0xe55a_7341_0a0f_b861, 12), id.raw()),
         _ => fingerprint(0x4d7c_51a9_284e_b603, ty),
     };
     Ok(StructuralType::new(
@@ -48,8 +48,8 @@ fn fingerprint(mut state: u64, ty: &SsaType) -> u64 {
     match ty {
         SsaType::Capability(kind) => mix(state, *kind as u64),
         SsaType::Resource(kind) => mix(state, *kind as u64),
-        SsaType::StructuralDestination(id) => mix(state, id.raw() as u64),
-        SsaType::Product(id) => mix(state, id.raw() as u64),
+        SsaType::StructuralDestination(id) => mix(state, id.raw()),
+        SsaType::Product(id) => mix(state, id.raw()),
         SsaType::Enum { id, arguments } => {
             state = fingerprint_bytes(state, &id.bytes());
             for argument in arguments {

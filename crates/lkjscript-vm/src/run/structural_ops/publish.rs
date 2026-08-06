@@ -25,7 +25,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
 }
 
 fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let expected_representation = StructuralRepresentationId::new(vm.read_u16()?);
+    let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected_type = representation_type(
         vm.chunk,
         expected_representation,
@@ -72,7 +72,7 @@ fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn publish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let expected_representation = StructuralRepresentationId::new(vm.read_u16()?);
+    let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected_type = representation_type(
         vm.chunk,
         expected_representation,

@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn borrow<J: RuntimeTier>(vm: &mut Vm<'_, J>, exclusive: bool) -> Result<()> {
-    let view_representation = StructuralRepresentationId::new(vm.read_u16()?);
+    let view_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let view_type =
         representation_type(vm.chunk, view_representation, StructuralValueCategory::View)?;
     let owner_value = vm.pop()?;

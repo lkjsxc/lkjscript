@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
+use lkjscript_core::{Error, ProductId, Result};
 
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
@@ -13,7 +13,7 @@ use crate::hir::{
     MatchTestKind, Operation, Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField,
     RuntimeLayoutId, Source, SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness,
     TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH,
-    ENUM_RECURSION_MAX_WORK, MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
+    ENUM_RECURSION_MAX_WORK,
 };
 use crate::source::Expr as AstExpr;
 

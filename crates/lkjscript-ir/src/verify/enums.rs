@@ -35,10 +35,12 @@ pub(crate) fn verify_enum_metadata(program: &Program) -> crate::Result<()> {
             .map(String::as_str)
             .collect();
         let mut tags = HashSet::new();
-        for variant in &definition.variants {
+        for (source_order, variant) in definition.variants.iter().enumerate() {
             verify_variant(program, variant, &scope, &mut variants, &mut fields)?;
-            if !tags.insert(variant.physical_tag)
-                || usize::from(variant.physical_tag) >= definition.variants.len()
+            if u64::try_from(source_order).ok() != Some(variant.source_order)
+                || !tags.insert(variant.physical_tag)
+                || usize::try_from(variant.physical_tag)
+                    .map_or(true, |tag| tag >= definition.variants.len())
             {
                 return fail("SSA enum has malformed physical tags");
             }

@@ -75,17 +75,14 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
         (Op::ConvertBytesToString, "immutable bytes"),
     ] {
         let mut chunk = unit_chunk();
-        chunk.main.code = if operation == Op::Car {
-            vec![
-                Op::Unit as u8,
-                operation as u8,
-                u8::MAX,
-                u8::MAX,
-                Op::Return as u8,
-            ]
+        chunk.main.code.clear();
+        chunk.main.emit(Op::Unit);
+        if operation == Op::Car {
+            chunk.main.emit_op_u64(operation, 0);
         } else {
-            vec![Op::Unit as u8, operation as u8, Op::Return as u8]
-        };
+            chunk.main.emit(operation);
+        }
+        chunk.main.emit(Op::Return);
         let message = error(chunk);
         assert!(
             message.contains(category),

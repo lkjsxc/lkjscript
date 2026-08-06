@@ -2,9 +2,6 @@ use super::*;
 
 pub const ENUM_RECURSION_MAX_DEPTH: usize = 32;
 pub const ENUM_RECURSION_MAX_WORK: usize = 4_096;
-pub const MAX_ENUM_VARIANTS: usize = 15;
-pub const MAX_VARIANT_FIELDS: usize = 15;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumDefinition {
     pub id: EnumId,
@@ -19,7 +16,7 @@ pub struct EnumDefinition {
 pub struct EnumVariant {
     pub id: VariantId,
     pub name: String,
-    pub source_order: u16,
+    pub source_order: u64,
     pub fields: Vec<EnumVariantField>,
 }
 
@@ -33,7 +30,7 @@ pub struct EnumLayoutFacts {
 pub struct EnumVariantField {
     pub id: VariantFieldId,
     pub name: String,
-    pub source_order: u16,
+    pub source_order: u64,
     pub ty: Type,
     pub indirect: bool,
 }

@@ -47,7 +47,7 @@ pub enum EvalValue {
         enum_id: EnumId,
         variant: VariantId,
         layout: RuntimeLayoutId,
-        physical_tag: u16,
+        physical_tag: u64,
         payload: Vec<Self>,
     },
     /// Session-region segmented persistent list handle.

@@ -97,7 +97,7 @@ fn representation_value(
     representation: StructuralRepresentationId,
     value: ValueId,
 ) {
-    out.u16(representation.raw());
+    out.u64(representation.raw());
     out.u32(value.raw());
 }
 fn scalar(out: &mut Encoder, tag: u16, value: ValueId) {
@@ -111,13 +111,13 @@ fn product_field(
     out: &mut Encoder,
     tag: u16,
     product: ProductId,
-    field: u8,
+    field: u64,
     value: ValueId,
     replacement: Option<ValueId>,
 ) {
     out.tag(tag);
-    out.u16(product.raw());
-    out.u8(field);
+    out.u64(product.raw());
+    out.u64(field);
     out.u32(value.raw());
     out.option(replacement.as_ref(), |out, value| out.u32(value.raw()));
 }

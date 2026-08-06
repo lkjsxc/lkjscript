@@ -12,14 +12,19 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
                 let mut tags = std::collections::HashSet::with_capacity(variants.len());
                 let mut ids = std::collections::HashSet::with_capacity(variants.len());
                 let mut fields = Vec::new();
-                for variant in variants {
+                for (source_order, variant) in variants.iter().enumerate() {
+                    if u64::try_from(source_order).ok() != Some(variant.source_order) {
+                        return Err(Error::msg(
+                            "bytecode structural enum variant source order is inconsistent",
+                        ));
+                    }
                     if !tags.insert(variant.physical_tag) || !ids.insert(variant.variant) {
                         return Err(Error::msg(
                             "bytecode structural enum variants duplicate identity or physical tag",
                         ));
                     }
                     fields.extend(&variant.fields);
-                    bytes = add(bytes, 36, "structural metadata byte size")?;
+                    bytes = add(bytes, 44, "structural metadata byte size")?;
                 }
                 fields
             }
@@ -91,7 +96,9 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
         if let crate::StructuralTypeKind::Product(id) = ty.kind {
             let product = chunk
                 .products
-                .get(id.index())
+                .get(id.index().ok_or_else(|| {
+                    Error::msg("bytecode structural ProductId exceeds host index width")
+                })?)
                 .filter(|product| product.id == id)
                 .ok_or_else(|| Error::msg("bytecode structural product identity is missing"))?;
             if ty.runtime_type.layout != crate::product_layout_identity(product.identity)

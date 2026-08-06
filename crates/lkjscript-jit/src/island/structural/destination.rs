@@ -17,7 +17,9 @@ impl JitStructuralRuntime {
             .collect::<Result<Vec<_>, _>>()?;
         let key = match aggregate.kind() {
             StructuralAggregateKind::Product => self.runtime.begin_product(value_type, fields),
-            StructuralAggregateKind::Enum(tag) => self.runtime.begin_enum(value_type, tag, fields),
+            StructuralAggregateKind::Enum(tag) => {
+                self.runtime.begin_enum(value_type, u64::from(tag), fields)
+            }
         }
         .map_err(|error| self.map_error(error))?;
         Ok(NativeStructuralDestination::new(
@@ -66,7 +68,7 @@ impl JitStructuralRuntime {
             _ => return Err(NativeServiceError::Trap),
         };
         self.runtime
-            .initialize_value(destination_key(destination)?, field, value)
+            .initialize_value(destination_key(destination)?, usize::from(field), value)
             .map_err(|error| self.map_error(error))?;
         if let Some(key) = consumed_owner {
             self.owners.remove(&key);

@@ -55,7 +55,7 @@ impl Utf8ErrorKind {
         UTF8_ERROR_VARIANTS[self.index()]
     }
 
-    pub const fn physical_tag(self) -> u16 {
+    pub const fn physical_tag(self) -> u64 {
         match self {
             Self::UnexpectedContinuation => 1,
             Self::InvalidLeadingByte => 0,
@@ -127,7 +127,7 @@ impl SystemErrorKind {
         SYSTEM_ERROR_VARIANTS[self.index()]
     }
 
-    pub const fn physical_tag(self) -> u16 {
+    pub const fn physical_tag(self) -> u64 {
         match self {
             Self::Io => 0,
             Self::Network => 4,

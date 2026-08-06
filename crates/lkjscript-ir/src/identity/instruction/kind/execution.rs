@@ -47,7 +47,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         }
         InstructionKind::ProductValue { product, fields } => {
             out.tag(25);
-            out.u16(product.raw());
+            out.u64(product.raw());
             ids(out, fields);
         }
         InstructionKind::ProductField {
@@ -85,12 +85,14 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             enum_id,
             variant,
             field,
+            field_index,
             layout,
             value,
         } => {
             out.tag(30);
             enum_header(out, *enum_id, *variant, *layout);
             out.fixed(&field.bytes());
+            out.u64(*field_index);
             out.u32(value.raw());
         }
         _ => out.fail("verified SSA identity execution instruction partition failed"),

@@ -37,16 +37,13 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
     assert!(error(fsync).contains("typed resource"));
 
     let mut aggregate_any = unit_chunk();
-    aggregate_any.main.code = vec![
-        Op::Unit as u8,
-        Op::EmptyList as u8,
-        Op::Cons as u8,
-        Op::Car as u8,
-        u8::MAX,
-        u8::MAX,
-        Op::SysFsync as u8,
-        Op::Return as u8,
-    ];
+    aggregate_any.main.code.clear();
+    aggregate_any.main.emit(Op::Unit);
+    aggregate_any.main.emit(Op::EmptyList);
+    aggregate_any.main.emit(Op::Cons);
+    aggregate_any.main.emit_op_u64(Op::Car, 0);
+    aggregate_any.main.emit(Op::SysFsync);
+    aggregate_any.main.emit(Op::Return);
     let message = error(aggregate_any);
     assert!(
         message.contains("typed resource kind mismatch: got any"),
@@ -57,7 +54,10 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
 #[test]
 fn list_first_rejects_stale_structural_element_metadata() {
     let mut chunk = unit_chunk();
-    chunk.main.code = vec![Op::EmptyList as u8, Op::Car as u8, 0, 0, Op::Return as u8];
+    chunk.main.code.clear();
+    chunk.main.emit(Op::EmptyList);
+    chunk.main.emit_op_u64(Op::Car, 1);
+    chunk.main.emit(Op::Return);
     assert!(error(chunk).contains("list-first element representation is stale"));
 }
 

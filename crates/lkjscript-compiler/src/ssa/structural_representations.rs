@@ -107,8 +107,8 @@ fn push_representation(
         return Ok(());
     }
     let id = StructuralRepresentationId::new(
-        u16::try_from(memory.representations.len())
-            .map_err(|_| Error::msg("structural representation table exceeds u16"))?,
+        u64::try_from(memory.representations.len())
+            .map_err(|_| Error::msg("structural representation table exceeds u64"))?,
     );
     memory
         .representations

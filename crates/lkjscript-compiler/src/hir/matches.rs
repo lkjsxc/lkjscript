@@ -23,7 +23,8 @@ pub struct MatchLocal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchFieldPattern {
     pub name: String,
-    pub projection: MatchLocal,
+    pub field_index: u64,
+    pub projection: Option<MatchLocal>,
     pub pattern: MatchPattern,
 }
 
@@ -99,7 +100,7 @@ pub struct MatchBindingAssignment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MatchEdgeTarget {
-    Arm(u16),
+    Arm(u64),
     Default,
     Unreachable,
 }
