@@ -38,16 +38,23 @@ line-oriented text and package files
 
 Trusted compiler entry points compile directly without selecting a compiler resource profile or
 charging source, HIR, or SSA shape to a budget ledger. The lexer-token, children-per-form,
-top-level-forms, 16 MiB per-file source, 256 MiB aggregate-source, and 65,536 source-unit validity
-ceilings have been removed. Trusted validation, loading, package analysis, and compilation select
-an explicit unrestricted source-byte policy. Source files are read to EOF in checked, fallibly
-reserved chunks; metadata is a capacity and change-detection hint, not admission. Generated
-coverage compiles and executes a source 1,024 bytes beyond the former 16 MiB boundary and exercises
-the source authority with 65,537 in-memory units. Checked accounting crosses 256 MiB; the exact
-258 MiB compile-and-execute geometry is retained as an opt-in stress test and has not been run as
-part of normal verification. Compile metrics are observational phase timings and source-file
-counts only. Package manifests and prepared-program identities likewise do not carry
-compiler-profile identity.
+top-level-form, source nesting, 16 MiB per-file source, 256 MiB aggregate-source, and 65,536
+source-unit validity ceilings have been removed. The parser uses fallibly grown explicit frames;
+source projection, identity flattening, formatting, module rewriting, clone, and destruction use
+iterative work stacks. Remaining recursive expression analysis, HIR memory planning, and SSA
+lowering call sites use localized repeatable heap-backed stack segments rather than a finite depth
+admission rule. Trusted validation, loading, package analysis, and compilation select an explicit
+unrestricted source-byte policy. Source files are read to EOF in checked, fallibly reserved chunks;
+metadata is a capacity and change-detection hint, not admission. Generated coverage compiles,
+validates, executes through the VM, and destroys a program with 8,192 nested `do` expressions on a
+256 KiB native thread stack. A nested product-match fixture reaches a physical marker depth above
+50, and malformed 8,192-deep mismatched and unclosed input produces deterministic diagnostics and
+drops partial trees on the same small stack. Other generated coverage compiles and executes a
+source 1,024 bytes beyond the former 16 MiB boundary and exercises the source authority with 65,537
+in-memory units. Checked accounting crosses 256 MiB; the exact 258 MiB compile-and-execute geometry
+is retained as an opt-in stress test and has not been run as part of normal verification. Compile
+metrics are observational phase timings and source-file counts only. Package manifests and
+prepared-program identities likewise do not carry compiler-profile identity.
 
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
 diagnostics, transactions, and a local stdio session. It supplies an explicit limited aggregate
@@ -64,13 +71,15 @@ may build elsewhere, but no other host or native target is currently claimed as 
 
 ## Known gaps
 
-- The parser still imposes a nesting safety ceiling while recursive parsing and destruction remain;
-  removing it requires the separate stack-safe depth cutover. Source spans and positions remain
-  `u32`, so an individual source beyond that addressable range fails at a representation boundary.
-  HIR, ownership, memory-plan, SSA, and structural-value paths retain other arbitrary count or
-  recursion ceilings. Compact executable bytecode operands and indexes retain width ceilings.
-  These are follow-up validity and representation gaps, not host policy.
-- Several user-controlled compiler trees and analyses remain recursive or have poor large-input
+- Source spans, positions, and snapshot-local node indexes remain `u32`, so an individual source
+  or source tree beyond those addressable ranges fails at a representation boundary. HIR,
+  ownership, memory-plan, SSA, recursive type/trait/enum,
+  and structural-value paths retain other arbitrary count or recursion ceilings. Compact
+  executable bytecode operands and indexes retain width ceilings. These are follow-up validity and
+  representation gaps, not host policy.
+- Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
+  including parts of type, trait, enum, semantic-schema, and transaction processing, still need
+  explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input
   complexity.
 - The compiler cannot yet consume a syntax-independent semantic snapshot directly.
 - Semantic edits still publish text files, and stable identity remains coupled to the current

@@ -54,7 +54,7 @@ pub(super) fn atom_from_name(
                 ));
             } else {
                 SyntaxKind::Symbol {
-                    name: name.to_string(),
+                    name: super::limits::clone_string(name, origin, span, "source symbol")?,
                 }
             }
         } else if looks_numeric(name) || is_non_finite_spelling(name) {
@@ -65,7 +65,7 @@ pub(super) fn atom_from_name(
             ));
         } else {
             SyntaxKind::Symbol {
-                name: name.to_string(),
+                name: super::limits::clone_string(name, origin, span, "source symbol")?,
             }
         }
     };

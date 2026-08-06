@@ -8,7 +8,20 @@ pub(in crate::ownership) fn check_expr(
     future: &BTreeSet<BindingId>,
     context: UseContext,
 ) -> Result<()> {
-    expire_dead_loans(state, &uses(expression).union(future).copied().collect());
+    crate::stack::grow(|| check_expr_inner(program, expression, places, state, future, context))
+}
+
+fn check_expr_inner(
+    program: &Program,
+    expression: &Expr,
+    places: &BTreeMap<BindingId, PlaceId>,
+    state: &mut State,
+    future: &BTreeSet<BindingId>,
+    context: UseContext,
+) -> Result<()> {
+    if !state.reference_loans.is_empty() {
+        expire_dead_loans(state, &uses(expression).union(future).copied().collect());
+    }
     reject_unsupported_type_placement(&expression.ty)?;
     match &expression.kind {
         ExprKind::Load(_)

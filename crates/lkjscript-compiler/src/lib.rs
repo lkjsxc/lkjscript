@@ -14,6 +14,7 @@ mod pipeline;
 pub mod semantic;
 pub mod source;
 mod ssa;
+mod stack;
 mod types;
 
 use std::path::Path;

@@ -78,6 +78,19 @@ impl<'a> Producer<'a> {
         escape: MemoryEscape,
         loan_binding: Option<BindingId>,
     ) -> Result<MemoryExpressionId> {
+        crate::stack::grow(|| {
+            self.walk_expr_inner(expression, parent, child_index, escape, loan_binding)
+        })
+    }
+
+    fn walk_expr_inner(
+        &mut self,
+        expression: &Expr,
+        parent: Option<MemoryExpressionId>,
+        child_index: u32,
+        escape: MemoryEscape,
+        loan_binding: Option<BindingId>,
+    ) -> Result<MemoryExpressionId> {
         let expression_id = self.next_expression()?;
         self.expression_parents.insert(expression_id, parent);
         let expression_entry = self.add_entry(

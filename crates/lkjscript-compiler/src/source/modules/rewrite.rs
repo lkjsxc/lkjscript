@@ -61,26 +61,23 @@ fn rewrite_named(args: &mut [Expr], bindings: &BTreeMap<String, String>) {
 }
 
 fn rewrite_uses(expr: &mut Expr, bindings: &BTreeMap<String, String>) {
-    match expr {
-        Expr::Call { name, args } => {
-            if let Some(replacement) = bindings.get(name) {
-                *name = replacement.clone();
+    let mut work = vec![expr];
+    while let Some(expression) = work.pop() {
+        match expression {
+            Expr::Call { name, args } => {
+                if let Some(replacement) = bindings.get(name) {
+                    *name = replacement.clone();
+                }
+                work.extend(args.iter_mut().rev());
             }
-            for argument in args {
-                rewrite_uses(argument, bindings);
+            Expr::Symbol(name) => {
+                if let Some(replacement) = bindings.get(name) {
+                    *name = replacement.clone();
+                }
             }
+            Expr::List(items) => work.extend(items.iter_mut().rev()),
+            _ => {}
         }
-        Expr::Symbol(name) => {
-            if let Some(replacement) = bindings.get(name) {
-                *name = replacement.clone();
-            }
-        }
-        Expr::List(items) => {
-            for item in items {
-                rewrite_uses(item, bindings);
-            }
-        }
-        _ => {}
     }
 }
 

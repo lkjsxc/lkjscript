@@ -36,6 +36,16 @@ fn walk_placement<'a>(
     child_index: u32,
     output: &mut Vec<PlacementFact<'a>>,
 ) -> Result<()> {
+    crate::stack::grow(|| walk_placement_inner(expression, function, parent, child_index, output))
+}
+
+fn walk_placement_inner<'a>(
+    expression: &'a Expr,
+    function: MemoryFunctionId,
+    parent: Option<MemoryExpressionId>,
+    child_index: u32,
+    output: &mut Vec<PlacementFact<'a>>,
+) -> Result<()> {
     let id = MemoryExpressionId::new(index_u32(output.len())?);
     output.push(PlacementFact {
         id,

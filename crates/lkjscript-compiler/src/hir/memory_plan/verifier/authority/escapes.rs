@@ -40,37 +40,43 @@ pub(super) fn expected_entry_escape(
     }
 }
 
-fn expected_expression_escape(facts: &Facts<'_>, id: MemoryExpressionId) -> Result<MemoryEscape> {
-    let fact = facts
+fn expected_expression_escape(
+    facts: &Facts<'_>,
+    mut id: MemoryExpressionId,
+) -> Result<MemoryEscape> {
+    loop {
+        let fact = expression_fact(facts, id)
+            .ok_or_else(|| Error::msg("memory authority escape lost expression"))?;
+        let Some(parent) = fact.parent else {
+            return Ok(MemoryEscape::Returned);
+        };
+        let parent_fact = expression_fact(facts, parent)
+            .ok_or_else(|| Error::msg("memory authority escape lost parent"))?;
+        use hir::ExprKind as K;
+        match &parent_fact.expression.kind {
+            K::Call { .. } | K::Operation { .. } => return Ok(MemoryEscape::Caller),
+            K::Return { .. } => return Ok(MemoryEscape::Returned),
+            K::Trap { .. } | K::Exit { .. } => return Ok(MemoryEscape::Runtime),
+            K::If { .. } if fact.child_index > 0 => id = parent,
+            K::Do(items)
+                if usize::try_from(fact.child_index).ok() == items.len().checked_sub(1) =>
+            {
+                id = parent;
+            }
+            K::Let { bindings, .. }
+                if usize::try_from(fact.child_index).ok() == Some(bindings.len()) =>
+            {
+                id = parent;
+            }
+            K::MutableLocal { .. } if fact.child_index == 1 => id = parent,
+            _ => return Ok(MemoryEscape::Local),
+        }
+    }
+}
+
+fn expression_fact<'a>(facts: &'a Facts<'a>, id: MemoryExpressionId) -> Option<&'a ExprFact<'a>> {
+    facts
         .expressions
-        .iter()
-        .find(|item| item.id == id)
-        .ok_or_else(|| Error::msg("memory authority escape lost expression"))?;
-    let Some(parent) = fact.parent else {
-        return Ok(MemoryEscape::Returned);
-    };
-    let parent_fact = facts
-        .expressions
-        .iter()
-        .find(|item| item.id == parent)
-        .ok_or_else(|| Error::msg("memory authority escape lost parent"))?;
-    use hir::ExprKind as K;
-    Ok(match &parent_fact.expression.kind {
-        K::Call { .. } | K::Operation { .. } => MemoryEscape::Caller,
-        K::Return { .. } => MemoryEscape::Returned,
-        K::Trap { .. } | K::Exit { .. } => MemoryEscape::Runtime,
-        K::If { .. } if fact.child_index > 0 => expected_expression_escape(facts, parent)?,
-        K::Do(items) if usize::try_from(fact.child_index).ok() == items.len().checked_sub(1) => {
-            expected_expression_escape(facts, parent)?
-        }
-        K::Let { bindings, .. }
-            if usize::try_from(fact.child_index).ok() == Some(bindings.len()) =>
-        {
-            expected_expression_escape(facts, parent)?
-        }
-        K::MutableLocal { .. } if fact.child_index == 1 => {
-            expected_expression_escape(facts, parent)?
-        }
-        _ => MemoryEscape::Local,
-    })
+        .get(id.index()?)
+        .filter(|fact| fact.id == id)
 }

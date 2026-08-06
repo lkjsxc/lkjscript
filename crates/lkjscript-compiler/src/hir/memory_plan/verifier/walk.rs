@@ -68,6 +68,16 @@ fn walk<'a>(
     child_index: u32,
     facts: &mut Facts<'a>,
 ) -> Result<super::super::MemoryExpressionId> {
+    crate::stack::grow(|| walk_inner(expression, function, parent, child_index, facts))
+}
+
+fn walk_inner<'a>(
+    expression: &'a Expr,
+    function: MemoryFunctionId,
+    parent: Option<super::super::MemoryExpressionId>,
+    child_index: u32,
+    facts: &mut Facts<'a>,
+) -> Result<super::super::MemoryExpressionId> {
     let id = super::super::MemoryExpressionId::new(index_u32(facts.expressions.len())?);
     facts.expressions.push(ExprFact {
         id,

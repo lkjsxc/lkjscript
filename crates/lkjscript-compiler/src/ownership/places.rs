@@ -4,6 +4,10 @@ pub(in crate::ownership) fn collect_places(
     expression: &Expr,
     output: &mut BTreeMap<BindingId, PlaceId>,
 ) {
+    crate::stack::grow(|| collect_places_inner(expression, output));
+}
+
+fn collect_places_inner(expression: &Expr, output: &mut BTreeMap<BindingId, PlaceId>) {
     match &expression.kind {
         ExprKind::Let { bindings, body } => {
             for binding in bindings {

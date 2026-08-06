@@ -3,12 +3,15 @@
 ## Now
 
 1. **Remove remaining source-representation, HIR, ownership, and executable ceilings.** Flat
-   lexer-token, children-per-form, top-level-form, per-file source-byte, aggregate source-byte, and
-   source-unit quotas are removed. Next, make source parsing and destruction stack-safe before
-   deleting the nesting guard and widening or segmenting `u32` source positions and spans. Then
-   address product/HIR/ownership/memory-plan/SSA checks and compact executable widths in
-   dependency-closed slices. Completion requires just-beyond-old-boundary and substantially larger
-   positive programs, checked growth, and successful execution through the retained generic path.
+   lexer-token, children-per-form, top-level-form, source-nesting, per-file source-byte, aggregate
+   source-byte, and source-unit quotas are removed. Parsing, source projection/identity/formatting,
+   recursive source and HIR destruction, and the ordinary deep-expression analysis/lowering path
+   are stack-safe through 8,192 nested forms on a 256 KiB native stack. Next widen or segment `u32`
+   source positions, spans, and snapshot-local node indexes, then address
+   product/HIR/ownership/memory-plan/SSA checks, remaining
+   recursive type/trait/enum paths, and compact executable widths in dependency-closed slices.
+   Completion requires just-beyond-old-boundary and substantially larger positive programs,
+   checked growth, and successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte
    admission are removed. The untrusted Semantic Source boundary now supplies only an aggregate
    source-byte loader policy and applies it to staged transactions before publication. Continue

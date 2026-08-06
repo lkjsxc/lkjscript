@@ -53,6 +53,16 @@ pub(super) fn collect_direct_callees(
     binding_to_function: &[Option<usize>],
     callees: &mut Vec<usize>,
 ) {
+    crate::stack::grow(|| {
+        collect_direct_callees_inner(expression, binding_to_function, callees);
+    });
+}
+
+fn collect_direct_callees_inner(
+    expression: &Expr,
+    binding_to_function: &[Option<usize>],
+    callees: &mut Vec<usize>,
+) {
     match &expression.kind {
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)

@@ -15,6 +15,10 @@ pub(super) fn verify(program: &hir::Program) -> Result<()> {
 }
 
 fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Result<()> {
+    crate::stack::grow(|| expression_inner(value, program, counts))
+}
+
+fn expression_inner(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Result<()> {
     match &value.kind {
         ExprKind::MatchUnreachable { plan } => {
             let index = usize::try_from(plan.raw())

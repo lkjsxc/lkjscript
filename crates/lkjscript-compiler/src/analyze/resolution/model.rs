@@ -65,6 +65,10 @@ impl<'a> Resolver<'a> {
     }
 
     pub(in crate::analyze) fn resolve_expr(&mut self, expression: &AstExpr) -> Result<Expr> {
+        crate::stack::grow(|| self.resolve_expr_inner(expression))
+    }
+
+    fn resolve_expr_inner(&mut self, expression: &AstExpr) -> Result<Expr> {
         match expression {
             AstExpr::LitUnit => Ok(self.expression(Type::Unit, ExprKind::LitUnit)),
             AstExpr::LitBool(value) => Ok(self.expression(Type::Bool, ExprKind::LitBool(*value))),

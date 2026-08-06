@@ -1,6 +1,10 @@
 use super::*;
 
 pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSet>]) -> EffectSet {
+    crate::stack::grow(|| recompute_expr_inner(expression, summaries))
+}
+
+fn recompute_expr_inner(expression: &mut Expr, summaries: &[Option<EffectSet>]) -> EffectSet {
     let effects = match &mut expression.kind {
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)

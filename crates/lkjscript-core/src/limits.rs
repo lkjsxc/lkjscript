@@ -2,8 +2,6 @@
 
 use std::time::Duration;
 
-/// Maximum lkjscript form depth in one file.
-pub const MAX_NEST_DEPTH: u32 = 8;
 /// Maximum fields in one nominal product declaration.
 pub const MAX_PRODUCT_FIELDS: usize = 15;
 /// Maximum entry comparisons performed by one structural list equality.
@@ -40,19 +38,9 @@ impl Default for ValidationLimits {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Limits {
-    pub max_nest_depth: u32,
     pub validation: ValidationLimits,
-}
-
-impl Default for Limits {
-    fn default() -> Self {
-        Self {
-            max_nest_depth: MAX_NEST_DEPTH,
-            validation: ValidationLimits::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,7 +89,6 @@ mod tests {
     #[test]
     fn defaults_match_spec_consts() {
         let lim = Limits::default();
-        assert_eq!(lim.max_nest_depth, MAX_NEST_DEPTH);
         assert_eq!(lim.validation, ValidationLimits::default());
         assert_eq!(MAX_PRODUCT_FIELDS, 15);
         assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);

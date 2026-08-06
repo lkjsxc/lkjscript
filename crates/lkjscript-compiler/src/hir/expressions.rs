@@ -1,11 +1,377 @@
 use super::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Expr {
     pub ty: Type,
     pub effects: EffectSet,
     pub origin: SourceId,
     pub kind: ExprKind,
+}
+
+impl Clone for Expr {
+    fn clone(&self) -> Self {
+        enum Work<'a> {
+            Visit(&'a Expr),
+            Finish(&'a Expr, usize),
+        }
+
+        let mut work = vec![Work::Visit(self)];
+        let mut completed = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(expression) => {
+                    let children = expression_children(expression);
+                    let child_count = children.len();
+                    work.push(Work::Finish(expression, child_count));
+                    work.extend(children.into_iter().rev().map(Work::Visit));
+                }
+                Work::Finish(expression, child_count) => {
+                    let split = completed.len() - child_count;
+                    let children = completed.split_off(split);
+                    completed.push(Self {
+                        ty: expression.ty.clone(),
+                        effects: expression.effects,
+                        origin: expression.origin,
+                        kind: clone_kind(&expression.kind, children),
+                    });
+                }
+            }
+        }
+        completed.pop().unwrap_or_else(|| Self {
+            ty: Type::Unit,
+            effects: EffectSet::PURE,
+            origin: self.origin,
+            kind: ExprKind::LitUnit,
+        })
+    }
+}
+
+fn expression_children(expression: &Expr) -> Vec<&Expr> {
+    match &expression.kind {
+        ExprKind::Call { args, .. }
+        | ExprKind::Operation { args, .. }
+        | ExprKind::Do(args)
+        | ExprKind::Loop { body: args, .. }
+        | ExprKind::ProductValue { fields: args, .. }
+        | ExprKind::EnumValue { fields: args, .. } => args.iter().collect(),
+        ExprKind::While {
+            condition, body, ..
+        } => std::iter::once(condition.as_ref()).chain(body).collect(),
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value)
+        | ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value }
+        | ExprKind::SetLocal { value, .. }
+        | ExprKind::ProductField { value, .. }
+        | ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => vec![value],
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => vec![condition, then_branch, else_branch],
+        ExprKind::Let { bindings, body } => bindings
+            .iter()
+            .map(|binding| &binding.value)
+            .chain(std::iter::once(body.as_ref()))
+            .collect(),
+        ExprKind::MutableLocal { initial, body, .. }
+        | ExprKind::WithProductField {
+            value: initial,
+            replacement: body,
+            ..
+        } => vec![initial, body],
+        ExprKind::LitI64(_)
+        | ExprKind::LitF64(_)
+        | ExprKind::LitBool(_)
+        | ExprKind::LitUnit
+        | ExprKind::EmptyList
+        | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
+        | ExprKind::Load(_)
+        | ExprKind::Move { .. }
+        | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. }
+        | ExprKind::Continue { .. }
+        | ExprKind::MatchUnreachable { .. }
+        | ExprKind::QuoteSymbol(_) => Vec::new(),
+    }
+}
+
+fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
+    match kind {
+        ExprKind::LitI64(value) => ExprKind::LitI64(*value),
+        ExprKind::LitF64(value) => ExprKind::LitF64(*value),
+        ExprKind::LitBool(value) => ExprKind::LitBool(*value),
+        ExprKind::LitUnit => ExprKind::LitUnit,
+        ExprKind::EmptyList => ExprKind::EmptyList,
+        ExprKind::LitStr(value) => ExprKind::LitStr(value.clone()),
+        ExprKind::LitBytes(value) => ExprKind::LitBytes(value.clone()),
+        ExprKind::Load(value) => ExprKind::Load(*value),
+        ExprKind::Move { place, binding } => ExprKind::Move {
+            place: *place,
+            binding: *binding,
+        },
+        ExprKind::Borrow {
+            place,
+            loan,
+            kind,
+            binding,
+        } => ExprKind::Borrow {
+            place: *place,
+            loan: *loan,
+            kind: *kind,
+            binding: *binding,
+        },
+        ExprKind::BorrowBytes {
+            place,
+            loan,
+            binding,
+        } => ExprKind::BorrowBytes {
+            place: *place,
+            loan: *loan,
+            binding: *binding,
+        },
+        ExprKind::Call {
+            callee,
+            instantiation,
+            ..
+        } => ExprKind::Call {
+            callee: *callee,
+            args: children,
+            instantiation: instantiation.clone(),
+        },
+        ExprKind::Operation {
+            binding,
+            operation,
+            resolved_signature,
+            ..
+        } => ExprKind::Operation {
+            binding: *binding,
+            operation: *operation,
+            resolved_signature: resolved_signature.clone(),
+            args: children,
+        },
+        ExprKind::F64FromI64Exact(_) => ExprKind::F64FromI64Exact(Box::new(children.remove(0))),
+        ExprKind::F64FromI64Rounded(_) => ExprKind::F64FromI64Rounded(Box::new(children.remove(0))),
+        ExprKind::I64FromF64Exact(_) => ExprKind::I64FromF64Exact(Box::new(children.remove(0))),
+        ExprKind::I64FromF64Trunc(_) => ExprKind::I64FromF64Trunc(Box::new(children.remove(0))),
+        ExprKind::Do(_) => ExprKind::Do(children),
+        ExprKind::If { .. } => ExprKind::If {
+            condition: Box::new(children.remove(0)),
+            then_branch: Box::new(children.remove(0)),
+            else_branch: Box::new(children.remove(0)),
+        },
+        ExprKind::While { loop_id, .. } => ExprKind::While {
+            loop_id: *loop_id,
+            condition: Box::new(children.remove(0)),
+            body: children,
+        },
+        ExprKind::Loop {
+            loop_id,
+            result_type,
+            ..
+        } => ExprKind::Loop {
+            loop_id: *loop_id,
+            result_type: result_type.clone(),
+            body: children,
+        },
+        ExprKind::Return { .. } => ExprKind::Return {
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::Break { loop_id, .. } => ExprKind::Break {
+            loop_id: *loop_id,
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::Continue { loop_id } => ExprKind::Continue { loop_id: *loop_id },
+        ExprKind::Trap { .. } => ExprKind::Trap {
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::Exit { .. } => ExprKind::Exit {
+            code: Box::new(children.remove(0)),
+        },
+        ExprKind::Let { bindings, .. } => {
+            let body = Box::new(children.remove(bindings.len()));
+            let bindings = bindings
+                .iter()
+                .zip(children)
+                .map(|(binding, value)| LocalDefinition {
+                    binding: binding.binding,
+                    place: binding.place,
+                    static_bytes: binding.static_bytes,
+                    slot: binding.slot,
+                    value,
+                })
+                .collect();
+            ExprKind::Let { bindings, body }
+        }
+        ExprKind::MutableLocal {
+            binding,
+            place,
+            slot,
+            ..
+        } => ExprKind::MutableLocal {
+            binding: *binding,
+            place: *place,
+            slot: *slot,
+            initial: Box::new(children.remove(0)),
+            body: Box::new(children.remove(0)),
+        },
+        ExprKind::SetLocal { target, slot, .. } => ExprKind::SetLocal {
+            target: *target,
+            slot: *slot,
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::ProductValue { product, .. } => ExprKind::ProductValue {
+            product: *product,
+            fields: children,
+        },
+        ExprKind::ProductField { product, field, .. } => ExprKind::ProductField {
+            product: *product,
+            field: *field,
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::WithProductField { product, field, .. } => ExprKind::WithProductField {
+            product: *product,
+            field: *field,
+            value: Box::new(children.remove(0)),
+            replacement: Box::new(children.remove(0)),
+        },
+        ExprKind::EnumValue {
+            enum_id,
+            variant,
+            layout,
+            ..
+        } => ExprKind::EnumValue {
+            enum_id: *enum_id,
+            variant: *variant,
+            layout: *layout,
+            fields: children,
+        },
+        ExprKind::EnumIsVariant {
+            enum_id,
+            variant,
+            layout,
+            ..
+        } => ExprKind::EnumIsVariant {
+            enum_id: *enum_id,
+            variant: *variant,
+            layout: *layout,
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::EnumField {
+            enum_id,
+            variant,
+            field,
+            layout,
+            ..
+        } => ExprKind::EnumField {
+            enum_id: *enum_id,
+            variant: *variant,
+            field: *field,
+            layout: *layout,
+            value: Box::new(children.remove(0)),
+        },
+        ExprKind::EnumUnwrap {
+            enum_id,
+            variant,
+            field,
+            layout,
+            trap,
+            ..
+        } => ExprKind::EnumUnwrap {
+            enum_id: *enum_id,
+            variant: *variant,
+            field: *field,
+            layout: *layout,
+            value: Box::new(children.remove(0)),
+            trap: trap.clone(),
+        },
+        ExprKind::MatchUnreachable { plan } => ExprKind::MatchUnreachable { plan: *plan },
+        ExprKind::QuoteSymbol(value) => ExprKind::QuoteSymbol(value.clone()),
+    }
+}
+
+impl Drop for Expr {
+    fn drop(&mut self) {
+        let mut pending = Vec::new();
+        take_children(self, &mut pending);
+        while let Some(mut expression) = pending.pop() {
+            take_children(&mut expression, &mut pending);
+        }
+    }
+}
+
+fn take_children(expression: &mut Expr, pending: &mut Vec<Expr>) {
+    let kind = std::mem::replace(&mut expression.kind, ExprKind::LitUnit);
+    match kind {
+        ExprKind::Call { mut args, .. }
+        | ExprKind::Operation { mut args, .. }
+        | ExprKind::Do(mut args)
+        | ExprKind::While { body: mut args, .. }
+        | ExprKind::Loop { body: mut args, .. }
+        | ExprKind::ProductValue {
+            fields: mut args, ..
+        }
+        | ExprKind::EnumValue {
+            fields: mut args, ..
+        } => pending.append(&mut args),
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value)
+        | ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value }
+        | ExprKind::SetLocal { value, .. }
+        | ExprKind::ProductField { value, .. }
+        | ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => pending.push(*value),
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            pending.push(*condition);
+            pending.push(*then_branch);
+            pending.push(*else_branch);
+        }
+        ExprKind::Let { bindings, body } => {
+            pending.extend(bindings.into_iter().map(|binding| binding.value));
+            pending.push(*body);
+        }
+        ExprKind::MutableLocal { initial, body, .. } => {
+            pending.push(*initial);
+            pending.push(*body);
+        }
+        ExprKind::WithProductField {
+            value, replacement, ..
+        } => {
+            pending.push(*value);
+            pending.push(*replacement);
+        }
+        ExprKind::LitI64(_)
+        | ExprKind::LitF64(_)
+        | ExprKind::LitBool(_)
+        | ExprKind::LitUnit
+        | ExprKind::EmptyList
+        | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
+        | ExprKind::Load(_)
+        | ExprKind::Move { .. }
+        | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. }
+        | ExprKind::Continue { .. }
+        | ExprKind::MatchUnreachable { .. }
+        | ExprKind::QuoteSymbol(_) => {}
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -8,7 +8,12 @@ HIR, ownership/effect/memory passes derive executable obligations, SSA lowering 
 control-flow program, and the IR verifier publishes an opaque verified program. Bytecode lowering
 and validation provide the generic executable representation used by the runtime. This trusted
 pipeline has no compiler resource profile or cross-phase budget ledger; source-file counts and
-phase durations are observation only.
+phase durations are observation only. Source parsing and source-tree operations use explicit work
+stacks. Recursive expression mechanisms whose control and mutable compiler state make immediate
+continuation-stack rewrites disproportionately invasive use the localized `stacker` boundary,
+which repeatedly adds heap-backed stack segments and therefore defines tuning geometry rather than
+a finite accepted depth. Recursive source and HIR ownership is dismantled by custom non-recursive
+destruction.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot

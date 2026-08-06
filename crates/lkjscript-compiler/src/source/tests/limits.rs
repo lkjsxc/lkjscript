@@ -1,46 +1,6 @@
 use super::*;
 
 #[test]
-fn nesting_safety_limit_remains_enforced_at_its_boundary() {
-    let accepted = unit_main("unit");
-    let limits = Limits {
-        max_nest_depth: 3,
-        ..Limits::default()
-    };
-    validate(&accepted, "limit.lkjscript", &limits).expect("three nested forms fit");
-
-    let error = validate(
-        &accepted,
-        "limit.lkjscript",
-        &Limits {
-            max_nest_depth: 2,
-            ..limits
-        },
-    )
-    .expect_err("nesting safety boundary");
-    assert_eq!(error.category().as_str(), "resource-limit");
-    assert!(error.message().contains("semantic nest depth exceeded"));
-}
-
-#[test]
-fn match_structural_markers_have_a_separate_hard_depth_bound() {
-    let nesting = 33;
-    let mut source =
-        String::from("main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n");
-    source.push_str(&"fields/\n".repeat(nesting));
-    source.push_str("x\n");
-    source.push_str(&"/fields\n".repeat(nesting));
-    source.push_str("arms/\narm/\nwildcard/\n/wildcard\n0\n/arm\n/arms\n/match\n/main\n");
-    let error = validate(&source, "match-depth.lkjscript", &Limits::default())
-        .expect_err("match marker depth plus one");
-    assert_eq!(error.category().as_str(), "resource-limit", "{error}");
-    assert!(
-        error.message().contains("match marker depth exceeded"),
-        "{error}"
-    );
-}
-
-#[test]
 fn limited_reader_uses_a_sentinel_while_unrestricted_reader_reaches_eof() {
     let origin = SourceOrigin::in_memory("src/reader.lkjscript");
     let bytes = vec![b'x'; 4];

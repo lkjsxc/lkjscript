@@ -7,6 +7,10 @@ pub(in crate::ownership) fn uses(expression: &Expr) -> BTreeSet<BindingId> {
 }
 
 pub(in crate::ownership) fn collect_uses(expression: &Expr, output: &mut BTreeSet<BindingId>) {
+    crate::stack::grow(|| collect_uses_inner(expression, output));
+}
+
+fn collect_uses_inner(expression: &Expr, output: &mut BTreeSet<BindingId>) {
     match &expression.kind {
         ExprKind::Load(reference)
         | ExprKind::Move {
@@ -86,6 +90,10 @@ pub(in crate::ownership) fn uses_bindings(
 }
 
 pub(in crate::ownership) fn contains_ownership_action(expression: &Expr) -> bool {
+    crate::stack::grow(|| contains_ownership_action_inner(expression))
+}
+
+fn contains_ownership_action_inner(expression: &Expr) -> bool {
     if matches!(
         expression.kind,
         ExprKind::Move { .. } | ExprKind::Borrow { .. }

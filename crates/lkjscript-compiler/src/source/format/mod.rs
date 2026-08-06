@@ -29,68 +29,81 @@ pub(crate) fn format_node_source(node: &SourceNode) -> String {
 }
 
 fn format_node(node: &SourceNode, output: &mut String, emit_trivia: bool) {
-    if emit_trivia {
-        format_trivia(&node.leading_trivia, output);
+    enum Work<'a> {
+        Node(&'a SourceNode),
+        Close(&'a str, &'a [String]),
     }
-    match &node.kind {
-        SyntaxKind::I64 { value } => {
-            output.push_str(&value.to_string());
-            output.push('\n');
-        }
-        SyntaxKind::F64 { value } => {
-            output.push_str(&format_f64(*value));
-            output.push('\n');
-        }
-        SyntaxKind::Bool { value } => {
-            output.push_str(if *value { "true\n" } else { "false\n" });
-        }
-        SyntaxKind::Unit => output.push_str("unit\n"),
-        SyntaxKind::Str { value } => {
-            format_text("string-literal", value, output);
+
+    let mut work = vec![Work::Node(node)];
+    while let Some(item) = work.pop() {
+        let Work::Node(node) = item else {
+            let Work::Close(name, trivia) = item else {
+                continue;
+            };
             if emit_trivia {
-                format_trivia(&node.before_close_trivia, output);
-            }
-        }
-        SyntaxKind::Bytes { value } => {
-            output.push_str("bytes-literal/\n");
-            for byte in value {
-                use std::fmt::Write as _;
-                let _ = write!(output, "{byte:02x}");
-            }
-            output.push_str("\n/bytes-literal\n");
-            if emit_trivia {
-                format_trivia(&node.before_close_trivia, output);
-            }
-        }
-        SyntaxKind::Symbol { name } => {
-            output.push_str(name);
-            output.push('\n');
-        }
-        SyntaxKind::Call { name } => {
-            if matches!(name.as_str(), "name" | "module") {
-                if let [SourceNode {
-                    kind: SyntaxKind::Str { value },
-                    ..
-                }] = node.children.as_slice()
-                {
-                    format_text(name, value, output);
-                    if emit_trivia {
-                        format_trivia(&node.before_close_trivia, output);
-                    }
-                    return;
-                }
-            }
-            output.push_str(name);
-            output.push_str("/\n");
-            for child in &node.children {
-                format_node(child, output, emit_trivia);
-            }
-            if emit_trivia {
-                format_trivia(&node.before_close_trivia, output);
+                format_trivia(trivia, output);
             }
             output.push('/');
             output.push_str(name);
             output.push('\n');
+            continue;
+        };
+        if emit_trivia {
+            format_trivia(&node.leading_trivia, output);
+        }
+        match &node.kind {
+            SyntaxKind::I64 { value } => {
+                output.push_str(&value.to_string());
+                output.push('\n');
+            }
+            SyntaxKind::F64 { value } => {
+                output.push_str(&format_f64(*value));
+                output.push('\n');
+            }
+            SyntaxKind::Bool { value } => {
+                output.push_str(if *value { "true\n" } else { "false\n" });
+            }
+            SyntaxKind::Unit => output.push_str("unit\n"),
+            SyntaxKind::Str { value } => {
+                format_text("string-literal", value, output);
+                if emit_trivia {
+                    format_trivia(&node.before_close_trivia, output);
+                }
+            }
+            SyntaxKind::Bytes { value } => {
+                output.push_str("bytes-literal/\n");
+                for byte in value {
+                    use std::fmt::Write as _;
+                    let _ = write!(output, "{byte:02x}");
+                }
+                output.push_str("\n/bytes-literal\n");
+                if emit_trivia {
+                    format_trivia(&node.before_close_trivia, output);
+                }
+            }
+            SyntaxKind::Symbol { name } => {
+                output.push_str(name);
+                output.push('\n');
+            }
+            SyntaxKind::Call { name } => {
+                if matches!(name.as_str(), "name" | "module") {
+                    if let [SourceNode {
+                        kind: SyntaxKind::Str { value },
+                        ..
+                    }] = node.children.as_slice()
+                    {
+                        format_text(name, value, output);
+                        if emit_trivia {
+                            format_trivia(&node.before_close_trivia, output);
+                        }
+                        continue;
+                    }
+                }
+                output.push_str(name);
+                output.push_str("/\n");
+                work.push(Work::Close(name, &node.before_close_trivia));
+                work.extend(node.children.iter().rev().map(Work::Node));
+            }
         }
     }
 }

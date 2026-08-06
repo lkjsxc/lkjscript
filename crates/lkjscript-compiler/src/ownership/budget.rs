@@ -12,6 +12,10 @@ pub(in crate::ownership) fn charge_expression_nodes(
     expression: &Expr,
     nodes: &mut usize,
 ) -> Result<()> {
+    crate::stack::grow(|| charge_expression_nodes_inner(expression, nodes))
+}
+
+fn charge_expression_nodes_inner(expression: &Expr, nodes: &mut usize) -> Result<()> {
     *nodes = nodes
         .checked_add(1)
         .ok_or_else(|| Error::msg("ownership analysis expression budget overflow"))?;

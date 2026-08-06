@@ -1,6 +1,10 @@
 use crate::hir::{self, Type};
 
 pub(super) fn verifier_demands_compare(body: &hir::Expr, parameter: &str) -> bool {
+    crate::stack::grow(|| verifier_demands_compare_inner(body, parameter))
+}
+
+fn verifier_demands_compare_inner(body: &hir::Expr, parameter: &str) -> bool {
     if let hir::ExprKind::Operation {
         operation: hir::Operation::EqualValue,
         args,
@@ -18,6 +22,10 @@ pub(super) fn verifier_demands_compare(body: &hir::Expr, parameter: &str) -> boo
 }
 
 pub(super) fn verifier_compare_only(body: &hir::Expr, parameter: &str) -> bool {
+    crate::stack::grow(|| verifier_compare_only_inner(body, parameter))
+}
+
+fn verifier_compare_only_inner(body: &hir::Expr, parameter: &str) -> bool {
     match &body.kind {
         hir::ExprKind::Load(_) | hir::ExprKind::Move { .. } => {
             matches!(&body.ty, Type::Param(name) if name == parameter)
