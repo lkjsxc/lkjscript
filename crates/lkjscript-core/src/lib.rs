@@ -8,7 +8,6 @@ mod opcode;
 mod outcome;
 mod prelude;
 mod resource_table;
-mod sha256;
 mod structural;
 mod validation;
 mod value;
@@ -38,7 +37,7 @@ pub use limits::{
     MAX_BYTECODE_TABLE_ENTRIES, MAX_BYTE_STORAGE_BYTES, MAX_CHUNK_ENCODED_BYTES,
     MAX_CONSTANT_DATA_BYTES, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
-pub use lkjscript_contracts::MemoryWitnessOperation;
+pub use lkjscript_contracts::{sha256, MemoryWitnessOperation, Sha256};
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
 };
@@ -64,7 +63,6 @@ pub use resource_table::{
     ResourceOwnership, ResourceState, ResourceTable, ResourceTableConfigError, ResourceTableError,
     ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ResourceTokenParts, ScopeId,
 };
-pub use sha256::sha256;
 pub use structural::{
     product_layout_identity, product_semantic_identity, ByteVectorKey, BytesKey, CheckedU32Range,
     DestinationCleanupReport, DomainClass, DomainKey, InlineStructuralValue, InvalidUniqueKeyWord,

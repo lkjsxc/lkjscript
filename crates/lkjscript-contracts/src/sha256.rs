@@ -1,4 +1,4 @@
-//! Small owned SHA-256 implementation for the fixed digest capability.
+//! Small owned incremental SHA-256 implementation for fixed content identities.
 
 const INITIAL_STATE: [u32; 8] = [
     0x6a09_e667,
@@ -78,30 +78,94 @@ const ROUND_CONSTANTS: [u32; 64] = [
     0xc671_78f2,
 ];
 
+/// Incremental SHA-256 state with a fixed-size working set.
+#[derive(Clone)]
+pub struct Sha256 {
+    state: [u32; 8],
+    buffer: [u8; 64],
+    buffer_len: usize,
+    bit_length: u64,
+}
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Sha256 {
+    /// Create an empty SHA-256 state.
+    pub const fn new() -> Self {
+        Self {
+            state: INITIAL_STATE,
+            buffer: [0; 64],
+            buffer_len: 0,
+            bit_length: 0,
+        }
+    }
+
+    /// Add bytes to the digest without allocating.
+    ///
+    /// SHA-256 encodes the low 64 bits of the message bit length, so length accounting wraps as
+    /// required by the algorithm while every supplied byte is still compressed.
+    pub fn update(&mut self, mut input: &[u8]) {
+        if self.buffer_len != 0 {
+            let take = (64 - self.buffer_len).min(input.len());
+            let end = self.buffer_len + take;
+            self.buffer[self.buffer_len..end].copy_from_slice(&input[..take]);
+            self.add_short_length(take);
+            self.buffer_len = end;
+            input = &input[take..];
+            if self.buffer_len == 64 {
+                compress(&mut self.state, &self.buffer);
+                self.buffer_len = 0;
+            } else {
+                return;
+            }
+        }
+
+        let mut blocks = input.chunks_exact(64);
+        for block in &mut blocks {
+            compress(&mut self.state, block);
+            self.bit_length = self.bit_length.wrapping_add(512);
+        }
+        let remainder = blocks.remainder();
+        self.buffer[..remainder.len()].copy_from_slice(remainder);
+        self.buffer_len = remainder.len();
+        self.add_short_length(remainder.len());
+    }
+
+    /// Finish the digest.
+    pub fn finish(mut self) -> [u8; 32] {
+        self.buffer[self.buffer_len] = 0x80;
+        self.buffer[self.buffer_len + 1..].fill(0);
+        if self.buffer_len >= 56 {
+            compress(&mut self.state, &self.buffer);
+            self.buffer.fill(0);
+        }
+        self.buffer[56..].copy_from_slice(&self.bit_length.to_be_bytes());
+        compress(&mut self.state, &self.buffer);
+
+        let mut output = [0_u8; 32];
+        for (index, word) in self.state.iter().enumerate() {
+            output[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
+        }
+        output
+    }
+
+    fn add_short_length(&mut self, byte_length: usize) {
+        debug_assert!(byte_length <= 64);
+        for _ in 0..byte_length {
+            self.bit_length = self.bit_length.wrapping_add(8);
+        }
+    }
+}
+
 /// Return the SHA-256 digest of `input`.
 pub fn sha256(input: &[u8]) -> [u8; 32] {
-    let mut state = INITIAL_STATE;
-    let mut blocks = input.chunks_exact(64);
-    for block in &mut blocks {
-        compress(&mut state, block);
-    }
-
-    let remainder = blocks.remainder();
-    let mut final_blocks = [[0_u8; 64]; 2];
-    final_blocks[0][..remainder.len()].copy_from_slice(remainder);
-    final_blocks[0][remainder.len()] = 0x80;
-    let final_count = if remainder.len() >= 56 { 2 } else { 1 };
-    let bit_length = (input.len() as u64).wrapping_mul(8).to_be_bytes();
-    final_blocks[final_count - 1][56..].copy_from_slice(&bit_length);
-    for block in final_blocks.iter().take(final_count) {
-        compress(&mut state, block);
-    }
-
-    let mut output = [0_u8; 32];
-    for (index, word) in state.iter().enumerate() {
-        output[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
-    }
-    output
+    let mut state = Sha256::new();
+    state.update(input);
+    state.finish()
 }
 
 fn compress(state: &mut [u32; 8], block: &[u8]) {
@@ -158,7 +222,7 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    use super::sha256;
+    use super::{sha256, Sha256};
 
     fn hex(bytes: &[u8]) -> String {
         bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -182,9 +246,51 @@ mod tests {
         ] {
             assert_eq!(hex(&sha256(input)), expected);
         }
+
+        let mut million_a = Sha256::new();
+        let chunk = [b'a'; 1_000];
+        for _ in 0..1_000 {
+            million_a.update(&chunk);
+        }
         assert_eq!(
-            hex(&sha256(&vec![b'a'; 1_000_000])),
+            hex(&million_a.finish()),
             "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
         );
+    }
+
+    #[test]
+    fn streaming_matches_one_shot_across_adversarial_boundaries() {
+        let vectors = [
+            b"".as_slice(),
+            b"abc".as_slice(),
+            b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_slice(),
+            b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdefx".as_slice(),
+        ];
+        let patterns: &[&[usize]] = &[
+            &[1],
+            &[2, 1, 3],
+            &[55, 1, 7],
+            &[56, 8],
+            &[63, 1, 64, 1],
+            &[64],
+            &[65, 3],
+        ];
+
+        for input in vectors {
+            for pattern in patterns {
+                let mut state = Sha256::new();
+                let mut offset = 0;
+                let mut step = 0;
+                while offset < input.len() {
+                    let chunk_len = pattern[step % pattern.len()];
+                    let end = offset.saturating_add(chunk_len).min(input.len());
+                    state.update(&input[offset..end]);
+                    offset = end;
+                    step += 1;
+                }
+                state.update(&[]);
+                assert_eq!(state.finish(), sha256(input));
+            }
+        }
     }
 }

@@ -67,11 +67,18 @@ Semantic Source request may apply an explicit aggregate source-byte policy;
 exhausting that policy is a typed host resource failure and does not make the unchanged program
 invalid.
 
+Canonical verified-SSA, validated-bytecode, and prepared-program identities are incrementally
+hashed without canonical-byte, append-count, prepared-descriptor-byte, or ordered-closure-entry
+ceilings. This changes no canonical bytes or digests. Prepared closure ordering, uniqueness,
+nonempty/nonzero rules, and checked `u64` canonical length encoding remain validation laws or wire
+representation boundaries.
+
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
-addressable representation boundaries. Other HIR, memory-plan table and deterministic-work, SSA,
+addressable representation boundaries. HIR memory planning still has table, shape, and
+verifier-work quotas. Bytecode `ValidationLimits` still cap encoded chunks, function code, tables,
+metadata, and constant data, while compact operands and indexes retain width ceilings. Other
 recursive type/trait/enum, structural-value, and executable-width ceilings also remain. These
-inherited ceilings are known defects, not permanent
-language rules. New work must remove the checks and repair the algorithms or representations
-rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
+inherited ceilings are known defects, not permanent language rules. New work must remove the
+checks and repair the algorithms or representations rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
 overflow, and explicit untrusted-request policy must report typed failures without partial
 publication.

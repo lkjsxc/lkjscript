@@ -57,6 +57,21 @@ fn closure_rejects_reorder_missing_extra_and_zero() {
 }
 
 #[test]
+fn closure_accepts_more_than_former_entry_boundary() {
+    let values: Vec<_> = (1_u64..=65_537)
+        .map(|value| {
+            let mut digest = [0; 32];
+            digest[24..].copy_from_slice(&value.to_be_bytes());
+            digest
+        })
+        .collect();
+    assert_ne!(
+        prepared_ordered_closure_digest(1, &values).expect("large ordered closure"),
+        [0; 32]
+    );
+}
+
+#[test]
 fn descriptor_rejects_missing_fields() {
     let mut missing = descriptor();
     missing.contracts.bytecode = [0; 32];

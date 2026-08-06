@@ -48,7 +48,9 @@ ownership is:
 - `lkjscript-host`, `lkjscript-sys`, `lkjscript-linux-host`, and `lkjscript-database`: safe host
   interfaces and narrow operating-system/SQLite mechanisms;
 - `lkjscript-contracts`: boundary schemas and content identities still used by packages, process
-  messages, prepared programs, and executable artifacts; compiler resource-category/profile
+  messages, prepared programs, and executable artifacts; it owns the safe incremental SHA-256
+  state re-exported by core, and canonical SSA, bytecode, and prepared identity construction feeds
+  that state without buffering complete descriptors; compiler resource-category/profile
   descriptors are not part of the registry;
 - `lkjscript-app`: CLI, daemon binaries, provider wiring, diagnostics, and integration tests.
 

@@ -54,11 +54,10 @@ pub use platform::{PublicContractIdentity, PLATFORM_REVISION};
 pub use prepared::{
     prepared_ordered_closure_digest, PackageProvenanceKind, PreparedContractDigests,
     PreparedProgramDescriptor, PreparedProgramError, PreparedProgramIdentity,
-    MAX_PREPARED_CLOSURE_ENTRIES, MAX_PREPARED_DESCRIPTOR_BYTES,
 };
 pub use registry::{require_exact, ContractMismatch, ContractSet, RegisteredContract};
 pub use resource::ResourceKind;
-pub use sha256::sha256;
+pub use sha256::{sha256, Sha256};
 pub use vocabulary::{
     is_identifier, operation_by_id, operation_by_source_name, operation_semantics_by_id,
     removed_spelling, OperationCategory, OperationEffects, OperationIdentity, OperationOwnership,

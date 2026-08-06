@@ -58,7 +58,13 @@ source 1,024 bytes beyond the former 16 MiB boundary and exercises the source au
 in-memory units. Checked accounting crosses 256 MiB; the exact 258 MiB compile-and-execute geometry
 is retained as an opt-in stress test and has not been run as part of normal verification. Compile
 metrics are observational phase timings and source-file counts only. Package manifests and
-prepared-program identities likewise do not carry compiler-profile identity.
+prepared-program identities likewise do not carry compiler-profile identity. Canonical
+verified-SSA, validated-bytecode, and prepared-program identity bytes stream directly into one
+incremental SHA-256 implementation owned by `lkjscript-contracts` and re-exported by core. Identity
+construction has no canonical-byte, append-count, prepared-descriptor-byte, or ordered-closure-entry
+admission ceiling and retains a fixed-size hashing working set. Prepared closures still require a
+nonempty, nonzero, strictly ordered unique sequence, and canonical sequence lengths remain checked
+against their `u64` wire representation.
 
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
 diagnostics, transactions, and a local stdio session. It supplies an explicit limited aggregate
@@ -82,10 +88,12 @@ may build elsewhere, but no other host or native target is currently claimed as 
   uses, loans, constants, calls, obligations, type nodes and edges, witnesses, aggregate shape,
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
-  constant and type
-  fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and 40,045 verifier
-  steps. Compact executable bytecode operands and indexes retain width ceilings. These are
-  follow-up validity and representation gaps, not host policy.
+  constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
+  40,045 verifier steps. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function
+  code bytes, table entries, metadata bytes, and constant data during validation; compact bytecode
+  operands and indexes retain additional width ceilings. This identity cutover does not remove
+  those checks. Where they constrain trusted compiler output rather than an untrusted serialized
+  boundary, they remain follow-up validity and representation gaps, not host policy.
 - Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
   including parts of type, trait, enum, semantic-schema, and transaction processing, still need
   explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input

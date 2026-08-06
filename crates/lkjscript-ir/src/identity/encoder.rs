@@ -1,19 +1,15 @@
 use crate::{IrError, Result};
-
-const MAX_CANONICAL_BYTES: usize = 64 * 1024 * 1024;
-const MAX_CANONICAL_WORK: usize = 8 * 1024 * 1024;
+use lkjscript_core::Sha256;
 
 pub(super) struct Encoder {
-    bytes: Vec<u8>,
-    work: usize,
+    state: Sha256,
     error: Option<IrError>,
 }
 
 impl Encoder {
     pub(super) fn new(domain: &[u8]) -> Self {
         let mut encoder = Self {
-            bytes: Vec::new(),
-            work: 0,
+            state: Sha256::new(),
             error: None,
         };
         encoder.bytes(domain);
@@ -21,27 +17,9 @@ impl Encoder {
     }
 
     fn append(&mut self, value: &[u8]) {
-        if self.error.is_some() {
-            return;
+        if self.error.is_none() {
+            self.state.update(value);
         }
-        let Some(next) = self.bytes.len().checked_add(value.len()) else {
-            self.fail("verified SSA identity size overflow");
-            return;
-        };
-        let Some(work) = self.work.checked_add(1) else {
-            self.fail("verified SSA identity work overflow");
-            return;
-        };
-        if next > MAX_CANONICAL_BYTES || work > MAX_CANONICAL_WORK {
-            self.fail("verified SSA identity bound exceeded");
-            return;
-        }
-        if self.bytes.try_reserve(value.len()).is_err() {
-            self.fail("verified SSA identity allocation failed");
-            return;
-        }
-        self.bytes.extend_from_slice(value);
-        self.work = work;
     }
 
     pub(super) fn fail(&mut self, message: &'static str) {
@@ -101,7 +79,22 @@ impl Encoder {
     pub(super) fn finish(self) -> Result<[u8; 32]> {
         match self.error {
             Some(error) => Err(error),
-            None => Ok(lkjscript_core::sha256(&self.bytes)),
+            None => Ok(self.state.finish()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Encoder;
+
+    #[test]
+    #[ignore = "release stress geometry for the former append-count ceiling"]
+    fn more_than_former_append_count_boundary_succeeds() {
+        let mut encoder = Encoder::new(&[]);
+        for _ in 0..=8_388_608 {
+            encoder.fixed(&[0]);
+        }
+        assert!(matches!(encoder.finish(), Ok(digest) if digest != [0; 32]));
     }
 }

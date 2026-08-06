@@ -1,46 +1,23 @@
-use crate::{Error, Result};
-
-const MAX_CANONICAL_BYTES: usize = 64 * 1024 * 1024;
-const MAX_CANONICAL_WORK: usize = 8 * 1024 * 1024;
+use crate::{Error, Result, Sha256};
 
 pub(super) struct Encoder {
-    bytes: Vec<u8>,
-    work: usize,
+    state: Sha256,
     error: Option<Error>,
 }
 
 impl Encoder {
     pub(super) fn new(domain: &[u8]) -> Self {
         let mut out = Self {
-            bytes: Vec::new(),
-            work: 0,
+            state: Sha256::new(),
             error: None,
         };
         out.bytes(domain);
         out
     }
     fn append(&mut self, value: &[u8]) {
-        if self.error.is_some() {
-            return;
+        if self.error.is_none() {
+            self.state.update(value);
         }
-        let Some(size) = self.bytes.len().checked_add(value.len()) else {
-            self.fail("validated bytecode identity size overflow");
-            return;
-        };
-        let Some(work) = self.work.checked_add(1) else {
-            self.fail("validated bytecode identity work overflow");
-            return;
-        };
-        if size > MAX_CANONICAL_BYTES || work > MAX_CANONICAL_WORK {
-            self.fail("validated bytecode identity bound exceeded");
-            return;
-        }
-        if self.bytes.try_reserve(value.len()).is_err() {
-            self.fail("validated bytecode identity allocation failed");
-            return;
-        }
-        self.bytes.extend_from_slice(value);
-        self.work = work;
     }
     pub(super) fn fail(&mut self, message: &'static str) {
         if self.error.is_none() {
@@ -105,7 +82,22 @@ impl Encoder {
     pub(super) fn finish(self) -> Result<[u8; 32]> {
         match self.error {
             Some(error) => Err(error),
-            None => Ok(crate::sha256(&self.bytes)),
+            None => Ok(self.state.finish()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Encoder;
+
+    #[test]
+    fn streams_more_than_former_sixty_four_mib_boundary() {
+        let chunk = [0x5a; 4 * 1024];
+        let mut encoder = Encoder::new(&[]);
+        for _ in 0..=(64 * 1024 * 1024) / chunk.len() {
+            encoder.fixed(&chunk);
+        }
+        assert!(matches!(encoder.finish(), Ok(digest) if digest != [0; 32]));
     }
 }

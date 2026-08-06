@@ -38,11 +38,11 @@ pub struct PreparedProgramDescriptor {
 impl PreparedProgramDescriptor {
     pub fn identity(&self) -> Result<PreparedProgramIdentity, PreparedProgramError> {
         self.validate()?;
-        let mut out = Encoder::new(DOMAIN)?;
-        out.tag(1)?;
-        out.u64(self.platform_revision)?;
-        out.tag(2)?;
-        out.u8(self.package_kind as u8)?;
+        let mut out = Encoder::new(DOMAIN);
+        out.tag(1);
+        out.u64(self.platform_revision);
+        out.tag(2);
+        out.u8(self.package_kind as u8);
         for (tag, value) in [
             (3, self.package_content),
             (4, self.package_root),
@@ -61,8 +61,8 @@ impl PreparedProgramDescriptor {
             (17, self.contracts.runtime_control),
             (18, self.contracts.process_outcome_codec),
         ] {
-            out.tag(tag)?;
-            out.fixed(&value)?;
+            out.tag(tag);
+            out.fixed(&value);
         }
         PreparedProgramIdentity::new(out.finish())
     }

@@ -6,8 +6,6 @@ use std::fmt;
 pub use descriptor::{PackageProvenanceKind, PreparedContractDigests, PreparedProgramDescriptor};
 use encoder::Encoder;
 
-pub const MAX_PREPARED_CLOSURE_ENTRIES: usize = 65_536;
-pub const MAX_PREPARED_DESCRIPTOR_BYTES: usize = 4 * 1024 * 1024;
 const CLOSURE_DOMAIN: &[u8] = b"lkjscript.prepared-program-closure\0canonical-binary";
 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -43,8 +41,7 @@ pub enum PreparedProgramError {
     ZeroDigest,
     EmptyClosure,
     ClosureOrder,
-    BoundExceeded,
-    AllocationFailed,
+    LengthOverflow,
 }
 
 impl fmt::Display for PreparedProgramError {
@@ -54,8 +51,7 @@ impl fmt::Display for PreparedProgramError {
             Self::ZeroDigest => "prepared digest is zero",
             Self::EmptyClosure => "prepared closure is empty",
             Self::ClosureOrder => "prepared closure is not strictly ordered and unique",
-            Self::BoundExceeded => "prepared descriptor bound exceeded",
-            Self::AllocationFailed => "prepared descriptor allocation failed",
+            Self::LengthOverflow => "prepared closure length exceeds canonical u64 encoding",
         })
     }
 }
@@ -69,18 +65,15 @@ pub fn prepared_ordered_closure_digest(
     if values.is_empty() {
         return Err(PreparedProgramError::EmptyClosure);
     }
-    if values.len() > MAX_PREPARED_CLOSURE_ENTRIES {
-        return Err(PreparedProgramError::BoundExceeded);
-    }
     if !values.windows(2).all(|pair| pair[0] < pair[1]) {
         return Err(PreparedProgramError::ClosureOrder);
     }
-    let mut out = Encoder::new(CLOSURE_DOMAIN)?;
-    out.tag(domain_tag)?;
-    out.u64(u64::try_from(values.len()).map_err(|_| PreparedProgramError::BoundExceeded)?)?;
+    let mut out = Encoder::new(CLOSURE_DOMAIN);
+    out.tag(domain_tag);
+    out.u64(u64::try_from(values.len()).map_err(|_| PreparedProgramError::LengthOverflow)?);
     for value in values {
         nonzero(*value)?;
-        out.fixed(value)?;
+        out.fixed(value);
     }
     let digest = out.finish();
     nonzero(digest)?;
