@@ -10,7 +10,7 @@ pub(crate) fn process_place_end(
     live_loans: &BTreeMap<PlaceId, Vec<LiveLoan>>,
 ) -> crate::Result<()> {
     let _declared = place_by_id(function, place)?;
-    if !state.active_places.remove(&place) {
+    if !state.active_places_mut().remove(&place) {
         return fail("SSA PlaceEnd references a place that is not active");
     }
     if live_loans
@@ -44,7 +44,7 @@ pub(crate) fn process_end_borrow(
         .ok_or_else(|| IrError::new("SSA EndBorrow has mismatched place, loan, or value"))?;
     let ended = loans.remove(index);
     if ended.kind == crate::BorrowKind::Mutable {
-        state.affine.remove(&value);
+        state.affine_mut().remove(&value);
     }
     if loans.is_empty() {
         live_loans.remove(&place);
@@ -80,12 +80,12 @@ pub(crate) fn process_drop(
                 return fail("SSA implicit Drop does not discharge its exact owned whole place");
             }
             if current {
-                state.owners.remove(&place);
+                state.owners_mut().remove(&place);
             }
-            state.affine.remove(&value);
+            state.affine_mut().remove(&value);
         }
         DropEventKind::ExplicitClose => {
-            if state.pending_drops.remove(&place) != Some(value)
+            if state.pending_drops_mut().remove(&place) != Some(value)
                 || !matches!(glue, DropGlueIdentity::Resource(_))
             {
                 return fail("SSA explicit Drop does not match one completed resource close");

@@ -1,105 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
-use crate::verify::*;
-use crate::{BlockId, CallTarget, Function, InstructionKind, Terminator, ValueId};
-
-pub(crate) fn precheck_ownership_work_shape(function: &Function) -> crate::Result<()> {
-    let mut work = 0usize;
-    charge_ownership_work(&mut work, function.signature.type_parameters.len())?;
-    charge_ownership_work(&mut work, function.signature.bounds.len())?;
-    charge_ownership_work(&mut work, function.signature.parameters.len())?;
-    charge_ownership_work(&mut work, function.blocks.len())?;
-    charge_ownership_work(&mut work, function.places.len())?;
-    charge_ownership_work(&mut work, function.failure_cleanups.len())?;
-    for plan in &function.failure_cleanups {
-        charge_ownership_work(&mut work, plan.actions.len())?;
-    }
-    for block in &function.blocks {
-        charge_ownership_work(&mut work, block.parameters.len())?;
-        charge_ownership_work(&mut work, block.instructions.len())?;
-        charge_ownership_work(&mut work, terminator_operand_count(&block.terminator))?;
-        if let Some(frame) = &block.metadata.frame_state {
-            charge_ownership_work(&mut work, frame.locals.len())?;
-            charge_ownership_work(&mut work, frame.operand_stack.len())?;
-        }
-        for instruction in &block.instructions {
-            charge_ownership_work(&mut work, instruction_operand_count(&instruction.kind))?;
-            if let Some(frame) = &instruction.metadata.frame_state {
-                charge_ownership_work(&mut work, frame.locals.len())?;
-                charge_ownership_work(&mut work, frame.operand_stack.len())?;
-            }
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> usize {
-    match kind {
-        InstructionKind::Constant(_)
-        | InstructionKind::PlaceEnd { .. }
-        | InstructionKind::DestinationCreate { .. }
-        | InstructionKind::FunctionRef(_) => 0,
-        InstructionKind::Copy(_)
-        | InstructionKind::PlaceInit { .. }
-        | InstructionKind::EndBorrow { .. }
-        | InstructionKind::Drop { .. }
-        | InstructionKind::Move { .. }
-        | InstructionKind::Borrow { .. }
-        | InstructionKind::StructuralPublish { .. }
-        | InstructionKind::DestinationFinish { .. }
-        | InstructionKind::DestinationAbort { .. }
-        | InstructionKind::AggregateFieldBorrow { .. }
-        | InstructionKind::AggregateTag { .. }
-        | InstructionKind::AggregateConsumePayload { .. }
-        | InstructionKind::StringUtf8View { .. }
-        | InstructionKind::StructuralCopy { .. }
-        | InstructionKind::MemoryWitnessIndependentOwner { .. }
-        | InstructionKind::MemoryWitnessDispose { .. }
-        | InstructionKind::F64FromI64Exact { .. }
-        | InstructionKind::F64FromI64Rounded { .. }
-        | InstructionKind::I64FromF64Exact { .. }
-        | InstructionKind::I64FromF64Trunc { .. }
-        | InstructionKind::ProductField { .. }
-        | InstructionKind::EnumIsVariant { .. }
-        | InstructionKind::EnumField { .. } => 1,
-        InstructionKind::DestinationFieldInit { .. }
-        | InstructionKind::MemoryWitnessCompare { .. } => 2,
-        InstructionKind::Runtime { arguments, .. }
-        | InstructionKind::Call {
-            target: CallTarget::Direct(_),
-            arguments,
-            ..
-        }
-        | InstructionKind::ProductValue {
-            fields: arguments, ..
-        }
-        | InstructionKind::EnumValue {
-            fields: arguments, ..
-        } => arguments.len(),
-        InstructionKind::Call {
-            target: CallTarget::Indirect(_),
-            arguments,
-            ..
-        } => arguments.len().saturating_add(1),
-        InstructionKind::WithProductField { .. } => 2,
-    }
-}
-
-pub(crate) fn terminator_operand_count(terminator: &Terminator) -> usize {
-    match terminator {
-        Terminator::Branch { arguments, .. } => arguments.len(),
-        Terminator::ConditionalBranch {
-            true_arguments,
-            false_arguments,
-            ..
-        } => 1usize
-            .saturating_add(true_arguments.len())
-            .saturating_add(false_arguments.len()),
-        Terminator::Return(_) | Terminator::Exit { .. } => 1,
-        Terminator::Trap { .. } => 1,
-        Terminator::Outcome { detail, .. } => usize::from(detail.is_some()),
-    }
-}
+use crate::{BlockId, ValueId};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum AffineProvenance {
@@ -118,10 +20,32 @@ pub(crate) struct AffineFact {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct OwnershipState {
-    pub(crate) active_places: BTreeSet<crate::PlaceId>,
-    pub(crate) owners: BTreeMap<crate::PlaceId, ValueId>,
-    pub(crate) pending_drops: BTreeMap<crate::PlaceId, ValueId>,
-    pub(crate) affine: BTreeMap<ValueId, AffineFact>,
+    pub(crate) active_places: Arc<BTreeSet<crate::PlaceId>>,
+    pub(crate) owners: Arc<BTreeMap<crate::PlaceId, ValueId>>,
+    pub(crate) pending_drops: Arc<BTreeMap<crate::PlaceId, ValueId>>,
+    pub(crate) affine: Arc<BTreeMap<ValueId, AffineFact>>,
+}
+
+impl OwnershipState {
+    pub(crate) fn active_places_mut(&mut self) -> &mut BTreeSet<crate::PlaceId> {
+        Arc::make_mut(&mut self.active_places)
+    }
+
+    pub(crate) fn owners_mut(&mut self) -> &mut BTreeMap<crate::PlaceId, ValueId> {
+        Arc::make_mut(&mut self.owners)
+    }
+
+    pub(crate) fn pending_drops_mut(&mut self) -> &mut BTreeMap<crate::PlaceId, ValueId> {
+        Arc::make_mut(&mut self.pending_drops)
+    }
+
+    pub(crate) fn affine_mut(&mut self) -> &mut BTreeMap<ValueId, AffineFact> {
+        Arc::make_mut(&mut self.affine)
+    }
+
+    pub(crate) fn clear_affine(&mut self) {
+        self.affine = Arc::default();
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

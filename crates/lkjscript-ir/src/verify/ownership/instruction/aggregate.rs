@@ -35,14 +35,14 @@ fn process_aggregate_payload(
                 if live_loans.get(place).is_some_and(|loans| !loans.is_empty()) {
                     return fail("SSA aggregate payload transfer conflicts with a live loan");
                 }
-                state.owners.remove(place);
+                state.owners_mut().remove(place);
             }
             None if current_owner_place(state, *value).is_some() => {
                 return fail("SSA unplaced aggregate payload transfer names a placed owner");
             }
             None => {}
         }
-        state.affine.remove(value);
+        state.affine_mut().remove(value);
     }
     Ok(())
 }

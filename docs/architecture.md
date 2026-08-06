@@ -14,7 +14,11 @@ use explicit work stacks. Recursive expression mechanisms whose control and muta
 make immediate continuation-stack rewrites disproportionately invasive use the localized `stacker` boundary,
 which repeatedly adds heap-backed stack segments and therefore defines tuning geometry rather than
 a finite accepted depth. Recursive source and HIR ownership is dismantled by custom non-recursive
-destruction.
+destruction. SSA ownership verification admits wide semantic state without work or retained-cell
+budgets. Single-source worklist states move into block processing; join-capable states share
+copy-on-write ordered fact sets and maps, so unchanged CFG propagation does not copy whole states.
+Join comparison remains exact. Failure-cleanup derivation iterates active owners rather than every
+declared place, avoiding repeated whole-place-table scans as cleanup progresses.
 
 Executable-width ownership is now explicit at each boundary: analyzer/HIR arity and local storage,
 codegen colors, and bytecode prototypes use host indexes; SSA frame-state slots use `u64` identity

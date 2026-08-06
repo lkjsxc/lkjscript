@@ -4,7 +4,6 @@ use crate::verify::*;
 use crate::{BlockId, BorrowKind, FailureCleanupAction, Function, Program, SsaType, TraitRole};
 
 pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::Result<()> {
-    precheck_ownership_work_shape(function)?;
     let type_parameters: Vec<&str> = function
         .signature
         .type_parameters

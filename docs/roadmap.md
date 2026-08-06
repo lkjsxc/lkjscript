@@ -14,10 +14,13 @@
    Byte-sized function arity, call argument, local, cleanup-local, and executable-place widths are
    removed: one fixed-`u64` index/pair format now executes 300 parameters, arguments, live lexical
    locals, and direct VM place 299, with checked decode and automatic VM fallback; a larger stress
-   case executes 1,024 parameters, arguments, and lexical locals. Next remove the
-   ownership-CFG work quota that blocks a 300-owned-parameter production-source place, then widen
-   or segment retained `u16` function offsets, jumps, cleanup ranges/plans, constants, globals,
-   product/enum/structural tables and descriptors, plus byte-sized product fields and enum
+   case executes 1,024 parameters, arguments, and lexical locals. SSA ownership work and retained
+   state-cell quotas are removed; generated coverage verifies 44,000 owned parameters and places,
+   132,000 state cells per block, 264,000 cells under the former aggregate retained-state
+   accounting across propagation, and exact cleanup. A 300-owned-parameter source now reaches the
+   separate bytecode failure-cleanup aggregate action ceiling. Next widen or segment that cleanup
+   representation and retained `u16` function offsets, jumps, cleanup ranges/plans, constants,
+   globals, product/enum/structural tables and descriptors, plus byte-sized product fields and enum
    substitutions. Completion requires just-beyond-old-boundary and substantially larger positive
    programs, checked growth, and successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte

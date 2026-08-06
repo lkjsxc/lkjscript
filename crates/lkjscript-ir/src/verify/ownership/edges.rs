@@ -39,7 +39,7 @@ pub(crate) fn consume_affine_arguments(
         }
         if let Some(place) = current_owner_place(state, *argument) {
             if resource && consume_handles {
-                state.owners.remove(&place);
+                state.owners_mut().remove(&place);
             } else {
                 return fail(format!(
                     "SSA call consumes current owner of PlaceId {} without explicit Move",
@@ -47,7 +47,7 @@ pub(crate) fn consume_affine_arguments(
                 ));
             }
         }
-        state.affine.remove(argument);
+        state.affine_mut().remove(argument);
     }
     Ok(())
 }
@@ -64,13 +64,11 @@ pub(crate) fn transfer_edge(
     state: &OwnershipState,
     target: BlockId,
     arguments: &[ValueId],
-    work: &mut usize,
 ) -> crate::Result<OwnershipState> {
     let program = context.program;
     let types = context.types;
     let nonowned_affine = context.nonowned_affine;
     let target_block = block_by_id(context.function, target)?;
-    charge_ownership_work(work, ownership_state_cells(state)?)?;
     if !state.pending_drops.is_empty() {
         return fail("SSA edge leaves an explicit resource drop event pending");
     }
@@ -85,7 +83,7 @@ pub(crate) fn transfer_edge(
         );
     }
     let mut next = state.clone();
-    next.affine.clear();
+    next.clear_affine();
     let mut seen = BTreeSet::new();
     for (argument, parameter) in arguments.iter().zip(&target_block.parameters) {
         let ty = value_type(types, *argument)?;
@@ -113,9 +111,8 @@ pub(crate) fn transfer_edge(
                         "SSA owner block argument does not transport the current value for its PlaceId",
                     );
                 }
-                next.owners.insert(place, parameter.id);
-                next.affine.remove(argument);
-                next.affine.insert(
+                next.owners_mut().insert(place, parameter.id);
+                next.affine_mut().insert(
                     parameter.id,
                     AffineFact {
                         provenance: AffineProvenance::Place(place),
@@ -129,7 +126,6 @@ pub(crate) fn transfer_edge(
                         "SSA edge cannot implicitly transfer a current Owned place; use Move",
                     );
                 }
-                next.affine.remove(argument);
                 let provenance = if fact.transferred {
                     match fact.provenance {
                         AffineProvenance::Place(place) if state.active_places.contains(&place) => {
@@ -144,7 +140,7 @@ pub(crate) fn transfer_edge(
                         other => other,
                     }
                 };
-                next.affine.insert(
+                next.affine_mut().insert(
                     parameter.id,
                     AffineFact {
                         provenance,

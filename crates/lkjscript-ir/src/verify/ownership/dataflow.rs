@@ -8,7 +8,7 @@ pub(crate) fn verify_ownership_facts(
     function: &Function,
     types: &[SsaType],
 ) -> crate::Result<()> {
-    let (mut work, entry) = collect_ownership_provenance(function)?;
+    let entry = collect_ownership_provenance(function)?;
     let reachable = reachable(function)?;
     for block in &function.blocks {
         let has_loop_action = block.instructions.iter().any(|instruction| {
@@ -17,7 +17,7 @@ pub(crate) fn verify_ownership_facts(
                 InstructionKind::Move { .. } | InstructionKind::Borrow { .. }
             )
         });
-        if has_loop_action && block_is_cyclic(function, block.id, &mut work)? {
+        if has_loop_action && block_is_cyclic(function, block.id)? {
             return fail(
                 "SSA loop ownership state must be invariant; Move and Borrow are unavailable in loop cycles",
             );
@@ -47,9 +47,9 @@ pub(crate) fn verify_ownership_facts(
     let mut initial = OwnershipState::default();
     for parameter in &entry.parameters {
         if let Some(place) = parameter.owner_place {
-            initial.active_places.insert(place);
-            initial.owners.insert(place, parameter.id);
-            initial.affine.insert(
+            initial.active_places_mut().insert(place);
+            initial.owners_mut().insert(place, parameter.id);
+            initial.affine_mut().insert(
                 parameter.id,
                 AffineFact {
                     provenance: AffineProvenance::Place(place),
@@ -57,7 +57,7 @@ pub(crate) fn verify_ownership_facts(
                 },
             );
         } else if is_affine(program, &parameter.ty) {
-            initial.affine.insert(
+            initial.affine_mut().insert(
                 parameter.id,
                 AffineFact {
                     provenance: AffineProvenance::External(parameter.id),
@@ -76,40 +76,49 @@ pub(crate) fn verify_ownership_facts(
         return fail("SSA entry ownership state is missing");
     };
     *entry_state = Some(initial);
+
+    // A state with only one possible incoming source can be moved into block processing. States
+    // that participate in joins remain shared so later predecessors can be compared exactly.
+    let mut incoming_sources = vec![0usize; function.blocks.len()];
+    incoming_sources[entry_index] = 1;
+    for block in &function.blocks {
+        for successor in successors(&block.terminator) {
+            let successor_index = successor
+                .index()
+                .ok_or_else(|| IrError::new("SSA successor cannot index ownership state"))?;
+            let Some(count) = incoming_sources.get_mut(successor_index) else {
+                return fail("SSA successor ownership state is missing");
+            };
+            *count = count
+                .checked_add(1)
+                .ok_or_else(|| IrError::new("SSA ownership predecessor count overflow"))?;
+        }
+    }
+
     let mut queue = VecDeque::from([function.entry]);
     let mut queued = BTreeSet::from([function.entry]);
-    let mut retained_state_cells = ownership_state_cells(
-        incoming
-            .get(entry_index)
-            .and_then(Option::as_ref)
-            .ok_or_else(|| IrError::new("SSA entry ownership state is missing"))?,
-    )?;
-
     let nonowned_affine = nonowned_affine_values(program, function);
     while let Some(block_id) = queue.pop_front() {
         queued.remove(&block_id);
-        charge_ownership_work(&mut work, 1)?;
         let index = block_id
             .index()
             .ok_or_else(|| IrError::new("SSA BlockId cannot index ownership state"))?;
-        let state_ref = incoming
-            .get(index)
-            .and_then(Option::as_ref)
-            .ok_or_else(|| IrError::new("SSA ownership worklist lost incoming state"))?;
-        charge_ownership_work(&mut work, ownership_state_cells(state_ref)?)?;
-        let state = state_ref.clone();
+        let state = if incoming_sources.get(index).copied() == Some(1) {
+            incoming
+                .get_mut(index)
+                .and_then(Option::take)
+                .ok_or_else(|| IrError::new("SSA ownership worklist lost incoming state"))?
+        } else {
+            incoming
+                .get(index)
+                .and_then(Option::as_ref)
+                .cloned()
+                .ok_or_else(|| IrError::new("SSA ownership worklist lost incoming state"))?
+        };
         let current = block_by_id(function, block_id)?;
-        let successors = process_ownership_block(
-            program,
-            function,
-            current,
-            state,
-            types,
-            &nonowned_affine,
-            &mut work,
-        )?;
+        let successors =
+            process_ownership_block(program, function, current, state, types, &nonowned_affine)?;
         for (successor, successor_state) in successors {
-            charge_ownership_work(&mut work, 1)?;
             let successor_index = successor
                 .index()
                 .ok_or_else(|| IrError::new("SSA successor cannot index ownership state"))?;
@@ -118,11 +127,6 @@ pub(crate) fn verify_ownership_facts(
             };
             match slot {
                 Some(previous) if previous != &successor_state => {
-                    charge_ownership_work(
-                        &mut work,
-                        ownership_state_cells(previous)?
-                            .saturating_add(ownership_state_cells(&successor_state)?),
-                    )?;
                     return fail(format!(
                         concat!(
                             "SSA ownership predecessor states do not join exactly at block {}: ",
@@ -133,24 +137,8 @@ pub(crate) fn verify_ownership_facts(
                         successor_state = successor_state,
                     ));
                 }
-                Some(previous) => {
-                    charge_ownership_work(
-                        &mut work,
-                        ownership_state_cells(previous)?
-                            .saturating_add(ownership_state_cells(&successor_state)?),
-                    )?;
-                }
+                Some(_) => {}
                 None => {
-                    let cells = ownership_state_cells(&successor_state)?;
-                    retained_state_cells = retained_state_cells
-                        .checked_add(cells)
-                        .ok_or_else(|| IrError::new("SSA retained ownership state overflow"))?;
-                    if retained_state_cells > OWNERSHIP_VERIFY_MAX_RETAINED_STATE_CELLS {
-                        return fail(format!(
-                            "SSA retained ownership state exceeds {OWNERSHIP_VERIFY_MAX_RETAINED_STATE_CELLS} cells"
-                        ));
-                    }
-                    charge_ownership_work(&mut work, cells)?;
                     *slot = Some(successor_state);
                     if queued.insert(successor) {
                         queue.push_back(successor);

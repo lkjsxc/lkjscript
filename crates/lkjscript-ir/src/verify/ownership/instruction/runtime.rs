@@ -30,7 +30,7 @@ fn process_runtime_instruction(
         closes,
     )?;
     if let Some((place, value)) = pending {
-        if state.pending_drops.insert(place, value).is_some() {
+        if state.pending_drops_mut().insert(place, value).is_some() {
             return fail("SSA resource close duplicated a pending Drop event");
         }
     }

@@ -112,25 +112,3 @@ pub(crate) fn current_owner_place(
     };
     (state.owners.get(place) == Some(&value)).then_some(*place)
 }
-
-pub(crate) fn ownership_state_cells(state: &OwnershipState) -> crate::Result<usize> {
-    state
-        .active_places
-        .len()
-        .checked_add(state.owners.len())
-        .and_then(|cells| cells.checked_add(state.pending_drops.len()))
-        .and_then(|cells| cells.checked_add(state.affine.len()))
-        .ok_or_else(|| IrError::new("SSA ownership state cell count overflow"))
-}
-
-pub(crate) fn charge_ownership_work(work: &mut usize, amount: usize) -> crate::Result<()> {
-    *work = work
-        .checked_add(amount)
-        .ok_or_else(|| IrError::new("SSA ownership CFG verification work overflow"))?;
-    if *work > OWNERSHIP_VERIFY_MAX_WORK {
-        return fail(format!(
-            "SSA ownership CFG verification work exceeded {OWNERSHIP_VERIFY_MAX_WORK}"
-        ));
-    }
-    Ok(())
-}

@@ -65,7 +65,10 @@ validity. Ownership analysis and HIR memory planning do not reject an aggregate 
 count; memory-plan expression work remains checked observational `u64` telemetry. An untrusted
 Semantic Source request may apply an explicit aggregate source-byte policy;
 exhausting that policy is a typed host resource failure and does not make the unchanged program
-invalid.
+invalid. SSA ownership verification has no project-selected work or retained-state-cell quota;
+wide states remain subject to the same exact predecessor joins, affine availability, active
+place/owner/drop facts, loop invariance, unreachable ownership rejection, borrow locality, and
+cleanup semantics as smaller states.
 
 Canonical verified-SSA, validated-bytecode, and prepared-program identities are incrementally
 hashed without canonical-byte, append-count, prepared-descriptor-byte, or ordered-closure-entry
@@ -93,9 +96,10 @@ metadata, and constant data. `u16` function offsets, jumps, cleanup ranges and p
 constants, globals, and product/enum/structural tables remain; product fields and enum substitutions
 retain byte-sized representations. HIR/SSA place identities and validator-synthetic owner
 identities still use `u32`, a separate representation gap above that range. A generated
-300-owned-parameter source currently reaches the separate SSA ownership-CFG work quota before
-executable lowering, although validated bytecode and the VM execute unique place 299. Other
-recursive type/trait/enum and structural-value ceilings also remain. These
+300-owned-parameter source passes SSA ownership verification but currently reaches the retained
+bytecode failure-cleanup aggregate action ceiling before executable publication, although validated
+bytecode and the VM execute unique place 299. Other recursive type/trait/enum and structural-value
+ceilings also remain. These
 inherited ceilings are known defects, not permanent language rules. New work must remove the
 checks and repair the algorithms or representations rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
 overflow, and explicit untrusted-request policy must report typed failures without partial

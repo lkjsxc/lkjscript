@@ -47,7 +47,13 @@ admission rule. Trusted validation, loading, package analysis, and compilation s
 unrestricted source-byte policy. Source files are read to EOF in checked, fallibly reserved chunks;
 metadata is a capacity and change-detection hint, not admission. Ownership analysis no longer
 pre-scans HIR merely to reject an aggregate expression count. HIR memory-plan expression work is
-checked observational `u64` telemetry rather than admission. Generated coverage compiles, creates
+checked observational `u64` telemetry rather than admission. SSA ownership verification likewise
+has no ownership-work or retained-state-cell admission ceiling. Its worklist moves single-source
+states and shares copy-on-write state across joins, while exact predecessor-state equality and all
+ownership cleanup rules remain enforced. Generated SSA coverage verifies 44,000 owned resource
+parameters and places with 132,000 active-place, owner, and affine state cells per block, 264,000
+cells under the former aggregate retained-state accounting across a two-block propagation, one
+44,000-argument consuming call, and exact cleanup of every place. Generated coverage compiles, creates
 a verified HIR memory plan, creates verified and normalized SSA, validates bytecode, executes
 through the VM, and destroys a program with 20,000 nested `do` expressions on a 256 KiB native
 thread stack. That fixture records exactly 20,001 memory-plan expressions, 20,003 entries, and
@@ -110,10 +116,11 @@ may build elsewhere, but no other host or native target is currently claimed as 
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. A source with 300 simultaneously owned byte-vector parameters currently
-  reaches the separate SSA ownership-CFG work ceiling of 131,072 before executable lowering, so a
-  production-source place above 255 is not yet claimed even though validated bytecode and the VM
-  execute place 299. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function code
+  40,045 verifier steps. A source with 300 simultaneously owned byte-vector parameters now passes
+  the SSA ownership verifier but reaches the separately retained bytecode failure-cleanup aggregate
+  action ceiling before validated executable publication. Therefore the production source vertical
+  for 300 owned arguments is not yet claimed even though validated bytecode and the VM execute one
+  owned parameter in slot 299 and direct place 299. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function code
   bytes, table entries, metadata bytes, and constant data during validation. Function offsets,
   jumps, failure-cleanup ranges and plan indexes, constants, globals, product/enum/structural tables,
   product fields, enum substitutions, and several structural descriptors retain `u16` or `u8`

@@ -27,7 +27,7 @@ pub(super) fn register_instruction_result(
         && !structural_view
         && !borrowed_resource
     {
-        state.affine.insert(
+        state.affine_mut().insert(
             instruction.id,
             AffineFact {
                 provenance: AffineProvenance::Fresh(instruction.id),

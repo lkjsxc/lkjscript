@@ -18,13 +18,11 @@ pub(crate) fn process_ownership_block(
     mut state: OwnershipState,
     types: &[SsaType],
     nonowned_affine: &HashSet<ValueId>,
-    work: &mut usize,
 ) -> crate::Result<Vec<(BlockId, OwnershipState)>> {
     let last_use = ownership_last_uses(block);
     let mut live_loans: BTreeMap<crate::PlaceId, Vec<LiveLoan>> = BTreeMap::new();
 
     for (index, instruction) in block.instructions.iter().enumerate() {
-        charge_ownership_work(work, 1)?;
         expire_unplaced_affine(&mut state, &last_use, index);
         verify_frame_affine_available(
             program,
@@ -114,15 +112,7 @@ pub(crate) fn process_ownership_block(
         )?,
         "block terminator",
     )?;
-    process_ownership_terminator(
-        program,
-        function,
-        block,
-        &state,
-        types,
-        nonowned_affine,
-        work,
-    )
+    process_ownership_terminator(program, function, block, &state, types, nonowned_affine)
 }
 
 include!("block/terminator.rs");

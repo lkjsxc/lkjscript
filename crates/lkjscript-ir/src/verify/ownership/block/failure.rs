@@ -64,7 +64,8 @@ pub(super) fn expected_failure_cleanup(
             value: loan.value,
         });
     }
-    let placed: std::collections::BTreeSet<_> = state.owners.values().copied().collect();
+    let exclusions: HashSet<_> = exclusions.iter().copied().collect();
+    let placed: HashSet<_> = state.owners.values().copied().collect();
     let mut unplaced = Vec::new();
     for value in state.affine.keys() {
         if !exclusions.contains(value)
@@ -85,17 +86,15 @@ pub(super) fn expected_failure_cleanup(
             glue,
         });
     }
-    for place in function.places.iter().rev() {
-        if let Some(value) = state.owners.get(&place.id) {
-            let glue = place
-                .drop_glue
-                .ok_or_else(|| IrError::new("SSA failure cleanup owner has no drop glue"))?;
-            expected.push(FailureCleanupAction::DropOwner {
-                place: Some(place.id),
-                value: *value,
-                glue,
-            });
-        }
+    for (place, value) in state.owners.iter().rev() {
+        let glue = place_by_id(function, *place)?
+            .drop_glue
+            .ok_or_else(|| IrError::new("SSA failure cleanup owner has no drop glue"))?;
+        expected.push(FailureCleanupAction::DropOwner {
+            place: Some(*place),
+            value: *value,
+            glue,
+        });
     }
     Ok(expected)
 }

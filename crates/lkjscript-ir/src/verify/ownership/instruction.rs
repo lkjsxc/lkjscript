@@ -22,13 +22,13 @@ pub(crate) fn process_ownership_instruction(
                 return fail("SSA assigns the same owner value to multiple PlaceIds");
             }
             let fact = state
-                .affine
+                .affine_mut()
                 .get_mut(value)
                 .ok_or_else(|| IrError::new("SSA PlaceInit uses an unavailable affine owner"))?;
             fact.provenance = AffineProvenance::Place(*place);
             fact.transferred = false;
-            state.active_places.insert(*place);
-            state.owners.insert(*place, *value);
+            state.active_places_mut().insert(*place);
+            state.owners_mut().insert(*place, *value);
         }
         InstructionKind::PlaceEnd { place } => {
             process_place_end(function, *place, state, live_loans)?;
@@ -50,11 +50,11 @@ pub(crate) fn process_ownership_instruction(
                 return fail("SSA Move conflicts with a live loan");
             }
             let _old = state
-                .affine
+                .affine_mut()
                 .remove(value)
                 .ok_or_else(|| IrError::new("SSA Move consumes an unavailable affine owner"))?;
-            state.owners.remove(place);
-            state.affine.insert(
+            state.owners_mut().remove(place);
+            state.affine_mut().insert(
                 instruction.id,
                 AffineFact {
                     provenance: AffineProvenance::Place(*place),
@@ -86,7 +86,7 @@ pub(crate) fn process_ownership_instruction(
                 value: instruction.id,
             });
             if *kind == crate::BorrowKind::Mutable {
-                state.affine.insert(
+                state.affine_mut().insert(
                     instruction.id,
                     AffineFact {
                         provenance: AffineProvenance::Loan(*loan),

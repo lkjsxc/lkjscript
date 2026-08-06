@@ -6,10 +6,8 @@ use crate::{Function, InstructionKind, IrError, ValueId};
 pub(crate) fn verify_borrow_uses(
     function: &Function,
     borrows: &BTreeMap<ValueId, BorrowDefinition>,
-    work: &mut usize,
 ) -> crate::Result<()> {
-    let mut semantic_uses: BTreeMap<ValueId, usize> =
-        borrows.keys().copied().map(|value| (value, 0)).collect();
+    let mut semantic_uses = BTreeSet::new();
     let mut ended = BTreeSet::new();
     for block in &function.blocks {
         verify_frame_borrows(
@@ -19,7 +17,6 @@ pub(crate) fn verify_borrow_uses(
             &ended,
         )?;
         for instruction in &block.instructions {
-            charge_ownership_work(work, 1)?;
             if let InstructionKind::EndBorrow { place, loan, value } = instruction.kind {
                 let definition = borrows
                     .get(&value)
@@ -31,7 +28,7 @@ pub(crate) fn verify_borrow_uses(
                 {
                     return fail("SSA EndBorrow is duplicated or has mismatched provenance");
                 }
-                if semantic_uses.get(&value).copied().unwrap_or(0) == 0 {
+                if !semantic_uses.contains(&value) {
                     return fail("SSA EndBorrow precedes any supported semantic loan use");
                 }
             } else {
@@ -53,12 +50,7 @@ pub(crate) fn verify_borrow_uses(
                     ) {
                         return fail("SSA Borrow result has an unsupported non-argument use");
                     }
-                    let count = semantic_uses
-                        .get_mut(&operand)
-                        .ok_or_else(|| IrError::new("SSA Borrow use accounting is inconsistent"))?;
-                    *count = count
-                        .checked_add(1)
-                        .ok_or_else(|| IrError::new("SSA Borrow use count overflow"))?;
+                    semantic_uses.insert(operand);
                 }
             }
             verify_frame_borrows(
@@ -74,9 +66,10 @@ pub(crate) fn verify_borrow_uses(
             }
         }
     }
-    if let Some((value, definition)) = borrows.iter().find(|(value, _)| {
-        semantic_uses.get(value).copied().unwrap_or(0) == 0 || !ended.contains(value)
-    }) {
+    if let Some((value, definition)) = borrows
+        .iter()
+        .find(|(value, _)| !semantic_uses.contains(value) || !ended.contains(value))
+    {
         return fail(format!(
             "SSA Borrow result {} for LoanId {} lacks one semantic use and EndBorrow",
             value.raw(),

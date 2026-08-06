@@ -5,7 +5,6 @@ fn process_ownership_terminator(
     state: &OwnershipState,
     types: &[SsaType],
     nonowned_affine: &HashSet<ValueId>,
-    work: &mut usize,
 ) -> crate::Result<Vec<(BlockId, OwnershipState)>> {
     let terminal = !matches!(
         block.terminator,
@@ -32,7 +31,7 @@ fn process_ownership_terminator(
     match &block.terminator {
         Terminator::Branch { target, arguments } => Ok(vec![(
             *target,
-            transfer_edge(&edge_context, state, *target, arguments, work)?,
+            transfer_edge(&edge_context, state, *target, arguments)?,
         )]),
         Terminator::ConditionalBranch {
             true_target,
@@ -43,23 +42,11 @@ fn process_ownership_terminator(
         } => Ok(vec![
             (
                 *true_target,
-                transfer_edge(
-                    &edge_context,
-                    state,
-                    *true_target,
-                    true_arguments,
-                    work,
-                )?,
+                transfer_edge(&edge_context, state, *true_target, true_arguments)?,
             ),
             (
                 *false_target,
-                transfer_edge(
-                    &edge_context,
-                    state,
-                    *false_target,
-                    false_arguments,
-                    work,
-                )?,
+                transfer_edge(&edge_context, state, *false_target, false_arguments)?,
             ),
         ]),
         Terminator::Return(value) => {
