@@ -135,17 +135,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lkjscript-xtask"
-version = "0.0.0"
-dependencies = [
- "lkjscript-compiler",
- "lkjscript-contracts",
- "lkjscript-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

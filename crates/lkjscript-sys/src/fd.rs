@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Owned OS file descriptors; Drop closes.
 
 use std::os::fd::RawFd;

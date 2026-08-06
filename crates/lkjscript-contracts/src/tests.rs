@@ -122,13 +122,11 @@ fn current_registry_is_closed_deterministic_and_dependency_checked() {
     );
     let second = second_result.unwrap_or_default();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 27);
+    assert_eq!(first.len(), 22);
     assert!(first.get(LANGUAGE).is_some());
-    assert!(first.get(LIMIT_INVENTORY).is_some());
     assert!(first.get(SEMANTIC_RESOURCE_PLANE).is_some());
     assert!(first.get(MEMORY_OBLIGATIONS).is_some());
     assert!(first.get(STRUCTURAL_OWNERSHIP_DOMAINS).is_some());
-    assert!(first.get(PUBLIC_FACTS).is_some());
     assert!(first.get(RUNTIME_CONTROL).is_some());
     assert!(first.get(PREPARED_PROGRAM).is_some());
 }
@@ -140,15 +138,11 @@ fn compiled_source_digests_match_descriptors() {
     let contracts = result.unwrap_or_default();
     for (name, digest) in [
         (AGENT_PROTOCOL, AGENT_PROTOCOL_DIGEST),
-        (AGENT_WORK_STATE, AGENT_WORK_STATE_DIGEST),
-        (CAPSULE_MANIFEST, CAPSULE_MANIFEST_DIGEST),
         (DIAGNOSTICS, DIAGNOSTICS_DIGEST),
         (LANGUAGE, LANGUAGE_DIGEST),
-        (LIMIT_INVENTORY, LIMIT_INVENTORY_DIGEST),
         (MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST),
         (METRICS, METRICS_DIGEST),
         (NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST),
-        (REPOSITORY_GRAPH, REPOSITORY_GRAPH_DIGEST),
         (RESOURCE_CATEGORIES, RESOURCE_CATEGORIES_DIGEST),
         (RESOURCE_PROFILES, RESOURCE_PROFILES_DIGEST),
         (RUNTIME_CALLS, RUNTIME_CALLS_DIGEST),

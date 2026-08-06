@@ -8,10 +8,7 @@ RUN apt-get update \
 RUN rustup component add rustfmt clippy
 COPY .gitignore Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.lock.json ./
 COPY crates ./crates
-COPY meta/config ./meta/config
 COPY meta/platform-revision ./meta/platform-revision
-COPY meta/agent-state ./meta/agent-state
-COPY meta/unsafe ./meta/unsafe
 COPY docs ./docs
 COPY src ./src
 COPY meta/scripts ./meta/scripts
@@ -20,9 +17,8 @@ COPY meta/Dockerfile meta/docker-compose.yml ./meta/
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-release,target=/src/target,sharing=locked \
-    cargo build --locked --release -p lkjscript-app -p lkjscript-xtask \
-    && cp /src/target/release/lkjscript /tmp/lkjscript \
-    && cp /src/target/release/lkjscript-xtask /tmp/lkjscript-xtask
+    cargo build --locked --release -p lkjscript-app \
+    && cp /src/target/release/lkjscript /tmp/lkjscript
 
 FROM build AS verified
 RUN apt-get update \
@@ -31,9 +27,10 @@ RUN apt-get update \
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-verify,target=/src/target,sharing=locked \
-    --mount=type=bind,from=repository-git,source=.,target=/src/.git,readonly \
-    git config --global --add safe.directory /src \
-    && cargo run --locked -p lkjscript-xtask -- quiet verify \
+    cargo fmt --all -- --check \
+    && cargo clippy --workspace --all-targets --all-features --locked -- -D warnings \
+    && cargo test --workspace --all-targets --locked \
+    && cargo build --workspace --release --locked \
     && /tmp/lkjscript run src/examples/hello/main.lkjscript | grep -q 3628800 \
     && /tmp/lkjscript run src/examples/mandel/main.lkjscript > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
@@ -53,7 +50,6 @@ COPY --from=build /tmp/lkjscript /usr/local/bin/lkjscript
 ENV LKJSCRIPT_ROOT=/usr/local/share/lkjscript
 COPY src /usr/local/share/lkjscript/src
 WORKDIR /usr/local/share/lkjscript
-COPY meta/config ./meta/config
 COPY lkjscript.package.json lkjscript.lock.json ./
 ENTRYPOINT ["lkjscript"]
 CMD ["--help"]

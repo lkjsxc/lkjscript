@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use super::*;
 
 pub(super) extern "C" fn runtime_island_poll(state: *mut IslandCallState<'_>) {

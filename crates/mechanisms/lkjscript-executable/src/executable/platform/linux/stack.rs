@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use super::*;
 
 pub(in crate::executable) fn native_stack_bounds() -> Option<(usize, usize)> {

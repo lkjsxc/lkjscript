@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 mod cleanup;
 use super::*;
 use cleanup::end_borrow;

@@ -1,62 +1,81 @@
 # lkjscript
 
-`lkjscript` is an AI-primary, statically typed, memory-safe functional language
-and daemon-first platform implemented in Rust. One resolved typed authority feeds
-HIR, verified SSA, validated bytecode, the evaluator, the reference VM, and the
-native JIT tiers.
+`lkjscript` is an experimental, AI-primary, statically typed, memory-safe language and
+runtime implemented in Rust. The project is undergoing an architectural reset toward a typed
+semantic program model, scalable compiler algorithms, and one coherent production runtime path.
 
-## Status
-<!-- LKJ-F documentation-authority accepted-contract mNBp5F48YmWvCfUZWovZ5YKqvSnefIQTu8xE7sStxaQ -->
-<!-- LKJ-F jit-proof-forced current 17j6L43d9Fi6RBsicYW35vmSIBb2VWtoJBFrmjJd2Wk -->
-<!-- LKJ-F no-tracing-runtime current FWMY13I30geyQOA0b0DiqLAtyX3rWuYJeiLTRQmnOVE -->
-<!-- LKJ-F os-resident-runtime-foundation current QGVIHLHgKeS5SBg9o97QU1axaFUq4liXv2E0_7iGBkc -->
+Today, programs are imported from the provisional line-oriented `.lkjscript` projection. The
+compiler resolves and checks them, builds typed HIR and verified SSA, emits validated bytecode,
+and runs them through the default automatic VM/native path. Linux x86-64 is the currently tested
+native platform.
 
+## Build and run
 
-Canonical source uses **`.lkjscript`** only. Removed suffixes, language markers,
-editions, and compatibility modes have no aliases. Linux x86-64 is the Current
-native acceptance platform.
-
-The Current Linux platform runs a foreground `lkjscriptd` coordinator with
-bounded authenticated local control and isolated application cells. Standalone
-execution remains a bounded bootstrap, recovery, diagnosis, CI, and development
-path rather than a second platform authority.
-
-Supported slices execute through an independent evaluator, validated reference
-VM, callable baseline JIT, and forced proof-checked JIT. Forced native execution
-preflights complete support and never falls back to the VM.
-
-The runtime is collector-free. No tracing heap, liveness root map, collection
-service, collector barrier, collector configuration, collector metric, or
-tracing fallback remains in production.
-
-Exact Current capability and explicit gaps are in
-[Current State](docs/current-state.md). Accepted future work is not implied by
-this entry point.
-
-## Development Commands
+A current Rust toolchain and SQLite runtime library are required.
 
 ```sh
+cargo build --locked -p lkjscript-app
 cargo run --locked -p lkjscript-app --bin lkjscript -- \
-  run --engine vm src/examples/hello/main.lkjscript
-cargo run --locked -p lkjscript-app --bin lkjscript -- \
-  run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
-cargo run --locked -p lkjscript-app --bin lkjscript -- \
-  run --engine optimizing-jit src/examples/jit-scalar/main.lkjscript
-cargo run --locked -p lkjscript-app --bin lkjscript -- describe --json
-cargo run --locked -p lkjscript-app --bin lkjscript -- memory inventory --json
-cargo run --locked -p lkjscript-xtask -- quiet verify
+  run src/examples/hello/main.lkjscript
 ```
 
-Docker verification, when Docker is available:
+The example prints `3628800`, the factorial of 10.
+
+The text projection is intentionally verbose and is not the permanent source schema. A small
+ordinary function currently looks like this:
+
+```text
+def/
+name/
+dec
+/name
+public
+fn/
+sig/
+inputs/
+i64
+/inputs
+output/
+i64
+/output
+/sig
+params/
+n
+i64
+/params
+subtract/
+n
+1
+/subtract
+/fn
+/def
+```
+
+See [`src/examples/hello/dec.lkjscript`](src/examples/hello/dec.lkjscript) for the executable
+source.
+
+## Verification
+
+The reset uses transparent commands rather than the removed governance wrapper:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --locked
+cargo build --workspace --release --locked
+```
+
+Docker also runs these commands and the retained application smoke tests:
 
 ```sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 ```
 
-## Engineering Authority
+## Active documentation
 
-- [Current State](docs/current-state.md)
-- [Architecture](docs/operations/architecture.md)
-- [Language](docs/language/README.md)
-- [Verification](docs/operations/verification.md)
-- [Agent Guide](AGENTS.md)
+- [Current implementation](docs/current.md)
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Current language semantics](docs/language.md)
+- [Semantic source-model direction](docs/source-model.md)
+- [Ordered roadmap](docs/roadmap.md)
+- [Engineering policy](AGENTS.md)

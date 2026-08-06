@@ -8,13 +8,6 @@
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
     "meta/benchmarks/jit/pre-jit-workload/kernel.lkjscript", "meta/benchmarks/jit/pre-jit-workload/main.lkjscript",
     "src/examples/bench/leibniz-loop.lkjscript", "src/examples/bench/main.lkjscript",
-    "src/examples/brainfuck/access.lkjscript", "src/examples/brainfuck/cell-value.lkjscript",
-    "src/examples/brainfuck/dispatch.lkjscript", "src/examples/brainfuck/io-byte.lkjscript",
-    "src/examples/brainfuck/load.lkjscript", "src/examples/brainfuck/loop-depth.lkjscript",
-    "src/examples/brainfuck/main.lkjscript", "src/examples/brainfuck/next-pc.lkjscript",
-    "src/examples/brainfuck/pointer-value.lkjscript", "src/examples/brainfuck/run.lkjscript",
-    "src/examples/brainfuck/scan-backward.lkjscript",
-    "src/examples/brainfuck/scan-forward.lkjscript",
     "src/examples/bulk-bytes/io.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/bulk-bytes/roundtrip.lkjscript", "src/examples/bulk-bytes/support.lkjscript",
     "src/examples/durable-files/io.lkjscript", "src/examples/durable-files/main.lkjscript",
@@ -62,7 +55,7 @@
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
     "meta/benchmarks/jit/pre-jit-workload/main.lkjscript", "src/examples/bench/main.lkjscript",
-    "src/examples/brainfuck/main.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
+    "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/durable-files/main.lkjscript", "src/examples/hello/main.lkjscript",
     "src/examples/http/hello.lkjscript", "src/examples/jit-optimizing/main.lkjscript",
     "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
@@ -85,10 +78,6 @@
 {
       "name": "bench-main",
       "module": "src/examples/bench/main.lkjscript"
-    },
-{
-      "name": "brainfuck-main",
-      "module": "src/examples/brainfuck/main.lkjscript"
     },
 {
       "name": "buffer-demo",

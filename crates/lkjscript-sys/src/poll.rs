@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! poll(2) via owned libc extern.
 
 const POLLIN: i16 = 1;

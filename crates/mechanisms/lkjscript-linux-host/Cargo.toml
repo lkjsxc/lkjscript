@@ -10,7 +10,7 @@ lkjscript-contracts = { path = "../../lkjscript-contracts" }
 lkjscript-resource = { path = "../../lkjscript-resource" }
 
 [lints.rust]
-unsafe_code = "allow"
+unsafe_code = "deny"
 
 [lints.clippy]
 expect_used = "deny"

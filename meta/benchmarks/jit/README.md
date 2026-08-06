@@ -103,24 +103,6 @@ The verdict is **Rejected**: scalar native was 10,354,617/7,647,935 ns =
 1.05 ceilings. This cross-evolution sentinel permits no no-regression or
 optimizing-performance claim.
 
-## Rejected Persistent Native Cache Candidate
-
-Commit `90aae65fcc8d458be27af75da8ed51b4e518d8df` was measured with five
-warmups and 30 randomized samples for each disabled, cold-miss, and warm-hit
-combination across scalar, allocation, Brainfuck, editor, and SQLite. The exact
-candidate-only generator is
-[`native_cache_benchmark.py`](native_cache_benchmark.py), and the immutable
-result is
-[`results/native-image-cache-selection.json`](results/native-image-cache-selection.json).
-The script must be run from the candidate commit because Current code correctly
-removes the rejected `--native-cache` interface.
-
-No eligible workload passed the predeclared warm-hit and cold-miss gates.
-Scalar and allocation warm hits regressed wall p50 and time to first native
-entry; Brainfuck improved wall p50 by only 0.12%, regressed first-native time by
-31.67%, and required 137 executions to break even. The candidate is **Rejected**
-and retained only in Git and benchmark history.
-
 ## Rejected Post-Canonical-Cutover Result At `ed36559`
 
 A clean locked run after canonical modules/packages, explicit capabilities,

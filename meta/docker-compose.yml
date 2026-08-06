@@ -47,8 +47,6 @@ services:
     profiles: ["verify"]
     build:
       context: ..
-      additional_contexts:
-        repository-git: ../.git
       dockerfile: meta/Dockerfile
       target: verified
     entrypoint: ["cat"]

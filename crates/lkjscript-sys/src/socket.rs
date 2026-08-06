@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Linux TCP socket primitives via owned libc externs.
 
 use std::os::fd::RawFd;

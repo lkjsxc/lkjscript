@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use super::*;
 
 pub(super) const SQLITE_OK: c_int = 0;

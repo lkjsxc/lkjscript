@@ -15,7 +15,6 @@ members = [
     "crates/lkjscript-vm",
     "crates/lkjscript-runtime",
     "crates/lkjscript-app",
-    "crates/lkjscript-xtask",
 ]
 resolver = "2"
 

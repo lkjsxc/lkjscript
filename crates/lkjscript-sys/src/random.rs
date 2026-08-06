@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Linux kernel entropy via getrandom, with no userspace fallback.
 
 use crate::fd::{errno, FdError};

@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Linux filesystem open/read/write/access via owned libc externs.
 
 use std::ffi::{c_char, c_void, CString};

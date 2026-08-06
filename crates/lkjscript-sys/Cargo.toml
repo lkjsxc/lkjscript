@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [lints.rust]
-unsafe_code = "allow"
+unsafe_code = "deny"
 
 [lints.clippy]
 expect_used = "deny"

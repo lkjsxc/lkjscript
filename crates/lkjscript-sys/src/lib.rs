@@ -1,9 +1,8 @@
 //! Residual Linux-first host I/O and SQLite wrappers with no dependencies.
 //!
-//! Unsafe code is machine-registered by mechanism. Every public safe wrapper
-//! validates the complete memory and type contract required by its FFI call.
-
-#![allow(unsafe_code)]
+//! Unsafe code is confined by lint to the private FFI modules that need it.
+//! Every public safe wrapper validates the complete memory and type contract
+//! required by its FFI call.
 
 mod fd;
 mod file;

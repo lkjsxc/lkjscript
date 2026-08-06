@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use super::*;
 
 pub(super) fn end_borrow(state: *mut IslandCallState<'_>, loan: NativeLoan, slot: RuntimeCallSlot) {

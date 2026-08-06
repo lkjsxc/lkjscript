@@ -19,7 +19,6 @@ fn workspace() -> PathBuf {
 fn canonical_corpus_compiles_under_every_registered_profile() {
     let roots = [
         "src/examples/bench/main.lkjscript",
-        "src/examples/brainfuck/main.lkjscript",
         "src/examples/bulk-bytes/main.lkjscript",
         "src/examples/durable-files/main.lkjscript",
         "src/examples/hello/main.lkjscript",

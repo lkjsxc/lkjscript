@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Fixed Linux terminal operations and best-effort exit restoration.
 
 use std::sync::Mutex;

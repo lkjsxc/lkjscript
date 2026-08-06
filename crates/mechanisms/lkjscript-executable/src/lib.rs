@@ -1,9 +1,7 @@
 //! Safe installation and invocation facade for verified native images.
 //!
 //! Unsafe executable mapping, generated entry, and native runtime bridge code
-//! is confined to machine-registered files behind this crate's safe API.
-
-#![allow(unsafe_code)]
+//! is lint-confined to private mechanism modules behind this crate's safe API.
 
 use std::sync::OnceLock;
 use std::time::Instant;

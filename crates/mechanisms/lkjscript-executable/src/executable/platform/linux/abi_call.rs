@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use super::*;
 
 pub(in crate::executable) unsafe fn invoke_typed(

@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! Linux monotonic clock and sleep via owned libc externs.
 
 use crate::fd::{errno, FdError};

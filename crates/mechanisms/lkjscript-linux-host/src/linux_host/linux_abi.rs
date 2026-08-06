@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 //! The complete unsafe Linux affinity ABI boundary.
 
 fn errno() -> i32 {
