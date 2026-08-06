@@ -159,14 +159,14 @@ fn ownership_verifier_rejects_nested_function_laundering() {
 
     let mut deeply_nested_function = one_block_program();
     let mut nested = SsaType::Unit;
-    for _ in 0..70 {
+    for _ in 0..300 {
         nested = SsaType::Function(Box::new(Signature::monomorphic(Vec::new(), nested)));
     }
     *deeply_nested_function.functions[0].signature.result = SsaType::List(Box::new(nested));
     let error = verify(deeply_nested_function)
-        .expect_err("nested function ownership scan must remain under type verifier bounds");
+        .expect_err("fixture still has a deliberately mismatched return value");
     assert!(
-        error.to_string().contains("type nesting exceeds"),
+        error.to_string().contains("returns the wrong type"),
         "{error}"
     );
 }

@@ -1,49 +1,54 @@
 pub(crate) fn supports_list_element_equality(ty: &SsaType) -> bool {
-    match ty {
-        SsaType::List(item) => supports_list_element_equality(item),
-        other => supports_value_equality(other),
+    let mut current = ty;
+    while let SsaType::List(item) = current {
+        current = item;
     }
+    supports_value_equality(current)
 }
 
 pub(crate) fn supports_value_equality(ty: &SsaType) -> bool {
-    match ty {
-        SsaType::Unit
-        | SsaType::Bool
-        | SsaType::I64
-        | SsaType::F64
-        | SsaType::Str
-        | SsaType::Path
-        | SsaType::Symbol => true,
-        SsaType::Enum { arguments, .. } => arguments.iter().all(supports_value_equality),
-        _ => false,
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            SsaType::Unit
+            | SsaType::Bool
+            | SsaType::I64
+            | SsaType::F64
+            | SsaType::Str
+            | SsaType::Path
+            | SsaType::Symbol => {}
+            SsaType::Enum { arguments, .. } => pending.extend(arguments),
+            _ => return false,
+        }
     }
-}
-
-pub(crate) fn signature_contains_ownership(program: &Program, signature: &Signature) -> bool {
-    signature
-        .parameters
-        .iter()
-        .any(|ty| contains_ownership_type(program, ty))
-        || contains_ownership_type(program, &signature.result)
+    true
 }
 
 pub(crate) fn contains_ownership_type(program: &Program, ty: &SsaType) -> bool {
-    if program.memory.is_owned(ty) {
-        return true;
+    contains_ownership_worklist(program, vec![ty])
+}
+
+fn contains_ownership_worklist(program: &Program, mut pending: Vec<&SsaType>) -> bool {
+    while let Some(ty) = pending.pop() {
+        if program.memory.is_owned(ty) {
+            return true;
+        }
+        match ty {
+            SsaType::Bytes
+            | SsaType::ByteVector
+            | SsaType::ByteSlice
+            | SsaType::ByteSliceMut
+            | SsaType::StructuralDestination(_) => return true,
+            SsaType::List(inner) => pending.push(inner),
+            SsaType::Enum { arguments, .. } => pending.extend(arguments),
+            SsaType::Function(signature) => {
+                pending.push(&signature.result);
+                pending.extend(&signature.parameters);
+            }
+            _ => {}
+        }
     }
-    match ty {
-        SsaType::Bytes
-        | SsaType::ByteVector
-        | SsaType::ByteSlice
-        | SsaType::ByteSliceMut
-        | SsaType::StructuralDestination(_) => true,
-        SsaType::List(inner) => contains_ownership_type(program, inner),
-        SsaType::Enum { arguments, .. } => arguments
-            .iter()
-            .any(|argument| contains_ownership_type(program, argument)),
-        SsaType::Function(signature) => signature_contains_ownership(program, signature),
-        _ => false,
-    }
+    false
 }
 
 pub(crate) fn is_byte_vector(ty: &SsaType) -> bool {

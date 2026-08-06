@@ -29,9 +29,6 @@ pub fn canonical_semantic_descriptor(value: &SemanticDescriptor) -> Result<Vec<u
     for declaration in &value.declarations {
         out.declaration(declaration)?;
     }
-    if out.0.len() > MAX_SEMANTIC_DESCRIPTOR_BYTES {
-        return Err(E("semantic descriptor byte limit exceeded"));
-    }
     Ok(out.0)
 }
 
@@ -70,54 +67,53 @@ impl Encoder {
         Ok(())
     }
     fn ty(&mut self, value: &SemanticType) -> Result<(), E> {
-        match value {
-            SemanticType::Primitive(kind) => {
-                self.byte(0);
-                self.byte(primitive(*kind));
-            }
-            SemanticType::Capability(kind) => {
-                self.byte(1);
-                self.byte(capability(*kind));
-            }
-            SemanticType::Resource(kind) => {
-                self.byte(2);
-                self.byte(resource(*kind));
-            }
-            SemanticType::Product(id) => {
-                self.byte(3);
-                self.bytes(id)?;
-            }
-            SemanticType::Enum {
-                identity,
-                arguments,
-            } => {
-                self.byte(4);
-                self.bytes(identity)?;
-                self.len(arguments.len())?;
-                for ty in arguments {
-                    self.ty(ty)?;
+        let mut pending = vec![value];
+        while let Some(value) = pending.pop() {
+            match value {
+                SemanticType::Primitive(kind) => {
+                    self.byte(0);
+                    self.byte(primitive(*kind));
                 }
-            }
-            SemanticType::Parameter(name) => {
-                self.byte(5);
-                self.string(name)?;
-            }
-            SemanticType::List(ty) => {
-                self.byte(6);
-                self.ty(ty)?;
-            }
-            SemanticType::Function { parameters, result } => {
-                self.byte(7);
-                self.len(parameters.len())?;
-                for ty in parameters {
-                    self.ty(ty)?;
+                SemanticType::Capability(kind) => {
+                    self.byte(1);
+                    self.byte(capability(*kind));
                 }
-                self.ty(result)?;
-            }
-            SemanticType::ForAll { parameters, body } => {
-                self.byte(8);
-                self.names(parameters)?;
-                self.ty(body)?;
+                SemanticType::Resource(kind) => {
+                    self.byte(2);
+                    self.byte(resource(*kind));
+                }
+                SemanticType::Product(id) => {
+                    self.byte(3);
+                    self.bytes(id)?;
+                }
+                SemanticType::Enum {
+                    identity,
+                    arguments,
+                } => {
+                    self.byte(4);
+                    self.bytes(identity)?;
+                    self.len(arguments.len())?;
+                    pending.extend(arguments.iter().rev());
+                }
+                SemanticType::Parameter(name) => {
+                    self.byte(5);
+                    self.string(name)?;
+                }
+                SemanticType::List(ty) => {
+                    self.byte(6);
+                    pending.push(ty);
+                }
+                SemanticType::Function { parameters, result } => {
+                    self.byte(7);
+                    self.len(parameters.len())?;
+                    pending.push(result);
+                    pending.extend(parameters.iter().rev());
+                }
+                SemanticType::ForAll { parameters, body } => {
+                    self.byte(8);
+                    self.names(parameters)?;
+                    pending.push(body);
+                }
             }
         }
         Ok(())

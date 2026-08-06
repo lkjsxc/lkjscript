@@ -1,19 +1,13 @@
 use std::collections::HashSet;
 
 use crate::verify::*;
-use crate::{
-    MemoryWitnessId, Program, StructuralValueCategory, MAX_MEMORY_WITNESSES,
-    MAX_MEMORY_WITNESS_DEPENDENCIES,
-};
+use crate::{MemoryWitnessId, Program, StructuralValueCategory};
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let records = &program.memory.witnesses;
-    if records.len() > MAX_MEMORY_WITNESSES {
-        return fail("SSA memory witness table exceeds bounded maximum");
-    }
     let mut prior = None;
     let mut types = HashSet::new();
-    let mut edges = 0usize;
+    let mut observed_edges = 0_u64;
     for record in records {
         if !record.id.is_resolved() || prior.is_some_and(|id| id >= record.id) {
             return fail("SSA memory witness table must be sorted with unique nonzero IDs");
@@ -48,13 +42,13 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
             return fail("SSA executable memory witness member identity is noncanonical");
         }
         validate_representation(program, record)?;
-        edges = edges
-            .checked_add(record.dependencies.len())
-            .ok_or_else(|| crate::IrError::new("SSA witness edge work overflow"))?;
-        if edges > MAX_MEMORY_WITNESS_DEPENDENCIES {
-            return fail("SSA memory witness dependency table exceeds bounded maximum");
-        }
+        observed_edges = observed_edges
+            .checked_add(u64::try_from(record.dependencies.len()).map_err(|_| {
+                crate::IrError::new("SSA witness edge count exceeds telemetry representation")
+            })?)
+            .ok_or_else(|| crate::IrError::new("SSA witness edge telemetry overflow"))?;
     }
+    let _ = observed_edges;
     Ok(())
 }
 

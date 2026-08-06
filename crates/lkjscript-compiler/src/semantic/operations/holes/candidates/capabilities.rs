@@ -6,8 +6,8 @@ pub(super) fn required(
     expression: &Expression,
 ) -> Vec<String> {
     let parameters = match expression {
-        Expression::BuiltinCall { operation, .. } => match operation.0.signature() {
-            Type::Fn { params, .. } => Some(params),
+        Expression::BuiltinCall { operation, .. } => match &operation.0.signature() {
+            Type::Fn { params, .. } => Some(params.clone()),
             _ => None,
         },
         Expression::UserCall { name, .. } => super::super::scope::function_signatures(tree)

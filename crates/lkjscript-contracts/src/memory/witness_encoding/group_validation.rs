@@ -5,21 +5,14 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 pub fn validate_executable_memory_witness_groups(
     groups: &[ExecutableMemoryWitnessGroup],
 ) -> Result<(), ExecutableMemoryWitnessGroupError> {
-    if groups.len() > MAX_EXECUTABLE_MEMORY_WITNESS_GROUPS {
-        return fail("executable memory witness group limit exceeded");
-    }
     let mut group_index = HashMap::with_capacity(groups.len());
     let mut member_index = HashMap::new();
-    let mut member_count = 0usize;
     for (index, group) in groups.iter().enumerate() {
         if group.id == [0; 32] || group_index.insert(group.id, index).is_some() {
             return fail("memory witness groups require unique nonzero identities");
         }
-        member_count = member_count.checked_add(group.members.len()).ok_or(
-            ExecutableMemoryWitnessGroupError("memory witness member count overflow"),
-        )?;
-        if member_count > MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_MEMBERS || group.members.is_empty() {
-            return fail("memory witness group membership limit or emptiness violation");
+        if group.members.is_empty() {
+            return fail("memory witness group cannot be empty");
         }
         validate_member_order(group)?;
         validate_local_scc(group)?;
@@ -33,7 +26,6 @@ pub fn validate_executable_memory_witness_groups(
         }
     }
     let mut outgoing = vec![BTreeSet::new(); groups.len()];
-    let mut edges = 0usize;
     for (group_index_value, group) in groups.iter().enumerate() {
         for member in &group.members {
             validate_member(
@@ -45,12 +37,6 @@ pub fn validate_executable_memory_witness_groups(
                 &member_index,
                 &mut outgoing,
             )?;
-            edges = edges.checked_add(member.dependencies.len()).ok_or(
-                ExecutableMemoryWitnessGroupError("memory witness edge count overflow"),
-            )?;
-            if edges > MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_EDGES {
-                return fail("memory witness group edge limit exceeded");
-            }
         }
     }
     validate_dag(&outgoing)?;

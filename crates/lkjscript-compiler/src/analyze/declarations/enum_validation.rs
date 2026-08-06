@@ -6,6 +6,14 @@ impl Analyzer {
         ty: &Type,
         parameters: &[String],
     ) -> std::result::Result<Type, String> {
+        crate::stack::grow(|| self.resolve_enum_type_inner(ty, parameters))
+    }
+
+    fn resolve_enum_type_inner(
+        &self,
+        ty: &Type,
+        parameters: &[String],
+    ) -> std::result::Result<Type, String> {
         Ok(match ty {
             Type::Enum {
                 name, arguments, ..
@@ -79,79 +87,85 @@ impl Analyzer {
     }
 
     pub(in crate::analyze) fn validate_enum_recursion(&self) -> Result<()> {
-        let mut work = 0_usize;
-        for definition in &self.enums {
-            let mut path = Vec::new();
-            self.walk_enum(definition.id, 0, &mut path, &mut work)
-                .map_err(|message| self.error(definition.origin, message))?;
+        enum Work<'a> {
+            Enum(EnumId),
+            Type(&'a Type),
         }
-        Ok(())
-    }
 
-    fn walk_enum(
-        &self,
-        id: EnumId,
-        depth: usize,
-        path: &mut Vec<EnumId>,
-        work: &mut usize,
-    ) -> std::result::Result<(), String> {
-        if path.contains(&id) {
-            return Ok(());
-        }
-        if depth > ENUM_RECURSION_MAX_DEPTH {
-            return Err(format!(
-                "enum recursion depth exceeds {ENUM_RECURSION_MAX_DEPTH}"
-            ));
-        }
-        *work = work
-            .checked_add(1)
-            .ok_or_else(|| "enum recursion work overflow".to_string())?;
-        if *work > ENUM_RECURSION_MAX_WORK {
-            return Err(format!(
-                "enum recursion work exceeds {ENUM_RECURSION_MAX_WORK}"
-            ));
-        }
-        let definition = self
+        let definitions: HashMap<_, _> = self
             .enums
             .iter()
-            .find(|definition| definition.id == id)
-            .ok_or_else(|| "enum recursion references unknown EnumId".to_string())?;
-        path.push(id);
-        for field in definition
-            .variants
-            .iter()
-            .flat_map(|variant| &variant.fields)
-        {
-            self.walk_type(&field.ty, depth, path, work)?;
-        }
-        path.pop();
-        Ok(())
-    }
-
-    fn walk_type(
-        &self,
-        ty: &Type,
-        depth: usize,
-        path: &mut Vec<EnumId>,
-        work: &mut usize,
-    ) -> std::result::Result<(), String> {
-        match ty {
-            Type::Enum { id, arguments, .. } => {
-                self.walk_enum(*id, depth.saturating_add(1), path, work)?;
-                for argument in arguments {
-                    self.walk_type(argument, depth, path, work)?;
+            .map(|definition| (definition.id, definition))
+            .collect();
+        let mut visited = HashSet::new();
+        let mut work = Vec::new();
+        work.try_reserve(self.enums.len())
+            .map_err(|_| Error::msg("enum recursion work allocation failed"))?;
+        work.extend(
+            self.enums
+                .iter()
+                .rev()
+                .map(|definition| Work::Enum(definition.id)),
+        );
+        let mut observed_work = 0_u64;
+        while let Some(item) = work.pop() {
+            observed_work = observed_work
+                .checked_add(1)
+                .ok_or_else(|| Error::msg("enum recursion work overflow"))?;
+            match item {
+                Work::Enum(id) => {
+                    if !visited.insert(id) {
+                        continue;
+                    }
+                    let definition = definitions
+                        .get(&id)
+                        .copied()
+                        .ok_or_else(|| Error::msg("enum recursion references unknown EnumId"))?;
+                    let field_count = definition
+                        .variants
+                        .iter()
+                        .map(|variant| variant.fields.len())
+                        .try_fold(0_usize, usize::checked_add)
+                        .ok_or_else(|| Error::msg("enum recursion field count overflow"))?;
+                    work.try_reserve(field_count)
+                        .map_err(|_| Error::msg("enum recursion work allocation failed"))?;
+                    for field in definition
+                        .variants
+                        .iter()
+                        .rev()
+                        .flat_map(|variant| variant.fields.iter().rev())
+                    {
+                        work.push(Work::Type(&field.ty));
+                    }
                 }
+                Work::Type(ty) => match ty {
+                    Type::Enum { id, arguments, .. } => {
+                        let additional = arguments
+                            .len()
+                            .checked_add(1)
+                            .ok_or_else(|| Error::msg("enum recursion work size overflow"))?;
+                        work.try_reserve(additional)
+                            .map_err(|_| Error::msg("enum recursion work allocation failed"))?;
+                        work.extend(arguments.iter().rev().map(Work::Type));
+                        work.push(Work::Enum(*id));
+                    }
+                    Type::List(inner) => work.push(Work::Type(inner)),
+                    Type::Fn { params, ret } => {
+                        let additional = params
+                            .len()
+                            .checked_add(1)
+                            .ok_or_else(|| Error::msg("enum recursion work size overflow"))?;
+                        work.try_reserve(additional)
+                            .map_err(|_| Error::msg("enum recursion work allocation failed"))?;
+                        work.push(Work::Type(ret));
+                        work.extend(params.iter().rev().map(Work::Type));
+                    }
+                    Type::Forall { body, .. } => work.push(Work::Type(body)),
+                    _ => {}
+                },
             }
-            Type::List(inner) => self.walk_type(inner, depth, path, work)?,
-            Type::Fn { params, ret } => {
-                for parameter in params {
-                    self.walk_type(parameter, depth, path, work)?;
-                }
-                self.walk_type(ret, depth, path, work)?;
-            }
-            Type::Forall { body, .. } => self.walk_type(body, depth, path, work)?,
-            _ => {}
         }
+        let _ = observed_work;
         Ok(())
     }
 }

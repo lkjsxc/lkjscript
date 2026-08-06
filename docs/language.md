@@ -61,8 +61,11 @@ aggregate-source, and 65,536 source-unit ceilings have been removed. Trusted sou
 loading, package analysis, and compilation are unrestricted by source-byte, source-unit, or source
 nesting policy. Parsing and the ordinary deep-expression compiler path grow stack storage on the
 heap and report parser reservation failure as host failure; depth does not grant or deny language
-validity. Ownership analysis and HIR memory planning do not reject an aggregate HIR expression
-count; memory-plan expression work remains checked observational `u64` telemetry. An untrusted
+validity. Ownership analysis and HIR memory planning do not reject an aggregate HIR expression,
+type-fact, type-edge, witness, or type-SCC work count; memory-plan work remains checked observational
+`u64` telemetry. Compiler and SSA type verification do not use depth or work fuel. Auto traits are
+solved over memoized canonical obligations with coinductive nominal cycles: a cycle holds unless a
+reachable constituent disproves the trait. An untrusted
 Semantic Source request may apply an explicit aggregate source-byte policy;
 exhausting that policy is a typed host resource failure and does not make the unchanged program
 invalid. SSA ownership verification has no project-selected work or retained-state-cell quota;
@@ -94,8 +97,10 @@ specialization status: automatic mode uses the VM, and a forced native diagnosti
 signature or shape.
 
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
-addressable representation boundaries. HIR memory-plan entry, constant, and whole-verifier work
-counts are checked observational telemetry; other table, shape, and SCC-work quotas remain.
+addressable representation boundaries. HIR memory-plan entry, constant, type, witness, and
+whole-verifier work counts are checked observational telemetry. Function/use/loan/call/obligation,
+witness parameter/argument, destination, borrow-scope, and drop-path quotas remain, as do SSA
+region-product and executable structural destination/operation-reference table ceilings.
 Trusted bytecode validation is unrestricted by encoded-byte, table-entry,
 metadata-byte, constant-data-byte, and cleanup-node/range counts. An untrusted artifact caller may
 explicitly select `ValidationPolicy::Limited { max_total_bytes }`; this checks only one
@@ -106,8 +111,10 @@ structural tables remain `u16`, while product fields and enum substitutions reta
 representations. HIR memory-plan table identities and HIR/SSA place identities still use `u32`, a
 separate representation gap above
 that range. Validator-synthetic owner identity preserves instruction offsets and parameter indexes
-at host width. Other recursive type/trait/enum and structural-value ceilings also remain. These
-inherited ceilings are known defects, not permanent language rules. New work must remove the
-checks and repair the algorithms or representations rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
+at host width. Individual recursive witness-group ordinals remain `u16`, and recursive semantic
+operation, runtime structural-value, and specialization paths retain incomplete stack-safety
+coverage. These inherited representation and recursion gaps are known defects, not permanent
+language rules. New work must remove the checks and repair the algorithms or representations
+rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
 overflow, and explicit untrusted-request policy must report typed failures without partial
 publication.

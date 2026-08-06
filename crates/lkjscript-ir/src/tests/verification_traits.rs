@@ -11,6 +11,103 @@ fn verifier_accepts_dense_exact_program_and_evaluator_returns_exact_value() {
 }
 
 #[test]
+fn deep_types_verify_and_reject_deterministically_on_a_small_native_stack() {
+    const DEPTH: usize = 8_192;
+    std::thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(|| {
+            let nested = |leaf| {
+                let mut ty = leaf;
+                for _ in 0..DEPTH {
+                    ty = SsaType::List(Box::new(ty));
+                }
+                ty
+            };
+            let mut valid = one_block_program();
+            valid.products.push(ProductMetadata {
+                id: ProductId::new(0),
+                name: "DeepValid".into(),
+                fields: vec![ProductField {
+                    name: "value".into(),
+                    ty: nested(SsaType::I64),
+                }],
+            });
+            verify(valid).expect("8,192-deep valid SSA type");
+
+            let malformed = || {
+                let mut program = one_block_program();
+                program.products.push(ProductMetadata {
+                    id: ProductId::new(0),
+                    name: "DeepMalformed".into(),
+                    fields: vec![ProductField {
+                        name: "value".into(),
+                        ty: nested(SsaType::TypeParameter("missing".into())),
+                    }],
+                });
+                verify(program)
+                    .expect_err("deep unbound parameter")
+                    .to_string()
+            };
+            let first = malformed();
+            let second = malformed();
+            assert!(first.contains("unbound type parameter missing"), "{first}");
+            assert_eq!(first, second);
+        })
+        .expect("spawn deep SSA type verifier")
+        .join()
+        .expect("deep SSA type verifier thread");
+}
+
+#[test]
+fn auto_trait_solver_memoizes_wide_obligations_and_solves_nominal_cycles() {
+    let program = one_block_program();
+    let mut wide = SsaType::I64;
+    for _ in 0..300 {
+        wide = SsaType::List(Box::new(wide));
+    }
+    assert!(
+        crate::verify::auto_trait_holds(&program, TraitRole::Copy, &wide)
+            .expect("wide Copy obligation graph")
+    );
+
+    let mut cyclic = one_block_program();
+    cyclic.products = vec![
+        ProductMetadata {
+            id: ProductId::new(0),
+            name: "A".into(),
+            fields: vec![ProductField {
+                name: "b".into(),
+                ty: SsaType::Product(ProductId::new(1)),
+            }],
+        },
+        ProductMetadata {
+            id: ProductId::new(1),
+            name: "B".into(),
+            fields: vec![ProductField {
+                name: "a".into(),
+                ty: SsaType::Product(ProductId::new(0)),
+            }],
+        },
+    ];
+    assert!(crate::verify::auto_trait_holds(
+        &cyclic,
+        TraitRole::Copy,
+        &SsaType::Product(ProductId::new(0)),
+    )
+    .expect("coinductive Copy cycle"));
+    cyclic.products[1].fields.push(ProductField {
+        name: "owner".into(),
+        ty: SsaType::ByteVector,
+    });
+    assert!(!crate::verify::auto_trait_holds(
+        &cyclic,
+        TraitRole::Copy,
+        &SsaType::Product(ProductId::new(0)),
+    )
+    .expect("cycle with non-Copy field"));
+}
+
+#[test]
 fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts() {
     let canonical = verify(bounded_call_program()).expect("verify canonical marker witness");
     assert_eq!(
@@ -40,7 +137,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
 
     let mut deeply_nested_type = bounded_call_program();
     let mut nested = SsaType::I64;
-    for _ in 0..70 {
+    for _ in 0..300 {
         nested = SsaType::List(Box::new(nested));
     }
     deeply_nested_type.products.push(ProductMetadata {
@@ -51,8 +148,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
             ty: nested,
         }],
     });
-    let deep_error = verify(deeply_nested_type).expect_err("deep type must be bounded");
-    assert!(deep_error.to_string().contains("type nesting exceeds"));
+    verify(deeply_nested_type).expect("deep valid type must not be rejected by verifier fuel");
 
     let mut unavailable_clone_bound = bounded_call_program();
     unavailable_clone_bound.functions[0].signature.bounds[0].trait_id = TraitId::new(1);

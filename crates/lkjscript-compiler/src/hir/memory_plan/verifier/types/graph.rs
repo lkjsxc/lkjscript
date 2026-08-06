@@ -17,7 +17,14 @@ pub(crate) struct VerifiedDeclarationGraph {
 
 impl VerifiedDeclarationGraph {
     pub(crate) fn new(program: &hir::Program) -> Result<Self> {
+        let declaration_count = program
+            .products
+            .len()
+            .checked_add(program.enums.len())
+            .ok_or_else(|| Error::msg("verifier type declaration count overflow"))?;
         let mut keys = Vec::new();
+        keys.try_reserve(declaration_count)
+            .map_err(|_| Error::msg("verifier type key allocation failed"))?;
         keys.extend(
             program
                 .products
@@ -30,29 +37,42 @@ impl VerifiedDeclarationGraph {
                 .iter()
                 .map(|item| VerifiedDeclarationKey::Enum(item.id.bytes())),
         );
-        if u64::try_from(keys.len()).unwrap_or(u64::MAX) > MAX_MEMORY_PLAN_TYPE_NODES {
-            return Err(Error::msg(
-                "memory verifier type graph exceeds bounded nodes",
-            ));
-        }
         let index: HashMap<_, _> = keys
             .iter()
             .cloned()
             .enumerate()
-            .map(|(i, key)| (key, i))
+            .map(|(index, key)| (key, index))
             .collect();
-        let mut adjacency = vec![Vec::new(); keys.len()];
-        for (node, key) in keys.iter().enumerate() {
-            for ty in verified_declaration_fields(program, key)? {
-                let mut targets = Vec::new();
-                verified_collect_declarations(ty, &mut targets);
-                for target in targets {
-                    if let Some(target) = index.get(&target) {
-                        adjacency[node].push(*target);
-                    }
-                }
-            }
+        let mut adjacency = Vec::new();
+        adjacency
+            .try_reserve(keys.len())
+            .map_err(|_| Error::msg("verifier type adjacency allocation failed"))?;
+        adjacency.resize_with(keys.len(), Vec::new);
+
+        for (node, product) in program.products.iter().enumerate() {
+            verified_add_declaration_edges(
+                node,
+                product.fields.iter().map(|field| &field.ty),
+                &index,
+                &mut adjacency,
+            )?;
         }
+        let enum_offset = program.products.len();
+        for (offset, definition) in program.enums.iter().enumerate() {
+            let node = enum_offset
+                .checked_add(offset)
+                .ok_or_else(|| Error::msg("verifier enum graph index overflow"))?;
+            verified_add_declaration_edges(
+                node,
+                definition
+                    .variants
+                    .iter()
+                    .flat_map(|variant| variant.fields.iter().map(|field| &field.ty)),
+                &index,
+                &mut adjacency,
+            )?;
+        }
+
         let edges = adjacency.iter().try_fold(0_u64, |sum, item| {
             sum.checked_add(
                 u64::try_from(item.len())
@@ -70,12 +90,14 @@ impl VerifiedDeclarationGraph {
             scc_work,
         })
     }
+
     pub(crate) fn component(&self, key: &VerifiedDeclarationKey) -> Option<usize> {
         self.index
             .get(key)
             .and_then(|index| self.components.get(*index))
             .copied()
     }
+
     pub(crate) fn is_recursive(&self, key: &VerifiedDeclarationKey) -> bool {
         self.component(key)
             .and_then(|id| self.recursive.get(id))
@@ -84,48 +106,72 @@ impl VerifiedDeclarationGraph {
     }
 }
 
-pub(crate) fn verified_declaration_fields<'a>(
-    program: &'a hir::Program,
-    key: &VerifiedDeclarationKey,
-) -> Result<Vec<&'a Type>> {
-    match key {
-        VerifiedDeclarationKey::Product(name) => program
-            .products
-            .iter()
-            .find(|item| &item.name == name)
-            .map(|item| item.fields.iter().map(|field| &field.ty).collect())
-            .ok_or_else(|| Error::msg("memory verifier lost product declaration")),
-        VerifiedDeclarationKey::Enum(id) => program
-            .enums
-            .iter()
-            .find(|item| item.id.bytes() == *id)
-            .map(|item| {
-                item.variants
-                    .iter()
-                    .flat_map(|variant| variant.fields.iter().map(|field| &field.ty))
-                    .collect()
-            })
-            .ok_or_else(|| Error::msg("memory verifier lost enum declaration")),
+fn verified_add_declaration_edges<'a>(
+    node: usize,
+    types: impl IntoIterator<Item = &'a Type>,
+    index: &HashMap<VerifiedDeclarationKey, usize>,
+    adjacency: &mut [Vec<usize>],
+) -> Result<()> {
+    let mut referenced = Vec::new();
+    for ty in types {
+        verified_collect_declarations(ty, &mut referenced)?;
     }
+    let targets = adjacency
+        .get_mut(node)
+        .ok_or_else(|| Error::msg("verifier type graph node is missing"))?;
+    targets
+        .try_reserve(referenced.len())
+        .map_err(|_| Error::msg("verifier type edge allocation failed"))?;
+    targets.extend(
+        referenced
+            .into_iter()
+            .filter_map(|target| index.get(&target).copied()),
+    );
+    Ok(())
 }
 
-pub(super) fn verified_collect_declarations(ty: &Type, output: &mut Vec<VerifiedDeclarationKey>) {
-    match ty {
-        Type::Product(name) => output.push(VerifiedDeclarationKey::Product(name.clone())),
-        Type::Enum { id, arguments, .. } => {
-            output.push(VerifiedDeclarationKey::Enum(id.bytes()));
-            for argument in arguments {
-                verified_collect_declarations(argument, output);
+pub(super) fn verified_collect_declarations(
+    ty: &Type,
+    output: &mut Vec<VerifiedDeclarationKey>,
+) -> Result<()> {
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Product(name) => {
+                output.try_reserve(1).map_err(|_| {
+                    Error::msg("memory verifier declaration output allocation failed")
+                })?;
+                output.push(VerifiedDeclarationKey::Product(name.clone()));
             }
-        }
-        Type::List(inner) => verified_collect_declarations(inner, output),
-        Type::Fn { params, ret } => {
-            for parameter in params {
-                verified_collect_declarations(parameter, output);
+            Type::Enum { id, arguments, .. } => {
+                output.try_reserve(1).map_err(|_| {
+                    Error::msg("memory verifier declaration output allocation failed")
+                })?;
+                output.push(VerifiedDeclarationKey::Enum(id.bytes()));
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    Error::msg("memory verifier declaration work allocation failed")
+                })?;
+                pending.extend(arguments.iter().rev());
             }
-            verified_collect_declarations(ret, output);
+            Type::List(inner) | Type::Forall { body: inner, .. } => {
+                pending.try_reserve(1).map_err(|_| {
+                    Error::msg("memory verifier declaration work allocation failed")
+                })?;
+                pending.push(inner);
+            }
+            Type::Fn { params, ret } => {
+                let additional = params
+                    .len()
+                    .checked_add(1)
+                    .ok_or_else(|| Error::msg("memory verifier declaration work size overflow"))?;
+                pending.try_reserve(additional).map_err(|_| {
+                    Error::msg("memory verifier declaration work allocation failed")
+                })?;
+                pending.push(ret);
+                pending.extend(params.iter().rev());
+            }
+            _ => {}
         }
-        Type::Forall { body, .. } => verified_collect_declarations(body, output),
-        _ => {}
     }
+    Ok(())
 }

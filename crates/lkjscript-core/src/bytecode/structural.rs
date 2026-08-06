@@ -1,8 +1,5 @@
 use super::{EnumId, ProductId, RuntimeLayoutId, VariantId};
 
-pub const MAX_STRUCTURAL_TYPES: usize = 16_384;
-pub const MAX_STRUCTURAL_LAYOUTS: usize = 16_384;
-pub const MAX_STRUCTURAL_REPRESENTATIONS: usize = 65_536;
 pub const MAX_STRUCTURAL_DESTINATIONS: usize = 65_536;
 pub const MAX_STRUCTURAL_OPERATION_REFS: usize = 65_536;
 

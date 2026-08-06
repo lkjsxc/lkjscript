@@ -68,63 +68,67 @@ pub(super) fn callable_result(ty: &Type) -> Result<&Type> {
 }
 
 pub(super) fn type_matches(expected: &Type, actual: &MemoryType) -> bool {
-    match (expected, actual) {
-        (Type::Never, MemoryType::Never)
-        | (Type::Unit, MemoryType::Unit)
-        | (Type::Bool, MemoryType::Bool)
-        | (Type::I64, MemoryType::I64)
-        | (Type::F64, MemoryType::F64)
-        | (Type::Str, MemoryType::String)
-        | (Type::Path, MemoryType::Path)
-        | (Type::Symbol, MemoryType::Symbol) => true,
-        (Type::Capability(left), MemoryType::Capability(right)) => left == right,
-        (Type::Bytes, MemoryType::Bytes)
-        | (Type::ByteVector, MemoryType::ByteVector)
-        | (Type::ByteSlice, MemoryType::ByteSlice)
-        | (Type::ByteSliceMut, MemoryType::ByteSliceMut) => true,
-        (Type::Resource(left), MemoryType::Resource(right)) => left == right,
-        (Type::Product(left), MemoryType::Product(right)) => left == right,
-        (
-            Type::Enum {
-                id,
-                name,
-                arguments,
-            },
-            MemoryType::Enum {
-                id: actual_id,
-                name: actual_name,
-                arguments: actual_arguments,
-            },
-        ) => {
-            id.bytes() == *actual_id
+    let mut pending = vec![(expected, actual)];
+    while let Some((expected, actual)) = pending.pop() {
+        match (expected, actual) {
+            (Type::Never, MemoryType::Never)
+            | (Type::Unit, MemoryType::Unit)
+            | (Type::Bool, MemoryType::Bool)
+            | (Type::I64, MemoryType::I64)
+            | (Type::F64, MemoryType::F64)
+            | (Type::Str, MemoryType::String)
+            | (Type::Path, MemoryType::Path)
+            | (Type::Symbol, MemoryType::Symbol)
+            | (Type::Bytes, MemoryType::Bytes)
+            | (Type::ByteVector, MemoryType::ByteVector)
+            | (Type::ByteSlice, MemoryType::ByteSlice)
+            | (Type::ByteSliceMut, MemoryType::ByteSliceMut) => {}
+            (Type::Capability(left), MemoryType::Capability(right)) if left == right => {}
+            (Type::Resource(left), MemoryType::Resource(right)) if left == right => {}
+            (Type::Product(left), MemoryType::Product(right)) if left == right => {}
+            (
+                Type::Enum {
+                    id,
+                    name,
+                    arguments,
+                },
+                MemoryType::Enum {
+                    id: actual_id,
+                    name: actual_name,
+                    arguments: actual_arguments,
+                },
+            ) if id.bytes() == *actual_id
                 && name == actual_name
-                && type_lists_match(arguments, actual_arguments)
+                && arguments.len() == actual_arguments.len() =>
+            {
+                pending.extend(arguments.iter().zip(actual_arguments));
+            }
+            (Type::Param(left), MemoryType::TypeParameter(right)) if left == right => {}
+            (Type::List(left), MemoryType::List(right)) => pending.push((left, right)),
+            (Type::Fn { params, ret }, MemoryType::Function { parameters, result })
+                if params.len() == parameters.len() =>
+            {
+                pending.push((ret, result));
+                pending.extend(params.iter().zip(parameters));
+            }
+            (
+                Type::Forall { vars, body },
+                MemoryType::ForAll {
+                    variables,
+                    body: actual_body,
+                },
+            ) if vars == variables => pending.push((body, actual_body)),
+            _ => return false,
         }
-        (Type::Param(left), MemoryType::TypeParameter(right)) => left == right,
-        (Type::List(left), MemoryType::List(right)) => type_matches(left, right),
-        (Type::Fn { params, ret }, MemoryType::Function { parameters, result }) => {
-            type_lists_match(params, parameters) && type_matches(ret, result)
-        }
-        (
-            Type::Forall { vars, body },
-            MemoryType::ForAll {
-                variables,
-                body: actual_body,
-            },
-        ) => vars == variables && type_matches(body, actual_body),
-        _ => false,
     }
-}
-
-fn type_lists_match(expected: &[Type], actual: &[MemoryType]) -> bool {
-    expected.len() == actual.len()
-        && expected
-            .iter()
-            .zip(actual)
-            .all(|(left, right)| type_matches(left, right))
+    true
 }
 
 pub(super) fn verified_memory_type(ty: &Type) -> MemoryType {
+    crate::stack::grow(|| verified_memory_type_inner(ty))
+}
+
+fn verified_memory_type_inner(ty: &Type) -> MemoryType {
     match ty {
         Type::Never => MemoryType::Never,
         Type::Unit => MemoryType::Unit,

@@ -5,16 +5,16 @@ pub(in crate::operation) fn instantiate_result(
     callable: Type,
     arguments: &[Type],
 ) -> Result<Type, String> {
-    let (parameters, result) = match callable {
+    let (parameters, result) = match &callable {
         Type::Forall { vars, body } => {
-            let Type::Fn { params, ret } = *body else {
+            let Type::Fn { params, ret } = body.as_ref() else {
                 return Err(format!("{name}: forall body is not a function"));
             };
             let mut substitutions = std::collections::HashMap::new();
             for (pattern, argument) in params.iter().zip(arguments) {
-                bind_type_params(name, pattern, argument, &vars, &mut substitutions)?;
+                bind_type_params(name, pattern, argument, vars, &mut substitutions)?;
             }
-            for variable in &vars {
+            for variable in vars {
                 if !substitutions.contains_key(variable) {
                     return Err(format!(
                         "{name}: cannot infer type parameter {variable} from arguments"
@@ -29,7 +29,7 @@ pub(in crate::operation) fn instantiate_result(
                 ret.subst(&substitutions),
             )
         }
-        Type::Fn { params, ret } => (params, *ret),
+        Type::Fn { params, ret } => (params.clone(), ret.as_ref().clone()),
         other => return Err(format!("{name} is not a function ({other})")),
     };
     if parameters.len() != arguments.len() {

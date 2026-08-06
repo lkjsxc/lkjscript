@@ -2,9 +2,6 @@ use super::{SemanticContractError as E, *};
 use std::collections::{BTreeSet, VecDeque};
 
 pub fn validate_semantic_descriptor(value: &SemanticDescriptor) -> Result<(), E> {
-    if value.declarations.len() > MAX_SEMANTIC_DECLARATIONS {
-        return Err(E("semantic declaration limit exceeded"));
-    }
     let mut identities = BTreeSet::new();
     let mut prior = None;
     for declaration in &value.declarations {
@@ -123,32 +120,28 @@ fn collect_refs(
     out: &mut VecDeque<[u8; 32]>,
     work: &mut usize,
 ) -> Result<(), E> {
-    *work = work
-        .checked_add(1)
-        .ok_or(E("semantic type work overflow"))?;
-    if *work > MAX_SEMANTIC_TYPE_NODES {
-        return Err(E("semantic type node limit exceeded"));
-    }
-    match ty {
-        SemanticType::Product(id) => out.push_back(*id),
-        SemanticType::Enum {
-            identity,
-            arguments,
-        } => {
-            out.push_back(*identity);
-            for ty in arguments {
-                collect_refs(ty, out, work)?;
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        *work = work
+            .checked_add(1)
+            .ok_or(E("semantic type work overflow"))?;
+        match ty {
+            SemanticType::Product(id) => out.push_back(*id),
+            SemanticType::Enum {
+                identity,
+                arguments,
+            } => {
+                out.push_back(*identity);
+                pending.extend(arguments.iter().rev());
             }
-        }
-        SemanticType::List(ty) => collect_refs(ty, out, work)?,
-        SemanticType::Function { parameters, result } => {
-            for ty in parameters {
-                collect_refs(ty, out, work)?;
+            SemanticType::List(ty) => pending.push(ty),
+            SemanticType::Function { parameters, result } => {
+                pending.push(result);
+                pending.extend(parameters.iter().rev());
             }
-            collect_refs(result, out, work)?;
+            SemanticType::ForAll { body, .. } => pending.push(body),
+            _ => {}
         }
-        SemanticType::ForAll { body, .. } => collect_refs(body, out, work)?,
-        _ => {}
     }
     Ok(())
 }

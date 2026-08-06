@@ -11,8 +11,8 @@ pub(crate) fn parameter_type(
     tree: &ValidatedSourceTree,
 ) -> Option<Type> {
     let (params, result) = if let Some(operation) = crate::hir::Operation::from_name(name) {
-        match operation.signature() {
-            Type::Fn { params, ret } => (params, *ret),
+        match &operation.signature() {
+            Type::Fn { params, ret } => (params.clone(), ret.as_ref().clone()),
             _ => return None,
         }
     } else {

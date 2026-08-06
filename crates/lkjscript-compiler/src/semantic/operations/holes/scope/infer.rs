@@ -22,16 +22,16 @@ pub(super) fn expression(node: &SourceNode, scope: &BTreeMap<String, ScopeEntity
 
 fn call_type(name: &str, scope: &BTreeMap<String, ScopeEntity>) -> Option<Type> {
     if let Some(operation) = crate::hir::Operation::from_name(name) {
-        if let Type::Fn { ret, .. } = operation.signature() {
-            return Some(*ret);
+        if let Type::Fn { ret, .. } = &operation.signature() {
+            return Some(ret.as_ref().clone());
         }
     }
     scope
         .values()
         .find(|entry| entry.name == name)
         .and_then(|entry| super::parse_canonical(&entry.instantiated_type))
-        .and_then(|ty| match ty {
-            Type::Fn { ret, .. } => Some(*ret),
+        .and_then(|ty| match &ty {
+            Type::Fn { ret, .. } => Some(ret.as_ref().clone()),
             _ => None,
         })
 }

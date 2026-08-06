@@ -46,14 +46,9 @@ impl Producer<'_> {
     fn finish_type_work(&mut self) -> Result<()> {
         self.work.type_nodes = u64::try_from(self.type_planner.facts.len())
             .map_err(|_| Error::msg("HIR memory-plan type facts exceed u64"))?;
-        if self.work.type_nodes > MAX_MEMORY_PLAN_TYPE_NODES {
-            return Err(Error::msg("HIR memory-plan type facts exceed bounded maximum"));
-        }
         self.work.witnesses = u64::try_from(self.type_planner.witnesses.len())
             .map_err(|_| Error::msg("HIR memory-plan witnesses exceed u64"))?;
-        if self.work.witnesses != self.work.type_nodes
-            || self.work.witnesses > MAX_MEMORY_PLAN_WITNESSES
-        {
+        if self.work.witnesses != self.work.type_nodes {
             return Err(Error::msg("HIR memory-plan witness table is not exact"));
         }
         self.work.type_edges = self.type_planner.graph.edges;

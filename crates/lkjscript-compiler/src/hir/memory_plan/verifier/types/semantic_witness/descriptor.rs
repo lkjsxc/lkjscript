@@ -3,7 +3,7 @@ impl VerifiedTypes<'_> {
         &self,
         root: &Type,
     ) -> Result<lkjscript_contracts::SemanticDescriptor> {
-        let mut pending = VecDeque::from([root.clone()]);
+        let mut pending = VecDeque::from([root]);
         let mut declarations = BTreeMap::new();
         while let Some(ty) = pending.pop_front() {
             match ty {
@@ -12,7 +12,7 @@ impl VerifiedTypes<'_> {
                         .program
                         .products
                         .iter()
-                        .find(|item| item.name == name)
+                        .find(|item| item.name == *name)
                         .ok_or_else(|| {
                             Error::msg("memory verifier semantic closure lost product")
                         })?;
@@ -30,7 +30,7 @@ impl VerifiedTypes<'_> {
                             })
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    pending.extend(item.fields.iter().map(|field| field.ty.clone()));
+                    pending.extend(item.fields.iter().map(|field| &field.ty));
                     declarations.insert(
                         item.identity,
                         lkjscript_contracts::SemanticDeclaration::Product(
@@ -47,7 +47,7 @@ impl VerifiedTypes<'_> {
                         .program
                         .enums
                         .iter()
-                        .find(|item| item.id == id)
+                        .find(|item| item.id == *id)
                         .ok_or_else(|| {
                             Error::msg("memory verifier semantic closure lost enum")
                         })?;
@@ -78,7 +78,7 @@ impl VerifiedTypes<'_> {
                         })
                         .collect::<Result<Vec<_>>>()?;
                     for variant in &item.variants {
-                        pending.extend(variant.fields.iter().map(|field| field.ty.clone()));
+                        pending.extend(variant.fields.iter().map(|field| &field.ty));
                     }
                     declarations.insert(
                         id.bytes(),
@@ -91,12 +91,12 @@ impl VerifiedTypes<'_> {
                         ),
                     );
                 }
-                Type::List(inner) => pending.push_back(*inner),
+                Type::List(inner) => pending.push_back(inner),
                 Type::Fn { params, ret } => {
                     pending.extend(params);
-                    pending.push_back(*ret);
+                    pending.push_back(ret);
                 }
-                Type::Forall { body, .. } => pending.push_back(*body),
+                Type::Forall { body, .. } => pending.push_back(body),
                 _ => {}
             }
         }

@@ -1,6 +1,10 @@
 use super::*;
 
 pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
+    crate::stack::grow(|| parse_one_inner(atoms, i))
+}
+
+fn parse_one_inner(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
     let Some(atom) = atoms.get(i) else {
         return Err("expected type".into());
     };

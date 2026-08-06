@@ -126,6 +126,17 @@ fn finish_group(
     semantic_ids: &[[u8; 32]], witnesses: &mut [MemoryWitness], states: &mut [u8],
     group_ids: &mut [MemoryWitnessGroupId],
 ) -> Result<()> {
+    crate::stack::grow(|| finish_group_inner(
+        group, groups, group_of, ordinals, semantic_ids, witnesses, states, group_ids,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_group_inner(
+    group: usize, groups: &[Vec<usize>], group_of: &[usize], ordinals: &[u16],
+    semantic_ids: &[[u8; 32]], witnesses: &mut [MemoryWitness], states: &mut [u8],
+    group_ids: &mut [MemoryWitnessGroupId],
+) -> Result<()> {
     if states[group] == 2 { return Ok(()); }
     if states[group] == 1 { return Err(Error::msg("memory witness external group cycle")); }
     states[group] = 1;

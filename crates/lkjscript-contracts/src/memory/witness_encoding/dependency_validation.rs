@@ -69,11 +69,6 @@ pub fn semantic_dependency_requirements(
         }
         _ => {}
     }
-    if output.len() > MAX_SEMANTIC_EDGES {
-        return Err(SemanticContractError(
-            "semantic dependency edge limit exceeded",
-        ));
-    }
     Ok(output)
 }
 

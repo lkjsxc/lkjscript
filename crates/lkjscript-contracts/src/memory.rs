@@ -32,10 +32,7 @@ pub use witness_encoding::{
     ExecutableMemoryWitnessRole, ExecutableMemoryWitnessTarget, SemanticContractError,
     SemanticDeclaration, SemanticDescriptor, SemanticEnumDeclaration, SemanticEnumVariant,
     SemanticEnumVariantField, SemanticPrimitiveKind, SemanticProductDeclaration,
-    SemanticProductField, SemanticType, MAX_EXECUTABLE_MEMORY_WITNESS_GROUPS,
-    MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_EDGES, MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_MEMBERS,
-    MAX_SEMANTIC_DECLARATIONS, MAX_SEMANTIC_DESCRIPTOR_BYTES, MAX_SEMANTIC_EDGES,
-    MAX_SEMANTIC_TYPE_NODES,
+    SemanticProductField, SemanticType,
 };
 pub use witness_routes::{
     memory_witness_routes_are_compatible, required_memory_witness_operations,

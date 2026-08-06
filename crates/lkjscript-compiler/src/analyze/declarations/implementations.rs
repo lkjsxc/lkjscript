@@ -39,7 +39,7 @@ impl Analyzer {
                         ),
                     ));
                 }
-                let Type::Product(product_name) = target else {
+                let Type::Product(product_name) = &target else {
                     return Err(self.error(
                         source,
                         "marker impl target must be one exact nominal Product type",
@@ -47,7 +47,7 @@ impl Analyzer {
                 };
                 let product = self
                     .product_names
-                    .get(&product_name)
+                    .get(product_name)
                     .copied()
                     .ok_or_else(|| {
                         self.error(

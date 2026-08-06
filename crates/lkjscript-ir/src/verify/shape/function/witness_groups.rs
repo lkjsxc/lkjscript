@@ -1,12 +1,9 @@
 use crate::verify::*;
-use crate::{MemoryWitnessGroupId, Program, MAX_MEMORY_WITNESS_GROUPS};
+use crate::{MemoryWitnessGroupId, Program};
 use std::collections::HashSet;
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let memory = &program.memory;
-    if memory.witness_groups.len() > MAX_MEMORY_WITNESS_GROUPS {
-        return fail("SSA memory witness group table exceeds bounded maximum");
-    }
     let mut prior = None;
     let mut covered = HashSet::new();
     let groups = memory

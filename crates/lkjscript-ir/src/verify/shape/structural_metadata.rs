@@ -6,10 +6,7 @@ mod witness_groups;
 #[path = "function/witnesses.rs"]
 mod witnesses;
 
-use crate::{
-    Program, SsaType, StructuralLayoutKind, StructuralStorage, StructuralValueCategory,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
-};
+use crate::{Program, SsaType, StructuralLayoutKind, StructuralStorage, StructuralValueCategory};
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let memory = &program.memory;
@@ -33,12 +30,6 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
     }
     witness_groups::verify(program)?;
     witnesses::verify(program)?;
-    if memory.types.len() > MAX_STRUCTURAL_TYPES
-        || memory.layouts.len() > MAX_STRUCTURAL_LAYOUTS
-        || memory.representations.len() > MAX_STRUCTURAL_REPRESENTATIONS
-    {
-        return fail("SSA structural metadata exceeds bounded table limits");
-    }
     for (index, layout) in memory.layouts.iter().enumerate() {
         if layout.id.index() != Some(index) || !layout.identity.is_resolved() {
             return fail("SSA structural layouts require dense IDs and stable identities");

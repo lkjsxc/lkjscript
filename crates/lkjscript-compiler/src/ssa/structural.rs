@@ -62,16 +62,21 @@ pub(in crate::ssa) fn lower_structural_memory(
 }
 
 fn memory_type_has_resource(ty: &MemoryType) -> bool {
-    match ty {
-        MemoryType::Resource(_) => true,
-        MemoryType::List(inner) => memory_type_has_resource(inner),
-        MemoryType::Enum { arguments, .. } => arguments.iter().any(memory_type_has_resource),
-        MemoryType::Function { parameters, result } => {
-            parameters.iter().any(memory_type_has_resource) || memory_type_has_resource(result)
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            MemoryType::Resource(_) => return true,
+            MemoryType::List(inner) => pending.push(inner),
+            MemoryType::Enum { arguments, .. } => pending.extend(arguments),
+            MemoryType::Function { parameters, result } => {
+                pending.push(result);
+                pending.extend(parameters);
+            }
+            MemoryType::ForAll { body, .. } => pending.push(body),
+            _ => {}
         }
-        MemoryType::ForAll { body, .. } => memory_type_has_resource(body),
-        _ => false,
     }
+    false
 }
 
 pub(in crate::ssa) fn structural_glue(

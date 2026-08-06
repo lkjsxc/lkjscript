@@ -77,6 +77,10 @@ fn binding_storage(storage: BindingStorage) -> MemoryBindingStorage {
     }
 }
 pub(super) fn memory_type(ty: &Type) -> MemoryType {
+    crate::stack::grow(|| memory_type_inner(ty))
+}
+
+fn memory_type_inner(ty: &Type) -> MemoryType {
     match ty {
         Type::Never => MemoryType::Never,
         Type::Unit => MemoryType::Unit,

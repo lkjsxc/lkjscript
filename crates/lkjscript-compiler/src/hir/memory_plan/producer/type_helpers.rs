@@ -102,6 +102,7 @@ pub(super) fn checked_observe(slot: &mut u64, amount: usize, label: &str) -> Res
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn bounded_add(slot: &mut u64, amount: usize, limit: u64, label: &str) -> Result<()> {
     *slot = slot.checked_add(u64::try_from(amount)
         .map_err(|_| Error::msg(format!("HIR memory-plan {label} charge exceeds u64")))?)

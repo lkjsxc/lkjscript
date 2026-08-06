@@ -82,16 +82,20 @@ fn witness_process_codec(ty: &Type, derived: &DerivedType) -> MemoryProcessCodec
 }
 
 fn witness_codec_type(ty: &Type) -> bool {
-    match ty {
-        Type::Never
-        | Type::Capability(_)
-        | Type::Resource(_)
-        | Type::Fn { .. }
-        | Type::Forall { .. } => false,
-        Type::Enum { arguments, .. } => arguments.iter().all(witness_codec_type),
-        Type::List(inner) => witness_codec_type(inner),
-        _ => true,
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Never
+            | Type::Capability(_)
+            | Type::Resource(_)
+            | Type::Fn { .. }
+            | Type::Forall { .. } => return false,
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::List(inner) => pending.push(inner),
+            _ => {}
+        }
     }
+    true
 }
 
 fn witness_list_element(ty: &Type, derived: &DerivedType) -> MemoryListElementEligibility {

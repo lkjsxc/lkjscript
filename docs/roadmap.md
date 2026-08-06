@@ -8,9 +8,14 @@
    recursive source and HIR destruction, and the ordinary deep-expression analysis/lowering path
    are stack-safe through 20,000 nested forms and 20,001 HIR expressions on a 256 KiB native stack.
    Ownership's aggregate expression pre-scan and memory planning's expression admission are
-   removed; checked expression work remains telemetry. Next widen or segment `u32` source
-   positions, spans, and snapshot-local node indexes, then address
-   product/HIR/memory-plan-table/SSA checks and remaining recursive type/trait/enum paths.
+   removed; checked expression work remains telemetry. Compiler/SSA type depth and work fuel,
+   recursive enum graph fuel, and HIR memory-plan type-node, type-edge, witness/group/dependency,
+   semantic-descriptor, structural metadata table, and type-SCC work ceilings are removed.
+   Canonical memoized auto-trait solving handles cyclic nominal obligations coinductively, and
+   generated coverage crosses 512 nested source types and 8,192 nested raw SSA types on a 256 KiB
+   stack. Next widen or segment `u32` source positions, spans, and snapshot-local node indexes, then
+   address the remaining HIR/SSA identity and unrelated function/use/loan/call/obligation,
+   destination, borrow-scope, drop-path, and witness-arity ceilings.
    Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
    constant-data-byte, or cleanup-node/range count admission; a boundary-local limited validator
    checks only total artifact bytes and has no finite default. Byte-sized function arity, call
@@ -38,8 +43,13 @@
    descriptors, field indexes, source orders, physical tags, and enum substitutions use `u64` with
    checked host conversion. Generated 300-field products and 300-variant enums with a 300-field
    payload execute through validated VM bytecode, and private compact native shapes decline to the
-   VM in automatic mode. Next remove remaining unrelated witness, structural-table, and
-   HIR/SSA-identity ceilings. Bytecode links, call-witness offsets, cleanup range
+   VM in automatic mode. Total memory witness/group/dependency and structural type/layout/
+   representation table ceilings are removed; generated coverage verifies 32,769 HIR declarations
+   with more than 65,536 SCC steps, 16,385 executable witness groups, and semantic descriptors past
+   the former declaration, type-node, edge, and 16 MiB byte boundaries. Per-call witness arity,
+   recursive-group `u16` ordinals, structural destination/operation-reference counts, and HIR/SSA
+   identity widths remain.
+   Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
    unrestricted by the removed general bytecode table and metadata admission. Completion requires
    just-beyond-old-boundary and substantially larger positive programs, checked growth, and

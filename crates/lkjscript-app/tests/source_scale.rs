@@ -160,6 +160,55 @@ fn generated_nested_do_source(depth: usize, result: i64) -> Result<String, std::
     Ok(source)
 }
 
+fn generated_nested_list_type_source(depth: usize, leaf: &str) -> String {
+    let mut ty = String::new();
+    for _ in 0..depth {
+        ty.push_str("list/\n");
+    }
+    ty.push_str(leaf);
+    ty.push('\n');
+    for _ in 0..depth {
+        ty.push_str("/list\n");
+    }
+    let mut element = String::new();
+    for _ in 1..depth {
+        element.push_str("list/\n");
+    }
+    element.push_str(leaf);
+    element.push('\n');
+    for _ in 1..depth {
+        element.push_str("/list\n");
+    }
+    format!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}/output\n/sig\nempty-list/\n{element}/empty-list\n/main\n"
+    )
+}
+
+fn generated_wide_cyclic_type_source(width: usize) -> Result<String, std::fmt::Error> {
+    let mut source = String::from("enum/\nname/\nwide\n/name\nforall/\n");
+    for index in 0..width {
+        writeln!(source, "t-{index}")?;
+    }
+    source.push_str(
+        "/forall\nvariants/\nvariant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+    );
+    source.push_str(concat!(
+        "product/\nname/\nrecursive\n/name\nfields/\nfield/\nname/\nnext\n/name\ntype/\n",
+        "option/\nproduct/\nrecursive\n/product\n/option\n/type\n/field\n/fields\n/product\n",
+    ));
+    source.push_str(
+        "product/\nname/\nwide-holder\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nwide/\n",
+    );
+    for _ in 0..width {
+        source.push_str("i64\n");
+    }
+    source.push_str(concat!(
+        "/wide\n/type\n/field\n/fields\n/product\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    ));
+    Ok(source)
+}
+
 fn generated_deep_malformed_source(depth: usize, mismatched: bool) -> String {
     let mut source = String::from("main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n");
     for _ in 0..depth {
@@ -283,6 +332,84 @@ fn deeply_nested_source_compiles_validates_executes_and_drops_on_a_small_stack(
     worker
         .join()
         .map_err(|_| std::io::Error::other("deep source worker panicked"))??;
+    Ok(())
+}
+
+#[test]
+fn deeply_nested_type_crosses_analysis_memory_ssa_bytecode_and_vm_on_a_small_stack(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    const DEPTH: usize = 512;
+    const _: () = assert!(DEPTH > 256);
+    let valid = generated_nested_list_type_source(DEPTH, "i64");
+    let malformed = generated_nested_list_type_source(DEPTH, "missing-type");
+    let worker = std::thread::Builder::new()
+        .name("deep-type-small-stack".into())
+        .stack_size(256 * 1024)
+        .spawn(
+            move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                validate_source(&valid, "deep-type.lkjscript")?;
+                let program = compile_source(&valid, "deep-type.lkjscript")?;
+                if program.memory_plan().work.type_nodes <= 256 {
+                    return Err("deep type did not cross former type/trait work geometry".into());
+                }
+                if program.ssa().program().functions.is_empty() {
+                    return Err("deep type did not reach verified SSA".into());
+                }
+                match run_chunk(
+                    program.bytecode(),
+                    &ExecutionInputs::default(),
+                    &ExecutionConfig::default(),
+                ) {
+                    ExecutionOutcome::Returned(_) => {}
+                    other => {
+                        return Err(format!("deep type program did not return: {other:?}").into())
+                    }
+                }
+                drop(program);
+
+                let diagnose = || {
+                    compile_source(&malformed, "malformed-deep-type.lkjscript")
+                        .map_err(|error| error.to_string())
+                };
+                let first = match diagnose() {
+                    Err(error) => error,
+                    Ok(_) => return Err("malformed deep type unexpectedly compiled".into()),
+                };
+                let second = match diagnose() {
+                    Err(error) => error,
+                    Ok(_) => return Err("malformed deep type unexpectedly compiled twice".into()),
+                };
+                if first != second || !first.contains("unbound type parameter missing-type") {
+                    return Err(format!(
+                    "deep type diagnostic was not deterministic: first={first:?}, second={second:?}"
+                )
+                    .into());
+                }
+                Ok(())
+            },
+        )?;
+    worker
+        .join()
+        .map_err(|_| std::io::Error::other("deep type worker panicked"))??;
+    Ok(())
+}
+
+#[test]
+fn wide_and_cyclic_types_cross_the_public_compiler_and_runtime_path(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const WIDTH: usize = 300;
+    const _: () = assert!(WIDTH > 256);
+    let source = generated_wide_cyclic_type_source(WIDTH)?;
+    let program = compile_source(&source, "wide-cyclic-type.lkjscript")?;
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    assert!(
+        matches!(outcome, ExecutionOutcome::Returned(_)),
+        "{outcome:?}"
+    );
     Ok(())
 }
 

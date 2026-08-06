@@ -43,10 +43,34 @@ impl<'a> VerifiedTypes<'a> {
         if let Some(id) = self.memo.get(ty) {
             return Ok(*id);
         }
-        if u64::try_from(self.expected.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_TYPE_NODES {
-            return Err(Error::msg(
-                "memory verifier type facts exceed bounded maximum",
-            ));
+        let mut lists = Vec::new();
+        let mut current = ty;
+        while let Type::List(inner) = current {
+            if self.memo.contains_key(current) {
+                break;
+            }
+            lists
+                .try_reserve(1)
+                .map_err(|_| Error::msg("memory verifier type work allocation failed"))?;
+            lists.push(current);
+            current = inner;
+        }
+        if lists.is_empty() {
+            return crate::stack::grow(|| self.intern_inner(ty));
+        }
+        self.intern(current)?;
+        for list in lists.into_iter().rev() {
+            self.intern_inner(list)?;
+        }
+        self.memo
+            .get(ty)
+            .copied()
+            .ok_or_else(|| Error::msg("memory verifier list interning omitted its root"))
+    }
+
+    fn intern_inner(&mut self, ty: &Type) -> Result<MemoryTypeFactId> {
+        if let Some(id) = self.memo.get(ty) {
+            return Ok(*id);
         }
         let derived = self.derive(ty)?;
         if derived.closure.class == MemoryClosureClass::IllegalDomainBridge {
@@ -128,9 +152,7 @@ impl<'a> VerifiedTypes<'a> {
                 sum.checked_add(u64::try_from(witness.facts.dependencies.len()).ok()?)
             })
             .unwrap_or(u64::MAX);
-        if type_nodes > MAX_MEMORY_PLAN_TYPE_NODES
-            || witnesses > MAX_MEMORY_PLAN_WITNESSES
-            || witnesses != type_nodes
+        if witnesses != type_nodes
             || unique_witnesses.len() != self.plan.witnesses.len()
             || drop_paths > MAX_MEMORY_PLAN_DROP_PATHS
             || self.plan.type_facts.len() != self.expected.len()

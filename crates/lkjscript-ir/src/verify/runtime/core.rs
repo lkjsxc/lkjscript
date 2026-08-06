@@ -15,12 +15,11 @@ pub(super) fn core_signature(
         RuntimeOp::Add | RuntimeOp::Subtract | RuntimeOp::Multiply | RuntimeOp::Divide => {
             parameters.len() == 2
                 && parameters.iter().all(is_numeric)
-                && result
-                    == if parameters.iter().any(|ty| ty == &SsaType::F64) {
-                        &SsaType::F64
-                    } else {
-                        &SsaType::I64
-                    }
+                && if parameters.iter().any(|ty| matches!(ty, SsaType::F64)) {
+                    matches!(result, SsaType::F64)
+                } else {
+                    matches!(result, SsaType::I64)
+                }
         }
         RuntimeOp::EqualValue => {
             parameters.len() == 2

@@ -61,7 +61,8 @@ pub(super) fn enumerate(
         if !record.legal_action_available || !record.semantic_source_builtin_call {
             continue;
         }
-        let crate::hir::Type::Fn { params, ret } = operation.signature() else {
+        let signature = operation.signature();
+        let crate::hir::Type::Fn { params, ret } = &signature else {
             continue;
         };
         if ret.as_ref() != expected {

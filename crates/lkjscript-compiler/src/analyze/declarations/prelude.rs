@@ -126,14 +126,15 @@ impl Analyzer {
         parameters: Vec<String>,
         variants: Vec<EnumVariant>,
     ) {
-        let Type::Enum { id, name, .. } = crate::types::prelude_type(kind, Vec::new()) else {
+        let ty = crate::types::prelude_type(kind, Vec::new());
+        let Type::Enum { id, name, .. } = &ty else {
             unreachable!("prelude type must be nominal")
         };
         self.enum_headers
-            .insert(name.clone(), (id, parameters.clone()));
+            .insert(name.clone(), (*id, parameters.clone()));
         self.enums.push(EnumDefinition {
-            id,
-            name,
+            id: *id,
+            name: name.clone(),
             origin: SourceId::new(u32::MAX),
             type_parameters: parameters,
             variants,

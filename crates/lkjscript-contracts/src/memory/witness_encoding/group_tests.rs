@@ -93,6 +93,47 @@ fn singleton_and_recursive_group_identities_validate_atomically() {
 }
 
 #[test]
+#[allow(clippy::expect_used)]
+fn witness_groups_cross_the_former_total_count_boundary() {
+    const GROUPS: u64 = 16_385;
+    let groups: Vec<_> = (0..GROUPS)
+        .map(|index| {
+            let mut identity = [0_u8; 32];
+            identity[..8].copy_from_slice(&(index + 1).to_be_bytes());
+            let semantic = SemanticDescriptor {
+                root: SemanticType::Product(identity),
+                declarations: vec![SemanticDeclaration::Product(SemanticProductDeclaration {
+                    identity,
+                    fields: Vec::new(),
+                })],
+            };
+            let mut member_facts = facts();
+            member_facts.semantic_type =
+                semantic_type_closure_hash(&semantic).expect("semantic type identity");
+            member_facts.semantic_contract =
+                semantic_contract_hash(&semantic).expect("semantic contract identity");
+            member_facts.semantic = semantic;
+            let mut member = ExecutableMemoryWitnessGroupMember {
+                id: [0; 32],
+                ordinal: 0,
+                semantic_identity: member_facts.semantic_type,
+                facts: member_facts,
+                dependencies: Vec::new(),
+            };
+            let id = executable_memory_witness_group_id(false, std::slice::from_ref(&member));
+            member.id = executable_memory_witness_member_id(id, 0, member.semantic_identity);
+            ExecutableMemoryWitnessGroup {
+                id,
+                recursive: false,
+                members: vec![member],
+            }
+        })
+        .collect();
+    validate_executable_memory_witness_groups(&groups)
+        .expect("witness group totals are not semantic admission limits");
+}
+
+#[test]
 fn malformed_ordinal_reorder_and_forged_id_reject() {
     let mut ordinal = recursive_pair(true);
     ordinal[0].members[0].dependencies[0].target = ExecutableMemoryWitnessTarget::LocalMember(9);

@@ -27,10 +27,8 @@ pub use bytecode::{
     StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
     StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata, StructuralTypeMode,
     StructuralValueCategory, StructuralVariantLayout, UniqueValueKind, VariantFieldId, VariantId,
-    MAX_CALL_WITNESS_SITES, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
-    MAX_MEMORY_WITNESS_GROUPS, MAX_MEMORY_WITNESS_PARAMETERS, MAX_STRUCTURAL_DESTINATIONS,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_OPERATION_REFS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    MAX_CALL_WITNESS_SITES, MAX_MEMORY_WITNESS_PARAMETERS, MAX_STRUCTURAL_DESTINATIONS,
+    MAX_STRUCTURAL_OPERATION_REFS,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use limits::{

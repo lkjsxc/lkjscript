@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles() {
+fn structural_auto_traits_cover_nested_products_and_coinductive_cycles() {
     let nested_products = "product/\nname/\nleaf\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nstring\n/type\n/field\n/fields\n/product\nproduct/\nname/\nnest\n/name\nfields/\nfield/\nname/\nitems\n/name\ntype/\noption\nresult\nlist\nproduct\nleaf\ni64\n/type\n/field\n/fields\n/product\n";
     let value = "product-value/\nnest\nfield/\nitems\nnone/\nresult\nlist\nproduct\nleaf\ni64\n/none\n/field\n/product-value";
     let copy_source = format!(
@@ -69,11 +69,12 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
         bounded_identity("copy-recursive", "copy"),
         main_source("product/\nrecursive\n/product", "copy-recursive/\nproduct-value/\nrecursive\nfield/\nnext\nnone/\nproduct\nrecursive\n/none\n/field\n/product-value\n/copy-recursive")
     );
-    assert!(analysis_error(&source).contains("recursive product cycle"));
+    analyze_one(&source).expect("nominal recursive Copy cycle is coinductively satisfied");
 
+    const AUTO_TRAIT_CHAIN: usize = 300;
     let mut deep = String::new();
-    for index in 0..20 {
-        let field_type = if index == 19 {
+    for index in 0..AUTO_TRAIT_CHAIN {
+        let field_type = if index + 1 == AUTO_TRAIT_CHAIN {
             "i64".to_string()
         } else {
             format!("option/\nproduct/\np{}\n/product\n/option", index + 1)
@@ -87,8 +88,5 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
         "product/\np0\n/product",
         "copy-deep/\nproduct-value/\np0\nfield/\nnext\nnone/\nproduct\np1\n/none\n/field\n/product-value\n/copy-deep",
     ));
-    let first = analysis_error(&deep);
-    let second = analysis_error(&deep);
-    assert!(first.contains("trait solver depth exceeded"));
-    assert_eq!(first, second);
+    analyze_one(&deep).expect("deep Copy obligations exceed former solver depth and work fuel");
 }

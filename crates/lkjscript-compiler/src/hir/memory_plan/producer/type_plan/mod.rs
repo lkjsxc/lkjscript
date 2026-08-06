@@ -29,10 +29,36 @@ impl<'a> TypePlanner<'a> {
     }
 
     fn intern(&mut self, ty: &Type) -> Result<MemoryTypeFactId> {
+        if let Some(id) = self.memo.get(ty) {
+            return Ok(*id);
+        }
+        let mut lists = Vec::new();
+        let mut current = ty;
+        while let Type::List(inner) = current {
+            if self.memo.contains_key(current) {
+                break;
+            }
+            lists
+                .try_reserve(1)
+                .map_err(|_| Error::msg("HIR memory-plan type work allocation failed"))?;
+            lists.push(current);
+            current = inner;
+        }
+        if lists.is_empty() {
+            return crate::stack::grow(|| self.intern_inner(ty));
+        }
+        self.intern(current)?;
+        for list in lists.into_iter().rev() {
+            self.intern_inner(list)?;
+        }
+        self.memo
+            .get(ty)
+            .copied()
+            .ok_or_else(|| Error::msg("HIR memory-plan list interning omitted its root"))
+    }
+
+    fn intern_inner(&mut self, ty: &Type) -> Result<MemoryTypeFactId> {
         if let Some(id) = self.memo.get(ty) { return Ok(*id); }
-        let mut count = u64::try_from(self.facts.len())
-            .map_err(|_| Error::msg("HIR memory-plan type facts exceed u64"))?;
-        bounded_add(&mut count, 1, MAX_MEMORY_PLAN_TYPE_NODES, "type nodes")?;
         let derived = self.derive(ty)?;
         if derived.closure.class == MemoryClosureClass::IllegalDomainBridge {
             return Err(closure_error(ty, &derived.closure));

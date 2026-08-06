@@ -12,13 +12,10 @@ use crate::hir::{
     MatchPattern, MatchPlan, MatchPlanCharges, MatchPlanId, MatchProjection, MatchTest,
     MatchTestKind, Operation, Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField,
     RuntimeLayoutId, Source, SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness,
-    TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH,
-    ENUM_RECURSION_MAX_WORK,
+    TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId,
 };
 use crate::source::Expr as AstExpr;
 
-pub const TRAIT_SOLVER_MAX_DEPTH: usize = 32;
-pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
 use crate::source::ValidatedSourceTree;
 use crate::types::parse_one;
 

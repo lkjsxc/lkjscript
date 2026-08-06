@@ -2,6 +2,13 @@ pub(in crate::ssa) fn lower_memory_type(
     ty: &MemoryType,
     products: &HashMap<String, ProductId>,
 ) -> Result<SsaType> {
+    crate::stack::grow(|| lower_memory_type_inner(ty, products))
+}
+
+fn lower_memory_type_inner(
+    ty: &MemoryType,
+    products: &HashMap<String, ProductId>,
+) -> Result<SsaType> {
     Ok(match ty {
         MemoryType::Never => return Err(Error::msg("Never has no structural representation")),
         MemoryType::Unit => SsaType::Unit,
@@ -41,11 +48,13 @@ pub(in crate::ssa) fn lower_memory_type(
             )))
         }
         MemoryType::ForAll { variables, body } => {
-            let SsaType::Function(mut signature) = lower_memory_type(body, products)? else {
+            let lowered = lower_memory_type(body, products)?;
+            let SsaType::Function(signature) = &lowered else {
                 return Err(Error::msg("structural forall body is not callable"));
             };
+            let mut signature = signature.as_ref().clone();
             signature.type_parameters = variables.clone();
-            SsaType::Function(signature)
+            SsaType::Function(Box::new(signature))
         }
     })
 }
@@ -107,7 +116,8 @@ fn layout_kind(
                             .fields
                             .iter()
                             .map(|field| {
-                                substitute_ssa(lower_type(&field.ty, products)?, &substitutions)
+                                let ty = lower_type(&field.ty, products)?;
+                                substitute_ssa(&ty, &substitutions)
                             })
                             .collect::<Result<Vec<_>>>()?,
                     })
@@ -134,20 +144,20 @@ fn variant_physical_tag(item: &hir::EnumDefinition, id: hir::VariantId) -> Resul
         .ok_or_else(|| Error::msg("structural enum physical tag is missing"))
 }
 
-fn substitute_ssa(ty: SsaType, substitutions: &HashMap<String, SsaType>) -> Result<SsaType> {
+fn substitute_ssa(ty: &SsaType, substitutions: &HashMap<String, SsaType>) -> Result<SsaType> {
     Ok(match ty {
         SsaType::TypeParameter(name) => substitutions
-            .get(&name)
+            .get(name)
             .cloned()
             .ok_or_else(|| Error::msg("structural enum field has unknown type parameter"))?,
         SsaType::Enum { id, arguments } => SsaType::Enum {
-            id,
+            id: *id,
             arguments: arguments
-                .into_iter()
+                .iter()
                 .map(|argument| substitute_ssa(argument, substitutions))
                 .collect::<Result<Vec<_>>>()?,
         },
-        SsaType::List(item) => SsaType::List(Box::new(substitute_ssa(*item, substitutions)?)),
-        other => other,
+        SsaType::List(item) => SsaType::List(Box::new(substitute_ssa(item, substitutions)?)),
+        other => other.clone(),
     })
 }

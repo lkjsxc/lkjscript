@@ -5,68 +5,63 @@ use crate::analyze::*;
 pub(in crate::analyze) use parsing::*;
 
 pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut HashSet<&'a str>) {
-    match ty {
-        Type::Param(parameter) => {
-            output.insert(parameter);
-        }
-        Type::List(inner) => collect_type_params(inner, output),
-        Type::Enum { arguments, .. } => {
-            for argument in arguments {
-                collect_type_params(argument, output);
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Param(name) => {
+                output.insert(name);
             }
-        }
-        Type::Fn { params, ret } => {
-            for parameter in params {
-                collect_type_params(parameter, output);
+            Type::List(inner) => pending.push(inner),
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
             }
-            collect_type_params(ret, output);
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
         }
-        Type::Forall { body, .. } => collect_type_params(body, output),
-        _ => {}
     }
 }
 
 pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
-    match ty {
-        Type::Bytes
-        | Type::ByteVector
-        | Type::ByteSlice
-        | Type::ByteSliceMut
-        | Type::Resource(_) => true,
-        Type::List(inner) => contains_ownership_type(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
-        Type::Fn { params, ret } => {
-            params.iter().any(contains_ownership_type) || contains_ownership_type(ret)
-        }
-        Type::Forall { body, .. } => contains_ownership_type(body),
-        _ => false,
-    }
+    visit_type(ty, |ty| {
+        matches!(
+            ty,
+            Type::Bytes
+                | Type::ByteVector
+                | Type::ByteSlice
+                | Type::ByteSliceMut
+                | Type::Resource(_)
+        )
+    })
 }
 
 pub(in crate::analyze) fn contains_resource_type(ty: &Type) -> bool {
-    match ty {
-        Type::Resource(_) => true,
-        Type::List(inner) => contains_resource_type(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(contains_resource_type),
-        Type::Fn { params, ret } => {
-            params.iter().any(contains_resource_type) || contains_resource_type(ret)
-        }
-        Type::Forall { body, .. } => contains_resource_type(body),
-        _ => false,
-    }
+    visit_type(ty, |ty| matches!(ty, Type::Resource(_)))
 }
 
 pub(in crate::analyze) fn contains_reference_type(ty: &Type) -> bool {
-    match ty {
-        Type::ByteSlice | Type::ByteSliceMut => true,
-        Type::List(inner) => contains_reference_type(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(contains_reference_type),
-        Type::Fn { params, ret } => {
-            params.iter().any(contains_reference_type) || contains_reference_type(ret)
+    visit_type(ty, |ty| matches!(ty, Type::ByteSlice | Type::ByteSliceMut))
+}
+
+fn visit_type(ty: &Type, mut predicate: impl FnMut(&Type) -> bool) -> bool {
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        if predicate(ty) {
+            return true;
         }
-        Type::Forall { body, .. } => contains_reference_type(body),
-        _ => false,
+        match ty {
+            Type::List(inner) => pending.push(inner),
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
+        }
     }
+    false
 }
 
 pub(in crate::analyze) fn declared_name_form(

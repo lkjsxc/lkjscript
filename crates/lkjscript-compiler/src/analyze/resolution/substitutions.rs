@@ -7,20 +7,20 @@ impl Resolver<'_> {
         callable: Type,
         args: &[Expr],
     ) -> Result<(Type, Vec<TypeSubstitution>)> {
-        let Type::Forall { vars, body } = callable else {
+        let Type::Forall { vars, body } = &callable else {
             return Ok((callable, Vec::new()));
         };
-        let Type::Fn { params, ret } = *body else {
+        let Type::Fn { params, ret } = body.as_ref() else {
             return Err(self.error("forall body must be a function type"));
         };
         if params.len() != args.len() {
-            return Ok((Type::Fn { params, ret }, Vec::new()));
+            return Ok((callable, Vec::new()));
         }
         let mut substitutions = HashMap::new();
         for (pattern, argument) in params.iter().zip(args) {
-            self.bind_type_params(name, pattern, &argument.ty, &vars, &mut substitutions)?;
+            self.bind_type_params(name, pattern, &argument.ty, vars, &mut substitutions)?;
         }
-        for variable in &vars {
+        for variable in vars {
             if !substitutions.contains_key(variable) {
                 return Err(self.error(format!(
                     "{name}: cannot infer type parameter {variable} from arguments"

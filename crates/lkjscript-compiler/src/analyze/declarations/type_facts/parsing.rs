@@ -69,6 +69,10 @@ pub(in crate::analyze) fn parse_typed_params(
 pub(in crate::analyze) fn parameter_type(
     expression: &AstExpr,
 ) -> std::result::Result<Type, String> {
+    crate::stack::grow(|| parameter_type_inner(expression))
+}
+
+fn parameter_type_inner(expression: &AstExpr) -> std::result::Result<Type, String> {
     match expression {
         AstExpr::LitUnit => Ok(Type::Unit),
         AstExpr::Symbol(name) => atom_type(name),

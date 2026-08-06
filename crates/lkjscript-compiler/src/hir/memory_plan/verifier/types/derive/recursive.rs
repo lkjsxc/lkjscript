@@ -30,7 +30,7 @@ impl VerifiedTypes<'_> {
                 {
                     if let Type::Enum { arguments, .. } = &field {
                         for (index, argument) in arguments.iter().enumerate() {
-                            if verified_type_mentions_component(argument, &self.graph, component) {
+                            if verified_type_mentions_component(argument, &self.graph, component)? {
                                 return Err(Error::msg(
                                     "LKJ-MEM-RECURSIVE-NONREGULAR transformed recursive type argument",
                                 ));
@@ -53,7 +53,7 @@ impl VerifiedTypes<'_> {
                     }
                     continue;
                 }
-                if verified_type_mentions_component(&field, &self.graph, component) {
+                if verified_type_mentions_component(&field, &self.graph, component)? {
                     return Err(Error::msg(
                         "LKJ-MEM-RECURSIVE-NONREGULAR wrapped recursive field",
                     ));
@@ -105,12 +105,12 @@ fn verified_type_mentions_component(
     ty: &Type,
     graph: &VerifiedDeclarationGraph,
     component: usize,
-) -> bool {
+) -> Result<bool> {
     let mut declarations = Vec::new();
-    verified_collect_declarations(ty, &mut declarations);
-    declarations
+    verified_collect_declarations(ty, &mut declarations)?;
+    Ok(declarations
         .iter()
-        .any(|key| graph.component(key) == Some(component))
+        .any(|key| graph.component(key) == Some(component)))
 }
 
 #[allow(clippy::too_many_arguments)]

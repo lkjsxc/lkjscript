@@ -9,11 +9,9 @@ pub use identity::{
 };
 pub use witness::{
     MemoryWitnessDescriptor, MemoryWitnessGroupDescriptor, MemoryWitnessGroupMember,
-    MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES, MAX_MEMORY_WITNESS_GROUPS,
     MAX_MEMORY_WITNESS_PARAMETERS,
 };
 
-pub const MAX_STRUCTURAL_TYPES: usize = 16_384;
 pub const MAX_REGION_PRODUCTS: usize = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,9 +19,6 @@ pub struct RegionProductMetadata {
     pub product: ProductId,
     pub identity: RuntimeLayoutId,
 }
-pub const MAX_STRUCTURAL_LAYOUTS: usize = 16_384;
-pub const MAX_STRUCTURAL_REPRESENTATIONS: usize = 65_536;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StructuralValueCategory {
     Owner,

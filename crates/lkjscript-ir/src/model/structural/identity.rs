@@ -109,24 +109,30 @@ pub fn runtime_product_layout_identity(identity: [u8; 32]) -> NonZeroU64 {
 }
 
 fn fingerprint(mut state: u64, ty: &SsaType) -> u64 {
-    state = fingerprint_tag(state, type_tag(ty));
-    match ty {
-        SsaType::Capability(kind) => mix(state, *kind as u64),
-        SsaType::Resource(kind) => mix(state, *kind as u64),
-        SsaType::StructuralDestination(id) => mix(state, id.raw()),
-        SsaType::Product(id) => mix(state, id.raw()),
-        SsaType::Enum { id, arguments } => {
-            state = fingerprint_bytes(state, &id.bytes());
-            arguments.iter().fold(state, fingerprint)
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        state = fingerprint_tag(state, type_tag(ty));
+        match ty {
+            SsaType::Capability(kind) => state = mix(state, *kind as u64),
+            SsaType::Resource(kind) => state = mix(state, *kind as u64),
+            SsaType::StructuralDestination(id) => state = mix(state, id.raw()),
+            SsaType::Product(id) => state = mix(state, id.raw()),
+            SsaType::Enum { id, arguments } => {
+                state = fingerprint_bytes(state, &id.bytes());
+                pending.extend(arguments.iter().rev());
+            }
+            SsaType::List(inner) => pending.push(inner),
+            SsaType::Function(signature) => {
+                pending.push(&signature.result);
+                pending.extend(signature.parameters.iter().rev());
+            }
+            SsaType::TypeParameter(name) => {
+                state = fingerprint_bytes(state, name.as_bytes());
+            }
+            _ => {}
         }
-        SsaType::List(inner) => fingerprint(state, inner),
-        SsaType::Function(signature) => {
-            state = signature.parameters.iter().fold(state, fingerprint);
-            fingerprint(state, &signature.result)
-        }
-        SsaType::TypeParameter(name) => fingerprint_bytes(state, name.as_bytes()),
-        _ => state,
     }
+    state
 }
 
 const fn type_tag(ty: &SsaType) -> u8 {

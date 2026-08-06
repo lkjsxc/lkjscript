@@ -120,46 +120,41 @@ impl Analyzer {
         &self,
         ty: &Type,
     ) -> std::result::Result<(), String> {
-        match ty {
-            Type::Never => Err("Never is not a storage, field, or ABI type".into()),
-            Type::Product(name) => {
-                if self.product_names.contains_key(name) {
-                    Ok(())
-                } else {
-                    Err(format!("unknown product type {name}"))
+        let mut pending = vec![ty];
+        while let Some(ty) = pending.pop() {
+            match ty {
+                Type::Never => return Err("Never is not a storage, field, or ABI type".into()),
+                Type::Product(name) if !self.product_names.contains_key(name) => {
+                    return Err(format!("unknown product type {name}"));
                 }
+                Type::Enum {
+                    id,
+                    name,
+                    arguments,
+                } => {
+                    let Some((expected, parameters)) = self.enum_headers.get(name) else {
+                        return Err(format!("unknown enum type {name}"));
+                    };
+                    if id != expected || arguments.len() != parameters.len() {
+                        return Err(format!("enum type {name} has invalid identity or arity"));
+                    }
+                    pending.extend(arguments);
+                }
+                Type::List(inner) => {
+                    if contains_ownership_type(inner) {
+                        return Err("ownership/reference types cannot be stored in List".into());
+                    }
+                    pending.push(inner);
+                }
+                Type::Fn { params, ret } => {
+                    pending.push(ret);
+                    pending.extend(params);
+                }
+                Type::Forall { body, .. } => pending.push(body),
+                _ => {}
             }
-            Type::Enum {
-                id,
-                name,
-                arguments,
-            } => {
-                let Some((expected, parameters)) = self.enum_headers.get(name) else {
-                    return Err(format!("unknown enum type {name}"));
-                };
-                if id != expected || arguments.len() != parameters.len() {
-                    return Err(format!("enum type {name} has invalid identity or arity"));
-                }
-                for argument in arguments {
-                    self.validate_product_type(argument)?;
-                }
-                Ok(())
-            }
-            Type::List(inner) => {
-                if contains_ownership_type(inner) {
-                    return Err("ownership/reference types cannot be stored in List".into());
-                }
-                self.validate_product_type(inner)
-            }
-            Type::Fn { params, ret } => {
-                for parameter in params {
-                    self.validate_product_type(parameter)?;
-                }
-                self.validate_product_type(ret)
-            }
-            Type::Forall { body, .. } => self.validate_product_type(body),
-            _ => Ok(()),
         }
+        Ok(())
     }
 
     pub(in crate::analyze) fn product_by_name(&self, name: &str) -> Result<&ProductDefinition> {

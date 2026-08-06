@@ -45,9 +45,7 @@ pub use structural::{
     RegionProductMetadata, StructuralDropGlueIdentity, StructuralLayoutKind,
     StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationMetadata,
     StructuralStorage, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
-    StructuralVariantLayout, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
-    MAX_MEMORY_WITNESS_GROUPS, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
+    StructuralVariantLayout, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
 };
 pub use terminator::{BlockMetadata, StructuredOutcome, Terminator};
 pub use types::{

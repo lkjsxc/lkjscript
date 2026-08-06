@@ -2,64 +2,64 @@ use super::encoder::Encoder;
 use crate::*;
 
 pub(super) fn ty(out: &mut Encoder, value: &SsaType) {
-    match value {
-        SsaType::Unit => out.tag(0),
-        SsaType::Bool => out.tag(1),
-        SsaType::I64 => out.tag(2),
-        SsaType::F64 => out.tag(3),
-        SsaType::Str => out.tag(4),
-        SsaType::Symbol => out.tag(5),
-        SsaType::Bytes => out.tag(6),
-        SsaType::ByteVector => out.tag(7),
-        SsaType::ByteSlice => out.tag(8),
-        SsaType::ByteSliceMut => out.tag(9),
-        SsaType::Path => out.tag(10),
-        SsaType::Capability(kind) => {
-            out.tag(11);
-            capability(out, *kind);
-        }
-        SsaType::Resource(kind) => {
-            out.tag(12);
-            resource(out, *kind);
-        }
-        SsaType::StructuralDestination(id) => {
-            out.tag(13);
-            out.u64(id.raw());
-        }
-        SsaType::Product(id) => {
-            out.tag(14);
-            out.u64(id.raw());
-        }
-        SsaType::Enum { id, arguments } => {
-            out.tag(15);
-            out.fixed(&id.bytes());
-            out.sequence(arguments, ty);
-        }
-        SsaType::List(element) => {
-            out.tag(16);
-            ty(out, element);
-        }
-        SsaType::Function(signature) => {
-            out.tag(17);
-            signature_value(out, signature);
-        }
-        SsaType::TypeParameter(name) => {
-            out.tag(18);
-            out.string(name);
+    let mut pending = vec![value];
+    while let Some(value) = pending.pop() {
+        match value {
+            SsaType::Unit => out.tag(0),
+            SsaType::Bool => out.tag(1),
+            SsaType::I64 => out.tag(2),
+            SsaType::F64 => out.tag(3),
+            SsaType::Str => out.tag(4),
+            SsaType::Symbol => out.tag(5),
+            SsaType::Bytes => out.tag(6),
+            SsaType::ByteVector => out.tag(7),
+            SsaType::ByteSlice => out.tag(8),
+            SsaType::ByteSliceMut => out.tag(9),
+            SsaType::Path => out.tag(10),
+            SsaType::Capability(kind) => {
+                out.tag(11);
+                capability(out, *kind);
+            }
+            SsaType::Resource(kind) => {
+                out.tag(12);
+                resource(out, *kind);
+            }
+            SsaType::StructuralDestination(id) => {
+                out.tag(13);
+                out.u64(id.raw());
+            }
+            SsaType::Product(id) => {
+                out.tag(14);
+                out.u64(id.raw());
+            }
+            SsaType::Enum { id, arguments } => {
+                out.tag(15);
+                out.fixed(&id.bytes());
+                out.len(arguments.len());
+                pending.extend(arguments.iter().rev());
+            }
+            SsaType::List(element) => {
+                out.tag(16);
+                pending.push(element);
+            }
+            SsaType::Function(signature) => {
+                out.tag(17);
+                signature_header(out, signature);
+                out.len(signature.parameters.len());
+                pending.push(&signature.result);
+                pending.extend(signature.parameters.iter().rev());
+            }
+            SsaType::TypeParameter(name) => {
+                out.tag(18);
+                out.string(name);
+            }
         }
     }
 }
 
-pub(super) fn signature_value(out: &mut Encoder, value: &Signature) {
-    let Signature {
-        type_parameters,
-        bounds,
-        memory_witness_parameters,
-        parameters,
-        result,
-    } = value;
-    out.sequence(type_parameters, |out, value| out.string(value));
-    out.sequence(bounds, |out, value| {
+fn signature_header(out: &mut Encoder, value: &Signature) {
+    out.sequence(&value.type_parameters, |out, value| out.string(value));
+    out.sequence(&value.bounds, |out, value| {
         let TraitBound {
             parameter,
             trait_id,
@@ -67,7 +67,7 @@ pub(super) fn signature_value(out: &mut Encoder, value: &Signature) {
         out.string(parameter);
         out.u32(trait_id.raw());
     });
-    out.sequence(memory_witness_parameters, |out, value| {
+    out.sequence(&value.memory_witness_parameters, |out, value| {
         let MemoryWitnessParameter {
             parameter,
             operations,
@@ -75,8 +75,15 @@ pub(super) fn signature_value(out: &mut Encoder, value: &Signature) {
         out.string(parameter);
         out.sequence(operations, |out, value| witness_operation(out, *value));
     });
-    out.sequence(parameters, ty);
-    ty(out, result);
+}
+
+pub(super) fn signature_value(out: &mut Encoder, value: &Signature) {
+    signature_header(out, value);
+    out.len(value.parameters.len());
+    for parameter in &value.parameters {
+        ty(out, parameter);
+    }
+    ty(out, &value.result);
 }
 
 pub(super) fn instantiation(out: &mut Encoder, value: &GenericInstantiation) {

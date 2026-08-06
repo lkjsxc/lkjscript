@@ -3,6 +3,13 @@ impl VerifiedTypes<'_> {
         &self,
         ty: &Type,
     ) -> Result<lkjscript_contracts::SemanticType> {
+        crate::stack::grow(|| self.verified_semantic_type_inner(ty))
+    }
+
+    fn verified_semantic_type_inner(
+        &self,
+        ty: &Type,
+    ) -> Result<lkjscript_contracts::SemanticType> {
         use lkjscript_contracts::{SemanticPrimitiveKind as P, SemanticType as S};
         Ok(match ty {
             Type::Never => S::Primitive(P::Never),

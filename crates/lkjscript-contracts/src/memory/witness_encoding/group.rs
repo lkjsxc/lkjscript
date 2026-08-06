@@ -1,9 +1,5 @@
 use super::{ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessFacts};
 
-pub const MAX_EXECUTABLE_MEMORY_WITNESS_GROUPS: usize = 16_384;
-pub const MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_MEMBERS: usize = 16_384;
-pub const MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_EDGES: usize = 65_536;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutableMemoryWitnessGroupMember {
     pub id: [u8; 32],

@@ -9,7 +9,7 @@ impl FunctionBuilder<'_> {
         let dynamic = parameters
             .iter()
             .copied()
-            .zip(self.signature.parameters.clone())
+            .zip(&self.signature.parameters)
             .filter_map(|(binding, ty)| match ty {
                 SsaType::TypeParameter(parameter)
                     if self
@@ -17,7 +17,7 @@ impl FunctionBuilder<'_> {
                         .memory_witness_parameters
                         .iter()
                         .any(|requirement| {
-                            requirement.parameter == parameter
+                            requirement.parameter == parameter.as_str()
                                 && requirement.operations.contains(
                                     &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
                                 )
@@ -26,7 +26,7 @@ impl FunctionBuilder<'_> {
                                     .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
                         }) =>
                 {
-                    Some((binding, parameter))
+                    Some((binding, parameter.clone()))
                 }
                 _ => None,
             })

@@ -1,7 +1,5 @@
 use super::*;
 
-pub const ENUM_RECURSION_MAX_DEPTH: usize = 32;
-pub const ENUM_RECURSION_MAX_WORK: usize = 4_096;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumDefinition {
     pub id: EnumId,

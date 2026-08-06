@@ -5,6 +5,9 @@ pub(crate) fn verified_components(
 ) -> Result<(Vec<usize>, Vec<bool>, u64)> {
     let mut work = 0_u64;
     let mut order = Vec::new();
+    order
+        .try_reserve(adjacency.len())
+        .map_err(|_| Error::msg("memory verifier SCC order allocation failed"))?;
     let mut seen = vec![false; adjacency.len()];
     for root in 0..adjacency.len() {
         if seen[root] {
@@ -15,7 +18,10 @@ pub(crate) fn verified_components(
         while let Some((node, edge)) = stack.pop() {
             verified_scc_charge(&mut work)?;
             if let Some(next) = adjacency[node].get(edge).copied() {
-                stack.push((node, edge + 1));
+                let next_edge = edge
+                    .checked_add(1)
+                    .ok_or_else(|| Error::msg("memory verifier SCC edge index overflow"))?;
+                stack.push((node, next_edge));
                 if !seen[next] {
                     seen[next] = true;
                     stack.push((next, 0));
@@ -25,7 +31,11 @@ pub(crate) fn verified_components(
             }
         }
     }
-    let mut reverse = vec![Vec::new(); adjacency.len()];
+    let mut reverse = Vec::new();
+    reverse
+        .try_reserve(adjacency.len())
+        .map_err(|_| Error::msg("memory verifier reverse graph allocation failed"))?;
+    reverse.resize_with(adjacency.len(), Vec::new);
     for (from, targets) in adjacency.iter().enumerate() {
         for target in targets {
             reverse[*target].push(from);
@@ -33,17 +43,22 @@ pub(crate) fn verified_components(
     }
     let mut component = vec![usize::MAX; adjacency.len()];
     let mut sizes = Vec::new();
+    sizes
+        .try_reserve(adjacency.len())
+        .map_err(|_| Error::msg("memory verifier SCC size allocation failed"))?;
     while let Some(root) = order.pop() {
         if component[root] != usize::MAX {
             continue;
         }
         let id = sizes.len();
-        let mut size = 0;
+        let mut size = 0_usize;
         let mut stack = vec![root];
         component[root] = id;
         while let Some(node) = stack.pop() {
             verified_scc_charge(&mut work)?;
-            size += 1;
+            size = size
+                .checked_add(1)
+                .ok_or_else(|| Error::msg("memory verifier SCC size overflow"))?;
             for next in &reverse[node] {
                 if component[*next] == usize::MAX {
                     component[*next] = id;
@@ -66,8 +81,5 @@ fn verified_scc_charge(work: &mut u64) -> Result<()> {
     *work = work
         .checked_add(1)
         .ok_or_else(|| Error::msg("memory verifier SCC work overflow"))?;
-    if *work > MAX_MEMORY_PLAN_SCC_WORK {
-        return Err(Error::msg("memory verifier SCC work exceeds maximum"));
-    }
     Ok(())
 }

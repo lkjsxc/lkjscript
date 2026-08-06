@@ -13,16 +13,21 @@ pub(in crate::ownership) fn reject_unsupported_type_placement(ty: &Type) -> Resu
 }
 
 pub(in crate::ownership) fn contains_ownership(ty: &Type) -> bool {
-    match ty {
-        Type::Bytes | Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut => true,
-        Type::List(inner) => contains_ownership(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership),
-        Type::Fn { params, ret } => {
-            params.iter().any(contains_ownership) || contains_ownership(ret)
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Bytes | Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut => return true,
+            Type::List(inner) => pending.push(inner),
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
         }
-        Type::Forall { body, .. } => contains_ownership(body),
-        _ => false,
     }
+    false
 }
 
 pub(in crate::ownership) fn uses_reference_binding(

@@ -30,7 +30,7 @@ impl TypePlanner<'_> {
                 {
                     if let Type::Enum { arguments, .. } = &field {
                         for (index, argument) in arguments.iter().enumerate() {
-                            if type_mentions_component(argument, &self.graph, component) {
+                            if type_mentions_component(argument, &self.graph, component)? {
                                 return Err(Error::msg(
                                     "LKJ-MEM-RECURSIVE-NONREGULAR transformed recursive type argument",
                                 ));
@@ -53,7 +53,7 @@ impl TypePlanner<'_> {
                     }
                     continue;
                 }
-                if type_mentions_component(&field, &self.graph, component) {
+                if type_mentions_component(&field, &self.graph, component)? {
                     return Err(Error::msg(
                         "LKJ-MEM-RECURSIVE-NONREGULAR wrapped recursive field",
                     ));
@@ -115,12 +115,12 @@ fn type_mentions_component(
     ty: &Type,
     graph: &DeclarationGraph,
     component: usize,
-) -> bool {
+) -> Result<bool> {
     let mut declarations = Vec::new();
-    collect_declarations(ty, &mut declarations);
-    declarations
+    collect_declarations(ty, &mut declarations)?;
+    Ok(declarations
         .iter()
-        .any(|key| graph.component(key) == Some(component))
+        .any(|key| graph.component(key) == Some(component)))
 }
 
 fn fold_recursive_fact(

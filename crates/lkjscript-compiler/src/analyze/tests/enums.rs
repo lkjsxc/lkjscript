@@ -1,5 +1,5 @@
 use super::*;
-use crate::hir::{EnumId, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH};
+use crate::hir::{EnumId, VariantFieldId, VariantId};
 
 pub(super) fn canonical_source(body: &str) -> String {
     body.to_string()
@@ -156,7 +156,7 @@ fn recursive_chain(edges: usize) -> String {
 }
 
 #[test]
-fn recursion_depth_exact_bound_succeeds_and_plus_one_rejects() {
+fn recursive_enum_graph_has_no_depth_or_work_admission_quota() {
     let self_cycle = recursive_chain(0).replace(
         "fields/\n/fields",
         "fields/\nvariant-field/\nname/\nnext\n/name\ntype/\ne0/\n/e0\n/type\n/variant-field\n/fields",
@@ -165,17 +165,7 @@ fn recursion_depth_exact_bound_succeeds_and_plus_one_rejects() {
         "{self_cycle}{}",
         unit_main_source()
     )))
-    .expect("bounded self recursion");
-    let exact = canonical_source(&format!(
-        "{}{}",
-        recursive_chain(ENUM_RECURSION_MAX_DEPTH),
-        unit_main_source()
-    ));
-    analyze_one(&exact).expect("exact recursion depth");
-    let plus_one = canonical_source(&format!(
-        "{}{}",
-        recursive_chain(ENUM_RECURSION_MAX_DEPTH + 1),
-        unit_main_source()
-    ));
-    assert!(analysis_error(&plus_one).contains("enum recursion depth exceeds"));
+    .expect("nominal self recursion");
+    let wide = canonical_source(&format!("{}{}", recursive_chain(300), unit_main_source()));
+    analyze_one(&wide).expect("enum recursion beyond former depth and work geometry");
 }

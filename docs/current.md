@@ -62,11 +62,29 @@ source into more than 4,096 SSA blocks, publishes bytecode, and executes the res
 Generated SSA coverage verifies 44,000 owned resource
 parameters and places with 132,000 active-place, owner, and affine state cells per block, 264,000
 cells under the former aggregate retained-state accounting across a two-block propagation, one
-44,000-argument consuming call, and exact cleanup of every place. Generated coverage compiles, creates
+44,000-argument consuming call, and exact cleanup of every place. Compiler and SSA type validation
+no longer use depth or work admission fuel. Their type shape, substitution, ownership, identity,
+formatting, clone, equality, hashing, and destruction paths use explicit worklists or repeatable
+heap-backed stack segments. Auto-trait solvers canonicalize type nodes, memoize obligations, and
+compute a deterministic coinductive greatest fixed point, including nominal cycles; enum recursion
+validation likewise uses graph worklists rather than depth fuel. HIR memory planning and executable
+witness validation no longer cap type facts, type-graph edges, semantic descriptor nodes/bytes,
+witnesses, witness groups/dependencies, structural metadata tables, or deterministic type-SCC work.
+Checked `u64` work observations and checked allocation/identity conversions remain. Generated HIR
+coverage derives and independently verifies a 32,769-declaration graph whose SCC observation
+crosses 65,536 steps. Contract coverage validates 16,385 independent executable witness groups and
+semantic descriptors with 16,385 reachable declarations, 65,537 fields/type edges, and more than
+16 MiB of canonical input.
+
+Generated coverage compiles, creates
 a verified HIR memory plan, creates verified and normalized SSA, validates bytecode, executes
 through the VM, and destroys a program with 20,000 nested `do` expressions on a 256 KiB native
 thread stack. That fixture records exactly 20,001 memory-plan expressions, 20,003 entries, and
-40,045 verifier steps. A nested product-match fixture reaches a physical marker depth above 50,
+40,045 verifier steps. A 512-deep nested list type crosses source analysis, HIR memory planning,
+verified SSA, validated bytecode, VM execution, deterministic malformed-type diagnostics, and
+destruction on the same small stack. Raw SSA verification covers valid and malformed 8,192-deep
+types, while generated 300-wide and cyclic nominal type graphs exercise public compiler paths and
+coinductive trait tests. A nested product-match fixture reaches a physical marker depth above 50,
 and malformed 8,192-deep mismatched and unclosed input produces deterministic diagnostics and
 drops partial trees on the same small stack. Other generated coverage compiles and executes a
 source 1,024 bytes beyond the former 16 MiB boundary and exercises the source authority with 65,537
@@ -169,12 +187,13 @@ may build elsewhere, but no other host or native target is currently claimed as 
 ## Known gaps
 
 - Source spans, positions, and snapshot-local node indexes remain `u32`, so an individual source
-  or source tree beyond those addressable ranges fails at a representation boundary. HIR, SSA,
-  recursive type/trait/enum, and structural-value paths retain other arbitrary count or recursion
-  ceilings. HIR memory-plan entry, constant, and whole-verifier work counts are now checked
+  or source tree beyond those addressable ranges fails at a representation boundary. HIR
+  memory-plan entry, constant, type, witness, and whole-verifier work counts are checked
   observational telemetry. Independently triggered quotas remain for functions, uses, loans,
-  calls, obligations, type nodes and edges, witnesses, aggregate shape, destinations, borrow
-  scopes, drop paths, and deterministic SCC work. The
+  calls, obligations, witness parameter/argument arity, destinations, borrow scopes, and drop
+  paths. SSA region-product metadata and bytecode structural destination/operation-reference
+  tables retain count ceilings. A recursive executable witness group also retains a checked `u16`
+  member ordinal representation boundary, distinct from the removed total witness/group quotas. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
   40,045 verifier steps. Bytecode validation has no project-selected encoded-size, physical-table,
@@ -190,10 +209,10 @@ may build elsewhere, but no other host or native target is currently claimed as 
   value identities still use `u32`; this is an external representation gap distinct from the removed
   4,096-block verifier admission rule. Where the remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,
   they remain follow-up validity and representation gaps, not host policy.
-- Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
-  including parts of type, trait, enum, semantic-schema, and transaction processing, still need
-  explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input
-  complexity.
+- Type and SSA type ownership, identity, verification, trait solving, and the ordinary memory-plan
+  and lowering path have deep-stack coverage. Other recursive semantic-operation, transaction,
+  runtime structural-value, and specialization paths still need explicit work-stack conversion or
+  equivalent evidence. Some analyses retain poor large-input complexity.
 - The compiler cannot yet consume a syntax-independent semantic snapshot directly.
 - Semantic edits still publish text files, and stable identity remains coupled to the current
   source representation in important paths.

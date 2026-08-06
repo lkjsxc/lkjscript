@@ -24,45 +24,58 @@ unit_enum!(MemoryBindingStorage { Local = 0, Function = 1 });
 
 impl Canonical for MemoryType {
     fn encode(&self, output: &mut Encoder) -> Result<()> {
-        match self {
-            Self::Never => output.tag(0),
-            Self::Unit => output.tag(1),
-            Self::Bool => output.tag(2),
-            Self::I64 => output.tag(3),
-            Self::F64 => output.tag(4),
-            Self::String => output.tag(5),
-            Self::Bytes => output.tag(6),
-            Self::Path => output.tag(7),
-            Self::Capability(kind) => tagged(output, 8, kind),
-            Self::ByteVector => output.tag(9),
-            Self::ByteSlice => output.tag(10),
-            Self::ByteSliceMut => output.tag(11),
-            Self::Symbol => output.tag(12),
-            Self::Resource(kind) => tagged(output, 13, kind),
-            Self::Product(name) => tagged(output, 14, name),
-            Self::Enum {
-                id,
-                name,
-                arguments,
-            } => {
-                output.tag(15)?;
-                output.value(id)?;
-                output.value(name)?;
-                output.value(arguments)
-            }
-            Self::TypeParameter(name) => tagged(output, 16, name),
-            Self::List(element) => tagged(output, 17, element),
-            Self::Function { parameters, result } => {
-                output.tag(18)?;
-                output.value(parameters)?;
-                output.value(result)
-            }
-            Self::ForAll { variables, body } => {
-                output.tag(19)?;
-                output.value(variables)?;
-                output.value(body)
+        let mut pending = vec![self];
+        while let Some(ty) = pending.pop() {
+            match ty {
+                Self::Never => output.tag(0)?,
+                Self::Unit => output.tag(1)?,
+                Self::Bool => output.tag(2)?,
+                Self::I64 => output.tag(3)?,
+                Self::F64 => output.tag(4)?,
+                Self::String => output.tag(5)?,
+                Self::Bytes => output.tag(6)?,
+                Self::Path => output.tag(7)?,
+                Self::Capability(kind) => tagged(output, 8, kind)?,
+                Self::ByteVector => output.tag(9)?,
+                Self::ByteSlice => output.tag(10)?,
+                Self::ByteSliceMut => output.tag(11)?,
+                Self::Symbol => output.tag(12)?,
+                Self::Resource(kind) => tagged(output, 13, kind)?,
+                Self::Product(name) => tagged(output, 14, name)?,
+                Self::Enum {
+                    id,
+                    name,
+                    arguments,
+                } => {
+                    output.tag(15)?;
+                    output.value(id)?;
+                    output.value(name)?;
+                    output.value(&u64::try_from(arguments.len()).map_err(|_| {
+                        Error::msg("canonical memory type argument count exceeds u64")
+                    })?)?;
+                    pending.extend(arguments.iter().rev());
+                }
+                Self::TypeParameter(name) => tagged(output, 16, name)?,
+                Self::List(element) => {
+                    output.tag(17)?;
+                    pending.push(element);
+                }
+                Self::Function { parameters, result } => {
+                    output.tag(18)?;
+                    output.value(&u64::try_from(parameters.len()).map_err(|_| {
+                        Error::msg("canonical memory type parameter count exceeds u64")
+                    })?)?;
+                    pending.push(result);
+                    pending.extend(parameters.iter().rev());
+                }
+                Self::ForAll { variables, body } => {
+                    output.tag(19)?;
+                    output.value(variables)?;
+                    pending.push(body);
+                }
             }
         }
+        Ok(())
     }
 }
 

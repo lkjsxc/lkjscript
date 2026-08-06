@@ -91,8 +91,8 @@ impl VerifiedTypes<'_> {
                 .graph
                 .component(&root)
                 .ok_or_else(|| Error::msg("memory verifier lost recursive component"))?;
-            let arguments = match ty {
-                Type::Enum { arguments, .. } => arguments,
+            let arguments = match &ty {
+                Type::Enum { arguments, .. } => arguments.clone(),
                 _ => Vec::new(),
             };
             let keys: Vec<_> = self

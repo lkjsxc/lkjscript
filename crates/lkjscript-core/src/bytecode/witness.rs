@@ -15,9 +15,6 @@ impl MemoryWitnessGroupId {
     }
 }
 
-pub const MAX_MEMORY_WITNESS_GROUPS: usize = 16_384;
-pub const MAX_MEMORY_WITNESSES: usize = 16_384;
-pub const MAX_MEMORY_WITNESS_DEPENDENCIES: usize = 65_536;
 pub const MAX_MEMORY_WITNESS_PARAMETERS: usize = 16;
 pub const MAX_CALL_WITNESS_SITES: usize = 65_536;
 

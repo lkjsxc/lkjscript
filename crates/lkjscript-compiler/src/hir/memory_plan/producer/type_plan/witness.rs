@@ -8,9 +8,6 @@ impl TypePlanner<'_> {
         drop_glue: Option<MemoryDropGlueId>,
         drop_path: Option<MemoryDropPathId>,
     ) -> Result<MemoryWitnessId> {
-        if u64::try_from(self.witnesses.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_WITNESSES {
-            return Err(Error::msg("HIR memory-plan witnesses exceed bounded maximum"));
-        }
         let semantic = self.producer_semantic_descriptor(ty)?;
         let dependencies = self.producer_witness_dependencies(ty)?;
         lkjscript_contracts::validate_executable_dependencies(&semantic, &dependencies)

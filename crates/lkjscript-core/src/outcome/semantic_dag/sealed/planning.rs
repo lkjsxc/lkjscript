@@ -2,7 +2,7 @@ use super::super::{SemanticDagPayload, SemanticDagSnapshot, SemanticDagType};
 use super::cells::{SealedDagCell, SealedDagNodeCell, SealedDagNodePayload};
 use super::model::SealedSemanticDagError;
 use super::{SealedSemanticDagRuntime, SEALED_DAG_BYTE_CHUNK};
-use crate::{StructuralLimit, MAX_MEMORY_WITNESSES};
+use crate::StructuralLimit;
 
 pub(super) struct RehydrationPlan {
     pub cells: Vec<SealedDagCell>,
@@ -79,10 +79,7 @@ fn validate_type_closure(
     if snapshot.root_node().value_type != expected {
         return Err(SealedSemanticDagError::RootTypeMismatch);
     }
-    if type_closure.is_empty()
-        || type_closure.len() > MAX_MEMORY_WITNESSES
-        || type_closure.windows(2).any(|pair| pair[0] >= pair[1])
-    {
+    if type_closure.is_empty() || type_closure.windows(2).any(|pair| pair[0] >= pair[1]) {
         return Err(SealedSemanticDagError::InvalidTypeClosure);
     }
     for node in snapshot.nodes() {

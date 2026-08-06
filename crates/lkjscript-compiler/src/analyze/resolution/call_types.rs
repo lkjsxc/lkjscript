@@ -21,7 +21,7 @@ impl Resolver<'_> {
                 "{name}: ownership/reference generic instantiation is unavailable in the initial ownership slice"
             )));
         }
-        let Type::Fn { params, ret } = instantiated else {
+        let Type::Fn { params, ret } = &instantiated else {
             return Err(self.error(format!("{name} is not a function")));
         };
         if params.len() != args.len() {
@@ -40,13 +40,13 @@ impl Resolver<'_> {
                 }));
             }
         }
-        if contains_reference_type(&ret) {
+        if contains_reference_type(ret) {
             return Err(self.error(format!(
                 "{name}: user-call results cannot be lexical references in the initial ownership slice"
             )));
         }
         let instantiation = self.call_instantiation(name, callee, substitutions)?;
-        Ok((*ret, instantiation))
+        Ok((ret.as_ref().clone(), instantiation))
     }
 
     fn call_instantiation(
