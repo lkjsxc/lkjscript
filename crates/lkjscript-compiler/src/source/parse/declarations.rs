@@ -1,27 +1,10 @@
-use lkjscript_core::Limits;
-
-use crate::source::{SourceNode, SourceOrigin, SourceResult, SourceSpan, SyntaxKind};
+use crate::source::{SourceNode, SourceOrigin, SourceResult, SyntaxKind};
 
 use super::declaration_shapes::{
     valid_enum, valid_function, valid_name, valid_product_field, valid_signature,
 };
 
-pub(super) fn validate_top_level(
-    forms: &[SourceNode],
-    limits: &Limits,
-    origin: &SourceOrigin,
-) -> SourceResult<()> {
-    let count = u32::try_from(forms.len()).unwrap_or(u32::MAX);
-    if count > limits.max_toplevel_forms {
-        return Err(super::limits::resource_error(
-            origin,
-            forms.first().map_or(SourceSpan::zero(), |form| form.span),
-            format!(
-                "too many top-level forms ({count} > {}); split via import",
-                limits.max_toplevel_forms
-            ),
-        ));
-    }
+pub(super) fn validate_top_level(forms: &[SourceNode], origin: &SourceOrigin) -> SourceResult<()> {
     for form in forms {
         match &form.kind {
             SyntaxKind::Call { name }

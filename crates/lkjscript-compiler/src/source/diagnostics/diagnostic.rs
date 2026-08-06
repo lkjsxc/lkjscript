@@ -169,7 +169,12 @@ impl SourceDiagnostic {
     }
 
     pub(crate) fn into_core(self) -> Error {
-        Error::msg(self.render_human())
+        let rendered = self.render_human();
+        if self.code == "LKJ-SRC-HOST" {
+            Error::host(rendered)
+        } else {
+            Error::msg(rendered)
+        }
     }
 }
 

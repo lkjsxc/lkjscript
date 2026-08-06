@@ -29,31 +29,6 @@ fn removed_edition_form_is_rejected_not_selected() {
 }
 
 #[test]
-fn every_top_level_form_consumes_the_declaration_limit() {
-    let source = unit_main("unit");
-    validate(
-        &source,
-        "src/main.lkjscript",
-        &Limits {
-            max_toplevel_forms: 1,
-            ..Limits::default()
-        },
-    )
-    .expect("one declaration fits");
-    let plus_one = format!("{}{source}", named_def("helper"));
-    let error = validate(
-        &plus_one,
-        "src/main.lkjscript",
-        &Limits {
-            max_toplevel_forms: 1,
-            ..Limits::default()
-        },
-    )
-    .expect_err("one declaration over limit");
-    assert_eq!(error.code(), "LKJ-SRC-LIMIT");
-}
-
-#[test]
 fn source_identity_changes_with_exact_bytes_and_logical_path() {
     let source = unit_main("unit");
     let first = validate(&source, "src/main.lkjscript", &Limits::default()).expect("first");

@@ -1,6 +1,6 @@
-use lkjscript_core::Limits;
+use lkjscript_core::ValidationLimits;
 
-use crate::source::{SourceOrigin, SourceResult, Token, TokenKind};
+use crate::source::{SourceOrigin, SourceResult, SourceSpan, Token, TokenKind};
 
 use super::lines::Line;
 
@@ -12,9 +12,12 @@ pub(super) struct Lexed {
 pub(super) fn lex(
     lines: &[Line<'_>],
     origin: &SourceOrigin,
-    limits: &Limits,
+    validation_limits: &ValidationLimits,
 ) -> SourceResult<Lexed> {
     let mut output = Vec::new();
+    output.try_reserve(lines.len()).map_err(|_| {
+        super::limits::allocation_error(origin, SourceSpan::zero(), "source token storage")
+    })?;
     let mut pending_trivia = Vec::new();
     let mut index = 0;
     while index < lines.len() {
@@ -33,8 +36,15 @@ pub(super) fn lex(
                 std::mem::take(&mut pending_trivia),
             )?;
             if name == "bytes-literal" {
-                decode_bytes_literal(&mut text_tokens, origin, limits)?;
+                decode_bytes_literal(&mut text_tokens, origin, validation_limits)?;
             }
+            output.try_reserve(text_tokens.len()).map_err(|_| {
+                super::limits::allocation_error(
+                    origin,
+                    super::lines::line_span(line),
+                    "source token storage",
+                )
+            })?;
             output.append(&mut text_tokens);
             index = next;
             continue;
@@ -85,7 +95,7 @@ fn text_open_name(line: &str) -> Option<&'static str> {
 fn decode_bytes_literal(
     tokens: &mut [Token],
     origin: &SourceOrigin,
-    limits: &Limits,
+    validation_limits: &ValidationLimits,
 ) -> SourceResult<()> {
     let Some(Token {
         kind: TokenKind::Str(payload),
@@ -124,7 +134,7 @@ fn decode_bytes_literal(
         ));
     }
     let decoded_len = payload.len() / 2;
-    if decoded_len > limits.validation.max_constant_data_bytes {
+    if decoded_len > validation_limits.max_constant_data_bytes {
         return Err(super::limits::resource_error(
             origin,
             *span,

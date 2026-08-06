@@ -115,6 +115,13 @@ pub(super) fn parse_element(
             }
             _ => {
                 let (child, next) = super::syntax::parse_expr(tokens, cursor, origin)?;
+                children.try_reserve(1).map_err(|_| {
+                    super::limits::allocation_error(
+                        origin,
+                        tokens[cursor].span,
+                        "syntax child storage",
+                    )
+                })?;
                 children.push(child);
                 cursor = next;
             }

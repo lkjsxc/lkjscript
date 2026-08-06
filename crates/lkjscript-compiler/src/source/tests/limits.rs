@@ -1,41 +1,25 @@
 use super::*;
 
 #[test]
-fn all_existing_source_limits_remain_enforced_at_boundaries() {
+fn nesting_safety_limit_remains_enforced_at_its_boundary() {
     let accepted = unit_main("unit");
     let limits = Limits {
-        max_tokens_per_file: 10,
-        max_toplevel_forms: 1,
         max_nest_depth: 3,
-        max_children: 2,
         ..Limits::default()
     };
-    assert!(validate(&accepted, "limit.lkjscript", &limits).is_ok());
-    for limits in [
-        Limits {
-            max_tokens_per_file: 9,
-            ..limits
-        },
-        Limits {
+    validate(&accepted, "limit.lkjscript", &limits).expect("three nested forms fit");
+
+    let error = validate(
+        &accepted,
+        "limit.lkjscript",
+        &Limits {
             max_nest_depth: 2,
             ..limits
         },
-        Limits {
-            max_children: 1,
-            ..limits
-        },
-    ] {
-        let error =
-            validate(&accepted, "limit.lkjscript", &limits).expect_err("source limit boundary");
-        assert_eq!(error.category().as_str(), "resource-limit");
-    }
-    let imports = format!(
-        "imports/\nimport/\nmodule/\na.lkjscript\n/module\ndeclarations/\na\n/declarations\n/import\nimport/\nmodule/\nb.lkjscript\n/module\ndeclarations/\nb\n/declarations\n/import\n/imports\n{}",
-        named_def("extra")
-    );
-    let error =
-        validate(&imports, "limit.lkjscript", &limits).expect_err("top-level form boundary");
+    )
+    .expect_err("nesting safety boundary");
     assert_eq!(error.category().as_str(), "resource-limit");
+    assert!(error.message().contains("semantic nest depth exceeded"));
 }
 
 #[test]

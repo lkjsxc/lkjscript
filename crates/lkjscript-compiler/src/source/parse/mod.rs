@@ -42,11 +42,19 @@ pub(crate) fn parse_file(
     }
     let exact_source_sha256 = lkjscript_core::sha256(source.as_bytes());
     let lines = lines::source_lines(source);
-    let lexed = lex::lex(&lines, &origin, limits)?;
-    limits::check_file_limits(&lexed.tokens, limits, &origin)?;
+    let lexed = lex::lex(&lines, &origin, &limits.validation)?;
+    limits::check_nesting_safety(&lexed.tokens, limits, &origin)?;
     let syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
-    declarations::validate_top_level(&syntax, limits, &origin)?;
-    let forms = syntax.iter().map(SourceNode::project).collect();
+    declarations::validate_top_level(&syntax, &origin)?;
+    let mut forms = Vec::new();
+    forms.try_reserve(syntax.len()).map_err(|_| {
+        limits::allocation_error(
+            &origin,
+            crate::source::SourceSpan::zero(),
+            "projected source forms",
+        )
+    })?;
+    forms.extend(syntax.iter().map(SourceNode::project));
     let identity =
         crate::source::identity::source_identity(&origin, exact_source_len, exact_source_sha256)?;
     Ok(SourceFile {

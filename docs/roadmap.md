@@ -2,11 +2,12 @@
 
 ## Now
 
-1. **Remove remaining source-shape and HIR/ownership ceilings.** Delete the parser/source,
-   nesting, child, token, top-level, field, source-unit, HIR-expression, memory-plan, and SSA checks
-   dependency-closed.
-   Completion requires just-beyond-old-boundary and substantially larger positive programs,
-   stack-safe user-controlled traversals, checked growth, and successful execution through the
+1. **Remove remaining source, HIR, ownership, and executable ceilings.** Flat lexer-token,
+   children-per-form, and top-level-form quotas are removed. Next, make source parsing and
+   destruction stack-safe before deleting the nesting guard, then address source-foundation byte
+   and source-unit ceilings, product/HIR/ownership/memory-plan/SSA checks, and compact executable
+   widths in dependency-closed slices. Completion requires just-beyond-old-boundary and
+   substantially larger positive programs, checked growth, and successful execution through the
    retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger admission is removed.
    Continue replacing remaining validity-changing implementation ceilings with unrestricted local

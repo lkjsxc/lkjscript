@@ -11,6 +11,9 @@ pub(super) fn parse_tokens(
     let mut forms = Vec::new();
     while index < tokens.len() {
         let (expression, next) = parse_expr(tokens, index, origin)?;
+        forms.try_reserve(1).map_err(|_| {
+            super::limits::allocation_error(origin, tokens[index].span, "top-level syntax forms")
+        })?;
         forms.push(expression);
         index = next;
     }

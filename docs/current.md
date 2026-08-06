@@ -37,9 +37,11 @@ line-oriented text and package files
 ```
 
 Trusted compiler entry points compile directly without selecting a compiler resource profile or
-charging source, HIR, or SSA shape to a budget ledger. Compile metrics are observational phase
-timings and source-file counts only. Package manifests and prepared-program identities likewise do
-not carry compiler-profile identity.
+charging source, HIR, or SSA shape to a budget ledger. The lexer-token, children-per-form, and
+top-level-forms validity quotas have been removed; generated coverage compiles and executes one
+program with 64 helper declarations, 128 children in one `do`, and more than 1,000 tokens. Compile
+metrics are observational phase timings and source-file counts only. Package manifests and
+prepared-program identities likewise do not carry compiler-profile identity.
 
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
 diagnostics, transactions, and a local stdio session. It uses direct boundary-local byte and
@@ -54,10 +56,12 @@ may build elsewhere, but no other host or native target is currently claimed as 
 
 ## Known gaps
 
-- Parser and source-foundation `Limits` still impose token, nesting, child, top-level, byte, and
-  source-unit ceilings. HIR, ownership, memory-plan, SSA, and structural-value paths retain other
-  arbitrary count or recursion ceilings. Compact bytecode operands and indexes retain width
-  ceilings. These are follow-up validity and representation gaps, not host policy.
+- The parser still imposes a nesting safety ceiling while recursive parsing and destruction remain;
+  removing it requires the separate stack-safe depth cutover. Source-foundation per-file and
+  aggregate byte ceilings and the source-unit ceiling also remain. HIR, ownership, memory-plan,
+  SSA, and structural-value paths retain other arbitrary count or recursion ceilings. Compact
+  executable bytecode operands and indexes retain width ceilings. These are follow-up validity and
+  representation gaps, not host policy.
 - Several user-controlled compiler trees and analyses remain recursive or have poor large-input
   complexity.
 - The compiler cannot yet consume a syntax-independent semantic snapshot directly.
