@@ -85,7 +85,7 @@ pub(super) fn color_locals(
     let mut slots = HashMap::with_capacity(value_count);
     for (raw, color) in colors.into_iter().enumerate() {
         let value = ValueId::new(
-            u32::try_from(raw).map_err(|_| Error::msg("SSA local ValueId exceeds u32"))?,
+            u64::try_from(raw).map_err(|_| Error::msg("SSA local ValueId exceeds u64"))?,
         );
         let color = color.ok_or_else(|| Error::msg("SSA value did not receive a local color"))?;
         slots.insert(value, color);

@@ -1,5 +1,5 @@
 use super::{instruction_error, Kind, OwnerIdentity, State};
-use crate::{Chunk, DecodedInstruction, FunctionProto, ProductId, Result};
+use crate::{Chunk, DecodedInstruction, FunctionProto, ProductId, Result, StructuralSliceExt};
 
 include!("structural.rs");
 

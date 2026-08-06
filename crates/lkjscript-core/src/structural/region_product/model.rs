@@ -62,8 +62,8 @@ impl Default for RegionProductLimits {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RegionProductMetrics {
-    pub records: u32,
-    pub fields: u32,
+    pub records: u64,
+    pub fields: u64,
     pub reserved_bytes_estimate: u64,
 }
 

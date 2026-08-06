@@ -26,9 +26,9 @@ pub(crate) struct Charges {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PositionRecord {
-    pub byte: u32,
-    pub line: u32,
-    pub column: u32,
+    pub byte: u64,
+    pub line: u64,
+    pub column: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -68,7 +68,7 @@ pub(crate) struct DeclarationRecord {
     pub name: String,
     pub source: String,
     pub span: SpanRecord,
-    pub node: u32,
+    pub node: u64,
     pub fingerprint: String,
 }
 
@@ -109,8 +109,8 @@ pub(crate) struct IdentityRelation {
     pub relation: IdentityRelationKind,
     pub old_key: Option<String>,
     pub new_key: Option<String>,
-    pub old_node: Option<u32>,
-    pub new_node: Option<u32>,
+    pub old_node: Option<u64>,
+    pub new_node: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

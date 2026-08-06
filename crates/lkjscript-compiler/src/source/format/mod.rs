@@ -174,17 +174,19 @@ fn expand_exponent(mantissa: &str, exponent: &str) -> String {
             output.push('0');
         }
         output.push_str(&digits);
-    } else if shifted as usize >= digits.len() {
-        output.push_str(&digits);
-        for _ in digits.len()..shifted as usize {
-            output.push('0');
-        }
-        output.push_str(".0");
     } else {
-        let split = shifted as usize;
-        output.push_str(&digits[..split]);
-        output.push('.');
-        output.push_str(&digits[split..]);
+        let shifted = shifted as usize;
+        if shifted >= digits.len() {
+            output.push_str(&digits);
+            for _ in digits.len()..shifted {
+                output.push('0');
+            }
+            output.push_str(".0");
+        } else {
+            output.push_str(&digits[..shifted]);
+            output.push('.');
+            output.push_str(&digits[shifted..]);
+        }
     }
     output
 }

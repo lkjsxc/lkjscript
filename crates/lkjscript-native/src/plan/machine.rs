@@ -1,22 +1,27 @@
 use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct StaticBytesIdentity(u32);
+pub struct StaticBytesIdentity(u64);
 
 impl StaticBytesIdentity {
     #[must_use]
-    pub const fn new(index: u32) -> Self {
+    pub const fn new(index: u64) -> Self {
         Self(index)
     }
 
     #[must_use]
-    pub const fn index(self) -> u32 {
+    pub const fn index(self) -> u64 {
         self.0
     }
 
     #[must_use]
+    pub fn host_index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
+
+    #[must_use]
     pub const fn opaque_word(self) -> u64 {
-        self.0 as u64 + 1
+        self.0
     }
 }
 
@@ -43,11 +48,11 @@ impl MachinePlanBuilder {
             .iter()
             .position(|candidate| candidate.as_ref() == bytes)
         {
-            return u32::try_from(index)
+            return u64::try_from(index)
                 .map(StaticBytesIdentity::new)
                 .map_err(|_| PlanError::TooManyItems);
         }
-        let index = u32::try_from(self.static_bytes.len()).map_err(|_| PlanError::TooManyItems)?;
+        let index = u64::try_from(self.static_bytes.len()).map_err(|_| PlanError::TooManyItems)?;
         self.static_bytes.push(bytes.to_vec().into_boxed_slice());
         Ok(StaticBytesIdentity::new(index))
     }
@@ -57,7 +62,7 @@ impl MachinePlanBuilder {
         source_function: SourceFunctionId,
         signature: Signature,
     ) -> Result<FunctionId, PlanError> {
-        let index = u32::try_from(self.functions.len()).map_err(|_| PlanError::TooManyItems)?;
+        let index = u64::try_from(self.functions.len()).map_err(|_| PlanError::TooManyItems)?;
         let id = FunctionId {
             plan: self.plan,
             index,
@@ -110,7 +115,7 @@ impl MachinePlanBuilder {
             return Err(PlanError::ForeignId("function ID"));
         }
         self.functions
-            .get(function.index as usize)
+            .get(function.host_index().unwrap_or(usize::MAX))
             .filter(|item| item.id == function)
             .ok_or(PlanError::UnknownFunction)
     }
@@ -123,7 +128,7 @@ impl MachinePlanBuilder {
             return Err(PlanError::ForeignId("function ID"));
         }
         self.functions
-            .get_mut(function.index as usize)
+            .get_mut(function.host_index().unwrap_or(usize::MAX))
             .filter(|item| item.id == function)
             .ok_or(PlanError::UnknownFunction)
     }

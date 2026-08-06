@@ -9,7 +9,7 @@ pub struct DestinationCleanupReport {
     pub sequence: u64,
     pub initialized_fields: usize,
     pub cleanup_order: Vec<usize>,
-    pub nodes_released: u32,
+    pub nodes_released: u64,
     pub bytes_released: u64,
 }
 
@@ -114,7 +114,7 @@ impl StructuralValueRuntime {
     }
 
     pub(super) fn release_image(&mut self, image: StructuralImage, facts: TreeFacts) {
-        let work = u64::from(facts.nodes);
+        let work = facts.nodes;
         drop(image);
         self.metrics.releases = self.metrics.releases.saturating_add(1);
         self.metrics.release_work = self.metrics.release_work.saturating_add(work);

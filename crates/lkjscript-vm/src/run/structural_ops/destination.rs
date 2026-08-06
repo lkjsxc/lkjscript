@@ -39,7 +39,7 @@ fn create<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let layout = vm
         .chunk
         .structural_layouts()
-        .get(layout.layout.index())
+        .get_structural(layout.layout)
         .filter(|item| item.id == layout.layout)
         .ok_or_else(|| Error::msg("structural destination layout is stale"))?;
     let key = match (&layout.kind, metadata.active_variant) {

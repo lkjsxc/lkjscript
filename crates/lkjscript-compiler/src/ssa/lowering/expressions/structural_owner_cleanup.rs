@@ -49,8 +49,8 @@ impl FunctionBuilder<'_> {
         expression_origin: hir::SourceId,
     ) -> Result<StructuralOwnerPlace> {
         let place = SsaPlaceId::new(
-            u32::try_from(self.places.len())
-                .map_err(|_| Error::msg("SSA synthetic place count exceeds u32"))?,
+            u64::try_from(self.places.len())
+                .map_err(|_| Error::msg("SSA synthetic place count exceeds u64"))?,
         );
         let binding = BindingId::new(self.next_synthetic_binding);
         self.next_synthetic_binding = self

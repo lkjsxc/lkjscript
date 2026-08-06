@@ -23,7 +23,7 @@ pub(crate) fn execute_request(
     let source_byte_policy = crate::source::SourceBytePolicy::limited(policy.source_bytes);
     let root = Path::new(&request.root);
     let request_charge = Charges {
-        request_bytes: u64::try_from(request_bytes).unwrap_or(u64::MAX),
+        request_bytes: request_bytes as u64,
         ..Charges::default()
     };
     let guard = match super::transaction::begin(root) {

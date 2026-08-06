@@ -35,7 +35,7 @@ pub struct TrapMapEntry {
     pub(super) function: FunctionId,
     pub(super) code_offset: u32,
     pub(super) trap: TrapCode,
-    pub(super) site: Option<u32>,
+    pub(super) site: Option<u64>,
 }
 
 impl TrapMapEntry {
@@ -55,7 +55,7 @@ impl TrapMapEntry {
     }
 
     #[must_use]
-    pub const fn site(self) -> Option<u32> {
+    pub const fn site(self) -> Option<u64> {
         self.site
     }
 }

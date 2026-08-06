@@ -51,14 +51,14 @@ pub enum MemoryMixedBridgeDirection {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryTypePathElement {
-    ProductField { index: u32, name: String },
+    ProductField { index: u64, name: String },
     EnumVariantField {
-        variant_index: u32,
+        variant_index: u64,
         variant: [u8; 32],
-        field_index: u32,
+        field_index: u64,
         field: [u8; 32],
     },
-    TypeArgument(u32),
+    TypeArgument(u64),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,7 +126,7 @@ pub enum MemoryDestinationKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryDestinationField {
-    pub index: u32,
+    pub index: u64,
     pub expression: MemoryExpressionId,
     pub drop_path: Option<MemoryDropPathId>,
 }
@@ -146,11 +146,11 @@ pub struct MemoryDestinationPlan {
     pub execution: MemoryExecution,
     pub execution_cutover: Option<MemoryExecutionCutover>,
     pub type_fact: MemoryTypeFactId,
-    pub field_count: u32,
+    pub field_count: u64,
     pub fields: Vec<MemoryDestinationField>,
     pub active_payload: Option<MemoryActivePayload>,
-    pub initialized_order: Vec<u32>,
-    pub reverse_abort_cleanup: Vec<u32>,
+    pub initialized_order: Vec<u64>,
+    pub reverse_abort_cleanup: Vec<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -158,10 +158,10 @@ pub struct MemoryBorrowScopePlan {
     pub id: MemoryBorrowScopeId,
     pub function: MemoryFunctionId,
     pub call: MemoryCallId,
-    pub argument_index: u32,
+    pub argument_index: u64,
     pub source_expression: MemoryExpressionId,
-    pub binding: u32,
-    pub place: u32,
+    pub binding: u64,
+    pub place: u64,
     pub kind: MemoryBorrowKind,
     pub semantic_uses: u64,
     pub end_after: MemoryExpressionId,

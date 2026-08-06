@@ -9,19 +9,19 @@ pub(crate) enum ResolvedOperation {
         old_name: String,
         new_name: String,
         module: String,
-        declaration_node: u32,
+        declaration_node: u64,
     },
     Replace {
         key: String,
-        node: u32,
+        node: u64,
         path: Vec<usize>,
         replacement: crate::semantic::schema::Expression,
         relation: crate::semantic::schema::IdentityRelationKind,
     },
     DeleteHole {
         key: String,
-        node: u32,
-        owner: u32,
+        node: u64,
+        owner: u64,
         path: Vec<usize>,
     },
 }

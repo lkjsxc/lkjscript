@@ -1,11 +1,18 @@
 use crate::ssa::*;
 
+// A materialized binding vector cannot have `usize::MAX` elements.
+#[allow(clippy::expect_used)]
 pub(in crate::ssa) fn edge_arguments(
     result: ValueId,
     bindings: &[BindingId],
     env: &BTreeMap<BindingId, ValueId>,
 ) -> Result<Vec<ValueId>> {
-    let mut arguments = Vec::with_capacity(bindings.len().saturating_add(1));
+    let mut arguments = Vec::with_capacity(
+        bindings
+            .len()
+            .checked_add(1)
+            .expect("materialized binding count fits host indexing"),
+    );
     arguments.push(result);
     for binding in bindings {
         arguments.push(
@@ -138,10 +145,10 @@ pub(in crate::ssa) fn is_owned_value(structural: &StructuralMemoryMetadata, ty: 
 }
 
 pub(in crate::ssa) struct CleanupPlan {
-    pub(in crate::ssa) next_expression: u32,
-    pub(in crate::ssa) placement_routes: BTreeMap<u32, ActiveValuePlacement>,
-    pub(in crate::ssa) call_parameter_modes: BTreeMap<u32, Vec<MemoryParameterMode>>,
-    pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
+    pub(in crate::ssa) next_expression: u64,
+    pub(in crate::ssa) placement_routes: BTreeMap<u64, ActiveValuePlacement>,
+    pub(in crate::ssa) call_parameter_modes: BTreeMap<u64, Vec<MemoryParameterMode>>,
+    pub(in crate::ssa) loan_ends: BTreeMap<u64, Vec<SsaLoanId>>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) place_drop_classes: BTreeMap<SsaPlaceId, MemoryDropClass>,
 }

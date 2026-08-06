@@ -8,8 +8,8 @@ use expected::{declaration_return, expected_at};
 
 pub(crate) struct HoleSite<'a> {
     pub tree: &'a ValidatedSourceTree,
-    pub node: u32,
-    pub owner_node: u32,
+    pub node: u64,
+    pub owner_node: u64,
     pub declaration_key: String,
     pub local_identity: String,
     pub goal: Option<String>,
@@ -20,8 +20,14 @@ pub(crate) struct HoleSite<'a> {
     pub expected: Result<Type, TypeUnavailableReason>,
 }
 
-pub(crate) fn find(tree: &ValidatedSourceTree, index: u32) -> Result<HoleSite<'_>, ProtocolError> {
-    let summary = tree.nodes().get(index as usize).ok_or_else(|| {
+pub(crate) fn find(tree: &ValidatedSourceTree, index: u64) -> Result<HoleSite<'_>, ProtocolError> {
+    let host_index = usize::try_from(index).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            format!("hole node {index} is not host-addressable"),
+        )
+    })?;
+    let summary = tree.nodes().get(host_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             format!("unknown hole node {index}"),
@@ -34,7 +40,7 @@ pub(crate) fn find(tree: &ValidatedSourceTree, index: u32) -> Result<HoleSite<'_
         )
     })?;
     let nodes = crate::semantic::tree::source_nodes(tree);
-    let source = *nodes.get(index as usize).ok_or_else(|| {
+    let source = *nodes.get(host_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             "hole source node is unavailable",
@@ -46,7 +52,13 @@ pub(crate) fn find(tree: &ValidatedSourceTree, index: u32) -> Result<HoleSite<'_
             format!("invalid typed hole: {message}"),
         )
     })?;
-    let root = *nodes.get(owner.node().index() as usize).ok_or_else(|| {
+    let owner_index = usize::try_from(owner.node().index()).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "hole declaration node is not host-addressable",
+        )
+    })?;
+    let root = *nodes.get(owner_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             "hole declaration source is unavailable",
@@ -83,9 +95,15 @@ pub(crate) fn find(tree: &ValidatedSourceTree, index: u32) -> Result<HoleSite<'_
 
 pub(crate) fn expected_for_node(
     tree: &ValidatedSourceTree,
-    index: u32,
+    index: u64,
 ) -> Result<(String, Result<Type, TypeUnavailableReason>), ProtocolError> {
-    let summary = tree.nodes().get(index as usize).ok_or_else(|| {
+    let host_index = usize::try_from(index).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            format!("expression node {index} is not host-addressable"),
+        )
+    })?;
+    let summary = tree.nodes().get(host_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             format!("unknown expression node {index}"),
@@ -98,7 +116,13 @@ pub(crate) fn expected_for_node(
         )
     })?;
     let nodes = crate::semantic::tree::source_nodes(tree);
-    let root = *nodes.get(owner.node().index() as usize).ok_or_else(|| {
+    let owner_index = usize::try_from(owner.node().index()).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "expression declaration node is not host-addressable",
+        )
+    })?;
+    let root = *nodes.get(owner_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             "expression declaration source is unavailable",

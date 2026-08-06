@@ -9,6 +9,8 @@ use ranking::{builtin_category, rank_key};
 
 use super::site::HoleSite;
 
+// Every count is bounded by materialized host collections, so checked u64 accounting cannot fail.
+#[allow(clippy::expect_used)]
 pub(super) fn enumerate(
     site: &HoleSite<'_>,
     scope: &[ScopeEntity],
@@ -104,7 +106,9 @@ pub(super) fn enumerate(
     for (category, expression) in expressions {
         if !super::validate::checker_accepts(site, &expression) {
             let count = rejected.entry(category).or_insert(0_u64);
-            *count = count.saturating_add(1);
+            *count = count
+                .checked_add(1)
+                .expect("materialized rejected candidates fit u64");
             continue;
         }
         if let Some(candidate) = candidate(site, expected, category, expression) {
@@ -117,7 +121,8 @@ pub(super) fn enumerate(
         supported: true,
         truncated: false,
         charged_category: "hole_candidates".into(),
-        charged_count: candidates.len() as u64,
+        charged_count: u64::try_from(candidates.len())
+            .expect("materialized candidate count fits u64"),
         search_work: work,
         omitted,
         reason: None,

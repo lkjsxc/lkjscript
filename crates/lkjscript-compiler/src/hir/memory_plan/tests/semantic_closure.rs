@@ -94,7 +94,7 @@ fn recursive_product_self_edge_uses_local_member_ordinal() {
     let group = plan
         .witness_groups
         .iter()
-        .find(|group| group.id == record.group)
+        .find(|group| Some(group.id) == record.group)
         .expect("recursive witness group");
     assert!(group.recursive);
     assert_eq!(group.members.len(), 1);
@@ -124,7 +124,7 @@ fn mutually_recursive_product_enum_closes_one_atomic_group() {
     let group = plan
         .witness_groups
         .iter()
-        .find(|group| group.id == statement.group)
+        .find(|group| Some(group.id) == statement.group)
         .expect("mutual recursive group");
     assert!(group.recursive);
     assert_eq!(group.members.len(), 2);
@@ -134,7 +134,7 @@ fn mutually_recursive_product_enum_closes_one_atomic_group() {
         .all(|pair| pair[0].semantic_identity < pair[1].semantic_identity));
     assert!(group.members.iter().all(|member| plan
         .witness(member.witness)
-        .is_some_and(|witness| witness.group == group.id)));
+        .is_some_and(|witness| witness.group == Some(group.id))));
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn generic_recursive_tree_instantiation_is_one_self_recursive_group() {
     let group = plan
         .witness_groups
         .iter()
-        .find(|group| group.id == record.group)
+        .find(|group| Some(group.id) == record.group)
         .expect("generic recursive tree group");
     assert!(group.recursive);
     assert_eq!(group.members.len(), 1);

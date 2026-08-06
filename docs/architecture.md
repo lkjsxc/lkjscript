@@ -31,9 +31,13 @@ work counts are not admission rules. HIR memory-plan function/use/loan/call/obli
 witness-arity, destination, borrow-scope, drop-path, SSA region-product, and executable structural
 reference quotas are also gone. Producer accounting is checked observational `u64` telemetry; the
 independent verifier reconstructs exact totals and equality without an admission comparison.
-Memory witness parameters/bindings and group ordinals, local witness dependency targets, HIR
-destination/borrow-scope/drop-path/drop-glue IDs, and executable structural destination IDs use
-`u64` with checked host conversion. Placement retains only two private seal-selection thresholds;
+Source positions/spans and revision-scoped source-node indexes are `u64`; Semantic Source JSON
+requests, responses, transaction relations, and declaration/source-order references preserve that
+width. HIR source, binding, trait, implementation, place, loan, loop, match-plan/arm/path, and all
+memory-plan dense identity domains use `u64`. Memory witness parameters/bindings and group
+ordinals, local witness dependency targets, HIR destination/borrow-scope/drop-path/drop-glue IDs,
+and executable structural type/layout/representation/destination IDs use checked host conversion. Unresolved witness grouping
+and synthetic origins are typed variants rather than reserved numeric values. Placement retains only two private seal-selection thresholds;
 when they are not met, the total generic placement route is selected. They do not reject a program.
 
 The memory-plan producer indexes expression entries, destination children, source places, direct
@@ -60,8 +64,10 @@ preserves cleanup order without reconnecting an unchanged owner segment whenever
 changes. Code generation pre-indexes SSA value types, definitions, and moved call arguments, then
 maps nodes in producer order without iterating hash tables or searching whole plans.
 
-Executable-width ownership is explicit at each boundary: analyzer/HIR arity and local storage and
-codegen colors use host indexes; SSA frame-state slots use `u64` identity values. Bytecode constant
+Executable-width ownership is explicit at each boundary: analyzer/HIR arity, local storage, and
+codegen colors use host indexes. SSA function/block/value/binding/trait/implementation/place/loan
+IDs, source/origin links, frame-state slots and bytecode positions, and bytecode links use `u64`;
+all vector access converts through `usize::try_from` or an equivalent checked helper. Bytecode constant
 and global IDs, prototype constants, global-prototype metadata, call-witness/link prototype
 references, and runtime function/symbol/static-constant references use `u64`. Constant/global
 interners own hash-backed lookup indexes alongside insertion-order vectors, including exact-bit
@@ -77,9 +83,15 @@ them to `u32`. Nominal product/enum identities, source-order values, physical en
 aggregate field indexes, and product/enum/structural bytecode table and descriptor references use
 `u64` with checked host conversion. Aggregate descriptor interners pair insertion-order vectors
 with hash indexes, avoiding repeated whole-table scans without making hash iteration canonical.
-The native planner retains compact `u8`/`u16` aggregate fields only as a private specialization
-eligibility format; checked preflight declines wider shapes and automatic execution uses validated
-VM bytecode.
+Native source-function, source-origin, function, block, value, local, static-bytes, product, and
+frame-home identities are wide. Native layout identities separate builtin, structural, capability, resource, loan, unique, and
+nominal-product domains. Native reference-layout hashing includes the typed domain, full `u64`
+value, and nominal digest instead of collision-prone arithmetic tags. Native frame ordinals and trap, heap, and structural runtime-site identities remain `u64` across
+generated code and runtime dispatch; an explicit presence word carries optional trap sites without
+reserving a numeric value. Machine-code offsets, x86 frame sizes/displacements, registers, opcodes,
+and closed ABI tags remain checked narrow machine boundaries. The native planner retains compact calling-convention aggregate
+eligibility where required; checked preflight declines unsupported shapes and automatic execution
+uses validated VM bytecode.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot

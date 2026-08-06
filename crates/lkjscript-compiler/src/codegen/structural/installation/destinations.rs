@@ -37,7 +37,7 @@ fn install_structural_destinations(chunk: &mut Chunk) -> Result<()> {
             .ok_or_else(|| Error::msg("structural destination has no owner representation"))?;
         let layout = chunk
             .structural_layouts
-            .get(representation.layout.index())
+            .get_structural(representation.layout)
             .ok_or_else(|| Error::msg("structural destination layout is missing"))?;
         let mut candidates: Vec<(Option<BytecodeVariantId>, Vec<StructuralFieldMetadata>)> =
             match &layout.kind {

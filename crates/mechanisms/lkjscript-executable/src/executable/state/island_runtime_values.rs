@@ -3,16 +3,15 @@
 use super::*;
 
 impl IslandCallState<'_> {
-    pub(in crate::executable) fn dispatch_runtime_value_operation(&mut self, site_id: u32) {
+    pub(in crate::executable) fn dispatch_runtime_value_operation(&mut self, site_id: u64) {
         if self.status != 0 {
             return;
         }
-        let Some(site) = self
-            .image
-            .heap_runtime_sites()
-            .get(site_id as usize)
-            .cloned()
-        else {
+        let Ok(site_index) = usize::try_from(site_id) else {
+            self.invalidate_frame();
+            return;
+        };
+        let Some(site) = self.image.heap_runtime_sites().get(site_index).cloned() else {
             self.invalidate_frame();
             return;
         };
@@ -25,7 +24,14 @@ impl IslandCallState<'_> {
             return;
         };
         let frame = self.active_frames[frame_index];
-        let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
+        let Some(function_ordinal) = frame.function_ordinal else {
+            self.invalidate_frame();
+            return;
+        };
+        let Some(entry) = usize::try_from(function_ordinal)
+            .ok()
+            .and_then(|function| self.image.entries().get(function))
+        else {
             self.invalidate_frame();
             return;
         };

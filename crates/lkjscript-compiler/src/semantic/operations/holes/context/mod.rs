@@ -8,7 +8,7 @@ use facts::{constraints, expected_fact, identity};
 
 pub(crate) fn build(
     tree: &ValidatedSourceTree,
-    node: u32,
+    node: u64,
 ) -> Result<HoleContextResult, ProtocolError> {
     let site = super::site::find(tree, node)?;
     let program = super::validate::completed_program(&site).ok();

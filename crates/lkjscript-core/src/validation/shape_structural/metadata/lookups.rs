@@ -4,7 +4,7 @@ fn lookup_representation(
 ) -> Result<&StructuralRepresentationMetadata> {
     chunk
         .structural_representations
-        .get(id.index())
+        .get_structural(id)
         .filter(|item| item.id == id)
         .ok_or_else(|| Error::msg("bytecode structural representation reference is stale"))
 }
@@ -26,7 +26,7 @@ fn layout_fields(
 ) -> Result<Vec<StructuralFieldMetadata>> {
     let layout = chunk
         .structural_layouts
-        .get(id.index())
+        .get_structural(id)
         .filter(|item| item.id == id)
         .ok_or_else(|| Error::msg("bytecode structural layout reference is stale"))?;
     match &layout.kind {

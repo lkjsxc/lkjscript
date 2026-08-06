@@ -98,9 +98,11 @@ fn structural_value_matches_copy_representation<J: RuntimeTier>(
 ) -> Result<bool> {
     let (_, record) = invocation(vm)?.owner(value)?;
     let mode = vm.chunk.structural_representations()
-        .get(record.representation.index())
+        .get_structural(record.representation)
         .and_then(|representation| {
-            vm.chunk.structural_types().get(representation.type_id.index())
+            vm.chunk
+                .structural_types()
+                .get_structural(representation.type_id)
         })
         .map(|ty| ty.mode);
     let dynamic_owner = mode == Some(lkjscript_core::StructuralTypeMode::Immutable)

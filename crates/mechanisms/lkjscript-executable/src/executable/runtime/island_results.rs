@@ -24,7 +24,8 @@ pub(super) fn service_error(state: &mut IslandCallState<'_>, error: NativeServic
         NativeServiceError::Trap => {
             state.status = 1;
             state.trap = TrapCode::Explicit.as_u32();
-            state.payload = -1;
+            state.payload = 0;
+            state.trap_site_present = 0;
         }
         NativeServiceError::ResourceLimitExceeded => {
             state.status = 4;

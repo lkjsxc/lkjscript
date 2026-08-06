@@ -81,24 +81,27 @@ pub(super) struct PinnedSession {
 
 impl PinnedSession {
     pub fn metadata_bytes(&self) -> Option<u64> {
-        let fixed = self.state.session_identity.len()
-            + self.state.compiler_build.len()
-            + self.state.semantic_schema.len()
-            + self.state.semantic_contract.len()
-            + self.state.diagnostic_schema.len()
-            + self.state.diagnostic_contract.len()
-            + self.state.canonical_root.len()
-            + self.state.source_revision.len();
-        self.fingerprints
-            .iter()
-            .try_fold(fixed as u64, |total, item| {
-                let item_bytes = item
-                    .path
-                    .len()
-                    .checked_add(item.sha256.len())?
-                    .checked_add(std::mem::size_of_val(&item.bytes))?;
-                total.checked_add(u64::try_from(item_bytes).ok()?)
-            })
+        let fixed = [
+            self.state.session_identity.len(),
+            self.state.compiler_build.len(),
+            self.state.semantic_schema.len(),
+            self.state.semantic_contract.len(),
+            self.state.diagnostic_schema.len(),
+            self.state.diagnostic_contract.len(),
+            self.state.canonical_root.len(),
+            self.state.source_revision.len(),
+        ]
+        .into_iter()
+        .try_fold(0_usize, usize::checked_add)?;
+        let fixed = u64::try_from(fixed).ok()?;
+        self.fingerprints.iter().try_fold(fixed, |total, item| {
+            let item_bytes = item
+                .path
+                .len()
+                .checked_add(item.sha256.len())?
+                .checked_add(std::mem::size_of_val(&item.bytes))?;
+            total.checked_add(u64::try_from(item_bytes).ok()?)
+        })
     }
 }
 impl From<&SourceUnitRecord> for SourceFingerprint {

@@ -45,6 +45,8 @@ pub(crate) enum TypeExpression {
     },
 }
 
+// Measurements traverse a materialized host tree; checked u64 arithmetic documents the invariant.
+#[allow(clippy::expect_used)]
 impl TypeExpression {
     pub(crate) fn to_atoms(&self, span: SourceSpan) -> Result<Vec<SourceNode>, String> {
         let mut output = Vec::new();
@@ -110,31 +112,43 @@ impl TypeExpression {
         Ok(())
     }
 
-    pub(crate) fn measure(&self, depth: u32, counts: &mut super::ExpressionCounts) {
-        counts.nodes = counts.nodes.saturating_add(1);
+    pub(crate) fn measure(&self, depth: u64, counts: &mut super::ExpressionCounts) {
+        counts.nodes = counts
+            .nodes
+            .checked_add(1)
+            .expect("host-addressable type expressions fit u64");
         counts.depth = counts.depth.max(depth);
+        let next = depth
+            .checked_add(1)
+            .expect("host-addressable type-expression depth fits u64");
         match self {
             Self::Product { name }
             | Self::Variable { name }
-            | Self::Capability { capability: name } => {
-                counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
-            }
+            | Self::Capability { capability: name } => add_measured_string(counts, name),
             Self::Enum { name, arguments } => {
-                counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
+                add_measured_string(counts, name);
                 for argument in arguments {
-                    argument.measure(depth.saturating_add(1), counts);
+                    argument.measure(next, counts);
                 }
             }
             Self::List { element: inner } | Self::Option { value: inner } => {
-                inner.measure(depth.saturating_add(1), counts)
+                inner.measure(next, counts)
             }
             Self::Result { ok, error } => {
-                ok.measure(depth.saturating_add(1), counts);
-                error.measure(depth.saturating_add(1), counts);
+                ok.measure(next, counts);
+                error.measure(next, counts);
             }
             _ => {}
         }
     }
+}
+
+#[allow(clippy::expect_used)]
+fn add_measured_string(counts: &mut super::ExpressionCounts, value: &str) {
+    counts.string_bytes = counts
+        .string_bytes
+        .checked_add(u64::try_from(value.len()).expect("host string bytes fit u64"))
+        .expect("materialized type-expression strings fit u64");
 }
 
 fn collect_prefixed(

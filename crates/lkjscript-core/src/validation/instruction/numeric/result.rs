@@ -61,7 +61,7 @@ fn result_layout_matches(
         variants,
     }) = chunk
         .structural_layouts
-        .get(layout_id.index())
+        .get_structural(layout_id)
         .filter(|layout| layout.id == layout_id)
         .map(|layout| &layout.kind)
     else {
@@ -91,7 +91,7 @@ fn result_layout_matches(
 fn numeric_error_type_matches(chunk: &Chunk, type_id: crate::StructuralTypeId) -> bool {
     let Some(ty) = chunk
         .structural_types
-        .get(type_id.index())
+        .get_structural(type_id)
         .filter(|ty| ty.id == type_id)
     else {
         return false;
@@ -105,7 +105,7 @@ fn numeric_error_type_matches(chunk: &Chunk, type_id: crate::StructuralTypeId) -
         ..
     }) = chunk
         .structural_layouts
-        .get(ty.layout.index())
+        .get_structural(ty.layout)
         .filter(|layout| layout.id == ty.layout)
         .map(|layout| &layout.kind)
     else {

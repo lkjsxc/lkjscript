@@ -2,7 +2,7 @@ fn preferred_result_type(chunk: &Chunk, proto: &FunctionProto) -> Option<crate::
     proto.return_structural.and_then(|representation| {
         chunk
             .structural_representations
-            .get(representation.index())
+            .get_structural(representation)
             .map(|item| item.type_id)
     })
 }
@@ -21,7 +21,7 @@ fn find_result_type(
         if enum_id.bytes() != crate::RESULT_ID {
             return false;
         }
-        let Some(layout) = chunk.structural_layouts.get(ty.layout.index()) else {
+        let Some(layout) = chunk.structural_layouts.get_structural(ty.layout) else {
             return false;
         };
         let crate::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
@@ -37,7 +37,7 @@ fn find_result_type(
             };
             chunk
                 .structural_types
-                .get(type_id.index())
+                .get_structural(type_id)
                 .is_some_and(|ty| {
                     matches!(
                         ty.kind,
@@ -54,7 +54,7 @@ fn find_result_type(
         .and_then(|preferred| {
             chunk
                 .structural_types
-                .get(preferred.index())
+                .get_structural(preferred)
                 .filter(|ty| candidate(ty))
                 .map(|ty| ty.id)
         })

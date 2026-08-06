@@ -15,7 +15,7 @@ impl VerifiedTypes<'_> {
                         Ok((
                             field.ty.clone(),
                             MemoryTypePathElement::ProductField {
-                                index: index_u32(index)?,
+                                index: index_u64(index)?,
                                 name: field.name.clone(),
                             },
                         ))
@@ -30,9 +30,9 @@ impl VerifiedTypes<'_> {
                         fields.push((
                             field.ty.clone(),
                             MemoryTypePathElement::EnumVariantField {
-                                variant_index: index_u32(variant_index)?,
+                                variant_index: index_u64(variant_index)?,
                                 variant: variant.id.bytes(),
-                                field_index: index_u32(field_index)?,
+                                field_index: index_u64(field_index)?,
                                 field: field.id.bytes(),
                             },
                         ));

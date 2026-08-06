@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructuralRuntimeSite {
-    pub(super) id: u32,
+    pub(super) id: u64,
     pub(super) function: FunctionId,
     pub(super) descriptor: StructuralCallDescriptor,
     pub(super) source: Option<SourceOrigin>,
@@ -10,7 +10,7 @@ pub struct StructuralRuntimeSite {
 
 impl StructuralRuntimeSite {
     #[must_use]
-    pub const fn id(&self) -> u32 {
+    pub const fn id(&self) -> u64 {
         self.id
     }
 

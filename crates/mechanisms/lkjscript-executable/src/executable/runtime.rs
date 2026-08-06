@@ -43,11 +43,15 @@ extern "C" fn runtime_enter_function(state: *mut NativeCallState<'_>, function: 
         state.status = 5;
         return;
     };
-    let Some(entries) = state.native_entries.get_mut(index) else {
+    let Some(entries) = state
+        .native_entries
+        .get(index)
+        .and_then(|entries| entries.checked_add(1))
+    else {
         state.status = 5;
         return;
     };
-    *entries = entries.saturating_add(1);
+    state.native_entries[index] = entries;
 }
 
 extern "C" fn runtime_reserve_frame(
@@ -59,10 +63,6 @@ extern "C" fn runtime_reserve_frame(
     // SAFETY: generated canonical minimal prologues pass their invocation context
     // and current frame base before touching generated-frame storage.
     let Some(invocation) = (unsafe { state.as_mut() }) else {
-        return state;
-    };
-    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
-        invocation.invalidate_active_frame();
         return state;
     };
     invocation.reserve_frame(function_ordinal, frame_bytes, rbp);
@@ -79,10 +79,6 @@ extern "C" fn runtime_register_frame(
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
     };
-    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
-        state.invalidate_active_frame();
-        return;
-    };
     state.register_frame(function_ordinal, rbp);
 }
 
@@ -95,10 +91,6 @@ extern "C" fn runtime_unregister_frame(
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
     };
-    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
-        state.invalidate_active_frame();
-        return;
-    };
     state.unregister_frame(function_ordinal, rbp);
 }
 
@@ -106,10 +98,6 @@ extern "C" fn runtime_value_dispatch(state: *mut NativeCallState<'_>, site: u64)
     // SAFETY: generated runtime-value sites pass their retained dense site
     // identity. Raw frame homes are validated and accessed only in this module.
     let Some(state) = (unsafe { state.as_mut() }) else {
-        return;
-    };
-    let Ok(site) = u32::try_from(site) else {
-        state.invalidate_active_frame();
         return;
     };
     state.dispatch_runtime_value_operation(site);

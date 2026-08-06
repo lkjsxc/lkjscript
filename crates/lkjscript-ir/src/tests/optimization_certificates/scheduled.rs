@@ -76,12 +76,16 @@ fn widened_optimization_program() -> Program {
         let start = block
             .parameters
             .len()
-            .saturating_add(block.instructions.len()) as u32;
-        for id in start..start + 80 {
+            .checked_add(block.instructions.len())
+            .and_then(|count| u64::try_from(count).ok())
+            .expect("test value identity");
+        for id in start..start.checked_add(80).expect("test value range") {
             block.instructions.push(Instruction {
                 id: ValueId::new(id),
                 ty: SsaType::I64,
-                kind: InstructionKind::Constant(Constant::I64(i64::from(id))),
+                kind: InstructionKind::Constant(Constant::I64(
+                    i64::try_from(id).expect("test constant"),
+                )),
                 metadata: metadata(EffectSet::PURE),
             });
         }

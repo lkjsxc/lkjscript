@@ -1,7 +1,7 @@
 use crate::analyze::*;
 
 pub(super) fn verify(program: &hir::Program) -> Result<()> {
-    let mut counts = vec![0_u32; program.match_plans.len()];
+    let mut counts = vec![0_u64; program.match_plans.len()];
     for function in &program.functions {
         expression(&function.body, program, &mut counts)?;
     }
@@ -14,11 +14,11 @@ pub(super) fn verify(program: &hir::Program) -> Result<()> {
     Ok(())
 }
 
-fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Result<()> {
+fn expression(value: &Expr, program: &hir::Program, counts: &mut [u64]) -> Result<()> {
     crate::stack::grow(|| expression_inner(value, program, counts))
 }
 
-fn expression_inner(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Result<()> {
+fn expression_inner(value: &Expr, program: &hir::Program, counts: &mut [u64]) -> Result<()> {
     match &value.kind {
         ExprKind::MatchUnreachable { plan } => {
             let index = usize::try_from(plan.raw())

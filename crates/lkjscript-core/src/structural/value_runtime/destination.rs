@@ -181,11 +181,7 @@ impl StructuralValueRuntime {
             .metrics
             .destination_fields_initialized
             .saturating_add(1);
-        self.record(
-            StructuralEventKind::Initialize,
-            key.slot(),
-            u64::try_from(field).unwrap_or(u64::MAX),
-        );
+        self.record(StructuralEventKind::Initialize, key.slot(), field as u64);
         Ok(())
     }
 }

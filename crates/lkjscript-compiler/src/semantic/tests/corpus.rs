@@ -54,7 +54,9 @@ fn project_source(workspace: &Path, path: &Path) -> std::io::Result<()> {
         let rebuilt = decoded.to_source().expect("validate closed subtree");
         assert_eq!(
             crate::source::format_node_source(&rebuilt),
-            crate::source::format_node_source(source_nodes[index as usize])
+            crate::source::format_node_source(
+                source_nodes[usize::try_from(index).expect("fixture index fits host indexing")],
+            )
         );
     }
     let snapshot = crate::semantic::schema::SnapshotResult {

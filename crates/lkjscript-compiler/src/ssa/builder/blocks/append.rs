@@ -56,7 +56,7 @@ impl FunctionBuilder<'_> {
         Ok(id)
     }
 
-    pub(in crate::ssa) fn next_origin(&mut self, source: u32) -> Origin {
+    pub(in crate::ssa) fn next_origin(&mut self, source: u64) -> Origin {
         let position = self.next_position;
         self.next_position = self.next_position.saturating_add(1);
         origin(source, position)

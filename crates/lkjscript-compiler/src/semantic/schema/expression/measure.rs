@@ -1,11 +1,18 @@
 use super::{Expression, ExpressionCounts};
 
+// Measurements traverse a materialized host tree; checked u64 arithmetic documents the invariant.
+#[allow(clippy::expect_used)]
 impl Expression {
-    pub(crate) fn measure(&self, depth: u32, counts: &mut ExpressionCounts) {
-        counts.nodes = counts.nodes.saturating_add(1);
+    pub(crate) fn measure(&self, depth: u64, counts: &mut ExpressionCounts) {
+        counts.nodes = counts
+            .nodes
+            .checked_add(1)
+            .expect("host-addressable expression trees fit u64");
         counts.depth = counts.depth.max(depth);
         self.measure_strings(counts);
-        let next = depth.saturating_add(1);
+        let next = depth
+            .checked_add(1)
+            .expect("host-addressable expression depth fits u64");
         match self {
             Self::EmptyList { element } => element.measure(next, counts),
             Self::None { value_type } => value_type.measure(next, counts),
@@ -97,11 +104,14 @@ impl Expression {
             Self::Let { bindings, .. } => bindings.iter().map(|binding| binding.name.len()).sum(),
             _ => 0,
         };
-        counts.string_bytes = counts.string_bytes.saturating_add(bytes as u64);
+        counts.string_bytes = counts
+            .string_bytes
+            .checked_add(u64::try_from(bytes).expect("host string bytes fit u64"))
+            .expect("materialized expression strings fit u64");
     }
 }
 
-fn measure_many(values: &[Expression], depth: u32, counts: &mut ExpressionCounts) {
+fn measure_many(values: &[Expression], depth: u64, counts: &mut ExpressionCounts) {
     for value in values {
         value.measure(depth, counts);
     }

@@ -85,7 +85,7 @@ impl Evaluator<'_> {
             }
             EvalValue::Function(function) => Ok(SemanticValue::new(
                 expected,
-                SemanticPayload::Static(StaticStructuralLeaf::Function(u64::from(function.raw()))),
+                SemanticPayload::Static(StaticStructuralLeaf::Function(function.raw())),
             )),
             EvalValue::Path(_) if expected.kind == StructuralKind::Path => Ok(SemanticValue::new(
                 expected,
@@ -172,8 +172,6 @@ impl Evaluator<'_> {
         match value.payload {
             SemanticPayload::Inline(value) => Ok(inline_eval(value)),
             SemanticPayload::Static(StaticStructuralLeaf::Function(id)) => {
-                let id = u32::try_from(id)
-                    .map_err(|_| Flow::Trap("evaluator function identity exceeds u32".into()))?;
                 Ok(EvalValue::Function(crate::FunctionId::new(id)))
             }
             SemanticPayload::Static(StaticStructuralLeaf::Symbol(id)) => {

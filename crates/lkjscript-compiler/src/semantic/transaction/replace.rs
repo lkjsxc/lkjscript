@@ -7,12 +7,18 @@ pub(crate) fn resolve(
     tree: &ValidatedSourceTree,
     key: &str,
     entity_fingerprint: &str,
-    node_index: u32,
+    node_index: u64,
     node_fingerprint: &str,
     replacement: &Expression,
 ) -> Result<ResolvedOperation, ProtocolError> {
     let entity = crate::semantic::operations::entity::read(tree, key, Some(entity_fingerprint))?;
-    let node = tree.nodes().get(node_index as usize).ok_or_else(|| {
+    let host_index = usize::try_from(node_index).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            format!("node {node_index} is not host-addressable"),
+        )
+    })?;
+    let node = tree.nodes().get(host_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             format!("unknown node {node_index}"),
@@ -32,7 +38,7 @@ pub(crate) fn resolve(
     }
     let source_nodes = crate::semantic::tree::source_nodes(tree);
     let source = source_nodes
-        .get(node_index as usize)
+        .get(host_index)
         .ok_or_else(|| error(ProtocolErrorCode::UnknownNode, "node source is unavailable"))?;
     if crate::semantic::tree::fingerprint(source) != node_fingerprint {
         return Err(error(
@@ -40,14 +46,18 @@ pub(crate) fn resolve(
             "node fingerprint is stale",
         ));
     }
-    let root = source_nodes
-        .get(owner.node().index() as usize)
-        .ok_or_else(|| {
-            error(
-                ProtocolErrorCode::UnknownNode,
-                "entity source is unavailable",
-            )
-        })?;
+    let owner_index = usize::try_from(owner.node().index()).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "entity source identity is not host-addressable",
+        )
+    })?;
+    let root = source_nodes.get(owner_index).ok_or_else(|| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "entity source is unavailable",
+        )
+    })?;
     let path = super::positions::path_from_owner(tree, owner.node().index(), node_index)?;
     if !super::positions::is_expression_path(root, &path) {
         return Err(error(

@@ -21,7 +21,7 @@ fn string_utf8_view(
     require_same_type(chunk, representation, expected.id, proto, instruction)?;
     let ty = chunk
         .structural_types
-        .get(expected.type_id.index())
+        .get_structural(expected.type_id)
         .ok_or_else(|| {
             instruction_error(
                 proto,

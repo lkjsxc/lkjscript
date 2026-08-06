@@ -97,7 +97,7 @@ pub(super) fn candidate(
     let cost = node_cost(&expression);
     let effects = super::super::candidate_support::effects(site, &expression);
     let rank = CandidateRank {
-        category: category as u16,
+        category: category.rank(),
         effect_cost: effects.len() as u16,
         ownership_cost: u16::from(!matches!(
             super::super::types::ownership(ty),
@@ -174,8 +174,8 @@ fn source(expression: &Expression, span: crate::source::SourceSpan) -> Option<St
         .map(|node| crate::source::format_node_source(&node))
 }
 
-fn node_cost(expression: &Expression) -> u32 {
+fn node_cost(expression: &Expression) -> u64 {
     let mut counts = ExpressionCounts::default();
     expression.measure(1, &mut counts);
-    u32::try_from(counts.nodes).unwrap_or(u32::MAX)
+    counts.nodes
 }

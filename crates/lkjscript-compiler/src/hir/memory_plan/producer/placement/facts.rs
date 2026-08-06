@@ -5,7 +5,7 @@ pub(super) struct PlacementFact<'a> {
     pub(super) function: MemoryFunctionId,
     pub(super) expression: &'a Expr,
     pub(super) parent: Option<MemoryExpressionId>,
-    pub(super) child_index: u32,
+    pub(super) child_index: u64,
 }
 
 pub(super) fn collect_placement_facts(program: &hir::Program) -> Result<Vec<PlacementFact<'_>>> {
@@ -13,7 +13,7 @@ pub(super) fn collect_placement_facts(program: &hir::Program) -> Result<Vec<Plac
     for (index, function) in program.functions.iter().enumerate() {
         walk_placement(
             &function.body,
-            MemoryFunctionId::new(index_u32(index)?),
+            MemoryFunctionId::new(index_u64(index)?),
             None,
             0,
             &mut output,
@@ -21,7 +21,7 @@ pub(super) fn collect_placement_facts(program: &hir::Program) -> Result<Vec<Plac
     }
     walk_placement(
         &program.main.body,
-        MemoryFunctionId::new(index_u32(program.functions.len())?),
+        MemoryFunctionId::new(index_u64(program.functions.len())?),
         None,
         0,
         &mut output,
@@ -33,7 +33,7 @@ fn walk_placement<'a>(
     expression: &'a Expr,
     function: MemoryFunctionId,
     parent: Option<MemoryExpressionId>,
-    child_index: u32,
+    child_index: u64,
     output: &mut Vec<PlacementFact<'a>>,
 ) -> Result<()> {
     crate::stack::grow(|| walk_placement_inner(expression, function, parent, child_index, output))
@@ -43,10 +43,10 @@ fn walk_placement_inner<'a>(
     expression: &'a Expr,
     function: MemoryFunctionId,
     parent: Option<MemoryExpressionId>,
-    child_index: u32,
+    child_index: u64,
     output: &mut Vec<PlacementFact<'a>>,
 ) -> Result<()> {
-    let id = MemoryExpressionId::new(index_u32(output.len())?);
+    let id = MemoryExpressionId::new(index_u64(output.len())?);
     output.push(PlacementFact {
         id,
         function,
@@ -55,7 +55,7 @@ fn walk_placement_inner<'a>(
         child_index,
     });
     for (index, child) in placement_children(expression).into_iter().enumerate() {
-        walk_placement(child, function, Some(id), index_u32(index)?, output)?;
+        walk_placement(child, function, Some(id), index_u64(index)?, output)?;
     }
     Ok(())
 }

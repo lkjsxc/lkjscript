@@ -24,14 +24,18 @@ pub(crate) fn read(
 ) -> Result<EntityRecord, ProtocolError> {
     let declaration = find(tree, key)?;
     let syntax = crate::semantic::tree::source_nodes(tree);
-    let source = syntax
-        .get(declaration.node().index() as usize)
-        .ok_or_else(|| {
-            error(
-                ProtocolErrorCode::UnknownNode,
-                "declaration node is unavailable",
-            )
-        })?;
+    let declaration_index = usize::try_from(declaration.node().index()).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "declaration node is not host-addressable",
+        )
+    })?;
+    let source = syntax.get(declaration_index).ok_or_else(|| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "declaration node is unavailable",
+        )
+    })?;
     let fingerprint = crate::semantic::tree::fingerprint(source);
     if expected.is_some_and(|value| value != fingerprint) {
         return Err(error(

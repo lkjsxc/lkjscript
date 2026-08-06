@@ -113,7 +113,7 @@ impl JitUniqueRuntime {
     fn loan(&mut self, value: NativeLoan) -> Result<Loan, NativeServiceError> {
         let word = value.opaque_word();
         let generation = u32::try_from(word >> 32).map_err(|_| self.reject())?;
-        let index = word as u32 as usize;
+        let index = usize::try_from(word & u64::from(u32::MAX)).map_err(|_| self.reject())?;
         let loan = self
             .loans
             .get(index)

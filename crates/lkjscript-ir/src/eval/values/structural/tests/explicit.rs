@@ -185,7 +185,7 @@ fn affine_structural_copy_is_rejected_before_evaluation() {
     ));
 }
 
-fn drop_action(value: u32, glue: DropGlueIdentity) -> FailureCleanupAction {
+fn drop_action(value: u64, glue: DropGlueIdentity) -> FailureCleanupAction {
     FailureCleanupAction::DropOwner {
         place: None,
         value: ValueId::new(value),

@@ -15,7 +15,7 @@ pub(super) fn verify_uses_and_constants(plan: &HirMemoryPlan, facts: &Facts<'_>)
         return Err(Error::msg("HIR memory use/constant coverage mismatch"));
     }
     for (index, (actual, expected)) in plan.uses.iter().zip(uses).enumerate() {
-        if actual.id.raw() != index_u32(index)?
+        if actual.id.raw() != index_u64(index)?
             || actual.function != expected.0
             || actual.expression != expected.1
             || actual.binding != expected.2
@@ -25,7 +25,7 @@ pub(super) fn verify_uses_and_constants(plan: &HirMemoryPlan, facts: &Facts<'_>)
         }
     }
     for (index, (actual, expected)) in plan.constants.iter().zip(constants).enumerate() {
-        if actual.id.raw() != index_u32(index)?
+        if actual.id.raw() != index_u64(index)?
             || actual.function != expected.0
             || actual.expression != expected.1
             || actual.value != expected.2
@@ -38,7 +38,7 @@ pub(super) fn verify_uses_and_constants(plan: &HirMemoryPlan, facts: &Facts<'_>)
     Ok(())
 }
 
-fn verified_use(kind: &hir::ExprKind) -> Option<(u32, MemoryUseKind)> {
+fn verified_use(kind: &hir::ExprKind) -> Option<(u64, MemoryUseKind)> {
     match kind {
         hir::ExprKind::Load(reference) => Some((reference.binding.raw(), MemoryUseKind::Load)),
         hir::ExprKind::Move { binding, .. } => Some((binding.binding.raw(), MemoryUseKind::Move)),

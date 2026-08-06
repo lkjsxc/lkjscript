@@ -12,7 +12,7 @@ pub(super) fn lower_function(
     modes: &BytesModes,
     static_bytes: &HashMap<Vec<u8>, lkjscript_native::StaticBytesIdentity>,
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<(u32, String)>,
+    explicit_traps: &mut Vec<(u64, String)>,
 ) -> Result<(), LoweringError> {
     let value_types = collect_value_types(program, function, layouts, modes)?;
     let mut locals = Vec::with_capacity(value_types.len());

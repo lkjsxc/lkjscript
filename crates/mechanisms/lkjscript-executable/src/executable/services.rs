@@ -70,13 +70,13 @@ impl Default for NativeInvocationConfig {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NativeEntryCount {
-    pub(super) source_function: u32,
+    pub(super) source_function: u64,
     pub(super) entries: u64,
 }
 
 impl NativeEntryCount {
     #[must_use]
-    pub const fn source_function(self) -> u32 {
+    pub const fn source_function(self) -> u64 {
         self.source_function
     }
 

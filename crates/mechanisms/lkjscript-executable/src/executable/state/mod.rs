@@ -19,14 +19,14 @@ pub(super) const NATIVE_STACK_GUARD_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy)]
 pub(super) struct ActiveFrame {
-    pub(super) function_ordinal: u32,
+    pub(super) function_ordinal: Option<u64>,
     pub(super) rbp: *mut u8,
     pub(super) reserved_bytes: usize,
     pub(super) value_homes: usize,
 }
 
 const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
-    function_ordinal: u32::MAX,
+    function_ordinal: None,
     rbp: std::ptr::null_mut(),
     reserved_bytes: 0,
     value_homes: 0,
@@ -34,7 +34,7 @@ const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
 
 #[derive(Clone, Copy)]
 pub(super) struct PendingFrameReservation {
-    pub(super) function_ordinal: u32,
+    pub(super) function_ordinal: u64,
     pub(super) rbp: *mut u8,
     pub(super) frame_bytes: usize,
     pub(super) value_homes: usize,
@@ -42,12 +42,13 @@ pub(super) struct PendingFrameReservation {
 
 #[repr(C)]
 pub(super) struct NativeCallState<'a> {
-    // These first three fields are the stable runtime ABI consumed directly by
-    // generated code. The native contract adds frame operations without changing the
-    // semantic or runtime ABI versions.
+    // These first four fields are the stable runtime ABI consumed directly by
+    // generated code. `trap_site_present` makes the full-width site optional without
+    // reserving a numeric sentinel.
     pub(super) status: u32,
     pub(super) trap: u32,
     pub(super) payload: i64,
+    pub(super) trap_site_present: u64,
     pub(super) _scratch_integer_arguments: [u64; 5],
     pub(super) _scratch_float_arguments: [u64; 2],
     pub(super) poll_fuel_remaining: u64,

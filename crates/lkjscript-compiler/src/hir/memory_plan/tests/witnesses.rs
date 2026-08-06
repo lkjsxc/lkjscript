@@ -23,7 +23,7 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     let second = derive(&hir)?;
     assert_eq!(
         first.id.to_hex(),
-        "605661b09d5ec7c7c09a8f7698a1dddb4fa3afeb69095a880996c8234443b4b3"
+        "cbeb37fc572600c76de5a0fc9eca69c4615d80c94247a50509f63b0bdce03769"
     );
     assert_eq!(
         witness(&first, &MemoryType::Product("record".into()))?

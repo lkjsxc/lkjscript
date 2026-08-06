@@ -13,7 +13,7 @@ pub(super) fn verify_function(
     block_index(function, entry)?;
 
     for (index, fact) in function.values.iter().enumerate() {
-        if fact.id.function != function.id || fact.id.index as usize != index {
+        if fact.id.function != function.id || fact.id.host_index().unwrap_or(usize::MAX) != index {
             return Err(VerificationError::InvalidValue(fact.id));
         }
         if let ValueDefinition::Parameter(parameter) = fact.definition {
@@ -23,7 +23,8 @@ pub(super) fn verify_function(
         }
     }
     for (index, local) in function.locals.iter().enumerate() {
-        if local.id.function != function.id || local.id.index as usize != index {
+        if local.id.function != function.id || local.id.host_index().unwrap_or(usize::MAX) != index
+        {
             return Err(VerificationError::InvalidLocal(local.id));
         }
     }
@@ -179,7 +180,7 @@ pub(super) fn transfer_sets(
     let mut locals = in_locals.to_vec();
     for instruction in &function.blocks[block_index_value].instructions {
         transfer_instruction(function, instruction, &mut values, &mut locals)?;
-        if let Some(value) = values.get_mut(instruction.output.index as usize) {
+        if let Some(value) = values.get_mut(instruction.output.host_index().unwrap_or(usize::MAX)) {
             *value = true;
         }
     }

@@ -105,16 +105,16 @@ impl StructuralValueRuntime {
         self.metrics.destination_cleanup_work = self
             .metrics
             .destination_cleanup_work
-            .saturating_add(u64::from(report.nodes_released));
+            .saturating_add(report.nodes_released);
         self.record(
             StructuralEventKind::DestinationAbort,
             key.slot(),
-            u64::try_from(report.initialized_fields).unwrap_or(u64::MAX),
+            report.initialized_fields as u64,
         );
         self.record(
             StructuralEventKind::DestinationCleanup,
             key.slot(),
-            u64::from(report.nodes_released),
+            report.nodes_released,
         );
         if self.cleanup_reports.len() == self.limits.max_cleanup_reports as usize {
             self.cleanup_reports.pop_front();

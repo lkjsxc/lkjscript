@@ -79,7 +79,7 @@ fn forged_stale_wrong_operation_operand_and_nondominating_certificates_fail_clos
     };
 
     let mut stale = optimized.certificate().clone();
-    stale.records[0].value = ValueId::new(u32::MAX);
+    stale.records[0].value = ValueId::new(u64::MAX);
     reject(stale);
 
     let mut wrong_operation = optimized.certificate().clone();

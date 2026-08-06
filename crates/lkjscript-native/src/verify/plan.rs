@@ -65,9 +65,11 @@ pub(super) fn verify_plan_inner(
                 | Operation::StaticStringConst(identity, _) => Some(identity),
                 _ => None,
             };
-            if static_identity
-                .is_some_and(|identity| static_bytes.get(identity.index() as usize).is_none())
-            {
+            if static_identity.is_some_and(|identity| {
+                identity
+                    .host_index()
+                    .is_none_or(|index| static_bytes.get(index).is_none())
+            }) {
                 return Err(VerificationError::TypeMismatch("static bytes constant"));
             }
         }

@@ -3,6 +3,17 @@ use crate::{FailureCleanupAction, FailureCleanupNode, UniqueValueKind};
 
 const WIDE_COUNT: usize = 300;
 
+#[test]
+fn malformed_reference_above_u32_rejects_before_table_indexing() {
+    let mut chunk = Chunk::new();
+    chunk
+        .main
+        .emit_op_u64(Op::LoadConst, u64::from(u32::MAX) + 1);
+    chunk.main.emit(Op::Return);
+    let message = error(chunk);
+    assert!(message.contains("constant"), "{message}");
+}
+
 fn encoded(value: usize) -> u64 {
     u64::try_from(value).expect("test width fits u64")
 }

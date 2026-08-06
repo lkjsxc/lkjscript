@@ -3,11 +3,11 @@ use crate::*;
 
 const SCALE_BLOCKS: usize = 10_000;
 
-fn scalar_instruction(id: u32, value: i64) -> Instruction {
+fn scalar_instruction(id: u64, value: i64) -> Instruction {
     constant(id, value)
 }
 
-fn bool_instruction(id: u32, value: bool) -> Instruction {
+fn bool_instruction(id: u64, value: bool) -> Instruction {
     Instruction {
         id: ValueId::new(id),
         ty: SsaType::Bool,
@@ -18,11 +18,11 @@ fn bool_instruction(id: u32, value: bool) -> Instruction {
 
 fn branch(id: usize, target: usize) -> Block {
     Block {
-        id: BlockId::new(u32::try_from(id).expect("test BlockId geometry fits u32")),
+        id: BlockId::new(u64::try_from(id).expect("test BlockId geometry fits u64")),
         parameters: Vec::new(),
         instructions: Vec::new(),
         terminator: Terminator::Branch {
-            target: BlockId::new(u32::try_from(target).expect("test BlockId geometry fits u32")),
+            target: BlockId::new(u64::try_from(target).expect("test BlockId geometry fits u64")),
             arguments: Vec::new(),
         },
         metadata: block_metadata(),
@@ -49,7 +49,7 @@ fn linear_function(block_count: usize) -> Function {
     for id in 0..block_count {
         let mut block = if id + 1 == block_count {
             Block {
-                id: BlockId::new(u32::try_from(id).expect("test BlockId geometry fits u32")),
+                id: BlockId::new(u64::try_from(id).expect("test BlockId geometry fits u64")),
                 parameters: Vec::new(),
                 instructions: Vec::new(),
                 terminator: Terminator::Return(ValueId::new(0)),
@@ -105,17 +105,17 @@ fn branching_function() -> Function {
             Terminator::ConditionalBranch {
                 condition: ValueId::new(0),
                 true_target: BlockId::new(
-                    u32::try_from(merge + 1).expect("test BlockId geometry fits u32"),
+                    u64::try_from(merge + 1).expect("test BlockId geometry fits u64"),
                 ),
                 true_arguments: Vec::new(),
                 false_target: BlockId::new(
-                    u32::try_from(merge + 2).expect("test BlockId geometry fits u32"),
+                    u64::try_from(merge + 2).expect("test BlockId geometry fits u64"),
                 ),
                 false_arguments: Vec::new(),
             }
         };
         blocks.push(Block {
-            id: BlockId::new(u32::try_from(merge).expect("test BlockId geometry fits u32")),
+            id: BlockId::new(u64::try_from(merge).expect("test BlockId geometry fits u64")),
             parameters: Vec::new(),
             instructions: Vec::new(),
             terminator,
@@ -185,7 +185,7 @@ fn verifier_rejects_high_block_nondominating_use_and_missing_edge() {
 
     let mut missing_edge = linear_function(SCALE_BLOCKS);
     missing_edge.blocks[SCALE_BLOCKS - 2].terminator = Terminator::Branch {
-        target: BlockId::new(u32::MAX),
+        target: BlockId::new(u64::from(u32::MAX) + 1),
         arguments: Vec::new(),
     };
     let error = verify(program(missing_edge))

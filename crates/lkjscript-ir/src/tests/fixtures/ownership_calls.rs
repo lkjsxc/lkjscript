@@ -4,7 +4,7 @@ pub(crate) use implicit::implicit_call_caller;
 use super::*;
 use crate::*;
 
-pub(super) fn drop_action(place: u32, value: u32) -> FailureCleanupAction {
+pub(super) fn drop_action(place: u64, value: u64) -> FailureCleanupAction {
     FailureCleanupAction::DropOwner {
         place: Some(PlaceId::new(place)),
         value: ValueId::new(value),

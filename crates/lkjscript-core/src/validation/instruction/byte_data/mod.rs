@@ -1,5 +1,5 @@
 use super::{instruction_error, types::*, Kind, OwnerIdentity, State};
-use crate::{Chunk, DecodedInstruction, Error, FunctionProto, Op, Result};
+use crate::{Chunk, DecodedInstruction, Error, FunctionProto, Op, Result, StructuralSliceExt};
 
 pub(super) fn apply(
     chunk: &Chunk,

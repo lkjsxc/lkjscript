@@ -2,7 +2,7 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::{
     SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
-    StructuralLimits, StructuralSnapshotLimits, StructuralType,
+    StructuralLimits, StructuralSliceExt, StructuralSnapshotLimits, StructuralType,
 };
 
 #[test]
@@ -32,7 +32,10 @@ fn compiler_authenticates_general_enum_rehydration() {
         .expect("installed enum witness");
     assert!(witness.facts.capabilities.sealed_region);
     assert!(witness.facts.capabilities.process_codec);
-    let layout = &chunk.structural_layouts()[enum_type.layout.index()];
+    let layout = chunk
+        .structural_layouts()
+        .get_structural(enum_type.layout)
+        .expect("enum structural layout");
     let StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
         panic!("enum layout required")
     };

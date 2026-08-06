@@ -10,7 +10,7 @@ pub(super) fn instruction(out: &mut Encoder, value: &Instruction) {
         kind,
         metadata: instruction_metadata,
     } = value;
-    out.u32(id.raw());
+    out.wide(id.raw());
     types::ty(out, ty);
     kind::kind_value(out, kind);
     instruction_meta(out, instruction_metadata);
@@ -75,22 +75,22 @@ pub(super) fn frame_state(out: &mut Encoder, value: &FrameState) {
         locals,
         operand_stack,
     } = value;
-    out.u32(*bytecode_position);
+    out.wide(*bytecode_position);
     out.sequence(locals, |out, value| {
         let FrameLocal {
             binding,
             slot,
             value,
         } = value;
-        out.u32(binding.raw());
+        out.wide(binding.raw());
         out.u64(*slot);
-        out.u32(value.raw());
+        out.wide(value.raw());
     });
     ids(out, operand_stack);
 }
 fn place_value(out: &mut Encoder, place: PlaceId, value: ValueId) {
-    out.u32(place.raw());
-    out.u32(value.raw());
+    out.wide(place.raw());
+    out.wide(value.raw());
 }
 fn representation_value(
     out: &mut Encoder,
@@ -98,14 +98,14 @@ fn representation_value(
     value: ValueId,
 ) {
     out.u64(representation.raw());
-    out.u32(value.raw());
+    out.wide(value.raw());
 }
 fn scalar(out: &mut Encoder, tag: u16, value: ValueId) {
     out.tag(tag);
-    out.u32(value.raw());
+    out.wide(value.raw());
 }
 fn ids(out: &mut Encoder, values: &[ValueId]) {
-    out.sequence(values, |out, value| out.u32(value.raw()));
+    out.sequence(values, |out, value| out.wide(value.raw()));
 }
 fn product_field(
     out: &mut Encoder,
@@ -118,8 +118,8 @@ fn product_field(
     out.tag(tag);
     out.u64(product.raw());
     out.u64(field);
-    out.u32(value.raw());
-    out.option(replacement.as_ref(), |out, value| out.u32(value.raw()));
+    out.wide(value.raw());
+    out.option(replacement.as_ref(), |out, value| out.wide(value.raw()));
 }
 fn enum_header(out: &mut Encoder, id: EnumId, variant: VariantId, layout: RuntimeLayoutId) {
     out.fixed(&id.bytes());

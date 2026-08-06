@@ -6,7 +6,7 @@ pub(super) enum LayoutShape {
     Bool,
     I64,
     F64,
-    RegionProduct(u32, [u8; 32]),
+    RegionProduct(u64, [u8; 32]),
     List(u64, crate::LayoutIdentity, u64),
 }
 
@@ -47,16 +47,11 @@ pub(super) fn verify_layout_identities(
             };
             let (identity, shape) = match reference_type {
                 ReferenceType::RegionProduct(identity, digest) => {
-                    let Some(product) = identity.get().checked_sub(32) else {
+                    let Some(product) = identity.product_id() else {
                         return Err(VerificationError::TypeMismatch(
-                            "structural layout identity",
+                            "structural layout identity domain",
                         ));
                     };
-                    if u16::try_from(product).is_err() {
-                        return Err(VerificationError::TypeMismatch(
-                            "structural layout identity",
-                        ));
-                    }
                     (identity, LayoutShape::RegionProduct(product, digest))
                 }
                 ReferenceType::List(identity, semantic, element, element_semantic) => {

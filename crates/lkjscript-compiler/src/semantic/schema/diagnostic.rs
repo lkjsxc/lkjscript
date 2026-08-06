@@ -47,7 +47,7 @@ pub(crate) enum Certainty {
 #[serde(deny_unknown_fields)]
 pub(crate) struct RelatedRecord {
     pub label: String,
-    pub node: Option<u32>,
+    pub node: Option<u64>,
     pub source: String,
     pub span: SpanRecord,
 }
@@ -56,7 +56,7 @@ pub(crate) struct RelatedRecord {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum RepairRecord {
     RefreshSnapshot,
-    ReplaceName { node: u32, name: String },
+    ReplaceName { node: u64, name: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -68,7 +68,7 @@ pub(crate) struct DiagnosticRecord {
     pub severity: Severity,
     pub category: DiagnosticCategory,
     pub certainty: Certainty,
-    pub primary_node: Option<u32>,
+    pub primary_node: Option<u64>,
     pub primary_source: String,
     pub primary_span: SpanRecord,
     pub related: Vec<RelatedRecord>,

@@ -112,7 +112,7 @@ pub(super) fn value_index(
     if value.function != function.id {
         return Err(VerificationError::InvalidValue(value));
     }
-    let index = value.index as usize;
+    let index = value.host_index().unwrap_or(usize::MAX);
     if function.values.get(index).map(|fact| fact.id) != Some(value) {
         return Err(VerificationError::InvalidValue(value));
     }
@@ -126,7 +126,7 @@ pub(super) fn local_index(
     if local.function != function.id {
         return Err(VerificationError::InvalidLocal(local));
     }
-    let index = local.index as usize;
+    let index = local.host_index().unwrap_or(usize::MAX);
     if function.locals.get(index).map(|fact| fact.id) != Some(local) {
         return Err(VerificationError::InvalidLocal(local));
     }
@@ -140,7 +140,7 @@ pub(super) fn block_index(
     if block.function != function.id {
         return Err(VerificationError::InvalidTarget(block));
     }
-    let index = block.index as usize;
+    let index = block.host_index().unwrap_or(usize::MAX);
     if function.blocks.get(index).map(|item| item.id) != Some(block) {
         return Err(VerificationError::InvalidTarget(block));
     }

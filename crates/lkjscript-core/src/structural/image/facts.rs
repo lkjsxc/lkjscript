@@ -1,6 +1,6 @@
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct TreeFacts {
-    pub nodes: u32,
+    pub nodes: u64,
     pub bytes: u64,
     pub string_bytes: u64,
     pub path_bytes: u64,

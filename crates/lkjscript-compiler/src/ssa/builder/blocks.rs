@@ -12,8 +12,8 @@ impl FunctionBuilder<'_> {
         block_origin: Origin,
         loop_header: bool,
     ) -> Result<BlockId> {
-        let raw = u32::try_from(self.blocks.len())
-            .map_err(|_| Error::msg("SSA block count exceeds u32"))?;
+        let raw = u64::try_from(self.blocks.len())
+            .map_err(|_| Error::msg("SSA block count exceeds u64"))?;
         let id = BlockId::new(raw);
         self.blocks.push(PendingBlock {
             id,
@@ -167,7 +167,7 @@ impl FunctionBuilder<'_> {
         self.next_value = self
             .next_value
             .checked_add(1)
-            .ok_or_else(|| Error::msg("SSA value count exceeds u32"))?;
+            .ok_or_else(|| Error::msg("SSA value count exceeds u64"))?;
         self.value_types.push(ty.clone());
         Ok(id)
     }

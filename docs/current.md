@@ -73,9 +73,16 @@ arguments, destinations, borrow scopes, drop paths, type facts, type-graph edges
 descriptor nodes/bytes, witnesses, witness groups/dependencies, structural metadata tables,
 region-product metadata, or deterministic type-SCC work. Producer accounting and independent
 verifier reconstruction use checked observational `u64` totals and require exact equality; they do
-not compare a program count with an admission maximum. Memory witness parameters, bindings,
-group ordinals, local dependency targets, HIR destination/borrow-scope/drop-path/drop-glue IDs, and
-bytecode structural destination IDs use `u64` with checked host indexing. The two retained seal
+not compare a program count with an admission maximum. Source bytes, lines, columns, spans, revision-scoped node indexes, declaration/source order, and
+Semantic Source JSON node relations use `u64`; source slicing and node lookup convert to host
+`usize` before access. HIR source, binding, trait, implementation, place, loan, loop, match-plan,
+match-arm/path, and every memory-plan dense identity use `u64`. Memory witness parameters,
+bindings, group ordinals, local dependency targets, HIR destination/borrow-scope/drop-path/drop-glue
+IDs, and bytecode structural type/layout/representation/destination IDs use the same checked
+host-index boundary. SSA
+function, block, value, binding, trait, implementation, place, loan, origin, frame-state bytecode
+position, and bytecode-link identities are canonical `u64`; synthetic origins and unresolved
+witness group membership are typed states rather than numeric sentinels. The two retained seal
 thresholds select a total generic placement fallback and cannot reject a program. Uses, loan ends,
 direct calls, expression entries, source places, destination children, borrow scopes, drop paths,
 declaration metadata, and structural destination metadata are preindexed instead of repeatedly
@@ -208,16 +215,17 @@ may build elsewhere, but no other host or native target is currently claimed as 
 
 ## Known gaps
 
-- Source spans, positions, binding/place/loan IDs, and snapshot-local node indexes remain `u32`,
-  so source structures beyond those addressable ranges fail at a representation boundary. HIR
-  function, expression, entry, use, constant, call, obligation, and type-fact IDs also remain
-  `u32`; HIR destination, borrow-scope, drop-path, and drop-glue IDs are now wide. SSA function,
-  block, value, binding, trait, implementation, place, and loan identities remain `u32`. These are
-  actual source/IR representation gaps, not count policies or semantic laws. Core structural type,
-  layout, and representation IDs carry `u64`, but some existing host lookup helpers still map an
-  unrepresentable ID to a failed lookup sentinel instead of returning a typed host-width error;
-  structural destination and memory-witness paths use checked conversion. Compact native witness,
-  aggregate, and cleanup fields remain checked specialization eligibility boundaries; automatic
+- Source, HIR, memory-plan, and SSA dense identities are `u64` and use checked host indexing.
+  Revision-scoped `NodeId` is deliberately still a bootstrap opaque dense identity: widening its
+  wire/index representation prevents aliasing and saturation, but does not provide the edit-stable
+  logical semantic identity required in Phase 5. Core structural-image node IDs and ranges are
+  wide, but pre-existing semantic-DAG snapshot IDs, structural runtime slot/generation keys,
+  scheduler IDs, machine-code offsets, register numbers, opcode bytes, OS CPU numbers, and
+  SQLite/protocol fields retain narrow representations. Native frame-function ordinals, trap and
+  runtime-site identities, and source/native function links remain `u64` through the generated-code
+  runtime ABI. The machine and OS fields are checked external/ABI boundaries; semantic-DAG and structural-runtime identities
+  remain representation gaps to widen or segment. Compact native calling-convention aggregate,
+  witness, and cleanup fields remain checked specialization eligibility boundaries; automatic
   execution retains the validated generic VM route when native planning declines a shape.
   Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
   constant-size, cleanup-node/range, witness, region-product, or structural-operation table

@@ -16,7 +16,7 @@ pub(super) fn ty(id: u64, kind: NativeStructuralKind) -> StructuralTypeIdentity 
 
 pub(super) fn declare_owner(
     plan: &mut MachinePlanBuilder,
-    source: u32,
+    source: u64,
     value_type: StructuralTypeIdentity,
 ) -> Result<FunctionId, PlanError> {
     plan.declare_function(

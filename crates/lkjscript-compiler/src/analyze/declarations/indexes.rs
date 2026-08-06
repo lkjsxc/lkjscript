@@ -4,7 +4,7 @@ impl Analyzer {
     pub(in crate::analyze) fn new(program: &ValidatedSourceTree) -> Result<Self> {
         let mut sources = Vec::with_capacity(program.files().len());
         for file in program.files() {
-            let raw = u32::try_from(sources.len())
+            let raw = u64::try_from(sources.len())
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             sources.push(Source {
                 id: SourceId::new(raw),
@@ -45,7 +45,7 @@ impl Analyzer {
 
     pub(in crate::analyze) fn install_core_traits(&mut self) -> Result<()> {
         for core in CoreTrait::ALL {
-            let raw = u32::try_from(self.traits.len())
+            let raw = u64::try_from(self.traits.len())
                 .map_err(|_| Error::msg("too many traits for HIR TraitId"))?;
             let id = TraitId::new(raw);
             let name = core.name().to_string();
@@ -66,7 +66,7 @@ impl Analyzer {
     ) -> Result<()> {
         for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
-                u32::try_from(source_index)
+                u64::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
             );
             for form in &file.forms {
@@ -108,7 +108,7 @@ impl Analyzer {
                     );
                 }
                 let id =
-                    TraitId::new(u32::try_from(self.traits.len()).map_err(|_| {
+                    TraitId::new(u64::try_from(self.traits.len()).map_err(|_| {
                         self.error(source, "too many trait declarations for TraitId")
                     })?);
                 self.trait_names.insert(trait_name.clone(), id);
@@ -128,7 +128,7 @@ impl Analyzer {
         program: &ValidatedSourceTree,
     ) -> Result<()> {
         for (source_index, file) in program.files().iter().enumerate() {
-            let source_raw = u32::try_from(source_index)
+            let source_raw = u64::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
             for form in &file.forms {

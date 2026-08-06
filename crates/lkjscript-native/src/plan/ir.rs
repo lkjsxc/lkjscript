@@ -124,7 +124,7 @@ pub(crate) enum Terminator {
     Return(ValueId),
     Trap {
         trap: TrapCode,
-        site: Option<u32>,
+        site: Option<u64>,
     },
     Exit(ValueId),
     Outcome(RuntimeOutcome),

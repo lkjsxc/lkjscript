@@ -54,7 +54,7 @@ fn layout_identity_exhaustion_is_structured() {
         region_products: std::collections::HashMap::new(),
         structural: Default::default(),
         witness_slots: Default::default(),
-        next: u32::MAX,
+        next: u64::MAX,
     };
     assert!(matches!(layouts.intern(&ty), Err(LoweringError { .. })));
 }
@@ -110,7 +110,7 @@ fn native_preflight_declines_quadratic_materialization_of_shared_cleanup_chains(
     let cleanup = Some(FailureCleanupRoots::single(
         next.expect("nonempty cleanup chain"),
     ));
-    let instructions = (0..220_u32)
+    let instructions = (0..220_u64)
         .map(|id| Instruction {
             id: ValueId::new(id),
             ty: SsaType::Unit,

@@ -68,7 +68,7 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
         return Err(Error::msg("HIR memory plan does not cover every function"));
     }
     for (index, function) in program.functions.iter().enumerate() {
-        let id = MemoryFunctionId::new(index_u32(index)?);
+        let id = MemoryFunctionId::new(index_u64(index)?);
         let actual = plan
             .function(id)
             .ok_or_else(|| Error::msg("HIR memory plan is missing a dense function identity"))?;
@@ -86,7 +86,7 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
             ));
         }
     }
-    let main_id = MemoryFunctionId::new(index_u32(program.functions.len())?);
+    let main_id = MemoryFunctionId::new(index_u64(program.functions.len())?);
     let main = plan
         .function(main_id)
         .ok_or_else(|| Error::msg("HIR memory plan is missing main"))?;
@@ -135,10 +135,6 @@ fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
         return Err(Error::msg("HIR memory-plan bytes drop glue mismatch"));
     }
     Ok(())
-}
-
-fn index_u32(index: usize) -> Result<u32> {
-    u32::try_from(index).map_err(|_| Error::msg("HIR memory verifier index exceeds u32"))
 }
 
 fn index_u64(index: usize) -> Result<u64> {

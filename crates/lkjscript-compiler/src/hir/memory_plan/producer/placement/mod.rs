@@ -22,7 +22,7 @@ pub(super) fn derive_value_placements(
     let estimate_index = EstimateIndex::new(program)?;
     let mut entries_by_expression = HashMap::new();
     let mut witnesses_by_id = HashMap::new();
-    let mut uses_by_binding: HashMap<(MemoryFunctionId, u32), Vec<&MemoryUse>> = HashMap::new();
+    let mut uses_by_binding: HashMap<(MemoryFunctionId, u64), Vec<&MemoryUse>> = HashMap::new();
     for entry in entries {
         if let MemorySubject::Expression { expression, .. } = entry.subject {
             if entries_by_expression.insert(expression, entry).is_some() {
@@ -151,7 +151,7 @@ pub(super) fn derive_value_placements(
 }
 
 fn relevant_uses<'a>(
-    uses: &'a HashMap<(MemoryFunctionId, u32), Vec<&'a MemoryUse>>,
+    uses: &'a HashMap<(MemoryFunctionId, u64), Vec<&'a MemoryUse>>,
     function: MemoryFunctionId,
     binding: Option<BindingId>,
 ) -> &'a [&'a MemoryUse] {

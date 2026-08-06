@@ -147,6 +147,6 @@ impl Expression {
 #[derive(Default)]
 pub(crate) struct ExpressionCounts {
     pub nodes: u64,
-    pub depth: u32,
+    pub depth: u64,
     pub string_bytes: u64,
 }

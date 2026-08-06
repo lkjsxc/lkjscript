@@ -20,7 +20,7 @@ pub use identity::{
     RootClass, RootKey, SemanticTypeIdentity, StructuralRuntimeId,
 };
 pub use image::{
-    CheckedU32Range, LocalNodeId, SemanticChildren, StructuralImage,
+    CheckedU64Range, LocalNodeId, SemanticChildren, StructuralImage,
     StructuralImageConversionFailure, StructuralNode, StructuralNodePayload, StructuralNodeRecord,
     StructuralNodeView,
 };
@@ -59,5 +59,5 @@ pub use value_runtime::{
     StructuralOwnerKind, StructuralProjection, StructuralPublishFailure, StructuralSealResult,
     StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
     StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey,
-    DEFAULT_STRUCTURAL_TREE_NODES, STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
+    DEFAULT_STRUCTURAL_TREE_NODES,
 };

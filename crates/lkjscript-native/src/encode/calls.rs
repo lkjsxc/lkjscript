@@ -80,10 +80,11 @@ impl FunctionEncoder<'_> {
         descriptor: &crate::HeapCallDescriptor,
         arguments: &[ValueId],
     ) -> Result<(), NativeError> {
-        let site_id = to_u32(self.heap_runtime_sites.len())?;
+        let site_id = u64::try_from(self.heap_runtime_sites.len())
+            .map_err(|_| EncodeError::LimitExceeded("u64 heap runtime-site width"))?;
         self.runtime_calls.insert(RuntimeCallSlot::HeapDispatch);
         self.load_integer_register(7, self.context_offset())?;
-        self.load_integer_register_immediate(6, u64::from(site_id))?;
+        self.load_integer_register_immediate(6, site_id)?;
         self.emit_call_target(RelocationTarget::Runtime(RuntimeCallSlot::HeapDispatch))?;
         self.emit(&[0x41, 0xff, 0xd3])?;
         let argument_homes = arguments

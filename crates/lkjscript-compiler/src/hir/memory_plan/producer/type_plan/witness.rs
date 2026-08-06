@@ -47,8 +47,8 @@ impl TypePlanner<'_> {
         let index = self.witnesses.len();
         self.witnesses.push(MemoryWitness {
             id,
-            group: MemoryWitnessGroupId::from_bytes([0; 32]),
-            ordinal: u64::MAX,
+            group: None,
+            ordinal: None,
             facts,
         });
         self.witness_indices.insert(id, index);

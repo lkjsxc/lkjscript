@@ -61,7 +61,7 @@ pub(crate) fn collect_values(
     let mut types = vec![SsaType::Unit; values.len()];
     let mut definitions = HashMap::with_capacity(values.len());
     for raw in 0..values.len() {
-        let raw = u32::try_from(raw).map_err(|_| IrError::new("SSA ValueId count exceeds u32"))?;
+        let raw = u64::try_from(raw).map_err(|_| IrError::new("SSA ValueId exceeds u64"))?;
         let id = ValueId::new(raw);
         let Some((ty, definition)) = values.remove(&id) else {
             return fail(format!(
@@ -69,7 +69,10 @@ pub(crate) fn collect_values(
                 function.name, raw
             ));
         };
-        let Some(slot) = types.get_mut(usize::try_from(raw).unwrap_or(usize::MAX)) else {
+        let Some(slot) = usize::try_from(raw)
+            .ok()
+            .and_then(|index| types.get_mut(index))
+        else {
             return fail("SSA ValueId indexing failed");
         };
         *slot = ty;

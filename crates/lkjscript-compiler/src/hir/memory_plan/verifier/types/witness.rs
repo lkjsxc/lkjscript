@@ -10,7 +10,7 @@ impl VerifiedTypes<'_> {
         drop_glue: Option<MemoryDropGlueId>,
         drop_path: Option<MemoryDropPathId>,
     ) -> Result<MemoryWitnessId> {
-        let index = MemoryTypeFactId::new(index_u32(self.expected.len())?);
+        let index = MemoryTypeFactId::new(index_u64(self.expected.len())?);
         let actual = index
             .index()
             .and_then(|index| self.plan.witnesses.get(index))

@@ -51,7 +51,7 @@ impl StructuralProjectionDescriptor {
     }
 
     pub(crate) fn canonical(&self) -> bool {
-        self.view_type.is_valid() && self.path.len() <= u16::MAX as usize
+        self.view_type.is_valid() && self.path.len() <= usize::from(u16::MAX)
     }
 }
 
@@ -123,7 +123,7 @@ impl StructuralAggregateDescriptor {
         self.identity != 0
             && self.value_type.is_valid()
             && right_kind
-            && self.fields.len() <= u16::MAX as usize
+            && self.fields.len() <= usize::from(u16::MAX)
             && self.fields.iter().all(|field| field.is_valid())
     }
 }

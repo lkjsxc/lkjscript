@@ -4,7 +4,7 @@ use super::*;
 pub(super) fn drop_copy_parameters(
     function: &Function,
     block: &Block,
-    returned: ValueId,
+    returned: Option<ValueId>,
     native_block: lkjscript_native::BlockId,
     locals: &[LocalId],
     value_types: &[ValueType],
@@ -12,7 +12,7 @@ pub(super) fn drop_copy_parameters(
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     for parameter in &block.parameters {
-        if parameter.id == returned
+        if Some(parameter.id) == returned
             || !matches!(
                 value_type(value_types, parameter.id)?,
                 ValueType::StructuralOwner(_)

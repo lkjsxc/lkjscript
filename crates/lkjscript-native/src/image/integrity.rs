@@ -25,12 +25,11 @@ impl InstallableImage {
             return Err(ImageIntegrityError::MetadataAccountingMismatch);
         }
 
-        if self.static_bytes.len() > u32::MAX as usize {
-            return Err(ImageIntegrityError::StaticBytes);
-        }
         let mut functions = HashSet::new();
         for entry in &self.entries {
-            if entry.offset >= entry.end || entry.end as usize > self.bytes.len() {
+            if entry.offset >= entry.end
+                || usize::try_from(entry.end).map_or(true, |end| end > self.bytes.len())
+            {
                 return Err(ImageIntegrityError::EntryRange);
             }
             if !functions.insert(entry.function) {
@@ -48,7 +47,8 @@ impl InstallableImage {
         self.validate_execution_domain(&runtime_calls)?;
         let mut relocated_runtime_calls = HashSet::new();
         for relocation in &self.relocations {
-            let start = relocation.offset as usize;
+            let start = usize::try_from(relocation.offset)
+                .map_err(|_| ImageIntegrityError::RelocationRange)?;
             let end = start
                 .checked_add(relocation.kind.width())
                 .ok_or(ImageIntegrityError::RelocationRange)?;
@@ -94,7 +94,7 @@ impl InstallableImage {
         }
         super::heap_sites::verify_heap_sites(self, &runtime_calls)?;
         for (expected_id, site) in self.structural_runtime_sites.iter().enumerate() {
-            if site.id as usize != expected_id
+            if usize::try_from(site.id).ok() != Some(expected_id)
                 || !functions.contains(&site.function)
                 || !site.descriptor.canonical()
             {

@@ -28,8 +28,8 @@ impl Producer<'_> {
         self.uses
             .try_reserve(1)
             .map_err(|_| Error::host("HIR memory-plan use allocation failed"))?;
-        let id = MemoryUseId::new(u32::try_from(self.uses.len())
-            .map_err(|_| Error::msg("HIR memory-plan use identity exceeds u32"))?);
+        let id = MemoryUseId::new(u64::try_from(self.uses.len())
+            .map_err(|_| Error::msg("HIR memory-plan use identity exceeds u64"))?);
         self.uses.push(MemoryUse { id, function: self.current_function,
             expression, binding: binding.raw(), kind });
         Ok(())
@@ -48,7 +48,7 @@ fn recursive_fields(
                 .filter(|item| item.name == *name)
                 .ok_or_else(|| Error::msg("recursive memory plan lost product"))?;
             item.fields.iter().enumerate().map(|(index, field)| Ok((field.ty.clone(),
-                MemoryTypePathElement::ProductField { index: index_u32(index)?,
+                MemoryTypePathElement::ProductField { index: index_u64(index)?,
                     name: field.name.clone() }))).collect()
         }
         DeclarationKey::Enum(id) => {
@@ -60,8 +60,8 @@ fn recursive_fields(
             for (variant_index, variant) in item.variants.iter().enumerate() {
                 for (field_index, field) in variant.fields.iter().enumerate() {
                     fields.push((field.ty.clone(), MemoryTypePathElement::EnumVariantField {
-                        variant_index: index_u32(variant_index)?, variant: variant.id.bytes(),
-                        field_index: index_u32(field_index)?, field: field.id.bytes(),
+                        variant_index: index_u64(variant_index)?, variant: variant.id.bytes(),
+                        field_index: index_u64(field_index)?, field: field.id.bytes(),
                     }));
                 }
             }

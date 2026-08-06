@@ -24,9 +24,10 @@ pub use bytecode::{
     StructuralAggregateFieldRef, StructuralDestinationFieldRef, StructuralDestinationId,
     StructuralDestinationMetadata, StructuralFieldMetadata, StructuralFieldRoute,
     StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata, StructuralPayloadRef,
-    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
-    StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata, StructuralTypeMode,
-    StructuralValueCategory, StructuralVariantLayout, UniqueValueKind, VariantFieldId, VariantId,
+    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralSliceExt,
+    StructuralStorage, StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata,
+    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, UniqueValueKind,
+    VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use limits::{
@@ -61,7 +62,7 @@ pub use resource_table::{
     ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ResourceTokenParts, ScopeId,
 };
 pub use structural::{
-    product_layout_identity, product_semantic_identity, ByteVectorKey, BytesKey, CheckedU32Range,
+    product_layout_identity, product_semantic_identity, ByteVectorKey, BytesKey, CheckedU64Range,
     DestinationCleanupReport, DomainClass, DomainKey, InlineStructuralValue, InvalidUniqueKeyWord,
     InvalidUniqueStoreLimits, LayoutIdentity, LocalNodeId, PathKey, PoolId, PoolMetrics,
     PoolPartition, RegionMetrics, RegionOwner, RegionProductArena, RegionProductArenaId,
@@ -84,7 +85,7 @@ pub use structural::{
     StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics,
     StructuralViewKey, TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError,
     UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
-    DEFAULT_STRUCTURAL_TREE_NODES, STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
+    DEFAULT_STRUCTURAL_TREE_NODES,
 };
 pub use validation::{
     bind_prepared_identity, validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity,

@@ -2,7 +2,7 @@ use super::*;
 use crate::*;
 
 pub(crate) fn assert_cross_function_duplicate_loans() {
-    let borrowed_function = |id: u32, name: &str| {
+    let borrowed_function = |id: u64, name: &str| {
         let mut function = Function {
             id: FunctionId::new(id),
             name: name.into(),

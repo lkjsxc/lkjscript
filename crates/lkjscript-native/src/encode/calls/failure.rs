@@ -61,7 +61,10 @@ impl FunctionEncoder<'_> {
                     self.emit_runtime_call_target(*slot)?;
                 }
                 crate::plan::FailureCleanupOperation::Structural(descriptor) => {
-                    let site_id = to_u32(self.structural_runtime_sites.len())?;
+                    let site_id =
+                        u64::try_from(self.structural_runtime_sites.len()).map_err(|_| {
+                            EncodeError::LimitExceeded("u64 structural runtime-site width")
+                        })?;
                     self.structural_runtime_sites.push(structural_runtime_site(
                         site_id,
                         self.function.id,
@@ -71,7 +74,7 @@ impl FunctionEncoder<'_> {
                     self.runtime_calls
                         .insert(RuntimeCallSlot::StructuralDispatch);
                     self.load_integer_register(7, self.context_offset())?;
-                    self.load_integer_register_immediate(6, u64::from(site_id))?;
+                    self.load_integer_register_immediate(6, site_id)?;
                     self.load_integer_register(2, self.local_offset(cleanup.local)?)?;
                     self.load_integer_register_immediate(1, 0)?;
                     self.load_integer_register_immediate(8, 0)?;

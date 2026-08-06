@@ -13,13 +13,13 @@ impl<'a> Resolver<'a> {
         let local_places = local_slots
             .iter()
             .map(|(binding, slot)| {
-                u32::try_from(*slot)
+                u64::try_from(*slot)
                     .map(|slot| (*binding, PlaceId::new(slot)))
-                    .map_err(|_| Error::msg("parameter ownership place exceeds u32"))
+                    .map_err(|_| Error::msg("parameter ownership place exceeds u64"))
             })
             .collect::<Result<HashMap<_, _>>>()?;
-        let next_place = u32::try_from(parameter_count)
-            .map_err(|_| Error::msg("parameter ownership place count exceeds u32"))?;
+        let next_place = u64::try_from(parameter_count)
+            .map_err(|_| Error::msg("parameter ownership place count exceeds u64"))?;
         Ok(Self {
             analyzer,
             origin,

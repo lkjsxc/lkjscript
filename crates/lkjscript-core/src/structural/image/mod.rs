@@ -10,7 +10,7 @@ mod validation;
 
 pub use children::SemanticChildren;
 pub use model::{
-    CheckedU32Range, LocalNodeId, StructuralImage, StructuralNode, StructuralNodePayload,
+    CheckedU64Range, LocalNodeId, StructuralImage, StructuralNode, StructuralNodePayload,
     StructuralNodeRecord, StructuralNodeView,
 };
 

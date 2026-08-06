@@ -12,8 +12,8 @@ fn exact_utf8_byte_line_column_spans_are_retained() {
     let span = string.span();
     let start = source.find("string-literal/\n").expect("string open");
     let end = source.find("\n/string-literal").expect("string close") + "\n/string-literal".len();
-    assert_eq!(span.start().byte() as usize, start);
-    assert_eq!(span.end().byte() as usize, end);
+    assert_eq!(usize::try_from(span.start().byte()).ok(), Some(start));
+    assert_eq!(usize::try_from(span.end().byte()).ok(), Some(end));
     assert_eq!(span.start().line(), 9);
     assert_eq!(span.start().column(), 1);
     assert_eq!(span.end().line(), 11);

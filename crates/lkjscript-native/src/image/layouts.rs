@@ -39,10 +39,9 @@ pub(super) fn valid_frame_homes(frame: &FrameFacts, entry: &EntryMetadata) -> bo
         match home.kind {
             FrameHomeKind::Local(index) if index < frame.local_slots => {}
             FrameHomeKind::Value(index) if index < frame.value_slots => {
-                if entry
-                    .signature
-                    .parameters()
-                    .get(index as usize)
+                if usize::try_from(index)
+                    .ok()
+                    .and_then(|host_index| entry.signature.parameters().get(host_index))
                     .is_some_and(|parameter| *parameter != home.value_type)
                 {
                     return false;
@@ -56,10 +55,8 @@ pub(super) fn valid_frame_homes(frame: &FrameFacts, entry: &EntryMetadata) -> bo
 
 pub(super) fn canonical_home_displacement(frame: &FrameFacts, kind: FrameHomeKind) -> Option<i32> {
     let slot = match kind {
-        FrameHomeKind::Local(index) => u64::from(index).checked_add(1)?,
-        FrameHomeKind::Value(index) => u64::from(frame.local_slots)
-            .checked_add(u64::from(index))?
-            .checked_add(1)?,
+        FrameHomeKind::Local(index) => index.checked_add(1)?,
+        FrameHomeKind::Value(index) => frame.local_slots.checked_add(index)?.checked_add(1)?,
     };
     let bytes = slot.checked_add(1)?.checked_mul(8)?;
     i32::try_from(bytes).ok()?.checked_neg()

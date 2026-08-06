@@ -42,9 +42,9 @@ fn copy_structural_representation(
 ) -> bool {
     chunk
         .structural_representations
-        .get(representation.index())
+        .get_structural(representation)
         .filter(|item| item.id == representation)
-        .and_then(|item| chunk.structural_types.get(item.type_id.index()))
+        .and_then(|item| chunk.structural_types.get_structural(item.type_id))
         .is_some_and(|item| item.mode == crate::StructuralTypeMode::Copy)
 }
 

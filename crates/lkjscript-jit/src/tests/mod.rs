@@ -25,7 +25,7 @@ fn core_traits() -> Vec<TraitMetadata> {
     .into_iter()
     .enumerate()
     .map(|(index, (name, role))| TraitMetadata {
-        id: TraitId::new(index as u32),
+        id: TraitId::new(u64::try_from(index).expect("test trait index")),
         name: name.into(),
         role,
         source: None,

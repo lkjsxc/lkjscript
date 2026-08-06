@@ -1,7 +1,7 @@
 fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
     let mut bytes = usize::from(chunk.memory_plan.is_some()) * 32;
     for (index, layout) in chunk.structural_layouts.iter().enumerate() {
-        if layout.id.index() != index {
+        if layout.id.index() != Some(index) {
             return Err(Error::msg("bytecode structural LayoutIds are not dense"));
         }
         bytes = add(bytes, 35, "structural metadata byte size")?;
@@ -36,7 +36,7 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
     }
     let mut witnesses = std::collections::HashSet::with_capacity(chunk.structural_types.len());
     for (index, ty) in chunk.structural_types.iter().enumerate() {
-        if ty.id.index() != index {
+        if ty.id.index() != Some(index) {
             return Err(Error::msg("bytecode structural TypeIds are not dense"));
         }
         if !ty.witness.is_resolved() {
@@ -51,7 +51,7 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
         }
         let layout = chunk
             .structural_layouts
-            .get(ty.layout.index())
+            .get_structural(ty.layout)
             .filter(|layout| layout.id == ty.layout)
             .ok_or_else(|| Error::msg("bytecode structural type references a missing layout"))?;
         let matches = matches!(

@@ -6,14 +6,14 @@ impl<'a> Producer<'a> {
         self.charge_functions(function_count)?;
         for (index, function) in self.program.functions.iter().enumerate() {
             let id = MemoryFunctionId::new(
-                u32::try_from(index)
-                    .map_err(|_| Error::msg("HIR memory-plan function identity exceeds u32"))?,
+                u64::try_from(index)
+                    .map_err(|_| Error::msg("HIR memory-plan function identity exceeds u64"))?,
             );
             self.build_function(id, function)?;
         }
         let main_id = MemoryFunctionId::new(
-            u32::try_from(self.program.functions.len())
-                .map_err(|_| Error::msg("HIR memory-plan main identity exceeds u32"))?,
+            u64::try_from(self.program.functions.len())
+                .map_err(|_| Error::msg("HIR memory-plan main identity exceeds u64"))?,
         );
         self.build_main(main_id)?;
         self.finish_loans()?;
@@ -59,8 +59,8 @@ impl<'a> Producer<'a> {
     fn build_signatures(&mut self) -> Result<()> {
         for (index, function) in self.program.functions.iter().enumerate() {
             let function_id = MemoryFunctionId::new(
-                u32::try_from(index)
-                    .map_err(|_| Error::msg("HIR memory signature identity exceeds u32"))?,
+                u64::try_from(index)
+                    .map_err(|_| Error::msg("HIR memory signature identity exceeds u64"))?,
             );
             let binding = self.program.binding(function.binding).ok_or_else(|| {
                 Error::msg("HIR memory signature references unknown function binding")
@@ -107,8 +107,8 @@ impl<'a> Producer<'a> {
             });
         }
         let main_id = MemoryFunctionId::new(
-            u32::try_from(self.program.functions.len())
-                .map_err(|_| Error::msg("HIR main memory signature identity exceeds u32"))?,
+            u64::try_from(self.program.functions.len())
+                .map_err(|_| Error::msg("HIR main memory signature identity exceeds u64"))?,
         );
         let main_parameters = self.program.main.param_types.clone().into_iter()
             .map(|ty| self.planned_parameter_mode(&ty, false)).collect::<Result<Vec<_>>>()?;
@@ -138,8 +138,8 @@ impl<'a> Producer<'a> {
             let parameter_entry = self.add_entry(
                 MemorySubject::Parameter {
                     function: id,
-                    index: u32::try_from(index)
-                        .map_err(|_| Error::msg("HIR memory parameter index exceeds u32"))?,
+                    index: u64::try_from(index)
+                        .map_err(|_| Error::msg("HIR memory parameter index exceeds u64"))?,
                     binding: binding.raw(),
                     place: place.raw(),
                 },

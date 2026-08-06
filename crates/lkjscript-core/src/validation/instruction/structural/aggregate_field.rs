@@ -36,7 +36,7 @@ fn aggregate_field_copy(
             field_result_kind(chunk, reference.result, owner, false, proto, instruction)?
         }
         StructuralFieldRoute::Structural(type_id) => {
-            let ty = chunk.structural_types.get(type_id.index()).ok_or_else(|| {
+            let ty = chunk.structural_types.get_structural(type_id).ok_or_else(|| {
                 instruction_error(
                     proto,
                     instruction.op(),
@@ -144,7 +144,7 @@ fn result_representation(
     })?;
     let item = chunk
         .structural_representations
-        .get(id.index())
+        .get_structural(id)
         .filter(|item| item.id == id)
         .ok_or_else(|| {
             instruction_error(

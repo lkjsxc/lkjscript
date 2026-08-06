@@ -7,7 +7,7 @@ fn require_owner_representation(
         != representation(chunk, expected).and_then(|item| {
             chunk
                 .structural_types()
-                .get(item.type_id.index())
+                .get_structural(item.type_id)
                 .map(|ty| ty.runtime_type)
                 .ok_or_else(|| Error::msg("structural operation type metadata is stale"))
         })?
@@ -89,7 +89,7 @@ fn physical_tag(
         .ok_or_else(|| Error::msg("structural enum type metadata is missing"))?;
     let layout = chunk
         .structural_layouts()
-        .get(ty.layout.index())
+        .get_structural(ty.layout)
         .filter(|layout| layout.id == ty.layout)
         .ok_or_else(|| Error::msg("structural enum layout metadata is missing"))?;
     let lkjscript_core::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {

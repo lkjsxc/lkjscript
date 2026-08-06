@@ -8,7 +8,7 @@ impl Analyzer {
         let mut functions = Vec::new();
         let mut main = None;
         for (source_index, file) in program.files().iter().enumerate() {
-            let source_raw = u32::try_from(source_index)
+            let source_raw = u64::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
             let is_root = file.path == program.root_path();

@@ -31,7 +31,7 @@ pub enum EntryDecision {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarInvocationOutcome {
     Returned(NativeValue),
-    Trapped(TrapCode, Option<u32>),
+    Trapped(TrapCode, Option<u64>),
     Exited(i64),
     DeadlineExceeded,
     ResourceLimitExceeded(ResourceLimitKind),

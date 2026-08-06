@@ -68,7 +68,7 @@ pub(super) fn verify_destinations(
                 drop_path,
             })
             .collect::<Vec<_>>();
-        let initialized_order: Vec<u32> = (0..field_count).collect();
+        let initialized_order: Vec<u64> = (0..field_count).collect();
         let (kind, execution, execution_cutover) = match type_fact.derived.closure.class {
             MemoryClosureClass::Deterministic => (
                 MemoryDestinationKind::CutoverRequired,
@@ -141,7 +141,7 @@ fn verified_destination_shape(
     product_indices: &HashMap<hir::ProductId, usize>,
     enum_indices: &HashMap<hir::EnumId, usize>,
     expression: &hir::Expr,
-) -> Result<(u32, Option<MemoryActivePayload>)> {
+) -> Result<(u64, Option<MemoryActivePayload>)> {
     match &expression.kind {
         hir::ExprKind::ProductValue { product, fields } => {
             let declared = product_indices
@@ -152,7 +152,7 @@ fn verified_destination_shape(
             if declared.fields.len() != fields.len() {
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION product fields"));
             }
-            Ok((index_u32(fields.len())?, None))
+            Ok((index_u64(fields.len())?, None))
         }
         hir::ExprKind::EnumValue {
             enum_id,
@@ -170,7 +170,7 @@ fn verified_destination_shape(
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION enum fields"));
             }
             Ok((
-                index_u32(fields.len())?,
+                index_u64(fields.len())?,
                 Some(MemoryActivePayload {
                     variant: variant.bytes(),
                     source_order: declared.source_order,

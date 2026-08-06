@@ -1,114 +1,47 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TraitId(u32);
+macro_rules! dense_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(u64);
 
-impl TraitId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
+        impl $name {
+            pub(crate) const fn new(raw: u64) -> Self {
+                Self(raw)
+            }
 
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
+            #[allow(dead_code)]
+            pub const fn raw(self) -> u64 {
+                self.0
+            }
 
-    #[allow(dead_code)]
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
-    }
+            #[allow(dead_code)]
+            pub(crate) fn index(self) -> Option<usize> {
+                usize::try_from(self.0).ok()
+            }
+        }
+    };
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ImplId(u32);
+dense_id!(TraitId);
+dense_id!(ImplId);
+dense_id!(PlaceId);
+dense_id!(LoanId);
+dense_id!(LoopId);
+dense_id!(SourceId);
+dense_id!(BindingId);
 
-impl ImplId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
+#[cfg(test)]
+mod tests {
+    use super::{BindingId, ImplId, LoanId, PlaceId, SourceId, TraitId};
 
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PlaceId(u32);
-
-impl PlaceId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
-
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LoanId(u32);
-
-impl LoanId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
-
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LoopId(u32);
-
-impl LoopId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SourceId(u32);
-
-impl SourceId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
-
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BindingId(u32);
-
-impl BindingId {
-    pub(crate) const fn new(raw: u32) -> Self {
-        Self(raw)
-    }
-
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    pub(crate) fn index(self) -> Option<usize> {
-        usize::try_from(self.0).ok()
+    #[test]
+    fn dense_identity_domains_preserve_values_above_u32() {
+        let high = u64::from(u32::MAX) + 1;
+        assert_eq!(SourceId::new(high).raw(), high);
+        assert_eq!(BindingId::new(high + 1).raw(), high + 1);
+        assert_eq!(PlaceId::new(high + 2).raw(), high + 2);
+        assert_eq!(LoanId::new(high + 3).raw(), high + 3);
+        assert_eq!(TraitId::new(high + 4).raw(), high + 4);
+        assert_eq!(ImplId::new(high + 5).raw(), high + 5);
+        assert_ne!(BindingId::new(high).raw(), BindingId::new(0).raw());
     }
 }

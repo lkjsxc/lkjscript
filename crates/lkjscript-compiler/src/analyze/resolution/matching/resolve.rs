@@ -40,8 +40,8 @@ impl Resolver<'_> {
         let charges = super::charges::plan(&patterns, planned.len())?;
         self.check_usefulness(&planned, &scrutinee, &charges)?;
         let plan_id = MatchPlanId::new(
-            u32::try_from(self.analyzer.match_plans.len())
-                .map_err(|_| self.error("match plan count exceeds u32"))?,
+            u64::try_from(self.analyzer.match_plans.len())
+                .map_err(|_| self.error("match plan identity exceeds u64"))?,
         );
         let (tests, projections, bindings) = super::plan::flatten_plan(&planned);
         let mut edges = (1..planned.len())
@@ -98,7 +98,7 @@ impl Resolver<'_> {
                 return Err(self.error("arms/ contains only arm/ forms"));
             }
             let id =
-                u16::try_from(index).map_err(|_| self.error("match has more than 65535 arms"))?;
+                u64::try_from(index).map_err(|_| self.error("match arm identity exceeds u64"))?;
             self.scopes.push(HashMap::new());
             self.next_slot = arm_slot;
             let pattern = self.parse_match_pattern(pattern_form, &scrutinee.ty)?;

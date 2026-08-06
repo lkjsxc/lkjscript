@@ -6,14 +6,14 @@ pub(super) struct ExprFact<'a> {
     pub function: MemoryFunctionId,
     pub expression: &'a Expr,
     pub parent: Option<super::super::MemoryExpressionId>,
-    pub child_index: u32,
+    pub child_index: u64,
 }
 
 pub(super) struct Facts<'a> {
     pub expressions: Vec<ExprFact<'a>>,
-    pub children: HashMap<(MemoryExpressionId, u32), usize>,
-    pub uses_by_binding: HashMap<(MemoryFunctionId, u32), Vec<usize>>,
-    pub loads_by_binding: HashMap<(MemoryFunctionId, u32), Vec<usize>>,
+    pub children: HashMap<(MemoryExpressionId, u64), usize>,
+    pub uses_by_binding: HashMap<(MemoryFunctionId, u64), Vec<usize>>,
+    pub loads_by_binding: HashMap<(MemoryFunctionId, u64), Vec<usize>>,
     pub bodies: Vec<super::super::MemoryExpressionId>,
     pub parameters: u64,
     pub places: u64,
@@ -35,21 +35,21 @@ impl<'a> Facts<'a> {
     pub(super) fn child(
         &self,
         parent: MemoryExpressionId,
-        child_index: u32,
+        child_index: u64,
     ) -> Option<&ExprFact<'a>> {
         self.children
             .get(&(parent, child_index))
             .and_then(|index| self.expressions.get(*index))
     }
 
-    pub(super) fn binding_use_indices(&self, function: MemoryFunctionId, binding: u32) -> &[usize] {
+    pub(super) fn binding_use_indices(&self, function: MemoryFunctionId, binding: u64) -> &[usize] {
         self.uses_by_binding
             .get(&(function, binding))
             .map(Vec::as_slice)
             .unwrap_or_default()
     }
 
-    pub(super) fn binding_loads(&self, function: MemoryFunctionId, binding: u32) -> &[usize] {
+    pub(super) fn binding_loads(&self, function: MemoryFunctionId, binding: u64) -> &[usize] {
         self.loads_by_binding
             .get(&(function, binding))
             .map(Vec::as_slice)
@@ -74,7 +74,7 @@ pub(super) fn collect(program: &hir::Program) -> Result<Facts<'_>> {
         steps: 0,
     };
     for (index, function) in program.functions.iter().enumerate() {
-        let id = MemoryFunctionId::new(index_u32(index)?);
+        let id = MemoryFunctionId::new(index_u64(index)?);
         add(&mut facts.parameters, function.params.len())?;
         add(&mut facts.places, function.param_places.len())?;
         for parameter in &function.params {
@@ -91,7 +91,7 @@ pub(super) fn collect(program: &hir::Program) -> Result<Facts<'_>> {
         let body = walk(&function.body, id, None, 0, &mut facts)?;
         facts.bodies.push(body);
     }
-    let main_id = MemoryFunctionId::new(index_u32(program.functions.len())?);
+    let main_id = MemoryFunctionId::new(index_u64(program.functions.len())?);
     add(&mut facts.parameters, program.main.params.len())?;
     add(&mut facts.places, program.main.param_places.len())?;
     let body = walk(&program.main.body, main_id, None, 0, &mut facts)?;
@@ -103,7 +103,7 @@ fn walk<'a>(
     expression: &'a Expr,
     function: MemoryFunctionId,
     parent: Option<super::super::MemoryExpressionId>,
-    child_index: u32,
+    child_index: u64,
     facts: &mut Facts<'a>,
 ) -> Result<super::super::MemoryExpressionId> {
     crate::stack::grow(|| walk_inner(expression, function, parent, child_index, facts))
@@ -113,10 +113,10 @@ fn walk_inner<'a>(
     expression: &'a Expr,
     function: MemoryFunctionId,
     parent: Option<super::super::MemoryExpressionId>,
-    child_index: u32,
+    child_index: u64,
     facts: &mut Facts<'a>,
 ) -> Result<super::super::MemoryExpressionId> {
-    let id = super::super::MemoryExpressionId::new(index_u32(facts.expressions.len())?);
+    let id = super::super::MemoryExpressionId::new(index_u64(facts.expressions.len())?);
     let expression_index = facts.expressions.len();
     facts.expressions.push(ExprFact {
         id,
@@ -223,7 +223,7 @@ fn walk_inner<'a>(
                     child,
                     function,
                     Some(id),
-                    index_u32(index.saturating_add(1))?,
+                    index_u64(index.saturating_add(1))?,
                     facts,
                 )?;
             }
@@ -243,9 +243,9 @@ fn walk_inner<'a>(
                 if affine(&binding.value.ty) && !binding.static_bytes {
                     add(&mut facts.obligations, 1)?;
                 }
-                walk(&binding.value, function, Some(id), index_u32(index)?, facts)?;
+                walk(&binding.value, function, Some(id), index_u64(index)?, facts)?;
             }
-            walk(body, function, Some(id), index_u32(bindings.len())?, facts)?;
+            walk(body, function, Some(id), index_u64(bindings.len())?, facts)?;
         }
         ExprKind::MutableLocal { initial, body, .. } => {
             add(&mut facts.places, 1)?;
@@ -273,7 +273,7 @@ fn walk_children<'a>(
     facts: &mut Facts<'a>,
 ) -> Result<()> {
     for (index, child) in children.iter().enumerate() {
-        walk(child, function, Some(parent), index_u32(index)?, facts)?;
+        walk(child, function, Some(parent), index_u64(index)?, facts)?;
     }
     Ok(())
 }

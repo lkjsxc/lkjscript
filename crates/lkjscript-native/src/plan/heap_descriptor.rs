@@ -8,7 +8,7 @@ impl HeapCallDescriptor {
         allocation: AllocationClass,
         store: StoreClass,
     ) -> Result<Self, PlanError> {
-        if input_types.len() > 16 || input_types.len() != operation.expected_arity() {
+        if input_types.len() > 16 || Some(input_types.len()) != operation.expected_arity() {
             return Err(PlanError::InvalidHeapCall);
         }
         let descriptor = Self {

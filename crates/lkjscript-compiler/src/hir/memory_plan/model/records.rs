@@ -1,6 +1,6 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MemoryOrigin {
-    pub source: u32,
+    pub source: u64,
     pub expression: Option<MemoryExpressionId>,
 }
 
@@ -9,27 +9,27 @@ pub enum MemorySubject {
     Expression {
         expression: MemoryExpressionId,
         parent: Option<MemoryExpressionId>,
-        child_index: u32,
+        child_index: u64,
         kind: MemoryExpressionKind,
     },
     Parameter {
         function: MemoryFunctionId,
-        index: u32,
-        binding: u32,
-        place: u32,
+        index: u64,
+        binding: u64,
+        place: u64,
     },
     Result {
         function: MemoryFunctionId,
     },
     Place {
         function: MemoryFunctionId,
-        place: u32,
-        binding: u32,
+        place: u64,
+        binding: u64,
     },
     Loan {
         function: MemoryFunctionId,
-        place: u32,
-        loan: u32,
+        place: u64,
+        loan: u64,
         expression: MemoryExpressionId,
     },
     Constant {
@@ -93,8 +93,8 @@ pub struct FunctionMemorySignature {
 pub struct FunctionMemoryPlan {
     pub id: MemoryFunctionId,
     pub name: String,
-    pub binding: Option<u32>,
-    pub source: u32,
+    pub binding: Option<u64>,
+    pub source: u64,
     pub signature: FunctionMemorySignature,
     pub parameter_entries: Vec<MemoryEntryId>,
     pub result_entry: MemoryEntryId,
@@ -115,7 +115,7 @@ pub struct MemoryUse {
     pub id: MemoryUseId,
     pub function: MemoryFunctionId,
     pub expression: MemoryExpressionId,
-    pub binding: u32,
+    pub binding: u64,
     pub kind: MemoryUseKind,
 }
 
@@ -142,7 +142,7 @@ pub struct MemoryConstantPlan {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryCallTarget {
     Direct(MemoryFunctionId),
-    Indirect(u32),
+    Indirect(u64),
     Operation(u16),
 }
 

@@ -75,7 +75,7 @@ impl TypePlanner<'_> {
             children.push((
                 self.fact(id)?.clone(),
                 MemoryTypePathElement::ProductField {
-                    index: index_u32(index)?,
+                    index: index_u64(index)?,
                     name: field.name.clone(),
                 },
             ));
@@ -129,9 +129,9 @@ impl TypePlanner<'_> {
                 children.push((
                     fact,
                     MemoryTypePathElement::EnumVariantField {
-                        variant_index: index_u32(variant_index)?,
+                        variant_index: index_u64(variant_index)?,
                         variant: variant.id.bytes(),
-                        field_index: index_u32(field_index)?,
+                        field_index: index_u64(field_index)?,
                         field: field.id.bytes(),
                     },
                 ));

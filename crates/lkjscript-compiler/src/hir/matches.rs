@@ -1,13 +1,13 @@
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MatchPlanId(u32);
+pub struct MatchPlanId(u64);
 
 impl MatchPlanId {
-    pub(crate) const fn new(raw: u32) -> Self {
+    pub(crate) const fn new(raw: u64) -> Self {
         Self(raw)
     }
-    pub const fn raw(self) -> u32 {
+    pub const fn raw(self) -> u64 {
         self.0
     }
 }
@@ -78,23 +78,23 @@ pub enum MatchTestKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchTest {
-    pub arm: u16,
-    pub path: Vec<u16>,
+    pub arm: u64,
+    pub path: Vec<u64>,
     pub kind: MatchTestKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchProjection {
-    pub arm: u16,
-    pub path: Vec<u16>,
+    pub arm: u64,
+    pub path: Vec<u64>,
     pub local: MatchLocal,
     pub active_variant: Option<VariantId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchBindingAssignment {
-    pub arm: u16,
-    pub path: Vec<u16>,
+    pub arm: u64,
+    pub path: Vec<u64>,
     pub local: MatchLocal,
 }
 
@@ -117,7 +117,7 @@ pub struct MatchPlanCharges {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlannedMatchArm {
-    pub id: u16,
+    pub id: u64,
     pub pattern: MatchPattern,
     pub body_type: Type,
 }

@@ -77,7 +77,7 @@ impl VerifiedTypes<'_> {
             children.push((
                 self.expected(id)?.derived.clone(),
                 MemoryTypePathElement::ProductField {
-                    index: index_u32(index)?,
+                    index: index_u64(index)?,
                     name: field.name.clone(),
                 },
             ));
@@ -124,9 +124,9 @@ impl VerifiedTypes<'_> {
                 children.push((
                     self.expected(child)?.derived.clone(),
                     MemoryTypePathElement::EnumVariantField {
-                        variant_index: index_u32(vi)?,
+                        variant_index: index_u64(vi)?,
                         variant: variant.id.bytes(),
-                        field_index: index_u32(fi)?,
+                        field_index: index_u64(fi)?,
                         field: field.id.bytes(),
                     },
                 ));

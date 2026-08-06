@@ -6,7 +6,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
     match value {
         InstructionKind::FunctionRef(value) => {
             out.tag(18);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::Runtime {
             operation,
@@ -33,11 +33,11 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             match target {
                 CallTarget::Direct(id) => {
                     out.tag(0);
-                    out.u32(id.raw());
+                    out.wide(id.raw());
                 }
                 CallTarget::Indirect(id) => {
                     out.tag(1);
-                    out.u32(id.raw());
+                    out.wide(id.raw());
                 }
             }
             ids(out, arguments);
@@ -79,7 +79,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(29);
             enum_header(out, *enum_id, *variant, *layout);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::EnumField {
             enum_id,
@@ -93,7 +93,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             enum_header(out, *enum_id, *variant, *layout);
             out.fixed(&field.bytes());
             out.u64(*field_index);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         _ => out.fail("verified SSA identity execution instruction partition failed"),
     }

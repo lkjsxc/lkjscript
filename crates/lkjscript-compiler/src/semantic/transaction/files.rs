@@ -24,10 +24,9 @@ pub(super) fn changed_sources(
             )
         })?;
         let new_bytes = source.as_bytes();
+        let new_len = checked_len(new_bytes.len(), "rebuilt source")?;
         let new_hash = lkjscript_core::sha256(new_bytes);
-        if original.exact_source_sha256 == new_hash
-            && original.exact_source_len == new_bytes.len() as u64
-        {
+        if original.exact_source_sha256 == new_hash && original.exact_source_len == new_len {
             continue;
         }
         let old_bytes = std::fs::read(path).map_err(|failure| {
@@ -40,7 +39,7 @@ pub(super) fn changed_sources(
             )
         })?;
         if lkjscript_core::sha256(&old_bytes) != original.exact_source_sha256
-            || old_bytes.len() as u64 != original.exact_source_len
+            || checked_len(old_bytes.len(), "published source")? != original.exact_source_len
         {
             return Err(error(
                 ProtocolErrorCode::PreconditionFailed,
@@ -51,7 +50,7 @@ pub(super) fn changed_sources(
             path: origin.logical_path.clone(),
             old_sha256: crate::semantic::tree::hex(&original.exact_source_sha256),
             new_sha256: crate::semantic::tree::hex(&new_hash),
-            bytes: new_bytes.len() as u64,
+            bytes: new_len,
         });
         sources.push(StagedSource {
             logical_path: origin.logical_path.clone(),
@@ -63,6 +62,15 @@ pub(super) fn changed_sources(
     sources.sort_by(|a, b| a.logical_path.cmp(&b.logical_path));
     changes.sort_by(|a, b| a.path.cmp(&b.path));
     Ok((sources, changes))
+}
+
+fn checked_len(len: usize, context: &str) -> Result<u64, ProtocolError> {
+    u64::try_from(len).map_err(|_| {
+        error(
+            ProtocolErrorCode::PublicationFailed,
+            format!("{context} length exceeds the u64 metadata representation"),
+        )
+    })
 }
 
 pub(super) fn check_preconditions(

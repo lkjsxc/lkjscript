@@ -24,15 +24,15 @@ pub(crate) enum OperationRequest {
     },
     QueryNode {
         revision: String,
-        node: u32,
+        node: u64,
     },
     HoleContext {
         revision: String,
-        node: u32,
+        node: u64,
     },
     LegalActions {
         revision: String,
-        node: u32,
+        node: u64,
     },
     Diagnostics {
         revision: String,
@@ -79,14 +79,14 @@ pub(crate) enum TransactionOperation {
     ReplaceExpression {
         declaration_key: String,
         entity_fingerprint: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         expression: Expression,
     },
     InsertHole {
         declaration_key: String,
         entity_fingerprint: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         hole_identity: String,
         goal: Option<String>,
@@ -95,7 +95,7 @@ pub(crate) enum TransactionOperation {
     FillHole {
         declaration_key: String,
         entity_fingerprint: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         hole_identity: String,
         expected_type: String,
@@ -104,7 +104,7 @@ pub(crate) enum TransactionOperation {
     RefineHole {
         declaration_key: String,
         entity_fingerprint: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         hole_identity: String,
         expected_type: String,
@@ -113,7 +113,7 @@ pub(crate) enum TransactionOperation {
     DeleteHole {
         declaration_key: String,
         entity_fingerprint: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         hole_identity: String,
         expected_type: String,

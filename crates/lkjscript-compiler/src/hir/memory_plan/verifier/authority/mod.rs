@@ -66,7 +66,7 @@ fn verify_authority_signatures(
 ) -> Result<()> {
     for (index, function) in program.functions.iter().enumerate() {
         let actual = &plan
-            .function(MemoryFunctionId::new(index_u32(index)?))
+            .function(MemoryFunctionId::new(index_u64(index)?))
             .ok_or_else(|| Error::msg("memory authority lost function"))?
             .signature;
         let binding = program
@@ -104,7 +104,7 @@ fn verify_authority_signatures(
             ));
         }
     }
-    let main_id = MemoryFunctionId::new(index_u32(program.functions.len())?);
+    let main_id = MemoryFunctionId::new(index_u64(program.functions.len())?);
     let actual = &plan
         .function(main_id)
         .ok_or_else(|| Error::msg("memory authority lost main"))?

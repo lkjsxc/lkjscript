@@ -42,7 +42,7 @@ pub(crate) enum MatchPatternExpression {
 
 pub(super) fn measure_arms(
     arms: &[MatchExpressionArm],
-    depth: u32,
+    depth: u64,
     counts: &mut super::ExpressionCounts,
 ) {
     for arm in arms {
@@ -51,14 +51,20 @@ pub(super) fn measure_arms(
     }
 }
 
+#[allow(clippy::expect_used)]
 fn measure_pattern(
     pattern: &MatchPatternExpression,
-    depth: u32,
+    depth: u64,
     counts: &mut super::ExpressionCounts,
 ) {
-    counts.nodes = counts.nodes.saturating_add(1);
+    counts.nodes = counts
+        .nodes
+        .checked_add(1)
+        .expect("host-addressable pattern trees fit u64");
     counts.depth = counts.depth.max(depth);
-    let next = depth.saturating_add(1);
+    let next = depth
+        .checked_add(1)
+        .expect("host-addressable pattern depth fits u64");
     match pattern {
         MatchPatternExpression::Binding { name } => add_string(counts, name),
         MatchPatternExpression::Variant {
@@ -78,13 +84,17 @@ fn measure_pattern(
     }
 }
 
-fn measure_fields(fields: &[MatchPatternField], depth: u32, counts: &mut super::ExpressionCounts) {
+fn measure_fields(fields: &[MatchPatternField], depth: u64, counts: &mut super::ExpressionCounts) {
     for field in fields {
         add_string(counts, &field.name);
         measure_pattern(&field.pattern, depth, counts);
     }
 }
 
+#[allow(clippy::expect_used)]
 fn add_string(counts: &mut super::ExpressionCounts, value: &str) {
-    counts.string_bytes = counts.string_bytes.saturating_add(value.len() as u64);
+    counts.string_bytes = counts
+        .string_bytes
+        .checked_add(u64::try_from(value.len()).expect("host string bytes fit u64"))
+        .expect("materialized pattern strings fit u64");
 }

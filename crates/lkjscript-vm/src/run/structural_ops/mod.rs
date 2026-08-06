@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use lkjscript_core::{
     Error, ResourceLimitKind, Result, StructuralDestinationId, StructuralDestinationKey,
-    StructuralRepresentationId, StructuralRootTableError, StructuralType, StructuralValueCategory,
-    StructuralValueError, StructuralValueKey, StructuralValueRuntime, StructuralValueRuntimeLimits,
-    StructuralViewKey, ValidatedChunk, Value,
+    StructuralRepresentationId, StructuralRootTableError, StructuralSliceExt, StructuralType,
+    StructuralValueCategory, StructuralValueError, StructuralValueKey, StructuralValueRuntime,
+    StructuralValueRuntimeLimits, StructuralViewKey, ValidatedChunk, Value,
 };
 
 use super::{unique, RuntimeTier, Vm};
@@ -125,7 +125,7 @@ fn representation(
 ) -> Result<&lkjscript_core::StructuralRepresentationMetadata> {
     chunk
         .structural_representations()
-        .get(id.index())
+        .get_structural(id)
         .filter(|item| item.id == id)
         .ok_or_else(|| Error::msg("structural representation metadata is stale"))
 }
@@ -143,7 +143,7 @@ fn representation_type(
     }
     chunk
         .structural_types()
-        .get(representation.type_id.index())
+        .get_structural(representation.type_id)
         .filter(|item| item.id == representation.type_id && item.layout == representation.layout)
         .map(|item| item.runtime_type)
         .ok_or_else(|| Error::msg("structural representation has invalid exact type metadata"))

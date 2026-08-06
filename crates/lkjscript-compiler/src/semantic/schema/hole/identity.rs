@@ -11,7 +11,7 @@ pub(crate) struct TypedHoleIdentity {
     pub identity: String,
     pub declaration_key: String,
     pub local_identity: String,
-    pub node: u32,
+    pub node: u64,
     pub node_fingerprint: String,
     pub source: String,
     pub span: SpanRecord,
@@ -124,5 +124,5 @@ pub(crate) struct ControlConstraint {
     pub function_return: String,
     pub loop_result: Option<String>,
     pub available_forms: Vec<String>,
-    pub loop_depth: u32,
+    pub loop_depth: u64,
 }

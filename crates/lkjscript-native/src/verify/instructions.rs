@@ -141,7 +141,7 @@ pub(super) fn verify_instruction(
         Operation::HeapCall(descriptor, arguments) => {
             if !descriptor.canonical_facts_are_valid()
                 || descriptor.input_types().len() != arguments.len()
-                || descriptor.input_types().len() != descriptor.operation().expected_arity()
+                || Some(descriptor.input_types().len()) != descriptor.operation().expected_arity()
                 || arguments
                     .iter()
                     .zip(descriptor.input_types())

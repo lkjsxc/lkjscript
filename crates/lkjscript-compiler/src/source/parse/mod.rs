@@ -20,19 +20,14 @@ pub(crate) fn parse_file(
     path: PathBuf,
 ) -> SourceResult<SourceFile> {
     let exact_source_len = u64::try_from(source.len()).map_err(|_| {
-        limits::resource_error(
-            &origin,
+        crate::source::SourceDiagnostic::new(
+            "LKJ-SRC-HOST",
+            crate::source::DiagnosticCategory::SourceLoading,
+            "host source length exceeds the u64 position representation",
+            origin.clone(),
             crate::source::SourceSpan::zero(),
-            "source exceeds the byte-addressable span limit",
         )
     })?;
-    if source.len() > u32::MAX as usize {
-        return Err(limits::resource_error(
-            &origin,
-            crate::source::SourceSpan::zero(),
-            "source exceeds the byte-addressable span limit",
-        ));
-    }
     let exact_source_sha256 = lkjscript_core::sha256(source.as_bytes());
     let lines = lines::source_lines(source);
     let lexed = lex::lex(&lines, &origin)?;

@@ -13,7 +13,7 @@ impl StructuralImage {
         if self.nodes.is_empty() {
             return Err(StructuralValueError::InvariantViolation);
         }
-        let node_count = u32::try_from(self.nodes.len())
+        let node_count = u64::try_from(self.nodes.len())
             .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
         if node_count > limits.max_tree_nodes {
             return Err(StructuralValueError::LimitExceeded(
@@ -34,7 +34,7 @@ impl StructuralImage {
         };
         for (index, node) in self.nodes.iter().enumerate() {
             let parent =
-                u32::try_from(index).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+                u64::try_from(index).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
             match &node.payload {
                 StructuralNodePayload::Inline(value) => {
                     let expected = match value {
@@ -96,8 +96,8 @@ impl StructuralImage {
 
 fn validate_children(
     image: &StructuralImage,
-    range: super::CheckedU32Range,
-    parent: u32,
+    range: super::CheckedU64Range,
+    parent: u64,
     parents: &mut [u16],
     depths: &mut [u16],
     used: &mut [bool],
@@ -111,7 +111,11 @@ fn validate_children(
     let children = StructuralImage::range(&image.fields, range)
         .ok_or(StructuralValueError::InvariantViolation)?;
     mark(used, range.start(), range.end())?;
-    let depth = depths[parent as usize]
+    let parent_index =
+        usize::try_from(parent).map_err(|_| StructuralValueError::InvariantViolation)?;
+    let depth = depths
+        .get(parent_index)
+        .ok_or(StructuralValueError::InvariantViolation)?
         .checked_add(1)
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
     if depth > limits.max_tree_depth && !children.is_empty() {
@@ -120,10 +124,12 @@ fn validate_children(
         ));
     }
     for child in children {
-        if child.get() <= parent || child.get() as usize >= image.nodes.len() {
+        let index = child
+            .index()
+            .ok_or(StructuralValueError::InvariantViolation)?;
+        if child.get() <= parent || index >= image.nodes.len() {
             return Err(StructuralValueError::InvariantViolation);
         }
-        let index = child.get() as usize;
         parents[index] = parents[index]
             .checked_add(1)
             .ok_or(StructuralValueError::ArithmeticOverflow)?;
@@ -175,9 +181,11 @@ fn add_bytes(
     Ok(())
 }
 
-fn mark(used: &mut [bool], start: u32, end: u32) -> Result<(), StructuralValueError> {
+fn mark(used: &mut [bool], start: u64, end: u64) -> Result<(), StructuralValueError> {
+    let start = usize::try_from(start).map_err(|_| StructuralValueError::InvariantViolation)?;
+    let end = usize::try_from(end).map_err(|_| StructuralValueError::InvariantViolation)?;
     let range = used
-        .get_mut(start as usize..end as usize)
+        .get_mut(start..end)
         .ok_or(StructuralValueError::InvariantViolation)?;
     if range.iter().any(|value| *value) {
         return Err(StructuralValueError::InvariantViolation);

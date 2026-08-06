@@ -86,7 +86,7 @@ fn released_domain_capacity_is_live_not_cumulative() -> Result<(), StructuralVal
 }
 
 fn value_with_nodes(
-    nodes: u32,
+    nodes: u64,
     product_type: lkjscript_core::StructuralType,
     integer_type: lkjscript_core::StructuralType,
 ) -> SemanticValue {

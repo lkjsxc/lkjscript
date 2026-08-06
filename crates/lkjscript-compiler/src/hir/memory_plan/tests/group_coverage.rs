@@ -43,7 +43,7 @@ fn mutually_recursive_expression_statement_enums_share_one_group() {
     assert_eq!(groups.len(), 1);
     assert!(groups[0].members.iter().all(|member| plan
         .witness(member.witness)
-        .is_some_and(|witness| witness.group == groups[0].id)));
+        .is_some_and(|witness| witness.group == Some(groups[0].id))));
 }
 
 #[test]
@@ -68,5 +68,6 @@ fn parent_group_names_exact_external_child_group_and_member() {
         .expect("child witness");
     assert!(matches!(parent.facts.dependencies[0].target,
         lkjscript_contracts::ExecutableMemoryWitnessTarget::ExternalMember { group, member }
-            if group == child.group.as_bytes() && member == child.id.as_bytes()));
+            if group == child.group.expect("child group").as_bytes()
+                && member == child.id.as_bytes()));
 }

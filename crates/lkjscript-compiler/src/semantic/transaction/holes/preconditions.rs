@@ -3,7 +3,7 @@ use crate::semantic::schema::{ProtocolError, ProtocolErrorCode, TypeUnavailableR
 
 pub(super) fn check_hole<'a>(
     tree: &'a crate::source::ValidatedSourceTree,
-    node: u32,
+    node: u64,
     declaration_key: &str,
     hole_identity: &str,
     expected_type: &str,
@@ -21,7 +21,7 @@ pub(super) fn check_hole<'a>(
 
 pub(super) fn check_target_expected(
     tree: &crate::source::ValidatedSourceTree,
-    node: u32,
+    node: u64,
     declaration_key: &str,
     expected_type: &str,
 ) -> Result<(), ProtocolError> {

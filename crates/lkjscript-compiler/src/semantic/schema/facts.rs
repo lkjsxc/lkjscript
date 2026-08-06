@@ -81,16 +81,16 @@ pub(crate) enum FactValue {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum FactReference {
     Declaration { key: String },
-    HirExpression { function: String, expression: u32 },
-    Place { function: String, place: u32 },
-    Loan { function: String, loan: u32 },
-    CfgBlock { function: String, block: u32 },
-    SsaValue { function: String, value: u32 },
-    SsaBlock { function: String, block: u32 },
-    FrameState { function: String, state: u32 },
+    HirExpression { function: String, expression: u64 },
+    Place { function: String, place: u64 },
+    Loan { function: String, loan: u64 },
+    CfgBlock { function: String, block: u64 },
+    SsaValue { function: String, value: u64 },
+    SsaBlock { function: String, block: u64 },
+    FrameState { function: String, state: u64 },
     Layout { identity: String },
     Proof { identity: String },
-    Bytecode { function: String, instruction: u32 },
+    Bytecode { function: String, instruction: u64 },
     NativeCode { artifact: String, offset: u64 },
 }
 

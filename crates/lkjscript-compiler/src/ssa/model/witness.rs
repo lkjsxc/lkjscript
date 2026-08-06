@@ -21,6 +21,12 @@ fn install_memory_witnesses(
     for witness in &plan.witnesses {
         let facts = &witness.facts;
         if !witness_is_installable(witness) { continue; }
+        let group = witness
+            .group
+            .ok_or_else(|| Error::msg("installable memory witness has no group"))?;
+        let ordinal = witness
+            .ordinal
+            .ok_or_else(|| Error::msg("installable memory witness has no ordinal"))?;
         let ty = lower_memory_type(&facts.ty, products)?;
         let route = fallback_route(
             witness.id,
@@ -39,8 +45,8 @@ fn install_memory_witnesses(
         let dependencies = facts.dependencies.clone();
         memory.witnesses.push(lkjscript_ir::MemoryWitnessDescriptor {
             id: MemoryWitnessId::new(witness.id.as_bytes()),
-            group: lkjscript_ir::MemoryWitnessGroupId::new(witness.group.as_bytes()),
-            ordinal: witness.ordinal,
+            group: lkjscript_ir::MemoryWitnessGroupId::new(group.as_bytes()),
+            ordinal,
             facts: crate::memory_plan::executable_facts(facts)?,
             ty,
             dependencies,

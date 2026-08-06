@@ -19,17 +19,17 @@ pub enum StoreClass {
 pub enum HeapOperation {
     EmptyList,
     ProductValue {
-        product: u32,
-        fields: u8,
+        product: u64,
+        fields: u64,
     },
     ProductField {
-        product: u32,
-        field: u8,
+        product: u64,
+        field: u64,
         field_type: ValueType,
     },
     WithProductField {
-        product: u32,
-        field: u8,
+        product: u64,
+        field: u64,
         field_type: ValueType,
     },
     Cons,
@@ -40,12 +40,12 @@ pub enum HeapOperation {
 }
 
 impl HeapOperation {
-    pub(crate) fn expected_arity(&self) -> usize {
+    pub(crate) fn expected_arity(&self) -> Option<usize> {
         match self {
-            Self::EmptyList => 0,
-            Self::ProductValue { fields, .. } => usize::from(*fields),
-            Self::ProductField { .. } | Self::Car | Self::Cdr | Self::IsEmptyList => 1,
-            Self::WithProductField { .. } | Self::Cons | Self::ListEqual => 2,
+            Self::EmptyList => Some(0),
+            Self::ProductValue { fields, .. } => usize::try_from(*fields).ok(),
+            Self::ProductField { .. } | Self::Car | Self::Cdr | Self::IsEmptyList => Some(1),
+            Self::WithProductField { .. } | Self::Cons | Self::ListEqual => Some(2),
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{InstructionKind, Program, TraitRole};
 pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
     super::structural_metadata::verify(program)?;
     if program.sources.iter().enumerate().any(|(index, source)| {
-        source.id != u32::try_from(index).unwrap_or(u32::MAX) || source.path.is_empty()
+        u64::try_from(index).ok() != Some(source.id) || source.path.is_empty()
     }) {
         return fail("SSA source metadata must have dense IDs and non-empty paths");
     }
@@ -127,9 +127,11 @@ pub(crate) fn verify_trait_metadata(program: &Program) -> crate::Result<()> {
                 return fail("SSA compiler-owned trait identity is not canonical");
             }
         } else if trait_metadata.role != TraitRole::User
-            || trait_metadata
-                .source
-                .is_none_or(|source| source as usize >= program.sources.len())
+            || trait_metadata.source.is_none_or(|source| {
+                usize::try_from(source)
+                    .ok()
+                    .is_none_or(|index| index >= program.sources.len())
+            })
         {
             return fail("SSA source trait has invalid role or source identity");
         }
@@ -144,7 +146,10 @@ pub(crate) fn verify_trait_metadata(program: &Program) -> crate::Result<()> {
             return fail("SSA explicit implementation targets a compiler-owned core trait");
         }
         let _product = product_by_id(program, implementation.product)?;
-        if implementation.source as usize >= program.sources.len() {
+        if usize::try_from(implementation.source)
+            .ok()
+            .is_none_or(|index| index >= program.sources.len())
+        {
             return fail("SSA implementation has an invalid source identity");
         }
         if !coherent.insert((implementation.trait_id, implementation.product)) {

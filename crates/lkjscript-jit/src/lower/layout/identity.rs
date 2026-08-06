@@ -4,23 +4,11 @@ pub(in crate::lower) fn scalar_structural_type(
     _plan: lkjscript_ir::MemoryPlanId,
     ty: &SsaType,
 ) -> Option<lkjscript_native::StructuralTypeIdentity> {
-    let (_layout, kind) = match ty {
-        SsaType::Unit => (
-            ValueType::Unit.layout_identity().get(),
-            lkjscript_native::StructuralKind::Unit,
-        ),
-        SsaType::Bool => (
-            ValueType::Bool.layout_identity().get(),
-            lkjscript_native::StructuralKind::Bool,
-        ),
-        SsaType::I64 => (
-            ValueType::I64.layout_identity().get(),
-            lkjscript_native::StructuralKind::I64,
-        ),
-        SsaType::F64 => (
-            ValueType::F64.layout_identity().get(),
-            lkjscript_native::StructuralKind::F64,
-        ),
+    let kind = match ty {
+        SsaType::Unit => lkjscript_native::StructuralKind::Unit,
+        SsaType::Bool => lkjscript_native::StructuralKind::Bool,
+        SsaType::I64 => lkjscript_native::StructuralKind::I64,
+        SsaType::F64 => lkjscript_native::StructuralKind::F64,
         _ => return None,
     };
     let runtime_type = lkjscript_ir::runtime_structural_type(None, ty)

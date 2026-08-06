@@ -8,7 +8,7 @@ impl CleanupPlan {
         let function_plan = plan
             .function(function)
             .ok_or_else(|| Error::msg("HIR memory plan lost an SSA function"))?;
-        let mut loan_ends: BTreeMap<u32, Vec<SsaLoanId>> = BTreeMap::new();
+        let mut loan_ends: BTreeMap<u64, Vec<SsaLoanId>> = BTreeMap::new();
         for loan in plan.loans.iter().filter(|loan| loan.function == function) {
             loan_ends
                 .entry(loan.end_after.raw())

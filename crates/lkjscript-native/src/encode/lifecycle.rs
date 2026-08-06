@@ -12,7 +12,7 @@ impl FunctionEncoder<'_> {
         self.emit_jump(FixupTarget::Block(entry))?;
 
         for block in &self.function.blocks {
-            let index = block.id.index as usize;
+            let index = block.id.host_index().unwrap_or(usize::MAX);
             let offset = self.bytes.len();
             let slot = self
                 .block_offsets
@@ -96,7 +96,7 @@ impl FunctionEncoder<'_> {
 
     pub(super) fn emit_reserve_frame(&mut self) -> Result<(), NativeError> {
         self.runtime_calls.insert(RuntimeCallSlot::ReserveFrame);
-        self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
+        self.load_integer_register_immediate(6, self.function_ordinal)?;
         self.load_integer_register_immediate(2, u64::from(self.frame_bytes))?;
         // mov rcx, rbp. RDI still carries the invocation context.
         self.emit(&[0x48, 0x89, 0xe9])?;
@@ -164,7 +164,7 @@ impl FunctionEncoder<'_> {
     pub(super) fn emit_register_frame(&mut self) -> Result<(), NativeError> {
         self.runtime_calls.insert(RuntimeCallSlot::RegisterFrame);
         self.load_integer_register(7, self.context_offset())?;
-        self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
+        self.load_integer_register_immediate(6, self.function_ordinal)?;
         // mov rdx, rbp. The raw frame base is consumed only by the private sys
         // runtime trampoline and never appears in a safe API.
         self.emit(&[0x48, 0x89, 0xea])?;

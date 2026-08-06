@@ -16,7 +16,7 @@ fn aggregate_tag(
     require_same_type(chunk, representation, expected.id, proto, instruction)?;
     let layout = chunk
         .structural_layouts
-        .get(expected.layout.index())
+        .get_structural(expected.layout)
         .ok_or_else(|| {
             instruction_error(
                 proto,

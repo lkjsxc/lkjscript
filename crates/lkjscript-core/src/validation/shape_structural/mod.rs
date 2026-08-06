@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     Chunk, Error, MemoryWitnessGroupId, MemoryWitnessId, Result, StructuralDestinationMetadata,
     StructuralFieldMetadata, StructuralFieldRoute, StructuralLayoutKind,
-    StructuralRepresentationMetadata, StructuralValueCategory,
+    StructuralRepresentationMetadata, StructuralSliceExt, StructuralValueCategory,
 };
 
 pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
@@ -29,7 +29,7 @@ pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
         .try_reserve(chunk.structural_representations.len())
         .map_err(|_| Error::host("bytecode structural representation index allocation failed"))?;
     for (index, representation) in chunk.structural_representations.iter().enumerate() {
-        if representation.id.index() != index {
+        if representation.id.index() != Some(index) {
             return Err(Error::msg(
                 "bytecode structural RepresentationIds are not dense",
             ));

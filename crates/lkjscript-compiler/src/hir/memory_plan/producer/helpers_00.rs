@@ -23,8 +23,8 @@ mod observational_accounting_tests {
         Ok(())
     }
 }
-fn index_u32(index: usize) -> Result<u32> {
-    u32::try_from(index).map_err(|_| Error::msg("HIR memory-plan child index exceeds u32"))
+fn index_u64(index: usize) -> Result<u64> {
+    u64::try_from(index).map_err(|_| Error::msg("HIR memory-plan child index exceeds u64"))
 }
 fn function_result_type(ty: &Type) -> Result<&Type> {
     let (_, result) = callable_type(ty)?;

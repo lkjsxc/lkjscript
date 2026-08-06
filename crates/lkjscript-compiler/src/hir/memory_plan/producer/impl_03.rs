@@ -14,7 +14,7 @@ impl<'a> Producer<'a> {
                     self.walk_expr(
                         &local.value,
                         Some(expression_id),
-                        index_u32(index)?,
+                        index_u64(index)?,
                         MemoryEscape::Local,
                         binding,
                     )?;
@@ -22,7 +22,7 @@ impl<'a> Producer<'a> {
                 self.walk_expr(
                     body,
                     Some(expression_id),
-                    index_u32(bindings.len())?,
+                    index_u64(bindings.len())?,
                     escape,
                     None,
                 )?;
@@ -85,7 +85,7 @@ impl<'a> Producer<'a> {
             let expression = self.walk_expr(
                 argument,
                 Some(parent),
-                index_u32(index)?,
+                index_u64(index)?,
                 MemoryEscape::Caller,
                 None,
             )?;
@@ -107,11 +107,11 @@ impl<'a> Producer<'a> {
             } else {
                 MemoryEscape::Local
             };
-            self.walk_expr(child, Some(parent), index_u32(index)?, escape, None)?;
+            self.walk_expr(child, Some(parent), index_u64(index)?, escape, None)?;
         }
         Ok(())
     }
-    fn add_local_place(&mut self, local: &LocalDefinition, source: u32) -> Result<()> {
+    fn add_local_place(&mut self, local: &LocalDefinition, source: u64) -> Result<()> {
         let ty = self.binding_type(local.binding)?.clone();
         self.add_place(
             self.current_function,
@@ -127,9 +127,9 @@ impl<'a> Producer<'a> {
         &mut self,
         function: MemoryFunctionId,
         binding: BindingId,
-        place: u32,
+        place: u64,
         ty: &Type,
-        source: u32,
+        source: u64,
         owns_obligation: bool,
     ) -> Result<MemoryEntryId> {
         if place != self.next_place {

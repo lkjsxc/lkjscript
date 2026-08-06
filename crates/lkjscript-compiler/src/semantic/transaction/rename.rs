@@ -28,14 +28,18 @@ pub(crate) fn resolve(
         ));
     }
     let nodes = crate::semantic::tree::source_nodes(tree);
-    let node = nodes
-        .get(declaration.node().index() as usize)
-        .ok_or_else(|| {
-            error(
-                ProtocolErrorCode::UnknownNode,
-                "declaration source node is unavailable",
-            )
-        })?;
+    let declaration_index = usize::try_from(declaration.node().index()).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "declaration source identity is not host-addressable",
+        )
+    })?;
+    let node = nodes.get(declaration_index).ok_or_else(|| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            "declaration source node is unavailable",
+        )
+    })?;
     if crate::semantic::tree::fingerprint(node) != fingerprint {
         return Err(error(
             ProtocolErrorCode::PreconditionFailed,

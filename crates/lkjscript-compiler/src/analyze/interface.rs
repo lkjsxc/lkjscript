@@ -52,7 +52,7 @@ impl Analyzer {
         let mut main = None;
         for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
-                u32::try_from(source_index)
+                u64::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
             );
             let is_root = file.path == program.root_path();
@@ -132,7 +132,7 @@ fn declaration_root(source: &ValidatedSourceTree) -> Result<Main> {
         .position(|file| file.path == source.root_path())
         .ok_or_else(|| Error::msg("declaration analysis root source is absent"))?;
     let origin = SourceId::new(
-        u32::try_from(index).map_err(|_| Error::msg("declaration root SourceId exceeds u32"))?,
+        u64::try_from(index).map_err(|_| Error::msg("declaration root SourceId exceeds u64"))?,
     );
     Ok(Main {
         origin,

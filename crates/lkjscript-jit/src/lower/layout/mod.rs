@@ -10,7 +10,7 @@ pub(in crate::lower) use identity::*;
 use witness_slots::native_witness_slots;
 
 impl LayoutInterner {
-    pub(super) const FIRST_NESTED_IDENTITY: u32 = 32 + u16::MAX as u32 + 1;
+    pub(super) const FIRST_NESTED_IDENTITY: u64 = 32 + u16::MAX as u64 + 1;
 
     pub(super) fn build(
         program: &lkjscript_ir::Program,
@@ -134,9 +134,7 @@ impl LayoutInterner {
             SsaType::Bool => Some(ValueType::Bool.layout_identity()),
             SsaType::I64 => Some(ValueType::I64.layout_identity()),
             SsaType::F64 => Some(ValueType::F64.layout_identity()),
-            SsaType::Product(product) => u32::try_from(product.raw())
-                .ok()
-                .map(LayoutIdentity::product),
+            SsaType::Product(product) => Some(LayoutIdentity::product(product.raw())),
             SsaType::Str | SsaType::Path | SsaType::List(_) | SsaType::Enum { .. } => {
                 self.identities.get(ty).copied()
             }

@@ -17,7 +17,7 @@ fn structural_copy(
     require_same_type(chunk, actual, representation, proto, instruction)?;
     let metadata = chunk
         .structural_representations
-        .get(representation.index())
+        .get_structural(representation)
         .filter(|item| {
             item.id == representation
                 && item.category == crate::StructuralValueCategory::Owner
@@ -32,7 +32,7 @@ fn structural_copy(
         })?;
     let type_metadata = chunk
         .structural_types
-        .get(metadata.type_id.index())
+        .get_structural(metadata.type_id)
         .ok_or_else(|| crate::Error::msg("structural copy owner type is missing"))?;
     if type_metadata.mode == crate::StructuralTypeMode::Affine {
         return fail(

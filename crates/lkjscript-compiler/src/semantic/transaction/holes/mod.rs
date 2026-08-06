@@ -138,7 +138,7 @@ fn replace(
     tree: &crate::source::ValidatedSourceTree,
     declaration_key: &str,
     entity_fingerprint: &str,
-    node: u32,
+    node: u64,
     node_fingerprint: &str,
     expression: Expression,
     relation: IdentityRelationKind,

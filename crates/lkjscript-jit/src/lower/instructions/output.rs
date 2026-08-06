@@ -11,8 +11,12 @@ pub(super) fn write_instruction_output(
     output: lkjscript_native::ValueId,
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
+    let source = match instruction.metadata.origin {
+        lkjscript_ir::Origin::Source { node, .. } => SourceOrigin::new(node),
+        lkjscript_ir::Origin::Synthetic => SourceOrigin::synthetic(),
+    };
     builder
-        .set_instruction_source(output, SourceOrigin::new(instruction.metadata.origin.node))
+        .set_instruction_source(output, source)
         .map_err(LoweringError::backend)?;
     builder
         .set_instruction_failure_cleanup(

@@ -4,14 +4,14 @@ use super::{AggregateMode, ClosureClass};
 
 pub(crate) struct ClosureReconstructor<'a> {
     program: &'a Program,
-    max_nodes: u32,
+    max_nodes: u64,
     max_depth: u16,
-    nodes: u32,
+    nodes: u64,
     active: Vec<SsaType>,
 }
 
 impl<'a> ClosureReconstructor<'a> {
-    pub(crate) const fn new(program: &'a Program, max_nodes: u32, max_depth: u16) -> Self {
+    pub(crate) const fn new(program: &'a Program, max_nodes: u64, max_depth: u16) -> Self {
         Self {
             program,
             max_nodes,

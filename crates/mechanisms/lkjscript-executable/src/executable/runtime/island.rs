@@ -18,11 +18,15 @@ pub(super) extern "C" fn runtime_island_enter(state: *mut IslandCallState<'_>, f
         state.status = 5;
         return;
     };
-    let Some(entries) = state.native_entries.get_mut(index) else {
+    let Some(entries) = state
+        .native_entries
+        .get(index)
+        .and_then(|entries| entries.checked_add(1))
+    else {
         state.status = 5;
         return;
     };
-    *entries = entries.saturating_add(1);
+    state.native_entries[index] = entries;
 }
 
 pub(super) extern "C" fn runtime_island_stdin(
@@ -65,11 +69,7 @@ pub(super) extern "C" fn runtime_island_stdin(
 pub(super) extern "C" fn runtime_island_value_dispatch(state: *mut IslandCallState<'_>, site: u64) {
     // SAFETY: collector-free relocation binds this call to its live island state.
     if let Some(state) = unsafe { state.as_mut() } {
-        if let Ok(site) = u32::try_from(site) {
-            state.dispatch_runtime_value_operation(site);
-        } else {
-            state.invalidate_frame();
-        }
+        state.dispatch_runtime_value_operation(site);
     }
 }
 
@@ -95,11 +95,7 @@ pub(super) extern "C" fn runtime_island_reserve(
 ) -> *mut IslandCallState<'_> {
     // SAFETY: canonical prologues pass their live island context and frame base.
     if let Some(invocation) = unsafe { state.as_mut() } {
-        if let Ok(function) = u32::try_from(function) {
-            invocation.reserve_frame(function, bytes, rbp);
-        } else {
-            invocation.invalidate_frame();
-        }
+        invocation.reserve_frame(function, bytes, rbp);
         invocation.entry_rejected = invocation.status != 0;
     }
     state
@@ -124,11 +120,7 @@ pub(super) extern "C" fn runtime_island_register(
 ) {
     // SAFETY: context provenance is identical to runtime_island_reserve.
     if let Some(state) = unsafe { state.as_mut() } {
-        if let Ok(function) = u32::try_from(function) {
-            state.register_frame(function, rbp);
-        } else {
-            state.invalidate_frame();
-        }
+        state.register_frame(function, rbp);
     }
 }
 
@@ -139,10 +131,6 @@ pub(super) extern "C" fn runtime_island_unregister(
 ) {
     // SAFETY: context provenance is identical to runtime_island_reserve.
     if let Some(state) = unsafe { state.as_mut() } {
-        if let Ok(function) = u32::try_from(function) {
-            state.unregister_frame(function, rbp);
-        } else {
-            state.invalidate_frame();
-        }
+        state.unregister_frame(function, rbp);
     }
 }

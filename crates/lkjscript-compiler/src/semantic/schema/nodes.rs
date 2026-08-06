@@ -167,13 +167,13 @@ pub(crate) struct TriviaRecord {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NodeRecord {
-    pub index: u32,
+    pub index: u64,
     pub kind: SemanticNodeKind,
     pub value: Option<SemanticNodeValue>,
     pub source: String,
     pub span: SpanRecord,
-    pub parent: Option<u32>,
-    pub children: Vec<u32>,
+    pub parent: Option<u64>,
+    pub children: Vec<u64>,
     pub declaration: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_identity: Option<String>,

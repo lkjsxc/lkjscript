@@ -140,7 +140,8 @@ impl JitUniqueRuntime {
 
     pub(crate) fn end_borrow(&mut self, value: NativeLoan) -> Result<(), NativeServiceError> {
         self.loan(value)?;
-        let index = value.opaque_word() as u32 as usize;
+        let index = usize::try_from(value.opaque_word() & u64::from(u32::MAX))
+            .map_err(|_| NativeServiceError::Trap)?;
         let Some(slot) = self.loans.get_mut(index) else {
             return Err(NativeServiceError::Trap);
         };

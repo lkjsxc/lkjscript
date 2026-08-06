@@ -167,7 +167,7 @@ impl<'a> Producer<'a> {
                     self.walk_expr(
                         child,
                         Some(expression_id),
-                        index_u32(index.saturating_add(1))?,
+                        index_u64(index.saturating_add(1))?,
                         MemoryEscape::Local,
                         None,
                     )?;

@@ -65,7 +65,7 @@ fn signature_header(out: &mut Encoder, value: &Signature) {
             trait_id,
         } = value;
         out.string(parameter);
-        out.u32(trait_id.raw());
+        out.wide(trait_id.raw());
     });
     out.sequence(&value.memory_witness_parameters, |out, value| {
         let MemoryWitnessParameter {
@@ -106,13 +106,13 @@ pub(super) fn instantiation(out: &mut Encoder, value: &GenericInstantiation) {
             ty: value_ty,
             kind,
         } = value;
-        out.u32(trait_id.raw());
+        out.wide(trait_id.raw());
         ty(out, value_ty);
         match kind {
             TraitWitnessKind::AutoTrait => out.tag(0),
             TraitWitnessKind::Explicit(id) => {
                 out.tag(1);
-                out.u32(id.raw());
+                out.wide(id.raw());
             }
         }
     });

@@ -1,4 +1,5 @@
 use crate::codegen::*;
+use lkjscript_core::StructuralSliceExt;
 
 mod requirements;
 mod witnesses;
@@ -85,11 +86,11 @@ pub(in crate::codegen) fn intern_aggregate_field_for_representation(
 ) -> Result<u64> {
     let metadata = chunk
         .structural_representations
-        .get(representation.index())
+        .get_structural(representation)
         .ok_or_else(|| Error::msg("aggregate field representation is missing"))?;
     let layout = chunk
         .structural_layouts
-        .get(metadata.layout.index())
+        .get_structural(metadata.layout)
         .ok_or_else(|| Error::msg("aggregate field layout is missing"))?;
     let active_variant = match (&layout.kind, requested_variant) {
         (BytecodeStructuralLayoutKind::Enum { variants, .. }, Some(requested))

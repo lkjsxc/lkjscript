@@ -36,7 +36,7 @@ pub(super) fn verify_obligations(program: &hir::Program, plan: &HirMemoryPlan) -
     }
     let mut seen = BTreeSet::new();
     for (index, obligation) in plan.obligations.iter().enumerate() {
-        if obligation.id.raw() != index_u32(index)? || !seen.insert(obligation.entry) {
+        if obligation.id.raw() != index_u64(index)? || !seen.insert(obligation.entry) {
             return Err(Error::msg("memory obligations are not dense and unique"));
         }
         let (kind, glue, path, has_class) = expected

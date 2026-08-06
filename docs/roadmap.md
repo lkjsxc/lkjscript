@@ -19,8 +19,12 @@
    and independent verifier totals are checked observational `u64` equality. Generated coverage
    crosses 4,096 functions, 65,536 uses, 16,384 loans/calls/borrow scopes, 32,768 obligations/drop
    paths, 16 witness parameters/arguments, 16,384 region products, and 16,384 structural
-   destinations/operation references. Next widen or segment `u32` source positions, spans,
-   snapshot-local node indexes, remaining HIR IDs, and SSA function/block/value/place identities.
+   destinations/operation references. Source positions/spans and revision-scoped node indexes,
+   Semantic Source wire relations, all HIR and memory-plan dense IDs, SSA
+   function/block/value/binding/trait/implementation/place/loan identities and origin/link metadata,
+   core structural-image node/range identities, and native source/plan links now use `u64` with
+   checked host conversion. Synthetic/unresolved states and native layout domains no longer use
+   collision-prone numeric sentinels or arithmetic tags.
    Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
    constant-data-byte, or cleanup-node/range count admission; a boundary-local limited validator
    checks only total artifact bytes and has no finite default. Byte-sized function arity, call
@@ -54,8 +58,10 @@
    the former declaration, type-node, edge, and 16 MiB byte boundaries. Per-call witness arity,
    recursive-group ordinals, region products, structural destination/operation-reference counts,
    and related witness transport now use unrestricted vectors plus wide checked identities where
-   identities cross a boundary. Remaining HIR/SSA `u32` identities and pre-existing core
-   structural type/layout/representation host-lookup sentinels remain.
+   identities cross a boundary. Remaining narrow representation work is concentrated in
+   pre-existing semantic-DAG snapshot IDs, structural runtime slot/generation keys, scheduler IDs,
+   and checked machine/OS/ABI boundaries; Phase 5 still replaces revision-scoped dense `NodeId`
+   with edit-stable logical semantic identity.
    Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
    unrestricted by the removed general bytecode table and metadata admission. Completion requires

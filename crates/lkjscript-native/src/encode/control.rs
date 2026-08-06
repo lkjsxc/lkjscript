@@ -61,9 +61,11 @@ impl FunctionEncoder<'_> {
                     OutcomeKind::Trap(*trap),
                 ));
                 if let Some(site) = site {
-                    self.load_rax_immediate(u64::from(*site))?;
+                    self.load_rax_immediate(*site)?;
                     self.load_integer_register(1, self.context_offset())?;
                     self.emit(&[0x48, 0x89, 0x41, 0x08])?;
+                    self.load_rax_immediate(1)?;
+                    self.emit(&[0x48, 0x89, 0x41, 0x10])?;
                 }
                 self.emit_jump(FixupTarget::Trap(*trap))
             }
@@ -121,7 +123,7 @@ impl FunctionEncoder<'_> {
     pub(super) fn emit_unregister_frame(&mut self) -> Result<(), NativeError> {
         self.runtime_calls.insert(RuntimeCallSlot::UnregisterFrame);
         self.load_integer_register(7, self.context_offset())?;
-        self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
+        self.load_integer_register_immediate(6, self.function_ordinal)?;
         // mov rdx, rbp; sys validates both the descriptor and frame base.
         self.emit(&[0x48, 0x89, 0xea])?;
         self.emit_runtime_call_target(RuntimeCallSlot::UnregisterFrame)

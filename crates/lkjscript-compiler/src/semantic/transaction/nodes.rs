@@ -1,6 +1,6 @@
 use crate::source::{SourceFile, SourceNode};
 
-pub(crate) fn node_mut(files: &mut [SourceFile], index: u32) -> Option<&mut SourceNode> {
+pub(crate) fn node_mut(files: &mut [SourceFile], index: u64) -> Option<&mut SourceNode> {
     let mut ordered: Vec<_> = (0..files.len()).collect();
     ordered.sort_by(|a, b| {
         files[*a]
@@ -8,7 +8,7 @@ pub(crate) fn node_mut(files: &mut [SourceFile], index: u32) -> Option<&mut Sour
             .logical_path
             .cmp(&files[*b].origin.logical_path)
     });
-    let mut remaining = index as usize;
+    let mut remaining = usize::try_from(index).ok()?;
     let mut selected = None;
     for file in ordered {
         let count: usize = files[file].syntax.iter().map(node_count).sum();

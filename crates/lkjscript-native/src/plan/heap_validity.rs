@@ -11,9 +11,8 @@ impl HeapCallDescriptor {
         match &self.operation {
             Op::EmptyList => inputs.is_empty() && valid_list_reference(result),
             Op::ProductValue { product, fields } => {
-                usize::from(*fields) == inputs.len()
-                    && usize::from(*fields) <= 15
-                    && u16::try_from(*product).is_ok()
+                usize::try_from(*fields).ok() == Some(inputs.len())
+                    && *fields <= 15
                     && product_reference_matches(result, *product)
                     && inputs.iter().copied().all(is_region_product_field)
             }
@@ -23,7 +22,6 @@ impl HeapCallDescriptor {
                 field_type,
             } => {
                 *field < 15
-                    && u16::try_from(*product).is_ok()
                     && is_region_product_field(*field_type)
                     && result == *field_type
                     && matches!(inputs, [input]
@@ -37,7 +35,6 @@ impl HeapCallDescriptor {
                 field_type,
             } => {
                 *field < 15
-                    && u16::try_from(*product).is_ok()
                     && is_region_product_field(*field_type)
                     && matches!(inputs, [input, replacement]
                         if product_reference_matches(*input, *product)
@@ -123,7 +120,7 @@ const fn nonzero(value: u64) -> u64 {
     }
 }
 
-fn product_reference_matches(value_type: ValueType, product: u32) -> bool {
+fn product_reference_matches(value_type: ValueType, product: u64) -> bool {
     matches!(
         value_type,
         ValueType::Reference(ReferenceType::RegionProduct(layout, _))

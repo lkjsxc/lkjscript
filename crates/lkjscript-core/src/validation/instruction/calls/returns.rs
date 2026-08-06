@@ -33,9 +33,9 @@ fn validate_unique_exit_state(
             Kind::Bytes(_) | Kind::ByteVector(_) => true,
             Kind::StructuralOwner { representation, .. } => chunk
                 .structural_representations
-                .get(representation.index())
+                .get_structural(representation)
                 .and_then(|representation| {
-                    chunk.structural_types.get(representation.type_id.index())
+                    chunk.structural_types.get_structural(representation.type_id)
                 })
                 .is_none_or(|ty| ty.mode != crate::StructuralTypeMode::Copy),
             Kind::BytesBorrow { owner, .. } | Kind::ByteSlice { owner, .. } => {

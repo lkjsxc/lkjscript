@@ -37,8 +37,8 @@ fn flatten_node(
     let mut root_id = None;
 
     while let Some((node, parent)) = work.pop() {
-        let raw = u32::try_from(output.len()).map_err(|_| {
-            SourceDiagnostic::generic(origin.clone(), "too many source nodes for NodeId")
+        let raw = u64::try_from(output.len()).map_err(|_| {
+            SourceDiagnostic::generic(origin.clone(), "source node identity exceeds u64")
         })?;
         let id = NodeId {
             revision,

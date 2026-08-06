@@ -34,10 +34,7 @@ pub use error::{
 pub use events::{
     StructuralEvent, StructuralEventKind, StructuralEventLog, StructuralValueRuntimeMetrics,
 };
-pub use limits::{
-    StructuralValueRuntimeLimits, DEFAULT_STRUCTURAL_TREE_NODES,
-    STRUCTURAL_TREE_NODE_SAFETY_MAXIMUM,
-};
+pub use limits::{StructuralValueRuntimeLimits, DEFAULT_STRUCTURAL_TREE_NODES};
 pub use model::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StaticArtifactPayload,
     StaticStructuralArtifact, StaticStructuralLeaf, StructuralDestinationKey, StructuralFieldPath,

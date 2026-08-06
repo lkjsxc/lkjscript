@@ -26,7 +26,10 @@ pub(super) fn check_borrow_conflicts(
         return Ok(());
     };
     for fact in &function.values {
-        if values.get(fact.id.index as usize).copied().unwrap_or(false)
+        if values
+            .get(fact.id.host_index().unwrap_or(usize::MAX))
+            .copied()
+            .unwrap_or(false)
             && borrowed_from(function, fact.id) == Some(owner)
             && (exclusive || borrowed_exclusively(function, fact.id))
         {
@@ -42,7 +45,10 @@ pub(super) fn reject_live_borrow(
     values: &[bool],
 ) -> Result<(), VerificationError> {
     if function.values.iter().any(|fact| {
-        values.get(fact.id.index as usize).copied().unwrap_or(false)
+        values
+            .get(fact.id.host_index().unwrap_or(usize::MAX))
+            .copied()
+            .unwrap_or(false)
             && borrowed_from(function, fact.id) == Some(owner)
     }) {
         return Err(VerificationError::LiveLoan(owner));

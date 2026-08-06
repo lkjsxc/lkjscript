@@ -39,7 +39,7 @@ impl TypePlanner<'_> {
                             let fact = self.fact(argument_id)?.clone();
                             let mut argument_path = vec![path.clone()];
                             argument_path
-                                .push(MemoryTypePathElement::TypeArgument(index_u32(index)?));
+                                .push(MemoryTypePathElement::TypeArgument(index_u64(index)?));
                             fold_recursive_fact(
                                 fact,
                                 argument_path,

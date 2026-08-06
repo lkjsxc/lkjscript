@@ -8,8 +8,8 @@ impl<'a> Producer<'a> {
     ) -> Result<()> {
         self.charge_obligations(1)?;
         let id = MemoryObligationId::new(
-            u32::try_from(self.obligations.len())
-                .map_err(|_| Error::msg("HIR memory-plan obligation identity exceeds u32"))?,
+            u64::try_from(self.obligations.len())
+                .map_err(|_| Error::msg("HIR memory-plan obligation identity exceeds u64"))?,
         );
         self.obligations.push(MemoryObligation {
             id,
@@ -36,8 +36,8 @@ impl<'a> Producer<'a> {
             .try_reserve(1)
             .map_err(|_| Error::host("HIR memory-plan entry allocation failed"))?;
         let id = MemoryEntryId::new(
-            u32::try_from(self.entries.len())
-                .map_err(|_| Error::msg("HIR memory-plan entry identity exceeds u32"))?,
+            u64::try_from(self.entries.len())
+                .map_err(|_| Error::msg("HIR memory-plan entry identity exceeds u64"))?,
         );
         let type_fact = self.type_planner.intern(ty)?;
         let fact = self.type_planner.fact(type_fact)?.clone();
@@ -107,7 +107,7 @@ impl<'a> Producer<'a> {
         Ok(id)
     }
     fn finish_loans(&mut self) -> Result<()> {
-        let mut loads_by_binding: BTreeMap<(MemoryFunctionId, u32), Vec<MemoryExpressionId>> =
+        let mut loads_by_binding: BTreeMap<(MemoryFunctionId, u64), Vec<MemoryExpressionId>> =
             BTreeMap::new();
         for usage in &self.uses {
             if usage.kind == MemoryUseKind::Load {

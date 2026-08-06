@@ -2,21 +2,25 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SourcePosition {
-    pub(crate) byte: u32,
-    pub(crate) line: u32,
-    pub(crate) column: u32,
+    pub(crate) byte: u64,
+    pub(crate) line: u64,
+    pub(crate) column: u64,
 }
 
 impl SourcePosition {
-    pub const fn byte(self) -> u32 {
+    pub const fn new(byte: u64, line: u64, column: u64) -> Self {
+        Self { byte, line, column }
+    }
+
+    pub const fn byte(self) -> u64 {
         self.byte
     }
 
-    pub const fn line(self) -> u32 {
+    pub const fn line(self) -> u64 {
         self.line
     }
 
-    pub const fn column(self) -> u32 {
+    pub const fn column(self) -> u64 {
         self.column
     }
 }
@@ -36,7 +40,7 @@ impl SourceSpan {
         self.end
     }
 
-    pub const fn byte_range(self) -> std::ops::Range<u32> {
+    pub const fn byte_range(self) -> std::ops::Range<u64> {
         self.start.byte..self.end.byte
     }
 

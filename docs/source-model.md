@@ -7,10 +7,14 @@ transactions. Text, structured interchange, IDE views, and human-readable diffs 
 around that snapshot. The compiler must consume semantic data directly rather than render and
 reparse text.
 
-The current Semantic Source implementation is a useful bootstrap: it has stable node access,
-transactions, typed holes, diagnostics, snapshots, and local sessions. Its schema still mirrors the
+The current Semantic Source implementation is a useful bootstrap: it has deterministic,
+revision-scoped opaque node access, transactions, typed holes, diagnostics, snapshots, and local
+sessions. Source positions, spans, node indexes, and JSON transaction/query relations now preserve
+`u64` values and perform checked host indexing, so values above `u32` do not saturate or alias.
+That representation change does not make dense `NodeId` edit-stable. The schema still mirrors the
 provisional text tree, spans, and rendering rules, and transactions ultimately publish source
-files. It is not the permanent model.
+files. Replacing revision-scoped dense nodes with stable logical semantic identity remains a Phase
+5 gap; this bootstrap is not the permanent model.
 
 ## Identity
 

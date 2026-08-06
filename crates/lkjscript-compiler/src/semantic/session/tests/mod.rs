@@ -66,7 +66,11 @@ fn handle(session: &mut SemanticSession, request: &[u8]) -> (Vec<u8>, serde_json
 
 fn frame(payload: &[u8]) -> Vec<u8> {
     let mut output = Vec::with_capacity(payload.len() + 8);
-    output.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    output.extend_from_slice(
+        &u64::try_from(payload.len())
+            .expect("fixture payload length fits u64")
+            .to_be_bytes(),
+    );
     output.extend_from_slice(payload);
     output
 }

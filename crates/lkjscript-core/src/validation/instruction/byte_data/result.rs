@@ -14,7 +14,7 @@ fn result_owner(
         if enum_id.bytes() != crate::RESULT_ID {
             return None;
         }
-        let layout = chunk.structural_layouts.get(ty.layout.index())?;
+        let layout = chunk.structural_layouts.get_structural(ty.layout)?;
         let crate::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
             return None;
         };

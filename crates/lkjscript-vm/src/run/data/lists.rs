@@ -55,7 +55,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
             let arena = self.list_arena()?;
             let key = arena.key_from_word(word).map_err(segmented_list_error)?;
             arena
-                .collect_cloned(key, u32::MAX)
+                .collect_cloned(key, None)
                 .map_err(segmented_list_error)
         })
         .and_then(|owned| {

@@ -132,7 +132,7 @@ pub struct SealedSemanticDagReleaseFailure {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SealedSemanticDagMetrics {
-    pub typed_stores: u32,
+    pub typed_stores: u64,
     pub runtime: StructuralRuntimeMetrics,
     pub sealed: SealedRegionMetrics,
     pub live_regions: u64,

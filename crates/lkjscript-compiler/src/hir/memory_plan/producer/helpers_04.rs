@@ -189,7 +189,7 @@ impl Producer<'_> {
         } else { MemoryCopySharePlan::BorrowExclusive };
         self.calls[call_index].borrow_scopes[argument_index] = Some(id);
         self.borrow_scopes.push(MemoryBorrowScopePlan { id, function: self.current_function,
-            call, argument_index: index_u32(argument_index)?, source_expression: expression,
+            call, argument_index: index_u64(argument_index)?, source_expression: expression,
             binding: reference.binding.raw(), place, kind, semantic_uses: 1, end_after });
         Ok(())
     }

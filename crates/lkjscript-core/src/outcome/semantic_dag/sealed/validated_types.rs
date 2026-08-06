@@ -1,9 +1,9 @@
 use super::super::{SemanticDagKind, SemanticDagType};
 use super::model::SealedSemanticDagError;
 use crate::{
-    StructuralFieldMetadata, StructuralFieldRoute, StructuralKind, StructuralType,
-    StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
-    ValidatedChunk,
+    StructuralFieldMetadata, StructuralFieldRoute, StructuralKind, StructuralSliceExt,
+    StructuralType, StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode,
+    StructuralValueCategory, ValidatedChunk,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -19,7 +19,7 @@ pub(super) fn return_type(chunk: &ValidatedChunk) -> Result<ExpectedType, Sealed
         .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
     let representation = chunk
         .structural_representations()
-        .get(id.index())
+        .get_structural(id)
         .filter(|item| item.id == id && item.category == StructuralValueCategory::Owner)
         .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
     eligible_structural_type(chunk, representation.type_id)?;
@@ -76,7 +76,7 @@ pub(super) fn structural_type(
 ) -> Result<&StructuralTypeMetadata, SealedSemanticDagError> {
     chunk
         .structural_types()
-        .get(id.index())
+        .get_structural(id)
         .filter(|metadata| metadata.id == id)
         .ok_or(SealedSemanticDagError::ValidatedShapeMismatch)
 }

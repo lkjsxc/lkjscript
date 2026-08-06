@@ -65,11 +65,7 @@ impl StructuralValueRuntime {
                 self.note_publication(facts);
                 self.note_slot_reuse(reused);
                 self.note_sealed_publication(zero_copy, copied_bytes);
-                self.record(
-                    StructuralEventKind::Allocate,
-                    root.slot(),
-                    u64::from(facts.nodes),
-                );
+                self.record(StructuralEventKind::Allocate, root.slot(), facts.nodes);
                 self.record(StructuralEventKind::Seal, owner.slot(), copied_bytes);
                 Ok(StructuralSealResult {
                     owner,

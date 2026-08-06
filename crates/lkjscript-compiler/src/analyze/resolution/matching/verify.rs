@@ -8,7 +8,7 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
     for (index, plan) in program.match_plans.iter().enumerate() {
         let mut places = BTreeSet::new();
         let expected_id =
-            u32::try_from(index).map_err(|_| Error::msg("match plan index exceeds u32"))?;
+            u64::try_from(index).map_err(|_| Error::msg("match plan identity exceeds u64"))?;
         if plan.id.raw() != expected_id
             || plan.arms.is_empty()
             || !plan.exhaustive
@@ -32,8 +32,8 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
         }
         let mut matrix = Vec::with_capacity(plan.arms.len());
         for (arm_index, arm) in plan.arms.iter().enumerate() {
-            let arm_id =
-                u16::try_from(arm_index).map_err(|_| Error::msg("match arm index exceeds u16"))?;
+            let arm_id = u64::try_from(arm_index)
+                .map_err(|_| Error::msg("match arm identity exceeds u64"))?;
             if arm.id != arm_id
                 || Type::join_control(&arm.body_type, &plan.result_type)
                     != Some(plan.result_type.clone())

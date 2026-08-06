@@ -3,17 +3,18 @@ use crate::*;
 
 #[test]
 fn ownership_verification_accepts_more_than_former_retained_state_and_work_boundaries() {
-    const OWNED_PARAMETERS: u32 = 44_000;
-    const STATE_CELLS_PER_BLOCK: usize = 3 * OWNED_PARAMETERS as usize;
+    const OWNED_PARAMETERS: u64 = 44_000;
+    const OWNED_PARAMETER_COUNT: usize = 44_000;
+    const STATE_CELLS_PER_BLOCK: usize = 3 * OWNED_PARAMETER_COUNT;
     const FORMER_RETAINED_STATE_CELLS: usize = 2 * STATE_CELLS_PER_BLOCK;
-    const FORMER_PRECHECK_WORK_AT_FIRST_PLAN: usize = 3 * OWNED_PARAMETERS as usize + 4;
+    const FORMER_PRECHECK_WORK_AT_FIRST_PLAN: usize = 3 * OWNED_PARAMETER_COUNT + 4;
     const _: () = assert!(STATE_CELLS_PER_BLOCK > 131_072);
     const _: () = assert!(FORMER_RETAINED_STATE_CELLS > 131_072);
     const _: () = assert!(FORMER_PRECHECK_WORK_AT_FIRST_PLAN > 131_072);
 
     let resource_kind = lkjscript_contracts::ResourceKind::FileReader;
     let resource_type = SsaType::Resource(resource_kind);
-    let parameters = vec![resource_type.clone(); OWNED_PARAMETERS as usize];
+    let parameters = vec![resource_type.clone(); OWNED_PARAMETER_COUNT];
     let places: Vec<_> = (0..OWNED_PARAMETERS)
         .map(|index| PlaceMetadata {
             id: PlaceId::new(index),
@@ -35,15 +36,15 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
             id: ValueId::new(
                 OWNED_PARAMETERS
                     .checked_add(index)
-                    .expect("test ValueId geometry fits u32"),
+                    .expect("test ValueId geometry fits u64"),
             ),
             ty: resource_type.clone(),
             owner_place: Some(PlaceId::new(index)),
             origin: Origin::SYNTHETIC,
         })
         .collect();
-    let cleanup = |start: u64, value_offset: u32| {
-        let mut nodes = Vec::with_capacity(OWNED_PARAMETERS as usize);
+    let cleanup = |start: u64, value_offset: u64| {
+        let mut nodes = Vec::with_capacity(OWNED_PARAMETER_COUNT);
         for index in 0..OWNED_PARAMETERS {
             nodes.push(FailureCleanupNode {
                 action: FailureCleanupAction::DropOwner {
@@ -51,17 +52,17 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
                     value: ValueId::new(
                         value_offset
                             .checked_add(index)
-                            .expect("test ValueId geometry fits u32"),
+                            .expect("test ValueId geometry fits u64"),
                     ),
                     glue: DropGlueIdentity::Resource(resource_kind),
                 },
-                next: (index > 0).then(|| FailureCleanupId::new(start + u64::from(index) - 1)),
+                next: (index > 0).then(|| FailureCleanupId::new(start + index - 1)),
             });
         }
-        let root = FailureCleanupId::new(start + u64::from(OWNED_PARAMETERS) - 1);
+        let root = FailureCleanupId::new(start + OWNED_PARAMETERS - 1);
         (nodes, root)
     };
-    let (mut failure_cleanups, entry_cleanup) = cleanup(0, 0_u32);
+    let (mut failure_cleanups, entry_cleanup) = cleanup(0, 0_u64);
     let successor_start =
         u64::try_from(failure_cleanups.len()).expect("test cleanup geometry fits u64");
     let (successor_nodes, successor_cleanup) = cleanup(successor_start, OWNED_PARAMETERS);
@@ -69,7 +70,7 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
     let call_id = ValueId::new(
         OWNED_PARAMETERS
             .checked_mul(2)
-            .expect("test ValueId geometry fits u32"),
+            .expect("test ValueId geometry fits u64"),
     );
     let mut call_metadata = metadata(EffectSet::PURE);
     call_metadata.failure_cleanup = Some(FailureCleanupRoots::single(successor_cleanup));
@@ -78,7 +79,7 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
         locals: Vec::new(),
         operand_stack: Vec::new(),
     });
-    let mut instructions = Vec::with_capacity(1 + OWNED_PARAMETERS as usize);
+    let mut instructions = Vec::with_capacity(1 + OWNED_PARAMETER_COUNT);
     instructions.push(Instruction {
         id: call_id,
         ty: SsaType::Unit,
@@ -88,7 +89,7 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
                 .iter()
                 .map(|parameter| parameter.id)
                 .collect(),
-            consuming: vec![true; OWNED_PARAMETERS as usize],
+            consuming: vec![true; OWNED_PARAMETER_COUNT],
             signature: Signature::monomorphic(parameters.clone(), SsaType::Unit),
             instantiation: None,
         },
@@ -100,7 +101,7 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
                 .raw()
                 .checked_add(1)
                 .and_then(|first| first.checked_add(index))
-                .expect("test ValueId geometry fits u32"),
+                .expect("test ValueId geometry fits u64"),
             index,
         )
     }));

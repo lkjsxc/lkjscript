@@ -145,8 +145,8 @@ pub struct MemoryWitnessGroup {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryWitness {
     pub id: MemoryWitnessId,
-    pub group: MemoryWitnessGroupId,
-    pub ordinal: u64,
+    pub group: Option<MemoryWitnessGroupId>,
+    pub ordinal: Option<u64>,
     pub facts: MemoryWitnessFacts,
 }
 
@@ -154,7 +154,13 @@ impl MemoryWitness {
     pub fn recompute_id(&self) -> lkjscript_core::Result<MemoryWitnessId> {
         let semantic = lkjscript_contracts::semantic_type_closure_hash(&self.facts.semantic)
             .map_err(|error| lkjscript_core::Error::msg(error.to_string()))?;
-        Ok(memory_witness_id(self.group, self.ordinal, semantic))
+        let group = self
+            .group
+            .ok_or_else(|| lkjscript_core::Error::msg("memory witness group is unresolved"))?;
+        let ordinal = self
+            .ordinal
+            .ok_or_else(|| lkjscript_core::Error::msg("memory witness ordinal is unresolved"))?;
+        Ok(memory_witness_id(group, ordinal, semantic))
     }
 }
 

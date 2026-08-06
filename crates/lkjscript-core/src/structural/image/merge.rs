@@ -2,7 +2,7 @@ use super::super::value_runtime::{
     StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntimeLimits,
 };
 use super::{
-    CheckedU32Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
+    CheckedU64Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
     TreeFacts,
 };
 
@@ -32,9 +32,9 @@ impl StructuralImage {
         nodes.try_reserve_exact(nodes_len)?;
         fields.try_reserve_exact(fields_len)?;
         blob.try_reserve_exact(blob_len)?;
-        let root_fields = CheckedU32Range::new(
+        let root_fields = CheckedU64Range::new(
             0,
-            u32::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?,
+            u64::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?,
         )
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
         nodes.push(StructuralNodeRecord {
@@ -47,7 +47,7 @@ impl StructuralImage {
                 None => StructuralNodePayload::Product(root_fields),
             },
         });
-        let mut node_offset = 1_u32;
+        let mut node_offset = 1_u64;
         for child in children {
             fields.push(LocalNodeId::new(node_offset));
             node_offset = node_offset
@@ -56,8 +56,8 @@ impl StructuralImage {
         }
         node_offset = 1;
         let mut field_offset =
-            u32::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-        let mut blob_offset = 0_u32;
+            u64::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let mut blob_offset = 0_u64;
         for child in children {
             for record in &child.nodes {
                 nodes.push(StructuralNodeRecord {
@@ -95,8 +95,8 @@ impl StructuralImage {
 
 fn shift_payload(
     payload: &StructuralNodePayload,
-    field_offset: u32,
-    blob_offset: u32,
+    field_offset: u64,
+    blob_offset: u64,
 ) -> Result<StructuralNodePayload, StructuralValueError> {
     match payload {
         StructuralNodePayload::Inline(value) => Ok(StructuralNodePayload::Inline(*value)),
@@ -117,12 +117,12 @@ fn shift_payload(
 }
 
 fn shift_range(
-    range: CheckedU32Range,
-    offset: u32,
-) -> Result<CheckedU32Range, StructuralValueError> {
+    range: CheckedU64Range,
+    offset: u64,
+) -> Result<CheckedU64Range, StructuralValueError> {
     let start = range
         .start()
         .checked_add(offset)
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
-    CheckedU32Range::new(start, range.len()).ok_or(StructuralValueError::ArithmeticOverflow)
+    CheckedU64Range::new(start, range.len()).ok_or(StructuralValueError::ArithmeticOverflow)
 }

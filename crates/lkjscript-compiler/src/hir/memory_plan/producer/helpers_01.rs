@@ -124,7 +124,7 @@ fn destination_shape(
     products_by_id: &HashMap<hir::ProductId, usize>,
     enums_by_id: &HashMap<hir::EnumId, usize>,
     expression: &Expr,
-) -> Result<(u32, Option<MemoryActivePayload>)> {
+) -> Result<(u64, Option<MemoryActivePayload>)> {
     match &expression.kind {
         ExprKind::ProductValue { product, fields } => {
             let declared = products_by_id
@@ -135,7 +135,7 @@ fn destination_shape(
             if declared.fields.len() != fields.len() {
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION product fields"));
             }
-            Ok((index_u32(fields.len())?, None))
+            Ok((index_u64(fields.len())?, None))
         }
         ExprKind::EnumValue { enum_id, variant, fields, .. } => {
             let declared = enums_by_id
@@ -147,7 +147,7 @@ fn destination_shape(
             if declared.fields.len() != fields.len() {
                 return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION enum fields"));
             }
-            Ok((index_u32(fields.len())?, Some(MemoryActivePayload {
+            Ok((index_u64(fields.len())?, Some(MemoryActivePayload {
                 variant: variant.bytes(), source_order: declared.source_order,
             })))
         }

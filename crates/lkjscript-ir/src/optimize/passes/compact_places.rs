@@ -6,8 +6,8 @@ pub(crate) fn compact_blocks(program: &mut Program) -> crate::Result<()> {
     for function in &mut program.functions {
         let mut mapping = HashMap::with_capacity(function.blocks.len());
         for (index, block) in function.blocks.iter().enumerate() {
-            let raw = u32::try_from(index)
-                .map_err(|_| crate::IrError::new("SSA block count exceeds u32"))?;
+            let raw = u64::try_from(index)
+                .map_err(|_| crate::IrError::new("SSA block identity exceeds u64"))?;
             mapping.insert(block.id, BlockId::new(raw));
         }
         function.entry = mapped_block(&mapping, function.entry)?;
@@ -75,8 +75,8 @@ pub(crate) fn compact_places(program: &mut Program) -> crate::Result<()> {
             .collect();
         let mut mapping = HashMap::with_capacity(retained.len());
         for (index, place) in retained.iter().enumerate() {
-            let raw = u32::try_from(index)
-                .map_err(|_| crate::IrError::new("SSA place count exceeds u32"))?;
+            let raw = u64::try_from(index)
+                .map_err(|_| crate::IrError::new("SSA place identity exceeds u64"))?;
             mapping.insert(place.id, crate::PlaceId::new(raw));
         }
         function.places = retained

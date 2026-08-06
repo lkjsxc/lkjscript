@@ -2,37 +2,37 @@ use super::*;
 
 pub(super) fn verify_dense(plan: &HirMemoryPlan) -> Result<()> {
     for (index, function) in plan.functions.iter().enumerate() {
-        if function.id.raw() != index_u32(index)? || function.signature.function != function.id {
+        if function.id.raw() != index_u64(index)? || function.signature.function != function.id {
             return Err(Error::msg("HIR memory-plan functions are not dense"));
         }
     }
     for (index, entry) in plan.entries.iter().enumerate() {
-        if entry.id.raw() != index_u32(index)? {
+        if entry.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan entries are not dense"));
         }
     }
     for (index, item) in plan.uses.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan uses are not dense"));
         }
     }
     for (index, item) in plan.constants.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan constants are not dense"));
         }
     }
     for (index, item) in plan.calls.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan calls are not dense"));
         }
     }
     for (index, item) in plan.obligations.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan obligations are not dense"));
         }
     }
     for (index, item) in plan.type_facts.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
+        if item.id.raw() != index_u64(index)? {
             return Err(Error::msg("HIR memory-plan type facts are not dense"));
         }
     }

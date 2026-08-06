@@ -4,7 +4,7 @@ use super::*;
 /// through verified generated-frame homes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeapRuntimeSite {
-    pub(super) id: u32,
+    pub(super) id: u64,
     pub(super) function: FunctionId,
     pub(super) descriptor: HeapCallDescriptor,
     pub(super) arguments: Vec<FrameHome>,
@@ -14,7 +14,7 @@ pub struct HeapRuntimeSite {
 
 impl HeapRuntimeSite {
     #[must_use]
-    pub const fn id(&self) -> u32 {
+    pub const fn id(&self) -> u64 {
         self.id
     }
 
@@ -54,7 +54,7 @@ pub(super) fn verify_heap_sites(
             .iter()
             .find(|frame| frame.function == site.function)
             .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
-        if site.id as usize != expected_id
+        if usize::try_from(site.id).ok() != Some(expected_id)
             || site.arguments.len() != site.descriptor.input_types().len()
             || site
                 .arguments

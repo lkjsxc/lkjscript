@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(clippy::expect_used)]
 pub(super) fn install_structural_type(
     program: &mut Program,
     ty: SsaType,
@@ -8,15 +9,17 @@ pub(super) fn install_structural_type(
     if !program.memory.plan.is_resolved() {
         program.memory.plan = MemoryPlanId::new([1; 32]);
     }
-    let index = u64::try_from(program.memory.types.len()).unwrap_or(u64::MAX);
+    let index = u64::try_from(program.memory.types.len()).expect("fixture type count fits u64");
+    let identity_byte = u8::try_from(index.checked_add(1).expect("fixture identity arithmetic"))
+        .expect("fixture identity byte");
     let type_id = StructuralTypeId::new(index);
     let layout = StructuralLayoutId::new(index);
     program.memory.layouts.push(StructuralLayoutMetadata {
         id: layout,
-        identity: RuntimeLayoutId::new([index.saturating_add(1) as u8; 32]),
+        identity: RuntimeLayoutId::new([identity_byte; 32]),
         kind,
     });
-    let witness = MemoryWitnessId::new([index.saturating_add(1) as u8; 32]);
+    let witness = MemoryWitnessId::new([identity_byte; 32]);
     program.memory.types.push(StructuralTypeMetadata {
         id: type_id,
         witness,
@@ -38,7 +41,8 @@ pub(super) fn install_structural_type(
             StructuralStorage::UniqueStructural,
         ),
     ] {
-        let id = u64::try_from(program.memory.representations.len()).unwrap_or(u64::MAX);
+        let id = u64::try_from(program.memory.representations.len())
+            .expect("fixture representation count fits u64");
         program
             .memory
             .representations
@@ -60,7 +64,7 @@ pub(super) fn install_structural_type(
     }
 }
 
-pub(super) fn allocating_metadata(position: u32, effects: EffectSet) -> InstructionMetadata {
+pub(super) fn allocating_metadata(position: u64, effects: EffectSet) -> InstructionMetadata {
     InstructionMetadata {
         origin: Origin::SYNTHETIC,
         effects,
@@ -83,13 +87,11 @@ pub(super) fn allocating_metadata(position: u32, effects: EffectSet) -> Instruct
 }
 
 pub(super) fn allocating_cleanup_metadata(
-    position: u32,
+    position: u64,
     effects: EffectSet,
-    cleanup: u32,
+    cleanup: u64,
 ) -> InstructionMetadata {
     let mut metadata = allocating_metadata(position, effects);
-    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
-        u64::from(cleanup),
-    )));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(cleanup)));
     metadata
 }

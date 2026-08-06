@@ -3,6 +3,9 @@ use super::super::value_runtime::{
 };
 use super::{discard_semantic, LocalNodeId, StructuralImage, StructuralNodePayload};
 
+// Image construction validates node/range host indexing; this traversal only consumes published
+// records and its explicit work stacks preserve those invariants.
+#[allow(clippy::expect_used)]
 impl StructuralImage {
     pub fn to_semantic(&self) -> Result<SemanticValue, StructuralValueError> {
         self.to_semantic_at(LocalNodeId::ROOT)
@@ -20,7 +23,10 @@ impl StructuralImage {
         built.resize_with(self.nodes.len(), || None);
         pending.push(root);
         while let Some(id) = pending.pop() {
-            if std::mem::replace(&mut reachable[id.get() as usize], true) {
+            if std::mem::replace(
+                &mut reachable[id.index().expect("validated node identity")],
+                true,
+            ) {
                 continue;
             }
             match &self.record(id)?.payload {
@@ -51,7 +57,7 @@ impl StructuralImage {
             };
             built[index] = Some(SemanticValue::new(record.value_type, payload));
         }
-        built[root.get() as usize]
+        built[root.index().expect("validated root identity")]
             .take()
             .ok_or(StructuralValueError::InvariantViolation)
     }
@@ -91,7 +97,7 @@ fn build_payload(
 
 fn take_fields(
     image: &StructuralImage,
-    range: super::CheckedU32Range,
+    range: super::CheckedU64Range,
     built: &mut [Option<SemanticValue>],
 ) -> Result<Vec<SemanticValue>, StructuralValueError> {
     let ids = StructuralImage::range(&image.fields, range)
@@ -99,9 +105,11 @@ fn take_fields(
     let mut fields = Vec::new();
     fields.try_reserve_exact(ids.len())?;
     for id in ids {
+        let index = id.index().ok_or(StructuralValueError::InvariantViolation)?;
         fields.push(
-            built[id.get() as usize]
-                .take()
+            built
+                .get_mut(index)
+                .and_then(Option::take)
                 .ok_or(StructuralValueError::InvariantViolation)?,
         );
     }

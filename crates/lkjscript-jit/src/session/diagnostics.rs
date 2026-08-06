@@ -5,7 +5,7 @@ impl JitSession {
         &self,
         function: FunctionId,
         trap: TrapCode,
-        site: Option<u32>,
+        site: Option<u64>,
     ) -> String {
         match trap {
             TrapCode::I64Overflow => "checked I64 overflow".to_string(),
@@ -14,8 +14,9 @@ impl JitSession {
                 .last_runtime_trap
                 .clone()
                 .or_else(|| {
-                    self.functions
-                        .get(function.index().unwrap_or(usize::MAX))
+                    function
+                        .index()
+                        .and_then(|function| self.functions.get(function))
                         .and_then(|record| record.code_object)
                         .and_then(|identity| {
                             self.objects

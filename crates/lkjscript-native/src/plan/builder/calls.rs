@@ -39,7 +39,7 @@ impl FunctionBuilder {
                 .zip(descriptor.input_types())
                 .any(|(argument, expected)| {
                     self.values
-                        .get(argument.index as usize)
+                        .get(argument.host_index().unwrap_or(usize::MAX))
                         .filter(|fact| fact.id == *argument)
                         .is_none_or(|fact| fact.value_type != *expected)
                 })
@@ -131,7 +131,7 @@ impl FunctionBuilder {
         self.terminate(block, Terminator::Trap { trap, site: None })
     }
 
-    pub fn trap_at(&mut self, block: BlockId, trap: TrapCode, site: u32) -> Result<(), PlanError> {
+    pub fn trap_at(&mut self, block: BlockId, trap: TrapCode, site: u64) -> Result<(), PlanError> {
         self.terminate(
             block,
             Terminator::Trap {

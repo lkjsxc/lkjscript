@@ -5,7 +5,7 @@ fn semantic_for_type(
 ) -> Result<SemanticValue> {
     let ty = chunk
         .structural_types()
-        .get(type_id.index())
+        .get_structural(type_id)
         .filter(|ty| ty.id == type_id)
         .ok_or_else(|| Error::msg("host aggregate structural type is stale"))?;
     match value {
@@ -105,7 +105,7 @@ fn enum_semantic(
 ) -> Result<SemanticValue> {
     let layout = chunk
         .structural_layouts()
-        .get(layout_id.index())
+        .get_structural(layout_id)
         .filter(|layout| layout.id == layout_id)
         .ok_or_else(|| Error::msg("host enum structural layout is stale"))?;
     let StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {

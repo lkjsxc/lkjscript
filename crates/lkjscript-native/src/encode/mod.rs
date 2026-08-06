@@ -74,7 +74,7 @@ struct BranchFixup {
 
 struct FunctionEncoder<'a> {
     function: &'a FunctionPlan,
-    function_ordinal: u32,
+    function_ordinal: u64,
     signatures: &'a [(FunctionId, crate::Signature)],
     bytes: &'a mut Vec<u8>,
     relocations: &'a mut Vec<crate::Relocation>,

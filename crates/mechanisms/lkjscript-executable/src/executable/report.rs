@@ -3,7 +3,7 @@ use super::*;
 #[derive(Clone, Debug, PartialEq)]
 pub struct InvocationReport {
     pub(super) outcome: InvocationOutcome,
-    pub(super) trap_site: Option<u32>,
+    pub(super) trap_site: Option<u64>,
     pub(super) poll_count: u64,
     pub(super) native_entries: Vec<NativeEntryCount>,
     pub(super) peak_active_frame_depth: usize,
@@ -28,7 +28,7 @@ impl InvocationReport {
     }
 
     #[must_use]
-    pub const fn trap_site(&self) -> Option<u32> {
+    pub const fn trap_site(&self) -> Option<u64> {
         self.trap_site
     }
 

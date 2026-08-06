@@ -16,7 +16,7 @@ pub enum StructuralOwnerKind {
 pub struct StructuralDisposeReport {
     pub ownership: StructuralOwnerKind,
     pub final_release: bool,
-    pub nodes_reclaimed: u32,
+    pub nodes_reclaimed: u64,
     pub bytes_reclaimed: u64,
-    pub release_work: u32,
+    pub release_work: u64,
 }

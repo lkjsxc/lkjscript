@@ -1,5 +1,5 @@
 use super::{instruction_error, types::*, Kind, State};
-use crate::{Chunk, DecodedInstruction, FunctionProto, ResourceKind, Result};
+use crate::{Chunk, DecodedInstruction, FunctionProto, ResourceKind, Result, StructuralSliceExt};
 
 pub(super) fn file_open(
     chunk: &Chunk,
@@ -64,7 +64,7 @@ pub(super) fn structural_option_result(
         let crate::StructuralFieldRoute::Structural(type_id) = field.route else {
             return false;
         };
-        let Some(ty) = chunk.structural_types.get(type_id.index()) else {
+        let Some(ty) = chunk.structural_types.get_structural(type_id) else {
             return false;
         };
         if !matches!(
@@ -73,7 +73,7 @@ pub(super) fn structural_option_result(
         ) {
             return false;
         }
-        let Some(layout) = chunk.structural_layouts.get(ty.layout.index()) else {
+        let Some(layout) = chunk.structural_layouts.get_structural(ty.layout) else {
             return false;
         };
         let crate::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {

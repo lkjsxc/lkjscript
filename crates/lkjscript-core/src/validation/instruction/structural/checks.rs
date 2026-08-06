@@ -38,7 +38,7 @@ fn require_same_type(
 ) -> Result<()> {
     let left = chunk
         .structural_representations
-        .get(left.index())
+        .get_structural(left)
         .ok_or_else(|| {
             instruction_error(
                 proto,
@@ -49,7 +49,7 @@ fn require_same_type(
         })?;
     let right = chunk
         .structural_representations
-        .get(right.index())
+        .get_structural(right)
         .ok_or_else(|| {
             instruction_error(
                 proto,
@@ -94,11 +94,11 @@ fn require_field_value(
             Kind::StructuralOwner { representation, .. },
         ) => chunk
             .structural_representations
-            .get(representation.index())
+            .get_structural(representation)
             .and_then(|item| {
                 chunk
                     .structural_types
-                    .get(item.type_id.index())
+                    .get_structural(item.type_id)
                     .map(|ty| (item, ty))
             })
             .is_some_and(|(item, ty)| {

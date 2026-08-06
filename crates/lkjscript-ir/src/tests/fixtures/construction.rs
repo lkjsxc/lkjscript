@@ -17,11 +17,9 @@ pub(crate) fn metadata(effects: EffectSet) -> InstructionMetadata {
     }
 }
 
-pub(crate) fn metadata_cleanup(effects: EffectSet, cleanup: u32) -> InstructionMetadata {
+pub(crate) fn metadata_cleanup(effects: EffectSet, cleanup: u64) -> InstructionMetadata {
     let mut metadata = metadata(effects);
-    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
-        u64::from(cleanup),
-    )));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(cleanup)));
     metadata
 }
 
@@ -34,15 +32,13 @@ pub(crate) fn block_metadata() -> BlockMetadata {
     }
 }
 
-pub(crate) fn block_metadata_cleanup(cleanup: u32) -> BlockMetadata {
+pub(crate) fn block_metadata_cleanup(cleanup: u64) -> BlockMetadata {
     let mut metadata = block_metadata();
-    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
-        u64::from(cleanup),
-    )));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(cleanup)));
     metadata
 }
 
-pub(crate) fn constant(id: u32, value: i64) -> Instruction {
+pub(crate) fn constant(id: u64, value: i64) -> Instruction {
     Instruction {
         id: ValueId::new(id),
         ty: SsaType::I64,
@@ -52,7 +48,7 @@ pub(crate) fn constant(id: u32, value: i64) -> Instruction {
 }
 
 pub(crate) fn runtime(
-    id: u32,
+    id: u64,
     operation: RuntimeOp,
     arguments: Vec<ValueId>,
     effects: EffectSet,
@@ -112,7 +108,7 @@ pub(crate) fn core_traits() -> Vec<TraitMetadata> {
     .into_iter()
     .enumerate()
     .map(|(index, (name, role))| TraitMetadata {
-        id: TraitId::new(index as u32),
+        id: TraitId::new(index as u64),
         name: name.into(),
         role,
         source: None,
@@ -124,7 +120,7 @@ pub(crate) fn byte_vector_type() -> SsaType {
     SsaType::ByteVector
 }
 
-pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
+pub(crate) fn owned_place(id: u64, binding: u64) -> crate::PlaceMetadata {
     crate::PlaceMetadata {
         id: PlaceId::new(id),
         binding: crate::BindingId::new(binding),
@@ -133,7 +129,7 @@ pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
     }
 }
 
-pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
+pub(crate) fn drop_byte(id: u64, place: u64, value: u64) -> Instruction {
     Instruction {
         id: ValueId::new(id),
         ty: SsaType::Unit,
@@ -147,23 +143,21 @@ pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
     }
 }
 
-pub(crate) fn drop_byte_cleanup(id: u32, place: u32, value: u32, cleanup: u32) -> Instruction {
+pub(crate) fn drop_byte_cleanup(id: u64, place: u64, value: u64, cleanup: u64) -> Instruction {
     let mut instruction = drop_byte(id, place, value);
-    instruction.metadata.failure_cleanup = Some(FailureCleanupRoots::single(
-        FailureCleanupId::new(u64::from(cleanup)),
-    ));
+    instruction.metadata.failure_cleanup =
+        Some(FailureCleanupRoots::single(FailureCleanupId::new(cleanup)));
     instruction
 }
 
-pub(crate) fn place_end_cleanup(id: u32, place: u32, cleanup: u32) -> Instruction {
+pub(crate) fn place_end_cleanup(id: u64, place: u64, cleanup: u64) -> Instruction {
     let mut instruction = place_end(id, place);
-    instruction.metadata.failure_cleanup = Some(FailureCleanupRoots::single(
-        FailureCleanupId::new(u64::from(cleanup)),
-    ));
+    instruction.metadata.failure_cleanup =
+        Some(FailureCleanupRoots::single(FailureCleanupId::new(cleanup)));
     instruction
 }
 
-pub(crate) fn place_end(id: u32, place: u32) -> Instruction {
+pub(crate) fn place_end(id: u64, place: u64) -> Instruction {
     Instruction {
         id: ValueId::new(id),
         ty: SsaType::Unit,

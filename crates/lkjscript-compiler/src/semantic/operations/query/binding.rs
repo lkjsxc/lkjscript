@@ -6,7 +6,7 @@ use crate::source::{DeclarationKind, NodeKind, SourceNode, SyntaxKind, Validated
 
 pub(super) fn binding_fact(
     tree: &ValidatedSourceTree,
-    index: u32,
+    index: u64,
     node: &crate::source::NodeSummary,
     revision: &str,
 ) -> FactRecord {
@@ -20,7 +20,10 @@ pub(super) fn binding_fact(
         return unavailable_fact(revision, UnavailableReason::StructuralPosition);
     };
     let nodes = crate::semantic::tree::source_nodes(tree);
-    let Some(root) = nodes.get(owner.node().index() as usize) else {
+    let Some(root) = usize::try_from(owner.node().index())
+        .ok()
+        .and_then(|index| nodes.get(index))
+    else {
         return unavailable_fact(revision, UnavailableReason::DerivedArtifactUnavailable);
     };
     let Ok(path) = crate::semantic::transaction::path_from_owner(tree, owner.node().index(), index)

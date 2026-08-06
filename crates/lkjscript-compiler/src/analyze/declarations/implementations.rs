@@ -8,7 +8,7 @@ impl Analyzer {
         let mut coherent = HashSet::new();
         for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
-                u32::try_from(source_index)
+                u64::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
             );
             for form in &file.forms {
@@ -65,7 +65,7 @@ impl Analyzer {
                     ));
                 }
                 let id = ImplId::new(
-                    u32::try_from(self.implementations.len())
+                    u64::try_from(self.implementations.len())
                         .map_err(|_| self.error(source, "too many implementations for ImplId"))?,
                 );
                 self.implementations.push(ImplDefinition {

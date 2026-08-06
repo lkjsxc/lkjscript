@@ -24,8 +24,8 @@ pub(super) fn verify_witness_groups(plan: &HirMemoryPlan) -> Result<()> {
                         lkjscript_contracts::semantic_type_closure_hash(&witness.facts.semantic)
                             .map_err(|error| Error::msg(error.to_string()))?;
                     if !covered.insert(member.witness)
-                        || witness.group != group.id
-                        || witness.ordinal != member.ordinal
+                        || witness.group != Some(group.id)
+                        || witness.ordinal != Some(member.ordinal)
                         || member.semantic_identity != semantic_identity
                     {
                         return Err(Error::msg(

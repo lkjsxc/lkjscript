@@ -11,7 +11,7 @@ pub struct EvalStructuralObservation {
     pub roots: StructuralRootTableStats,
     pub events: Vec<StructuralEvent>,
     pub destination_cleanup: Vec<DestinationCleanupReport>,
-    pub static_string_artifacts: u32,
+    pub static_string_artifacts: u64,
     pub final_empty: bool,
 }
 
@@ -22,8 +22,7 @@ impl EvalStructuralObservation {
             roots: session.runtime.root_stats(),
             events: session.runtime.events().iter().copied().collect(),
             destination_cleanup: session.runtime.cleanup_reports().cloned().collect(),
-            static_string_artifacts: u32::try_from(session.static_string_count())
-                .unwrap_or(u32::MAX),
+            static_string_artifacts: session.static_string_count() as u64,
             final_empty,
         }
     }

@@ -19,28 +19,62 @@ pub(super) fn task_graph(
     let mut compute = 0_u64;
     let mut scratch = 0_u64;
     for (slot, function) in program.functions.iter().enumerate() {
-        let task = TaskId::new(slot as u32, 1);
+        let slot = u32::try_from(slot).map_err(|_| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-identity",
+                "optimizer task identity exceeds scheduler representation",
+            )
+        })?;
+        let task = TaskId::new(slot, 1);
         let local_compute = discovery_weight(function);
         let local_scratch = discovery_scratch(function);
-        compute = compute.saturating_add(local_compute);
-        scratch = scratch.saturating_add(local_scratch);
-        let output = DataOwnerId::new(slot as u32 + 1, 1);
+        compute = compute.checked_add(local_compute).ok_or_else(|| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-compute",
+                "optimizer compute accounting overflow",
+            )
+        })?;
+        scratch = scratch.checked_add(local_scratch).ok_or_else(|| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-scratch",
+                "optimizer scratch accounting overflow",
+            )
+        })?;
+        let output_slot = slot.checked_add(1).ok_or_else(|| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-identity",
+                "optimizer output identity exceeds scheduler representation",
+            )
+        })?;
+        let access_slot = slot.checked_mul(2).ok_or_else(|| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-identity",
+                "optimizer access identity exceeds scheduler representation",
+            )
+        })?;
+        let second_access_slot = access_slot.checked_add(1).ok_or_else(|| {
+            lkjscript_resource::ResourceError::new(
+                "scheduled-identity",
+                "optimizer access identity exceeds scheduler representation",
+            )
+        })?;
+        let output = DataOwnerId::new(output_slot, 1);
         builder.add_task(TaskNode {
             id: task,
             class: TaskClassId::from_name("proof-edit-discovery"),
             scope,
-            result: TaskResultId::new(slot as u32, 1),
+            result: TaskResultId::new(slot, 1),
             result_owner: output,
             dependencies: Vec::new(),
             accesses: vec![
                 AccessRecord {
-                    id: AccessRecordId::new((slot * 2) as u32, 1),
+                    id: AccessRecordId::new(access_slot, 1),
                     owner: input,
                     mode: AccessMode::Read,
                     range: None,
                 },
                 AccessRecord {
-                    id: AccessRecordId::new((slot * 2 + 1) as u32, 1),
+                    id: AccessRecordId::new(second_access_slot, 1),
                     owner: output,
                     mode: AccessMode::Produce,
                     range: None,
@@ -58,7 +92,12 @@ pub(super) fn task_graph(
         GraphLimits {
             max_tasks: program.functions.len(),
             max_dependencies: 0,
-            max_accesses: program.functions.len().saturating_mul(2),
+            max_accesses: program.functions.len().checked_mul(2).ok_or_else(|| {
+                lkjscript_resource::ResourceError::new(
+                    "scheduled-accesses",
+                    "optimizer access accounting overflow",
+                )
+            })?,
             max_compute_units: compute,
             max_scratch_bytes: scratch,
         },
@@ -73,9 +112,12 @@ pub(super) fn validate_admission(
         return Err("scheduled discovery requires a worker");
     }
     let mut queued = vec![0_u64; plan.workers.len()];
-    let descriptor_bytes = std::mem::size_of::<TaskId>() as u64;
+    let descriptor_bytes = u64::try_from(std::mem::size_of::<TaskId>())
+        .map_err(|_| "scheduled discovery descriptor size exceeds u64")?;
     for task in graph.tasks() {
-        let worker = task.id.slot as usize % plan.workers.len();
+        let worker = usize::try_from(task.id.slot)
+            .map_err(|_| "scheduled discovery task identity is not host-addressable")?
+            % plan.workers.len();
         queued[worker] = queued[worker].saturating_add(descriptor_bytes);
         if task.scratch_bytes > plan.workers[worker].scratch_bytes {
             return Err("scheduled discovery scratch reservation exceeds worker plan");

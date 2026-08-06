@@ -128,7 +128,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
     }
 }
 
-fn drop_plan(_id: u32, place: Option<u32>, value: u32) -> FailureCleanupNode {
+fn drop_plan(_id: u64, place: Option<u64>, value: u64) -> FailureCleanupNode {
     FailureCleanupNode {
         action: FailureCleanupAction::DropOwner {
             place: place.map(PlaceId::new),

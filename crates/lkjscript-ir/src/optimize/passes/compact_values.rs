@@ -12,19 +12,19 @@ pub(crate) fn compact_values(program: &mut Program) -> crate::Result<()> {
     for function in &mut program.functions {
         compact_failure_cleanups(function)?;
         let mut mapping = HashMap::new();
-        let mut next = 0_u32;
+        let mut next = 0_u64;
         for block in &function.blocks {
             for parameter in &block.parameters {
                 mapping.insert(parameter.id, ValueId::new(next));
                 next = next
                     .checked_add(1)
-                    .ok_or_else(|| crate::IrError::new("SSA value count exceeds u32"))?;
+                    .ok_or_else(|| crate::IrError::new("SSA value identity exceeds u64"))?;
             }
             for instruction in &block.instructions {
                 mapping.insert(instruction.id, ValueId::new(next));
                 next = next
                     .checked_add(1)
-                    .ok_or_else(|| crate::IrError::new("SSA value count exceeds u32"))?;
+                    .ok_or_else(|| crate::IrError::new("SSA value identity exceeds u64"))?;
             }
         }
         for block in &mut function.blocks {

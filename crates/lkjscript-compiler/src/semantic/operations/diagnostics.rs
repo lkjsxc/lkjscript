@@ -40,7 +40,7 @@ pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<Diag
         if registered_form(name) || crate::hir::Operation::from_name(name).is_some() {
             continue;
         }
-        let index = u32::try_from(source_index).unwrap_or(u32::MAX);
+        let index = source_index as u64;
         let known = tree
             .nodes()
             .get(source_index)

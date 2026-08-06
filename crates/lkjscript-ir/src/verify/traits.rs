@@ -13,7 +13,7 @@ enum CanonicalSsaTypeNode {
     List(usize),
     Function {
         type_parameters: Vec<String>,
-        bounds: Vec<(String, u32)>,
+        bounds: Vec<(String, u64)>,
         witnesses: Vec<(String, Vec<u8>)>,
         parameters: Vec<usize>,
         result: usize,

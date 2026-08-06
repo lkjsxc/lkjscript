@@ -25,7 +25,8 @@ pub fn encode(
         let start = bytes.len();
         let frame_bytes = calculate_frame_bytes(function)?;
         let outgoing_arguments = maximum_outgoing_arguments(function)?;
-        let function_ordinal = to_u32(function_ordinal)?;
+        let function_ordinal = u64::try_from(function_ordinal)
+            .map_err(|_| EncodeError::LimitExceeded("u64 function ordinal width"))?;
         let mut encoder = FunctionEncoder {
             function,
             function_ordinal,
@@ -60,8 +61,12 @@ pub fn encode(
         frames.push(frame_facts(
             function.id,
             frame_bytes,
-            to_u32(function.values.len())?,
-            to_u32(function.locals.len())?,
+            u64::try_from(function.values.len()).map_err(|_| {
+                NativeError::Encode(EncodeError::LimitExceeded("value frame identity"))
+            })?,
+            u64::try_from(function.locals.len()).map_err(|_| {
+                NativeError::Encode(EncodeError::LimitExceeded("local frame identity"))
+            })?,
             outgoing_arguments,
             build_frame_homes(function)?,
             returned_structural_owner_homes(function),

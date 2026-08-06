@@ -1,10 +1,10 @@
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryLoanPlan {
     pub function: MemoryFunctionId,
-    pub place: u32,
-    pub loan: u32,
+    pub place: u64,
+    pub loan: u64,
     pub expression: MemoryExpressionId,
-    pub binding: Option<u32>,
+    pub binding: Option<u64>,
     pub kind: MemoryBorrowKind,
     pub semantic_uses: u64,
     pub end_after: MemoryExpressionId,
@@ -31,10 +31,10 @@ pub struct MemoryDropGluePlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryDropPathElement {
-    ProductField { index: u32, name: String },
+    ProductField { index: u64, name: String },
     EnumField {
         variant: [u8; 32],
-        index: u32,
+        index: u64,
         field: [u8; 32],
     },
 }

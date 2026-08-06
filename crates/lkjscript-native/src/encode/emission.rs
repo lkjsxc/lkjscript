@@ -6,7 +6,7 @@ impl FunctionEncoder<'_> {
             let target = match fixup.target {
                 FixupTarget::Block(block) => self
                     .block_offsets
-                    .get(block.index as usize)
+                    .get(block.host_index().unwrap_or(usize::MAX))
                     .copied()
                     .flatten(),
                 FixupTarget::Trap(trap) => self.trap_offsets[trap_index(trap)],
@@ -29,7 +29,7 @@ impl FunctionEncoder<'_> {
     pub(super) fn value_type(&self, value: ValueId) -> Result<ValueType, NativeError> {
         self.function
             .values
-            .get(value.index as usize)
+            .get(value.host_index().unwrap_or(usize::MAX))
             .filter(|fact| fact.id == value)
             .map(|fact| fact.value_type)
             .ok_or(NativeError::Encode(EncodeError::InvalidValue))
@@ -40,11 +40,11 @@ impl FunctionEncoder<'_> {
     }
 
     pub(super) fn local_offset(&self, local: crate::LocalId) -> Result<i32, NativeError> {
-        local_home_offset(local.index as usize)
+        local_home_offset(local.host_index().unwrap_or(usize::MAX))
     }
 
     pub(super) fn value_offset(&self, value: ValueId) -> Result<i32, NativeError> {
-        value_home_offset(self.function, value.index as usize)
+        value_home_offset(self.function, value.host_index().unwrap_or(usize::MAX))
     }
 
     pub(super) fn load_rax_immediate(&mut self, value: u64) -> Result<(), NativeError> {

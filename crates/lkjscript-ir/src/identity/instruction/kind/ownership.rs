@@ -10,7 +10,7 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         }
         InstructionKind::Copy(value) => {
             out.tag(1);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::PlaceInit { place, value } => {
             out.tag(2);
@@ -18,13 +18,13 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         }
         InstructionKind::PlaceEnd { place } => {
             out.tag(3);
-            out.u32(place.raw());
+            out.wide(place.raw());
         }
         InstructionKind::EndBorrow { place, loan, value } => {
             out.tag(4);
-            out.u32(place.raw());
-            out.u32(loan.raw());
-            out.u32(value.raw());
+            out.wide(place.raw());
+            out.wide(loan.raw());
+            out.wide(value.raw());
         }
         InstructionKind::Drop {
             place,
@@ -51,10 +51,10 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             value,
         } => {
             out.tag(7);
-            out.u32(place.raw());
-            out.u32(loan.raw());
+            out.wide(place.raw());
+            out.wide(loan.raw());
             borrow_kind(out, *kind);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::StructuralPublish {
             representation,
@@ -79,17 +79,17 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             value,
         } => {
             out.tag(10);
-            out.u32(destination.raw());
+            out.wide(destination.raw());
             out.u64(*field);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::DestinationFinish { destination } => {
             out.tag(11);
-            out.u32(destination.raw());
+            out.wide(destination.raw());
         }
         InstructionKind::DestinationAbort { destination } => {
             out.tag(12);
-            out.u32(destination.raw());
+            out.wide(destination.raw());
         }
         InstructionKind::AggregateFieldBorrow {
             representation,
@@ -100,10 +100,10 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(13);
             out.u64(representation.raw());
-            out.u32(place.raw());
-            out.u32(loan.raw());
+            out.wide(place.raw());
+            out.wide(loan.raw());
             out.u64(*field);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::AggregateTag {
             representation,
@@ -120,9 +120,9 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(15);
             out.u64(representation.raw());
-            out.option(place.as_ref(), |out, value| out.u32(value.raw()));
+            out.option(place.as_ref(), |out, value| out.wide(value.raw()));
             out.fixed(&variant.bytes());
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::StringUtf8View {
             representation,
@@ -132,9 +132,9 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(16);
             out.u64(representation.raw());
-            out.u32(place.raw());
-            out.u32(loan.raw());
-            out.u32(value.raw());
+            out.wide(place.raw());
+            out.wide(loan.raw());
+            out.wide(value.raw());
         }
         InstructionKind::StructuralCopy {
             representation,
@@ -146,12 +146,12 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         InstructionKind::MemoryWitnessIndependentOwner { parameter, value } => {
             out.tag(18);
             out.string(parameter);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::MemoryWitnessDispose { parameter, value } => {
             out.tag(19);
             out.string(parameter);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         InstructionKind::MemoryWitnessCompare {
             parameter,
@@ -160,8 +160,8 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
         } => {
             out.tag(20);
             out.string(parameter);
-            out.u32(left.raw());
-            out.u32(right.raw());
+            out.wide(left.raw());
+            out.wide(right.raw());
         }
         _ => out.fail("verified SSA identity ownership instruction partition failed"),
     }

@@ -24,7 +24,7 @@ impl fmt::Display for RevisionId {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NodeId {
     pub(crate) revision: RevisionId,
-    pub(crate) index: u32,
+    pub(crate) index: u64,
 }
 
 impl NodeId {
@@ -32,7 +32,7 @@ impl NodeId {
         self.revision
     }
 
-    pub const fn index(self) -> u32 {
+    pub const fn index(self) -> u64 {
         self.index
     }
 }

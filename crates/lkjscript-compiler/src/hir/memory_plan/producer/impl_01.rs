@@ -18,8 +18,8 @@ impl<'a> Producer<'a> {
             let entry = self.add_entry(
                 MemorySubject::Parameter {
                     function: id,
-                    index: u32::try_from(index)
-                        .map_err(|_| Error::msg("HIR main memory parameter index exceeds u32"))?,
+                    index: u64::try_from(index)
+                        .map_err(|_| Error::msg("HIR main memory parameter index exceeds u64"))?,
                     binding: binding.raw(),
                     place: place.raw(),
                 },
@@ -74,7 +74,7 @@ impl<'a> Producer<'a> {
         &mut self,
         expression: &Expr,
         parent: Option<MemoryExpressionId>,
-        child_index: u32,
+        child_index: u64,
         escape: MemoryEscape,
         loan_binding: Option<BindingId>,
     ) -> Result<MemoryExpressionId> {
@@ -87,7 +87,7 @@ impl<'a> Producer<'a> {
         &mut self,
         expression: &Expr,
         parent: Option<MemoryExpressionId>,
-        child_index: u32,
+        child_index: u64,
         escape: MemoryEscape,
         loan_binding: Option<BindingId>,
     ) -> Result<MemoryExpressionId> {
@@ -170,8 +170,8 @@ impl<'a> Producer<'a> {
             .try_reserve(program.functions.len())
             .map_err(|_| Error::host("HIR memory-plan function index allocation failed"))?;
         for (index, function) in program.functions.iter().enumerate() {
-            let raw = u32::try_from(index)
-                .map_err(|_| Error::msg("HIR memory-plan function count exceeds u32"))?;
+            let raw = u64::try_from(index)
+                .map_err(|_| Error::msg("HIR memory-plan function count exceeds u64"))?;
             if function_ids.insert(function.binding, MemoryFunctionId::new(raw)).is_some() {
                 return Err(Error::msg(
                     "HIR memory-plan producer found duplicate function binding"));

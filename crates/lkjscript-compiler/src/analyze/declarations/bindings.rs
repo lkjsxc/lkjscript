@@ -35,7 +35,7 @@ impl Analyzer {
         ty: Type,
         origin: Origin,
     ) -> Result<BindingId> {
-        let raw = u32::try_from(self.bindings.len())
+        let raw = u64::try_from(self.bindings.len())
             .map_err(|_| Error::msg("too many bindings for HIR BindingId"))?;
         let id = BindingId::new(raw);
         self.bindings.push(Binding {

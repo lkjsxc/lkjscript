@@ -1,3 +1,4 @@
+use lkjscript_core::StructuralSliceExt;
 use lkjscript_runtime::process_cell_protocol::{
     expected_process_provenance, ProcessBootstrap, ProcessProgramProvenance,
 };
@@ -14,8 +15,12 @@ pub(super) fn authenticated(
     let structural = chunk
         .main()
         .return_structural
-        .and_then(|id| chunk.structural_representations().get(id.index()))
-        .and_then(|representation| chunk.structural_types().get(representation.type_id.index()));
+        .and_then(|id| chunk.structural_representations().get_structural(id))
+        .and_then(|representation| {
+            chunk
+                .structural_types()
+                .get_structural(representation.type_id)
+        });
     let (return_semantic, root_witness_group, root_witness_member) = match structural {
         Some(value_type) => {
             let witness = chunk

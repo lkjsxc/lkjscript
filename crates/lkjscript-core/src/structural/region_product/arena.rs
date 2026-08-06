@@ -105,11 +105,9 @@ impl<T> RegionProductArena<T> {
     }
 
     pub fn publish_storage_increase(&self, field_capacity: usize) -> u64 {
-        let fields = u64::try_from(field_capacity)
-            .unwrap_or(u64::MAX)
-            .saturating_mul(u64::try_from(std::mem::size_of::<T>()).unwrap_or(u64::MAX));
+        let fields = (field_capacity as u64).saturating_mul(std::mem::size_of::<T>() as u64);
         let record = if self.records.len() == self.records.capacity() {
-            u64::try_from(std::mem::size_of::<RegionProductRecord<T>>()).unwrap_or(u64::MAX)
+            std::mem::size_of::<RegionProductRecord<T>>() as u64
         } else {
             0
         };
@@ -118,18 +116,14 @@ impl<T> RegionProductArena<T> {
 
     pub fn metrics(&self) -> RegionProductMetrics {
         let field_capacity = self.records.iter().fold(0_u64, |total, record| {
-            total.saturating_add(u64::try_from(record.fields.capacity()).unwrap_or(u64::MAX))
+            total.saturating_add(record.fields.capacity() as u64)
         });
-        let field_bytes = field_capacity
-            .saturating_mul(u64::try_from(std::mem::size_of::<T>()).unwrap_or(u64::MAX));
-        let record_bytes = u64::try_from(self.records.capacity())
-            .unwrap_or(u64::MAX)
-            .saturating_mul(
-                u64::try_from(std::mem::size_of::<RegionProductRecord<T>>()).unwrap_or(u64::MAX),
-            );
+        let field_bytes = field_capacity.saturating_mul(std::mem::size_of::<T>() as u64);
+        let record_bytes = (self.records.capacity() as u64)
+            .saturating_mul(std::mem::size_of::<RegionProductRecord<T>>() as u64);
         RegionProductMetrics {
-            records: u32::try_from(self.records.len()).unwrap_or(u32::MAX),
-            fields: self.fields,
+            records: self.records.len() as u64,
+            fields: u64::from(self.fields),
             reserved_bytes_estimate: field_bytes.saturating_add(record_bytes),
         }
     }

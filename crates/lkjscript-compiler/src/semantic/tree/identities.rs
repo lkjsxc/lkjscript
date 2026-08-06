@@ -36,7 +36,7 @@ pub(super) fn enum_node_identity(
             let name = declared_child_name(source)?;
             let fields = tree.node(node.parent()?).ok()??;
             let variant = tree.node(fields.parent()?).ok()??;
-            let variant_source = source_nodes.get(variant.id().index() as usize)?;
+            let variant_source = source_nodes.get(usize::try_from(variant.id().index()).ok()?)?;
             let variant_name = declared_child_name(variant_source)?;
             let variant_id = crate::source::enum_member_identity(
                 declaration.key().digest(),

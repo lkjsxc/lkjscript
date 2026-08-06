@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use lkjscript_contracts::PreparedProgramIdentity;
-use lkjscript_core::{CapabilityKind, ValidatedChunk};
+use lkjscript_core::{CapabilityKind, StructuralSliceExt, ValidatedChunk};
 
 use crate::{ApplicationManifest, PackageContentId, RuntimeError};
 
@@ -49,8 +49,8 @@ pub(crate) fn process_identity(
     let structural = chunk
         .main()
         .return_structural
-        .and_then(|id| chunk.structural_representations().get(id.index()))
-        .and_then(|value| chunk.structural_types().get(value.type_id.index()));
+        .and_then(|id| chunk.structural_representations().get_structural(id))
+        .and_then(|value| chunk.structural_types().get_structural(value.type_id));
     let (return_semantic, root_witness_group, root_witness_member) = match structural {
         Some(value_type) => {
             let witness = chunk

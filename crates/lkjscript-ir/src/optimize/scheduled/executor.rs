@@ -26,7 +26,8 @@ impl<'a> TaskExecutor for DiscoveryExecutor<'a> {
         task: TaskId,
         _worker: lkjscript_resource::WorkerId,
     ) -> Result<Self::Output, Self::Error> {
-        let function = task.slot as usize;
+        let function = usize::try_from(task.slot)
+            .map_err(|_| input_index_error("scheduled discovery task ID exceeds host indexing"))?;
         let input = self
             .program
             .functions

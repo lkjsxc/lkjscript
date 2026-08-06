@@ -7,7 +7,8 @@ impl FunctionEncoder<'_> {
         descriptor: &crate::StructuralCallDescriptor,
         arguments: &[ValueId],
     ) -> Result<(), NativeError> {
-        let site_id = to_u32(self.structural_runtime_sites.len())?;
+        let site_id = u64::try_from(self.structural_runtime_sites.len())
+            .map_err(|_| EncodeError::LimitExceeded("u64 structural runtime-site width"))?;
         self.structural_runtime_sites.push(structural_runtime_site(
             site_id,
             self.function.id,
@@ -17,7 +18,7 @@ impl FunctionEncoder<'_> {
         self.runtime_calls
             .insert(RuntimeCallSlot::StructuralDispatch);
         self.load_integer_register(7, self.context_offset())?;
-        self.load_integer_register_immediate(6, u64::from(site_id))?;
+        self.load_integer_register_immediate(6, site_id)?;
         for register in [2_u8, 1_u8, 8_u8] {
             self.load_integer_register_immediate(register, 0)?;
         }

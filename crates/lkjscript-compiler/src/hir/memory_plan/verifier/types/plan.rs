@@ -105,7 +105,7 @@ impl<'a> VerifiedTypes<'a> {
                 "independent memory verifier reconstructed an illegal mixed bridge",
             ));
         }
-        let id = MemoryTypeFactId::new(index_u32(self.expected.len())?);
+        let id = MemoryTypeFactId::new(index_u64(self.expected.len())?);
         let (glue, path) = self.expected_drop(ty, &derived)?;
         let fact = id
             .index()

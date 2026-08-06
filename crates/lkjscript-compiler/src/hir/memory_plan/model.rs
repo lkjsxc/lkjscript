@@ -7,27 +7,6 @@ pub const HIR_MEMORY_PLAN_SCHEMA: &str = "lkjscript.hir-memory-plan";
 macro_rules! dense_id {
     ($name:ident) => {
         #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name(u32);
-
-        impl $name {
-            pub(crate) const fn new(raw: u32) -> Self {
-                Self(raw)
-            }
-
-            pub const fn raw(self) -> u32 {
-                self.0
-            }
-
-            pub fn index(self) -> Option<usize> {
-                usize::try_from(self.0).ok()
-            }
-        }
-    };
-}
-
-macro_rules! wide_dense_id {
-    ($name:ident) => {
-        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name(u64);
 
         impl $name {
@@ -54,10 +33,10 @@ dense_id!(MemoryConstantId);
 dense_id!(MemoryCallId);
 dense_id!(MemoryObligationId);
 dense_id!(MemoryTypeFactId);
-wide_dense_id!(MemoryDropGlueId);
-wide_dense_id!(MemoryDestinationId);
-wide_dense_id!(MemoryBorrowScopeId);
-wide_dense_id!(MemoryDropPathId);
+dense_id!(MemoryDropGlueId);
+dense_id!(MemoryDestinationId);
+dense_id!(MemoryBorrowScopeId);
+dense_id!(MemoryDropPathId);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MemoryPlanId([u8; 32]);

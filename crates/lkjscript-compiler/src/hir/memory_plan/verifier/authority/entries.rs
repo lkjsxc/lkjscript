@@ -62,7 +62,7 @@ pub(super) fn verify_no_partial_or_affine_copy(
 fn authority_parameter_type(
     program: &hir::Program,
     function: MemoryFunctionId,
-    index: u32,
+    index: u64,
 ) -> Result<&Type> {
     let fi = function
         .index()

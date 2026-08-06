@@ -25,9 +25,9 @@ pub(super) fn flatten_plan(
 }
 
 fn flatten_pattern(
-    arm: u16,
+    arm: u64,
     pattern: &MatchPattern,
-    path: &mut Vec<u16>,
+    path: &mut Vec<u64>,
     active: Option<VariantId>,
     tests: &mut Vec<MatchTest>,
     projections: &mut Vec<MatchProjection>,
@@ -83,18 +83,16 @@ fn flatten_pattern(
 }
 
 fn flatten_fields(
-    arm: u16,
+    arm: u64,
     fields: &[MatchFieldPattern],
-    path: &mut Vec<u16>,
+    path: &mut Vec<u64>,
     active: Option<VariantId>,
     tests: &mut Vec<MatchTest>,
     projections: &mut Vec<MatchProjection>,
     bindings: &mut Vec<MatchBindingAssignment>,
 ) {
     for (index, field) in fields.iter().enumerate() {
-        let Ok(index) = u16::try_from(index) else {
-            return;
-        };
+        let index = index as u64;
         path.push(index);
         if let Some(local) = &field.projection {
             projections.push(MatchProjection {

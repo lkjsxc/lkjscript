@@ -14,20 +14,6 @@ pub(super) fn syntax_error(
     )
 }
 
-pub(super) fn resource_error(
-    origin: &SourceOrigin,
-    span: SourceSpan,
-    message: impl Into<String>,
-) -> SourceDiagnostic {
-    SourceDiagnostic::new(
-        "LKJ-SRC-LIMIT",
-        DiagnosticCategory::ResourceLimit,
-        message,
-        origin.clone(),
-        span,
-    )
-}
-
 pub(super) fn clone_string(
     value: &str,
     origin: &SourceOrigin,

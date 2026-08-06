@@ -13,7 +13,7 @@ pub(super) fn function(out: &mut Encoder, value: &Function) {
         blocks,
         origin,
     } = value;
-    out.u32(id.raw());
+    out.wide(id.raw());
     out.string(name);
     types::signature_value(out, signature);
     out.sequence(places, |out, value| {
@@ -23,8 +23,8 @@ pub(super) fn function(out: &mut Encoder, value: &Function) {
             ty,
             drop_glue,
         } = value;
-        out.u32(id.raw());
-        out.u32(binding.raw());
+        out.wide(id.raw());
+        out.wide(binding.raw());
         types::ty(out, ty);
         out.option(drop_glue.as_ref(), |out, value| {
             memory::drop_glue(out, *value)
@@ -32,7 +32,7 @@ pub(super) fn function(out: &mut Encoder, value: &Function) {
     });
     out.sequence(failure_cleanups, failure_cleanup);
     metadata::effects(out, *effects);
-    out.u32(entry.raw());
+    out.wide(entry.raw());
     out.sequence(blocks, block);
     metadata::origin(out, origin);
 }
@@ -47,15 +47,15 @@ fn failure_cleanup(out: &mut Encoder, value: &FailureCleanupNode) {
             value,
         } => {
             out.tag(0);
-            out.u32(place.raw());
-            out.u32(loan.raw());
+            out.wide(place.raw());
+            out.wide(loan.raw());
             borrow_kind(out, *kind);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         FailureCleanupAction::DropOwner { place, value, glue } => {
             out.tag(1);
-            out.option(place.as_ref(), |out, value| out.u32(value.raw()));
-            out.u32(value.raw());
+            out.option(place.as_ref(), |out, value| out.wide(value.raw()));
+            out.wide(value.raw());
             memory::drop_glue(out, *glue);
         }
     }
@@ -70,7 +70,7 @@ fn block(out: &mut Encoder, value: &Block) {
         terminator,
         metadata: block_metadata,
     } = value;
-    out.u32(id.raw());
+    out.wide(id.raw());
     out.sequence(parameters, |out, value| {
         let BlockParameter {
             id,
@@ -78,9 +78,9 @@ fn block(out: &mut Encoder, value: &Block) {
             owner_place,
             origin,
         } = value;
-        out.u32(id.raw());
+        out.wide(id.raw());
         types::ty(out, ty);
-        out.option(owner_place.as_ref(), |out, value| out.u32(value.raw()));
+        out.option(owner_place.as_ref(), |out, value| out.wide(value.raw()));
         metadata::origin(out, origin);
     });
     out.sequence(instructions, instruction::instruction);
@@ -105,7 +105,7 @@ fn terminator_value(out: &mut Encoder, value: &Terminator) {
     match value {
         Terminator::Branch { target, arguments } => {
             out.tag(0);
-            out.u32(target.raw());
+            out.wide(target.raw());
             ids(out, arguments);
         }
         Terminator::ConditionalBranch {
@@ -116,23 +116,23 @@ fn terminator_value(out: &mut Encoder, value: &Terminator) {
             false_arguments,
         } => {
             out.tag(1);
-            out.u32(condition.raw());
-            out.u32(true_target.raw());
+            out.wide(condition.raw());
+            out.wide(true_target.raw());
             ids(out, true_arguments);
-            out.u32(false_target.raw());
+            out.wide(false_target.raw());
             ids(out, false_arguments);
         }
         Terminator::Return(value) => {
             out.tag(2);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         Terminator::Trap { value } => {
             out.tag(3);
-            out.u32(value.raw());
+            out.wide(value.raw());
         }
         Terminator::Exit { code } => {
             out.tag(4);
-            out.u32(code.raw());
+            out.wide(code.raw());
         }
         Terminator::Outcome { outcome, detail } => {
             out.tag(5);
@@ -141,7 +141,7 @@ fn terminator_value(out: &mut Encoder, value: &Terminator) {
                 StructuredOutcome::ResourceLimitExceeded => 1,
                 StructuredOutcome::HostFailure => 2,
             });
-            out.option(detail.as_ref(), |out, value| out.u32(value.raw()));
+            out.option(detail.as_ref(), |out, value| out.wide(value.raw()));
         }
     }
 }
@@ -153,5 +153,5 @@ pub(super) fn borrow_kind(out: &mut Encoder, value: BorrowKind) {
     });
 }
 fn ids(out: &mut Encoder, values: &[ValueId]) {
-    out.sequence(values, |out, value| out.u32(value.raw()));
+    out.sequence(values, |out, value| out.wide(value.raw()));
 }

@@ -26,7 +26,7 @@ pub struct CodeObject {
     pub(crate) optimization_certificate: Option<OptimizationCertificate>,
     pub(crate) optimization_stats: Option<OptimizationStats>,
     pub(crate) invalidated: bool,
-    pub(crate) explicit_traps: Vec<(u32, String)>,
+    pub(crate) explicit_traps: Vec<(u64, String)>,
     pub(crate) diagnostic_machine_code: Option<Vec<u8>>,
     pub(crate) native_entry_count: u64,
     pub(crate) installed: InstalledImage,

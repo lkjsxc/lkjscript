@@ -32,8 +32,8 @@ pub(super) fn pop_structural_leaf(
     };
     let kind = chunk
         .structural_representations
-        .get(representation.index())
-        .and_then(|item| chunk.structural_types.get(item.type_id.index()))
+        .get_structural(representation)
+        .and_then(|item| chunk.structural_types.get_structural(item.type_id))
         .map(|item| item.runtime_type.kind);
     if kind == Some(expected) {
         Ok(())
@@ -68,7 +68,7 @@ pub(super) fn structural_leaf_owner(
             representation.category == crate::StructuralValueCategory::Owner
                 && chunk
                     .structural_types
-                    .get(representation.type_id.index())
+                    .get_structural(representation.type_id)
                     .is_some_and(|ty| ty.runtime_type.kind == kind)
         });
     let representation = representation.ok_or_else(|| {

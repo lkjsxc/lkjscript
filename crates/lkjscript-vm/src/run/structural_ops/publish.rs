@@ -34,11 +34,11 @@ fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let mode = vm
         .chunk
         .structural_representations()
-        .get(expected_representation.index())
+        .get_structural(expected_representation)
         .and_then(|representation| {
             vm.chunk
                 .structural_types()
-                .get(representation.type_id.index())
+                .get_structural(representation.type_id)
         })
         .map(|metadata| metadata.mode)
         .ok_or_else(|| Error::msg("structural copy type metadata is missing"))?;
@@ -155,7 +155,7 @@ fn semantic_from_input<J: RuntimeTier>(
     let layout = vm
         .chunk
         .structural_layouts()
-        .get(representation.layout.index())
+        .get_structural(representation.layout)
         .filter(|item| item.id == representation.layout)
         .ok_or_else(|| Error::msg("structural publish layout metadata is stale"))?;
     let payload = match &layout.kind {

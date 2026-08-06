@@ -101,7 +101,7 @@ impl JitSession {
         &self,
         function: FunctionId,
         trap: TrapCode,
-        site: Option<u32>,
+        site: Option<u64>,
     ) -> String {
         self.trap_message(function, trap, site)
     }

@@ -118,14 +118,14 @@ pub(super) fn enum_definition(
         .map(|(vi, (name, fields))| hir::EnumVariant {
             id: variant_id(id.wrapping_add(1 + u8::try_from(vi).unwrap_or(0))),
             name: name.into(),
-            source_order: u64::try_from(vi).unwrap_or(u64::MAX),
+            source_order: vi as u64,
             fields: fields
                 .into_iter()
                 .enumerate()
                 .map(|(fi, ty)| hir::EnumVariantField {
                     id: field_id(id.wrapping_add(32 + u8::try_from(fi).unwrap_or(0))),
                     name: format!("field-{fi}"),
-                    source_order: u64::try_from(fi).unwrap_or(u64::MAX),
+                    source_order: fi as u64,
                     ty,
                     indirect: false,
                 })
@@ -135,7 +135,7 @@ pub(super) fn enum_definition(
     hir::EnumDefinition {
         id: id_value,
         name: name.into(),
-        origin: origin(),
+        origin: Some(origin()),
         type_parameters: parameters.iter().map(|item| (*item).into()).collect(),
         variants,
         layout: hir::EnumLayoutFacts {

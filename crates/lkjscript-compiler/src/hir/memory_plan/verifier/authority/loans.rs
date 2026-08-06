@@ -35,7 +35,7 @@ pub(super) fn verify_loans(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()
     }
     let mut identities = BTreeSet::new();
     for (actual, fact) in plan.loans.iter().zip(borrow_facts) {
-        let (place, loan, source, kind) = loan_source(fact.expression)?;
+        let (place, loan, kind) = loan_source(fact.expression)?;
         if !identities.insert((fact.function, loan)) {
             return Err(Error::msg("memory loan identity is duplicated"));
         }
@@ -61,44 +61,30 @@ pub(super) fn verify_loans(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()
                 "independent verifier rejected explicit loan scope",
             ));
         }
-        if source == u32::MAX {
-            return Err(Error::msg("memory loan source is invalid"));
-        }
     }
     Ok(())
 }
 
-fn loan_source(expression: &hir::Expr) -> Result<(u32, u32, u32, MemoryBorrowKind)> {
+fn loan_source(expression: &hir::Expr) -> Result<(u64, u64, MemoryBorrowKind)> {
     match &expression.kind {
         hir::ExprKind::Borrow {
-            place,
-            loan,
-            binding,
-            kind,
+            place, loan, kind, ..
         } => Ok((
             place.raw(),
             loan.raw(),
-            binding.binding.raw(),
             match kind {
                 hir::BorrowKind::Shared => MemoryBorrowKind::Shared,
                 hir::BorrowKind::Mutable => MemoryBorrowKind::Exclusive,
             },
         )),
-        hir::ExprKind::BorrowBytes {
-            place,
-            loan,
-            binding,
-        } => Ok((
-            place.raw(),
-            loan.raw(),
-            binding.binding.raw(),
-            MemoryBorrowKind::Shared,
-        )),
+        hir::ExprKind::BorrowBytes { place, loan, .. } => {
+            Ok((place.raw(), loan.raw(), MemoryBorrowKind::Shared))
+        }
         _ => Err(Error::msg("memory loan references non-borrow")),
     }
 }
 
-fn inferred_reference_binding(facts: &Facts<'_>, fact: &ExprFact<'_>) -> Option<u32> {
+fn inferred_reference_binding(facts: &Facts<'_>, fact: &ExprFact<'_>) -> Option<u64> {
     let parent = fact.parent?;
     let parent = facts.expression(parent)?;
     let hir::ExprKind::Let { bindings, .. } = &parent.expression.kind else {
@@ -111,7 +97,7 @@ fn inferred_reference_binding(facts: &Facts<'_>, fact: &ExprFact<'_>) -> Option<
 fn inferred_loan_end(
     facts: &Facts<'_>,
     fact: &ExprFact<'_>,
-    binding: Option<u32>,
+    binding: Option<u64>,
 ) -> Result<(u64, MemoryExpressionId)> {
     if let Some(binding) = binding {
         let loads = facts.binding_loads(fact.function, binding);

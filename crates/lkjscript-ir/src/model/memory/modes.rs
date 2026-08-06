@@ -45,7 +45,7 @@ fn borrow_mode(kind: BorrowKind) -> MemoryMode {
     }
 }
 
-fn sort_key(obligation: &SsaMemoryObligation) -> (u32, u8, u32, u32, u32) {
+fn sort_key(obligation: &SsaMemoryObligation) -> (u64, u8, u64, u64, u64) {
     match obligation.subject {
         MemoryObligationSubject::Owner { place, binding } => {
             (obligation.function.raw(), 0, place.raw(), binding.raw(), 0)

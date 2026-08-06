@@ -4,6 +4,8 @@ use crate::source::SourceNode;
 
 use super::super::site::HoleSite;
 
+// Hole discovery validates this revision-scoped node before constructing `HoleSite`.
+#[allow(clippy::expect_used)]
 pub(super) fn identity(site: &HoleSite<'_>) -> TypedHoleIdentity {
     TypedHoleIdentity {
         schema: "lkjscript.typed-hole".into(),
@@ -14,7 +16,11 @@ pub(super) fn identity(site: &HoleSite<'_>) -> TypedHoleIdentity {
         local_identity: site.local_identity.clone(),
         node: site.node,
         node_fingerprint: crate::semantic::tree::fingerprint(site.source),
-        source: site.tree.nodes()[site.node as usize]
+        source: site
+            .tree
+            .nodes()
+            .get(usize::try_from(site.node).expect("validated hole node is host-addressable"))
+            .expect("validated hole node exists")
             .origin()
             .logical_path()
             .into(),

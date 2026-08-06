@@ -129,27 +129,35 @@ pub(crate) fn verify_optimization_with_budget(
         )
     })?;
     let output_instructions = candidate_shape.instructions;
-    let algebraic_rewrites = certificate
-        .records
-        .iter()
-        .filter(|record| record.kind == OptimizationEditKind::AlgebraicIdentity)
-        .count() as u64;
-    let checked_i64_rewrites = certificate
-        .records
-        .iter()
-        .filter(|record| record.kind == OptimizationEditKind::CheckedI64GlobalValueNumbering)
-        .count() as u64;
-    let gvn_rewrites = certificate
-        .records
-        .len()
-        .saturating_sub(algebraic_rewrites as usize) as u64;
+    let algebraic_rewrites = u64::try_from(
+        certificate
+            .records
+            .iter()
+            .filter(|record| record.kind == OptimizationEditKind::AlgebraicIdentity)
+            .count(),
+    )
+    .map_err(|_| input_index_error("algebraic rewrite count exceeds u64 accounting"))?;
+    let checked_i64_rewrites = u64::try_from(
+        certificate
+            .records
+            .iter()
+            .filter(|record| record.kind == OptimizationEditKind::CheckedI64GlobalValueNumbering)
+            .count(),
+    )
+    .map_err(|_| input_index_error("checked rewrite count exceeds u64 accounting"))?;
+    let certificate_records = u64::try_from(certificate.records.len())
+        .map_err(|_| input_index_error("certificate length exceeds u64 accounting"))?;
+    let gvn_rewrites = certificate_records
+        .checked_sub(algebraic_rewrites)
+        .ok_or_else(|| input_index_error("rewrite accounting is inconsistent"))?;
     let certificate_bytes_estimate = certificate_size_estimate(&certificate)?;
     let optimizing_passes = budget
         .discovery_passes
-        .saturating_add(budget.checker_passes)
-        .saturating_add(budget.reconstruction_passes)
-        .saturating_add(budget.cleanup_passes)
-        .saturating_add(budget.validation_passes);
+        .checked_add(budget.checker_passes)
+        .and_then(|total| total.checked_add(budget.reconstruction_passes))
+        .and_then(|total| total.checked_add(budget.cleanup_passes))
+        .and_then(|total| total.checked_add(budget.validation_passes))
+        .ok_or_else(|| input_index_error("optimization pass accounting exceeds u64"))?;
     let stats = OptimizationStats {
         input_instructions: input_shape.instructions,
         output_instructions,

@@ -1,24 +1,42 @@
 use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct LayoutIdentity(u32);
+pub enum LayoutIdentity {
+    Unit,
+    Bool,
+    I64,
+    F64,
+    StructuralKey,
+    StaticBytes,
+    MemoryWitnessLocator,
+    Structural(u64),
+    Capability(lkjscript_contracts::CapabilityKind),
+    Resource(lkjscript_contracts::ResourceKind),
+    LoanBytes,
+    UniqueByteVector,
+    LoanByteSlice,
+    LoanByteSliceMut,
+    UniqueBytes,
+    Product(u64),
+}
 
 impl LayoutIdentity {
-    const PRODUCT_BASE: u32 = 32;
-
     #[must_use]
-    pub const fn new(value: u32) -> Self {
-        Self(value)
+    pub const fn new(value: u64) -> Self {
+        Self::Structural(value)
     }
 
     #[must_use]
-    pub const fn product(product: u32) -> Self {
-        Self(Self::PRODUCT_BASE + product)
+    pub const fn product(product: u64) -> Self {
+        Self::Product(product)
     }
 
     #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
+    pub const fn product_id(self) -> Option<u64> {
+        match self {
+            Self::Product(value) => Some(value),
+            _ => None,
+        }
     }
 }
 
@@ -102,27 +120,27 @@ impl ValueType {
     #[must_use]
     pub const fn layout_identity(self) -> LayoutIdentity {
         match self {
-            Self::Unit => LayoutIdentity::new(1),
-            Self::Bool => LayoutIdentity::new(2),
-            Self::I64 => LayoutIdentity::new(3),
-            Self::F64 => LayoutIdentity::new(4),
-            Self::StructuralKey => LayoutIdentity::new(5),
-            Self::StaticBytes => LayoutIdentity::new(6),
-            Self::MemoryWitnessLocator => LayoutIdentity::new(7),
+            Self::Unit => LayoutIdentity::Unit,
+            Self::Bool => LayoutIdentity::Bool,
+            Self::I64 => LayoutIdentity::I64,
+            Self::F64 => LayoutIdentity::F64,
+            Self::StructuralKey => LayoutIdentity::StructuralKey,
+            Self::StaticBytes => LayoutIdentity::StaticBytes,
+            Self::MemoryWitnessLocator => LayoutIdentity::MemoryWitnessLocator,
             Self::StaticString(value_type) | Self::StructuralOwner(value_type) => {
-                LayoutIdentity::new(value_type.layout() as u32)
+                LayoutIdentity::Structural(value_type.layout())
             }
-            Self::StructuralView(view) => LayoutIdentity::new(view.projected().layout() as u32),
+            Self::StructuralView(view) => LayoutIdentity::Structural(view.projected().layout()),
             Self::StructuralDestination(destination) => {
-                LayoutIdentity::new(destination.value_type().layout() as u32)
+                LayoutIdentity::Structural(destination.value_type().layout())
             }
-            Self::Capability(kind) => LayoutIdentity::new(8 + kind as u32),
-            Self::Resource(kind) => LayoutIdentity::new(16 + kind as u32),
-            Self::Loan(LoanType::Bytes) => LayoutIdentity::new(27),
-            Self::Unique(UniqueType::ByteVector) => LayoutIdentity::new(28),
-            Self::Loan(LoanType::ByteSlice) => LayoutIdentity::new(29),
-            Self::Loan(LoanType::ByteSliceMut) => LayoutIdentity::new(30),
-            Self::Unique(UniqueType::Bytes) => LayoutIdentity::new(31),
+            Self::Capability(kind) => LayoutIdentity::Capability(kind),
+            Self::Resource(kind) => LayoutIdentity::Resource(kind),
+            Self::Loan(LoanType::Bytes) => LayoutIdentity::LoanBytes,
+            Self::Unique(UniqueType::ByteVector) => LayoutIdentity::UniqueByteVector,
+            Self::Loan(LoanType::ByteSlice) => LayoutIdentity::LoanByteSlice,
+            Self::Loan(LoanType::ByteSliceMut) => LayoutIdentity::LoanByteSliceMut,
+            Self::Unique(UniqueType::Bytes) => LayoutIdentity::UniqueBytes,
             Self::Reference(ReferenceType::RegionProduct(layout, _))
             | Self::Reference(ReferenceType::List(layout, _, _, _)) => layout,
         }

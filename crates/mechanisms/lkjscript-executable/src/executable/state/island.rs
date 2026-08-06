@@ -2,14 +2,14 @@ use super::*;
 
 #[derive(Clone, Copy)]
 pub(in crate::executable) struct IslandFrame {
-    pub(in crate::executable) function_ordinal: u32,
+    pub(in crate::executable) function_ordinal: Option<u64>,
     pub(in crate::executable) rbp: *mut u8,
     pub(in crate::executable) reserved_bytes: usize,
     pub(in crate::executable) value_homes: usize,
 }
 
 pub(in crate::executable) const EMPTY_ISLAND_FRAME: IslandFrame = IslandFrame {
-    function_ordinal: u32::MAX,
+    function_ordinal: None,
     rbp: std::ptr::null_mut(),
     reserved_bytes: 0,
     value_homes: 0,
@@ -17,7 +17,7 @@ pub(in crate::executable) const EMPTY_ISLAND_FRAME: IslandFrame = IslandFrame {
 
 #[derive(Clone, Copy)]
 pub(in crate::executable) struct IslandFrameReservation {
-    pub(in crate::executable) function_ordinal: u32,
+    pub(in crate::executable) function_ordinal: u64,
     pub(in crate::executable) rbp: *mut u8,
     pub(in crate::executable) frame_bytes: usize,
     pub(in crate::executable) value_homes: usize,
@@ -28,6 +28,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) status: u32,
     pub(in crate::executable) trap: u32,
     pub(in crate::executable) payload: i64,
+    pub(in crate::executable) trap_site_present: u64,
     pub(in crate::executable) _scratch_integer_arguments: [u64; 5],
     pub(in crate::executable) _scratch_float_arguments: [u64; 2],
     pub(in crate::executable) poll_fuel_remaining: u64,
@@ -82,7 +83,8 @@ impl<'a> IslandCallState<'a> {
         Self {
             status,
             trap: 0,
-            payload: -1,
+            payload: 0,
+            trap_site_present: 0,
             _scratch_integer_arguments: [0; 5],
             _scratch_float_arguments: [0; 2],
             poll_fuel_remaining: config.poll_fuel,

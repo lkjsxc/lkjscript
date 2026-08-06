@@ -90,7 +90,7 @@ impl VerifiedTypes<'_> {
                     {
                         actions.push(MemoryDropAction {
                             path: vec![MemoryDropPathElement::ProductField {
-                                index: index_u32(index)?,
+                                index: index_u64(index)?,
                                 name: field.name.clone(),
                             }],
                             glue,
@@ -134,7 +134,7 @@ impl VerifiedTypes<'_> {
                         actions.push(MemoryDropAction {
                             path: vec![MemoryDropPathElement::EnumField {
                                 variant: variant.id.bytes(),
-                                index: index_u32(index)?,
+                                index: index_u64(index)?,
                                 field: field.id.bytes(),
                             }],
                             glue,

@@ -4,7 +4,7 @@ use super::super::value_runtime::{
     SemanticPayload, SemanticValue, StructuralValueError, StructuralValueRuntimeLimits,
 };
 use super::{
-    CheckedU32Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
+    CheckedU64Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
     TreeFacts,
 };
 
@@ -22,8 +22,7 @@ impl StructuralImage {
             .ok_or(StructuralValueError::InvariantViolation)?;
         let field_capacity =
             usize::try_from(field_count).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-        let blob_count =
-            u32::try_from(facts.bytes).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let blob_count = facts.bytes;
         let blob_capacity =
             usize::try_from(blob_count).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
         let mut nodes = Vec::new();
@@ -35,7 +34,7 @@ impl StructuralImage {
         blob.try_reserve_exact(blob_capacity)?;
         queue.try_reserve_exact(node_capacity)?;
         queue.push_back(value);
-        let mut next_id = 1_u32;
+        let mut next_id = 1_u64;
         while let Some(value) = queue.pop_front() {
             let payload = match &value.payload {
                 SemanticPayload::Inline(value) => StructuralNodePayload::Inline(*value),
@@ -44,13 +43,13 @@ impl StructuralImage {
                 | SemanticPayload::Path(bytes)
                 | SemanticPayload::Bytes(bytes)
                 | SemanticPayload::ByteVector(bytes) => {
-                    let start = u32::try_from(blob.len())
+                    let start = u64::try_from(blob.len())
                         .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-                    let length = u32::try_from(bytes.len())
+                    let length = u64::try_from(bytes.len())
                         .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
                     blob.extend_from_slice(bytes);
                     StructuralNodePayload::Bytes(
-                        CheckedU32Range::new(start, length)
+                        CheckedU64Range::new(start, length)
                             .ok_or(StructuralValueError::ArithmeticOverflow)?,
                     )
                 }
@@ -101,10 +100,10 @@ fn append_children<'a>(
     children: &'a [SemanticValue],
     queue: &mut VecDeque<&'a SemanticValue>,
     fields: &mut Vec<LocalNodeId>,
-    next_id: &mut u32,
-) -> Result<CheckedU32Range, StructuralValueError> {
+    next_id: &mut u64,
+) -> Result<CheckedU64Range, StructuralValueError> {
     let start =
-        u32::try_from(fields.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        u64::try_from(fields.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
     for child in children {
         let id = *next_id;
         *next_id = next_id
@@ -114,8 +113,8 @@ fn append_children<'a>(
         queue.push_back(child);
     }
     let length =
-        u32::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-    CheckedU32Range::new(start, length).ok_or(StructuralValueError::ArithmeticOverflow)
+        u64::try_from(children.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+    CheckedU64Range::new(start, length).ok_or(StructuralValueError::ArithmeticOverflow)
 }
 
 pub(crate) fn prepare_discard(
@@ -123,7 +122,9 @@ pub(crate) fn prepare_discard(
 ) -> Result<Vec<SemanticValue>, StructuralValueError> {
     let mut stack = Vec::new();
     stack
-        .try_reserve_exact(facts.nodes as usize)
+        .try_reserve_exact(
+            usize::try_from(facts.nodes).map_err(|_| StructuralValueError::AllocationFailed)?,
+        )
         .map_err(|_| StructuralValueError::AllocationFailed)?;
     Ok(stack)
 }

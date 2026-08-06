@@ -1,5 +1,5 @@
 use super::{instruction_error, types::*, Kind, OwnerIdentity, State};
-use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
+use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result, StructuralSliceExt};
 
 pub(super) fn apply(
     _chunk: &Chunk,
@@ -39,7 +39,7 @@ pub(super) fn apply(
                 );
                 let metadata = _chunk
                     .structural_representations
-                    .get(representation.index())
+                    .get_structural(representation)
                     .filter(|metadata| metadata.id == representation)
                     .ok_or_else(|| {
                         instruction_error(

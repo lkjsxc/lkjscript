@@ -4,7 +4,10 @@ use crate::source::{SourceNode, SyntaxKind, ValidatedSourceTree};
 pub(super) fn declared_body_mismatch(tree: &ValidatedSourceTree) -> Option<DiagnosticRecord> {
     let nodes = crate::semantic::tree::source_nodes(tree);
     for declaration in tree.declarations() {
-        let Some(root) = nodes.get(declaration.node().index() as usize) else {
+        let Some(root) = usize::try_from(declaration.node().index())
+            .ok()
+            .and_then(|index| nodes.get(index))
+        else {
             continue;
         };
         let Some((signature, body)) = declaration_body(root) else {
@@ -84,12 +87,12 @@ fn literal_type(node: &SourceNode) -> Option<&'static str> {
     }
 }
 
-fn node_index(tree: &ValidatedSourceTree, root: u32, target: &SourceNode) -> Option<u32> {
+fn node_index(tree: &ValidatedSourceTree, root: u64, target: &SourceNode) -> Option<u64> {
     let nodes = crate::semantic::tree::source_nodes(tree);
     nodes
         .iter()
         .enumerate()
-        .skip(root as usize)
+        .skip(usize::try_from(root).ok()?)
         .find(|(_, node)| std::ptr::eq(**node, target))
-        .and_then(|(index, _)| u32::try_from(index).ok())
+        .and_then(|(index, _)| u64::try_from(index).ok())
 }

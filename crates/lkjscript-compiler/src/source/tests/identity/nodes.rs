@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::source::NodeId;
 
 #[test]
 fn node_ids_are_dense_preorder_deterministic_and_revision_scoped() {
@@ -7,10 +8,16 @@ fn node_ids_are_dense_preorder_deterministic_and_revision_scoped() {
     let again = validate(&source, "src/nodes.lkjscript").expect("again");
     assert_eq!(first.revision(), again.revision());
     for (index, node) in first.nodes().iter().enumerate() {
-        assert_eq!(node.id().index() as usize, index);
+        assert_eq!(usize::try_from(node.id().index()).ok(), Some(index));
         assert_eq!(node.id().revision(), first.revision());
     }
     let root = first.nodes().first().expect("root");
+    let high = NodeId {
+        revision: first.revision(),
+        index: u64::from(u32::MAX) + 1,
+    };
+    assert_ne!(high, root.id());
+    assert!(first.node(high).expect("same revision").is_none());
     assert_eq!(root.kind(), NodeKind::Call);
     assert_eq!(root.label(), Some("main"));
     assert!(root.parent().is_none());

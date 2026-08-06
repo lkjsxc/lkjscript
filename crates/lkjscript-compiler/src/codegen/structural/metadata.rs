@@ -98,7 +98,7 @@ fn structural_field_from_chunk(chunk: &Chunk, ty: &SsaType) -> Result<Structural
     let runtime_type = match route {
         StructuralFieldRoute::Structural(type_id) => chunk
             .structural_types
-            .get(type_id.index())
+            .get_structural(type_id)
             .filter(|item| item.id == type_id)
             .map(|item| item.runtime_type),
         StructuralFieldRoute::Copy | StructuralFieldRoute::Unique => {

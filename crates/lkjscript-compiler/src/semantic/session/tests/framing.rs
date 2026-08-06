@@ -74,7 +74,10 @@ fn shutdown_is_one_exact_frame_without_contamination() {
     let mut output = Vec::new();
     crate::semantic::session::serve(&mut input, &mut output).expect("serve shutdown");
     assert!(output.len() >= 8);
-    let length = u64::from_be_bytes(output[..8].try_into().expect("response header")) as usize;
+    let length = usize::try_from(u64::from_be_bytes(
+        output[..8].try_into().expect("response header"),
+    ))
+    .expect("response length fits host indexing");
     assert_eq!(output.len(), length + 8);
     let response: serde_json::Value =
         serde_json::from_slice(&output[8..]).expect("framed response JSON");

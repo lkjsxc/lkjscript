@@ -15,15 +15,15 @@ pub use instances::{
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NativeSpecializationStats {
-    pub functions: u32,
-    pub calls: u32,
+    pub functions: u64,
+    pub calls: u64,
 }
 
 pub fn specialize_native_transport(
     input: &VerifiedProgram,
 ) -> crate::Result<(VerifiedProgram, NativeSpecializationStats)> {
     let mut instances = NativeInstances::new();
-    let mut calls = 0u32;
+    let mut calls = 0u64;
     for function in &input.program().functions {
         for block in &function.blocks {
             for instruction in &block.instructions {
@@ -73,8 +73,8 @@ pub fn specialize_native_transport(
                     .ok_or_else(|| {
                         IrError::new("native specialization function identity overflow")
                     })?;
-                let id = FunctionId::new(u32::try_from(next_index).map_err(|_| {
-                    IrError::new("native specialization function identity overflow")
+                let id = FunctionId::new(u64::try_from(next_index).map_err(|_| {
+                    IrError::new("native specialization function identity exceeds u64")
                 })?);
                 function.id = id;
                 function.name = format!("{}$native-transport-{ordinal}", original.name);
@@ -132,7 +132,8 @@ pub fn specialize_native_transport(
     Ok((
         specialized,
         NativeSpecializationStats {
-            functions: u32::try_from(instance_count).unwrap_or(u32::MAX),
+            functions: u64::try_from(instance_count)
+                .map_err(|_| IrError::new("native specialization count exceeds u64"))?,
             calls,
         },
     ))

@@ -94,10 +94,10 @@ impl ValidatedSourceTree {
                 actual: id.revision,
             });
         }
-        Ok(self
-            .nodes
-            .get(id.index as usize)
-            .filter(|node| node.id == id))
+        let Some(index) = usize::try_from(id.index).ok() else {
+            return Ok(None);
+        };
+        Ok(self.nodes.get(index).filter(|node| node.id == id))
     }
 
     /// Format the source unit at `logical_path` from structural nodes.

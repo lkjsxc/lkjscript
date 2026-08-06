@@ -109,7 +109,7 @@ impl Producer<'_> {
         }
         let id = MemoryDestinationId::new(u64::try_from(self.destinations.len())
             .map_err(|_| Error::msg("HIR memory-plan destination identity exceeds u64"))?);
-        let initialized_order: Vec<u32> = (0..field_count).collect();
+        let initialized_order: Vec<u64> = (0..field_count).collect();
         let fields = children.into_iter().map(|(index, expression, drop_path)| {
             MemoryDestinationField { index, expression, drop_path }
         }).collect();

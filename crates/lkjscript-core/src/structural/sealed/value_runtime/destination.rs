@@ -24,14 +24,16 @@ impl StructuralValueRuntime {
 }
 
 fn copied_image_bytes(image: &super::StructuralImage) -> Result<u64, StructuralValueError> {
-    let nodes = u64::from(image.node_count())
+    let nodes = image
+        .node_count()
         .checked_mul(std::mem::size_of::<StructuralNodeRecord>() as u64)
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
-    let fields = u64::from(image.field_cell_count())
+    let fields = image
+        .field_cell_count()
         .checked_mul(std::mem::size_of::<LocalNodeId>() as u64)
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
     nodes
         .checked_add(fields)
-        .and_then(|bytes| bytes.checked_add(u64::from(image.blob_len())))
+        .and_then(|bytes| bytes.checked_add(image.blob_len()))
         .ok_or(StructuralValueError::ArithmeticOverflow)
 }

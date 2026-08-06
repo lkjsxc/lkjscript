@@ -4,9 +4,9 @@ use crate::hir;
 #[allow(clippy::expect_used)]
 pub(super) fn wide_transport_program(width: usize) -> hir::Program {
     let vars: Vec<_> = (0..width).map(|index| format!("t-{index}")).collect();
-    let parameter_ids: Vec<_> = (0_u32..).take(width).map(hir::BindingId::new).collect();
+    let parameter_ids: Vec<_> = (0_u64..).take(width).map(hir::BindingId::new).collect();
     let function_binding = hir::BindingId::new(
-        u32::try_from(width).expect("wide transport fixture function binding fits u32"),
+        u64::try_from(width).expect("wide transport fixture function binding fits u64"),
     );
     let bindings = parameter_ids
         .iter()
@@ -36,7 +36,7 @@ pub(super) fn wide_transport_program(width: usize) -> hir::Program {
         binding: function_binding,
         origin: origin(),
         params: parameter_ids.clone(),
-        param_places: (0_u32..).take(width).map(hir::PlaceId::new).collect(),
+        param_places: (0_u64..).take(width).map(hir::PlaceId::new).collect(),
         bounds: Vec::new(),
         arity: width,
         local_count: 0,

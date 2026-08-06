@@ -168,13 +168,19 @@ fn append_changed_owners(
 
 fn follow_path(
     tree: &ValidatedSourceTree,
-    mut node: u32,
+    mut node: u64,
     path: &[usize],
-) -> Result<u32, ProtocolError> {
+) -> Result<u64, ProtocolError> {
     for child in path {
+        let index = usize::try_from(node).map_err(|_| {
+            error(
+                ProtocolErrorCode::ValidationFailed,
+                "replacement node identity is not host-addressable",
+            )
+        })?;
         node = tree
             .nodes()
-            .get(node as usize)
+            .get(index)
             .and_then(|summary| summary.children().get(*child))
             .map(|id| id.index())
             .ok_or_else(|| {

@@ -58,7 +58,7 @@ impl JitSession {
                     "invalid nested segmented-list return: {error:?}"
                 ))
             })?;
-            lists.collect_cloned(key, u32::MAX).map_err(|error| {
+            lists.collect_cloned(key, None).map_err(|error| {
                 lkjscript_core::Error::msg(format!(
                     "nested segmented-list snapshot failed: {error:?}"
                 ))

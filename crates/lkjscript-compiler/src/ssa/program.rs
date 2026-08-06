@@ -14,10 +14,11 @@ pub(in crate::ssa) fn construct_program(
         .iter()
         .enumerate()
         .map(|(index, function)| {
-            let raw = u32::try_from(index).unwrap_or(u32::MAX);
-            (function.binding, FunctionId::new(raw))
+            let raw = u64::try_from(index)
+                .map_err(|_| Error::msg("SSA function identity exceeds u64"))?;
+            Ok((function.binding, FunctionId::new(raw)))
         })
-        .collect();
+        .collect::<Result<_>>()?;
     let mut structural = lower_structural_memory(program, memory_plan, &product_ids)?;
     let region_products = lower_region_products(memory_plan, &product_ids)?;
     if !region_products.is_empty() && structural.types.is_empty() {
@@ -124,7 +125,7 @@ pub(in crate::ssa) fn construct_program(
     }
 
     let main_id = FunctionId::new(
-        u32::try_from(functions.len()).map_err(|_| Error::msg("too many SSA functions"))?,
+        u64::try_from(functions.len()).map_err(|_| Error::msg("too many SSA functions"))?,
     );
     functions.push(super::entry_function::construct(
         program,

@@ -174,21 +174,20 @@ pub(super) fn preflight_function(
                         "legacy aggregate operation in structural group",
                     );
                 }
-                InstructionKind::ProductValue { product, fields } => {
-                    if u32::try_from(product.raw()).is_err() || u8::try_from(fields.len()).is_err()
-                    {
+                InstructionKind::ProductValue { fields, .. } => {
+                    if fields.len() > 15 {
                         return unsupported_operation(
                             function.id,
-                            "native product construction exceeds compact aggregate eligibility",
+                            "native product construction exceeds calling-convention eligibility",
                         );
                     }
                 }
-                InstructionKind::ProductField { product, field, .. }
-                | InstructionKind::WithProductField { product, field, .. } => {
-                    if u32::try_from(product.raw()).is_err() || u8::try_from(*field).is_err() {
+                InstructionKind::ProductField { field, .. }
+                | InstructionKind::WithProductField { field, .. } => {
+                    if *field >= 15 {
                         return unsupported_operation(
                             function.id,
-                            "native product projection exceeds compact aggregate eligibility",
+                            "native product projection exceeds calling-convention eligibility",
                         );
                     }
                 }

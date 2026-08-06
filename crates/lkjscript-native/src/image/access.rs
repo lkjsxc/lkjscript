@@ -12,8 +12,7 @@ impl InstallableImage {
     }
 
     pub fn resolve_static_bytes(&self, identity: NativeStaticBytes) -> Option<&[u8]> {
-        let index = identity.opaque_word().checked_sub(1)?;
-        let index = usize::try_from(index).ok()?;
+        let index = usize::try_from(identity.opaque_word()).ok()?;
         self.static_bytes.get(index).map(AsRef::as_ref)
     }
 

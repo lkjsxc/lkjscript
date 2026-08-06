@@ -3,7 +3,7 @@ use crate::*;
 
 pub(super) fn source(out: &mut Encoder, value: &SourceMetadata) {
     let SourceMetadata { id, path } = value;
-    out.u32(*id);
+    out.u64(*id);
     out.string(path);
 }
 pub(super) fn product(out: &mut Encoder, value: &ProductMetadata) {
@@ -66,7 +66,7 @@ pub(super) fn trait_value(out: &mut Encoder, value: &TraitMetadata) {
         role,
         source,
     } = value;
-    out.u32(id.raw());
+    out.u64(id.raw());
     out.string(name);
     out.tag(match role {
         TraitRole::Copy => 0,
@@ -76,7 +76,7 @@ pub(super) fn trait_value(out: &mut Encoder, value: &TraitMetadata) {
         TraitRole::Sync => 4,
         TraitRole::User => 5,
     });
-    out.option(source.as_ref(), |out, value| out.u32(*value));
+    out.option(source.as_ref(), |out, value| out.u64(*value));
 }
 pub(super) fn implementation(out: &mut Encoder, value: &ImplMetadata) {
     let ImplMetadata {
@@ -85,16 +85,21 @@ pub(super) fn implementation(out: &mut Encoder, value: &ImplMetadata) {
         product,
         source,
     } = value;
-    out.u32(id.raw());
-    out.u32(trait_id.raw());
+    out.u64(id.raw());
+    out.u64(trait_id.raw());
     out.u64(product.raw());
-    out.u32(*source);
+    out.u64(*source);
 }
 pub(super) fn effects(out: &mut Encoder, value: EffectSet) {
     out.u16(value.bits());
 }
 pub(super) fn origin(out: &mut Encoder, value: &Origin) {
-    let Origin { source, node } = value;
-    out.u32(*source);
-    out.u32(*node);
+    match value {
+        Origin::Source { source, node } => {
+            out.tag(0);
+            out.u64(*source);
+            out.u64(*node);
+        }
+        Origin::Synthetic => out.tag(1),
+    }
 }

@@ -44,15 +44,22 @@ fn structural_layout(
     program: &Program,
     type_id: crate::StructuralTypeId,
 ) -> crate::Result<&crate::StructuralLayoutMetadata> {
+    let type_index = type_id
+        .index()
+        .ok_or_else(|| crate::IrError::new("SSA structural type ID exceeds host indexing"))?;
     let item = program
         .memory
         .types
-        .get(type_id.index().unwrap_or(usize::MAX))
+        .get(type_index)
         .ok_or_else(|| crate::IrError::new("SSA structural type metadata is missing"))?;
+    let layout_index = item
+        .layout
+        .index()
+        .ok_or_else(|| crate::IrError::new("SSA structural layout ID exceeds host indexing"))?;
     program
         .memory
         .layouts
-        .get(item.layout.index().unwrap_or(usize::MAX))
+        .get(layout_index)
         .filter(|layout| layout.id == item.layout)
         .ok_or_else(|| crate::IrError::new("SSA structural layout metadata is missing"))
 }

@@ -60,12 +60,12 @@ impl<T: Clone> SegmentedListArena<T> {
     pub fn collect_cloned(
         &self,
         mut key: SegmentedListKey,
-        max_steps: u32,
+        max_steps: Option<u64>,
     ) -> Result<Vec<T>, SegmentedListError> {
         self.validate_key(key)?;
         let mut output = Vec::new();
         while let Some(location) = key.location() {
-            if u32::try_from(output.len()).unwrap_or(u32::MAX) >= max_steps {
+            if max_steps.is_some_and(|maximum| output.len() as u64 >= maximum) {
                 return Err(SegmentedListError::Limit(
                     SegmentedListLimit::TraversalSteps,
                 ));

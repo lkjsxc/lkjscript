@@ -25,7 +25,7 @@ fn canonical_known_vector_and_repeat_stability() {
     assert!(first == identity(base()));
     assert_eq!(
         hex(first),
-        "3a47a5a7445bbde09335b9f8d10d24f9f442372e0bcf4dca51bb5791a047d2d4"
+        "5d90e618aa8f24a8e260f0825da3d772d831764a67c143eca9e025d87aa6933b"
     );
 }
 

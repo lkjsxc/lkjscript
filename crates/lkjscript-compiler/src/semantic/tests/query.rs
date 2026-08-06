@@ -2,6 +2,35 @@ use super::*;
 use crate::semantic::schema::{FactRecord, ResponseResult};
 
 #[test]
+fn high_wire_node_identity_rejects_without_narrowing_or_aliasing() {
+    let root = case_dir("query-high-node").join("main.lkjscript");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write query source");
+    let snapshot = response(
+        &crate::semantic::execute(&request(&root, "{\"kind\":\"snapshot\"}"))
+            .expect("query snapshot"),
+    );
+    let revision = snapshot.revision.expect("query revision");
+    let high = u64::from(u32::MAX) + 1;
+    let operation =
+        format!("{{\"kind\":\"query-node\",\"revision\":\"{revision}\",\"node\":{high}}}");
+    let queried = response(
+        &crate::semantic::execute(&request(&root, &operation))
+            .expect("high node identity reaches semantic validation"),
+    );
+    let ResponseResult::Error { error, .. } = queried.result else {
+        panic!("high node identity unexpectedly resolved");
+    };
+    assert_eq!(
+        error.code,
+        crate::semantic::schema::ProtocolErrorCode::UnknownNode
+    );
+}
+
+#[test]
 fn query_reports_only_correlated_compiler_facts() {
     let root = case_dir("query-facts").join("main.lkjscript");
     let source = concat!(

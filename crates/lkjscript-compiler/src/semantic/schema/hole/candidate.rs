@@ -19,6 +19,24 @@ pub(crate) enum CandidateCategory {
     NeverForm,
 }
 
+impl CandidateCategory {
+    pub(crate) const fn rank(self) -> u16 {
+        match self {
+            Self::ExactLiteral => 0,
+            Self::VisibleBinding => 1,
+            Self::ProductConstructor => 2,
+            Self::OptionConstructor => 3,
+            Self::ResultConstructor => 4,
+            Self::DirectFunction => 5,
+            Self::DirectBuiltin => 6,
+            Self::ExactConversion => 7,
+            Self::MatchSkeleton => 8,
+            Self::ControlForm => 9,
+            Self::NeverForm => 10,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HoleCandidate {
@@ -29,7 +47,7 @@ pub(crate) struct HoleCandidate {
     pub effects: Vec<SemanticEffect>,
     pub ownership: OwnershipAccess,
     pub capabilities: Vec<String>,
-    pub construction_cost: u32,
+    pub construction_cost: u64,
     pub expression: Expression,
     pub snippets: Vec<ConcreteSnippet>,
     pub edits: Vec<ExactSemanticEdit>,
@@ -43,7 +61,7 @@ pub(crate) struct CandidateRank {
     pub category: u16,
     pub effect_cost: u16,
     pub ownership_cost: u16,
-    pub construction_cost: u32,
+    pub construction_cost: u64,
     pub canonical_source: String,
     pub identity: String,
 }
@@ -60,7 +78,7 @@ pub(crate) struct ConcreteSnippet {
 pub(crate) enum ExactSemanticEdit {
     ReplaceHole {
         declaration_key: String,
-        node: u32,
+        node: u64,
         node_fingerprint: String,
         expression: Expression,
     },
@@ -70,7 +88,7 @@ pub(crate) enum ExactSemanticEdit {
         before_declaration: String,
     },
     QualifyReference {
-        node: u32,
+        node: u64,
         qualification: String,
     },
 }

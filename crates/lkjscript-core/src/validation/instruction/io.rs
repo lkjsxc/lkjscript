@@ -1,5 +1,5 @@
 use super::{types::*, Kind, State};
-use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
+use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result, StructuralSliceExt};
 
 pub(super) fn apply(
     chunk: &Chunk,
@@ -69,7 +69,7 @@ fn structural_string_option(
         if enum_id.bytes() != crate::OPTION_ID {
             return None;
         }
-        let layout = chunk.structural_layouts.get(ty.layout.index())?;
+        let layout = chunk.structural_layouts.get_structural(ty.layout)?;
         let crate::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
             return None;
         };

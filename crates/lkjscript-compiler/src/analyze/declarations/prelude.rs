@@ -135,7 +135,7 @@ impl Analyzer {
         self.enums.push(EnumDefinition {
             id: *id,
             name: name.clone(),
-            origin: SourceId::new(u32::MAX),
+            origin: None,
             type_parameters: parameters,
             variants,
             layout: EnumLayoutFacts {

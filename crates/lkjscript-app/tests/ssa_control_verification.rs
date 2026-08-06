@@ -96,7 +96,7 @@ fn stale_control_target_and_block_arguments_fail_closed() {
     let compiled = compile_source(LOOP, "stale-control.lkjscript").expect("compile loop");
     let mut stale_target = compiled.ssa().program().clone();
     stale_target.functions[0].blocks[0].terminator = Terminator::Branch {
-        target: BlockId::new(u32::MAX),
+        target: BlockId::new(u64::MAX),
         arguments: Vec::new(),
     };
     assert!(verify(stale_target).is_err());

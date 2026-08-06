@@ -86,10 +86,10 @@ fn validate_witness_route(chunk: &Chunk, witness: &crate::InstalledMemoryWitness
     let crate::MemoryWitnessValueKind::Structural(representation) = witness.value_kind else {
         return Ok(());
     };
-    let ty = chunk.structural_representations.get(representation.index())
+    let ty = chunk.structural_representations.get_structural(representation)
         .filter(|item| item.id == representation
             && item.category == StructuralValueCategory::Owner)
-        .and_then(|item| chunk.structural_types.get(item.type_id.index()))
+        .and_then(|item| chunk.structural_types.get_structural(item.type_id))
         .ok_or_else(|| Error::msg("bytecode memory witness structural route is stale"))?;
     let expected_mode = match ty.mode {
         crate::StructuralTypeMode::Copy => lkjscript_contracts::MemoryWitnessMode::Copy,

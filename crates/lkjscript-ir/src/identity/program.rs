@@ -26,5 +26,5 @@ pub(super) fn encode_program(out: &mut Encoder, value: &Program) {
     out.sequence(traits, metadata::trait_value);
     out.sequence(implementations, metadata::implementation);
     out.sequence(functions, function::function);
-    out.u32(main.raw());
+    out.wide(main.raw());
 }

@@ -33,7 +33,7 @@ impl SealedSemanticDagRuntime {
             live.4 = live.4.saturating_add(next.4);
         }
         SealedSemanticDagMetrics {
-            typed_stores: u32::try_from(self.stores.len()).unwrap_or(u32::MAX),
+            typed_stores: self.stores.len() as u64,
             runtime: self.runtime.metrics(),
             sealed,
             live_regions: live.0,

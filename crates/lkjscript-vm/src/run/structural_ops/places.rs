@@ -17,11 +17,11 @@ fn place_init<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let mode = vm
         .chunk
         .structural_representations()
-        .get(record.representation.index())
+        .get_structural(record.representation)
         .and_then(|representation| {
             vm.chunk
                 .structural_types()
-                .get(representation.type_id.index())
+                .get_structural(representation.type_id)
         })
         .map(|ty| ty.mode);
     let duplicate = current_places(vm)

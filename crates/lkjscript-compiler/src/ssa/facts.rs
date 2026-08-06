@@ -16,8 +16,8 @@ pub(in crate::ssa) fn failure_behavior(effects: EffectSet) -> FailureBehavior {
     }
 }
 
-pub(in crate::ssa) const fn origin(source: u32, node: u32) -> Origin {
-    Origin { source, node }
+pub(in crate::ssa) const fn origin(source: u64, node: u64) -> Origin {
+    Origin::source(source, node)
 }
 
 pub(in crate::ssa) fn ir_error(error: lkjscript_ir::IrError) -> Error {

@@ -20,7 +20,10 @@ pub(super) fn declared_functions(
         if declaration.kind() != crate::source::DeclarationKind::Function {
             continue;
         }
-        let Some(root) = source.get(declaration.node().index() as usize) else {
+        let Some(root) = usize::try_from(declaration.node().index())
+            .ok()
+            .and_then(|index| source.get(index))
+        else {
             continue;
         };
         let Some(function) = root

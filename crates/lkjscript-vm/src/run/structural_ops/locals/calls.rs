@@ -161,11 +161,11 @@ fn is_copy_root<J: RuntimeTier>(vm: &Vm<'_, J>, key: StructuralValueKey) -> Resu
     let copy = vm
         .chunk
         .structural_representations()
-        .get(record.representation.index())
+        .get_structural(record.representation)
         .and_then(|representation| {
             vm.chunk
                 .structural_types()
-                .get(representation.type_id.index())
+                .get_structural(representation.type_id)
         })
         .is_some_and(|ty| {
             matches!(

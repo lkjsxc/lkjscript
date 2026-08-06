@@ -15,7 +15,7 @@ impl FunctionBuilder {
             .map(|(index, value_type)| ValueFact {
                 id: ValueId {
                     function,
-                    index: u32::try_from(index).unwrap_or(u32::MAX),
+                    index: index as u64,
                 },
                 value_type,
                 definition: ValueDefinition::Parameter(index),
@@ -49,7 +49,7 @@ impl FunctionBuilder {
     }
 
     pub fn create_block(&mut self) -> Result<BlockId, PlanError> {
-        let index = u32::try_from(self.blocks.len()).map_err(|_| PlanError::TooManyItems)?;
+        let index = u64::try_from(self.blocks.len()).map_err(|_| PlanError::TooManyItems)?;
         let id = BlockId {
             function: self.function,
             index,
@@ -69,7 +69,7 @@ impl FunctionBuilder {
     }
 
     pub fn create_local(&mut self, value_type: ValueType) -> Result<LocalId, PlanError> {
-        let index = u32::try_from(self.locals.len()).map_err(|_| PlanError::TooManyItems)?;
+        let index = u64::try_from(self.locals.len()).map_err(|_| PlanError::TooManyItems)?;
         let id = LocalId {
             function: self.function,
             index,

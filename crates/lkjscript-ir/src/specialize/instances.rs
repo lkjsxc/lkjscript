@@ -94,7 +94,7 @@ mod tests {
             for index in 0..MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_DECLARATION {
                 record_instance(
                     &mut instances,
-                    FunctionId::new(target as u32),
+                    FunctionId::new(target as u64),
                     instance(index),
                 )
                 .expect("instance within declaration budget");
@@ -106,7 +106,7 @@ mod tests {
         );
         record_instance(
             &mut instances,
-            FunctionId::new(declarations as u32),
+            FunctionId::new(declarations as u64),
             instance(0),
         )
         .expect("first instance of another declaration");

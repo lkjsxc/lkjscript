@@ -147,16 +147,17 @@ fn push_representation(
     storage: StructuralStorage,
     route: [u8; 32],
 ) -> Result<()> {
-    let group = MemoryWitnessGroupId::new(witness.group.as_bytes());
+    let group = MemoryWitnessGroupId::new(
+        witness
+            .group
+            .ok_or_else(|| Error::msg("structural witness has no group"))?
+            .as_bytes(),
+    );
+    let ordinal = witness
+        .ordinal
+        .ok_or_else(|| Error::msg("structural witness has no ordinal"))?;
     if !keys.insert((
-        ty.id,
-        ty.witness,
-        group,
-        witness.ordinal,
-        ty.layout,
-        category,
-        storage,
-        route,
+        ty.id, ty.witness, group, ordinal, ty.layout, category, storage, route,
     )) {
         return Ok(());
     }
@@ -171,7 +172,7 @@ fn push_representation(
             type_id: ty.id,
             witness: ty.witness,
             witness_group: group,
-            witness_member: witness.ordinal,
+            witness_member: ordinal,
             layout: ty.layout,
             category,
             storage,

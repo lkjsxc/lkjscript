@@ -3,7 +3,7 @@ use super::*;
 impl NativeCallState<'_> {
     pub(in crate::executable) fn reserve_frame(
         &mut self,
-        function_ordinal: u32,
+        function_ordinal: u64,
         frame_bytes: u64,
         rbp: *mut u8,
     ) {
@@ -19,7 +19,11 @@ impl NativeCallState<'_> {
             self.invalidate_active_frame();
             return;
         }
-        let Some(entry) = self.image.entries().get(function_ordinal as usize) else {
+        let Ok(function_index) = usize::try_from(function_ordinal) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let Some(entry) = self.image.entries().get(function_index) else {
             self.invalidate_active_frame();
             return;
         };

@@ -22,12 +22,16 @@ pub(super) fn nearest_loop_type(site: &HoleSite<'_>) -> Option<Type> {
     result
 }
 
-pub(super) fn loop_depth(site: &HoleSite<'_>) -> u32 {
+// Traversal depth cannot exceed the host-addressable validated node collection.
+#[allow(clippy::expect_used)]
+pub(super) fn loop_depth(site: &HoleSite<'_>) -> u64 {
     let mut node = site.root;
-    let mut depth = 0_u32;
+    let mut depth = 0_u64;
     for index in &site.path {
         if matches!(&node.kind, SyntaxKind::Call { name } if name == "while" || name == "loop") {
-            depth = depth.saturating_add(1);
+            depth = depth
+                .checked_add(1)
+                .expect("host-addressable hole context depth fits u64");
         }
         let Some(child) = node.children.get(*index) else {
             break;

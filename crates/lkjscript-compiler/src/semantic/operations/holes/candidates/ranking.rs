@@ -19,7 +19,7 @@ pub(super) fn builtin_category(operation: crate::hir::Operation) -> CandidateCat
     }
 }
 
-pub(super) fn rank_key(candidate: &HoleCandidate) -> (u16, u16, u16, u32, &str, &str) {
+pub(super) fn rank_key(candidate: &HoleCandidate) -> (u16, u16, u16, u64, &str, &str) {
     let rank = &candidate.rank;
     (
         rank.category,

@@ -30,10 +30,30 @@ impl MemoryWitnessId {
     }
 }
 
+pub trait StructuralDenseId: Copy {
+    fn host_index(self) -> Option<usize>;
+}
+
+pub trait StructuralSliceExt<T> {
+    fn get_structural<I: StructuralDenseId>(&self, id: I) -> Option<&T>;
+}
+
+impl<T> StructuralSliceExt<T> for [T] {
+    fn get_structural<I: StructuralDenseId>(&self, id: I) -> Option<&T> {
+        id.host_index().and_then(|index| self.get(index))
+    }
+}
+
 macro_rules! structural_id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
         pub struct $name(u64);
+
+        impl StructuralDenseId for $name {
+            fn host_index(self) -> Option<usize> {
+                usize::try_from(self.0).ok()
+            }
+        }
 
         impl $name {
             pub const fn new(raw: u64) -> Self {
@@ -44,8 +64,14 @@ macro_rules! structural_id {
                 self.0
             }
 
-            pub fn index(self) -> usize {
-                usize::try_from(self.0).unwrap_or(usize::MAX)
+            pub fn index(self) -> Option<usize> {
+                self.host_index()
+            }
+
+            pub fn checked_index(self) -> crate::Result<usize> {
+                self.index().ok_or_else(|| {
+                    crate::Error::msg("bytecode structural identity exceeds host index width")
+                })
             }
         }
     };

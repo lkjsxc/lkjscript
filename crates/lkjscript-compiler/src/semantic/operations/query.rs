@@ -13,9 +13,15 @@ use crate::source::{NodeKind, ValidatedSourceTree};
 
 pub(crate) fn query(
     tree: &ValidatedSourceTree,
-    index: u32,
+    index: u64,
 ) -> Result<NodeQueryRecord, ProtocolError> {
-    let node = tree.nodes().get(index as usize).ok_or_else(|| {
+    let host_index = usize::try_from(index).map_err(|_| {
+        error(
+            ProtocolErrorCode::UnknownNode,
+            format!("node index {index} is not host-addressable"),
+        )
+    })?;
+    let node = tree.nodes().get(host_index).ok_or_else(|| {
         error(
             ProtocolErrorCode::UnknownNode,
             format!("unknown revision-scoped node index {index}"),

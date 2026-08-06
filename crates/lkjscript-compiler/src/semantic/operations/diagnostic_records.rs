@@ -8,12 +8,14 @@ pub(super) fn node(
     code: DiagnosticCode,
     category: DiagnosticCategory,
     tree: &ValidatedSourceTree,
-    index: u32,
+    index: u64,
     message: String,
     expected: Option<String>,
     actual: Option<String>,
 ) -> DiagnosticRecord {
-    let node = tree.nodes().get(index as usize);
+    let node = usize::try_from(index)
+        .ok()
+        .and_then(|host_index| tree.nodes().get(host_index));
     let source = node.map_or(tree.root_origin(), |node| node.origin());
     let span = node.map_or(crate::source::SourceSpan::zero(), |node| node.span());
     DiagnosticRecord {

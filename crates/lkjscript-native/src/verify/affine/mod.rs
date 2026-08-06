@@ -36,14 +36,14 @@ fn consume(
             if checked {
                 reject_live_borrow(function, operand, values)?;
             }
-            values[operand.index as usize] = false;
+            values[operand.host_index().unwrap_or(usize::MAX)] = false;
         }
     }
     match instruction.operation {
         Operation::ReadLocal(local) if local_type(function, local)?.is_affine() => {
-            locals[local.index as usize] = false;
+            locals[local.host_index().unwrap_or(usize::MAX)] = false;
         }
-        Operation::WriteLocal(local, _) => locals[local.index as usize] = true,
+        Operation::WriteLocal(local, _) => locals[local.host_index().unwrap_or(usize::MAX)] = true,
         _ => {}
     }
     Ok(())
@@ -66,7 +66,10 @@ pub(super) fn verify_affine_exit(
         _ => None,
     };
     for fact in &function.values {
-        if values.get(fact.id.index as usize).copied().unwrap_or(false)
+        if values
+            .get(fact.id.host_index().unwrap_or(usize::MAX))
+            .copied()
+            .unwrap_or(false)
             && fact.value_type.is_affine()
             && Some(fact.id) != returned
         {

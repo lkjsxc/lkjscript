@@ -51,7 +51,7 @@ pub(super) fn scoped_witness(
     None
 }
 
-pub(crate) fn witness(tree: &ValidatedSourceTree, ty: &Type, depth: u32) -> Option<Expression> {
+pub(crate) fn witness(tree: &ValidatedSourceTree, ty: &Type, depth: u64) -> Option<Expression> {
     if depth > 8 {
         return None;
     }
@@ -101,12 +101,12 @@ pub(crate) fn witness(tree: &ValidatedSourceTree, ty: &Type, depth: u32) -> Opti
     })
 }
 
-fn product_witness(tree: &ValidatedSourceTree, name: &str, depth: u32) -> Option<Expression> {
+fn product_witness(tree: &ValidatedSourceTree, name: &str, depth: u64) -> Option<Expression> {
     let nodes = crate::semantic::tree::source_nodes(tree);
     let declaration = tree.declarations().iter().find(|item| {
         item.kind() == crate::source::DeclarationKind::Product && item.name() == name
     })?;
-    let root = nodes.get(declaration.node().index() as usize)?;
+    let root = nodes.get(usize::try_from(declaration.node().index()).ok()?)?;
     let fields = root
         .children
         .iter()

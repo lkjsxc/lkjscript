@@ -155,7 +155,7 @@ impl TypePlanner<'_> {
                     if let Some(glue) = self.memo.get(&field.ty).and_then(|id| self.facts.get(id.index()?))
                         .and_then(|fact| fact.drop_glue) {
                         actions.push(MemoryDropAction { path: vec![MemoryDropPathElement::ProductField {
-                            index: index_u32(index)?, name: field.name.clone() }], glue });
+                            index: index_u64(index)?, name: field.name.clone() }], glue });
                     }
                 }
                 Ok(vec![MemoryDropBranch { active_variant: None, actions }])
@@ -176,7 +176,7 @@ impl TypePlanner<'_> {
                 if let Some(glue) = self.memo.get(&ty).and_then(|id| self.facts.get(id.index()?))
                     .and_then(|fact| fact.drop_glue) {
                     actions.push(MemoryDropAction { path: vec![MemoryDropPathElement::EnumField {
-                        variant: variant.id.bytes(), index: index_u32(index)?, field: field.id.bytes(),
+                        variant: variant.id.bytes(), index: index_u64(index)?, field: field.id.bytes(),
                     }], glue });
                 }
             }

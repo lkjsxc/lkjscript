@@ -131,8 +131,8 @@ fn same_witness_representation(
     left: crate::StructuralRepresentationId,
     right: crate::StructuralRepresentationId,
 ) -> bool {
-    let Some(left) = chunk.structural_representations.get(left.index()) else { return false };
-    let Some(right) = chunk.structural_representations.get(right.index()) else { return false };
+    let Some(left) = chunk.structural_representations.get_structural(left) else { return false };
+    let Some(right) = chunk.structural_representations.get_structural(right) else { return false };
     left.type_id == right.type_id
         && left.witness == right.witness
         && left.witness_group == right.witness_group

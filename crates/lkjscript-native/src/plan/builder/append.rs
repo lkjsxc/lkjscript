@@ -9,7 +9,7 @@ impl FunctionBuilder {
         self.check_value(value)?;
         let block_id = match self
             .values
-            .get(value.index as usize)
+            .get(value.host_index().unwrap_or(usize::MAX))
             .map(|fact| &fact.definition)
         {
             Some(ValueDefinition::Instruction(block)) => *block,
@@ -33,7 +33,7 @@ impl FunctionBuilder {
         self.check_value(value)?;
         let block_id = match self
             .values
-            .get(value.index as usize)
+            .get(value.host_index().unwrap_or(usize::MAX))
             .map(|fact| &fact.definition)
         {
             Some(ValueDefinition::Instruction(block)) => *block,
@@ -57,7 +57,7 @@ impl FunctionBuilder {
         self.check_value(value)?;
         let block_id = match self
             .values
-            .get(value.index as usize)
+            .get(value.host_index().unwrap_or(usize::MAX))
             .map(|fact| &fact.definition)
         {
             Some(ValueDefinition::Instruction(block)) => *block,
@@ -84,7 +84,7 @@ impl FunctionBuilder {
         if self.block(block)?.terminator.is_some() {
             return Err(PlanError::BlockAlreadyTerminated);
         }
-        let index = u32::try_from(self.values.len()).map_err(|_| PlanError::TooManyItems)?;
+        let index = u64::try_from(self.values.len()).map_err(|_| PlanError::TooManyItems)?;
         let output = ValueId {
             function: self.function,
             index,
@@ -127,7 +127,7 @@ impl FunctionBuilder {
             return Err(PlanError::ForeignId("block ID"));
         }
         self.blocks
-            .get(block.index as usize)
+            .get(block.host_index().unwrap_or(usize::MAX))
             .filter(|item| item.id == block)
             .ok_or(PlanError::UnknownBlock)
     }
@@ -137,7 +137,7 @@ impl FunctionBuilder {
             return Err(PlanError::ForeignId("block ID"));
         }
         self.blocks
-            .get_mut(block.index as usize)
+            .get_mut(block.host_index().unwrap_or(usize::MAX))
             .filter(|item| item.id == block)
             .ok_or(PlanError::UnknownBlock)
     }
@@ -147,7 +147,7 @@ impl FunctionBuilder {
             return Err(PlanError::ForeignId("value ID"));
         }
         self.values
-            .get(value.index as usize)
+            .get(value.host_index().unwrap_or(usize::MAX))
             .filter(|fact| fact.id == value)
             .map(|_| ())
             .ok_or(PlanError::UnknownValue)
@@ -158,7 +158,7 @@ impl FunctionBuilder {
             return Err(PlanError::ForeignId("local ID"));
         }
         self.locals
-            .get(local.index as usize)
+            .get(local.host_index().unwrap_or(usize::MAX))
             .filter(|fact| fact.id == local)
             .map(|fact| fact.value_type)
             .ok_or(PlanError::UnknownLocal)

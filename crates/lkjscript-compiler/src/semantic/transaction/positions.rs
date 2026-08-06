@@ -4,15 +4,21 @@ use crate::source::{SourceNode, SyntaxKind, ValidatedSourceTree};
 
 pub(crate) fn path_from_owner(
     tree: &ValidatedSourceTree,
-    owner: u32,
-    target: u32,
+    owner: u64,
+    target: u64,
 ) -> Result<Vec<usize>, ProtocolError> {
     let mut current = target;
     let mut reversed = Vec::new();
     while current != owner {
+        let current_index = usize::try_from(current).map_err(|_| {
+            error(
+                ProtocolErrorCode::UnknownNode,
+                "node path identity is not host-addressable",
+            )
+        })?;
         let node = tree
             .nodes()
-            .get(current as usize)
+            .get(current_index)
             .ok_or_else(|| error(ProtocolErrorCode::UnknownNode, "node path is incomplete"))?;
         let parent = node.parent().ok_or_else(|| {
             error(
@@ -20,9 +26,15 @@ pub(crate) fn path_from_owner(
                 "node escapes its declaration",
             )
         })?;
+        let parent_index = usize::try_from(parent.index()).map_err(|_| {
+            error(
+                ProtocolErrorCode::UnknownNode,
+                "parent node identity is not host-addressable",
+            )
+        })?;
         let parent_node = tree
             .nodes()
-            .get(parent.index() as usize)
+            .get(parent_index)
             .ok_or_else(|| error(ProtocolErrorCode::UnknownNode, "parent node is unavailable"))?;
         let child = parent_node
             .children()

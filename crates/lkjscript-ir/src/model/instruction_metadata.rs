@@ -17,7 +17,7 @@ pub struct FrameLocal {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrameState {
-    pub bytecode_position: u32,
+    pub bytecode_position: u64,
     pub locals: Vec<FrameLocal>,
     pub operand_stack: Vec<ValueId>,
 }

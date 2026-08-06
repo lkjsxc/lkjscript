@@ -31,8 +31,8 @@ pub(crate) fn relocation(
 pub(crate) fn frame_facts(
     function: FunctionId,
     frame_bytes: u32,
-    value_slots: u32,
-    local_slots: u32,
+    value_slots: u64,
+    local_slots: u64,
     outgoing_machine_arguments: u8,
     homes: Vec<FrameHome>,
     returned_structural_owners: Vec<FrameHomeKind>,
@@ -63,7 +63,7 @@ pub(crate) const fn frame_home(
 }
 
 pub(crate) fn heap_runtime_site(
-    id: u32,
+    id: u64,
     function: FunctionId,
     descriptor: HeapCallDescriptor,
     arguments: Vec<FrameHome>,
@@ -81,7 +81,7 @@ pub(crate) fn heap_runtime_site(
 }
 
 pub(crate) fn structural_runtime_site(
-    id: u32,
+    id: u64,
     function: FunctionId,
     descriptor: StructuralCallDescriptor,
     source: Option<SourceOrigin>,
@@ -112,7 +112,7 @@ pub(crate) fn trap_map_entry(
     function: FunctionId,
     code_offset: u32,
     trap: TrapCode,
-    site: Option<u32>,
+    site: Option<u64>,
 ) -> TrapMapEntry {
     TrapMapEntry {
         function,

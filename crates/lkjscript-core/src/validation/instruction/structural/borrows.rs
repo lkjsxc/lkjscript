@@ -83,7 +83,7 @@ fn publish(
     }
     let ty = chunk
         .structural_types
-        .get(representation.type_id.index())
+        .get_structural(representation.type_id)
         .ok_or_else(|| {
             instruction_error(
                 proto,

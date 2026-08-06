@@ -30,7 +30,7 @@ impl JitValueServices<'_> {
                 ),
             )),
             HeapOperation::ProductValue { product: _, fields } => {
-                if usize::from(*fields) != arguments.len() {
+                if usize::try_from(*fields).ok() != Some(arguments.len()) {
                     return self.trap("product field count mismatch");
                 }
                 let fields = arguments
@@ -62,14 +62,10 @@ impl JitValueServices<'_> {
                     return self.trap("product projection requires invocation-region metadata");
                 };
                 let key = self.region_key(reference)?;
-                let field = u16::from(*field);
+                let field = usize::try_from(*field).map_err(|_| NativeServiceError::Trap)?;
                 let value = self
                     .region_products
-                    .field(
-                        key,
-                        lkjscript_core::RuntimeLayoutId::new(identity),
-                        usize::from(field),
-                    )
+                    .field(key, lkjscript_core::RuntimeLayoutId::new(identity), field)
                     .copied()
                     .map_err(|error| self.region_product_error(error))?;
                 self.native_from_value(value, result_type)
@@ -96,7 +92,7 @@ impl JitValueServices<'_> {
                     .update(
                         key,
                         lkjscript_core::RuntimeLayoutId::new(identity),
-                        usize::from(*field),
+                        usize::try_from(*field).map_err(|_| NativeServiceError::Trap)?,
                         replacement,
                     )
                     .map_err(|error| self.region_product_error(error))?;

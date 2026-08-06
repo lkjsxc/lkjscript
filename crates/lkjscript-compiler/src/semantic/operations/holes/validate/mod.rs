@@ -17,7 +17,7 @@ pub(crate) fn source_holes(tree: &ValidatedSourceTree) -> Result<(), String> {
         if !super::types::call_is(node, "hole") {
             continue;
         }
-        let index = u32::try_from(index).map_err(|_| "hole NodeId overflow")?;
+        let index = u64::try_from(index).map_err(|_| "hole NodeId overflow")?;
         let site = super::site::find(tree, index).map_err(|failure| failure.message)?;
         let identity = format!("{}:{}", site.declaration_key, site.local_identity);
         if !identities.insert(identity) {
@@ -52,7 +52,7 @@ pub(crate) fn validate_incomplete(tree: &ValidatedSourceTree) -> Result<(), Stri
 
 pub(super) fn completed_tree(
     tree: &ValidatedSourceTree,
-    target: Option<(u32, Expression)>,
+    target: Option<(u64, Expression)>,
 ) -> Result<ValidatedSourceTree, String> {
     let mut files = tree.files().to_vec();
     let nodes = crate::semantic::tree::source_nodes(tree);
@@ -61,7 +61,7 @@ pub(super) fn completed_tree(
         if !super::types::call_is(node, "hole") {
             continue;
         }
-        let index = u32::try_from(index).map_err(|_| "hole NodeId overflow")?;
+        let index = u64::try_from(index).map_err(|_| "hole NodeId overflow")?;
         let expression = if target.as_ref().is_some_and(|(node, _)| *node == index) {
             target
                 .as_ref()

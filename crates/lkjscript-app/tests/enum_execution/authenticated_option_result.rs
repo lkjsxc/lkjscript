@@ -2,7 +2,8 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::{
     SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
-    StructuralLimits, StructuralSnapshotLimits, StructuralType, StructuralTypeKind,
+    StructuralLimits, StructuralSliceExt, StructuralSnapshotLimits, StructuralType,
+    StructuralTypeKind,
 };
 
 #[test]
@@ -40,8 +41,14 @@ fn exercise(source: &str, name: &str, active: &str, child_kind: StructuralKind, 
     let program = compile_source(source, name).expect("compile enum return");
     let chunk = program.bytecode();
     let returned = chunk.main().return_structural.expect("structural return");
-    let representation = &chunk.structural_representations()[returned.index()];
-    let enum_type = &chunk.structural_types()[representation.type_id.index()];
+    let representation = chunk
+        .structural_representations()
+        .get_structural(returned)
+        .expect("return representation");
+    let enum_type = chunk
+        .structural_types()
+        .get_structural(representation.type_id)
+        .expect("return structural type");
     assert_eq!(enum_type.runtime_type.kind, StructuralKind::Enum);
     let witness = chunk
         .memory_witnesses()
@@ -68,8 +75,11 @@ fn exercise(source: &str, name: &str, active: &str, child_kind: StructuralKind, 
         .find(|item| item.name == active)
         .expect("active variant")
         .id;
-    let StructuralLayoutKind::Enum { variants, .. } =
-        &chunk.structural_layouts()[enum_type.layout.index()].kind
+    let StructuralLayoutKind::Enum { variants, .. } = &chunk
+        .structural_layouts()
+        .get_structural(enum_type.layout)
+        .expect("enum layout")
+        .kind
     else {
         panic!("enum layout")
     };

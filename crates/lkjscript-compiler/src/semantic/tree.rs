@@ -86,7 +86,9 @@ pub(crate) fn declaration_record(
     declaration: &DeclarationSummary,
 ) -> DeclarationRecord {
     let nodes = source_nodes(tree);
-    let node = nodes.get(declaration.node().index() as usize);
+    let node = usize::try_from(declaration.node().index())
+        .ok()
+        .and_then(|index| nodes.get(index));
     DeclarationRecord {
         key: declaration.key().to_hex(),
         identity: declaration.key().canonical_identity().to_string(),
@@ -146,8 +148,11 @@ pub(crate) fn node_records(tree: &ValidatedSourceTree) -> Vec<NodeRecord> {
         .collect()
 }
 
+// `NodeSummary` instances come from this tree's validated dense projection.
+#[allow(clippy::expect_used)]
 pub(crate) fn node_record(tree: &ValidatedSourceTree, node: &NodeSummary) -> NodeRecord {
-    let index = node.id().index() as usize;
+    let index = usize::try_from(node.id().index())
+        .expect("validated source nodes have host-addressable dense indexes");
     let source = source_nodes(tree);
     let projection = projections(tree);
     node_record_parts(tree, node, source[index], &projection[index], &source)
@@ -177,14 +182,14 @@ fn node_record_parts(
 
 pub(crate) fn subtree_record(
     tree: &ValidatedSourceTree,
-    root_index: u32,
+    root_index: u64,
 ) -> Option<SemanticSubtreeRecord> {
     let records = node_records(tree);
     build_subtree(&records, root_index)
 }
 
-fn build_subtree(records: &[NodeRecord], index: u32) -> Option<SemanticSubtreeRecord> {
-    let node = records.get(index as usize)?.clone();
+fn build_subtree(records: &[NodeRecord], index: u64) -> Option<SemanticSubtreeRecord> {
+    let node = records.get(usize::try_from(index).ok()?)?.clone();
     let children = node
         .children
         .iter()

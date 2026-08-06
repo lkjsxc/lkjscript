@@ -5,7 +5,7 @@ fn validate_representation(
 ) -> Result<()> {
     let ty = chunk
         .structural_types
-        .get(representation.type_id.index())
+        .get_structural(representation.type_id)
         .filter(|ty| ty.id == representation.type_id)
         .ok_or_else(|| Error::msg("bytecode structural representation has a missing type"))?;
     if ty.layout != representation.layout || ty.witness != representation.witness {
@@ -84,7 +84,7 @@ fn validate_field(chunk: &Chunk, field: &StructuralFieldMetadata) -> Result<()> 
         StructuralFieldRoute::Structural(id) => {
             let ty = chunk
                 .structural_types
-                .get(id.index())
+                .get_structural(id)
                 .filter(|ty| ty.id == id)
                 .ok_or_else(|| {
                     Error::msg(

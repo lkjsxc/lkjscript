@@ -8,7 +8,7 @@ impl Analyzer {
         let mut identities = HashSet::new();
         for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
-                u32::try_from(source_index)
+                u64::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
             );
             for form in &file.forms {
@@ -75,7 +75,7 @@ impl Analyzer {
         let mut field_ids = HashSet::new();
         for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
-                u32::try_from(source_index)
+                u64::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
             );
             for form in &file.forms {
@@ -144,7 +144,7 @@ impl Analyzer {
                 self.enums.push(EnumDefinition {
                     id,
                     name: parsed.name,
-                    origin: source,
+                    origin: Some(source),
                     type_parameters: parameters,
                     variants,
                     layout,

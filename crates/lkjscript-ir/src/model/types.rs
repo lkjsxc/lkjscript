@@ -3,16 +3,17 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Origin {
-    pub source: u32,
-    pub node: u32,
+pub enum Origin {
+    Source { source: u64, node: u64 },
+    Synthetic,
 }
 
 impl Origin {
-    pub const SYNTHETIC: Self = Self {
-        source: u32::MAX,
-        node: u32::MAX,
-    };
+    pub const SYNTHETIC: Self = Self::Synthetic;
+
+    pub const fn source(source: u64, node: u64) -> Self {
+        Self::Source { source, node }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -497,7 +498,7 @@ pub struct TraitMetadata {
     pub id: TraitId,
     pub name: String,
     pub role: TraitRole,
-    pub source: Option<u32>,
+    pub source: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -505,7 +506,7 @@ pub struct ImplMetadata {
     pub id: ImplId,
     pub trait_id: TraitId,
     pub product: ProductId,
-    pub source: u32,
+    pub source: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

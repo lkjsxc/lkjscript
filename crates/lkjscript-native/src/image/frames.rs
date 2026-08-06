@@ -2,8 +2,8 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum FrameHomeKind {
-    Local(u32),
-    Value(u32),
+    Local(u64),
+    Value(u64),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,8 +65,8 @@ impl FrameHome {
 pub struct FrameFacts {
     pub(super) function: FunctionId,
     pub(super) frame_bytes: u32,
-    pub(super) value_slots: u32,
-    pub(super) local_slots: u32,
+    pub(super) value_slots: u64,
+    pub(super) local_slots: u64,
     pub(super) outgoing_machine_arguments: u8,
     pub(super) uses_red_zone: bool,
     pub(super) call_site_aligned_16: bool,
@@ -86,12 +86,12 @@ impl FrameFacts {
     }
 
     #[must_use]
-    pub const fn value_slots(&self) -> u32 {
+    pub const fn value_slots(&self) -> u64 {
         self.value_slots
     }
 
     #[must_use]
-    pub const fn local_slots(&self) -> u32 {
+    pub const fn local_slots(&self) -> u64 {
         self.local_slots
     }
 

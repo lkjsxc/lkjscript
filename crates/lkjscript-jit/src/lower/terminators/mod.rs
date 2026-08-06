@@ -13,7 +13,7 @@ pub(super) fn lower_terminator(
     block: &Block,
     context: TerminatorContext<'_>,
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<(u32, String)>,
+    explicit_traps: &mut Vec<(u64, String)>,
 ) -> Result<(), LoweringError> {
     let native_block = context.native_block;
     let edges = context.edges;

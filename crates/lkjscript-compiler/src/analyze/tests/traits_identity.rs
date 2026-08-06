@@ -17,7 +17,10 @@ fn marker_trait_impl_and_bound_resolve_to_dense_canonical_identities() {
     assert_eq!(program.traits.len(), CoreTrait::ALL.len() + 1);
     for (index, core) in CoreTrait::ALL.iter().enumerate() {
         assert_eq!(program.traits[index].name, core.name());
-        assert_eq!(program.traits[index].id.raw(), index as u32);
+        assert_eq!(
+            program.traits[index].id.raw(),
+            u64::try_from(index).expect("fixture trait index fits u64")
+        );
     }
     let marker = &program.traits[CoreTrait::ALL.len()];
     assert_eq!(marker.name, "marked");

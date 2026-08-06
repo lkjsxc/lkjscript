@@ -37,9 +37,10 @@ impl InstalledImage {
         {
             return Err(InvocationError::InvalidActiveFrame);
         }
-        let trap_site = (state.status == 1 && state.trap == TrapCode::Explicit.as_u32())
-            .then(|| u32::try_from(state.payload).ok())
-            .flatten();
+        let trap_site = (state.status == 1
+            && state.trap == TrapCode::Explicit.as_u32()
+            && state.trap_site_present == 1)
+            .then(|| u64::from_ne_bytes(state.payload.to_ne_bytes()));
         let outcome = match state.status {
             0 => InvocationOutcome::Returned(raw.into_value(entry.signature().result())?),
             1 => InvocationOutcome::Trapped(match state.trap {
@@ -67,13 +68,9 @@ impl InstalledImage {
             .copied()
             .enumerate()
             .filter(|(_, count)| *count != 0)
-            .filter_map(|(source, entries)| {
-                u32::try_from(source)
-                    .ok()
-                    .map(|source_function| NativeEntryCount {
-                        source_function,
-                        entries,
-                    })
+            .map(|(source, entries)| NativeEntryCount {
+                source_function: source as u64,
+                entries,
             })
             .collect();
         Ok(InvocationReport {

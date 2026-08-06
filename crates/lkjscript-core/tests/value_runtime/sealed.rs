@@ -121,7 +121,7 @@ fn release_case(
     nodes: usize,
     layout: u64,
     semantic: u64,
-) -> Result<(u64, u32), StructuralValueError> {
+) -> Result<(u64, u64), StructuralValueError> {
     let product = value_type(layout, semantic, StructuralKind::Product)?;
     let scalar = value_type(layout + 100, semantic + 100, StructuralKind::I64)?;
     let limits = lkjscript_core::StructuralValueRuntimeLimits {
@@ -155,10 +155,7 @@ fn release_case(
         reclaimed += runtime.dispose_owner(owner, product)?.nodes_reclaimed;
     }
     let work = runtime.metrics().sealed_release_work - before;
-    assert_eq!(
-        runtime.metrics().sealed_nodes_reclaimed,
-        u64::from(reclaimed)
-    );
+    assert_eq!(runtime.metrics().sealed_nodes_reclaimed, reclaimed);
     runtime.verify_empty()?;
     Ok((work, reclaimed))
 }

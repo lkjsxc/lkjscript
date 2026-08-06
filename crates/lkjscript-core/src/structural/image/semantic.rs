@@ -79,7 +79,7 @@ fn push_fields<'a>(
     stack: &mut Vec<(&'a SemanticValue, u16)>,
     fields: &'a [SemanticValue],
     depth: u16,
-    visited: u32,
+    visited: u64,
     limits: StructuralValueRuntimeLimits,
 ) -> Result<(), StructuralValueError> {
     if fields.len() > limits.max_fields {
@@ -88,9 +88,9 @@ fn push_fields<'a>(
         ));
     }
     let pending =
-        u32::try_from(stack.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        u64::try_from(stack.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
     let added =
-        u32::try_from(fields.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        u64::try_from(fields.len()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
     if visited
         .checked_add(pending)
         .and_then(|total| total.checked_add(added))

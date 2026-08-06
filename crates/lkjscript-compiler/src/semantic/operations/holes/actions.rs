@@ -3,7 +3,7 @@ use crate::source::ValidatedSourceTree;
 
 pub(crate) fn build(
     tree: &ValidatedSourceTree,
-    node: u32,
+    node: u64,
 ) -> Result<LegalActionsResult, ProtocolError> {
     let context = super::context::build(tree, node)?;
     let site = super::site::find(tree, node)?;
@@ -123,7 +123,10 @@ fn required_fields(site: &super::site::HoleSite<'_>) -> Vec<RequiredField> {
     }) else {
         return Vec::new();
     };
-    let Some(root) = nodes.get(declaration.node().index() as usize) else {
+    let Some(root) = usize::try_from(declaration.node().index())
+        .ok()
+        .and_then(|index| nodes.get(index))
+    else {
         return Vec::new();
     };
     let Some(fields) = root

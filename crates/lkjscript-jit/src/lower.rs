@@ -117,7 +117,7 @@ pub(crate) struct LoweredGroup {
     pub(crate) image: InstallableImage,
     pub(crate) functions: Vec<FunctionId>,
     pub(crate) native_functions: Vec<(FunctionId, lkjscript_native::FunctionId)>,
-    pub(crate) explicit_traps: Vec<(u32, String)>,
+    pub(crate) explicit_traps: Vec<(u64, String)>,
 }
 #[derive(Default)]
 struct LayoutInterner {
@@ -132,7 +132,7 @@ struct LayoutInterner {
         ),
         u16,
     >,
-    next: u32,
+    next: u64,
 }
 
 #[derive(Clone, Copy)]

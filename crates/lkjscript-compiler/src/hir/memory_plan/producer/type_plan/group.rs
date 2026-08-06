@@ -178,7 +178,8 @@ fn finish_group_inner(
         lkjscript_contracts::executable_memory_witness_group_id(recursive, &members));
     group_ids[group] = id;
     for member in &groups[group] {
-        witnesses[*member].group = id; witnesses[*member].ordinal = ordinals[*member];
+        witnesses[*member].group = Some(id);
+        witnesses[*member].ordinal = Some(ordinals[*member]);
         witnesses[*member].id = memory_witness_id(id, ordinals[*member],
             semantic_ids[*member]);
     }

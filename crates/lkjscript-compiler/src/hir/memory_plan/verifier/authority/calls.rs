@@ -76,7 +76,7 @@ pub(super) fn verify_authority_calls(
                         id,
                         function: fact.function,
                         call: call.id,
-                        argument_index: index_u32(index)?,
+                        argument_index: index_u64(index)?,
                         source_expression: child.id,
                         binding,
                         place,

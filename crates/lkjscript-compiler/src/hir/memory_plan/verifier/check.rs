@@ -90,7 +90,7 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
     }
     for (index, body) in facts.bodies.iter().enumerate() {
         let function = plan
-            .function(MemoryFunctionId::new(index_u32(index)?))
+            .function(MemoryFunctionId::new(index_u64(index)?))
             .ok_or_else(|| Error::msg("HIR memory function body is missing"))?;
         if function.body != *body {
             return Err(Error::msg("HIR memory function body identity mismatch"));

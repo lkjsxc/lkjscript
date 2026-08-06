@@ -2,7 +2,7 @@ use super::{instruction_error, types::*, Kind, OwnerIdentity, State};
 use crate::validation::{StructuralDestinationState, UniquePlaceState};
 use crate::{
     Chunk, DecodedInstruction, FunctionProto, Op, Result, StructuralFieldMetadata,
-    StructuralFieldRoute, StructuralRepresentationId, StructuralValueCategory,
+    StructuralFieldRoute, StructuralRepresentationId, StructuralSliceExt, StructuralValueCategory,
 };
 
 pub(super) fn apply(

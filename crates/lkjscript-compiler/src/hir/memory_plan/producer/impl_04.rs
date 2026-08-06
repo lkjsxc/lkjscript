@@ -13,8 +13,8 @@ impl<'a> Producer<'a> {
             .try_reserve(1)
             .map_err(|_| Error::host("HIR memory-plan constant allocation failed"))?;
         let id = MemoryConstantId::new(
-            u32::try_from(self.constants.len())
-                .map_err(|_| Error::msg("HIR memory-plan constant identity exceeds u32"))?,
+            u64::try_from(self.constants.len())
+                .map_err(|_| Error::msg("HIR memory-plan constant identity exceeds u64"))?,
         );
         self.constants.push(MemoryConstantPlan {
             id,
@@ -123,8 +123,8 @@ impl<'a> Producer<'a> {
             .try_reserve(1)
             .map_err(|_| Error::host("HIR memory-plan call allocation failed"))?;
         let id = MemoryCallId::new(
-            u32::try_from(self.calls.len())
-                .map_err(|_| Error::msg("HIR memory-plan call identity exceeds u32"))?,
+            u64::try_from(self.calls.len())
+                .map_err(|_| Error::msg("HIR memory-plan call identity exceeds u64"))?,
         );
         self.calls.push(MemoryCallPlan {
             id,

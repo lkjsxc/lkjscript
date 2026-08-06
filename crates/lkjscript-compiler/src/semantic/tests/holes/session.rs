@@ -30,13 +30,20 @@ fn bounded_local_session_serves_current_contract_hole_context() {
     }))
     .expect("encode session request");
     let mut framed = Vec::new();
-    framed.extend_from_slice(&(envelope.len() as u64).to_be_bytes());
+    framed.extend_from_slice(
+        &u64::try_from(envelope.len())
+            .expect("fixture envelope length fits u64")
+            .to_be_bytes(),
+    );
     framed.extend_from_slice(&envelope);
     let mut output = Vec::new();
     crate::semantic::session::serve(&mut std::io::Cursor::new(framed), &mut output)
         .expect("serve hole context");
     let length = u64::from_be_bytes(output[..8].try_into().expect("response header"));
-    assert_eq!(length as usize, output.len() - 8);
+    assert_eq!(
+        usize::try_from(length).expect("response length fits host indexing"),
+        output.len() - 8
+    );
     let response: serde_json::Value =
         serde_json::from_slice(&output[8..]).expect("decode session response");
     assert_eq!(response["response"]["kind"], "execute");

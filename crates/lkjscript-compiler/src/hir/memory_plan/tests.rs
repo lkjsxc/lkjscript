@@ -32,7 +32,7 @@ fn executable_retains_dense_independently_verified_hir_memory_plan() -> Result<(
         .entries
         .iter()
         .enumerate()
-        .all(|(index, entry)| entry.id.raw() == u32::try_from(index).unwrap_or(u32::MAX)));
+        .all(|(index, entry)| u64::try_from(index).ok() == Some(entry.id.raw())));
     Ok(())
 }
 

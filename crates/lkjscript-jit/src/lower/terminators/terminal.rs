@@ -6,7 +6,7 @@ pub(super) fn lower_terminal(
     block: &Block,
     context: TerminatorContext<'_>,
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<(u32, String)>,
+    explicit_traps: &mut Vec<(u64, String)>,
 ) -> Result<(), LoweringError> {
     let native_block = context.native_block;
     let locals = context.locals;
@@ -28,7 +28,7 @@ pub(super) fn lower_terminal(
             drop_copy_parameters(
                 function,
                 block,
-                *value,
+                Some(*value),
                 native_block,
                 locals,
                 value_types,
@@ -65,7 +65,7 @@ pub(super) fn lower_terminal(
             drop_copy_parameters(
                 function,
                 block,
-                *value,
+                Some(*value),
                 native_block,
                 locals,
                 value_types,
@@ -73,7 +73,7 @@ pub(super) fn lower_terminal(
                 builder,
             )?;
             if let Some(message) = message {
-                let site = u32::try_from(explicit_traps.len())
+                let site = u64::try_from(explicit_traps.len())
                     .ok()
                     .and_then(|index| index.checked_add(1))
                     .ok_or_else(|| {
@@ -107,7 +107,7 @@ pub(super) fn lower_terminal(
             drop_copy_parameters(
                 function,
                 block,
-                *code,
+                Some(*code),
                 native_block,
                 locals,
                 value_types,
@@ -133,7 +133,7 @@ pub(super) fn lower_terminal(
             drop_copy_parameters(
                 function,
                 block,
-                ValueId::new(u32::MAX),
+                None,
                 native_block,
                 locals,
                 value_types,

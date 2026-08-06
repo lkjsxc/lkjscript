@@ -90,7 +90,7 @@ struct Analyzer {
     implementation_index: HashMap<(TraitId, ProductId), ImplId>,
     function_bounds: HashMap<BindingId, Vec<TraitBound>>,
     match_plans: Vec<MatchPlan>,
-    next_loan: u32,
+    next_loan: u64,
 }
 
 mod declarations;
@@ -117,10 +117,10 @@ struct Resolver<'a> {
     type_variables: HashSet<String>,
     next_slot: usize,
     max_slots: usize,
-    next_place: u32,
+    next_place: u64,
     return_type: Type,
     loops: Vec<LoopContext>,
-    next_loop: u32,
+    next_loop: u64,
 }
 
 #[derive(Clone)]

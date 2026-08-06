@@ -54,7 +54,7 @@ impl StructuralValueRuntime {
             self.metrics.sealed_nodes_reclaimed = self
                 .metrics
                 .sealed_nodes_reclaimed
-                .saturating_add(u64::from(facts.nodes));
+                .saturating_add(facts.nodes);
             self.metrics.string_bytes_released = self
                 .metrics
                 .string_bytes_released

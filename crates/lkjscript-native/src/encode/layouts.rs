@@ -6,14 +6,18 @@ pub(super) fn build_frame_homes(
     let mut homes = Vec::with_capacity(function.locals.len() + function.values.len());
     for (index, local) in function.locals.iter().enumerate() {
         homes.push(frame_home(
-            FrameHomeKind::Local(to_u32(index)?),
+            FrameHomeKind::Local(u64::try_from(index).map_err(|_| {
+                NativeError::Encode(EncodeError::LimitExceeded("local frame identity"))
+            })?),
             local.value_type,
             local_home_offset(index)?,
         ));
     }
     for (index, value) in function.values.iter().enumerate() {
         homes.push(frame_home(
-            FrameHomeKind::Value(to_u32(index)?),
+            FrameHomeKind::Value(u64::try_from(index).map_err(|_| {
+                NativeError::Encode(EncodeError::LimitExceeded("value frame identity"))
+            })?),
             value.value_type,
             value_home_offset(function, index)?,
         ));
@@ -27,7 +31,7 @@ pub(super) fn returned_structural_owner_homes(function: &FunctionPlan) -> Vec<Fr
         .iter()
         .filter_map(|block| match block.terminator {
             Some(Terminator::Return(value))
-                if function.values[value.index as usize]
+                if function.values[value.host_index().unwrap_or(usize::MAX)]
                     .value_type
                     .is_structural_owner() =>
             {
@@ -47,13 +51,13 @@ pub(super) fn value_frame_home(
 ) -> Result<crate::FrameHome, NativeError> {
     let fact = function
         .values
-        .get(value.index as usize)
+        .get(value.host_index().unwrap_or(usize::MAX))
         .filter(|fact| fact.id == value)
         .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
     Ok(frame_home(
         FrameHomeKind::Value(value.index),
         fact.value_type,
-        value_home_offset(function, value.index as usize)?,
+        value_home_offset(function, value.host_index().unwrap_or(usize::MAX))?,
     ))
 }
 
@@ -104,7 +108,7 @@ pub(super) fn maximum_outgoing_arguments(function: &FunctionPlan) -> Result<u8, 
                     .filter(|argument| {
                         function
                             .values
-                            .get(argument.index as usize)
+                            .get(argument.host_index().unwrap_or(usize::MAX))
                             .map(|fact| fact.value_type != ValueType::Unit)
                             .unwrap_or(false)
                     })

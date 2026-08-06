@@ -90,8 +90,8 @@ impl<'a> TypePlanner<'a> {
         if derived.closure.class == MemoryClosureClass::IllegalDomainBridge {
             return Err(closure_error(ty, &derived.closure));
         }
-        let id = MemoryTypeFactId::new(u32::try_from(self.facts.len())
-            .map_err(|_| Error::msg("HIR memory-plan type fact identity exceeds u32"))?);
+        let id = MemoryTypeFactId::new(u64::try_from(self.facts.len())
+            .map_err(|_| Error::msg("HIR memory-plan type fact identity exceeds u64"))?);
         let (drop_glue, drop_path) = self.add_structural_drop(ty, &derived)?;
         let root_projection = if derived.closure.class == MemoryClosureClass::RegionClosed
         {

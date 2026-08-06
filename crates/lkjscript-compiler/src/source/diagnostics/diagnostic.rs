@@ -15,7 +15,7 @@ pub struct SourceDiagnostic {
     certainty: DiagnosticCertainty,
     message: String,
     origin: Box<SourceOrigin>,
-    primary_span: SourceSpan,
+    primary_span: Box<SourceSpan>,
     related: Vec<RelatedSourceSpan>,
 }
 
@@ -44,8 +44,8 @@ impl SourceDiagnostic {
     pub fn origin(&self) -> &SourceOrigin {
         self.origin.as_ref()
     }
-    pub const fn primary_span(&self) -> SourceSpan {
-        self.primary_span
+    pub fn primary_span(&self) -> SourceSpan {
+        *self.primary_span
     }
     pub fn related_spans(&self) -> &[RelatedSourceSpan] {
         &self.related
@@ -132,7 +132,7 @@ impl SourceDiagnostic {
             certainty: DiagnosticCertainty::Guaranteed,
             message: message.into(),
             origin: Box::new(origin),
-            primary_span,
+            primary_span: Box::new(primary_span),
             related: Vec::new(),
         }
     }

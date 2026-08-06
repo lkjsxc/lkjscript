@@ -98,11 +98,7 @@ impl StructuralValueRuntime {
             Ok(key) => {
                 self.note_publication(facts);
                 self.note_slot_reuse(reused);
-                self.record(
-                    StructuralEventKind::Allocate,
-                    root.slot(),
-                    u64::from(facts.nodes),
-                );
+                self.record(StructuralEventKind::Allocate, root.slot(), facts.nodes);
                 self.record(StructuralEventKind::Publish, key.slot(), 0);
                 Ok(key)
             }
@@ -154,11 +150,7 @@ impl StructuralValueRuntime {
     ) -> Result<(), StructuralValueError> {
         let (image, facts) = self.drop_owned_image(key, expected)?;
         self.metrics.drops = self.metrics.drops.saturating_add(1);
-        self.record(
-            StructuralEventKind::Drop,
-            key.slot(),
-            u64::from(facts.nodes),
-        );
+        self.record(StructuralEventKind::Drop, key.slot(), facts.nodes);
         self.release_image(image, facts);
         Ok(())
     }

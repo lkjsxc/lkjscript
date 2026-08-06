@@ -32,7 +32,7 @@ pub(super) fn verified_call_signature<'a>(
                     .filter(|function| function.binding == callee.binding)
                     .ok_or_else(|| Error::msg("memory verifier direct call target is stale"))?;
                 let signature = &plan
-                    .function(MemoryFunctionId::new(index_u32(target)?))
+                    .function(MemoryFunctionId::new(index_u64(target)?))
                     .ok_or_else(|| Error::msg("memory verifier lost direct signature"))?
                     .signature;
                 let binding = program
@@ -138,7 +138,7 @@ pub(super) fn inferred_scope_source(
     types: &mut VerifiedTypes<'_>,
     argument: &hir::Expr,
     mode: MemoryParameterMode,
-) -> Result<Option<(u32, MemoryBorrowKind)>> {
+) -> Result<Option<(u64, MemoryBorrowKind)>> {
     let hir::ExprKind::Load(reference) = argument.kind else {
         return Ok(None);
     };
@@ -163,7 +163,7 @@ pub(super) fn child_fact<'a>(
     parent: MemoryExpressionId,
     index: usize,
 ) -> Result<&'a ExprFact<'a>> {
-    let index = index_u32(index)?;
+    let index = index_u64(index)?;
     facts
         .child(parent, index)
         .ok_or_else(|| Error::msg("memory call lost argument expression"))

@@ -18,7 +18,7 @@ fn declaration_graph_crosses_former_type_node_and_scc_work_boundaries() -> Resul
     Ok(())
 }
 
-fn generated_temporary_borrow_program(count: u32) -> hir::Program {
+fn generated_temporary_borrow_program(count: u64) -> hir::Program {
     let binding = hir::BindingId::new(0);
     let source = hir::BindingRef {
         binding,
@@ -89,7 +89,7 @@ fn generated_structural_destination_program(
         products,
         Vec::new(),
     );
-    program.traits = (0_u32..)
+    program.traits = (0_u64..)
         .zip(hir::CoreTrait::ALL)
         .map(|(raw, core)| hir::TraitDefinition {
             id: hir::TraitId::new(raw),
@@ -108,12 +108,12 @@ fn generated_structural_parameter_program(count: u64) -> Result<hir::Program> {
         .iter()
         .map(|product| hir::Type::Product(product.name.clone()))
         .collect();
-    let parameter_ids: Vec<_> = (0_u32..)
+    let parameter_ids: Vec<_> = (0_u64..)
         .take(parameter_types.len())
         .map(hir::BindingId::new)
         .collect();
     let function_binding =
-        hir::BindingId::new(u32::try_from(parameter_ids.len()).map_err(|_| {
+        hir::BindingId::new(u64::try_from(parameter_ids.len()).map_err(|_| {
             lkjscript_core::Error::msg("test parameter count exceeds HIR BindingId")
         })?);
     program.bindings = parameter_ids
@@ -142,7 +142,7 @@ fn generated_structural_parameter_program(count: u64) -> Result<hir::Program> {
         binding: function_binding,
         origin: origin(),
         params: parameter_ids.clone(),
-        param_places: (0_u32..)
+        param_places: (0_u64..)
             .take(parameter_ids.len())
             .map(hir::PlaceId::new)
             .collect(),
@@ -159,12 +159,12 @@ fn generated_structural_parameter_program(count: u64) -> Result<hir::Program> {
 #[test]
 #[ignore = "opt-in release HIR memory-plan quota-removal stress geometry"]
 fn generated_hir_crosses_use_loan_obligation_destination_and_drop_path_boundaries() -> Result<()> {
-    const BORROWS: u32 = 65_537;
+    const BORROWS: u64 = 65_537;
     const DESTINATIONS_AND_DROP_PATHS: u64 = 32_769;
 
     let borrow_plan = derive(&generated_temporary_borrow_program(BORROWS))?;
-    assert_eq!(borrow_plan.work.uses, u64::from(BORROWS));
-    assert_eq!(borrow_plan.work.loans, u64::from(BORROWS));
+    assert_eq!(borrow_plan.work.uses, BORROWS);
+    assert_eq!(borrow_plan.work.loans, BORROWS);
     assert!(borrow_plan.work.obligations > 32_768);
 
     let destination_hir = generated_structural_destination_program(

@@ -128,10 +128,14 @@ impl FunctionBuilder<'_> {
             .structural
             .type_for(ty)
             .ok_or_else(|| Error::msg("structural enum test has no exact type metadata"))?;
+        let layout_index = item
+            .layout
+            .index()
+            .ok_or_else(|| Error::msg("structural layout ID exceeds host indexing"))?;
         let layout = self
             .structural
             .layouts
-            .get(item.layout.index().unwrap_or(usize::MAX))
+            .get(layout_index)
             .ok_or_else(|| Error::msg("structural enum test has no exact layout metadata"))?;
         let StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
             return Err(Error::msg("structural enum test has non-enum layout"));

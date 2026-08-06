@@ -6,8 +6,8 @@ use super::validated_types::{
 use super::SealedSemanticDagRuntime;
 use crate::{
     InlineStructuralValue, MemoryWitnessValueKind, StructuralFieldMetadata, StructuralKind,
-    StructuralLayoutKind, StructuralType, StructuralTypeMetadata, StructuralTypeMode,
-    ValidatedChunk,
+    StructuralLayoutKind, StructuralSliceExt, StructuralType, StructuralTypeMetadata,
+    StructuralTypeMode, ValidatedChunk,
 };
 
 impl SealedSemanticDagRuntime {
@@ -34,7 +34,7 @@ fn authenticate_return_witness(chunk: &ValidatedChunk) -> Result<(), SealedSeman
         .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
     let representation = chunk
         .structural_representations()
-        .get(representation_id.index())
+        .get_structural(representation_id)
         .filter(|item| item.id == representation_id)
         .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
     let value_type = structural_type(chunk, representation.type_id)?;
@@ -187,7 +187,7 @@ fn layout<'a>(
 ) -> Result<&'a StructuralLayoutKind, SealedSemanticDagError> {
     chunk
         .structural_layouts()
-        .get(metadata.layout.index())
+        .get_structural(metadata.layout)
         .filter(|layout| layout.id == metadata.layout)
         .map(|layout| &layout.kind)
         .ok_or(SealedSemanticDagError::ValidatedShapeMismatch)

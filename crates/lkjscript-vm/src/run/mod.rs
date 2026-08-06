@@ -67,7 +67,7 @@ pub trait RuntimeTier {
         execution: &ExecutionConfig,
     ) -> std::result::Result<ScalarInvocation, EngineError>;
     #[cfg(feature = "jit")]
-    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String;
+    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u64>) -> String;
 }
 
 #[derive(Debug, Default)]
@@ -95,7 +95,7 @@ impl RuntimeTier for NoTier {
     }
 
     #[cfg(feature = "jit")]
-    fn trap_message(&self, _function: FunctionId, _trap: TrapCode, _site: Option<u32>) -> String {
+    fn trap_message(&self, _function: FunctionId, _trap: TrapCode, _site: Option<u64>) -> String {
         "native tier is unavailable".to_string()
     }
 }
@@ -119,7 +119,7 @@ impl RuntimeTier for JitSession {
         JitSession::invoke_scalar(self, function, arguments, execution)
     }
 
-    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String {
+    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u64>) -> String {
         self.trap_message_for(function, trap, site)
     }
 }

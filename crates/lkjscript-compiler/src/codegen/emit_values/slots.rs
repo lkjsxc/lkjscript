@@ -28,7 +28,7 @@ impl Emitter<'_> {
         place: lkjscript_ir::PlaceId,
         value: ValueId,
     ) -> Result<()> {
-        let place = u64::from(place.raw());
+        let place = place.raw();
         let local = u64::try_from(self.slot(value)?)
             .map_err(|_| Error::msg("bytecode local index exceeds u64"))?;
         self.proto.try_emit_op_u64_pair(op, place, local)

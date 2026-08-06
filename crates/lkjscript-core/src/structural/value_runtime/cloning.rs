@@ -25,10 +25,7 @@ impl StructuralValueRuntime {
         match self.publish_image(cloned, facts) {
             Ok(copy) => {
                 self.metrics.clones = self.metrics.clones.saturating_add(1);
-                self.metrics.clone_nodes = self
-                    .metrics
-                    .clone_nodes
-                    .saturating_add(u64::from(facts.nodes));
+                self.metrics.clone_nodes = self.metrics.clone_nodes.saturating_add(facts.nodes);
                 self.metrics.string_bytes_cloned = self
                     .metrics
                     .string_bytes_cloned
@@ -37,11 +34,7 @@ impl StructuralValueRuntime {
                     .metrics
                     .path_bytes_cloned
                     .saturating_add(facts.path_bytes);
-                self.record(
-                    StructuralEventKind::Clone,
-                    key.slot(),
-                    u64::from(facts.nodes),
-                );
+                self.record(StructuralEventKind::Clone, key.slot(), facts.nodes);
                 Ok(copy)
             }
             Err(failure) => {

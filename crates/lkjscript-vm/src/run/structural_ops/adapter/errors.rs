@@ -8,7 +8,7 @@ fn system_error_layout_matches(
         variants,
     }) = chunk
         .structural_layouts()
-        .get(layout_id.index())
+        .get_structural(layout_id)
         .filter(|layout| layout.id == layout_id)
         .map(|layout| &layout.kind)
     else {
@@ -57,7 +57,7 @@ fn numeric_error_layout_matches(
         variants,
     }) = chunk
         .structural_layouts()
-        .get(layout_id.index())
+        .get_structural(layout_id)
         .filter(|layout| layout.id == layout_id)
         .map(|layout| &layout.kind)
     else {
@@ -92,7 +92,7 @@ fn utf8_error_layout_matches(
         variants,
     }) = chunk
         .structural_layouts()
-        .get(layout_id.index())
+        .get_structural(layout_id)
         .filter(|layout| layout.id == layout_id)
         .map(|layout| &layout.kind)
     else {

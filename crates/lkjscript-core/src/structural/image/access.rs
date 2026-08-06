@@ -87,8 +87,12 @@ impl StructuralImage {
         let StructuralNodePayload::Bytes(range) = record.payload else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
+        let start =
+            usize::try_from(range.start()).map_err(|_| StructuralValueError::InvariantViolation)?;
+        let end =
+            usize::try_from(range.end()).map_err(|_| StructuralValueError::InvariantViolation)?;
         self.blob
-            .get_mut(range.start() as usize..range.end() as usize)
+            .get_mut(start..end)
             .ok_or(StructuralValueError::InvariantViolation)
     }
 }
