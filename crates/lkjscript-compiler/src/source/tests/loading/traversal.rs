@@ -11,20 +11,15 @@ fn exact_import(path: &str, name: &str) -> String {
 }
 
 #[test]
-fn loader_uses_explicit_dependency_first_dfs_for_deep_import_chain() -> std::io::Result<()> {
+fn loader_uses_explicit_dependency_first_dfs_in_one_wide_directory() -> std::io::Result<()> {
     const DEPTH: usize = 1_500;
-    const FILES_PER_GROUP: usize = 15;
-    const GROUPS_PER_BUCKET: usize = 10;
 
-    let directory = TempDir::new("deep-imports")?;
+    let directory = TempDir::new("deep-wide-imports")?;
     let mut paths = Vec::with_capacity(DEPTH);
     let mut logical_paths = Vec::with_capacity(DEPTH);
     for index in 0..DEPTH {
-        let group = index / FILES_PER_GROUP;
-        let bucket = group / GROUPS_PER_BUCKET;
-        let logical = format!("units/b{bucket:02}/g{group:03}/u{index:04}.lkjscript");
+        let logical = format!("u{index:04}.lkjscript");
         let path = directory.0.join(&logical);
-        fs::create_dir_all(path.parent().expect("unit parent"))?;
         paths.push(path);
         logical_paths.push(logical);
     }
@@ -51,21 +46,6 @@ fn loader_uses_explicit_dependency_first_dfs_for_deep_import_chain() -> std::io:
     assert_eq!(tree.files().len(), DEPTH + 1);
     assert_eq!(tree.files()[0].path, paths[DEPTH - 1].canonicalize()?);
     assert_eq!(tree.files()[DEPTH].path, root.canonicalize()?);
-    Ok(())
-}
-
-#[test]
-fn source_tree_validation_uses_an_explicit_stack_for_deep_directories() -> std::io::Result<()> {
-    const DEPTH: usize = 1_500;
-    let directory = TempDir::new("deep-source-tree")?;
-    let mut deepest = directory.0.clone();
-    for _ in 0..DEPTH {
-        deepest.push("d");
-        fs::create_dir(&deepest)?;
-    }
-    fs::write(deepest.join("leaf.lkjscript"), unit_main("unit"))?;
-    validate_source_directory_tree(&directory.0, Limits::default().max_dir_children)
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
     Ok(())
 }
 
@@ -128,18 +108,16 @@ fn loader_retains_logical_origin_separate_from_canonical_host_path() -> std::io:
 }
 
 #[test]
-fn loader_rejects_wide_entry_directories_and_accepts_imported_declarations() -> std::io::Result<()>
-{
+fn loader_accepts_wide_directories_and_imported_declarations() -> std::io::Result<()> {
     let wide = TempDir::new("wide-entry")?;
     let entry = wide.0.join("main.lkjscript");
     fs::write(&entry, unit_main("unit"))?;
-    for index in 0..16 {
+    for index in 0..32 {
         fs::write(wide.0.join(format!("asset-{index}")), "")?;
     }
-    let error = load(&entry, &Limits::default())
-        .expect_err("wide source directory")
-        .to_string();
-    assert!(error.contains("at least 17 entries (max 16)"));
+    let tree = load(&entry, &Limits::default())
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    assert_eq!(tree.files().len(), 1);
 
     let declarations = TempDir::new("imported-declarations")?;
     let dependency = declarations.0.join("traits.lkjscript");

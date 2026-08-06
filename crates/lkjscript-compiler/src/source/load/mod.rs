@@ -1,5 +1,4 @@
 mod containment;
-mod directory;
 mod frame;
 mod imports;
 mod read;
@@ -21,7 +20,6 @@ pub(crate) use containment::ensure_source_path;
 pub(crate) use containment::source_origin;
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use containment::{open_source_file, opened_source_path};
-pub use directory::validate_source_directory_tree;
 #[cfg(test)]
 pub(crate) use imports::resolve_for_test;
 #[cfg(test)]

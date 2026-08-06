@@ -1,4 +1,4 @@
-use crate::source::{load, validate_source_directory_tree};
+use crate::source::load;
 
 mod directory;
 mod traversal;

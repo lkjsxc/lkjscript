@@ -62,7 +62,6 @@ pub(super) fn load_frame(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
-    super::directory::validate_source_directory(&parent, state.limits.max_dir_children)?;
     let source_bytes = super::read::read_bounded_source(
         &mut file,
         &metadata,

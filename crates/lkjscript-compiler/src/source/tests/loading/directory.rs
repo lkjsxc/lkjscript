@@ -1,28 +1,6 @@
 use super::super::*;
 
 #[test]
-fn source_tree_counts_git_and_target_in_sixteen_entry_rule() -> std::io::Result<()> {
-    let accepted = TempDir::new("sixteen")?;
-    fs::create_dir(accepted.0.join(".git"))?;
-    fs::create_dir(accepted.0.join("target"))?;
-    for index in 0..14 {
-        fs::write(accepted.0.join(format!("source-{index}.lkjscript")), "")?;
-    }
-    assert!(super::validate_source_directory_tree(&accepted.0, 16).is_ok());
-
-    let rejected = TempDir::new("seventeen")?;
-    fs::create_dir(rejected.0.join(".git"))?;
-    fs::create_dir(rejected.0.join("target"))?;
-    for index in 0..15 {
-        fs::write(rejected.0.join(format!("source-{index}.lkjscript")), "")?;
-    }
-    let error = super::validate_source_directory_tree(&rejected.0, 16)
-        .expect_err(".git and target count as source entries");
-    assert!(error.message().contains("at least 17 entries (max 16)"));
-    Ok(())
-}
-
-#[test]
 fn import_resolution_accepts_only_exact_package_module_paths() {
     let origin = Path::new("/a");
     let package = Path::new("/pkg");

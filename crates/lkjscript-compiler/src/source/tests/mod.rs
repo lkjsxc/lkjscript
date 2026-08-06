@@ -8,10 +8,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use lkjscript_core::Limits;
 
 use super::{
-    load, parse as parser, validate, validate::finish_tree, validate_source_directory_tree,
-    DeclarationKind, NodeKind, SourceFoundationBudget, SourceOrigin,
-    FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES, FOUNDATION_MAX_SOURCE_FILE_BYTES,
-    FOUNDATION_MAX_SOURCE_UNITS,
+    load, parse as parser, validate, validate::finish_tree, DeclarationKind, NodeKind,
+    SourceFoundationBudget, SourceOrigin, FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+    FOUNDATION_MAX_SOURCE_FILE_BYTES, FOUNDATION_MAX_SOURCE_UNITS,
 };
 
 static NEXT_DIR: AtomicU64 = AtomicU64::new(0);

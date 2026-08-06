@@ -8,8 +8,6 @@ pub const MAX_NEST_DEPTH: u32 = 8;
 pub const MAX_CHILDREN: u32 = 16;
 /// Maximum lexer tokens per source file.
 pub const MAX_TOKENS_PER_FILE: u32 = 384;
-/// Maximum files plus subdirectories in one lkjscript source directory.
-pub const MAX_DIR_CHILDREN: u32 = 16;
 /// Maximum top-level `def` / `main` / `import` / `product` forms per file.
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
 /// Maximum fields in one nominal product declaration.
@@ -53,7 +51,6 @@ pub struct Limits {
     pub max_nest_depth: u32,
     pub max_children: u32,
     pub max_tokens_per_file: u32,
-    pub max_dir_children: u32,
     pub max_toplevel_forms: u32,
     pub validation: ValidationLimits,
 }
@@ -64,7 +61,6 @@ impl Default for Limits {
             max_nest_depth: MAX_NEST_DEPTH,
             max_children: MAX_CHILDREN,
             max_tokens_per_file: MAX_TOKENS_PER_FILE,
-            max_dir_children: MAX_DIR_CHILDREN,
             max_toplevel_forms: MAX_TOPLEVEL_FORMS,
             validation: ValidationLimits::default(),
         }
@@ -120,7 +116,6 @@ mod tests {
         assert_eq!(lim.max_nest_depth, MAX_NEST_DEPTH);
         assert_eq!(lim.max_children, MAX_CHILDREN);
         assert_eq!(lim.max_tokens_per_file, MAX_TOKENS_PER_FILE);
-        assert_eq!(lim.max_dir_children, MAX_DIR_CHILDREN);
         assert_eq!(lim.max_toplevel_forms, MAX_TOPLEVEL_FORMS);
         assert_eq!(lim.validation, ValidationLimits::default());
         assert_eq!(MAX_PRODUCT_FIELDS, 15);

@@ -12,12 +12,3 @@ pub use source::{
     compile_source, compile_source_with_ledger, compile_source_with_profile, validate_source,
     validate_source_with_ledger, validate_source_with_profile,
 };
-
-use std::path::Path;
-
-use lkjscript_core::{Limits, Result};
-
-pub fn validate_source_tree(root: &Path, limits: &Limits) -> Result<()> {
-    crate::source::validate_source_directory_tree(root, limits.max_dir_children)
-        .map_err(crate::source::SourceDiagnostic::into_core)
-}

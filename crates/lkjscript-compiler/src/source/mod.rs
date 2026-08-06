@@ -33,7 +33,6 @@ pub use identity::{
     DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
     SourceIdentity, SourceTreeIdentity, StaleNodeId,
 };
-pub use load::validate_source_directory_tree;
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;
 pub(crate) use validate::SourceFoundationBudget;
@@ -44,8 +43,6 @@ pub const FOUNDATION_MAX_SOURCE_FILE_BYTES: u64 = 16 * 1024 * 1024;
 pub const FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 /// Always-enforced maximum for source units in a source closure.
 pub const FOUNDATION_MAX_SOURCE_UNITS: u64 = 65_536;
-/// Always-enforced maximum for entries scanned by a source-tree check.
-pub const FOUNDATION_MAX_SOURCE_TREE_ENTRIES: u64 = 65_536;
 
 #[cfg(test)]
 mod tests;
