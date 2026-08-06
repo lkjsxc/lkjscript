@@ -7,8 +7,6 @@ use serde::Serialize;
 pub struct SessionProcessError {
     code: ProcessCode,
     message: String,
-    #[serde(skip)]
-    budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,20 +26,7 @@ impl SessionProcessError {
         Self {
             code,
             message: message.into(),
-            budget: None,
         }
-    }
-
-    pub(in crate::semantic::session) fn budget(error: lkjscript_core::BudgetError) -> Self {
-        Self {
-            code: ProcessCode::FrameTooLarge,
-            message: error.to_string(),
-            budget: Some(Box::new(error)),
-        }
-    }
-
-    pub fn budget_error(&self) -> Option<&lkjscript_core::BudgetError> {
-        self.budget.as_deref()
     }
 
     pub(in crate::semantic::session) fn output(error: std::io::Error) -> Self {

@@ -5,11 +5,9 @@ mod corpus;
 mod diagnostics;
 mod edition;
 mod holes;
-mod ledger_prefix;
 mod match_schema;
 mod publication;
 mod publication_conflict;
-mod publication_limits;
 mod query;
 mod transaction;
 mod transaction_rejection;
@@ -40,7 +38,7 @@ fn case_dir(label: &str) -> PathBuf {
 
 fn request(root: &std::path::Path, operation: &str) -> Vec<u8> {
     format!(
-        "{{\"schema\":\"{}\",\"contract\":\"{}\",\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
+        "{{\"schema\":\"{}\",\"contract\":\"{}\",\"root\":{},\"operation\":{operation}}}",
         crate::semantic::SCHEMA,
         crate::semantic::CONTRACT,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root")

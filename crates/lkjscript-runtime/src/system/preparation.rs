@@ -1,9 +1,8 @@
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use lkjscript_contracts::PreparedProgramIdentity;
-use lkjscript_core::{CapabilityKind, Limits, ResourceProfileName, ValidatedChunk};
+use lkjscript_core::{CapabilityKind, Limits, ValidatedChunk};
 
 use crate::{ApplicationManifest, PackageContentId, RuntimeError};
 
@@ -28,20 +27,8 @@ pub(crate) fn prepare_isolated(
     if verified_root != package_root || content.as_bytes() != package.bytes() {
         return Err(process_error("parent package content identity mismatch"));
     }
-    let profile_name = package_manifest
-        .resource_profile
-        .as_deref()
-        .map_or(
-            Ok(ResourceProfileName::Default),
-            ResourceProfileName::from_str,
-        )
+    let program = lkjscript_compiler::compile_path(entry, &Limits::default())
         .map_err(|error| process_error(error.to_string()))?;
-    let program = lkjscript_compiler::compile_path_with_profile(
-        entry,
-        &Limits::default(),
-        lkjscript_compiler::ResourceProfile::new(profile_name),
-    )
-    .map_err(|error| process_error(error.to_string()))?;
     validate_grants(
         program.bytecode().required_capabilities(),
         &application.capabilities,

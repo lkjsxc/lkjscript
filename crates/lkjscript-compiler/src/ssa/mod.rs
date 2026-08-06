@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use lkjscript_core::{BudgetLedger, Error, Result};
+use lkjscript_core::{Error, Result};
 use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
     BorrowKind as SsaBorrowKind, CallTarget, Constant, DropEventKind, DropGlueIdentity, EffectSet,
@@ -39,22 +39,6 @@ pub(crate) struct SsaMetrics {
 pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
     let memory_verified = crate::memory_plan::verify_hir_memory(program)?;
     lower_program_with_metrics(&memory_verified).map(|(program, _)| program)
-}
-
-pub(crate) fn lower_program_with_budget(
-    program: &MemoryVerifiedHir<'_>,
-    ledger: &mut BudgetLedger,
-) -> Result<VerifiedProgram> {
-    lower_program_with_metrics_and_budget(program, ledger).map(|(program, _)| program)
-}
-
-pub(crate) fn lower_program_with_metrics_and_budget(
-    program: &MemoryVerifiedHir<'_>,
-    ledger: &mut BudgetLedger,
-) -> Result<(VerifiedProgram, SsaMetrics)> {
-    let (program, metrics) = lower_program_with_metrics(program)?;
-    crate::budget::reserve_bytecode_input(&program, ledger)?;
-    Ok((program, metrics))
 }
 
 pub(crate) fn lower_program_with_metrics(

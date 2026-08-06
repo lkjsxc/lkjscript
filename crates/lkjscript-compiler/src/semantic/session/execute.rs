@@ -1,23 +1,8 @@
-use crate::semantic::schema::{ApplyMode, OperationRequest, Request, Response, ResponseResult};
+use crate::semantic::schema::{ApplyMode, OperationRequest, Request, ResponseResult};
 
 use super::pending::PendingExecution;
 use super::schema::{SessionError, SessionErrorCode, SessionResult};
 use super::SemanticSession;
-
-fn response_fuel(response: &Response) -> Result<u64, SessionError> {
-    response
-        .charges
-        .work_units
-        .checked_add(response.charges.hole_search_work)
-        .and_then(|value| value.checked_add(response.charges.legal_actions))
-        .and_then(|value| value.checked_add(response.charges.transaction_impact_nodes))
-        .ok_or_else(|| {
-            SessionError::new(
-                SessionErrorCode::ResourceLimit,
-                "semantic session lifetime fuel charge overflow",
-            )
-        })
-}
 
 impl SemanticSession {
     pub(super) fn execute(&mut self, request: Request) -> SessionResult {
@@ -39,24 +24,11 @@ impl SemanticSession {
                     ),
                 };
             };
-            let (profile, root, expected) = (
-                pinned.state.profile,
+            let (root, expected) = (
                 pinned.state.canonical_root.clone(),
                 pinned.state.source_revision.clone(),
             );
-            let Some(ledger) = self.ledger.as_mut() else {
-                return SessionResult::Error {
-                    error: SessionError::new(
-                        SessionErrorCode::ResourceLimit,
-                        "session ledger authority is missing",
-                    ),
-                };
-            };
-            let snapshot = match super::source::snapshot(profile, &root, Some(&expected), ledger) {
-                Ok(snapshot) => snapshot,
-                Err(error) => return SessionResult::Error { error },
-            };
-            if let Err(error) = self.charge_fuel(snapshot.response.charges.work_units) {
+            if let Err(error) = super::source::snapshot(&root, Some(&expected)) {
                 return SessionResult::Error { error };
             }
         }
@@ -80,35 +52,15 @@ impl SemanticSession {
                 }
             }
         };
-        let Some(ledger) = self.ledger.as_mut() else {
+        if request_bytes > crate::semantic::MAX_REQUEST_BYTES {
             return SessionResult::Error {
                 error: SessionError::new(
                     SessionErrorCode::ResourceLimit,
-                    "session ledger authority is missing",
+                    "typed request exceeds Semantic Source input byte policy",
                 ),
             };
-        };
-        let request_charge = match u64::try_from(request_bytes) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                return SessionResult::Error {
-                    error: SessionError::new(
-                        SessionErrorCode::ResourceLimit,
-                        "typed request byte count overflow",
-                    ),
-                }
-            }
-        };
-        if let Err(error) = crate::semantic::codec::reserve_request_bytes(ledger, request_charge) {
-            return SessionResult::Error {
-                error: SessionError::new(SessionErrorCode::ResourceLimit, error.message),
-            };
         }
-        let outcome = match crate::semantic::engine::execute_request_with_ledger(
-            request,
-            request_bytes,
-            ledger,
-        ) {
+        let outcome = match crate::semantic::engine::execute_request(request, request_bytes) {
             Ok(outcome) => outcome,
             Err(error) => {
                 return SessionResult::Error {
@@ -117,14 +69,6 @@ impl SemanticSession {
             }
         };
         let response = outcome.prepared.response.clone();
-        let fuel = response_fuel(&response);
-        let fuel = match fuel {
-            Ok(fuel) => fuel,
-            Err(error) => return SessionResult::Error { error },
-        };
-        if let Err(error) = self.charge_fuel(fuel) {
-            return SessionResult::Error { error };
-        }
         let rollback =
             if publishes && matches!(&response.result, ResponseResult::ApplyTransaction { .. }) {
                 let Some(pinned) = self.pinned.clone() else {
@@ -166,12 +110,6 @@ impl SemanticSession {
                 "session is not initialized",
             )
         })?;
-        if request.profile != pinned.state.profile {
-            return Err(SessionError::new(
-                SessionErrorCode::PinnedProfileMismatch,
-                "semantic request attempted to repin the resource profile",
-            ));
-        }
         match super::source::roots_match(&pinned.state.canonical_root, &request.root) {
             Ok(true) => Ok(()),
             Ok(false) => Err(SessionError::new(

@@ -2,16 +2,17 @@
 
 ## Now
 
-1. **Remove remaining source-shape and HIR/ownership ceilings.** Delete the nesting, child, token,
-   top-level, field, source-unit, HIR-expression, and related profile checks dependency-closed.
+1. **Remove remaining source-shape and HIR/ownership ceilings.** Delete the parser/source,
+   nesting, child, token, top-level, field, source-unit, HIR-expression, memory-plan, and SSA checks
+   dependency-closed.
    Completion requires just-beyond-old-boundary and substantially larger positive programs,
    stack-safe user-controlled traversals, checked growth, and successful execution through the
    retained generic path.
-2. **Separate resource policy from language validity.** Replace positional compiler count ceilings
-   with unrestricted trusted-local compilation and explicit coarse input, memory, output,
-   deadline, cancellation, and parallelism policy at untrusted request boundaries. The same
-   program must exhaust under low policy and succeed unchanged under higher or unrestricted
-   policy.
+2. **Complete resource-policy separation.** Trusted compiler profile/ledger admission is removed.
+   Continue replacing remaining validity-changing implementation ceilings with unrestricted local
+   compilation and explicit coarse input, memory, output, deadline, cancellation, and parallelism
+   policy at untrusted request boundaries. The same program must exhaust under low policy and
+   succeed unchanged under higher or unrestricted policy.
 
 ## Next
 

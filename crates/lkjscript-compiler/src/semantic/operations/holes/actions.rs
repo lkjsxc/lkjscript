@@ -1,30 +1,12 @@
-use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
-
 use crate::semantic::schema::*;
 use crate::source::ValidatedSourceTree;
 
-pub(crate) fn build_with_ledger(
+pub(crate) fn build(
     tree: &ValidatedSourceTree,
     node: u32,
-    ledger: &mut BudgetLedger,
 ) -> Result<LegalActionsResult, ProtocolError> {
-    let context = super::context::build_with_ledger(tree, node, ledger)?;
+    let context = super::context::build(tree, node)?;
     let site = super::site::find(tree, node)?;
-    let maximum = u64::try_from(context.candidates.len())
-        .unwrap_or(u64::MAX)
-        .saturating_mul(2)
-        .saturating_add(32);
-    let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
-    let mut holes = request
-        .child(BudgetAuthority::Holes)
-        .map_err(crate::semantic::codec::budget_error)?;
-    let mut reservation = holes
-        .reserve(
-            ResourceCategory::LegalActions,
-            maximum,
-            BudgetCause::SemanticNode(u64::from(node)),
-        )
-        .map_err(crate::semantic::codec::budget_error)?;
     let child_kinds = child_kinds(&context.candidates);
     let constructors = constructors(&context.candidates);
     let required_fields = required_fields(&site);
@@ -41,17 +23,27 @@ pub(crate) fn build_with_ledger(
     if super::site::deletion_legal(&site) {
         transactions.push(HoleTransactionKind::DeleteHole);
     }
-    let charged = child_kinds
-        .len()
-        .saturating_add(constructors.len())
-        .saturating_add(required_fields.len())
-        .saturating_add(applicable_bindings.len())
-        .saturating_add(transactions.len());
-    let charged = u64::try_from(charged).unwrap_or(u64::MAX);
-    reservation
-        .consume(charged)
-        .map_err(crate::semantic::codec::budget_error)?;
-    reservation.return_unused();
+    let charged = [
+        child_kinds.len(),
+        constructors.len(),
+        required_fields.len(),
+        applicable_bindings.len(),
+        transactions.len(),
+    ]
+    .into_iter()
+    .try_fold(0_usize, usize::checked_add)
+    .ok_or_else(|| {
+        crate::semantic::codec::error(
+            ProtocolErrorCode::ResourceLimit,
+            "legal action count overflow",
+        )
+    })?;
+    let charged = u64::try_from(charged).map_err(|_| {
+        crate::semantic::codec::error(
+            ProtocolErrorCode::ResourceLimit,
+            "legal action count overflow",
+        )
+    })?;
     let mut coverage = context.exploration;
     coverage.charged_category = "legal-actions".into();
     coverage.charged_count = charged;

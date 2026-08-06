@@ -1,9 +1,7 @@
 use lkjscript_contracts::{
     PreparedContractDigests, PreparedProgramDescriptor, PreparedProgramIdentity,
 };
-use lkjscript_core::{
-    validated_bytecode_identity, Error, ResourceProfileIdentity, Result, ValidatedChunk,
-};
+use lkjscript_core::{validated_bytecode_identity, Error, Result, ValidatedChunk};
 use lkjscript_ir::{specialize_native_transport, verified_program_identity, VerifiedProgram};
 
 use super::PreparationProvenance;
@@ -15,7 +13,6 @@ pub(super) fn verify(
     ssa: &VerifiedProgram,
     bytecode: &ValidatedChunk,
     plan: &HirMemoryPlan,
-    profile: ResourceProfileIdentity,
     provenance: &PreparationProvenance,
 ) -> Result<()> {
     let semantic_ssa = verified_program_identity(ssa)
@@ -40,7 +37,6 @@ pub(super) fn verify(
         native_lowerable_ssa,
         validated_bytecode: validated_bytecode_identity(bytecode)?.bytes(),
         contracts: reconstruct_contract_digests()?,
-        resource_profile: reconstruct_profile_digest(profile),
     };
     if reconstructed != descriptor {
         return Err(Error::msg(
@@ -83,16 +79,4 @@ fn reconstruct_contract_digests() -> Result<PreparedContractDigests> {
         runtime_control,
         process_outcome_codec: lkjscript_contracts::sha256(&codec),
     })
-}
-
-fn reconstruct_profile_digest(value: ResourceProfileIdentity) -> [u8; 32] {
-    let mut bytes = Vec::from(b"lkjscript.resource-profile-identity".as_slice());
-    bytes.extend_from_slice(value.schema.as_bytes());
-    bytes.extend_from_slice(&value.contract.as_bytes());
-    bytes.extend_from_slice(value.name.as_str().as_bytes());
-    bytes.extend_from_slice(&value.resource_categories.as_bytes());
-    bytes.extend_from_slice(&value.implementation_maxima_sha256);
-    bytes.extend_from_slice(&value.ceilings_sha256);
-    bytes.extend_from_slice(&value.host_lowered_ceilings_sha256.unwrap_or([0; 32]));
-    lkjscript_contracts::sha256(&bytes)
 }

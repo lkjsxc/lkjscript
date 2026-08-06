@@ -23,7 +23,6 @@ fn library(root: &std::path::Path) {
         dependencies: Vec::new(),
         capabilities: Vec::new(),
         targets: Vec::new(),
-        resource_profile: None,
     };
     fs::write(
         root.join(MANIFEST_FILE),

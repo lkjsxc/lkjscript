@@ -1,10 +1,9 @@
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
-use std::str::FromStr;
 use std::sync::Arc;
 
-use lkjscript_core::{CapabilityKind, Limits, ResourceProfileName};
+use lkjscript_core::{CapabilityKind, Limits};
 
 mod provenance;
 use lkjscript_runtime::process_cell_protocol::{
@@ -134,16 +133,7 @@ fn prepare(bootstrap: &ProcessBootstrap) -> Result<lkjscript_compiler::Executabl
     if package.as_bytes() != bootstrap.package {
         return Err("worker package content identity mismatch".into());
     }
-    let profile = manifest
-        .resource_profile
-        .as_deref()
-        .map_or(
-            Ok(ResourceProfileName::Default),
-            ResourceProfileName::from_str,
-        )
-        .map_err(|error| error.to_string())?;
-    let profile = lkjscript_compiler::ResourceProfile::new(profile);
-    let program = lkjscript_compiler::compile_path_with_profile(entry, &Limits::default(), profile)
+    let program = lkjscript_compiler::compile_path(entry, &Limits::default())
         .map_err(|error| error.to_string())?;
     validate_grants(
         program.bytecode().required_capabilities(),

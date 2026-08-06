@@ -1,6 +1,5 @@
 //! Pure language core: values, validated bytecode, limits, and outcomes.
 
-mod budget;
 mod bytecode;
 mod error;
 mod limits;
@@ -8,19 +7,12 @@ mod numeric_conversion;
 mod opcode;
 mod outcome;
 mod prelude;
-mod profile;
 mod resource_table;
 mod sha256;
 mod structural;
 mod validation;
 mod value;
 
-pub use budget::{
-    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
-    BudgetPrefix, BudgetRejectedEvent, BudgetScope, Reservation, ReservationId,
-    ReservationJournalRecord, ReservationState, ResourceCategory, ResourceDiagnostic,
-    ResourceUsage, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
-};
 pub use bytecode::{
     runtime_product_contract_identity, CallWitnessSite, Chunk, ConstId, Constant,
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
@@ -67,10 +59,6 @@ pub use outcome::{
     MAX_STRUCTURAL_SNAPSHOT_WORK,
 };
 pub use prelude::*;
-pub use profile::{
-    InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,
-    ResourceProfileName, UnknownResourceProfile, RESOURCE_PROFILE_SCHEMA,
-};
 pub use resource_table::{
     BorrowedReservation, EmergencyObligations, OwnedReservation, ProviderId,
     ResourceCleanupAttempt, ResourceCleanupReport, ResourceKey, ResourceObservation,

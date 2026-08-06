@@ -10,9 +10,6 @@ use crate::execution_command::Engine;
 use crate::metrics_jit::render as jit;
 use crate::metrics_json::{outcome, string};
 
-#[path = "runtime/metrics_resources.rs"]
-mod resources;
-
 pub struct MetricReport<'a> {
     pub engine: Engine,
     pub configured_threshold: u64,
@@ -58,7 +55,6 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
         .stats
         .map_or(Duration::ZERO, |stats| stats.native_execution);
     let jit = report.stats.map_or_else(|| "null".to_string(), jit);
-    let compile_resources = resources::render(report.compile);
     let json = format!(
         concat!(
             "{{\"schema\":\"lkjscript.metrics\",\"contract\":\"{contract}\",\"engine\":{engine},",
@@ -77,8 +73,7 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
             "\"time_to_first_native_entry\":{time_to_first_native},",
             "\"first_native_call\":{first_native},\"native_execution\":{native_execution},",
             "\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},",
-            "\"source_files\":{source_files},",
-            "\"compile_resources\":{compile_resources},\"jit\":{jit}}}"
+            "\"source_files\":{source_files},\"jit\":{jit}}}"
         ),
         contract = lkjscript_contracts::METRICS_DIGEST,
         engine = string(engine),
@@ -104,7 +99,6 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
         vm_execution = report.vm_execution.as_nanos(),
         engine_execution = report.engine_execution.as_nanos(),
         source_files = report.compile.source_files,
-        compile_resources = compile_resources,
         jit = jit,
     );
     let line = format!("LKJSCRIPT_METRICS {json}\n");

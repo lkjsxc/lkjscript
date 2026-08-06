@@ -17,7 +17,6 @@ fn independent_prepared_reconstruction_rejects_self_consistent_descriptor_tamper
         program.ssa(),
         program.bytecode(),
         program.memory_plan(),
-        program.profile(),
         &provenance,
     )
     .expect("independent prepared reconstruction");
@@ -30,7 +29,6 @@ fn independent_prepared_reconstruction_rejects_self_consistent_descriptor_tamper
         program.ssa(),
         program.bytecode(),
         program.memory_plan(),
-        program.profile(),
         &provenance,
     )
     .is_err());

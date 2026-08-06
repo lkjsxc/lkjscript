@@ -14,15 +14,6 @@ fn compile_source(
     super::compile_source(&canonical_source(source), path, limits)
 }
 
-fn compile_source_with_profile(
-    source: &str,
-    path: &str,
-    limits: &Limits,
-    profile: crate::ResourceProfile,
-) -> lkjscript_core::Result<crate::ExecutableProgram> {
-    super::compile_source_with_profile(&canonical_source(source), path, limits, profile)
-}
-
 fn unit_main(body: &str) -> String {
     format!("main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
 }
@@ -48,10 +39,7 @@ fn ownership_source(body: &str, result: &str) -> String {
 mod affine_handles;
 mod capabilities;
 mod constants;
-mod ledger_hir;
-mod ledger_phases;
 mod match_nested;
-mod match_resources;
 mod matches;
 mod numeric;
 mod operations;
@@ -60,6 +48,5 @@ mod ownership_boundaries;
 mod ownership_control;
 mod ownership_flow;
 mod paths;
-mod resources;
 #[path = "structural_cases/bytecode.rs"]
 mod structural_bytecode;

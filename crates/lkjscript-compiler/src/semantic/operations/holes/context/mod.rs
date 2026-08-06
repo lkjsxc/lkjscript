@@ -5,18 +5,16 @@ mod support;
 use crate::semantic::schema::*;
 use crate::source::ValidatedSourceTree;
 use facts::{constraints, expected_fact, identity};
-use lkjscript_core::BudgetLedger;
 
-pub(crate) fn build_with_ledger(
+pub(crate) fn build(
     tree: &ValidatedSourceTree,
     node: u32,
-    ledger: &mut BudgetLedger,
 ) -> Result<HoleContextResult, ProtocolError> {
     let site = super::site::find(tree, node)?;
     let program = super::validate::completed_program(&site).ok();
     let scope = super::scope::entities(&site, program.as_ref());
     let (candidates, exploration, blockers) = if program.is_some() {
-        super::candidates::enumerate_with_ledger(&site, &scope, ledger)?
+        super::candidates::enumerate(&site, &scope)?
     } else {
         let message =
             "no bounded completion typechecked; derived scope and ownership facts are unavailable";

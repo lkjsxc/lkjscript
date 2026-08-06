@@ -36,10 +36,16 @@ line-oriented text and package files
     -> default VM/native execution path
 ```
 
+Trusted compiler entry points compile directly without selecting a compiler resource profile or
+charging source, HIR, or SSA shape to a budget ledger. Compile metrics are observational phase
+timings and source-file counts only. Package manifests and prepared-program identities likewise do
+not carry compiler-profile identity.
+
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
-diagnostics, transactions, and a local stdio session. It currently mirrors the text-oriented
-source tree and the compiler still recompiles from text, so it is a bootstrap editing service,
-not yet the intended semantic program authority.
+diagnostics, transactions, and a local stdio session. It uses direct boundary-local byte and
+request-count policy for untrusted framing and does not admit programs through compiler node/work
+profiles. It currently mirrors the text-oriented source tree and the compiler still recompiles
+from text, so it is a bootstrap editing service, not yet the intended semantic program authority.
 
 ## Tested platform
 
@@ -48,9 +54,10 @@ may build elsewhere, but no other host or native target is currently claimed as 
 
 ## Known gaps
 
-- Arbitrary source, HIR, ownership, SSA, structural-value, and resource-profile count ceilings
-  remain in parts of the implementation. The reset is removing them dependency-closed rather
-  than increasing them.
+- Parser and source-foundation `Limits` still impose token, nesting, child, top-level, byte, and
+  source-unit ceilings. HIR, ownership, memory-plan, SSA, and structural-value paths retain other
+  arbitrary count or recursion ceilings. Compact bytecode operands and indexes retain width
+  ceilings. These are follow-up validity and representation gaps, not host policy.
 - Several user-controlled compiler trees and analyses remain recursive or have poor large-input
   complexity.
 - The compiler cannot yet consume a syntax-independent semantic snapshot directly.

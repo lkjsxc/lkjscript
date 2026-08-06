@@ -1,16 +1,12 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact};
 
-use super::super::{name, RESOURCE_PROFILES, SEMANTIC_RESOURCE_PLANE, VERIFIED_SSA};
+use super::super::{name, SEMANTIC_RESOURCE_PLANE, VERIFIED_SSA};
 
 mod graph;
 mod placement;
 
-pub(crate) fn semantic_resource_plane(
-    profiles: ContractDigest,
-    ssa: ContractDigest,
-) -> ContractDescriptor {
+pub(crate) fn semantic_resource_plane(ssa: ContractDigest) -> ContractDescriptor {
     descriptor()
-        .dependency(name(RESOURCE_PROFILES), profiles.as_bytes())
         .dependency(name(VERIFIED_SSA), ssa.as_bytes())
         .item(graph::identities())
         .item(graph::authority())

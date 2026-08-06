@@ -6,7 +6,9 @@ The current compiler authority starts at package files and the provisional line-
 projection. The source loader validates paths and imports, the analyzer creates resolved typed
 HIR, ownership/effect/memory passes derive executable obligations, SSA lowering creates a typed
 control-flow program, and the IR verifier publishes an opaque verified program. Bytecode lowering
-and validation provide the generic executable representation used by the runtime.
+and validation provide the generic executable representation used by the runtime. This trusted
+pipeline has no compiler resource profile or cross-phase budget ledger; source-file counts and
+phase durations are observation only.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot
@@ -40,7 +42,8 @@ ownership is:
 - `lkjscript-host`, `lkjscript-sys`, `lkjscript-linux-host`, and `lkjscript-database`: safe host
   interfaces and narrow operating-system/SQLite mechanisms;
 - `lkjscript-contracts`: boundary schemas and content identities still used by packages, process
-  messages, prepared programs, and executable artifacts;
+  messages, prepared programs, and executable artifacts; compiler resource-category/profile
+  descriptors are not part of the registry;
 - `lkjscript-app`: CLI, daemon binaries, provider wiring, diagnostics, and integration tests.
 
 The removed `lkjscript-xtask` crate had no product consumer. Formatting, Clippy, tests, release
@@ -56,6 +59,10 @@ Validation remains fail-closed where data or authority crosses:
 - capability grants and host providers;
 - bytecode and executable-IR deserialization;
 - relocation, W^X code installation, native entry, FFI, and SQLite/OS calls.
+
+Semantic Source request bytes, response bytes, session frame/cumulative bytes, request count, and
+cancellation are boundary-local host policy. Semantic node, hole, transaction, HIR, and SSA counts
+do not grant language validity.
 
 Within one synchronous typed compiler pipeline, ordinary Rust ownership and opaque verified
 wrappers should replace repeated governance identities as later slices reach them.

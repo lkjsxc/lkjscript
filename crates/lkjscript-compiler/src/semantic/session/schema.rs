@@ -4,11 +4,7 @@ pub use process::SessionProcessError;
 
 use serde::{Deserialize, Serialize};
 
-use crate::semantic::schema::{
-    Request, ResourceProfile, ResourceProfileIdentityRecord, Response, SourceUnitRecord,
-};
-
-use super::limits::SessionLimits;
+use crate::semantic::schema::{Request, Response, SourceUnitRecord};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,11 +61,8 @@ pub(super) struct SessionStateRecord {
     pub semantic_contract: String,
     pub diagnostic_schema: String,
     pub diagnostic_contract: String,
-    pub profile: ResourceProfile,
-    pub profile_identity: ResourceProfileIdentityRecord,
     pub canonical_root: String,
     pub source_revision: String,
-    pub limits: SessionLimits,
     pub cache_entries: u64,
 }
 
@@ -123,7 +116,6 @@ impl From<&SourceUnitRecord> for SourceFingerprint {
 pub(super) enum SessionErrorCode {
     NotInitialized,
     StaleSessionRevision,
-    PinnedProfileMismatch,
     PinnedRootMismatch,
     ExternalSourceChange,
     ResourceLimit,

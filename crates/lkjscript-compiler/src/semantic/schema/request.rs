@@ -2,36 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use super::Expression;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum ResourceProfile {
-    Sandbox,
-    Default,
-    Build,
-    TrustedLocal,
-    Deterministic,
-}
-
-impl ResourceProfile {
-    pub(crate) const fn core(self) -> lkjscript_core::ResourceProfile {
-        use lkjscript_core::ResourceProfileName;
-        let name = match self {
-            Self::Sandbox => ResourceProfileName::Sandbox,
-            Self::Default => ResourceProfileName::Default,
-            Self::Build => ResourceProfileName::Build,
-            Self::TrustedLocal => ResourceProfileName::TrustedLocal,
-            Self::Deterministic => ResourceProfileName::Deterministic,
-        };
-        lkjscript_core::ResourceProfile::new(name)
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Request {
     pub schema: String,
     pub contract: String,
-    pub profile: ResourceProfile,
     pub root: String,
     pub operation: OperationRequest,
 }

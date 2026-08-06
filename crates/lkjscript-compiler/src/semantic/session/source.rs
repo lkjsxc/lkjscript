@@ -1,10 +1,6 @@
 use std::path::Path;
 
-use lkjscript_core::BudgetLedger;
-
-use crate::semantic::schema::{
-    OperationRequest, Request, ResourceProfile, Response, ResponseResult,
-};
+use crate::semantic::schema::{OperationRequest, Request, Response, ResponseResult};
 
 use super::schema::{SessionError, SessionErrorCode, SourceFingerprint};
 
@@ -29,16 +25,10 @@ pub(super) fn canonical_root(root: &str) -> Result<String, SessionError> {
     })
 }
 
-pub(super) fn snapshot(
-    profile: ResourceProfile,
-    root: &str,
-    expected: Option<&str>,
-    ledger: &mut BudgetLedger,
-) -> Result<SourceSnapshot, SessionError> {
+pub(super) fn snapshot(root: &str, expected: Option<&str>) -> Result<SourceSnapshot, SessionError> {
     let request = Request {
         schema: crate::semantic::SCHEMA.to_string(),
         contract: crate::semantic::CONTRACT.to_hex(),
-        profile,
         root: root.to_string(),
         operation: OperationRequest::Snapshot {
             expected_repository_identity: expected.map(str::to_string),
@@ -46,22 +36,19 @@ pub(super) fn snapshot(
     };
     let request_bytes = crate::semantic::codec::measure_json(&request)
         .map_err(|error| SessionError::new(SessionErrorCode::ResourceLimit, error.message))?;
-    let request_charge = u64::try_from(request_bytes).map_err(|_| {
-        SessionError::new(
+    if request_bytes > crate::semantic::MAX_REQUEST_BYTES {
+        return Err(SessionError::new(
             SessionErrorCode::ResourceLimit,
-            "source probe byte count overflow",
-        )
-    })?;
-    crate::semantic::codec::reserve_request_bytes(ledger, request_charge)
-        .map_err(|error| SessionError::new(SessionErrorCode::ResourceLimit, error.message))?;
+            "source probe exceeds Semantic Source input byte policy",
+        ));
+    }
     let outcome =
-        crate::semantic::engine::execute_request_with_ledger(request, request_bytes, ledger)
-            .map_err(|error| {
-                SessionError::new(
-                    SessionErrorCode::ExternalSourceChange,
-                    format!("source revision probe failed: {}", error.message),
-                )
-            })?;
+        crate::semantic::engine::execute_request(request, request_bytes).map_err(|error| {
+            SessionError::new(
+                SessionErrorCode::ExternalSourceChange,
+                format!("source revision probe failed: {}", error.message),
+            )
+        })?;
     let response = outcome.prepared.response;
     let revision = response.revision.clone().ok_or_else(|| {
         SessionError::new(
@@ -101,7 +88,6 @@ pub(super) fn roots_match(pinned: &str, requested: &str) -> Result<bool, Session
 
 pub(super) fn session_identity(
     compiler_build: &str,
-    profile: ResourceProfile,
     root: &str,
     source_revision: &str,
 ) -> Result<String, SessionError> {
@@ -109,7 +95,6 @@ pub(super) fn session_identity(
         compiler_build,
         crate::semantic::SCHEMA,
         crate::semantic::CONTRACT.to_hex(),
-        profile.core().name().as_str(),
         root,
         source_revision,
     );

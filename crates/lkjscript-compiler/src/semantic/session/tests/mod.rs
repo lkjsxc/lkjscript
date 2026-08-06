@@ -1,7 +1,6 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 mod framing;
-mod ledger;
 mod lifecycle;
 mod transaction;
 
@@ -29,15 +28,14 @@ fn case(label: &str) -> PathBuf {
     directory
 }
 
-fn semantic_request(root: &std::path::Path, profile: &str, operation: &str) -> String {
+fn semantic_request(root: &std::path::Path, operation: &str) -> String {
     format!(
         concat!(
             "{{\"schema\":\"lkjscript.semantic-source\",\"contract\":\"{}\",",
-            "\"profile\":\"{profile}\",\"root\":{},\"operation\":{operation}}}"
+            "\"root\":{},\"operation\":{operation}}}"
         ),
         crate::semantic::CONTRACT,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root"),
-        profile = profile,
         operation = operation,
     )
 }

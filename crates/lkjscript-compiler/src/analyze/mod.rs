@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use lkjscript_core::{BudgetLedger, Error, ProductId, Result, MAX_PRODUCT_FIELDS};
+use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
@@ -33,24 +33,6 @@ pub(crate) fn analyze_module_program(program: &ValidatedSourceTree) -> Result<hi
         .module_scoped_projection()
         .map_err(crate::source::SourceDiagnostic::into_core)?;
     analyze_program(&projection)
-}
-
-pub(crate) fn analyze_program_with_budget(
-    source: &ValidatedSourceTree,
-    ledger: &mut BudgetLedger,
-) -> Result<hir::Program> {
-    let mut program = analyze_program_without_effects_with_budget(source, ledger)?;
-    crate::effects::infer(&mut program);
-    Ok(program)
-}
-
-pub(crate) fn analyze_program_without_effects_with_budget(
-    source: &ValidatedSourceTree,
-    ledger: &mut BudgetLedger,
-) -> Result<hir::Program> {
-    let program = analyze_program_without_effects(source)?;
-    crate::budget::reserve_ssa_input(&program, ledger)?;
-    Ok(program)
 }
 
 pub(crate) fn analyze_program_without_effects(

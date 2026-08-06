@@ -18,7 +18,6 @@ pub struct Manifest {
     pub dependencies: Vec<Dependency>,
     pub capabilities: Vec<String>,
     pub targets: Vec<Target>,
-    pub resource_profile: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

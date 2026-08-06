@@ -1,5 +1,4 @@
 use crate::semantic::session::limits::{MAX_REQUEST_ID_BYTES, MAX_SESSION_REQUESTS};
-use lkjscript_core::BudgetLedger;
 
 use super::schema::{
     ProcessCode, SessionError, SessionErrorCode, SessionOperation, SessionProcessError,
@@ -40,9 +39,6 @@ impl SemanticSession {
                 ),
             ));
         }
-        if let Some(ledger) = self.ledger.as_mut() {
-            ledger.rollover_request_segment();
-        }
         if envelope.request_id.len() > MAX_REQUEST_ID_BYTES {
             return self.encode_result(
                 envelope.request_id,
@@ -54,11 +50,8 @@ impl SemanticSession {
                 },
             );
         }
-        let request_limit = self.pinned.as_ref().map_or(MAX_SESSION_REQUESTS, |pinned| {
-            pinned.state.limits.request_count
-        });
         let next_requests = self.requests.checked_add(1);
-        if next_requests.is_none_or(|requests| requests > request_limit) {
+        if next_requests.is_none_or(|requests| requests > MAX_SESSION_REQUESTS) {
             return self.encode_result(
                 envelope.request_id,
                 SessionResult::Error {
@@ -83,11 +76,6 @@ impl SemanticSession {
                     ),
                 },
             );
-        }
-        if let SessionOperation::Execute { request } = &envelope.request {
-            if let Err(error) = self.ensure_ledger(request.profile) {
-                return self.encode_result(envelope.request_id, SessionResult::Error { error });
-            }
         }
         let result = match envelope.request {
             SessionOperation::Execute { request } => self.execute(request),
@@ -114,22 +102,5 @@ impl SemanticSession {
             );
         }
         Ok(encoded)
-    }
-
-    fn ensure_ledger(
-        &mut self,
-        profile: crate::semantic::schema::ResourceProfile,
-    ) -> Result<(), SessionError> {
-        match &self.ledger {
-            Some(ledger) if crate::semantic::budget::profile_matches(profile, ledger) => Ok(()),
-            Some(_) => Err(SessionError::new(
-                SessionErrorCode::PinnedProfileMismatch,
-                "session request profile does not match outer-owned ledger",
-            )),
-            None => {
-                self.ledger = Some(BudgetLedger::new(profile.core()));
-                Ok(())
-            }
-        }
     }
 }

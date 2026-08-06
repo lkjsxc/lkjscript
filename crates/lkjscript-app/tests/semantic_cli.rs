@@ -80,8 +80,7 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     let request = format!(
         concat!(
             "{{\"schema\":\"lkjscript.semantic-source\",\"contract\":\"{}\",",
-            "\"profile\":\"default\",\"root\":{},",
-            "\"operation\":{{\"kind\":\"snapshot\"}}}}",
+            "\"root\":{},\"operation\":{{\"kind\":\"snapshot\"}}}}",
         ),
         lkjscript_contracts::SEMANTIC_SOURCE_DIGEST,
         format!("{:?}", root.to_string_lossy())

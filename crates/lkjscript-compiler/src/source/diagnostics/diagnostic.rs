@@ -17,7 +17,6 @@ pub struct SourceDiagnostic {
     origin: Box<SourceOrigin>,
     primary_span: SourceSpan,
     related: Vec<RelatedSourceSpan>,
-    budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 impl SourceDiagnostic {
@@ -50,9 +49,6 @@ impl SourceDiagnostic {
     }
     pub fn related_spans(&self) -> &[RelatedSourceSpan] {
         &self.related
-    }
-    pub fn budget_error(&self) -> Option<&lkjscript_core::BudgetError> {
-        self.budget.as_deref()
     }
     pub fn render_human(&self) -> String {
         let start = self.primary_span.start();
@@ -138,7 +134,6 @@ impl SourceDiagnostic {
             origin: Box::new(origin),
             primary_span,
             related: Vec::new(),
-            budget: None,
         }
     }
     pub(crate) fn with_related(
@@ -174,10 +169,7 @@ impl SourceDiagnostic {
     }
 
     pub(crate) fn into_core(self) -> Error {
-        self.budget
-            .as_deref()
-            .copied()
-            .map_or_else(|| Error::msg(self.render_human()), Error::budget)
+        Error::msg(self.render_human())
     }
 }
 

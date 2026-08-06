@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.package",
-  "contract": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
+  "contract": "11b96400932e06137ccaea41379b3a350100873c2c2043b3ececa822561012d0",
   "name": "polymorphic-history-consumer",
   "source_root": ".",
   "modules": [
@@ -20,7 +20,7 @@
     {
       "name": "polymorphic-history",
       "path": "history",
-      "content_sha256": "a04152e68d1b5f5cf3460534d711efb1e5c8cc2affc184e0bec9dd3f7aec3866"
+      "content_sha256": "894198897e9dfc379e603764e8ff3ad95b2c8caa0b4941bc56e3a56bc95c9de7"
     }
   ],
   "capabilities": [],
@@ -37,6 +37,5 @@
       "name": "main",
       "module": "main.lkjscript"
     }
-  ],
-  "resource_profile": null
+  ]
 }

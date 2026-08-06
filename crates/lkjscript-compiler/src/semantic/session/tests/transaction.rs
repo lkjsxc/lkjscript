@@ -13,7 +13,7 @@ fn published_transaction_advances_session_revision() {
         ),
     )
     .expect("write transaction source");
-    let snapshot = semantic_request(&root, "default", "{\"kind\":\"snapshot\"}");
+    let snapshot = semantic_request(&root, "{\"kind\":\"snapshot\"}");
     let operation = execute_operation(&snapshot);
     let mut session = SemanticSession::new();
     let (_, first) = handle(&mut session, &session_request("snapshot", 0, &operation));
@@ -50,7 +50,7 @@ fn published_transaction_advances_session_revision() {
             "new_name": "g",
         }],
     });
-    let semantic = semantic_request(&root, "default", &transaction.to_string());
+    let semantic = semantic_request(&root, &transaction.to_string());
     let operation = execute_operation(&semantic);
     let (_, published) = handle(&mut session, &session_request("publish", 1, &operation));
     assert_eq!(published["revision"], 2);

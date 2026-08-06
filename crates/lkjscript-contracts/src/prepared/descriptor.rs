@@ -33,7 +33,6 @@ pub struct PreparedProgramDescriptor {
     pub native_lowerable_ssa: [u8; 32],
     pub validated_bytecode: [u8; 32],
     pub contracts: PreparedContractDigests,
-    pub resource_profile: [u8; 32],
 }
 
 impl PreparedProgramDescriptor {
@@ -61,7 +60,6 @@ impl PreparedProgramDescriptor {
             (16, self.contracts.bytecode),
             (17, self.contracts.runtime_control),
             (18, self.contracts.process_outcome_codec),
-            (19, self.resource_profile),
         ] {
             out.tag(tag)?;
             out.fixed(&value)?;
@@ -90,7 +88,6 @@ impl PreparedProgramDescriptor {
             self.contracts.bytecode,
             self.contracts.runtime_control,
             self.contracts.process_outcome_codec,
-            self.resource_profile,
         ] {
             nonzero(value)?;
         }

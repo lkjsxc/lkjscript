@@ -1,22 +1,22 @@
 {
   "schema": "lkjscript.package-lock",
-  "contract": "c4baae4846a190f0a31d0a2156ec223ccd85a067a9439d65e7af499ca58261c4",
-  "root": "a04152e68d1b5f5cf3460534d711efb1e5c8cc2affc184e0bec9dd3f7aec3866",
+  "contract": "3cf2a427949ba9a94570c1fef337d7df7a62058c5420700593aa2d0b8c89496c",
+  "root": "894198897e9dfc379e603764e8ff3ad95b2c8caa0b4941bc56e3a56bc95c9de7",
   "contracts": {
     "lkjscript.language": "796f5e6f6173411fa774c28dd8d673522917f34f5c75783ccfee114581bf9981",
     "lkjscript.module-interface": "3097d3347caad1c8607ebfc188ab4d515f899ba9807c1b7859b5bd285f9d7854",
-    "lkjscript.package": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
-    "lkjscript.package-lock": "c4baae4846a190f0a31d0a2156ec223ccd85a067a9439d65e7af499ca58261c4",
-    "lkjscript.prepared-program": "915b1730553f3df0bdafffaeb002deade4310facbacdc6d0e778015746697352",
+    "lkjscript.package": "11b96400932e06137ccaea41379b3a350100873c2c2043b3ececa822561012d0",
+    "lkjscript.package-lock": "3cf2a427949ba9a94570c1fef337d7df7a62058c5420700593aa2d0b8c89496c",
+    "lkjscript.prepared-program": "6839791d0a90edb8daa781d97187d8b89c22a1255697d946f1f4b5eb56ff587f",
     "lkjscript.source": "8946b34d1f0569c5dff74078026ecf0f9785407e7ce7d74d2d2c9350e81738dc"
   },
   "packages": [
     {
       "name": "polymorphic-history",
       "origin": ".",
-      "manifest_sha256": "d07652e8ea2356a2f9ab5f713ddb2fef0fb951a5a18980988cd9f4a2e5a8f228",
+      "manifest_sha256": "cab989064392dc13de5002e64a1dee0971d449bd5754a5081ca31bbf1b1be32d",
       "package_memory_interface_sha256": "c2772215e7f1211b2be19c9055803dab1a082307883e4740379fb23386372baa",
-      "package_sha256": "a04152e68d1b5f5cf3460534d711efb1e5c8cc2affc184e0bec9dd3f7aec3866",
+      "package_sha256": "894198897e9dfc379e603764e8ff3ad95b2c8caa0b4941bc56e3a56bc95c9de7",
       "dependencies": [],
       "modules": [
         {"id":"history.lkjscript","source_sha256":"c03343508825fe4e86130f15f7ad35bcad3d3ca9f1c45b327ba808a161bf742d","source_closure":[{"id":"history.lkjscript","source_sha256":"c03343508825fe4e86130f15f7ad35bcad3d3ca9f1c45b327ba808a161bf742d"}],"module_interface_contract":"3097d3347caad1c8607ebfc188ab4d515f899ba9807c1b7859b5bd285f9d7854","module_interface_sha256":"abf262999f6aaaaf0a58ca863043946657a742833d6723416c44c6591b4b7e0e","module_memory_interface_sha256":"34c3485b8e013b96c4ecadb087a211ea4480e6247ed20896cef9058dab9b30a7","module_sha256":"be3cca5bbddbc11838abe48c9da92c474ca09ecd73582bc895c063c95a8a9dbf","exports":["keep-history"],"memory_interfaces":[{"declaration_identity":"d80fa516eca656e4138f365de36ca0d098a773cec78e50f5a117551f58cb617a","export_identity":"a32b55dc47727635244167b65589ff969d257073ddac0a9ba3992b3024c26a89","name":"keep-history","declaration_kind":"function","type_parameters":["t"],"trait_parameters":[],"memory_requirements":[{"parameter":"t","operations":["transport"]}],"parameter_modes":["copy"],"result_mode":"trivial","equality_constraints":[{"parameter":"t","support":"caller-witness-required"}],"process_codec_constraints":[{"parameter":"t","support":"caller-witness-required"}],"module_interface_contract":"3097d3347caad1c8607ebfc188ab4d515f899ba9807c1b7859b5bd285f9d7854","package_memory_interface_sha256":"eab3805e69425979b37d7b8ec37936a931e784ee2527129407e1e8cce4d16da1"}]}

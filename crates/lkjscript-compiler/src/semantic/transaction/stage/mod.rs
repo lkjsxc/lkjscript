@@ -1,8 +1,6 @@
-mod preflight;
-
 use std::collections::HashSet;
 
-use lkjscript_core::{BudgetLedger, Limits};
+use lkjscript_core::Limits;
 
 use crate::semantic::codec::error;
 use crate::semantic::schema::{
@@ -11,11 +9,10 @@ use crate::semantic::schema::{
 use crate::semantic::transaction::{ResolvedOperation, StagedTransaction};
 use crate::source::ValidatedSourceTree;
 
-pub(crate) fn stage_with_ledger(
+pub(crate) fn stage(
     tree: &ValidatedSourceTree,
     requests: &[TransactionOperation],
     preconditions: &[FilePrecondition],
-    ledger: &mut BudgetLedger,
 ) -> Result<StagedTransaction, ProtocolError> {
     if requests.is_empty() {
         return Err(error(
@@ -23,7 +20,6 @@ pub(crate) fn stage_with_ledger(
             "transaction has no operations",
         ));
     }
-    preflight::reserve(tree, requests, ledger)?;
     let resolved = resolve_all(tree, requests)?;
     reject_overlaps(&resolved)?;
     let mut files = tree.files().to_vec();

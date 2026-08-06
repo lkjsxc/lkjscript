@@ -24,7 +24,6 @@ fn descriptor() -> PreparedProgramDescriptor {
             runtime_control: [15; 32],
             process_outcome_codec: [16; 32],
         },
-        resource_profile: [17; 32],
     }
 }
 
@@ -36,7 +35,7 @@ fn descriptor_identity_is_known_and_field_sensitive() {
         .bytes();
     assert_eq!(
         crate::ContractDigest::from_bytes(identity).to_hex(),
-        "e43cff66ff8765b8f832f5793a9a91b5fba3d1757dac52246ab5a03b2dde9c71"
+        "0e6f021ce67c44ec717eee4af3ca105b8218d64a9c596dd25ccdac56afc164c2"
     );
     let mut forged = descriptor();
     forged.entry = [17; 32];

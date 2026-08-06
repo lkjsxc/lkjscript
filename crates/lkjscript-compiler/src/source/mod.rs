@@ -18,9 +18,8 @@ mod validate;
 #[cfg(test)]
 pub(crate) use api::validate_source_set_for_analysis;
 pub(crate) use api::{
-    ensure_source_path_for_compiler, load_for_compiler_with_budget, load_for_protocol,
-    load_with_metrics_and_budget, rebuild_staged_sources, validate_for_compiler_with_budget,
-    ValidatedSourceParts,
+    ensure_source_path_for_compiler, load_for_compiler, load_for_protocol, load_with_metrics,
+    rebuild_staged_sources, validate_for_compiler, ValidatedSourceParts,
 };
 pub use api::{load, validate, ValidatedSourceTree};
 pub use diagnostics::{

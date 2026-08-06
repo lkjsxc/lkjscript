@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.package",
-  "contract": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
+  "contract": "11b96400932e06137ccaea41379b3a350100873c2c2043b3ececa822561012d0",
   "name": "lkjscript-workspace",
   "source_root": ".",
   "modules": [
@@ -146,6 +146,5 @@
       "name": "sqlite-main",
       "module": "src/examples/sqlite/main.lkjscript"
     }
-  ],
-  "resource_profile": null
+  ]
 }

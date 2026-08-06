@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn strict_codec_rejects_every_json_boundary() {
+fn strict_codec_rejects_every_json_boundary_and_removed_profile_field() {
     let root = case_dir("codec").join("main.lkjscript");
     std::fs::write(
         &root,
@@ -16,9 +16,11 @@ fn strict_codec_rejects_every_json_boundary() {
         1,
     );
     let unknown_field = valid.replacen("\"contract\":", "\"unknown\":false,\"contract\":", 1);
+    let removed_profile = valid.replacen("\"root\":", "\"profile\":\"default\",\"root\":", 1);
     let invalid = [
         duplicate,
         unknown_field,
+        removed_profile,
         valid.replace(&crate::semantic::CONTRACT.to_hex(), &"0".repeat(64)),
         valid.replace(crate::semantic::SCHEMA, "lkjscript.agent-foundation"),
         valid.replace("\"kind\":\"snapshot\"", "\"kind\":\"invented\""),
@@ -71,13 +73,18 @@ fn closed_nested_kinds_and_operations_reject_unknown_input() {
 }
 
 #[test]
-fn aggregate_operation_string_work_and_output_limits_fail_closed() {
-    let root = case_dir("aggregate-limits").join("main.lkjscript");
+fn transaction_operation_count_is_not_a_codec_admission_quota() {
+    let root = case_dir("operation-count").join("main.lkjscript");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write source");
     let rename = concat!(
         "{\"kind\":\"rename-declaration\",\"declaration_key\":\"k\",",
         "\"entity_fingerprint\":\"f\",\"new_name\":\"n\"}",
     );
-    let operations = std::iter::repeat_n(rename, crate::semantic::codec::MAX_OPERATIONS + 1)
+    let operations = std::iter::repeat_n(rename, 65)
         .collect::<Vec<_>>()
         .join(",");
     let operation = format!(
@@ -88,47 +95,20 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
         ),
         operations = operations
     );
-    assert!(crate::semantic::execute(&request(&root, &operation)).is_err());
-    let huge = "x".repeat(crate::semantic::codec::MAX_STRING_BYTES as usize + 1);
-    let operation = format!(
-        "{{\"kind\":\"snapshot\",\"expected_repository_identity\":{}}}",
-        serde_json::to_string(&huge).expect("encode huge string")
-    );
-    assert!(crate::semantic::execute(&request(&root, &operation)).is_err());
-    let charges = crate::semantic::schema::Charges {
-        source_nodes: crate::semantic::codec::MAX_SCHEMA_NODES + 1,
-        ..crate::semantic::schema::Charges::default()
-    };
-    let limits = crate::semantic::charges::ProtocolLimits::for_profile(
-        crate::semantic::schema::ResourceProfile::Default,
-    );
-    assert!(limits.check_charges(&charges).is_err());
-    let charges = crate::semantic::schema::Charges {
-        work_units: crate::semantic::codec::MAX_WORK_UNITS + 1,
-        ..crate::semantic::schema::Charges::default()
-    };
-    assert!(limits.check_charges(&charges).is_err());
-    let sandbox = crate::semantic::charges::ProtocolLimits::for_profile(
-        crate::semantic::schema::ResourceProfile::Sandbox,
-    );
-    let charges = crate::semantic::schema::Charges {
-        work_units: 786_433,
-        ..crate::semantic::schema::Charges::default()
-    };
-    assert!(sandbox.check_charges(&charges).is_err());
-    assert!(limits.check_charges(&charges).is_ok());
+    let encoded = crate::semantic::execute(&request(&root, &operation))
+        .expect("operation count reaches semantic validation rather than codec rejection");
+    assert!(matches!(
+        response(&encoded).result,
+        crate::semantic::schema::ResponseResult::Error { .. }
+    ));
+}
+
+#[test]
+fn response_output_byte_policy_fails_before_publication() {
     let response = crate::semantic::schema::Response {
         schema: crate::semantic::SCHEMA.to_string(),
         contract: crate::semantic::CONTRACT.to_hex(),
         compiler_build: "x".repeat(crate::semantic::codec::MAX_OUTPUT_BYTES),
-        profile: crate::semantic::schema::ResourceProfile::Default,
-        profile_identity: crate::semantic::charges::identity(
-            crate::semantic::schema::ResourceProfile::Default,
-        ),
-        limits: crate::semantic::charges::ProtocolLimits::for_profile(
-            crate::semantic::schema::ResourceProfile::Default,
-        )
-        .record(),
         revision: None,
         charges: crate::semantic::schema::Charges::default(),
         result: crate::semantic::schema::ResponseResult::Error {
@@ -136,43 +116,11 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
                 code: crate::semantic::schema::ProtocolErrorCode::OutputLimit,
                 message: "bounded".to_string(),
                 diagnostic: None,
-                budget: None,
             }),
             diagnostic: None,
         },
     };
-    let mut ledger = lkjscript_core::BudgetLedger::default();
-    assert!(crate::semantic::codec::prepare_response(response, &mut ledger).is_err());
-}
-
-#[test]
-fn all_core_profiles_are_closed_protocol_selections() {
-    let root = case_dir("profiles").join("main.lkjscript");
-    std::fs::write(
-        &root,
-        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
-    )
-    .expect("write source");
-    let default =
-        String::from_utf8(request(&root, "{\"kind\":\"snapshot\"}")).expect("request UTF-8");
-    for profile in [
-        "sandbox",
-        "default",
-        "build",
-        "trusted-local",
-        "deterministic",
-    ] {
-        let selected = default.replace(
-            "\"profile\":\"default\"",
-            &format!("\"profile\":\"{profile}\""),
-        );
-        let encoded = crate::semantic::execute(selected.as_bytes()).expect("selected profile");
-        let decoded = response(&encoded);
-        assert_eq!(decoded.profile.core().name().as_str(), profile);
-        assert_eq!(decoded.profile_identity.ceilings_sha256.len(), 64);
-    }
-    let unknown = default.replace("\"profile\":\"default\"", "\"profile\":\"standard\"");
-    assert!(crate::semantic::execute(unknown.as_bytes()).is_err());
+    assert!(crate::semantic::codec::prepare_response(response).is_err());
 }
 
 #[test]

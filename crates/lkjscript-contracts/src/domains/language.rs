@@ -125,7 +125,6 @@ pub(super) fn semantic_source(
             ContractItem::new("envelope", ContractItemKind::Type)
                 .fact(fact("schema", "schema", "lkjscript.semantic-source"))
                 .fact(fact("contract", "contract", "full lowercase SHA-256"))
-                .fact(fact("profile", "profile", "closed resource profile name"))
                 .fact(fact("root", "root", "contained logical source root"))
                 .fact(fact("operation", "operation", "closed operation request")),
         )

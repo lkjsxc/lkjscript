@@ -5,7 +5,9 @@ fn take_snapshot(root: &std::path::Path) -> (String, SnapshotResult) {
     let output = crate::semantic::execute(&request(root, "{\"kind\":\"snapshot\"}"))
         .expect("snapshot request");
     let decoded = response(&output);
-    let revision = decoded.revision.expect("snapshot revision");
+    let revision = decoded
+        .revision
+        .unwrap_or_else(|| panic!("snapshot had no revision: {:?}", decoded.result));
     let ResponseResult::Snapshot { snapshot } = decoded.result else {
         panic!("expected snapshot response");
     };
@@ -176,5 +178,81 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
     assert_eq!(
         transaction.identities[0].old_node,
         transaction.identities[0].new_node
+    );
+}
+
+#[test]
+fn valid_transaction_crosses_the_removed_64_operation_admission_boundary() {
+    let directory = case_dir("transaction-scale");
+    let root = directory.join("main.lkjscript");
+    let mut source = String::from("imports/\n");
+    for file_index in 0..9 {
+        source.push_str(&format!(
+            "import/\nmodule/\nlib{file_index}.lkjscript\n/module\ndeclarations/\n"
+        ));
+        let mut library = String::new();
+        let mut names = ((file_index * 8)..((file_index + 1) * 8).min(65))
+            .map(|index| format!("f{index}"))
+            .collect::<Vec<_>>();
+        names.sort();
+        for name in names {
+            source.push_str(&format!("{name}\n"));
+            library.push_str(&format!(
+                "def/\nname/\n{name}\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\n"
+            ));
+        }
+        source.push_str("/declarations\n/import\n");
+        std::fs::write(
+            directory.join(format!("lib{file_index}.lkjscript")),
+            library,
+        )
+        .expect("write scale library");
+    }
+    source.push_str(
+        "/imports\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    );
+    std::fs::write(&root, &source).expect("write scale root");
+    let (revision, snapshot) = take_snapshot(&root);
+    let operations = (0..65)
+        .map(|index| {
+            let declaration = snapshot
+                .declarations
+                .iter()
+                .find(|declaration| declaration.name == format!("f{index}"))
+                .expect("generated declaration");
+            format!(
+                concat!(
+                    "{{\"kind\":\"rename-declaration\",",
+                    "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
+                    "\"new_name\":\"g{index}\"}}"
+                ),
+                declaration.key,
+                declaration.fingerprint,
+                index = index,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let operation = format!(
+        concat!(
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
+            "\"base_revision\":\"{revision}\",\"file_preconditions\":[{}],",
+            "\"operations\":[{operations}]}}"
+        ),
+        preconditions(&snapshot),
+        revision = revision,
+        operations = operations,
+    );
+    let preview = response(
+        &crate::semantic::execute(&request(&root, &operation))
+            .expect("valid transaction above the former operation boundary"),
+    );
+    assert!(matches!(
+        preview.result,
+        ResponseResult::ApplyTransaction { .. }
+    ));
+    assert_eq!(
+        std::fs::read_to_string(&root).expect("preview source remains unchanged"),
+        source
     );
 }

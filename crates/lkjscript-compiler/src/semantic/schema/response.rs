@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     ChangedSource, Charges, DeclarationRecord, DiagnosticRecord, EntityRecord, HoleContextResult,
-    IdentityRelation, LegalActionsResult, NodeQueryRecord, NodeRecord, ResourceProfile,
-    SourceUnitRecord,
+    IdentityRelation, LegalActionsResult, NodeQueryRecord, NodeRecord, SourceUnitRecord,
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -31,8 +30,6 @@ pub(crate) struct ProtocolError {
     pub message: String,
     #[serde(skip)]
     pub diagnostic: Option<Box<DiagnosticRecord>>,
-    #[serde(skip)]
-    pub budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -96,45 +93,10 @@ pub(crate) enum ResponseResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ResourceProfileIdentityRecord {
-    pub schema: String,
-    pub contract: String,
-    pub name: String,
-    pub resource_categories: String,
-    pub implementation_maxima_sha256: String,
-    pub ceilings_sha256: String,
-    pub host_lowered_ceilings_sha256: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ProtocolLimitsRecord {
-    pub request_bytes: u64,
-    pub response_bytes: u64,
-    pub source_bytes: u64,
-    pub source_units: u64,
-    pub source_nodes: u64,
-    pub work_units: u64,
-    pub hole_count: u64,
-    pub hole_candidates: u64,
-    pub hole_search_work: u64,
-    pub legal_actions: u64,
-    pub transactions: u64,
-    pub transaction_operations: u64,
-    pub transaction_impact_nodes: u64,
-    pub staged_publication_bytes: u64,
-    pub staged_publication_nodes: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct Response {
     pub schema: String,
     pub contract: String,
     pub compiler_build: String,
-    pub profile: ResourceProfile,
-    pub profile_identity: ResourceProfileIdentityRecord,
-    pub limits: ProtocolLimitsRecord,
     pub revision: Option<String>,
     pub charges: Charges,
     pub result: ResponseResult,

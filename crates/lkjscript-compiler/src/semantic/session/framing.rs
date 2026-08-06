@@ -48,12 +48,7 @@ pub(super) fn read_frame<R: Read>(
     let total = encoded_length.checked_add(8).ok_or_else(|| {
         SessionProcessError::new(ProcessCode::LengthOverflow, "session input byte overflow")
     })?;
-    let cumulative_limit = session
-        .pinned
-        .as_ref()
-        .map_or(MAX_SESSION_CUMULATIVE_INPUT_BYTES, |pinned| {
-            pinned.state.limits.cumulative_input_bytes
-        });
+    let cumulative_limit = MAX_SESSION_CUMULATIVE_INPUT_BYTES;
     let next = session.input_bytes.checked_add(total).ok_or_else(|| {
         SessionProcessError::new(ProcessCode::LengthOverflow, "session input byte overflow")
     })?;
@@ -62,15 +57,6 @@ pub(super) fn read_frame<R: Read>(
             ProcessCode::FrameTooLarge,
             format!("session cumulative input {next} exceeds {cumulative_limit}"),
         ));
-    }
-    if let Some(ledger) = session.ledger.as_mut() {
-        super::reserve_session(
-            ledger,
-            lkjscript_core::ResourceCategory::SemanticSessionInputBytes,
-            total,
-            lkjscript_core::BudgetCause::ProtocolFrame(total),
-        )
-        .map_err(SessionProcessError::budget)?;
     }
     let mut payload = Vec::new();
     payload.try_reserve_exact(length).map_err(|error| {
@@ -131,12 +117,7 @@ pub(super) fn write_frame<W: Write>(
     let total = length.checked_add(8).ok_or_else(|| {
         SessionProcessError::new(ProcessCode::LengthOverflow, "session output byte overflow")
     })?;
-    let cumulative_limit = session
-        .pinned
-        .as_ref()
-        .map_or(MAX_SESSION_CUMULATIVE_OUTPUT_BYTES, |pinned| {
-            pinned.state.limits.cumulative_output_bytes
-        });
+    let cumulative_limit = MAX_SESSION_CUMULATIVE_OUTPUT_BYTES;
     let next = session.output_bytes.checked_add(total).ok_or_else(|| {
         SessionProcessError::new(ProcessCode::LengthOverflow, "session output byte overflow")
     })?;

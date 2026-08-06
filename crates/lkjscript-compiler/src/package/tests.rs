@@ -40,7 +40,6 @@ fn fixture(label: &str) -> PathBuf {
             name: "main".into(),
             module: "main.lkjscript".into(),
         }],
-        resource_profile: None,
     };
     fs::write(
         root.join(MANIFEST_FILE),
@@ -186,6 +185,33 @@ fn lock_decoder_rejects_noncanonical_bytes() {
         .unwrap_err()
         .to_string()
         .contains("canonically encoded"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn metrics_collection_does_not_change_prepared_identity() {
+    let root = fixture("metrics-identity");
+    let (lock_path, lock) = create_lock(&root).unwrap();
+    fs::write(lock_path, lock).unwrap();
+    let entry = root.join("main.lkjscript");
+    let plain = crate::compile_path(&entry, &lkjscript_core::Limits::default()).unwrap();
+    let (measured, metrics) =
+        crate::compile_path_with_metrics(&entry, &lkjscript_core::Limits::default()).unwrap();
+    assert_eq!(plain.prepared_identity(), measured.prepared_identity());
+    assert_eq!(metrics.source_files, 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn removed_resource_profile_manifest_field_is_rejected() {
+    let root = fixture("removed-profile");
+    let path = root.join(MANIFEST_FILE);
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest["resource_profile"] = serde_json::Value::String("default".into());
+    fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    let error = graph::build(&root).unwrap_err().to_string();
+    assert!(error.contains("resource_profile") || error.contains("unknown field"));
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -5,15 +5,13 @@ mod ranking;
 
 use crate::semantic::schema::*;
 use build::{binding_expression, candidate, literal_expressions};
-use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
 use ranking::{builtin_category, rank_key};
 
 use super::site::HoleSite;
 
-pub(super) fn enumerate_with_ledger(
+pub(super) fn enumerate(
     site: &HoleSite<'_>,
     scope: &[ScopeEntity],
-    ledger: &mut BudgetLedger,
 ) -> Result<(Vec<HoleCandidate>, ExplorationRecord, Vec<ActionBlocker>), ProtocolError> {
     let expected = match &site.expected {
         Ok(ty) => ty,
@@ -45,28 +43,6 @@ pub(super) fn enumerate_with_ledger(
     else {
         return Ok(bounded_failure("hole search work overflow".into()));
     };
-    let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
-    let mut holes = request
-        .child(BudgetAuthority::Holes)
-        .map_err(crate::semantic::codec::budget_error)?;
-    let mut work_reservation = holes
-        .reserve(
-            ResourceCategory::HoleSearchWork,
-            work,
-            BudgetCause::SemanticNode(u64::from(site.node)),
-        )
-        .map_err(crate::semantic::codec::budget_error)?;
-    work_reservation
-        .consume(work)
-        .map_err(crate::semantic::codec::budget_error)?;
-    work_reservation.return_unused();
-    let mut reservation = holes
-        .reserve(
-            ResourceCategory::HoleCandidates,
-            maximum,
-            BudgetCause::SemanticNode(u64::from(site.node)),
-        )
-        .map_err(crate::semantic::codec::budget_error)?;
     let mut expressions = literal_expressions(site.tree, expected);
     expressions.extend(control::expressions(site, expected));
     for entity in scope {
@@ -122,7 +98,7 @@ pub(super) fn enumerate_with_ledger(
             Expression::UserCall { name, arguments },
         ));
     }
-    let mut candidates = Vec::with_capacity(expressions.len().min(maximum as usize));
+    let mut candidates = Vec::with_capacity(expressions.len());
     let mut rejected = std::collections::BTreeMap::new();
     for (category, expression) in expressions {
         if !super::validate::checker_accepts(site, &expression) {
@@ -130,14 +106,10 @@ pub(super) fn enumerate_with_ledger(
             *count = count.saturating_add(1);
             continue;
         }
-        if reservation.consume(1).is_err() {
-            break;
-        }
         if let Some(candidate) = candidate(site, expected, category, expression) {
             candidates.push(candidate);
         }
     }
-    reservation.return_unused();
     candidates.sort_by(|a, b| rank_key(a).cmp(&rank_key(b)));
     let omitted = omitted_categories(rejected);
     let exploration = ExplorationRecord {

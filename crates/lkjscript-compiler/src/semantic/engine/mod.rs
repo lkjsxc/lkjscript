@@ -2,9 +2,9 @@ mod response;
 
 use std::path::Path;
 
-use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, Limits, ResourceCategory};
+use lkjscript_core::Limits;
 
-use crate::semantic::codec::{budget_error, error, PreparedResponse};
+use crate::semantic::codec::{error, PreparedResponse};
 use crate::semantic::operations;
 use crate::semantic::schema::{
     Charges, ProtocolError, ProtocolErrorCode, Request, Response, ResponseResult,
@@ -15,16 +15,13 @@ pub(crate) struct EngineOutcome {
     pub prepared: PreparedResponse,
     pub publication: Option<super::transaction::StagedTransaction>,
     pub guard: Option<super::transaction::PublicationGuard>,
-    pub budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
-pub(crate) fn execute_request_with_ledger(
+pub(crate) fn execute_request(
     request: Request,
     request_bytes: usize,
-    ledger: &mut BudgetLedger,
 ) -> Result<EngineOutcome, ProtocolError> {
-    let profile = request.profile;
-    let limits = super::charges::ProtocolLimits::for_core(ledger.profile());
+    let policy = super::charges::BoundaryPolicy::default();
     let root = Path::new(&request.root);
     let request_charge = Charges {
         request_bytes: u64::try_from(request_bytes).unwrap_or(u64::MAX),
@@ -32,20 +29,13 @@ pub(crate) fn execute_request_with_ledger(
     };
     let guard = match super::transaction::begin(root) {
         Ok(guard) => guard,
-        Err(failure) => {
-            return prepare(
-                error_response(profile, None, request_charge, failure, ledger),
-                None,
-                None,
-                ledger,
-            )
-        }
+        Err(failure) => return prepare(error_response(None, request_charge, failure), None, None),
     };
     let tree = match crate::source::load_for_protocol(
         root,
         &Limits::default(),
-        limits.source_bytes,
-        limits.source_units,
+        policy.source_bytes,
+        crate::source::FOUNDATION_MAX_SOURCE_UNITS,
     ) {
         Ok(tree) => tree,
         Err(failure) => {
@@ -55,64 +45,28 @@ pub(crate) fn execute_request_with_ledger(
                     error: Box::new(error(ProtocolErrorCode::SourceLoad, failure.render_human())),
                     diagnostic,
                 },
-                ..base_response(profile, None, request_charge, ledger)
+                ..base_response(None, request_charge)
             };
-            return prepare(response, None, guard, ledger);
+            return prepare(response, None, guard);
         }
     };
     if let Err(message) = operations::holes::validate::source_holes(&tree) {
         let response = error_response(
-            profile,
             Some(tree.revision().to_hex()),
             request_charge,
             error(ProtocolErrorCode::ValidationFailed, message),
-            ledger,
         );
-        return prepare(response, None, guard, ledger);
+        return prepare(response, None, guard);
     }
     let mut charges = match super::charges::measure(&tree, request_bytes, &request.operation) {
         Ok(charges) => charges,
         Err(failure) => {
-            let response = error_response(
-                profile,
-                Some(tree.revision().to_hex()),
-                request_charge,
-                failure,
-                ledger,
-            );
-            return prepare(response, None, guard, ledger);
+            let response = error_response(Some(tree.revision().to_hex()), request_charge, failure);
+            return prepare(response, None, guard);
         }
     };
-    if let Err(failure) = reserve_tree(&tree, &charges, ledger) {
-        return prepare(
-            error_response(
-                profile,
-                Some(tree.revision().to_hex()),
-                charges,
-                budget_error(failure),
-                ledger,
-            ),
-            None,
-            guard,
-            ledger,
-        );
-    }
-    if let Err(failure) = limits.check_charges(&charges) {
-        return prepare(
-            error_response(
-                profile,
-                Some(tree.revision().to_hex()),
-                charges,
-                failure,
-                ledger,
-            ),
-            None,
-            guard,
-            ledger,
-        );
-    }
     let revision = tree.revision().to_hex();
-    match super::dispatch::dispatch(&tree, request.operation, &mut charges, limits, ledger) {
+    match super::dispatch::dispatch(&tree, request.operation, &mut charges) {
         Ok(dispatched) => {
             let response_revision = match &dispatched.result {
                 ResponseResult::ApplyTransaction { transaction } => {
@@ -122,9 +76,9 @@ pub(crate) fn execute_request_with_ledger(
             };
             let response = Response {
                 result: dispatched.result,
-                ..base_response(profile, Some(response_revision), charges, ledger)
+                ..base_response(Some(response_revision), charges)
             };
-            prepare(response, dispatched.publication, guard, ledger)
+            prepare(response, dispatched.publication, guard)
         }
         Err(failure) => {
             let diagnostic = failure.diagnostic.as_deref().cloned().or_else(|| {
@@ -139,44 +93,14 @@ pub(crate) fn execute_request_with_ledger(
                     )
                 })
             });
-            let mut response = error_response(profile, Some(revision), charges, failure, ledger);
+            let mut response = error_response(Some(revision), charges, failure);
             if let ResponseResult::Error {
                 diagnostic: slot, ..
             } = &mut response.result
             {
                 *slot = diagnostic.map(Box::new);
             }
-            prepare(response, None, guard, ledger)
+            prepare(response, None, guard)
         }
     }
-}
-
-#[allow(
-    clippy::result_large_err,
-    reason = "tree preflight preserves the fixed nonallocating budget prefix"
-)]
-fn reserve_tree(
-    tree: &crate::source::ValidatedSourceTree,
-    charges: &Charges,
-    ledger: &mut BudgetLedger,
-) -> Result<(), lkjscript_core::BudgetError> {
-    for (category, amount) in [
-        (ResourceCategory::SourceBytes, charges.source_bytes),
-        (ResourceCategory::SourceUnits, charges.source_units),
-        (ResourceCategory::SchemaNodes, charges.source_nodes),
-        (ResourceCategory::ValidationWork, charges.work_units),
-    ] {
-        super::budget::reserve(
-            ledger,
-            if category == ResourceCategory::ValidationWork {
-                BudgetAuthority::SchemaValidation
-            } else {
-                BudgetAuthority::SourceLoading
-            },
-            category,
-            amount,
-            BudgetCause::SemanticNode(u64::try_from(tree.nodes().len()).unwrap_or(u64::MAX)),
-        )?;
-    }
-    Ok(())
 }

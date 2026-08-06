@@ -1,4 +1,3 @@
-use lkjscript_core::ResourceProfile;
 use lkjscript_jit::JitConfig;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -13,7 +12,6 @@ pub struct RunOptions {
     pub engine: Engine,
     pub auto_threshold: u64,
     pub auto_enabled: bool,
-    pub resource_profile: ResourceProfile,
     pub file: String,
     pub script_args: Vec<String>,
 }
@@ -23,7 +21,6 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
     let mut engine = Engine::Auto;
     let mut auto_threshold = JitConfig::default().auto_threshold;
     let mut auto_enabled = true;
-    let mut resource_profile = ResourceProfile::default();
     while let Some(argument) = args.get(index).map(String::as_str) {
         match argument {
             "--engine" => {
@@ -54,13 +51,8 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
                 auto_enabled = false;
                 index += 1;
             }
-            "--resource-profile" => {
-                let value = args
-                    .get(index + 1)
-                    .ok_or_else(|| "--resource-profile needs a registered name".to_string())?;
-                resource_profile =
-                    ResourceProfile::named(value).map_err(|error| error.to_string())?;
-                index += 2;
+            unknown if unknown.starts_with("--") => {
+                return Err(format!("unknown run option: {unknown}"));
             }
             _ => break,
         }
@@ -78,7 +70,6 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
         engine,
         auto_threshold,
         auto_enabled,
-        resource_profile,
         file,
         script_args,
     })
@@ -87,7 +78,7 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::{parse_run, Engine, ResourceProfile};
+    use super::{parse_run, Engine};
 
     #[test]
     fn ordinary_run_defaults_to_auto_and_explicit_vm_remains_available() {
@@ -95,7 +86,6 @@ mod tests {
             parse_run(&["run".into(), "main.lkjscript".into()]).expect("parse default run");
         assert_eq!(default.engine, Engine::Auto);
         assert_eq!(default.auto_threshold, 64);
-        assert_eq!(default.resource_profile, ResourceProfile::default());
 
         let explicit_vm = parse_run(&[
             "run".into(),
@@ -115,21 +105,10 @@ mod tests {
         .expect("parse forced optimizing run");
         assert_eq!(optimizing.engine, Engine::OptimizingJit);
 
-        let sandbox = parse_run(&[
-            "run".into(),
-            "--resource-profile".into(),
-            "sandbox".into(),
-            "main.lkjscript".into(),
-        ])
-        .expect("parse resource profile");
-        assert_eq!(
-            sandbox.resource_profile,
-            ResourceProfile::named("sandbox").expect("registered profile")
-        );
         assert!(parse_run(&[
             "run".into(),
             "--resource-profile".into(),
-            "unknown".into(),
+            "sandbox".into(),
             "main.lkjscript".into(),
         ])
         .is_err());

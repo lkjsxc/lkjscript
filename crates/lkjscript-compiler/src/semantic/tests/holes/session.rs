@@ -14,7 +14,6 @@ fn bounded_local_session_serves_current_contract_hole_context() {
     let semantic = serde_json::json!({
         "schema": crate::semantic::SCHEMA,
         "contract": crate::semantic::CONTRACT.to_hex(),
-        "profile": "sandbox",
         "root": root.to_string_lossy(),
         "operation": {
             "kind": "hole-context",
@@ -58,7 +57,4 @@ fn bounded_local_session_serves_current_contract_hole_context() {
             .as_u64()
             .is_some_and(|charge| charge > 0)
     );
-    assert!(response["response"]["session"]["limits"]["session_nodes"]
-        .as_u64()
-        .is_some_and(|limit| limit > 0));
 }

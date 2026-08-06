@@ -109,8 +109,7 @@ fn build_fixture() -> Result<PackageFixture, Box<dyn std::error::Error>> {
          \"public\":[\"src/examples/hello/main.lkjscript\",\"structural/main.lkjscript\"],\
          \"dependencies\":[],\"capabilities\":[\"stdio\"],\
          \"targets\":[{{\"name\":\"hello-main\",\"module\":\"src/examples/hello/main.lkjscript\"}},\
-         {{\"name\":\"nested-return\",\"module\":\"structural/main.lkjscript\"}}],\
-         \"resource_profile\":null}}"
+         {{\"name\":\"nested-return\",\"module\":\"structural/main.lkjscript\"}}]}}"
     );
     std::fs::write(
         root.join(lkjscript_compiler::package::MANIFEST_FILE),

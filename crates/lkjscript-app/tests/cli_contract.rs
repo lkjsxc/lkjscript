@@ -25,6 +25,7 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
     assert!(help.contains("--engine vm|auto|baseline-jit|optimizing-jit"));
     assert!(help.contains("default: auto at 64 function entries"));
     assert!(help.contains("memory inventory [--json]"));
+    assert!(!help.contains("--resource-profile"));
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/optimizing-loop.lkjscript");
@@ -58,16 +59,23 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
         "\"optimization_certificate_bytes_estimate\":",
         "\"optimization_metadata_bytes_estimate\":",
         "\"certificate_bytes_estimate\":",
-        "\"compile_resources\":",
-        "\"schema\":\"lkjscript.resource-profile\"",
-        "\"resource_categories\":",
-        "\"worker_threads\":",
-        "\"scheduler_work\":",
     ] {
         assert!(json.contains(field), "missing metrics field {field}");
     }
     assert!(!json.contains("\"optimization_certificate_bytes\":"));
     assert!(!json.contains("\"optimization_metadata_bytes\":"));
+    assert!(!json.contains("\"compile_resources\":"));
+    assert!(!json.contains("lkjscript.resource-profile"));
+
+    let removed = Command::new(binary)
+        .args(["run", "--resource-profile", "default"])
+        .arg(&fixture)
+        .output()
+        .expect("run removed profile flag");
+    assert!(!removed.status.success());
+    assert!(String::from_utf8(removed.stderr)
+        .expect("removed flag diagnostic is UTF-8")
+        .contains("unknown run option: --resource-profile"));
 }
 
 #[test]

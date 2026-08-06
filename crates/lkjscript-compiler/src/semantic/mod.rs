@@ -1,6 +1,5 @@
 //! Strict one-shot Semantic Source protocol for the current exact contract.
 
-mod budget;
 mod charges;
 mod codec;
 mod dispatch;
@@ -17,8 +16,7 @@ mod tests;
 
 use std::fmt;
 
-use lkjscript_core::{BudgetError, BudgetLedger};
-use schema::{ProtocolError, ProtocolErrorCode};
+use schema::ProtocolError;
 
 pub const SCHEMA: &str = "lkjscript.semantic-source";
 pub const CONTRACT: lkjscript_contracts::ContractDigest =
@@ -28,19 +26,11 @@ pub use codec::MAX_REQUEST_BYTES;
 #[derive(Debug)]
 pub struct SemanticProcessError {
     protocol: ProtocolError,
-    budget: Option<Box<BudgetError>>,
 }
 
 impl SemanticProcessError {
-    fn from_protocol(mut protocol: ProtocolError) -> Self {
-        Self {
-            budget: protocol.budget.take(),
-            protocol,
-        }
-    }
-
-    pub fn budget_error(&self) -> Option<&BudgetError> {
-        self.budget.as_deref()
+    fn from_protocol(protocol: ProtocolError) -> Self {
+        Self { protocol }
     }
 }
 
@@ -55,56 +45,15 @@ impl fmt::Display for SemanticProcessError {
 
 impl std::error::Error for SemanticProcessError {}
 
-/// Encoded current-contract response plus an internal typed budget failure, if any.
-pub struct SemanticExecution {
-    response: Vec<u8>,
-    budget: Option<Box<BudgetError>>,
-}
-
-impl SemanticExecution {
-    pub fn response(&self) -> &[u8] {
-        &self.response
-    }
-
-    pub fn budget_error(&self) -> Option<&BudgetError> {
-        self.budget.as_deref()
-    }
-
-    pub fn into_response(self) -> Vec<u8> {
-        self.response
-    }
-}
-
-/// Decode, execute, and encode one request through one caller-owned ledger.
-pub fn execute_with_ledger(
-    input: &[u8],
-    ledger: &mut BudgetLedger,
-) -> Result<SemanticExecution, SemanticProcessError> {
-    let selected = codec::decode_profile(input).map_err(SemanticProcessError::from_protocol)?;
-    if !budget::profile_matches(selected, ledger) {
-        return Err(SemanticProcessError::from_protocol(codec::error(
-            ProtocolErrorCode::ResourceLimit,
-            "request profile does not match outer-owned ledger profile",
-        )));
-    }
-    let request = codec::decode_request_with_ledger(input, ledger)
-        .map_err(SemanticProcessError::from_protocol)?;
-    let mut outcome = engine::execute_request_with_ledger(request, input.len(), ledger)
+/// Decode, validate, execute, and canonically encode one complete request.
+pub fn execute(input: &[u8]) -> Result<Vec<u8>, SemanticProcessError> {
+    let request = codec::decode_request(input).map_err(SemanticProcessError::from_protocol)?;
+    let mut outcome = engine::execute_request(request, input.len())
         .map_err(SemanticProcessError::from_protocol)?;
     let response =
         codec::encode_prepared(&outcome.prepared).map_err(SemanticProcessError::from_protocol)?;
     publish_outcome(&mut outcome).map_err(SemanticProcessError::from_protocol)?;
-    Ok(SemanticExecution {
-        response,
-        budget: outcome.budget,
-    })
-}
-
-/// Decode, validate, execute, and canonically encode one complete request.
-pub fn execute(input: &[u8]) -> Result<Vec<u8>, SemanticProcessError> {
-    let selected = codec::decode_profile(input).map_err(SemanticProcessError::from_protocol)?;
-    let mut ledger = BudgetLedger::new(selected.core());
-    execute_with_ledger(input, &mut ledger).map(SemanticExecution::into_response)
+    Ok(response)
 }
 
 pub(crate) fn publish_outcome(outcome: &mut engine::EngineOutcome) -> Result<(), ProtocolError> {

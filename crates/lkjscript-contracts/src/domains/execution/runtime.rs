@@ -97,7 +97,7 @@ pub(crate) fn metrics() -> ContractDescriptor {
             .fact(fact(
                 "compile",
                 "compile",
-                "phase timing and exact resource facts",
+                "phase timing and observed source-file count",
             ))
             .fact(fact(
                 "engines",

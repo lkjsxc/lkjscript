@@ -1,5 +1,3 @@
-use lkjscript_core::{BudgetCause, ResourceCategory};
-
 use super::schema::{
     ProcessCode, SessionError, SessionErrorCode, SessionProcessError, SessionResponse,
     SessionResult,
@@ -52,27 +50,6 @@ impl SemanticSession {
         if !self.output_fits(measured) {
             return Ok(None);
         }
-        let total = u64::try_from(measured)
-            .ok()
-            .and_then(|bytes| bytes.checked_add(8))
-            .ok_or_else(|| {
-                SessionProcessError::new(
-                    ProcessCode::LengthOverflow,
-                    "session output byte overflow",
-                )
-            })?;
-        if let Some(ledger) = self.ledger.as_mut() {
-            if super::reserve_session(
-                ledger,
-                ResourceCategory::SemanticSessionOutputBytes,
-                total,
-                BudgetCause::ProtocolFrame(total),
-            )
-            .is_err()
-            {
-                return Ok(None);
-            }
-        }
         let mut encoded = Vec::new();
         encoded.try_reserve_exact(measured).map_err(|error| {
             SessionProcessError::new(
@@ -99,10 +76,7 @@ impl SemanticSession {
         if payload > self.frame_output_limit() {
             return false;
         }
-        let limit = self.pinned.as_ref().map_or(
-            super::limits::MAX_SESSION_CUMULATIVE_OUTPUT_BYTES,
-            |pinned| pinned.state.limits.cumulative_output_bytes,
-        );
+        let limit = super::limits::MAX_SESSION_CUMULATIVE_OUTPUT_BYTES;
         self.output_bytes
             .checked_add(total)
             .is_some_and(|next| next <= limit)

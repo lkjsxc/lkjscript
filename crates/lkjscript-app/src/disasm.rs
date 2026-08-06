@@ -1,29 +1,22 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use lkjscript_compiler::compile_path_with_profile;
-use lkjscript_core::{
-    DecodedInstruction, FunctionProto, Limits, Op, ResourceProfile, ValidatedChunk,
-};
+use lkjscript_compiler::compile_path;
+use lkjscript_core::{DecodedInstruction, FunctionProto, Limits, Op, ValidatedChunk};
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
-    let (profile, file) = request(args)?;
+    let file = request(args)?;
     let source = PathBuf::from(file);
     lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
-    let program = compile_path_with_profile(&source, &Limits::default(), profile)
-        .map_err(|error| error.to_string())?;
+    let program = compile_path(&source, &Limits::default()).map_err(|error| error.to_string())?;
     disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)
 }
 
-fn request(args: &[String]) -> Result<(ResourceProfile, &str), String> {
+fn request(args: &[String]) -> Result<&str, String> {
     match args {
-        [command, file] if command == "disasm" => Ok((ResourceProfile::default(), file)),
-        [command, flag, name, file] if command == "disasm" && flag == "--resource-profile" => {
-            let profile = ResourceProfile::named(name).map_err(|error| error.to_string())?;
-            Ok((profile, file))
-        }
-        _ => Err("usage: disasm [--resource-profile NAME] <file.lkjscript>".to_string()),
+        [command, file] if command == "disasm" => Ok(file),
+        _ => Err("usage: disasm <file.lkjscript>".to_string()),
     }
 }
 
@@ -137,19 +130,12 @@ mod tests {
     use super::{operand_annotation, product_field, request};
 
     #[test]
-    fn resource_profile_selection_is_strict() {
+    fn removed_resource_profile_flag_is_rejected() {
         assert!(request(&["disasm".into(), "main.lkjscript".into()]).is_ok());
         assert!(request(&[
             "disasm".into(),
             "--resource-profile".into(),
             "sandbox".into(),
-            "main.lkjscript".into(),
-        ])
-        .is_ok());
-        assert!(request(&[
-            "disasm".into(),
-            "--resource-profile".into(),
-            "unknown".into(),
             "main.lkjscript".into(),
         ])
         .is_err());

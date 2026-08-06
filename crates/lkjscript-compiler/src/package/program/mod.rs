@@ -10,8 +10,8 @@ use lkjscript_contracts::{
     PackageProvenanceKind, PreparedContractDigests, PreparedProgramDescriptor,
 };
 use lkjscript_core::{
-    bind_prepared_identity as bind_bytecode, validated_bytecode_identity, Error,
-    ResourceProfileIdentity, Result, ValidatedChunk, ValidationLimits,
+    bind_prepared_identity as bind_bytecode, validated_bytecode_identity, Error, Result,
+    ValidatedChunk, ValidationLimits,
 };
 use lkjscript_ir::{
     bind_prepared_identity as bind_ssa, specialize_native_transport, verified_program_identity,
@@ -24,7 +24,6 @@ pub(crate) fn bind(
     ssa: VerifiedProgram,
     bytecode: ValidatedChunk,
     memory_plan: &HirMemoryPlan,
-    profile: ResourceProfileIdentity,
     provenance: PreparationProvenance,
     limits: &ValidationLimits,
 ) -> Result<(PreparedProgram, VerifiedProgram, ValidatedChunk)> {
@@ -51,7 +50,6 @@ pub(crate) fn bind(
         native_lowerable_ssa,
         validated_bytecode,
         contracts: contract_digests()?,
-        resource_profile: profile_digest(profile),
     };
     let identity = descriptor
         .identity()
@@ -64,7 +62,6 @@ pub(crate) fn bind(
         &ssa,
         &bytecode,
         memory_plan,
-        profile,
         &provenance,
     )?;
     Ok((
@@ -152,18 +149,6 @@ fn contract_digests() -> Result<PreparedContractDigests> {
         runtime_control,
         process_outcome_codec: lkjscript_contracts::sha256(&codec),
     })
-}
-
-fn profile_digest(value: ResourceProfileIdentity) -> [u8; 32] {
-    let mut bytes = Vec::from(b"lkjscript.resource-profile-identity".as_slice());
-    bytes.extend_from_slice(value.schema.as_bytes());
-    bytes.extend_from_slice(&value.contract.as_bytes());
-    bytes.extend_from_slice(value.name.as_str().as_bytes());
-    bytes.extend_from_slice(&value.resource_categories.as_bytes());
-    bytes.extend_from_slice(&value.implementation_maxima_sha256);
-    bytes.extend_from_slice(&value.ceilings_sha256);
-    bytes.extend_from_slice(&value.host_lowered_ceilings_sha256.unwrap_or([0; 32]));
-    lkjscript_contracts::sha256(&bytes)
 }
 
 fn domain_hash(domain: &[u8], value: &[u8]) -> [u8; 32] {

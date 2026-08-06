@@ -2,7 +2,6 @@
 //! and validated reference bytecode.
 
 mod analyze;
-mod budget;
 mod codegen;
 mod effects;
 mod hir;
@@ -29,27 +28,15 @@ pub use memory_plan::{
 };
 pub use package::program::PreparedProgram;
 
-pub use lkjscript_core::{
-    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
-    BudgetPrefix, BudgetRejectedEvent, BudgetScope, InvalidCeiling, Reservation, ReservationId,
-    ReservationJournalRecord, ReservationState, ResourceCategory, ResourceCeilings,
-    ResourceDiagnostic, ResourceProfile, ResourceProfileIdentity, ResourceProfileName,
-    ResourceUsage, UnknownResourceProfile, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
-    RESOURCE_PROFILE_SCHEMA,
-};
 pub use pipeline::{
-    compile_path, compile_path_with_ledger, compile_path_with_metrics,
-    compile_path_with_metrics_and_ledger, compile_path_with_profile,
-    compile_path_with_profile_and_metrics, compile_path_with_sources,
-    compile_path_with_sources_and_ledger, compile_path_with_sources_and_profile, compile_source,
-    compile_source_with_ledger, compile_source_with_profile, validate_source,
-    validate_source_with_ledger, validate_source_with_profile,
+    compile_path, compile_path_with_metrics, compile_path_with_sources, compile_source,
+    validate_source,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 
-/// Monotonic direct phase timings and compiler-ledger totals at completion.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Monotonic direct phase timings and observed source-file count.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CompileMetrics {
     pub total: Duration,
     pub source_loading: Duration,
@@ -62,29 +49,6 @@ pub struct CompileMetrics {
     pub bytecode_lowering: Duration,
     pub bytecode_validation: Duration,
     pub source_files: usize,
-    pub profile: ResourceProfileIdentity,
-    pub resources: ResourceUsage,
-}
-
-impl Default for CompileMetrics {
-    fn default() -> Self {
-        let profile = ResourceProfile::default().identity();
-        Self {
-            total: Duration::default(),
-            source_loading: Duration::default(),
-            parsing: Duration::default(),
-            hir_analysis: Duration::default(),
-            effect_analysis: Duration::default(),
-            ssa_construction: Duration::default(),
-            ssa_verification: Duration::default(),
-            normalization: Duration::default(),
-            bytecode_lowering: Duration::default(),
-            bytecode_validation: Duration::default(),
-            source_files: 0,
-            profile,
-            resources: ResourceUsage::default(),
-        }
-    }
 }
 
 /// One compiled semantic program shared by the reference VM and later backends.
@@ -96,7 +60,6 @@ pub struct ExecutableProgram {
     memory_plan: HirMemoryPlan,
     memory_inventory: SsaMemoryInventory,
     bytecode_links: BytecodeLinkMetadata,
-    profile: ResourceProfileIdentity,
 }
 
 impl ExecutableProgram {
@@ -126,10 +89,6 @@ impl ExecutableProgram {
 
     pub fn bytecode_links(&self) -> &BytecodeLinkMetadata {
         &self.bytecode_links
-    }
-
-    pub const fn profile(&self) -> ResourceProfileIdentity {
-        self.profile
     }
 
     pub fn into_bytecode(self) -> ValidatedChunk {

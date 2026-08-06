@@ -1,8 +1,6 @@
 use std::io::Write;
 
-use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
-
-use crate::semantic::codec::{budget_error, error};
+use crate::semantic::codec::error;
 use crate::semantic::schema::{ProtocolError, ProtocolErrorCode, Response};
 
 pub(crate) struct PreparedResponse {
@@ -10,11 +8,8 @@ pub(crate) struct PreparedResponse {
     pub bytes: usize,
 }
 
-pub(crate) fn prepare_response(
-    mut response: Response,
-    ledger: &mut BudgetLedger,
-) -> Result<PreparedResponse, ProtocolError> {
-    let limit = crate::semantic::charges::ProtocolLimits::for_core(ledger.profile()).response_bytes;
+pub(crate) fn prepare_response(mut response: Response) -> Result<PreparedResponse, ProtocolError> {
+    let limit = crate::semantic::charges::BoundaryPolicy::default().response_bytes;
     for _ in 0..4 {
         let measured = count(&response, limit)?;
         let measured_u64 = u64::try_from(measured).map_err(|_| {
@@ -24,14 +19,6 @@ pub(crate) fn prepare_response(
             )
         })?;
         if response.charges.output_bytes == measured_u64 {
-            crate::semantic::budget::reserve(
-                ledger,
-                BudgetAuthority::ProtocolEncode,
-                ResourceCategory::ProtocolResponseBytes,
-                measured_u64,
-                BudgetCause::ProtocolFrame(measured_u64),
-            )
-            .map_err(budget_error)?;
             return Ok(PreparedResponse {
                 response,
                 bytes: measured,

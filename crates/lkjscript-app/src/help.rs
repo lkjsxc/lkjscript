@@ -5,7 +5,7 @@ pub fn print() {
     println!(
         "  lkjscript run [--engine vm|auto|baseline-jit|optimizing-jit] [--auto-jit-threshold N]"
     );
-    println!("                 [--disable-auto-jit] [--resource-profile NAME]");
+    println!("                 [--disable-auto-jit]");
     println!("                 <file.lkjscript> [--] [script-args...]");
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
     println!("  lkjscript describe [--json]");
@@ -17,7 +17,7 @@ pub fn print() {
     println!("  lkjscript runtime host-scheduler [--json]");
     println!("  lkjscript runtime plan [--json] [--parallelism N] [--tasks N]");
     println!("                           [--policy NAME] [--affinity MODE]");
-    println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
+    println!("  lkjscript disasm <file.lkjscript>");
     println!("  lkjscript semantic describe");
     println!("  lkjscript semantic [-] < request.json");
     println!("  lkjscript semantic serve --stdio");

@@ -122,7 +122,7 @@ fn current_registry_is_closed_deterministic_and_dependency_checked() {
     );
     let second = second_result.unwrap_or_default();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 22);
+    assert_eq!(first.len(), 20);
     assert!(first.get(LANGUAGE).is_some());
     assert!(first.get(SEMANTIC_RESOURCE_PLANE).is_some());
     assert!(first.get(MEMORY_OBLIGATIONS).is_some());
@@ -143,8 +143,6 @@ fn compiled_source_digests_match_descriptors() {
         (MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST),
         (METRICS, METRICS_DIGEST),
         (NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST),
-        (RESOURCE_CATEGORIES, RESOURCE_CATEGORIES_DIGEST),
-        (RESOURCE_PROFILES, RESOURCE_PROFILES_DIGEST),
         (RUNTIME_CALLS, RUNTIME_CALLS_DIGEST),
         (SEMANTIC_RESOURCE_PLANE, SEMANTIC_RESOURCE_PLANE_DIGEST),
         (SEMANTIC_SOURCE, SEMANTIC_SOURCE_DIGEST),

@@ -1,7 +1,5 @@
 use super::*;
-use crate::semantic::session::{
-    MAX_SESSION_LIFETIME_FUEL, MAX_SESSION_REQUESTS, MAX_SESSION_REVISION,
-};
+use crate::semantic::session::MAX_SESSION_REQUESTS;
 
 fn write_source(root: &std::path::Path) {
     std::fs::write(
@@ -15,19 +13,19 @@ fn write_source(root: &std::path::Path) {
     .expect("write session source");
 }
 
-fn snapshot_request(root: &std::path::Path, profile: &str) -> String {
-    execute_operation(&semantic_request(root, profile, "{\"kind\":\"snapshot\"}"))
+fn snapshot_request(root: &std::path::Path) -> String {
+    execute_operation(&semantic_request(root, "{\"kind\":\"snapshot\"}"))
 }
 
 #[test]
-fn session_pins_selection_detects_external_change_and_refreshes() {
+fn session_pins_root_detects_external_change_and_refreshes() {
     let directory = case("lifecycle");
     let root = directory.join("main.lkjscript");
     write_source(&root);
     let other_directory = case("other-root");
     let other = other_directory.join("main.lkjscript");
     write_source(&other);
-    let operation = snapshot_request(&root, "default");
+    let operation = snapshot_request(&root);
     let mut session = SemanticSession::new();
     let (_, first) = handle(&mut session, &session_request("first", 0, &operation));
     assert_eq!(first["revision"], 1);
@@ -57,13 +55,7 @@ fn session_pins_selection_detects_external_change_and_refreshes() {
 
     let (_, stale) = handle(&mut session, &session_request("stale", 0, &operation));
     assert_eq!(stale["response"]["error"]["code"], "stale-session-revision");
-    let profile = snapshot_request(&root, "build");
-    let (_, mismatch) = handle(&mut session, &session_request("profile", 1, &profile));
-    assert_eq!(
-        mismatch["response"]["error"]["code"],
-        "pinned-profile-mismatch"
-    );
-    let other_operation = snapshot_request(&other, "default");
+    let other_operation = snapshot_request(&other);
     let (_, mismatch) = handle(&mut session, &session_request("root", 1, &other_operation));
     assert_eq!(
         mismatch["response"]["error"]["code"],
@@ -98,11 +90,11 @@ fn session_pins_selection_detects_external_change_and_refreshes() {
 }
 
 #[test]
-fn request_fuel_and_revision_bounds_return_closed_errors() {
+fn request_count_and_revision_overflow_return_closed_errors() {
     let directory = case("limits");
     let root = directory.join("main.lkjscript");
     write_source(&root);
-    let operation = snapshot_request(&root, "default");
+    let operation = snapshot_request(&root);
     let mut request_session = SemanticSession::new();
     handle(
         &mut request_session,
@@ -115,21 +107,15 @@ fn request_fuel_and_revision_bounds_return_closed_errors() {
     );
     assert_eq!(limited["response"]["error"]["code"], "resource-limit");
 
-    let mut fuel_session = SemanticSession::new();
-    handle(&mut fuel_session, &session_request("first", 0, &operation));
-    fuel_session.lifetime_fuel = MAX_SESSION_LIFETIME_FUEL;
-    let (_, limited) = handle(&mut fuel_session, &session_request("fuel", 1, &operation));
-    assert_eq!(limited["response"]["error"]["code"], "resource-limit");
-
     let mut revision_session = SemanticSession::new();
     handle(
         &mut revision_session,
         &session_request("first", 0, &operation),
     );
-    revision_session.revision = MAX_SESSION_REVISION;
+    revision_session.revision = u64::MAX;
     let (_, limited) = handle(
         &mut revision_session,
-        &session_request("revision", MAX_SESSION_REVISION, "{\"kind\":\"refresh\"}"),
+        &session_request("revision", u64::MAX, "{\"kind\":\"refresh\"}"),
     );
     assert_eq!(limited["response"]["error"]["code"], "revision-overflow");
 }

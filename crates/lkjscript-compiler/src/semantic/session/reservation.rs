@@ -1,64 +1,41 @@
-use crate::semantic::charges::ProtocolLimits;
-
-use super::limits::MAX_SESSION_RETAINED_METADATA_BYTES;
+use super::limits::{
+    MAX_SESSION_CUMULATIVE_OUTPUT_BYTES, MAX_SESSION_FRAME_BYTES,
+    MAX_SESSION_RETAINED_METADATA_BYTES,
+};
 use super::schema::{SessionError, SessionErrorCode};
 use super::SemanticSession;
 
 impl SemanticSession {
     pub(super) fn reserve_publication(&self) -> Result<(), SessionError> {
-        self.reserve_revision_response()?;
-        let Some(pinned) = self.pinned.as_ref() else {
-            return Err(SessionError::new(
-                SessionErrorCode::NotInitialized,
-                "publication requires an initialized session",
-            ));
-        };
-        let request_work = ProtocolLimits::for_profile(pinned.state.profile).work_units;
-        let remaining = pinned
-            .state
-            .limits
-            .lifetime_fuel
-            .saturating_sub(self.lifetime_fuel);
-        if remaining < request_work {
-            return Err(SessionError::new(
-                SessionErrorCode::ResourceLimit,
-                "insufficient session fuel reserved for atomic publication",
-            ));
-        }
-        Ok(())
+        self.reserve_revision_response()
     }
 
     pub(super) fn reserve_revision_response(&self) -> Result<(), SessionError> {
-        let Some(pinned) = self.pinned.as_ref() else {
+        if self.pinned.is_none() {
             return Err(SessionError::new(
                 SessionErrorCode::NotInitialized,
                 "session is not initialized",
             ));
-        };
-        if self.revision >= pinned.state.limits.maximum_revision {
-            return Err(SessionError::new(
-                SessionErrorCode::RevisionOverflow,
-                "session revision maximum reached",
-            ));
         }
-        let reserve = pinned
-            .state
-            .limits
-            .frame_output_bytes
-            .checked_add(8)
-            .ok_or_else(|| {
-                SessionError::new(
-                    SessionErrorCode::ResourceLimit,
-                    "output reservation overflow",
-                )
-            })?;
+        self.revision.checked_add(1).ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::RevisionOverflow,
+                "session revision overflow",
+            )
+        })?;
+        let reserve = MAX_SESSION_FRAME_BYTES.checked_add(8).ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "output reservation overflow",
+            )
+        })?;
         let next = self.output_bytes.checked_add(reserve).ok_or_else(|| {
             SessionError::new(
                 SessionErrorCode::ResourceLimit,
                 "output reservation overflow",
             )
         })?;
-        if next > pinned.state.limits.cumulative_output_bytes {
+        if next > MAX_SESSION_CUMULATIVE_OUTPUT_BYTES {
             return Err(SessionError::new(
                 SessionErrorCode::ResourceLimit,
                 "insufficient output bytes reserved for revision change",
@@ -71,18 +48,13 @@ impl SemanticSession {
         let Some(pinned) = self.pinned.as_ref() else {
             return Ok(());
         };
-        let limit = pinned
-            .state
-            .limits
-            .retained_metadata_bytes
-            .min(MAX_SESSION_RETAINED_METADATA_BYTES);
         let bytes = pinned
             .metadata_bytes()
             .and_then(|bytes| bytes.checked_add(8));
-        if bytes.is_none_or(|bytes| bytes > limit) {
+        if bytes.is_none_or(|bytes| bytes > MAX_SESSION_RETAINED_METADATA_BYTES) {
             return Err(SessionError::new(
                 SessionErrorCode::ResourceLimit,
-                "session retained metadata limit exceeded",
+                "session retained metadata byte limit exceeded",
             ));
         }
         Ok(())

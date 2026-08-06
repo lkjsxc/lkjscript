@@ -27,12 +27,7 @@ pub(crate) fn package_manifest() -> ContractDescriptor {
                 "capabilities",
                 "sorted subset of eight exact provider authorities",
             ))
-            .fact(fact("targets", "targets", "closed build target set"))
-            .fact(fact(
-                "resource",
-                "resource policy",
-                "optional exact profile name",
-            )),
+            .fact(fact("targets", "targets", "closed build target set")),
     )
 }
 
