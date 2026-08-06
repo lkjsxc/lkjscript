@@ -112,7 +112,9 @@ fn loader_accepts_wide_directories_and_imported_declarations() -> std::io::Resul
     let wide = TempDir::new("wide-entry")?;
     let entry = wide.0.join("main.lkjscript");
     fs::write(&entry, unit_main("unit"))?;
-    for index in 0..32 {
+    // Sixteen unrelated entries plus the source file is exactly one beyond
+    // the former directory-width rejection boundary.
+    for index in 0..16 {
         fs::write(wide.0.join(format!("asset-{index}")), "")?;
     }
     let tree = load(&entry, &Limits::default())
