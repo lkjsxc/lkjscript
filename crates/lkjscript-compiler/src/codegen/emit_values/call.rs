@@ -20,7 +20,7 @@ impl Emitter<'_> {
         match target {
             CallTarget::Direct(function) => {
                 let global = self.global(*function)?;
-                self.proto.emit_op_u16(Op::LoadGlobal, global);
+                self.proto.try_emit_op_u16(Op::LoadGlobal, global)?;
             }
             CallTarget::Indirect(value) => self.load(*value)?,
         }
@@ -58,9 +58,12 @@ impl Emitter<'_> {
             .iter()
             .map(|binding| self.call_witness_binding(instantiation, binding))
             .collect::<Result<Vec<_>>>()?;
+        self.proto
+            .call_witnesses
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode call-witness reservation failed"))?;
         self.proto.call_witnesses.push(lkjscript_core::CallWitnessSite {
-            offset: u32::try_from(self.offset()?)
-                .map_err(|_| Error::msg("call witness offset exceeds u32"))?,
+            offset: self.offset()?,
             callee,
             bindings,
         });

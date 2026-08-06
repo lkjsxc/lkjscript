@@ -192,6 +192,19 @@ fn many_owned_arguments_source(count: usize) -> String {
     lines.join("\n")
 }
 
+fn wide_branch_source(body_updates: usize) -> String {
+    let mut source = String::from(
+        "def/\nname/\nwide-branch\n/name\nfn/\nsig/\ninputs/\nbool\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nflag\nbool\n/params\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n0\nif/\nflag\ndo/\n",
+    );
+    for _ in 0..body_updates {
+        source.push_str("set/\nx\nadd/\nx\n1\n/add\n/set\n");
+    }
+    source.push_str(
+        "x\n/do\n22\n/if\n/var\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nadd/\nwide-branch/\ntrue\n/wide-branch\nwide-branch/\nfalse\n/wide-branch\n/add\n/main\n",
+    );
+    source
+}
+
 fn logical_cleanup_actions(proto: &lkjscript_core::FunctionProto) -> usize {
     let mut lengths = Vec::with_capacity(proto.failure_cleanups.len());
     for node in &proto.failure_cleanups {
@@ -356,6 +369,7 @@ fn assert_many_owned_arguments(count: usize) {
         .find(|proto| proto.arity == count)
         .expect("many-owned function prototype");
     assert_eq!(function.unique_places, count);
+    assert!(program.bytecode().main().code.len() > usize::from(u16::MAX));
     assert!(function.failure_cleanups.iter().any(|node| {
         matches!(
             node.action,
@@ -423,6 +437,30 @@ fn assert_many_owned_arguments(count: usize) {
     );
     assert_eq!(returned_i64(outcome), 7);
 
+    let session = JitSession::new_auto(
+        program.ssa(),
+        program.bytecode_links(),
+        JitConfig {
+            auto_threshold: 1,
+            ..JitConfig::default()
+        },
+    );
+    let (auto_outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert_eq!(returned_i64(auto_outcome), 7);
+    let tier = stats
+        .functions
+        .iter()
+        .find(|item| item.name().ends_with("drop-many-owned"))
+        .expect("many-owned function tier record");
+    assert!(!tier.auto_entry_eligible());
+    assert_eq!(tier.native_entries(), 0);
+    assert!(stats.vm_fallbacks > 0);
+
     let instructions = program.bytecode().main_instructions();
     let call_index = instructions
         .iter()
@@ -452,8 +490,50 @@ fn assert_many_owned_arguments(count: usize) {
 }
 
 #[test]
-fn three_hundred_owned_parameters_and_arguments_publish_and_execute_with_shared_cleanup() {
-    assert_many_owned_arguments(WIDE_COUNT);
+fn one_thousand_twenty_four_owned_parameters_and_arguments_publish_and_execute_with_shared_cleanup()
+{
+    assert_many_owned_arguments(STRESS_COUNT);
+}
+
+#[test]
+fn generated_wide_jump_executes_both_source_branch_paths() {
+    const BODY_UPDATES: usize = 4_000;
+    let program = compile_source(
+        &wide_branch_source(BODY_UPDATES),
+        "generated-wide-jump.lkjscript",
+        &Limits::default(),
+    )
+    .expect("compile and prepare a source branch beyond the former jump boundary");
+    let function = program
+        .bytecode()
+        .protos()
+        .iter()
+        .find(|proto| proto.name.ends_with("wide-branch"))
+        .expect("wide branch function prototype");
+    assert!(
+        function.code.len() > usize::from(u16::MAX),
+        "wide branch emitted {} code bytes",
+        function.code.len()
+    );
+    let instructions = program
+        .bytecode()
+        .proto_instructions(0)
+        .expect("wide branch instructions");
+    assert!(instructions.iter().any(|instruction| {
+        matches!(instruction.op(), Op::Jump | Op::JumpIfFalse)
+            && instruction
+                .operand()
+                .index()
+                .is_some_and(|target| target > usize::from(u16::MAX))
+    }));
+    assert_eq!(
+        returned_i64(run_chunk(
+            program.bytecode(),
+            &ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        )),
+        i64::try_from(BODY_UPDATES).expect("test update count fits i64") + 22,
+    );
 }
 
 #[test]

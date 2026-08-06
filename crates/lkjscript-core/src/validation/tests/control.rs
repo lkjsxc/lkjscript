@@ -42,22 +42,15 @@ fn cfg_stack_local_return_and_fallthrough_are_checked() {
     assert!(error(return_shape).contains("exactly one"));
 
     let mut join = unit_chunk();
-    join.main.code = vec![
-        Op::True as u8,
-        Op::JumpIfFalse as u8,
-        9,
-        0,
-        Op::Unit as u8,
-        Op::Unit as u8,
-        Op::Jump as u8,
-        13,
-        0,
-        Op::Unit as u8,
-        Op::Jump as u8,
-        13,
-        0,
-        Op::Return as u8,
-    ];
+    join.main.code.clear();
+    join.main.emit(Op::True);
+    join.main.emit_op_u64(Op::JumpIfFalse, 21);
+    join.main.emit(Op::Unit);
+    join.main.emit(Op::Unit);
+    join.main.emit_op_u64(Op::Jump, 31);
+    join.main.emit(Op::Unit);
+    join.main.emit_op_u64(Op::Jump, 31);
+    join.main.emit(Op::Return);
     assert!(error(join).contains("stack depth"));
 }
 

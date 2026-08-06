@@ -111,16 +111,7 @@ fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
 }
 
 #[test]
-fn configured_code_table_metadata_and_constant_limits_are_enforced() {
-    let code_limits = ValidationLimits {
-        max_function_code_bytes: 1,
-        ..ValidationLimits::default()
-    };
-    assert!(validate_chunk(unit_chunk(), &code_limits)
-        .expect_err("code limit")
-        .to_string()
-        .contains("code bytes"));
-
+fn configured_total_byte_table_metadata_and_constant_limits_are_enforced() {
     let encoded_limits = ValidationLimits {
         max_encoded_bytes: 1,
         ..ValidationLimits::default()

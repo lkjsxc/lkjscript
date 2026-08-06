@@ -19,8 +19,7 @@ impl Emitter<'_> {
     pub(in crate::codegen) fn emit_index(&mut self, op: Op, index: usize) -> Result<()> {
         let index = u64::try_from(index)
             .map_err(|_| Error::msg("bytecode index exceeds u64"))?;
-        self.proto.emit_op_u64(op, index);
-        Ok(())
+        self.proto.try_emit_op_u64(op, index)
     }
 
     pub(in crate::codegen) fn emit_place_local(
@@ -32,7 +31,6 @@ impl Emitter<'_> {
         let place = u64::from(place.raw());
         let local = u64::try_from(self.slot(value)?)
             .map_err(|_| Error::msg("bytecode local index exceeds u64"))?;
-        self.proto.emit_op_u64_pair(op, place, local);
-        Ok(())
+        self.proto.try_emit_op_u64_pair(op, place, local)
     }
 }

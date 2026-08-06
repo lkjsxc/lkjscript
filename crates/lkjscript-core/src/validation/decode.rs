@@ -2,21 +2,9 @@ use std::collections::HashSet;
 
 use crate::{
     Chunk, DecodedInstruction, DecodedOperand, Error, FunctionProto, Op, OperandLayout, Result,
-    ValidationLimits, MAX_FUNCTION_CODE_BYTES,
 };
 
-pub(super) fn decode_function(
-    proto: &FunctionProto,
-    limits: &ValidationLimits,
-) -> Result<Vec<DecodedInstruction>> {
-    let code_limit = limits.max_function_code_bytes.min(MAX_FUNCTION_CODE_BYTES);
-    if proto.code.len() > code_limit {
-        return Err(Error::msg(format!(
-            "function {} has {} code bytes, limit {code_limit}",
-            proto.name,
-            proto.code.len()
-        )));
-    }
+pub(super) fn decode_function(proto: &FunctionProto) -> Result<Vec<DecodedInstruction>> {
     if proto.code.is_empty() {
         return Err(Error::msg(format!(
             "function {} has no bytecode",

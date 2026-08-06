@@ -59,7 +59,10 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
         chunk.global_prototypes.push(Some(prototype));
     }
 
-    let mut links = Vec::with_capacity(program.functions.len());
+    let mut links = Vec::new();
+    links
+        .try_reserve_exact(program.functions.len())
+        .map_err(|_| Error::host("bytecode function-link reservation failed"))?;
     for function in &program.functions {
         if function.id == program.main {
             continue;
@@ -93,10 +96,10 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
             .copied()
             .ok_or_else(|| Error::msg("SSA closure installation has no global mapping"))?;
         let constant = add_constant(&mut chunk, BytecodeConstant::Proto(prototype))?;
-        chunk.main.emit_op_u16(Op::LoadConst, constant);
-        chunk.main.emit_op_u16(Op::MakeClosure, 0);
-        chunk.main.emit_op_u16(Op::StoreGlobal, global);
-        chunk.main.emit(Op::Pop);
+        chunk.main.try_emit_op_u16(Op::LoadConst, constant)?;
+        chunk.main.try_emit_op_u16(Op::MakeClosure, 0)?;
+        chunk.main.try_emit_op_u16(Op::StoreGlobal, global)?;
+        chunk.main.try_emit(Op::Pop)?;
     }
 
     let main = program
@@ -141,6 +144,7 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     chunk.main.unique_places = main_proto.unique_places;
     chunk.main.failure_cleanups = main_proto.failure_cleanups;
     chunk.main.failure_cleanup_ranges = main_proto.failure_cleanup_ranges;
+    chunk.main.try_reserve_code(main_proto.code.len())?;
     chunk.main.code.extend(main_proto.code);
     links.push(main_link);
     links.sort_by_key(|link| link.function);

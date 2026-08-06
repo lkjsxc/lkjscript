@@ -18,7 +18,7 @@ fn validate_resource_arguments(
                     kind: actual,
                     owner,
                 },
-            ) if expected == actual && (!owning || owner != 0) => {
+            ) if expected == actual && (!owning || !owner.is_none()) => {
                 if owning {
                     if owners.contains(&owner) {
                         return Err(instruction_error(
@@ -69,7 +69,7 @@ fn consume_resource_arguments(
         let Kind::Resource { owner, .. } = argument else {
             continue;
         };
-        if *owner == 0 {
+        if owner.is_none() {
             continue;
         }
         for local in &mut state.locals {

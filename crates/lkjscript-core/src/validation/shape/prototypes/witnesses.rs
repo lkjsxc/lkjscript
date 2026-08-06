@@ -33,7 +33,7 @@ pub(super) fn validate(proto: &FunctionProto, category: &str) -> Result<()> {
     let mut prior_offset = None;
     for site in &proto.call_witnesses {
         let offset = usize::try_from(site.offset)
-            .map_err(|_| Error::msg("bytecode call witness offset exceeds usize"))?;
+            .map_err(|_| Error::msg("bytecode call witness offset exceeds host usize"))?;
         if prior_offset.is_some_and(|prior| prior >= site.offset)
             || proto.code.get(offset).copied() != Some(crate::Op::Call as u8)
             || site.bindings.len() > crate::MAX_MEMORY_WITNESS_PARAMETERS

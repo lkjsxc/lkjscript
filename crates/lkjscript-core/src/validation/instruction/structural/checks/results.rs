@@ -45,22 +45,12 @@ fn exact_copy_result(expected: crate::StructuralType) -> Option<Kind> {
     }
 }
 
-fn fresh_identity(
-    proto: &FunctionProto,
+const fn fresh_identity(
+    _proto: &FunctionProto,
     instruction: DecodedInstruction,
-    increment: u32,
-) -> Result<u32> {
-    u32::try_from(instruction.offset())
-        .ok()
-        .and_then(|offset| offset.checked_add(increment))
-        .ok_or_else(|| {
-            instruction_error(
-                proto,
-                instruction.op(),
-                instruction.offset(),
-                "structural owner identity overflow",
-            )
-        })
+    sequence: u8,
+) -> Result<OwnerIdentity> {
+    Ok(OwnerIdentity::instruction(instruction.offset(), sequence))
 }
 
 fn fail<T>(proto: &FunctionProto, instruction: DecodedInstruction, message: &str) -> Result<T> {

@@ -1,4 +1,4 @@
-use super::{Kind, State};
+use super::{Kind, OwnerIdentity, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
 mod owners;

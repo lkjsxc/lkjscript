@@ -86,10 +86,10 @@ impl Emitter<'_> {
             InstructionKind::Move { value, .. } => self.load(*value)?,
             InstructionKind::PlaceInit { .. }
             | InstructionKind::PlaceEnd { .. }
-            | InstructionKind::Drop { .. } => self.proto.emit(Op::Unit),
+            | InstructionKind::Drop { .. } => self.proto.try_emit(Op::Unit)?,
             InstructionKind::FunctionRef(function) => {
                 let global = self.global(*function)?;
-                self.proto.emit_op_u16(Op::LoadGlobal, global);
+                self.proto.try_emit_op_u16(Op::LoadGlobal, global)?;
             }
             InstructionKind::Runtime {
                 operation,
@@ -104,9 +104,9 @@ impl Emitter<'_> {
                     let representation =
                         structural_owner_representation(self.chunk, &instruction.ty)
                             .map_or(u16::MAX, |representation| representation.raw());
-                    self.proto.emit_op_u16(opcode, representation);
+                    self.proto.try_emit_op_u16(opcode, representation)?;
                 } else {
-                    self.proto.emit(opcode);
+                    self.proto.try_emit(opcode)?;
                 }
             }
             InstructionKind::F64FromI64Exact { value }

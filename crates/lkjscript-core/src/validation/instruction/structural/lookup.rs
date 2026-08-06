@@ -49,7 +49,11 @@ fn local_owner(
     slot: usize,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
-) -> Result<(StructuralRepresentationId, u32, Option<crate::VariantId>)> {
+) -> Result<(
+    StructuralRepresentationId,
+    OwnerIdentity,
+    Option<crate::VariantId>,
+)> {
     match state.locals.get(slot).copied().flatten() {
         Some(Kind::StructuralOwner {
             representation,
@@ -63,7 +67,7 @@ fn local_owner(
 fn require_place_owner(
     state: &State,
     place: usize,
-    owner: u32,
+    owner: OwnerIdentity,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {

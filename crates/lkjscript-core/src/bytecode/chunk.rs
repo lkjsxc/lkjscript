@@ -3,7 +3,7 @@
 mod failure;
 pub use failure::*;
 
-use crate::opcode::Op;
+use crate::{opcode::Op, Error, Result};
 
 include!("chunk/product.rs");
 
@@ -194,17 +194,41 @@ impl FunctionProto {
         self.emit_u64(second);
     }
 
+    pub fn try_reserve_code(&mut self, additional: usize) -> Result<()> {
+        self.code
+            .try_reserve(additional)
+            .map_err(|_| Error::host("bytecode function-code reservation failed"))
+    }
+
+    pub fn try_emit(&mut self, op: Op) -> Result<()> {
+        self.try_reserve_code(1)?;
+        self.emit(op);
+        Ok(())
+    }
+
+    pub fn try_emit_op_u16(&mut self, op: Op, n: u16) -> Result<()> {
+        self.try_reserve_code(3)?;
+        self.emit_op_u16(op, n);
+        Ok(())
+    }
+
+    pub fn try_emit_op_u64(&mut self, op: Op, n: u64) -> Result<()> {
+        self.try_reserve_code(9)?;
+        self.emit_op_u64(op, n);
+        Ok(())
+    }
+
+    pub fn try_emit_op_u64_pair(&mut self, op: Op, first: u64, second: u64) -> Result<()> {
+        self.try_reserve_code(17)?;
+        self.emit_op_u64_pair(op, first, second);
+        Ok(())
+    }
+
     pub fn len(&self) -> usize {
         self.code.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.code.is_empty()
-    }
-
-    pub fn patch_u16(&mut self, at: usize, n: u16) {
-        let bytes = n.to_le_bytes();
-        self.code[at] = bytes[0];
-        self.code[at + 1] = bytes[1];
     }
 }

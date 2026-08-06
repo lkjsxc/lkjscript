@@ -1,5 +1,5 @@
 use super::support::*;
-use super::{Kind, State};
+use super::{Kind, OwnerIdentity, State};
 use crate::validation::UniquePlaceState;
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
@@ -29,10 +29,7 @@ fn new_owner(
     state: &mut State,
 ) -> Result<()> {
     expect_pop(state, Kind::I64, proto, instruction)?;
-    let owner = u32::try_from(instruction.offset())
-        .ok()
-        .and_then(|offset| offset.checked_add(1))
-        .ok_or_else(|| error(proto, instruction, "byte-vector owner identity overflow"))?;
+    let owner = OwnerIdentity::instruction(instruction.offset(), 1);
     state.stack.push(Kind::ByteVector(owner));
     Ok(())
 }

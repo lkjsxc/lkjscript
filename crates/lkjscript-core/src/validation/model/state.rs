@@ -1,3 +1,62 @@
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum ParameterOwnerKind {
+    Resource,
+    Unique,
+    BorrowedUnique,
+    Structural,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum OwnerIdentity {
+    None,
+    Parameter {
+        index: usize,
+        kind: ParameterOwnerKind,
+    },
+    Instruction {
+        offset: usize,
+        sequence: u8,
+    },
+    Merged,
+}
+
+impl OwnerIdentity {
+    pub(super) const fn parameter(index: usize, kind: ParameterOwnerKind) -> Self {
+        Self::Parameter { index, kind }
+    }
+
+    pub(super) const fn instruction(offset: usize, sequence: u8) -> Self {
+        Self::Instruction { offset, sequence }
+    }
+
+    pub(super) const fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub(super) const fn is_borrowed_parameter(self) -> bool {
+        matches!(
+            self,
+            Self::Parameter {
+                kind: ParameterOwnerKind::BorrowedUnique,
+                ..
+            }
+        )
+    }
+}
+
+impl std::fmt::Display for OwnerIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => formatter.write_str("none"),
+            Self::Parameter { index, kind } => write!(formatter, "parameter {kind:?}:{index}"),
+            Self::Instruction { offset, sequence } => {
+                write!(formatter, "instruction {offset}:{sequence}")
+            }
+            Self::Merged => formatter.write_str("merged"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Kind {
     Any,
@@ -11,14 +70,14 @@ pub(super) enum Kind {
     Closure(u32),
     List,
     StaticBytes,
-    Bytes(u32),
+    Bytes(OwnerIdentity),
     BytesBorrow {
-        owner: u32,
+        owner: OwnerIdentity,
         used: bool,
     },
-    ByteVector(u32),
+    ByteVector(OwnerIdentity),
     ByteSlice {
-        owner: u32,
+        owner: OwnerIdentity,
         mutable: bool,
         used: bool,
     },
@@ -26,34 +85,34 @@ pub(super) enum Kind {
     Capability(crate::CapabilityKind),
     Resource {
         kind: crate::ResourceKind,
-        owner: u32,
+        owner: OwnerIdentity,
     },
     ResourceResult {
         kind: crate::ResourceKind,
-        owner: u32,
+        owner: OwnerIdentity,
     },
     Product(ProductId),
     RegionProduct(ProductId),
     Enum(EnumId, Option<VariantId>),
     StructuralOwner {
         representation: crate::StructuralRepresentationId,
-        owner: u32,
+        owner: OwnerIdentity,
         active_variant: Option<crate::VariantId>,
     },
     StructuralOwnerRef {
         representation: crate::StructuralRepresentationId,
-        owner: u32,
+        owner: OwnerIdentity,
         active_variant: Option<crate::VariantId>,
     },
     StructuralView {
         representation: crate::StructuralRepresentationId,
-        owner: u32,
+        owner: OwnerIdentity,
         mutable: bool,
         used: bool,
     },
     StructuralDestination {
         destination: crate::StructuralDestinationId,
-        identity: u32,
+        identity: OwnerIdentity,
     },
 }
 
@@ -142,8 +201,8 @@ impl std::fmt::Display for Kind {
 pub(super) enum UniquePlaceState {
     Inactive,
     Active {
-        owner: Option<u32>,
-        transferred: Option<u32>,
+        owner: Option<OwnerIdentity>,
+        transferred: Option<OwnerIdentity>,
     },
 }
 
@@ -159,5 +218,6 @@ pub(super) struct State {
     pub(super) locals: Vec<Option<Kind>>,
     pub(super) globals: Vec<Option<Kind>>,
     pub(super) unique_places: Vec<UniquePlaceState>,
-    pub(super) structural_destinations: std::collections::BTreeMap<u32, StructuralDestinationState>,
+    pub(super) structural_destinations:
+        std::collections::BTreeMap<OwnerIdentity, StructuralDestinationState>,
 }

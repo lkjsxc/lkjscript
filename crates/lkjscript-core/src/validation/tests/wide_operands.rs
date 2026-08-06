@@ -103,10 +103,14 @@ fn high_local_call_and_place_operands_validate_in_range_and_reject_equal_count()
 }
 
 #[test]
-fn truncated_wide_operands_and_jumps_into_wide_bytes_fail_closed() {
+fn truncated_wide_operands_and_invalid_wide_jumps_fail_closed() {
     let mut truncated_index = unit_chunk();
     truncated_index.main.code = vec![Op::LoadLocal as u8, 0, 0, 0, 0];
     assert!(error(truncated_index).contains("truncated LoadLocal operand"));
+
+    let mut truncated_jump = unit_chunk();
+    truncated_jump.main.code = vec![Op::Jump as u8, 0, 0, 0, 0];
+    assert!(error(truncated_jump).contains("truncated Jump operand"));
 
     let mut truncated_pair = unit_chunk();
     truncated_pair.main.code = vec![Op::ByteVectorPlaceInit as u8; 16];
@@ -118,10 +122,15 @@ fn truncated_wide_operands_and_jumps_into_wide_bytes_fail_closed() {
     jump.main.emit(Op::Unit);
     jump.main.emit_op_u64(Op::StoreLocal, 0);
     jump.main.emit(Op::Pop);
-    jump.main.emit_op_u16(Op::Jump, 2);
+    jump.main.emit_op_u64(Op::Jump, 2);
     jump.main.emit(Op::Unit);
     jump.main.emit(Op::Return);
     assert!(error(jump).contains("not an instruction boundary"));
+
+    let mut out_of_range = unit_chunk();
+    out_of_range.main.code.clear();
+    out_of_range.main.emit_op_u64(Op::Jump, 65_536);
+    assert!(error(out_of_range).contains("out of range"));
 }
 
 #[test]
@@ -159,10 +168,9 @@ fn high_cleanup_local_and_place_metadata_are_checked_without_byte_narrowing() {
 
 #[cfg(target_pointer_width = "32")]
 #[test]
-fn wide_operand_exceeding_host_usize_is_rejected_before_indexing() {
+fn wide_jump_exceeding_host_usize_is_rejected_before_indexing() {
     let mut chunk = unit_chunk();
     chunk.main.code.clear();
-    chunk.main.emit_op_u64(Op::LoadLocal, u64::MAX);
-    chunk.main.emit(Op::Return);
+    chunk.main.emit_op_u64(Op::Jump, u64::MAX);
     assert!(error(chunk).contains("exceeds host usize"));
 }

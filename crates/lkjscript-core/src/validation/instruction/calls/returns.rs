@@ -29,7 +29,7 @@ fn validate_unique_exit_state(
         .iter()
         .filter_map(|slot| *slot)
         .any(|kind| match kind {
-            Kind::Resource { owner, .. } | Kind::ResourceResult { owner, .. } => owner != 0,
+            Kind::Resource { owner, .. } | Kind::ResourceResult { owner, .. } => !owner.is_none(),
             Kind::Bytes(_) | Kind::ByteVector(_) => true,
             Kind::StructuralOwner { representation, .. } => chunk
                 .structural_representations
@@ -38,7 +38,9 @@ fn validate_unique_exit_state(
                     chunk.structural_types.get(representation.type_id.index())
                 })
                 .is_none_or(|ty| ty.mode != crate::StructuralTypeMode::Copy),
-            Kind::BytesBorrow { owner, .. } | Kind::ByteSlice { owner, .. } => owner & 0xf000_0000 != 0x9000_0000,
+            Kind::BytesBorrow { owner, .. } | Kind::ByteSlice { owner, .. } => {
+                !owner.is_borrowed_parameter()
+            }
             Kind::StructuralOwnerRef { .. } => false,
             Kind::StructuralView { .. } | Kind::StructuralDestination { .. } => true,
             _ => false,

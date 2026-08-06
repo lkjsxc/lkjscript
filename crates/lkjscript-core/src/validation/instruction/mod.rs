@@ -17,7 +17,7 @@ mod system_types;
 mod types;
 mod unique;
 
-use super::{decode::instruction_error, Kind, State};
+use super::{decode::instruction_error, Kind, OwnerIdentity, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
 include!("routing/dispatch.rs");

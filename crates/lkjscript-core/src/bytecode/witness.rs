@@ -70,7 +70,7 @@ pub struct MemoryWitnessBinding {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CallWitnessSite {
-    pub offset: u32,
+    pub offset: u64,
     pub callee: u32,
     pub bindings: Vec<MemoryWitnessBinding>,
 }

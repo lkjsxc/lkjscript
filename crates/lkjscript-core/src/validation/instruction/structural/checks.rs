@@ -1,6 +1,6 @@
 fn reject_live_view(
     state: &State,
-    owner: u32,
+    owner: OwnerIdentity,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {
@@ -140,7 +140,7 @@ fn require_field_value(
 fn field_result_kind(
     _chunk: &Chunk,
     field: StructuralFieldMetadata,
-    _owner: u32,
+    _owner: OwnerIdentity,
     _mutable: bool,
     proto: &FunctionProto,
     instruction: DecodedInstruction,

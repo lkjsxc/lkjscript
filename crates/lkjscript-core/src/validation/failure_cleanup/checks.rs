@@ -1,4 +1,4 @@
-use super::{Kind, State, UniquePlaceState};
+use super::{Kind, OwnerIdentity, State, UniquePlaceState};
 use crate::{Error, Result, UniqueValueKind};
 
 pub(super) fn validate_loan(
@@ -147,7 +147,7 @@ pub(super) fn validate_structural_drop(
     Ok(())
 }
 
-pub(super) fn local_owner(state: &State, local: usize) -> Option<u32> {
+pub(super) fn local_owner(state: &State, local: usize) -> Option<OwnerIdentity> {
     match state.locals.get(local).copied().flatten() {
         Some(Kind::Bytes(owner) | Kind::ByteVector(owner))
         | Some(Kind::StructuralOwner { owner, .. }) => Some(owner),

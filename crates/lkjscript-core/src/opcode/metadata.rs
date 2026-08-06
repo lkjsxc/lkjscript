@@ -72,8 +72,6 @@ const fn operand_layout(op: Op) -> OperandLayout {
         | Op::LoadGlobal
         | Op::Car
         | Op::StoreGlobal
-        | Op::Jump
-        | Op::JumpIfFalse
         | Op::MakeClosure
         | Op::MakeProduct
         | Op::LoadProductField
@@ -94,7 +92,9 @@ const fn operand_layout(op: Op) -> OperandLayout {
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View
         | Op::StructuralCopy => OperandLayout::U16,
-        Op::LoadLocal
+        Op::Jump
+        | Op::JumpIfFalse
+        | Op::LoadLocal
         | Op::StoreLocal
         | Op::Call
         | Op::ByteVectorBorrow

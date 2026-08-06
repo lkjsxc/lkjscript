@@ -1,5 +1,5 @@
 use super::super::instruction_error;
-use super::{Kind, State};
+use super::{Kind, OwnerIdentity, State};
 use crate::validation::UniquePlaceState;
 use crate::{DecodedInstruction, FunctionProto, Result};
 
@@ -21,7 +21,7 @@ pub(super) fn local_owner(
     slot: usize,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
-) -> Result<u32> {
+) -> Result<OwnerIdentity> {
     match state.locals.get(slot).copied().flatten() {
         Some(Kind::ByteVector(owner)) => Ok(owner),
         _ => Err(error(
@@ -35,7 +35,7 @@ pub(super) fn local_owner(
 pub(in crate::validation::instruction) fn expect_place_owner(
     state: &State,
     place: usize,
-    owner: u32,
+    owner: OwnerIdentity,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {
@@ -79,7 +79,7 @@ pub(super) fn store_empty_local(
     Ok(())
 }
 
-pub(super) fn live_views(state: &State, owner: u32) -> impl Iterator<Item = Kind> + '_ {
+pub(super) fn live_views(state: &State, owner: OwnerIdentity) -> impl Iterator<Item = Kind> + '_ {
     state
         .locals
         .iter()
@@ -90,7 +90,7 @@ pub(super) fn live_views(state: &State, owner: u32) -> impl Iterator<Item = Kind
 
 pub(super) fn reject_live_loan(
     state: &State,
-    owner: u32,
+    owner: OwnerIdentity,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {

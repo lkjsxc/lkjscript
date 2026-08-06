@@ -5,7 +5,7 @@ impl Emitter<'_> {
                 for field in fields {
                     self.load(*field)?;
                 }
-                self.proto.emit_op_u16(Op::MakeProduct, product.raw());
+                self.proto.try_emit_op_u16(Op::MakeProduct, product.raw())?;
             }
             InstructionKind::ProductField {
                 product,
@@ -14,7 +14,8 @@ impl Emitter<'_> {
             } => {
                 self.load(*value)?;
                 let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
-                self.proto.emit_op_u16(Op::LoadProductField, descriptor);
+                self.proto
+                    .try_emit_op_u16(Op::LoadProductField, descriptor)?;
             }
             InstructionKind::WithProductField {
                 product,
@@ -25,7 +26,8 @@ impl Emitter<'_> {
                 self.load(*value)?;
                 self.load(*replacement)?;
                 let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
-                self.proto.emit_op_u16(Op::WithProductField, descriptor);
+                self.proto
+                    .try_emit_op_u16(Op::WithProductField, descriptor)?;
             }
             InstructionKind::EnumValue {
                 enum_id,
@@ -48,7 +50,7 @@ impl Emitter<'_> {
                     *layout,
                     arguments.len(),
                 )?;
-                self.proto.emit_op_u16(Op::MakeEnum, descriptor);
+                self.proto.try_emit_op_u16(Op::MakeEnum, descriptor)?;
             }
             InstructionKind::EnumIsVariant {
                 enum_id,
@@ -58,7 +60,8 @@ impl Emitter<'_> {
             } => {
                 self.load(*value)?;
                 let descriptor = intern_enum_variant(self.chunk, *enum_id, *variant, *layout)?;
-                self.proto.emit_op_u16(Op::IsEnumVariant, descriptor);
+                self.proto
+                    .try_emit_op_u16(Op::IsEnumVariant, descriptor)?;
             }
             InstructionKind::EnumField {
                 enum_id,
@@ -70,7 +73,8 @@ impl Emitter<'_> {
                 self.load(*value)?;
                 let descriptor =
                     intern_enum_field(self.chunk, (*enum_id, *variant, *field), *layout)?;
-                self.proto.emit_op_u16(Op::LoadEnumField, descriptor);
+                self.proto
+                    .try_emit_op_u16(Op::LoadEnumField, descriptor)?;
             }
             _ => return Ok(false),
         }

@@ -5,16 +5,14 @@ fn emit_blocks(emitter: &mut Emitter<'_>) -> Result<()> {
         emitter.block_offsets.insert(block.id, offset);
         emitter.block_links.push(BytecodeBlockLink {
             block: block.id,
-            offset: u32::try_from(offset)
-                .map_err(|_| Error::msg("bytecode block link offset exceeds u32"))?,
+            offset,
         });
         let tail_call = tail_call_value(function, block);
         for instruction in &block.instructions {
             let offset = emitter.offset()?;
             emitter.instruction_links.push(BytecodeInstructionLink {
                 value: instruction.id,
-                offset: u32::try_from(offset)
-                    .map_err(|_| Error::msg("bytecode instruction link offset exceeds u32"))?,
+                offset,
             });
             emitter.emit_instruction(instruction, tail_call != Some(instruction.id))?;
             let end = emitter.offset()?;
@@ -27,7 +25,7 @@ fn emit_blocks(emitter: &mut Emitter<'_>) -> Result<()> {
             )?;
         }
         if tail_call.is_some() {
-            emitter.proto.emit(Op::Return);
+            emitter.proto.try_emit(Op::Return)?;
         } else {
             let offset = emitter.offset()?;
             emitter.emit_terminator(block.id, &block.terminator)?;

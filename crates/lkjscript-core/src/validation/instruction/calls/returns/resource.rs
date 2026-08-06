@@ -3,7 +3,7 @@ fn consume_resource_return(state: &mut State, returned: Kind) {
         Kind::Resource { owner, .. } | Kind::ResourceResult { owner, .. } => owner,
         _ => return,
     };
-    if owner == 0 {
+    if owner.is_none() {
         return;
     }
     for local in &mut state.locals {
@@ -40,11 +40,11 @@ fn validate_resource_return(
         (
             Some(crate::ResourceReturnKind::Resource(expected)),
             Kind::Resource { kind, owner },
-        ) => expected == kind && owner != 0,
+        ) => expected == kind && !owner.is_none(),
         (
             Some(crate::ResourceReturnKind::Result(expected)),
             Kind::ResourceResult { kind, owner },
-        ) => expected == kind && owner != 0,
+        ) => expected == kind && !owner.is_none(),
         (None, Kind::Resource { .. } | Kind::ResourceResult { .. }) => false,
         (None, _) => true,
         (Some(_), _) => false,

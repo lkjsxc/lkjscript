@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{Kind, State, UniquePlaceState};
+use super::{Kind, OwnerIdentity, State, UniquePlaceState};
 use crate::{Error, FailureCleanupAction, FunctionProto, Result, UniqueValueKind};
 use checks::{
     local_owner, validate_loan, validate_structural_drop, validate_structural_loan,

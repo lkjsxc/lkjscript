@@ -6,7 +6,7 @@ impl Emitter<'_> {
         glue: DropGlueIdentity,
     ) -> Result<()> {
         if glue == DropGlueIdentity::Bytes && self.static_bytes_value(value)? {
-            self.proto.emit(Op::Unit);
+            self.proto.try_emit(Op::Unit)?;
             return Ok(());
         }
         self.emit_place_local(
@@ -27,7 +27,6 @@ impl Emitter<'_> {
         _kind: lkjscript_core::ResourceKind,
     ) -> Result<()> {
         self.load(value)?;
-        self.proto.emit(Op::ResourceDrop);
-        Ok(())
+        self.proto.try_emit(Op::ResourceDrop)
     }
 }

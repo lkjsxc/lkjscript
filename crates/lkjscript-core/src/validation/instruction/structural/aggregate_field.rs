@@ -83,7 +83,7 @@ fn aggregate_field_input(
     instruction: DecodedInstruction,
     state: &mut State,
     operation: &str,
-) -> Result<(crate::StructuralAggregateFieldRef, u32)> {
+) -> Result<(crate::StructuralAggregateFieldRef, OwnerIdentity)> {
     let index = instruction_operand(proto, instruction)?;
     let reference = chunk
         .structural_aggregate_fields

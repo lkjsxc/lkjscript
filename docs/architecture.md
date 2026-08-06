@@ -27,10 +27,13 @@ maps nodes in producer order without iterating hash tables or searching whole pl
 Executable-width ownership is now explicit at each boundary: analyzer/HIR arity and local storage,
 codegen colors, and bytecode prototypes use host indexes; SSA frame-state slots use `u64` identity
 values. Bytecode operand metadata selects one of no operand, retained `u16`, fixed `u64` index, or
-two independent fixed `u64` place/local indexes. The decoder checks complete operands and host
-conversion before publishing `DecodedInstruction`; validators and the VM consume the typed decoded
-shape or the same fixed layout. Cleanup roots and range offsets use canonical `u64` values with checked host conversion. Constants,
-globals, jumps, function offsets, and product/enum/structural descriptors remain a separate
+two independent fixed `u64` place/local indexes. Branch targets use the fixed `u64` index layout.
+The decoder checks complete operands and host conversion before publishing `DecodedInstruction`;
+validators and the VM consume the typed decoded shape or the same fixed layout. Bytecode links,
+call-witness instruction offsets, cleanup roots, and cleanup range offsets use canonical `u64`
+values with checked host conversion. Validator ownership tracking keeps instruction offsets and
+parameter indexes in tagged host-width identities rather than narrowing them to `u32`. Constants,
+globals, and product/enum/structural table, descriptor, and field operands remain a separate
 `u16`/`u8` cutover.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer

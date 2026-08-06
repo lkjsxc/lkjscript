@@ -1,4 +1,4 @@
-use super::{instruction_error, Kind, State};
+use super::{instruction_error, Kind, OwnerIdentity, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, ProductId, Result};
 
 include!("structural.rs");

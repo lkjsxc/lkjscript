@@ -9,7 +9,7 @@ impl Emitter<'_> {
         match terminator {
             Terminator::Branch { target, arguments } => {
                 self.emit_edge_arguments(*target, arguments)?;
-                self.emit_jump(Op::Jump, *target);
+                self.emit_jump(Op::Jump, *target)?;
             }
             Terminator::ConditionalBranch {
                 condition,
@@ -19,27 +19,30 @@ impl Emitter<'_> {
                 false_arguments,
             } => {
                 self.load(*condition)?;
-                self.proto.emit(Op::JumpIfFalse);
-                let false_patch = self.proto.len();
-                self.proto.emit_u16(0);
+                self.proto.try_emit_op_u64(Op::JumpIfFalse, 0)?;
+                let false_patch = self
+                    .proto
+                    .len()
+                    .checked_sub(8)
+                    .ok_or_else(|| Error::msg("bytecode jump patch position underflow"))?;
                 self.emit_edge_arguments(*true_target, true_arguments)?;
-                self.emit_jump(Op::Jump, *true_target);
+                self.emit_jump(Op::Jump, *true_target)?;
                 let false_offset = self.offset()?;
                 self.patch_at(false_patch, false_offset)?;
                 self.emit_edge_arguments(*false_target, false_arguments)?;
-                self.emit_jump(Op::Jump, *false_target);
+                self.emit_jump(Op::Jump, *false_target)?;
             }
             Terminator::Return(value) => {
                 self.load(*value)?;
-                self.proto.emit(Op::Return);
+                self.proto.try_emit(Op::Return)?;
             }
             Terminator::Trap { value } => {
                 self.load(*value)?;
-                self.proto.emit(Op::Trap);
+                self.proto.try_emit(Op::Trap)?;
             }
             Terminator::Exit { code } => {
                 self.load(*code)?;
-                self.proto.emit(Op::Exit);
+                self.proto.try_emit(Op::Exit)?;
             }
             Terminator::Outcome { outcome, .. } => {
                 return Err(Error::msg(format!(
@@ -72,7 +75,11 @@ impl Emitter<'_> {
         }
         for (index, argument) in arguments.iter().enumerate() {
             self.load(*argument)?;
-            if arguments[index.saturating_add(1)..].contains(argument) {
+            let later = index
+                .checked_add(1)
+                .and_then(|start| arguments.get(start..))
+                .ok_or_else(|| Error::msg("SSA bytecode edge argument index overflow"))?;
+            if later.contains(argument) {
                 self.emit_independent_owner(*argument)?;
             }
         }
@@ -91,7 +98,7 @@ impl Emitter<'_> {
                 }
                 _ => {
                     self.emit_index(Op::StoreLocal, slot)?;
-                    self.proto.emit(Op::Pop);
+                    self.proto.try_emit(Op::Pop)?;
                 }
             }
         }
@@ -127,11 +134,15 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    pub(in crate::codegen) fn emit_jump(&mut self, operation: Op, target: BlockId) {
-        self.proto.emit(operation);
-        let patch = self.proto.len();
-        self.proto.emit_u16(0);
+    pub(in crate::codegen) fn emit_jump(&mut self, operation: Op, target: BlockId) -> Result<()> {
+        self.proto.try_emit_op_u64(operation, 0)?;
+        let patch = self
+            .proto
+            .len()
+            .checked_sub(8)
+            .ok_or_else(|| Error::msg("bytecode jump patch position underflow"))?;
         self.patches.push((patch, target));
+        Ok(())
     }
 
     pub(in crate::codegen) fn patch_jumps(&mut self) -> Result<()> {
@@ -149,10 +160,8 @@ impl Emitter<'_> {
     }
 
     pub(in crate::codegen) fn patch_at(&mut self, patch: usize, offset: u64) -> Result<()> {
-        let offset =
-            u16::try_from(offset).map_err(|_| Error::msg("bytecode jump target exceeds u16"))?;
         let end = patch
-            .checked_add(2)
+            .checked_add(8)
             .ok_or_else(|| Error::msg("bytecode jump patch overflow"))?;
         let bytes = self
             .proto

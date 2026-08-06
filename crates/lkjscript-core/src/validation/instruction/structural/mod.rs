@@ -1,4 +1,4 @@
-use super::{instruction_error, types::*, Kind, State};
+use super::{instruction_error, types::*, Kind, OwnerIdentity, State};
 use crate::validation::{StructuralDestinationState, UniquePlaceState};
 use crate::{
     Chunk, DecodedInstruction, FunctionProto, Op, Result, StructuralFieldMetadata,

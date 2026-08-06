@@ -26,10 +26,13 @@ pub fn bind_prepared_identity(
 
 pub fn validate_chunk(chunk: Chunk, limits: &ValidationLimits) -> Result<ValidatedChunk> {
     validate_tables(&chunk, limits)?;
-    let main_instructions = decode_function(&chunk.main, limits)?;
-    let mut proto_instructions = Vec::with_capacity(chunk.protos.len());
+    let main_instructions = decode_function(&chunk.main)?;
+    let mut proto_instructions = Vec::new();
+    proto_instructions
+        .try_reserve_exact(chunk.protos.len())
+        .map_err(|_| Error::host("prototype decode metadata reservation failed"))?;
     for proto in &chunk.protos {
-        proto_instructions.push(decode_function(proto, limits)?);
+        proto_instructions.push(decode_function(proto)?);
     }
 
     validate_instruction_operands(&chunk, &chunk.main, &main_instructions)?;

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::{
-    decode::instruction_error, instruction::apply_instruction, merge::merge_state, Kind, State,
-    UniquePlaceState,
+    decode::instruction_error, instruction::apply_instruction, merge::merge_state, Kind,
+    OwnerIdentity, ParameterOwnerKind, State, UniquePlaceState,
 };
 use crate::{Chunk, DecodedInstruction, Error, FunctionProto, Result};
 

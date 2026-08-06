@@ -6,12 +6,17 @@ fn validate_memory_witness_arguments(
     arguments: &[Kind],
     instruction: DecodedInstruction,
 ) -> Result<Vec<crate::MemoryWitnessBinding>> {
+    let instruction_offset = u64::try_from(instruction.offset()).map_err(|_| {
+        instruction_error(
+            caller,
+            instruction.op(),
+            instruction.offset(),
+            "call offset exceeds u64",
+        )
+    })?;
     let site = caller
         .call_witnesses
-        .binary_search_by_key(
-            &u32::try_from(instruction.offset()).unwrap_or(u32::MAX),
-            |site| site.offset,
-        )
+        .binary_search_by_key(&instruction_offset, |site| site.offset)
         .ok()
         .and_then(|index| caller.call_witnesses.get(index));
     if callee.memory_witness_parameters.is_empty() {

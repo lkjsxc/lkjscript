@@ -23,9 +23,6 @@ fn direct_owner(
     structural_leaf_owner(chunk, kind, proto, instruction)
 }
 
-fn new_owner(instruction: DecodedInstruction) -> Result<u32> {
-    u32::try_from(instruction.offset())
-        .ok()
-        .and_then(|offset| offset.checked_add(0x6800_0001))
-        .ok_or_else(|| Error::msg("conversion bytes owner identity overflow"))
+const fn new_owner(instruction: DecodedInstruction) -> Result<OwnerIdentity> {
+    Ok(OwnerIdentity::instruction(instruction.offset(), 1))
 }

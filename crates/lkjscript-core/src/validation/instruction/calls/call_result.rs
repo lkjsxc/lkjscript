@@ -55,7 +55,7 @@ fn call_return_kind(
         });
     }
     if let Some(kind) = proto.return_unique {
-        let owner = call_result_identity(proto, instruction, 0x4000_0001, "unique")?;
+        let owner = call_result_identity(proto, instruction, 1, "unique")?;
         return Ok(match kind {
             crate::UniqueValueKind::Bytes => Kind::Bytes(owner),
             crate::UniqueValueKind::ByteVector => Kind::ByteVector(owner),
@@ -112,26 +112,16 @@ fn structural_call_result(
 ) -> Result<Kind> {
     Ok(Kind::StructuralOwner {
         representation,
-        owner: call_result_identity(proto, instruction, 0x5000_0001, "structural")?,
+        owner: call_result_identity(proto, instruction, 2, "structural")?,
         active_variant: None,
     })
 }
 
 fn call_result_identity(
-    proto: &FunctionProto,
+    _proto: &FunctionProto,
     instruction: DecodedInstruction,
-    base: u32,
-    category: &str,
-) -> Result<u32> {
-    u32::try_from(instruction.offset())
-        .ok()
-        .and_then(|offset| offset.checked_add(base))
-        .ok_or_else(|| {
-            instruction_error(
-                proto,
-                instruction.op(),
-                instruction.offset(),
-                &format!("{category} call-result identity overflow"),
-            )
-        })
+    sequence: u8,
+    _category: &str,
+) -> Result<OwnerIdentity> {
+    Ok(OwnerIdentity::instruction(instruction.offset(), sequence))
 }

@@ -88,13 +88,13 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BytecodeInstructionLink {
     pub value: ValueId,
-    pub offset: u32,
+    pub offset: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BytecodeBlockLink {
     pub block: BlockId,
-    pub offset: u32,
+    pub offset: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

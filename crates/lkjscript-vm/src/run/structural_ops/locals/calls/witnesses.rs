@@ -17,8 +17,8 @@ pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
             .get(caller_frame.proto as usize)
             .ok_or_else(|| Error::msg("generic call caller metadata is missing"))?
     };
-    let offset = u32::try_from(call_offset)
-        .map_err(|_| Error::msg("generic call offset exceeds u32"))?;
+    let offset = u64::try_from(call_offset)
+        .map_err(|_| Error::msg("generic call offset exceeds u64"))?;
     let site = caller
         .call_witnesses
         .binary_search_by_key(&offset, |site| site.offset)

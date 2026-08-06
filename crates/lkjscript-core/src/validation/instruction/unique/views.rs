@@ -1,5 +1,5 @@
 use super::support::*;
-use super::{Kind, State};
+use super::{Kind, OwnerIdentity, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
 pub(super) fn apply(
@@ -113,7 +113,7 @@ fn end_borrow(
             ))
         }
     };
-    if owner & 0xf000_0000 == 0x9000_0000 {
+    if owner.is_borrowed_parameter() {
         return Err(error(
             proto,
             instruction,
@@ -141,7 +141,7 @@ pub(in crate::validation::instruction) fn pop_used_view(
     mutable: bool,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
-) -> Result<u32> {
+) -> Result<OwnerIdentity> {
     match pop(state, proto, instruction)? {
         Kind::ByteSlice {
             owner,

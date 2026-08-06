@@ -14,17 +14,22 @@
    Byte-sized function arity, call argument, local, cleanup-local, and executable-place widths are
    removed: one fixed-`u64` index/pair format now executes 300 parameters, arguments, live lexical
    locals, and direct VM place 299, with checked decode and automatic VM fallback; a larger stress
-   case executes 1,024 parameters, arguments, and lexical locals. SSA ownership work and retained
-   state-cell quotas are removed; generated coverage verifies 44,000 owned parameters and places,
+   case executes 1,024 parameters, arguments, and lexical locals. Branch targets use the same fixed
+   `u64` layout, and the separate 65,535-byte per-function validity limit is removed. Production
+   coverage executes a 115,754-byte main with 1,024 owned arguments and a generated function whose
+   branch target exceeds 65,535 bytes; automatic mode retains VM fallback when native expansion is
+   ineligible. SSA ownership work and retained state-cell quotas are removed; generated coverage
+   verifies 44,000 owned parameters and places,
    132,000 state cells per block, 264,000 cells under the former aggregate retained-state
    accounting across propagation, and exact cleanup. SSA and bytecode cleanup now use wide,
    backward-only hash-consed node arenas with segmented roots; a 300-owned-parameter/argument source
    publishes and runs with 315,450 logical actions represented by 1,200 physical nodes. Next remove
-   retained `u16` function offsets, jumps, constants, globals, product/enum/structural tables and
-   descriptors, plus byte-sized product fields and enum substitutions. Cleanup range offsets and
-   roots are already `u64`, while physical cleanup-node/range counts remain subject to the general
-   bytecode table and metadata validation boundary. Completion requires just-beyond-old-boundary and substantially larger positive
-   programs, checked growth, and successful execution through the retained generic path.
+   retained `u16` constants, globals, product/enum/structural tables and descriptors, plus byte-sized
+   product fields and enum substitutions. Bytecode links, call-witness offsets, cleanup range
+   offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
+   subject to the general bytecode table and metadata validation boundary. Completion requires
+   just-beyond-old-boundary and substantially larger positive programs, checked growth, and
+   successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte
    admission are removed. The untrusted Semantic Source boundary now supplies only an aggregate
    source-byte loader policy and applies it to staged transactions before publication. Continue

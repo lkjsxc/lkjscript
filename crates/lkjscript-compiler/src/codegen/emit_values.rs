@@ -68,7 +68,7 @@ impl Emitter<'_> {
             }
             _ => {
                 self.emit_index(Op::StoreLocal, slot)?;
-                self.proto.emit(Op::Pop);
+                self.proto.try_emit(Op::Pop)?;
             }
         }
         Ok(())

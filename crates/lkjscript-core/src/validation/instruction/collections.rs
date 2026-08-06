@@ -1,4 +1,4 @@
-use super::{instruction_error, types::*, Kind, State};
+use super::{instruction_error, types::*, Kind, OwnerIdentity, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
 pub(super) fn apply(
@@ -57,17 +57,7 @@ pub(super) fn apply(
                         "list-first requires an owner element representation",
                     ));
                 }
-                let owner = u32::try_from(instruction.offset())
-                    .ok()
-                    .and_then(|offset| offset.checked_add(1))
-                    .ok_or_else(|| {
-                        instruction_error(
-                            proto,
-                            op,
-                            instruction.offset(),
-                            "list-first owner identity overflow",
-                        )
-                    })?;
+                let owner = OwnerIdentity::instruction(instruction.offset(), 1);
                 state.stack.push(Kind::StructuralOwner {
                     representation,
                     owner,

@@ -23,9 +23,9 @@ fn initial_locals(
                     .flatten()
                     .is_some()
                 {
-                    0xb000_0000 | u32::try_from(index).unwrap_or(u32::MAX)
+                    OwnerIdentity::parameter(index, ParameterOwnerKind::Resource)
                 } else {
-                    0
+                    OwnerIdentity::None
                 },
             });
         let unique = proto
@@ -34,19 +34,26 @@ fn initial_locals(
             .copied()
             .flatten()
             .map(|kind| match kind {
-                crate::UniqueValueKind::Bytes => {
-                    Kind::Bytes(0x8000_0000 | u32::try_from(index).unwrap_or(u32::MAX))
-                }
-                crate::UniqueValueKind::ByteVector => {
-                    Kind::ByteVector(0x8000_0000 | u32::try_from(index).unwrap_or(u32::MAX))
-                }
+                crate::UniqueValueKind::Bytes => Kind::Bytes(OwnerIdentity::parameter(
+                    index,
+                    ParameterOwnerKind::Unique,
+                )),
+                crate::UniqueValueKind::ByteVector => Kind::ByteVector(
+                    OwnerIdentity::parameter(index, ParameterOwnerKind::Unique),
+                ),
                 crate::UniqueValueKind::ByteSlice => Kind::ByteSlice {
-                    owner: 0x9000_0000 | u32::try_from(index).unwrap_or(u32::MAX),
+                    owner: OwnerIdentity::parameter(
+                        index,
+                        ParameterOwnerKind::BorrowedUnique,
+                    ),
                     mutable: false,
                     used: false,
                 },
                 crate::UniqueValueKind::ByteSliceMut => Kind::ByteSlice {
-                    owner: 0x9000_0000 | u32::try_from(index).unwrap_or(u32::MAX),
+                    owner: OwnerIdentity::parameter(
+                        index,
+                        ParameterOwnerKind::BorrowedUnique,
+                    ),
                     mutable: true,
                     used: false,
                 },
@@ -69,7 +76,7 @@ fn initial_locals(
             .copied()
             .flatten()
             .map(|representation| {
-                let owner = 0xa000_0000 | u32::try_from(index).unwrap_or(u32::MAX);
+                let owner = OwnerIdentity::parameter(index, ParameterOwnerKind::Structural);
                 if proto
                     .parameter_structural_places
                     .get(index)

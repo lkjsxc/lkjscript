@@ -1,4 +1,4 @@
-use super::{error, DecodedInstruction, FunctionProto, Kind, Result, State};
+use super::{error, DecodedInstruction, FunctionProto, Kind, OwnerIdentity, Result, State};
 use crate::validation::instruction::types::instruction_operand;
 use crate::validation::instruction::unique::support::{expect_place_owner, place_and_slot};
 use crate::validation::UniquePlaceState;
@@ -8,7 +8,7 @@ fn local_bytes(
     slot: usize,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
-) -> Result<u32> {
+) -> Result<OwnerIdentity> {
     match state.locals.get(slot).copied().flatten() {
         Some(Kind::Bytes(owner)) => Ok(owner),
         _ => Err(error(
@@ -172,7 +172,7 @@ pub(super) fn place_end(
 
 pub(super) fn reject_owner_views(
     state: &State,
-    owner: u32,
+    owner: OwnerIdentity,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {

@@ -15,14 +15,14 @@ pub(super) fn handles(op: u8) -> bool {
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Jump as u8 => {
-            let at = vm.read_u16()? as usize;
+            let at = vm.read_index()?;
             if let Some(fr) = vm.frames.last_mut() {
                 fr.ip = at;
             }
             Ok(())
         }
         x if x == Op::JumpIfFalse as u8 => {
-            let at = vm.read_u16()? as usize;
+            let at = vm.read_index()?;
             let condition = vm
                 .pop()?
                 .as_bool()

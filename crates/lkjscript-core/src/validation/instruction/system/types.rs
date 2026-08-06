@@ -152,7 +152,7 @@ pub(super) fn consume_resource_owner(
             "resource consumption requires an owned resource",
         ));
     };
-    if owner == 0 {
+    if owner.is_none() {
         return Err(instruction_error(
             proto,
             instruction.op(),

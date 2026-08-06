@@ -21,7 +21,7 @@ pub(in crate::codegen) fn compile_function(
     let failure_index = FailureCodegenIndex::new(function)?;
     let (failure_cleanups, failure_cleanup_map) =
         compile_failure_cleanups(function, &slots, chunk, &failure_index)?;
-    let proto = FunctionProto {
+    let mut proto = FunctionProto {
         name: function.name.clone(),
         arity,
         locals,
@@ -152,6 +152,39 @@ pub(in crate::codegen) fn compile_function(
         failure_cleanup_ranges: Vec::new(),
         code: Vec::new(),
     };
+    let block_count = function.blocks.len();
+    let instruction_count = function.blocks.iter().try_fold(0_usize, |count, block| {
+        count
+            .checked_add(block.instructions.len())
+            .ok_or_else(|| Error::msg("SSA bytecode instruction count exceeds host usize"))
+    })?;
+    let range_capacity = block_count
+        .checked_add(instruction_count)
+        .ok_or_else(|| Error::msg("bytecode failure-range count exceeds host usize"))?;
+    let patch_capacity = block_count
+        .checked_mul(2)
+        .ok_or_else(|| Error::msg("bytecode jump-patch count exceeds host usize"))?;
+    proto
+        .failure_cleanup_ranges
+        .try_reserve_exact(range_capacity)
+        .map_err(|_| Error::host("bytecode failure-range reservation failed"))?;
+    proto.try_reserve_code(range_capacity)?;
+    let mut block_offsets = HashMap::new();
+    block_offsets
+        .try_reserve(block_count)
+        .map_err(|_| Error::host("bytecode block-offset reservation failed"))?;
+    let mut patches = Vec::new();
+    patches
+        .try_reserve_exact(patch_capacity)
+        .map_err(|_| Error::host("bytecode jump-patch reservation failed"))?;
+    let mut block_links = Vec::new();
+    block_links
+        .try_reserve_exact(block_count)
+        .map_err(|_| Error::host("bytecode block-link reservation failed"))?;
+    let mut instruction_links = Vec::new();
+    instruction_links
+        .try_reserve_exact(instruction_count)
+        .map_err(|_| Error::host("bytecode instruction-link reservation failed"))?;
     let mut emitter = Emitter {
         chunk,
         globals,
@@ -159,10 +192,10 @@ pub(in crate::codegen) fn compile_function(
         slots,
         code_base,
         proto,
-        block_offsets: HashMap::new(),
-        patches: Vec::new(),
-        block_links: Vec::new(),
-        instruction_links: Vec::new(),
+        block_offsets,
+        patches,
+        block_links,
+        instruction_links,
         failure_cleanup_map,
         failure_cleanups,
         failure_index,

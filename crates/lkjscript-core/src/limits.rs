@@ -12,7 +12,6 @@ pub const MAX_BYTE_STORAGE_BYTES: usize = 1_000_000;
 pub const MAX_BULK_IO_BYTES: usize = 64 * 1024;
 
 pub const MAX_CHUNK_ENCODED_BYTES: usize = 16 * 1024 * 1024;
-pub const MAX_FUNCTION_CODE_BYTES: usize = 65_535;
 pub const MAX_BYTECODE_TABLE_ENTRIES: usize = 65_535;
 pub const MAX_BYTECODE_METADATA_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_CONSTANT_DATA_BYTES: usize = 1024 * 1024;
@@ -20,7 +19,6 @@ pub const MAX_CONSTANT_DATA_BYTES: usize = 1024 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidationLimits {
     pub max_encoded_bytes: usize,
-    pub max_function_code_bytes: usize,
     pub max_table_entries: usize,
     pub max_metadata_bytes: usize,
     pub max_constant_data_bytes: usize,
@@ -30,7 +28,6 @@ impl Default for ValidationLimits {
     fn default() -> Self {
         Self {
             max_encoded_bytes: MAX_CHUNK_ENCODED_BYTES,
-            max_function_code_bytes: MAX_FUNCTION_CODE_BYTES,
             max_table_entries: MAX_BYTECODE_TABLE_ENTRIES,
             max_metadata_bytes: MAX_BYTECODE_METADATA_BYTES,
             max_constant_data_bytes: MAX_CONSTANT_DATA_BYTES,

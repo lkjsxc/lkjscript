@@ -1,4 +1,4 @@
-use super::{decode::instruction_error, Kind, State, UniquePlaceState};
+use super::{decode::instruction_error, Kind, OwnerIdentity, State, UniquePlaceState};
 use crate::{DecodedInstruction, FunctionProto, Result};
 
 pub(super) fn merge_state(
@@ -145,7 +145,7 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
                 },
             ) if left_representation == right_representation => Some(Kind::StructuralOwnerRef {
                 representation: left_representation,
-                owner: u32::MAX,
+                owner: OwnerIdentity::Merged,
                 active_variant: (left_variant == right_variant)
                     .then_some(left_variant)
                     .flatten(),
@@ -177,7 +177,10 @@ fn merge_place(left: UniquePlaceState, right: UniquePlaceState) -> Option<Unique
     }
 }
 
-fn merge_identity(left: Option<u32>, right: Option<u32>) -> Option<Option<u32>> {
+fn merge_identity(
+    left: Option<OwnerIdentity>,
+    right: Option<OwnerIdentity>,
+) -> Option<Option<OwnerIdentity>> {
     match (left, right) {
         (None, None) => Some(None),
         (Some(left), Some(_)) => Some(Some(left)),

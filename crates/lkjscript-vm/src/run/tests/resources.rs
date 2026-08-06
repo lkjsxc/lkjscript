@@ -152,9 +152,9 @@ fn configured_handle_and_wall_limits_are_structured() {
     socket.main.emit_op_u64(Op::LoadLocal, 0);
     socket.main.emit(Op::SysSocket);
     let wait_after_success = socket.main.code.len();
-    socket.main.emit_op_u16(
+    socket.main.emit_op_u64(
         Op::Jump,
-        u16::try_from(wait_after_success).expect("small test offset"),
+        u64::try_from(wait_after_success).expect("test offset fits u64"),
     );
     let socket = validate(socket);
     let mut handles = ExecutionConfig::default();
@@ -171,7 +171,7 @@ fn configured_handle_and_wall_limits_are_structured() {
     );
 
     let mut loop_chunk = Chunk::new();
-    loop_chunk.main.emit_op_u16(Op::Jump, 0);
+    loop_chunk.main.emit_op_u64(Op::Jump, 0);
     let loop_chunk = validate(loop_chunk);
     let mut deadline = ExecutionConfig::default();
     deadline.wall_time = Some(Duration::ZERO);

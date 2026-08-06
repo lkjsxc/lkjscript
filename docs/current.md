@@ -74,21 +74,29 @@ against their `u64` wire representation.
 
 Executable function arity and local slots now remain `usize` through HIR and code generation; SSA
 frame-state slots use `u64`, and bytecode prototypes, owner-place metadata, and failure-cleanup
-locals/places use host indexes. The one active bytecode format encodes local indexes, call argument
-counts, memory-witness ordinals, and single place indexes as fixed little-endian `u64`; instructions
-that name both a place and local encode two separate `u64` operands. Cleanup node identities and
-range offsets are also `u64` with checked host conversion. Existing `u16` table, function-offset,
-jump, descriptor, and field operands remain unchanged. Decoding
-classifies operands as no operand, `u16`, checked host index, or checked place/local pair, proves the
-complete operand is present, and rejects host-width overflow before validation or indexing. The VM
+locals/places use host indexes. The one active bytecode format encodes branch targets, local indexes, call argument counts,
+memory-witness ordinals, and single place indexes as fixed little-endian `u64`; instructions that
+name both a place and local encode two separate `u64` operands. Bytecode function, block, and
+instruction links, call-witness instruction offsets, cleanup node identities, and cleanup range
+offsets are also `u64`, with checked conversion at host-index boundaries. Existing constant,
+global, product, enum, and structural table, descriptor, and field operands remain `u16` or `u8`.
+Decoding classifies operands as no operand, `u16`, checked host index, or checked place/local pair,
+proves the complete operand is present, and rejects host-width overflow before validation or
+indexing. The VM
 uses checked frame arithmetic and fallible reservations, rejects a low stack host policy before
 wide frame allocation, tracks instruction starts independently of encoded length, and tail-forwards high local slots without two- or three-byte instruction assumptions.
 Generated production coverage compiles and executes 300 parameters, 300 arguments, and more than
 255 simultaneously live lexical locals, reads slot 299, agrees with the SSA evaluator, and proves
 that automatic execution remains on the generic VM route while forced native mode reports an
 unsupported signature. A larger generated stress case executes 1,024 parameters, arguments, and
-lexical locals through the VM and reads slot 1,023. A generated owned parameter in slot 299 also
-executes and cleans up. Failure cleanup is represented in SSA and bytecode by deterministic
+lexical locals through the VM and reads slot 1,023. A separate 1,024-owned-parameter and argument
+source emits 115,754 bytes in main, validates and prepares that executable, executes exact cleanup
+through the VM, and confirms that automatic execution retains the generic VM fallback when native
+cleanup expansion is ineligible. A generated owned parameter in slot 299 also executes and cleans
+up. Another generated source emits a function larger than 65,535 bytes with a branch target beyond
+that former boundary; calls taking both branch paths execute through the VM. Malformed fixed-width
+jumps are rejected when truncated, aimed into operand bytes, outside the function, or unrepresentable
+as a host index. Failure cleanup is represented in SSA and bytecode by deterministic
 hash-consed backward-only node chains. Ordinary cleanup has separate loan, unplaced-owner, and
 place roots so independently changing segments do not copy one another; call-unentered cleanup has
 its own root. The production 300-owned-byte-vector parameter/argument fixture publishes and runs in
@@ -127,17 +135,17 @@ may build elsewhere, but no other host or native target is currently claimed as 
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function
-  code bytes, physical table entries, metadata bytes, and constant data during validation. The
-  300-owner production geometry stays below those physical cleanup-node/range limits after sharing.
-  Function offsets, jumps, constants, globals, product/enum/structural tables, product fields, enum
-  substitutions, and several structural descriptors retain `u16` or `u8` representation ceilings;
-  in particular, the generated 1,024-owned-argument variant produces 115,754 main-function code
-  bytes and still reaches the retained 65,535-byte per-function validation boundary even though its
-  cleanup IDs and ranges are wide. HIR/SSA place identities and validator-synthetic owner identities remain
+  40,045 verifier steps. Bytecode `ValidationLimits` still cap total encoded chunk bytes, physical
+  table entries, metadata bytes, and constant data during validation; there is no separate
+  per-function code-byte validity limit. The 300- and 1,024-owner production geometries stay below
+  the remaining physical cleanup-node/range limits after sharing. Constants, globals,
+  product/enum/structural tables, product fields, enum substitutions, and several structural
+  descriptors retain `u16` or `u8` representation ceilings. HIR and SSA place identities remain
   `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.
-  Where these constrain trusted compiler output rather than an untrusted
-  serialized boundary, they remain follow-up validity and representation gaps, not host policy.
+  Validator-synthetic ownership identity no longer narrows bytecode positions or parameter indexes
+  to `u32`; it uses tagged instruction offsets and parameter indexes at host width. Where the
+  remaining bounds constrain trusted compiler output rather than an untrusted serialized boundary,
+  they remain follow-up validity and representation gaps, not host policy.
 - Recursive compiler paths not exercised by the ordinary deep-expression production vertical,
   including parts of type, trait, enum, semantic-schema, and transaction processing, still need
   explicit work-stack conversion or equivalent evidence. Some analyses retain poor large-input
