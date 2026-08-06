@@ -18,8 +18,6 @@ fn aggregate_authority_budgets_accept_exact_and_reject_plus_one() -> Result<()> 
         assert_eq!(exact, maximum);
         assert!(producer::bounded_add(&mut exact, 1, maximum, name).is_err());
     }
-    assert_eq!(MAX_MEMORY_PLAN_ENTRIES, 65_536);
     assert_eq!(MAX_MEMORY_PLAN_OBLIGATIONS, 32_768);
-    assert_eq!(MAX_MEMORY_PLAN_VERIFIER_STEPS, 262_144);
     Ok(())
 }

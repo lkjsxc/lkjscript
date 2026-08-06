@@ -4,8 +4,10 @@ use super::*;
 fn returned_symbol_retains_text_after_artifact_release() {
     let returned = {
         let mut chunk = Chunk::new();
-        let symbol = chunk.add_const(Constant::Symbol("retained-symbol".into()));
-        chunk.main.emit_op_u16(Op::LoadConst, symbol.0);
+        let symbol = chunk
+            .add_const(Constant::Symbol("retained-symbol".into()))
+            .expect("add symbol constant");
+        chunk.main.emit_op_u64(Op::LoadConst, symbol.0);
         chunk.main.emit(Op::Return);
         let chunk =
             validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("symbol validates");

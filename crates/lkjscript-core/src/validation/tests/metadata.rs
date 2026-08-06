@@ -3,7 +3,9 @@ use super::*;
 #[test]
 fn indexes_metadata_categories_and_capture_metadata_are_checked() {
     let mut constant = unit_chunk();
-    constant.main.code = vec![Op::LoadConst as u8, 0, 0, Op::Return as u8];
+    constant.main.code.clear();
+    constant.main.emit_op_u64(Op::LoadConst, 0);
+    constant.main.emit(Op::Return);
     assert!(error(constant).contains("constant index"));
 
     let mut captures = unit_chunk();
@@ -35,15 +37,10 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         failure_cleanup_ranges: Vec::new(),
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
-    captures.main.code = vec![
-        Op::LoadConst as u8,
-        0,
-        0,
-        Op::MakeClosure as u8,
-        1,
-        0,
-        Op::Return as u8,
-    ];
+    captures.main.code.clear();
+    captures.main.emit_op_u64(Op::LoadConst, 0);
+    captures.main.emit_op_u64(Op::MakeClosure, 1);
+    captures.main.emit(Op::Return);
     assert!(error(captures).contains("capture metadata"));
 }
 
@@ -81,11 +78,13 @@ fn global_closures_must_match_declared_prototypes() {
             code: vec![Op::Unit as u8, Op::Return as u8],
         });
     }
-    let stored = chunk.add_const(Constant::Proto(1));
+    let stored = chunk
+        .add_const(Constant::Proto(1))
+        .expect("add prototype constant");
     chunk.main.code.clear();
-    chunk.main.emit_op_u16(Op::LoadConst, stored.0);
-    chunk.main.emit_op_u16(Op::MakeClosure, 0);
-    chunk.main.emit_op_u16(Op::StoreGlobal, 0);
+    chunk.main.emit_op_u64(Op::LoadConst, stored.0);
+    chunk.main.emit_op_u64(Op::MakeClosure, 0);
+    chunk.main.emit_op_u64(Op::StoreGlobal, 0);
     chunk.main.emit(Op::Pop);
     chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
@@ -97,7 +96,7 @@ fn global_closures_must_match_declared_prototypes() {
 fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
     let mut valid = Chunk::new();
     valid.constants.push(Constant::Str("explicit trap".into()));
-    valid.main.emit_op_u16(Op::LoadConst, 0);
+    valid.main.emit_op_u64(Op::LoadConst, 0);
     valid.main.emit(Op::Trap);
     let validated =
         validate_chunk(valid, ValidationPolicy::Unrestricted).expect("explicit trap validates");
@@ -105,7 +104,7 @@ fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
 
     let mut wrong = Chunk::new();
     wrong.constants.push(Constant::I64(7));
-    wrong.main.emit_op_u16(Op::LoadConst, 0);
+    wrong.main.emit_op_u64(Op::LoadConst, 0);
     wrong.main.emit(Op::Trap);
     assert!(error(wrong).contains("expected string"));
 }
@@ -148,13 +147,9 @@ fn malformed_bytecode_failure_is_identical_under_low_and_unrestricted_policy() {
 #[test]
 fn unreachable_operands_and_duplicate_metadata_still_fail() {
     let mut unreachable = unit_chunk();
-    unreachable.main.code.extend_from_slice(&[
-        Op::LoadGlobal as u8,
-        0,
-        0,
-        Op::Unit as u8,
-        Op::Return as u8,
-    ]);
+    unreachable.main.emit_op_u64(Op::LoadGlobal, 0);
+    unreachable.main.emit(Op::Unit);
+    unreachable.main.emit(Op::Return);
     assert!(error(unreachable).contains("global index"));
 
     let mut duplicate = unit_chunk();

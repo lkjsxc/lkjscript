@@ -22,6 +22,7 @@ enum ValueKind {
     RegionProduct,
     Capability,
     Resource,
+    FunctionPrototype,
     Function,
     Symbol,
     AggregateAdapter,
@@ -76,13 +77,13 @@ impl Value {
         Self::new(ValueKind::F64, bits)
     }
 
-    pub const fn from_static_string(index: u16) -> Self {
-        Self::new(ValueKind::StaticString, index as u64)
+    pub const fn from_static_string(index: u64) -> Self {
+        Self::new(ValueKind::StaticString, index)
     }
 
-    pub const fn as_static_string(self) -> Option<u16> {
+    pub const fn as_static_string(self) -> Option<u64> {
         match self.kind {
-            ValueKind::StaticString => Some(self.payload as u16),
+            ValueKind::StaticString => Some(self.payload),
             _ => None,
         }
     }
@@ -91,12 +92,25 @@ impl Value {
         Self::new(ValueKind::Resource, index as u64)
     }
 
-    pub(crate) const fn from_function(prototype: u32) -> Self {
-        Self::new(ValueKind::Function, prototype as u64)
+    #[doc(hidden)]
+    pub const fn from_function_prototype(prototype: u64) -> Self {
+        Self::new(ValueKind::FunctionPrototype, prototype)
     }
 
-    pub(crate) const fn from_symbol(constant: u32) -> Self {
-        Self::new(ValueKind::Symbol, constant as u64)
+    #[doc(hidden)]
+    pub const fn as_function_prototype(self) -> Option<u64> {
+        match self.kind {
+            ValueKind::FunctionPrototype => Some(self.payload),
+            _ => None,
+        }
+    }
+
+    pub(crate) const fn from_function(prototype: u64) -> Self {
+        Self::new(ValueKind::Function, prototype)
+    }
+
+    pub(crate) const fn from_symbol(constant: u64) -> Self {
+        Self::new(ValueKind::Symbol, constant)
     }
 
     pub const fn from_capability(kind: CapabilityKind) -> Self {

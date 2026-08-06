@@ -100,7 +100,7 @@ pub struct BytecodeBlockLink {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionBytecodeLink {
     pub function: FunctionId,
-    pub prototype: Option<u32>,
+    pub prototype: Option<u64>,
     pub is_main: bool,
     pub blocks: Vec<BytecodeBlockLink>,
     pub instructions: Vec<BytecodeInstructionLink>,

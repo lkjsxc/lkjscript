@@ -46,13 +46,13 @@ fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
     let Some(frame) = vm.frames.last() else {
         return false;
     };
-    if frame.proto == u32::MAX {
+    let Some(prototype) = frame.proto else {
         return false;
-    }
+    };
     let Some(code) = vm
         .chunk
         .protos()
-        .get(frame.proto as usize)
+        .get(prototype)
         .map(|proto| proto.code.as_slice())
     else {
         return false;

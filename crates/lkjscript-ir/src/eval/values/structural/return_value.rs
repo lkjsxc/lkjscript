@@ -42,7 +42,9 @@ impl Evaluator<'_> {
             EvalValue::StaticBytes(index) => {
                 let bytes = self
                     .static_bytes
-                    .get(index as usize)
+                    .get(usize::try_from(index).map_err(|_| {
+                        Flow::Trap("returned static bytes index exceeds host usize".into())
+                    })?)
                     .ok_or_else(|| Flow::Trap("invalid returned static bytes".into()))?;
                 EvalValue::ReturnedBytes(copy_bytes(bytes)?)
             }

@@ -36,9 +36,6 @@ impl Encoder {
     pub(super) fn u16(&mut self, value: u16) {
         self.append(&value.to_be_bytes());
     }
-    pub(super) fn u32(&mut self, value: u32) {
-        self.append(&value.to_be_bytes());
-    }
     pub(super) fn u64(&mut self, value: u64) {
         self.append(&value.to_be_bytes());
     }

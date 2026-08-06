@@ -9,7 +9,9 @@ fn encoded(value: usize) -> u64 {
 
 fn high_call_chunk() -> Chunk {
     let mut chunk = Chunk::new();
-    let prototype = chunk.add_const(Constant::Proto(0));
+    let prototype = chunk
+        .add_const(Constant::Proto(0))
+        .expect("add prototype constant");
     let mut callee = Chunk::new().main;
     callee.name = "wide-callee".into();
     callee.arity = WIDE_COUNT;
@@ -21,8 +23,8 @@ fn high_call_chunk() -> Chunk {
     for _ in 0..WIDE_COUNT {
         chunk.main.emit(Op::Unit);
     }
-    chunk.main.emit_op_u16(Op::LoadConst, prototype.0);
-    chunk.main.emit_op_u16(Op::MakeClosure, 0);
+    chunk.main.emit_op_u64(Op::LoadConst, prototype.0);
+    chunk.main.emit_op_u64(Op::MakeClosure, 0);
     chunk.main.emit_op_u64(Op::Call, encoded(WIDE_COUNT));
     chunk.main.emit(Op::Return);
     chunk
@@ -32,8 +34,10 @@ fn high_place_chunk() -> Chunk {
     let mut chunk = Chunk::new();
     chunk.main.locals = WIDE_COUNT;
     chunk.main.unique_places = WIDE_COUNT;
-    let size = chunk.add_const(Constant::I64(1));
-    chunk.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = chunk
+        .add_const(Constant::I64(1))
+        .expect("add size constant");
+    chunk.main.emit_op_u64(Op::LoadConst, size.0);
     chunk.main.emit(Op::ByteVectorNew);
     chunk
         .main
@@ -104,6 +108,17 @@ fn high_local_call_and_place_operands_validate_in_range_and_reject_equal_count()
 
 #[test]
 fn truncated_wide_operands_and_invalid_wide_jumps_fail_closed() {
+    let mut truncated_constant = unit_chunk();
+    truncated_constant.main.code = vec![Op::LoadConst as u8, 0, 0, 0, 0];
+    assert!(error(truncated_constant).contains("truncated LoadConst operand"));
+
+    let mut out_of_range_constant = unit_chunk();
+    out_of_range_constant.main.code.clear();
+    out_of_range_constant
+        .main
+        .emit_op_u64(Op::LoadConst, 65_536);
+    assert!(error(out_of_range_constant).contains("constant index out of range"));
+
     let mut truncated_index = unit_chunk();
     truncated_index.main.code = vec![Op::LoadLocal as u8, 0, 0, 0, 0];
     assert!(error(truncated_index).contains("truncated LoadLocal operand"));
@@ -164,6 +179,56 @@ fn high_cleanup_local_and_place_metadata_are_checked_without_byte_narrowing() {
     };
     *place = Some(WIDE_COUNT);
     assert!(error(chunk).contains("local or place is out of range"));
+}
+
+#[test]
+fn constant_and_global_interning_is_bit_exact_and_insertion_ordered() {
+    let mut chunk = Chunk::new();
+    let negative_zero = chunk
+        .add_const(Constant::F64(f64::from_bits(1_u64 << 63)))
+        .expect("intern negative zero");
+    let positive_zero = chunk
+        .add_const(Constant::F64(0.0))
+        .expect("intern positive zero");
+    let duplicate_negative_zero = chunk
+        .add_const(Constant::F64(f64::from_bits(1_u64 << 63)))
+        .expect("intern duplicate negative zero");
+    let text = chunk
+        .add_const(Constant::Str("owned-key".into()))
+        .expect("intern string");
+    let duplicate_text = chunk
+        .add_const(Constant::Str("owned-key".into()))
+        .expect("intern duplicate string");
+    let bytes = chunk
+        .add_const(Constant::StaticBytes(vec![1, 2, 3].into_boxed_slice()))
+        .expect("intern bytes");
+    let duplicate_bytes = chunk
+        .add_const(Constant::StaticBytes(vec![1, 2, 3].into_boxed_slice()))
+        .expect("intern duplicate bytes");
+    assert_eq!(negative_zero.0, 0);
+    assert_eq!(positive_zero.0, 1);
+    assert_eq!(duplicate_negative_zero, negative_zero);
+    assert_eq!(duplicate_text, text);
+    assert_eq!(duplicate_bytes, bytes);
+    assert_eq!(chunk.constants.len(), 4);
+    chunk.constants[0] = Constant::I64(99);
+    let restored_negative_zero = chunk
+        .add_const(Constant::F64(f64::from_bits(1_u64 << 63)))
+        .expect("reindex externally changed constants");
+    assert_eq!(restored_negative_zero.0, 4);
+
+    let first = chunk.intern_global("first").expect("intern first global");
+    let second = chunk.intern_global("second").expect("intern second global");
+    let duplicate = chunk
+        .intern_global("first")
+        .expect("intern duplicate global");
+    assert_eq!((first.0, second.0, duplicate.0), (0, 1, 0));
+    chunk.global_names[0] = "changed".into();
+    let restored = chunk
+        .intern_global("first")
+        .expect("reindex externally changed globals");
+    assert_eq!(restored.0, 2);
+    assert_eq!(chunk.global_names, ["changed", "second", "first"]);
 }
 
 #[cfg(target_pointer_width = "32")]

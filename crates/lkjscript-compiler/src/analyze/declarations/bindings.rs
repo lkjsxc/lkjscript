@@ -83,8 +83,9 @@ pub(in crate::analyze) fn record_global(
     seen: &mut HashSet<BindingId>,
 ) -> Result<()> {
     if seen.insert(binding) {
-        let _slot = u16::try_from(layout.len())
-            .map_err(|_| Error::msg("too many resolved globals for bytecode u16 slots"))?;
+        layout
+            .try_reserve(1)
+            .map_err(|_| Error::host("resolved global layout allocation failed"))?;
         layout.push(binding);
     }
     Ok(())

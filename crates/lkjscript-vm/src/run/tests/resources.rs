@@ -9,9 +9,11 @@ fn call_frame_stack_policy_rejects_before_wide_local_allocation() {
     function.emit(Op::Unit);
     function.emit(Op::Return);
     chunk.protos.push(function);
-    let name = chunk.add_const(Constant::Proto(0));
-    chunk.main.emit_op_u16(Op::LoadConst, name.0);
-    chunk.main.emit_op_u16(Op::MakeClosure, 0);
+    let name = chunk
+        .add_const(Constant::Proto(0))
+        .expect("add prototype constant");
+    chunk.main.emit_op_u64(Op::LoadConst, name.0);
+    chunk.main.emit_op_u64(Op::MakeClosure, 0);
     chunk.main.emit_op_u64(Op::Call, 0);
     chunk.main.emit(Op::Return);
     let chunk = validate(chunk);
@@ -66,8 +68,10 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     );
 
     let mut string = Chunk::new();
-    let text = string.add_const(Constant::Str("x".into()));
-    string.main.emit_op_u16(Op::LoadConst, text.0);
+    let text = string
+        .add_const(Constant::Str("x".into()))
+        .expect("add text constant");
+    string.main.emit_op_u64(Op::LoadConst, text.0);
     string.main.emit(Op::Return);
     let string = validate(string);
 
@@ -110,9 +114,11 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     output_chunk.required_capabilities = vec![lkjscript_core::CapabilityKind::Stdio];
     output_chunk.main.arity = 1;
     output_chunk.main.locals = 1;
-    let text = output_chunk.add_const(Constant::Str("x".into()));
+    let text = output_chunk
+        .add_const(Constant::Str("x".into()))
+        .expect("add text constant");
     output_chunk.main.emit_op_u64(Op::LoadLocal, 0);
-    output_chunk.main.emit_op_u16(Op::LoadConst, text.0);
+    output_chunk.main.emit_op_u64(Op::LoadConst, text.0);
     output_chunk.main.emit(Op::WriteStr);
     output_chunk.main.emit(Op::Return);
     let output_chunk = validate(output_chunk);
@@ -190,9 +196,11 @@ fn configured_handle_and_wall_limits_are_structured() {
     wait.required_capabilities = vec![lkjscript_core::CapabilityKind::Clock];
     wait.main.arity = 1;
     wait.main.locals = 1;
-    let duration = wait.add_const(Constant::I64(50));
+    let duration = wait
+        .add_const(Constant::I64(50))
+        .expect("add duration constant");
     wait.main.emit_op_u64(Op::LoadLocal, 0);
-    wait.main.emit_op_u16(Op::LoadConst, duration.0);
+    wait.main.emit_op_u64(Op::LoadConst, duration.0);
     wait.main.emit(Op::SysWaitMs);
     wait.main.emit(Op::Return);
     let wait = validate(wait);

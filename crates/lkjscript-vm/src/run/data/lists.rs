@@ -59,7 +59,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 .map_err(segmented_list_error)
         })
         .and_then(|owned| {
-            owned.retain_symbols(|index| match self.chunk.constants().get(index as usize) {
+            owned.retain_symbols(|index| match self.chunk.constant(index) {
                 Some(lkjscript_core::Constant::Symbol(text)) => Ok(text.as_str()),
                 _ => Err(Error::msg("invalid returned symbol constant index")),
             })

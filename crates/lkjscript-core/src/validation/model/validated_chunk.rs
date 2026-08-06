@@ -24,20 +24,30 @@ impl ValidatedChunk {
         &self.chunk.constants
     }
 
+    pub fn constant(&self, index: u64) -> Option<&Constant> {
+        usize::try_from(index)
+            .ok()
+            .and_then(|index| self.chunk.constants.get(index))
+    }
+
     pub fn protos(&self) -> &[FunctionProto] {
         &self.chunk.protos
     }
 
-    pub fn function_value(&self, prototype: u32) -> Result<Value> {
+    pub fn function_value(&self, prototype: u64) -> Result<Value> {
+        let index = usize::try_from(prototype)
+            .map_err(|_| Error::msg("function prototype index exceeds host usize"))?;
         self.chunk
             .protos
-            .get(prototype as usize)
+            .get(index)
             .ok_or_else(|| Error::msg("function prototype index is out of range"))?;
         Ok(Value::from_function(prototype))
     }
 
-    pub fn symbol_value(&self, constant: u32) -> Result<Value> {
-        match self.chunk.constants.get(constant as usize) {
+    pub fn symbol_value(&self, constant: u64) -> Result<Value> {
+        let index = usize::try_from(constant)
+            .map_err(|_| Error::msg("symbol constant index exceeds host usize"))?;
+        match self.chunk.constants.get(index) {
             Some(Constant::Symbol(_)) => Ok(Value::from_symbol(constant)),
             _ => Err(Error::msg("symbol constant index is invalid")),
         }

@@ -141,7 +141,7 @@ fn capability_chunk(
         chunk
             .constants
             .push(Constant::Str("provider-output".into()));
-        chunk.main.emit_op_u16(Op::LoadConst, 0);
+        chunk.main.emit_op_u64(Op::LoadConst, 0);
         chunk.main.emit(Op::Print);
     } else if capability == lkjscript_core::CapabilityKind::Arguments {
         chunk.main.emit_op_u64(Op::LoadLocal, 0);

@@ -15,10 +15,10 @@ impl<J: RuntimeTier> Vm<'_, J> {
                     frame.instruction_offset
                 };
                 let offset = u64::try_from(offset).ok()?;
-                let proto = if frame.proto == u32::MAX {
-                    self.chunk.main()
+                let proto = if let Some(prototype) = frame.proto {
+                    self.chunk.protos().get(prototype)?
                 } else {
-                    self.chunk.protos().get(frame.proto as usize)?
+                    self.chunk.main()
                 };
                 let range = proto
                     .failure_cleanup_ranges
@@ -51,7 +51,7 @@ impl<J: RuntimeTier> Vm<'_, J> {
     fn execute_failure_chain(
         &mut self,
         frame: usize,
-        prototype: u32,
+        prototype: Option<usize>,
         mut root: Option<lkjscript_core::FailureCleanupId>,
     ) {
         while let Some(id) = root {
@@ -62,14 +62,14 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 );
                 return;
             };
-            let node = if prototype == u32::MAX {
-                self.chunk.main().failure_cleanups.get(index).copied()
-            } else {
+            let node = if let Some(prototype) = prototype {
                 self.chunk
                     .protos()
-                    .get(prototype as usize)
+                    .get(prototype)
                     .and_then(|proto| proto.failure_cleanups.get(index))
                     .copied()
+            } else {
+                self.chunk.main().failure_cleanups.get(index).copied()
             };
             let Some(node) = node else {
                 self.record_failure(
@@ -186,13 +186,13 @@ impl<J: RuntimeTier> Vm<'_, J> {
         let Some(frame) = self.frames.last() else {
             return true;
         };
-        let proto = if frame.proto == u32::MAX {
-            self.chunk.main()
-        } else {
-            let Some(proto) = self.chunk.protos().get(frame.proto as usize) else {
+        let proto = if let Some(prototype) = frame.proto {
+            let Some(proto) = self.chunk.protos().get(prototype) else {
                 return true;
             };
             proto
+        } else {
+            self.chunk.main()
         };
         let Some(offset) = u64::try_from(offset).ok() else {
             return true;

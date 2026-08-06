@@ -3,11 +3,8 @@ use crate::codegen::*;
 pub(in crate::codegen) fn add_constant(
     chunk: &mut Chunk,
     constant: BytecodeConstant,
-) -> Result<u16> {
-    let id = u16::try_from(chunk.constants.len())
-        .map_err(|_| Error::msg("too many constants for bytecode u16 IDs"))?;
-    chunk.constants.push(constant);
-    Ok(id)
+) -> Result<BytecodeConstId> {
+    chunk.add_const(constant)
 }
 
 pub(in crate::codegen) fn intern_product_field(

@@ -176,8 +176,13 @@ impl Analyzer {
         &self,
         functions: &[Function],
     ) -> Result<Vec<BindingId>> {
-        let mut layout = Vec::with_capacity(functions.len());
+        let mut layout = Vec::new();
+        layout
+            .try_reserve_exact(functions.len())
+            .map_err(|_| Error::host("resolved global layout allocation failed"))?;
         let mut seen = HashSet::new();
+        seen.try_reserve(functions.len())
+            .map_err(|_| Error::host("resolved global index allocation failed"))?;
         for function in functions {
             record_global(function.binding, &mut layout, &mut seen)?;
         }

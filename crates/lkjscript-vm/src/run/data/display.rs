@@ -26,7 +26,7 @@ pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Res
         return Ok(format!("#<fn:{prototype}>"));
     }
     if let Some(symbol) = value.as_symbol() {
-        return match vm.chunk.constants().get(symbol as usize) {
+        return match vm.chunk.constant(symbol) {
             Some(Constant::Symbol(text)) => Ok(text.clone()),
             _ => Err(Error::msg("invalid symbol constant index")),
         };

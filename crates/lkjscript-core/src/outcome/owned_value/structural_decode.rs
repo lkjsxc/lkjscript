@@ -110,9 +110,9 @@ fn decode_structural_inline(
 
 fn decode_structural_static(input: &mut Decoder<'_>) -> Result<crate::StaticStructuralLeaf> {
     Ok(match input.u8()? {
-        0 => crate::StaticStructuralLeaf::Function(input.u32()?),
-        1 => crate::StaticStructuralLeaf::Symbol(input.u32()?),
-        2 => crate::StaticStructuralLeaf::Bytes(input.u16()?),
+        0 => crate::StaticStructuralLeaf::Function(input.u64()?),
+        1 => crate::StaticStructuralLeaf::Symbol(input.u64()?),
+        2 => crate::StaticStructuralLeaf::Bytes(input.u64()?),
         _ => return Err(Error::msg("unknown structural static tag")),
     })
 }

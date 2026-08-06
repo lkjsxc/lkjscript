@@ -5,7 +5,7 @@ impl JitSession {
         &self.objects
     }
 
-    pub(crate) fn function_for_prototype(&self, prototype: u32) -> Option<FunctionId> {
+    pub(crate) fn function_for_prototype(&self, prototype: u64) -> Option<FunctionId> {
         self.links
             .as_ref()?
             .functions

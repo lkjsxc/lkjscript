@@ -1,6 +1,6 @@
 pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
     vm: &Vm<'_, J>,
-    callee_index: u32,
+    callee_index: u64,
     proto: &lkjscript_core::FunctionProto,
     arguments: &[Value],
     call_offset: usize,
@@ -9,13 +9,13 @@ pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
         .frames
         .last()
         .ok_or_else(|| Error::msg("generic call has no caller frame"))?;
-    let caller = if caller_frame.proto == u32::MAX {
-        vm.chunk.main()
-    } else {
+    let caller = if let Some(prototype) = caller_frame.proto {
         vm.chunk
             .protos()
-            .get(caller_frame.proto as usize)
+            .get(prototype)
             .ok_or_else(|| Error::msg("generic call caller metadata is missing"))?
+    } else {
+        vm.chunk.main()
     };
     let offset = u64::try_from(call_offset)
         .map_err(|_| Error::msg("generic call offset exceeds u64"))?;

@@ -9,8 +9,10 @@ fn failure_cleanup_metadata_is_shared_exact_and_independently_checked() {
     let mut chunk = Chunk::new();
     chunk.main.locals = 1;
     chunk.main.unique_places = 1;
-    let size = chunk.add_const(crate::Constant::I64(1));
-    chunk.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = chunk
+        .add_const(crate::Constant::I64(1))
+        .expect("add size constant");
+    chunk.main.emit_op_u64(Op::LoadConst, size.0);
     chunk.main.emit(Op::ByteVectorNew);
     chunk.main.emit_op_u8(Op::StoreUniqueLocal, 0);
     chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);

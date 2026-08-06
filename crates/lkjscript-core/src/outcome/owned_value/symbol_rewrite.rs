@@ -1,4 +1,4 @@
-fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u32>]) -> Result<()> {
+fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u64>]) -> Result<()> {
     match &mut value.payload {
         SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
             *symbol = canonical_symbol(*symbol, mapping)?;
@@ -17,7 +17,7 @@ fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u32>]
     Ok(())
 }
 
-fn rewrite_symbol(value: &mut Value, mapping: &[Option<u32>]) -> Result<()> {
+fn rewrite_symbol(value: &mut Value, mapping: &[Option<u64>]) -> Result<()> {
     let Some(old) = value.as_symbol() else {
         return Ok(());
     };
@@ -25,9 +25,9 @@ fn rewrite_symbol(value: &mut Value, mapping: &[Option<u32>]) -> Result<()> {
     Ok(())
 }
 
-fn canonical_symbol(old: u32, mapping: &[Option<u32>]) -> Result<u32> {
+fn canonical_symbol(old: u64, mapping: &[Option<u64>]) -> Result<u64> {
     mapping
-        .get(old as usize)
+        .get(usize::try_from(old).map_err(|_| Error::msg("owned symbol index exceeds host usize"))?)
         .copied()
         .flatten()
         .ok_or_else(|| Error::msg("owned symbol mapping is incomplete"))

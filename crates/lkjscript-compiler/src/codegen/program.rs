@@ -44,21 +44,42 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     install_structural_metadata(&mut chunk, program)?;
 
     let mut globals = HashMap::new();
+    globals
+        .try_reserve(program.functions.len())
+        .map_err(|_| Error::host("bytecode global mapping allocation failed"))?;
     let mut prototypes = HashMap::new();
+    prototypes
+        .try_reserve(program.functions.len())
+        .map_err(|_| Error::host("bytecode prototype mapping allocation failed"))?;
     for function in &program.functions {
         if function.id == program.main {
             continue;
         }
-        let slot = u16::try_from(chunk.global_names.len())
-            .map_err(|_| Error::msg("too many SSA functions for bytecode globals"))?;
-        globals.insert(function.id, slot);
-        chunk.global_names.push(function.name.clone());
-        let prototype = u32::try_from(prototypes.len())
-            .map_err(|_| Error::msg("too many SSA functions for bytecode prototypes"))?;
-        prototypes.insert(function.id, prototype);
-        chunk.global_prototypes.push(Some(prototype));
+        let slot = chunk.intern_global(&function.name)?;
+        if globals.insert(function.id, slot).is_some() {
+            return Err(Error::msg("duplicate SSA function global mapping"));
+        }
+        let prototype = u64::try_from(prototypes.len())
+            .map_err(|_| Error::host("bytecode prototype identity exceeds u64"))?;
+        if prototypes.insert(function.id, prototype).is_some() {
+            return Err(Error::msg("duplicate SSA function prototype mapping"));
+        }
+        let global_index = slot
+            .index()
+            .ok_or_else(|| Error::msg("bytecode global identity exceeds host usize"))?;
+        let metadata = chunk
+            .global_prototypes
+            .get_mut(global_index)
+            .ok_or_else(|| Error::msg("bytecode global prototype metadata is missing"))?;
+        if metadata.replace(prototype).is_some() {
+            return Err(Error::msg("duplicate bytecode global function name"));
+        }
     }
 
+    chunk
+        .protos
+        .try_reserve_exact(prototypes.len())
+        .map_err(|_| Error::host("bytecode prototype table allocation failed"))?;
     let mut links = Vec::new();
     links
         .try_reserve_exact(program.functions.len())
@@ -96,9 +117,9 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
             .copied()
             .ok_or_else(|| Error::msg("SSA closure installation has no global mapping"))?;
         let constant = add_constant(&mut chunk, BytecodeConstant::Proto(prototype))?;
-        chunk.main.try_emit_op_u16(Op::LoadConst, constant)?;
-        chunk.main.try_emit_op_u16(Op::MakeClosure, 0)?;
-        chunk.main.try_emit_op_u16(Op::StoreGlobal, global)?;
+        chunk.main.try_emit_op_u64(Op::LoadConst, constant.0)?;
+        chunk.main.try_emit_op_u64(Op::MakeClosure, 0)?;
+        chunk.main.try_emit_op_u64(Op::StoreGlobal, global.0)?;
         chunk.main.try_emit(Op::Pop)?;
     }
 

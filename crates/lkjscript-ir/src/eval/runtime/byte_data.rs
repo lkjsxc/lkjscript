@@ -53,7 +53,9 @@ impl Evaluator<'_> {
                 let bytes = match value {
                     EvalValue::StaticBytes(id) => self
                         .static_bytes
-                        .get(*id as usize)
+                        .get(usize::try_from(*id).map_err(|_| {
+                            Flow::Trap("static bytes index exceeds host usize".into())
+                        })?)
                         .ok_or_else(|| Flow::Trap("stale static bytes index".into()))?
                         .to_vec(),
                     _ => self.unique.copy_bytes(value)?,

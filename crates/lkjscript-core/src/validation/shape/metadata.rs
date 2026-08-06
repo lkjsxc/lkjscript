@@ -3,7 +3,7 @@ fn function_metadata_bytes(chunk: &Chunk) -> Result<(usize, usize)> {
     let global_prototype_bytes = chunk
         .global_prototypes
         .len()
-        .checked_mul(5)
+        .checked_mul(9)
         .ok_or_else(|| Error::host("bytecode metadata byte size overflow"))?;
     metadata_bytes = checked_add(metadata_bytes, global_prototype_bytes, "metadata byte size")?;
     metadata_bytes = checked_add(
@@ -81,7 +81,7 @@ fn witness_metadata_bytes(proto: &FunctionProto) -> Result<usize> {
         )?;
     }
     for call in &proto.call_witnesses {
-        bytes = checked_add(bytes, 8, "memory witness metadata byte size")?;
+        bytes = checked_add(bytes, 16, "memory witness metadata byte size")?;
         let binding_bytes = call
             .bindings
             .len()

@@ -7,17 +7,15 @@ use lkjscript_jit::{EntryDecision, NativeValue, ScalarInvocationOutcome, ValueTy
 use crate::run::{Frame, RuntimeTier, Vm};
 
 pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let captures = vm.read_u16()?;
+    let captures = vm.read_index()?;
     if captures != 0 {
         return Err(Error::msg("captured closures are unsupported"));
     }
     let value = vm.pop()?;
-    let proto_id = vm
-        .as_i64(value)
-        .map_err(|_| Error::msg("MakeClosure expects proto index"))?;
-    let proto_id =
-        u32::try_from(proto_id).map_err(|_| Error::msg("MakeClosure proto index out of range"))?;
-    vm.push(vm.chunk.function_value(proto_id)?);
+    let prototype = value
+        .as_function_prototype()
+        .ok_or_else(|| Error::msg("MakeClosure expects proto index"))?;
+    vm.push(vm.chunk.function_value(prototype)?);
     Ok(())
 }
 

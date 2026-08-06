@@ -24,15 +24,18 @@ impl EvaluatorStructuralSession {
         })
     }
 
-    pub(crate) fn static_string(&self, identity: u32) -> Result<&str, String> {
+    pub(crate) fn static_string(&self, identity: u64) -> Result<&str, String> {
         self.static_strings
-            .get(identity as usize)
+            .get(
+                usize::try_from(identity)
+                    .map_err(|_| "evaluator static string index exceeds host usize")?,
+            )
             .filter(|artifact| artifact.identity == identity)
             .map(|artifact| artifact.text.as_ref())
             .ok_or_else(|| "stale evaluator static string artifact".into())
     }
 
-    pub(crate) fn static_string_identity(&self, text: &str) -> Result<u32, String> {
+    pub(crate) fn static_string_identity(&self, text: &str) -> Result<u64, String> {
         self.static_strings
             .iter()
             .find(|artifact| artifact.text.as_ref() == text)
@@ -44,17 +47,20 @@ impl EvaluatorStructuralSession {
         self.static_strings.len()
     }
 
-    pub(crate) fn static_symbol_identity(&self, symbol: &str) -> Result<u32, String> {
+    pub(crate) fn static_symbol_identity(&self, symbol: &str) -> Result<u64, String> {
         self.static_symbols
             .iter()
             .position(|known| known.as_ref() == symbol)
-            .and_then(|index| u32::try_from(index).ok())
+            .and_then(|index| u64::try_from(index).ok())
             .ok_or_else(|| "evaluator static symbol table mismatch".into())
     }
 
-    pub(crate) fn static_symbol(&self, identity: u32) -> Result<&str, String> {
+    pub(crate) fn static_symbol(&self, identity: u64) -> Result<&str, String> {
         self.static_symbols
-            .get(identity as usize)
+            .get(
+                usize::try_from(identity)
+                    .map_err(|_| "evaluator static symbol index exceeds host usize")?,
+            )
             .map(AsRef::as_ref)
             .ok_or_else(|| "stale evaluator static symbol artifact".into())
     }
@@ -134,8 +140,8 @@ fn collect_static_strings(program: &Program) -> Result<Vec<StaticStringArtifact>
         if output.iter().any(|artifact| artifact.text.as_ref() == text) {
             continue;
         }
-        let identity = u32::try_from(output.len())
-            .map_err(|_| "evaluator static string artifact limit exceeded".to_owned())?;
+        let identity = u64::try_from(output.len())
+            .map_err(|_| "evaluator static string artifact identity exceeds u64".to_owned())?;
         output
             .try_reserve(1)
             .map_err(|_| "evaluator static string artifact allocation failed".to_owned())?;

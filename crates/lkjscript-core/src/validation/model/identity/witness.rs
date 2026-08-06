@@ -178,7 +178,7 @@ pub(super) fn call_site(out: &mut Encoder, value: &CallWitnessSite) {
         bindings,
     } = value;
     out.u64(*offset);
-    out.u32(*callee);
+    out.u64(*callee);
     out.sequence(bindings, |out, value| {
         let MemoryWitnessBinding { parameter, witness } = value;
         out.u16(*parameter);

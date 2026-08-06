@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn structural_symbol_traversal_and_equality_are_canonical() {
-    fn symbols(zeta: u32, alpha: u32) -> SemanticValue {
+    fn symbols(zeta: u64, alpha: u64) -> SemanticValue {
         value(
             40,
             StructuralKind::Product,
@@ -30,7 +30,7 @@ fn structural_symbol_traversal_and_equality_are_canonical() {
             ),
         )
     }
-    fn text(index: u32, zeta: u32, alpha: u32) -> crate::Result<&'static str> {
+    fn text(index: u64, zeta: u64, alpha: u64) -> crate::Result<&'static str> {
         if index == zeta {
             Ok("zeta")
         } else if index == alpha {

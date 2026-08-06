@@ -41,7 +41,7 @@ fn hand_built_nonstructural_enum_rejects_validation() {
         layout,
     });
     chunk.constants.push(Constant::I64(42));
-    chunk.main.emit_op_u16(Op::LoadConst, 0);
+    chunk.main.emit_op_u64(Op::LoadConst, 0);
     chunk.main.emit_op_u16(Op::MakeEnum, 0);
     chunk.main.emit_op_u16(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);

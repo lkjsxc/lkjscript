@@ -7,9 +7,9 @@ pub enum EvalValue {
     /// Legacy string category retained only for rejected mixed-graph diagnostics.
     Str(String),
     /// Evaluator-session static string artifact identity.
-    StaticString(u32),
+    StaticString(u64),
     /// Evaluator-session static symbol artifact identity.
-    StaticSymbol(u32),
+    StaticSymbol(u64),
     Symbol(String),
     /// Compact owned structural root.
     StructuralOwner(EvalStructuralOwner),
@@ -22,7 +22,7 @@ pub enum EvalValue {
     /// Key-free owned snapshot transferred across the evaluator boundary.
     ReturnedOwned(lkjscript_core::OwnedValue),
     /// Evaluator-local immutable static constant index.
-    StaticBytes(u32),
+    StaticBytes(u64),
     /// Execution-owned deterministic immutable-bytes key.
     Bytes(lkjscript_core::UniqueKeyWord),
     /// Execution-owned shared immutable-bytes loan token.

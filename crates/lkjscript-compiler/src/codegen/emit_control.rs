@@ -172,7 +172,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    pub(in crate::codegen) fn global(&self, function: FunctionId) -> Result<u16> {
+    pub(in crate::codegen) fn global(&self, function: FunctionId) -> Result<BytecodeGlobalId> {
         self.globals.get(&function).copied().ok_or_else(|| {
             Error::msg(format!(
                 "SSA function {} has no bytecode closure slot",

@@ -81,7 +81,7 @@ fn tail_call_reuses_the_current_frame() {
         ExecutionConfig::default(),
     );
     vm.frames.push(Frame {
-        proto: 1,
+        proto: Some(1),
         ip: 1,
         instruction_offset: 0,
         stack_base: 0,
@@ -97,7 +97,7 @@ fn tail_call_reuses_the_current_frame() {
     call(&mut vm, 1, 0).expect("tail call");
 
     assert_eq!(vm.frames.len(), 1);
-    assert_eq!(vm.frames[0].proto, 0);
+    assert_eq!(vm.frames[0].proto, Some(0));
     assert_eq!(vm.stack, vec![argument]);
 }
 
@@ -129,7 +129,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         ExecutionConfig::default(),
     );
     vm.frames.push(Frame {
-        proto: u32::MAX,
+        proto: None,
         ip: 0,
         instruction_offset: 0,
         stack_base: 0,

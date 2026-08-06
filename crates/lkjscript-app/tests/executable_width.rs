@@ -8,6 +8,7 @@ use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
 
 const WIDE_COUNT: usize = 300;
 const STRESS_COUNT: usize = 1_024;
+const WIDE_CONSTANT_COUNT: usize = 65_537;
 
 fn wide_scalar_source(count: usize) -> String {
     let mut lines = vec![
@@ -192,6 +193,19 @@ fn many_owned_arguments_source(count: usize) -> String {
     lines.join("\n")
 }
 
+fn wide_distinct_constants_source(count: usize) -> String {
+    let mut source = String::from(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n0\ndo/\n",
+    );
+    for value in 1..count {
+        source.push_str("set/\nx\n");
+        source.push_str(&value.to_string());
+        source.push_str("\n/set\n");
+    }
+    source.push_str("x\n/do\n/var\n/main\n");
+    source
+}
+
 fn wide_branch_source(body_updates: usize) -> String {
     let mut source = String::from(
         "def/\nname/\nwide-branch\n/name\nfn/\nsig/\ninputs/\nbool\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nflag\nbool\n/params\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n0\nif/\nflag\ndo/\n",
@@ -241,6 +255,30 @@ fn returned_i64(outcome: ExecutionOutcome) -> i64 {
         ExecutionOutcome::Returned(value) => value.as_i64().expect("returned I64"),
         other => panic!("wide executable did not return: {other:?}"),
     }
+}
+
+#[test]
+#[ignore = "release-only generated 65,537-distinct-constant executable-width stress"]
+fn generated_source_crosses_constant_memory_plan_and_bytecode_widths() {
+    let program = compile_source(
+        &wide_distinct_constants_source(WIDE_CONSTANT_COUNT),
+        "generated-wide-constants.lkjscript",
+    )
+    .expect("compile wide constants through HIR memory plan, SSA, and bytecode validation");
+    assert!(program.prepared_identity().is_bound());
+    assert_eq!(program.memory_plan().constants.len(), WIDE_CONSTANT_COUNT);
+    assert!(program.memory_plan().entries.len() > usize::from(u16::MAX));
+    assert!(program.memory_plan().work.verifier_steps > u64::from(u16::MAX));
+    assert!(!program.bytecode().constants().is_empty());
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    assert_eq!(
+        returned_i64(outcome),
+        i64::try_from(WIDE_CONSTANT_COUNT - 1).expect("test width fits i64")
+    );
 }
 
 #[test]

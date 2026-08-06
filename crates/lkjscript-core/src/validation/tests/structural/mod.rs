@@ -114,11 +114,13 @@ fn product_chunk() -> Chunk {
 fn emit_finished_product(chunk: &mut Chunk) {
     chunk.main.locals = 3;
     chunk.main.unique_places = 1;
-    let value = chunk.add_const(crate::Constant::I64(11));
+    let value = chunk
+        .add_const(crate::Constant::I64(11))
+        .expect("add value constant");
     chunk.main.emit_op_u16(Op::StructuralDestinationCreate, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
-    chunk.main.emit_op_u16(Op::LoadConst, value.0);
+    chunk.main.emit_op_u64(Op::LoadConst, value.0);
     chunk
         .main
         .emit_op_u16(Op::StructuralDestinationFieldInit, 0);

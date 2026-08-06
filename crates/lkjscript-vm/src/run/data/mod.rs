@@ -33,7 +33,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
     match op {
         x if x == Op::Nop as u8 => Ok(()),
         x if x == Op::LoadConst as u8 => {
-            let id = vm.read_u16()? as usize;
+            let id = vm.read_index()?;
             let v = vm.load_const(id)?;
             vm.push(v);
             Ok(())
@@ -97,7 +97,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::LoadGlobal as u8 => {
-            let id = vm.read_u16()? as usize;
+            let id = vm.read_index()?;
             let value = vm
                 .globals
                 .get(id)
@@ -110,7 +110,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::StoreGlobal as u8 => {
-            let id = vm.read_u16()? as usize;
+            let id = vm.read_index()?;
             let value = vm.peek()?;
             let target = vm
                 .globals

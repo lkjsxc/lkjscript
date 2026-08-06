@@ -5,10 +5,10 @@ pub(in crate::codegen) use emitter::Emitter;
 use failure::*;
 pub(in crate::codegen) fn compile_function(
     chunk: &mut Chunk,
-    globals: &HashMap<FunctionId, u16>,
+    globals: &HashMap<FunctionId, BytecodeGlobalId>,
     function: &Function,
     code_base: u64,
-    prototype: Option<u32>,
+    prototype: Option<u64>,
 ) -> Result<(FunctionProto, FunctionBytecodeLink)> {
     let slots = allocate_locals(function, chunk)?;
     let entry = function

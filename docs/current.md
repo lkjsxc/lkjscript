@@ -83,19 +83,32 @@ against their `u64` wire representation.
 
 Executable function arity and local slots now remain `usize` through HIR and code generation; SSA
 frame-state slots use `u64`, and bytecode prototypes, owner-place metadata, and failure-cleanup
-locals/places use host indexes. The one active bytecode format encodes branch targets, local indexes, call argument counts,
-memory-witness ordinals, and single place indexes as fixed little-endian `u64`; instructions that
-name both a place and local encode two separate `u64` operands. Bytecode function, block, and
-instruction links, call-witness instruction offsets, cleanup node identities, and cleanup range
-offsets are also `u64`, with checked conversion at host-index boundaries. Existing constant,
-global, product, enum, and structural table, descriptor, and field operands remain `u16` or `u8`.
-Decoding classifies operands as no operand, `u16`, checked host index, or checked place/local pair,
+locals/places use host indexes. The one active bytecode format encodes branch targets, constant and
+global indexes, closure operands, local indexes, call argument counts, memory-witness ordinals, and
+single place indexes as fixed little-endian `u64`; instructions that name both a place and local
+encode two separate `u64` operands. `ConstId`, `GlobalId`, prototype constants, global-prototype
+metadata, runtime function/symbol/static-constant references, call-witness prototype references,
+and bytecode-link prototype references carry `u64`, with checked conversion before host indexing.
+Constant and global interning use hash-backed lookup with insertion-order vectors; floating-point
+keys use exact bits, and string/bytes keys own their data, so canonical order never depends on hash
+iteration. Bytecode function, block, and instruction links, call-witness instruction offsets,
+cleanup node identities, and cleanup range offsets are also `u64`. Product, enum, and structural
+tables, descriptors, and fields remain `u16` or `u8`. Decoding classifies operands as no operand,
+retained `u16`, checked host index, or checked place/local pair,
 proves the complete operand is present, and rejects host-width overflow before validation or
 indexing. The VM
 uses checked frame arithmetic and fallible reservations, rejects a low stack host policy before
 wide frame allocation, tracks instruction starts independently of encoded length, and tail-forwards high local slots without two- or three-byte instruction assumptions.
-Generated production coverage compiles and executes 300 parameters, 300 arguments, and more than
-255 simultaneously live lexical locals, reads slot 299, agrees with the SSA evaluator, and proves
+Focused generated chunks intern, validate, and execute 65,537 distinct constants and globals,
+load/store index 65,536, and construct and call prototype 65,536. Malformed truncated and
+out-of-range fixed-width constant operands fail before indexing. An opt-in release production test
+compiles source containing exactly 65,537 distinct scalar constants through HIR memory planning,
+verified normalized SSA, validated/prepared bytecode, and VM execution; memory-plan entries,
+constants, and verifier work are checked observational telemetry rather than admission. Baseline
+normalization legally removes overwritten pure scalar stores before bytecode lowering, while the
+focused chunk test owns direct wide-operand execution evidence. Generated production coverage also
+compiles and executes 300 parameters, 300 arguments, and more than 255 simultaneously live lexical
+locals, reads slot 299, agrees with the SSA evaluator, and proves
 that automatic execution remains on the generic VM route while forced native mode reports an
 unsupported signature. A larger generated stress case executes 1,024 parameters, arguments, and
 lexical locals through the VM and reads slot 1,023. A separate 1,024-owned-parameter and argument
@@ -139,17 +152,19 @@ may build elsewhere, but no other host or native target is currently claimed as 
 - Source spans, positions, and snapshot-local node indexes remain `u32`, so an individual source
   or source tree beyond those addressable ranges fails at a representation boundary. HIR, SSA,
   recursive type/trait/enum, and structural-value paths retain other arbitrary count or recursion
-  ceilings. HIR memory planning still has independently triggered quotas for functions, entries,
-  uses, loans, constants, calls, obligations, type nodes and edges, witnesses, aggregate shape,
-  destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
+  ceilings. HIR memory-plan entry, constant, and whole-verifier work counts are now checked
+  observational telemetry. Independently triggered quotas remain for functions, uses, loans,
+  calls, obligations, type nodes and edges, witnesses, aggregate shape, destinations, borrow
+  scopes, drop paths, and deterministic SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
   40,045 verifier steps. Bytecode validation has no project-selected encoded-size, physical-table,
   metadata-size, constant-size, or cleanup-node/range count admission. An explicit limited policy
   at an untrusted artifact boundary may reject only the checked total-byte observation; trusted
-  compilation and prepared binding use unrestricted validation. Constants, globals,
-  product/enum/structural tables, product fields, enum substitutions, and several structural
-  descriptors retain `u16` or `u8` representation ceilings. HIR and SSA place identities remain
+  compilation and prepared binding use unrestricted validation. Constant, global, and prototype
+  executable references are fixed-`u64`; product/enum/structural tables, product fields, enum
+  substitutions, and several structural descriptors retain `u16` or `u8` representation
+  ceilings. HIR memory-plan table identities and HIR/SSA place identities remain
   `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.
   Validator-synthetic ownership identity no longer narrows bytecode positions or parameter indexes
   to `u32`; it uses tagged instruction offsets and parameter indexes at host width. Where the

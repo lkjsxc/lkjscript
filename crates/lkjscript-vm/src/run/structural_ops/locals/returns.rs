@@ -1,20 +1,14 @@
 pub(in crate::run) fn prepare_return<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     value: Value,
-    prototype: u32,
+    prototype: Option<usize>,
 ) -> Result<()> {
-    cleanup_copy_roots(vm, value, prototype == u32::MAX)?;
-    let (expected, type_variable, variable_representation) = if prototype == u32::MAX {
-        (
-            vm.chunk.main().return_structural,
-            vm.chunk.main().return_type_variable,
-            None,
-        )
-    } else {
+    cleanup_copy_roots(vm, value, prototype.is_none())?;
+    let (expected, type_variable, variable_representation) = if let Some(prototype) = prototype {
         let proto = vm
             .chunk
             .protos()
-            .get(prototype as usize)
+            .get(prototype)
             .ok_or_else(|| Error::msg("return prototype metadata is missing"))?;
         let variable_representation = proto.return_type_variable.and_then(|variable| {
             vm.frames
@@ -37,6 +31,12 @@ pub(in crate::run) fn prepare_return<J: RuntimeTier>(
             proto.return_structural,
             proto.return_type_variable,
             variable_representation,
+        )
+    } else {
+        (
+            vm.chunk.main().return_structural,
+            vm.chunk.main().return_type_variable,
+            None,
         )
     };
     match (

@@ -3,10 +3,10 @@ use super::*;
 #[test]
 fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
     let mut trap = Chunk::new();
-    let one = trap.add_const(Constant::I64(1));
-    let zero = trap.add_const(Constant::I64(0));
-    trap.main.emit_op_u16(Op::LoadConst, one.0);
-    trap.main.emit_op_u16(Op::LoadConst, zero.0);
+    let one = trap.add_const(Constant::I64(1)).expect("add one constant");
+    let zero = trap.add_const(Constant::I64(0)).expect("add zero constant");
+    trap.main.emit_op_u64(Op::LoadConst, one.0);
+    trap.main.emit_op_u64(Op::LoadConst, zero.0);
     trap.main.emit(Op::Div);
     trap.main.emit(Op::Return);
     let trap = validate(trap);
@@ -26,8 +26,8 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
     assert_emergency_cleanup(trapped_vm.resources.metrics());
 
     let mut exit = Chunk::new();
-    let zero = exit.add_const(Constant::I64(0));
-    exit.main.emit_op_u16(Op::LoadConst, zero.0);
+    let zero = exit.add_const(Constant::I64(0)).expect("add zero constant");
+    exit.main.emit_op_u64(Op::LoadConst, zero.0);
     exit.main.emit(Op::Exit);
     let exit = validate(exit);
     let mut exited_vm = Vm::new(
@@ -49,10 +49,10 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
 #[test]
 fn runtime_teardown_failure_attaches_without_replacing_trap() {
     let mut trap = Chunk::new();
-    let one = trap.add_const(Constant::I64(1));
-    let zero = trap.add_const(Constant::I64(0));
-    trap.main.emit_op_u16(Op::LoadConst, one.0);
-    trap.main.emit_op_u16(Op::LoadConst, zero.0);
+    let one = trap.add_const(Constant::I64(1)).expect("add one constant");
+    let zero = trap.add_const(Constant::I64(0)).expect("add zero constant");
+    trap.main.emit_op_u64(Op::LoadConst, one.0);
+    trap.main.emit_op_u64(Op::LoadConst, zero.0);
     trap.main.emit(Op::Div);
     trap.main.emit(Op::Return);
     let trap = validate(trap);

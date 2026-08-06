@@ -1,5 +1,5 @@
 impl OwnedValue {
-    pub fn as_function(&self) -> Option<u32> {
+    pub fn as_function(&self) -> Option<u64> {
         if let Some(value) = self.as_structural() {
             return match &value.payload {
                 SemanticPayload::Static(crate::StaticStructuralLeaf::Function(function)) => {

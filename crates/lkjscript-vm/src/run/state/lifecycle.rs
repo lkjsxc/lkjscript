@@ -36,8 +36,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             {
                 let transferred = if let Some(index) = value.as_static_bytes() {
                     self.chunk
-                        .constants()
-                        .get(usize::from(index))
+                        .constant(index)
                         .and_then(|constant| match constant {
                             lkjscript_core::Constant::StaticBytes(bytes) => {
                                 lkjscript_core::OwnedValue::from_unique_bytes(bytes.to_vec()).ok()

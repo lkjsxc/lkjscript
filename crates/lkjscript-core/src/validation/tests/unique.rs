@@ -4,10 +4,16 @@ fn unique_chunk() -> Chunk {
     let mut chunk = Chunk::new();
     chunk.main.locals = 3;
     chunk.main.unique_places = 1;
-    let size = chunk.add_const(crate::Constant::I64(2));
-    let index = chunk.add_const(crate::Constant::I64(1));
-    let byte = chunk.add_const(crate::Constant::I64(77));
-    chunk.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = chunk
+        .add_const(crate::Constant::I64(2))
+        .expect("add size constant");
+    let index = chunk
+        .add_const(crate::Constant::I64(1))
+        .expect("add index constant");
+    let byte = chunk
+        .add_const(crate::Constant::I64(77))
+        .expect("add byte constant");
+    chunk.main.emit_op_u64(Op::LoadConst, size.0);
     chunk.main.emit(Op::ByteVectorNew);
     chunk.main.emit_op_u8(Op::StoreUniqueLocal, 0);
     chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
@@ -15,8 +21,8 @@ fn unique_chunk() -> Chunk {
     chunk.main.emit_op_u8(Op::ByteVectorBorrowMut, 0);
     chunk.main.emit_op_u8(Op::StoreViewLocal, 1);
     chunk.main.emit_op_u8(Op::LoadViewLocal, 1);
-    chunk.main.emit_op_u16(Op::LoadConst, index.0);
-    chunk.main.emit_op_u16(Op::LoadConst, byte.0);
+    chunk.main.emit_op_u64(Op::LoadConst, index.0);
+    chunk.main.emit_op_u64(Op::LoadConst, byte.0);
     chunk.main.emit(Op::ByteSliceMutSet);
     chunk.main.emit(Op::Pop);
     chunk.main.emit_op_u8(Op::EndBorrowLocal, 1);
@@ -47,8 +53,10 @@ fn exact_unique_family_validates_without_traced_byte_objects() {
 #[test]
 fn ordinary_dup_and_load_cannot_copy_unique_values() {
     let mut duplicate = Chunk::new();
-    let size = duplicate.add_const(crate::Constant::I64(1));
-    duplicate.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = duplicate
+        .add_const(crate::Constant::I64(1))
+        .expect("add size constant");
+    duplicate.main.emit_op_u64(Op::LoadConst, size.0);
     duplicate.main.emit(Op::ByteVectorNew);
     duplicate.main.emit(Op::Dup);
     duplicate.main.emit(Op::Return);
@@ -81,8 +89,10 @@ fn missing_end_borrow_and_drop_reject_before_execution() {
     let mut missing_drop = Chunk::new();
     missing_drop.main.locals = 1;
     missing_drop.main.unique_places = 1;
-    let size = missing_drop.add_const(crate::Constant::I64(1));
-    missing_drop.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = missing_drop
+        .add_const(crate::Constant::I64(1))
+        .expect("add size constant");
+    missing_drop.main.emit_op_u64(Op::LoadConst, size.0);
     missing_drop.main.emit(Op::ByteVectorNew);
     missing_drop.main.emit_op_u8(Op::StoreUniqueLocal, 0);
     missing_drop
@@ -99,8 +109,10 @@ fn post_move_use_overlap_and_wrong_view_type_reject() {
     let mut moved = Chunk::new();
     moved.main.locals = 2;
     moved.main.unique_places = 1;
-    let size = moved.add_const(crate::Constant::I64(1));
-    moved.main.emit_op_u16(Op::LoadConst, size.0);
+    let size = moved
+        .add_const(crate::Constant::I64(1))
+        .expect("add size constant");
+    moved.main.emit_op_u64(Op::LoadConst, size.0);
     moved.main.emit(Op::ByteVectorNew);
     moved.main.emit_op_u8(Op::StoreUniqueLocal, 0);
     moved.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);

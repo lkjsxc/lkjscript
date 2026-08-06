@@ -5,6 +5,9 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         if let Some(error) = self.structural_initialization_error.take() {
             return Err(error);
         }
+        if let Some(error) = self.global_initialization_error.take() {
+            return Err(error);
+        }
         if let Some(error) = self.region_product_initialization_error.take() {
             return Err(error);
         }
@@ -33,7 +36,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             unique::RuntimePlace::Inactive,
         );
         self.frames.push(Frame {
-            proto: u32::MAX,
+            proto: None,
             ip: 0,
             instruction_offset: 0,
             stack_base: 0,

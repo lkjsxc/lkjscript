@@ -63,7 +63,9 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
 
     let mut global = unit_chunk();
     global.global_names.push("g".into());
-    global.main.code = vec![Op::LoadGlobal as u8, 0, 0, Op::Return as u8];
+    global.main.code.clear();
+    global.main.emit_op_u64(Op::LoadGlobal, 0);
+    global.main.emit(Op::Return);
     assert!(error(global).contains("global is not definitely initialized"));
 
     for (operation, category) in [

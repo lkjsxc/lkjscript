@@ -3,11 +3,13 @@ use super::*;
 pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize) -> Result<()> {
     let callee = vm.pop()?;
     match callee.as_function() {
-        Some(proto) => {
+        Some(prototype) => {
+            let proto_index = usize::try_from(prototype)
+                .map_err(|_| Error::msg("call proto index exceeds host usize"))?;
             let p = vm
                 .chunk
                 .protos()
-                .get(proto as usize)
+                .get(proto_index)
                 .ok_or_else(|| Error::msg("call proto index out of range"))?;
             if argc != p.arity {
                 return Err(Error::msg(format!(
@@ -23,8 +25,8 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                 .checked_sub(argument_count)
                 .ok_or_else(|| Error::msg("call argument stack underflow"))?;
             #[cfg(feature = "jit")]
-            if let EntryDecision::Native(function) = vm.jit.observe_function_entry(proto) {
-                if !vm.chunk.proto_has_structural_execution(proto as usize) {
+            if let EntryDecision::Native(function) = vm.jit.observe_function_entry(prototype) {
+                if !vm.chunk.proto_has_structural_execution(proto_index) {
                     let signature = vm.jit.scalar_signature(function).ok_or_else(|| {
                         Error::msg("installed native function has no scalar signature")
                     })?;
@@ -121,7 +123,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                 .to_vec();
             let memory_witnesses = super::super::structural_ops::call_memory_witnesses(
                 vm,
-                proto,
+                prototype,
                 p,
                 &arguments,
                 call_offset,
@@ -177,7 +179,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                 }
                 if let Some(frame) = vm.frames.last_mut() {
                     *frame = Frame {
-                        proto,
+                        proto: Some(proto_index),
                         ip: 0,
                         instruction_offset: 0,
                         stack_base,
@@ -199,7 +201,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                 .try_reserve(1)
                 .map_err(|_| Error::host("VM frame-stack reservation failed"))?;
             vm.frames.push(Frame {
-                proto,
+                proto: Some(proto_index),
                 ip: 0,
                 instruction_offset: 0,
                 stack_base: args_start,

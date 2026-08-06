@@ -60,7 +60,7 @@ pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
 
 pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<String> {
     if let Some(index) = value.as_static_string() {
-        return match vm.chunk.constants().get(usize::from(index)) {
+        return match vm.chunk.constant(index) {
             Some(Constant::Str(text)) => Ok(text.clone()),
             _ => Err(Error::msg("stale static string constant")),
         };
@@ -116,7 +116,7 @@ pub(in crate::run) fn static_string_semantic<J: RuntimeTier>(
     let index = value
         .as_static_string()
         .ok_or_else(|| Error::msg("expected static string artifact"))?;
-    let text = match vm.chunk.constants().get(usize::from(index)) {
+    let text = match vm.chunk.constant(index) {
         Some(Constant::Str(text)) => text,
         _ => return Err(Error::msg("stale static string artifact")),
     };

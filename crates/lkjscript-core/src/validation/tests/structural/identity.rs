@@ -77,8 +77,10 @@ fn region_product_metadata_cycles_are_rejected() {
 #[test]
 fn owner_view_and_destination_metadata_are_opcode_checked() {
     let mut owner = product_chunk();
-    let product = owner.add_const(crate::Constant::I64(0));
-    owner.main.emit_op_u16(Op::LoadConst, product.0);
+    let product = owner
+        .add_const(crate::Constant::I64(0))
+        .expect("add product constant");
+    owner.main.emit_op_u64(Op::LoadConst, product.0);
     owner.main.emit_op_u16(Op::StructuralPublish, 1);
     owner.main.emit(Op::Return);
     assert!(error(owner).contains("owner representation"));
@@ -102,12 +104,14 @@ fn owner_view_and_destination_metadata_are_opcode_checked() {
 fn destination_double_init_and_incomplete_finish_fail_closed() {
     let mut double = product_chunk();
     double.main.locals = 1;
-    let value = double.add_const(crate::Constant::I64(1));
+    let value = double
+        .add_const(crate::Constant::I64(1))
+        .expect("add value constant");
     double.main.emit_op_u16(Op::StructuralDestinationCreate, 0);
     double.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     for _ in 0..2 {
         double.main.emit_op_u8(Op::TakeStructuralLocal, 0);
-        double.main.emit_op_u16(Op::LoadConst, value.0);
+        double.main.emit_op_u64(Op::LoadConst, value.0);
         double
             .main
             .emit_op_u16(Op::StructuralDestinationFieldInit, 0);

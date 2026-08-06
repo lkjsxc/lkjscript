@@ -26,9 +26,13 @@
    132,000 state cells per block, 264,000 cells under the former aggregate retained-state
    accounting across propagation, and exact cleanup. SSA and bytecode cleanup now use wide,
    backward-only hash-consed node arenas with segmented roots; a 300-owned-parameter/argument source
-   publishes and runs with 315,450 logical actions represented by 1,200 physical nodes. Next remove
-   retained `u16` constants, globals, product/enum/structural tables and descriptors, plus byte-sized
-   product fields and enum substitutions. Bytecode links, call-witness offsets, cleanup range
+   publishes and runs with 315,450 logical actions represented by 1,200 physical nodes. Constants,
+   globals, and prototype references now use fixed-`u64` operands and metadata with checked host
+   indexing; focused chunks execute index 65,536 for all three tables, and a release stress source
+   crosses 65,535 distinct HIR scalar constants. HIR memory-plan entry, constant, and verifier-work
+   admission is removed in that production vertical. Next remove retained `u16`
+   product/enum/structural tables and descriptors, plus byte-sized product fields and enum
+   substitutions. Bytecode links, call-witness offsets, cleanup range
    offsets, and cleanup roots are already `u64`, while physical cleanup-node/range counts remain
    unrestricted by the removed general bytecode table and metadata admission. Completion requires
    just-beyond-old-boundary and substantially larger positive programs, checked growth, and

@@ -57,13 +57,15 @@ fn returning_enum_chunk() -> (
     install_authenticated_return_witness(&mut chunk, crate::StructuralTypeMode::Immutable);
     chunk.main.locals = 1;
     chunk.main.return_structural = Some(crate::StructuralRepresentationId::new(0));
-    let value = chunk.add_const(crate::Constant::I64(41));
+    let value = chunk
+        .add_const(crate::Constant::I64(41))
+        .expect("add value constant");
     chunk
         .main
         .emit_op_u16(Op::StructuralDestinationCreate, 0);
     chunk.main.emit_op_u8(Op::StoreStructuralLocal, 0);
     chunk.main.emit_op_u8(Op::TakeStructuralLocal, 0);
-    chunk.main.emit_op_u16(Op::LoadConst, value.0);
+    chunk.main.emit_op_u64(Op::LoadConst, value.0);
     chunk
         .main
         .emit_op_u16(Op::StructuralDestinationFieldInit, 0);

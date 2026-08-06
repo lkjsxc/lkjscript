@@ -65,6 +65,7 @@ fn encode_chunk(out: &mut Encoder, value: &Chunk) {
         enum_constructions,
         enum_variants,
         enum_fields,
+        ..
     } = value;
     out.sequence(constants, constant);
     out.sequence(protos, function::function);
@@ -84,7 +85,7 @@ fn encode_chunk(out: &mut Encoder, value: &Chunk) {
     });
     out.sequence(global_names, |out, value| out.string(value));
     out.sequence(global_prototypes, |out, value| {
-        out.option(value.as_ref(), |out, value| out.u32(*value))
+        out.option(value.as_ref(), |out, value| out.u64(*value))
     });
     out.sequence(products, metadata::product);
     out.sequence(product_fields, metadata::product_field);
@@ -117,7 +118,7 @@ fn constant(out: &mut Encoder, value: &crate::Constant) {
         }
         crate::Constant::Proto(value) => {
             out.tag(5);
-            out.u32(*value);
+            out.u64(*value);
         }
     }
 }

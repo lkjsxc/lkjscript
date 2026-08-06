@@ -3,15 +3,16 @@
 use std::collections::{HashMap, HashSet};
 
 use lkjscript_core::{
-    Chunk, Constant as BytecodeConstant, EnumConstructionRef,
+    Chunk, ConstId as BytecodeConstId, Constant as BytecodeConstant, EnumConstructionRef,
     EnumFieldMetadata as BytecodeEnumFieldMetadata, EnumFieldRef, EnumId as BytecodeEnumId,
     EnumMetadata as BytecodeEnumMetadata, EnumVariantMetadata as BytecodeEnumVariantMetadata,
     EnumVariantRef, Error, FailureCleanupAction as BytecodeFailureCleanupAction,
     FailureCleanupId as BytecodeFailureCleanupId,
     FailureCleanupInterner as BytecodeFailureCleanupInterner, FailureCleanupRange,
     FailureCleanupRoots as BytecodeFailureCleanupRoots, FunctionProto,
-    MemoryPlanId as BytecodeMemoryPlanId, MemoryWitnessId as BytecodeMemoryWitnessId, Op,
-    ProductFieldRef, ProductId as BytecodeProductId, ProductMetadata as BytecodeProductMetadata,
+    GlobalId as BytecodeGlobalId, MemoryPlanId as BytecodeMemoryPlanId,
+    MemoryWitnessId as BytecodeMemoryWitnessId, Op, ProductFieldRef,
+    ProductId as BytecodeProductId, ProductMetadata as BytecodeProductMetadata,
     RegionProductFieldKind, ResourceReturnKind, Result, RuntimeLayoutId as BytecodeLayoutId,
     StructuralAggregateFieldRef, StructuralDestinationFieldRef, StructuralDestinationId,
     StructuralDestinationMetadata, StructuralFieldMetadata, StructuralFieldRoute,

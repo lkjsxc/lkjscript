@@ -80,9 +80,11 @@ the semantic SSA identity as a claim of native support.
 
 Function parameter counts, call argument counts, lexical local slots, owner slots, and executable
 places are not limited by a byte-sized language rule. HIR and code generation retain host indexes;
-SSA frame metadata retains `u64` slots. The active bytecode uses fixed little-endian `u64` branch-target, local, argument-count,
-witness-ordinal, and place operands, with separate place and local operands when an instruction
-names both. Decoding rejects truncation and host-index overflow before indexing. The generic VM
+SSA frame metadata retains `u64` slots. The active bytecode uses fixed little-endian `u64`
+branch-target, constant, global, closure, local, argument-count, witness-ordinal, and place
+operands, with separate place and local operands when an instruction names both. Constant/global
+IDs, prototype references, and their runtime values and metadata remain `u64` until checked host
+indexing. Decoding rejects truncation and host-index overflow before indexing. The generic VM
 executes 300-parameter/argument programs with slot 299 and more than 255 simultaneously live lexical
 locals; larger generated cases execute 1,024 scalar and 1,024 owned parameters and arguments. The
 owned case emits and validates 115,754 bytes in main, executes exact cleanup, and uses the generic
@@ -92,15 +94,17 @@ specialization status: automatic mode uses the VM, and a forced native diagnosti
 signature or shape.
 
 Source positions, spans, and snapshot-local node indexes remain `u32`, creating separate
-addressable representation boundaries. HIR memory planning still has table, shape, and
-verifier-work quotas. Trusted bytecode validation is unrestricted by encoded-byte, table-entry,
+addressable representation boundaries. HIR memory-plan entry, constant, and whole-verifier work
+counts are checked observational telemetry; other table, shape, and SCC-work quotas remain.
+Trusted bytecode validation is unrestricted by encoded-byte, table-entry,
 metadata-byte, constant-data-byte, and cleanup-node/range counts. An untrusted artifact caller may
 explicitly select `ValidationPolicy::Limited { max_total_bytes }`; this checks only one
 checked-arithmetic total-byte observation, reports byte-policy exhaustion separately from malformed
 bytecode, and does not alter validity under `Unrestricted`. Bytes literals have no project-selected
-size rule: decoding validates hexadecimal syntax and reserves storage fallibly. `u16` constants,
-globals, and product/enum/structural tables remain, while product fields and enum substitutions retain byte-sized
-representations. HIR and SSA place identities still use `u32`, a separate representation gap above
+size rule: decoding validates hexadecimal syntax and reserves storage fallibly. Product, enum, and
+structural tables remain `u16`, while product fields and enum substitutions retain byte-sized
+representations. HIR memory-plan table identities and HIR/SSA place identities still use `u32`, a
+separate representation gap above
 that range. Validator-synthetic owner identity preserves instruction offsets and parameter indexes
 at host width. Other recursive type/trait/enum and structural-value ceilings also remain. These
 inherited ceilings are known defects, not permanent language rules. New work must remove the

@@ -31,9 +31,10 @@ impl Evaluator<'_> {
             }
             (Op::CloneBytes, [value]) => match value {
                 EvalValue::StaticBytes(id) => {
+                    let id = static_index(*id)?;
                     let (table, unique) = (&self.static_bytes, &mut self.unique);
                     let bytes = table
-                        .get(*id as usize)
+                        .get(id)
                         .ok_or_else(|| Flow::Trap("stale static bytes index".into()))?;
                     unique.clone_static(bytes)
                 }
@@ -45,9 +46,10 @@ impl Evaluator<'_> {
                 let len = index_arg("copy-bytes-slice", "length", *len)?;
                 match value {
                     EvalValue::StaticBytes(id) => {
+                        let id = static_index(*id)?;
                         let (table, unique) = (&self.static_bytes, &mut self.unique);
                         let bytes = table
-                            .get(*id as usize)
+                            .get(id)
                             .ok_or_else(|| Flow::Trap("stale static bytes index".into()))?;
                         unique.copy_static_range(bytes, start, len)
                     }
@@ -60,9 +62,10 @@ impl Evaluator<'_> {
             (Op::FreezeByteVector, [value]) => self.unique.freeze(value),
             (Op::ThawBytes, [value]) => match value {
                 EvalValue::StaticBytes(id) => {
+                    let id = static_index(*id)?;
                     let (table, unique) = (&self.static_bytes, &mut self.unique);
                     let bytes = table
-                        .get(*id as usize)
+                        .get(id)
                         .ok_or_else(|| Flow::Trap("stale static bytes index".into()))?;
                     unique.thaw_static(bytes)
                 }
@@ -83,12 +86,16 @@ impl Evaluator<'_> {
         }
     }
 
-    fn static_value(&self, id: u32) -> Result<&[u8], Flow> {
+    fn static_value(&self, id: u64) -> Result<&[u8], Flow> {
         self.static_bytes
-            .get(id as usize)
+            .get(static_index(id)?)
             .map(AsRef::as_ref)
             .ok_or_else(|| Flow::Trap("stale static bytes index".into()))
     }
+}
+
+fn static_index(id: u64) -> Result<usize, Flow> {
+    usize::try_from(id).map_err(|_| Flow::Trap("static bytes index exceeds host usize".into()))
 }
 
 fn index_arg(operation: &str, field: &str, value: i64) -> Result<usize, Flow> {

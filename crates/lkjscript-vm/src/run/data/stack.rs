@@ -7,14 +7,14 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
 
     pub(crate) fn code(&self) -> Result<&[u8]> {
         let frame = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
-        if frame.proto == u32::MAX {
-            Ok(&self.chunk.main().code)
-        } else {
+        if let Some(prototype) = frame.proto {
             self.chunk
                 .protos()
-                .get(frame.proto as usize)
+                .get(prototype)
                 .map(|proto| proto.code.as_slice())
                 .ok_or_else(|| Error::msg("frame proto index out of range"))
+        } else {
+            Ok(&self.chunk.main().code)
         }
     }
 
@@ -23,15 +23,15 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             let frame = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
             (frame.proto, frame.ip)
         };
-        let code = if proto == u32::MAX {
-            &self.chunk.main().code
-        } else {
+        let code = if let Some(prototype) = proto {
             &self
                 .chunk
                 .protos()
-                .get(proto as usize)
+                .get(prototype)
                 .ok_or_else(|| Error::msg("frame proto index out of range"))?
                 .code
+        } else {
+            &self.chunk.main().code
         };
         let byte = *code.get(ip).ok_or_else(|| Error::msg("ip out of range"))?;
         if let Some(frame) = self.frames.last_mut() {
@@ -132,17 +132,17 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             Constant::I64(number) => Ok(Value::from_i64(*number)),
             Constant::F64(number) => Ok(Value::from_f64_bits(number.to_bits())),
             Constant::Str(_) => Ok(Value::from_static_string(
-                u16::try_from(id)
-                    .map_err(|_| Error::msg("static string constant index exceeds u16"))?,
+                u64::try_from(id)
+                    .map_err(|_| Error::msg("static string constant index exceeds u64"))?,
             )),
             Constant::StaticBytes(_) => Ok(Value::from_static_bytes(
-                u16::try_from(id)
-                    .map_err(|_| Error::msg("static bytes constant index exceeds u16"))?,
+                u64::try_from(id)
+                    .map_err(|_| Error::msg("static bytes constant index exceeds u64"))?,
             )),
             Constant::Symbol(_) => self.chunk.symbol_value(
-                u32::try_from(id).map_err(|_| Error::msg("symbol constant index exceeds u32"))?,
+                u64::try_from(id).map_err(|_| Error::msg("symbol constant index exceeds u64"))?,
             ),
-            Constant::Proto(proto) => Ok(Value::from_i64(i64::from(*proto))),
+            Constant::Proto(proto) => Ok(Value::from_function_prototype(*proto)),
         }
     }
 }

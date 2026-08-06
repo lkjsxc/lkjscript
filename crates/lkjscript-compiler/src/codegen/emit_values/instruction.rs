@@ -89,7 +89,7 @@ impl Emitter<'_> {
             | InstructionKind::Drop { .. } => self.proto.try_emit(Op::Unit)?,
             InstructionKind::FunctionRef(function) => {
                 let global = self.global(*function)?;
-                self.proto.try_emit_op_u16(Op::LoadGlobal, global)?;
+                self.proto.try_emit_op_u64(Op::LoadGlobal, global.0)?;
             }
             InstructionKind::Runtime {
                 operation,

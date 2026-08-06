@@ -1,7 +1,7 @@
 fn validate_memory_witness_arguments(
     chunk: &Chunk,
     caller: &FunctionProto,
-    callee_index: u32,
+    callee_index: u64,
     callee: &FunctionProto,
     arguments: &[Kind],
     instruction: DecodedInstruction,

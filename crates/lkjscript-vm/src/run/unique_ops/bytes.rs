@@ -189,7 +189,7 @@ fn static_bytes(chunk: &lkjscript_core::ValidatedChunk, value: Value) -> Result<
     let Some(index) = value.as_static_bytes() else {
         return Ok(None);
     };
-    match chunk.constants().get(usize::from(index)) {
+    match chunk.constant(index) {
         Some(lkjscript_core::Constant::StaticBytes(bytes)) => Ok(Some(bytes)),
         _ => Err(Error::msg(
             "static bytes constant index is stale or wrong-layout",

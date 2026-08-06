@@ -17,7 +17,7 @@ pub use bytecode::{
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
     EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupId,
     FailureCleanupInterner, FailureCleanupNode, FailureCleanupRange, FailureCleanupRoots,
-    FunctionProto, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
+    FunctionProto, GlobalId, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
     InstalledMemoryWitnessGroupMember, MemoryPlanId, MemoryWitnessBinding, MemoryWitnessGroupId,
     MemoryWitnessId, MemoryWitnessParameter, MemoryWitnessValueKind, ProductFieldRef, ProductId,
     ProductMetadata, RegionProductFieldKind, ResourceReturnKind, RuntimeLayoutId,

@@ -42,7 +42,7 @@ fn authority_and_key_categories_remain_disjoint_for_equal_payloads() {
 
 #[test]
 fn function_prototypes_round_trip_inline_without_category_aliasing() {
-    for prototype in [0, 1, u32::MAX] {
+    for prototype in [0, 1, u64::from(u32::MAX), u64::MAX] {
         let value = Value::from_function(prototype);
         assert_eq!(value.as_function(), Some(prototype));
         assert!(value.as_i64().is_none());
@@ -53,7 +53,7 @@ fn function_prototypes_round_trip_inline_without_category_aliasing() {
 
 #[test]
 fn symbol_constants_round_trip_without_reference_aliasing() {
-    for constant in [0, 1, u32::MAX] {
+    for constant in [0, 1, u64::from(u32::MAX), u64::MAX] {
         let value = Value::from_symbol(constant);
         assert_eq!(value.as_symbol(), Some(constant));
         assert!(value.as_i64().is_none());

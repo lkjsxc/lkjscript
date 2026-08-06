@@ -14,8 +14,16 @@ fn every_known_opcode_has_truthful_metadata_and_round_trips() {
     assert_eq!(Op::from_byte(21), None);
     assert_eq!(Op::from_byte(85), None);
     assert_eq!(Op::from_byte(145), None);
-    assert_eq!(Op::LoadLocal.operand_layout(), OperandLayout::Index);
-    assert_eq!(Op::Call.operand_layout(), OperandLayout::Index);
+    for op in [
+        Op::LoadConst,
+        Op::LoadLocal,
+        Op::LoadGlobal,
+        Op::StoreGlobal,
+        Op::MakeClosure,
+        Op::Call,
+    ] {
+        assert_eq!(op.operand_layout(), OperandLayout::Index);
+    }
     assert_eq!(
         Op::StructuralPlaceInit.operand_layout(),
         OperandLayout::PlaceLocal

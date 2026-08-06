@@ -118,9 +118,10 @@ impl OwnedValue {
         if let Some(value) = self.as_structural() {
             return match &value.payload {
                 SemanticPayload::String(bytes) => std::str::from_utf8(bytes).ok(),
-                SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(index)) => {
-                    self.symbols.get(*index as usize)?.as_deref()
-                }
+                SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(index)) => self
+                    .symbols
+                    .get(usize::try_from(*index).ok()?)?
+                    .as_deref(),
                 _ => None,
             };
         }
@@ -128,13 +129,18 @@ impl OwnedValue {
             return match &value.root_node().payload {
                 crate::SemanticDagPayload::String(bytes) => std::str::from_utf8(bytes).ok(),
                 crate::SemanticDagPayload::Static(crate::StaticStructuralLeaf::Symbol(index)) => {
-                    self.symbols.get(*index as usize)?.as_deref()
+                    self.symbols
+                        .get(usize::try_from(*index).ok()?)?
+                        .as_deref()
                 }
                 _ => None,
             };
         }
         if let Some(index) = self.root.as_symbol() {
-            return self.symbols.get(index as usize)?.as_deref();
+            return self
+                .symbols
+                .get(usize::try_from(index).ok()?)?
+                .as_deref();
         }
         None
     }

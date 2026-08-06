@@ -20,7 +20,7 @@ impl Emitter<'_> {
         match target {
             CallTarget::Direct(function) => {
                 let global = self.global(*function)?;
-                self.proto.try_emit_op_u16(Op::LoadGlobal, global)?;
+                self.proto.try_emit_op_u64(Op::LoadGlobal, global.0)?;
             }
             CallTarget::Indirect(value) => self.load(*value)?,
         }
@@ -49,7 +49,11 @@ impl Emitter<'_> {
         let callee = self
             .chunk
             .global_prototypes
-            .get(usize::from(global))
+            .get(
+                global
+                    .index()
+                    .ok_or_else(|| Error::msg("bytecode global index exceeds host usize"))?,
+            )
             .copied()
             .flatten()
             .ok_or_else(|| Error::msg("witnessed call has no exact prototype"))?;

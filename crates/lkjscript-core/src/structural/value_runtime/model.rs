@@ -48,9 +48,9 @@ pub enum InlineStructuralValue {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaticStructuralLeaf {
-    Function(u32),
-    Symbol(u32),
-    Bytes(u16),
+    Function(u64),
+    Symbol(u64),
+    Bytes(u64),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

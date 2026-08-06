@@ -11,6 +11,14 @@ fn charge(slot: &mut u64, amount: usize, limit: u64, label: &str) -> Result<()> 
     }
     Ok(())
 }
+fn observe(slot: &mut u64, amount: usize, label: &str) -> Result<()> {
+    let amount = u64::try_from(amount)
+        .map_err(|_| Error::msg(format!("HIR memory-plan {label} observation exceeds u64")))?;
+    *slot = slot
+        .checked_add(amount)
+        .ok_or_else(|| Error::msg(format!("HIR memory-plan {label} observation overflow")))?;
+    Ok(())
+}
 fn index_u32(index: usize) -> Result<u32> {
     u32::try_from(index).map_err(|_| Error::msg("HIR memory-plan child index exceeds u32"))
 }

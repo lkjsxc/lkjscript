@@ -25,6 +25,9 @@ impl fmt::Debug for Value {
         if let Some(index) = self.as_resource() {
             return write!(formatter, "resource#{index}");
         }
+        if let Some(prototype) = self.as_function_prototype() {
+            return write!(formatter, "function-prototype#{prototype}");
+        }
         if let Some(prototype) = self.as_function() {
             return write!(formatter, "function#{prototype}");
         }

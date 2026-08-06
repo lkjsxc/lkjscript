@@ -2,8 +2,8 @@ use super::{Value, ValueKind};
 
 impl Value {
     #[doc(hidden)]
-    pub const fn from_static_bytes(index: u16) -> Self {
-        Self::new(ValueKind::StaticBytes, index as u64)
+    pub const fn from_static_bytes(index: u64) -> Self {
+        Self::new(ValueKind::StaticBytes, index)
     }
 
     #[doc(hidden)]
@@ -33,9 +33,9 @@ impl Value {
     }
 
     #[doc(hidden)]
-    pub const fn as_static_bytes(self) -> Option<u16> {
+    pub const fn as_static_bytes(self) -> Option<u64> {
         match self.kind {
-            ValueKind::StaticBytes => Some(self.payload as u16),
+            ValueKind::StaticBytes => Some(self.payload),
             _ => None,
         }
     }

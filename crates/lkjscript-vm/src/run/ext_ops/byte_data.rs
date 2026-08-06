@@ -61,7 +61,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
 
 fn exact_bytes<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: Value) -> Result<Vec<u8>> {
     if let Some(index) = value.as_static_bytes() {
-        return match vm.chunk.constants().get(usize::from(index)) {
+        return match vm.chunk.constant(index) {
             Some(lkjscript_core::Constant::StaticBytes(bytes)) => Ok(bytes.to_vec()),
             _ => Err(Error::msg("stale static bytes constant")),
         };

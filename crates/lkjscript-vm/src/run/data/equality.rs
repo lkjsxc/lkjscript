@@ -105,8 +105,8 @@ pub(crate) fn value_equal<J: RuntimeTier>(
     Ok(true)
 }
 
-fn symbol_text(chunk: &lkjscript_core::ValidatedChunk, symbol: u32) -> Result<&str> {
-    match chunk.constants().get(symbol as usize) {
+fn symbol_text(chunk: &lkjscript_core::ValidatedChunk, symbol: u64) -> Result<&str> {
+    match chunk.constant(symbol) {
         Some(lkjscript_core::Constant::Symbol(text)) => Ok(text),
         _ => Err(Error::msg("invalid symbol constant index")),
     }

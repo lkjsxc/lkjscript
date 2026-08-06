@@ -73,15 +73,15 @@ fn encode_structural_static(out: &mut Encoder, value: crate::StaticStructuralLea
     match value {
         crate::StaticStructuralLeaf::Function(value) => {
             out.u8(0)?;
-            out.u32(value)
+            out.u64(value)
         }
         crate::StaticStructuralLeaf::Symbol(value) => {
             out.u8(1)?;
-            out.u32(value)
+            out.u64(value)
         }
         crate::StaticStructuralLeaf::Bytes(value) => {
             out.u8(2)?;
-            out.u16(value)
+            out.u64(value)
         }
     }
 }

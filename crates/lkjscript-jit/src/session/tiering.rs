@@ -1,7 +1,7 @@
 use crate::*;
 
 impl JitSession {
-    pub fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision {
+    pub fn observe_function_entry(&mut self, prototype: u64) -> EntryDecision {
         let Some(function) = self.function_for_prototype(prototype) else {
             self.vm_fallbacks = self.vm_fallbacks.saturating_add(1);
             return EntryDecision::Interpret;

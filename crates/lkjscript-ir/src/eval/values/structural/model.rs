@@ -28,7 +28,7 @@ pub struct EvalStructuralDestination {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StaticStringArtifact {
-    pub(crate) identity: u32,
+    pub(crate) identity: u64,
     pub(crate) text: Box<str>,
 }
 

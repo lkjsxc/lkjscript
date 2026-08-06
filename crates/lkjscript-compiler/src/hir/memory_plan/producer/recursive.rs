@@ -27,6 +27,9 @@ impl Producer<'_> {
     fn add_use(&mut self, expression: MemoryExpressionId, binding: BindingId,
         kind: MemoryUseKind) -> Result<()> {
         self.charge_uses(1)?;
+        self.uses
+            .try_reserve(1)
+            .map_err(|_| Error::host("HIR memory-plan use allocation failed"))?;
         let id = MemoryUseId::new(u32::try_from(self.uses.len())
             .map_err(|_| Error::msg("HIR memory-plan use identity exceeds u32"))?);
         self.uses.push(MemoryUse { id, function: self.current_function,

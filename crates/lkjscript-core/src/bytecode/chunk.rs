@@ -3,12 +3,29 @@
 mod failure;
 pub use failure::*;
 
+use std::collections::HashMap;
+
 use crate::{opcode::Op, Error, Result};
 
 include!("chunk/product.rs");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ConstId(pub u16);
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct ConstId(pub u64);
+
+impl ConstId {
+    pub fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct GlobalId(pub u64);
+
+impl GlobalId {
+    pub fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Constant {
@@ -18,7 +35,58 @@ pub enum Constant {
     StaticBytes(Box<[u8]>),
     Symbol(String),
     /// Prototype index for MakeClosure.
-    Proto(u32),
+    Proto(u64),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+enum ConstantKey {
+    I64(i64),
+    F64(u64),
+    Str(String),
+    StaticBytes(Box<[u8]>),
+    Symbol(String),
+    Proto(u64),
+}
+
+impl ConstantKey {
+    fn copy(value: &Constant) -> Result<Self> {
+        match value {
+            Constant::I64(value) => Ok(Self::I64(*value)),
+            Constant::F64(value) => Ok(Self::F64(value.to_bits())),
+            Constant::Str(value) => copy_string(value).map(Self::Str),
+            Constant::StaticBytes(value) => copy_bytes(value).map(Self::StaticBytes),
+            Constant::Symbol(value) => copy_string(value).map(Self::Symbol),
+            Constant::Proto(value) => Ok(Self::Proto(*value)),
+        }
+    }
+
+    fn matches(&self, value: &Constant) -> bool {
+        match (self, value) {
+            (Self::I64(left), Constant::I64(right)) => left == right,
+            (Self::F64(left), Constant::F64(right)) => *left == right.to_bits(),
+            (Self::Str(left), Constant::Str(right))
+            | (Self::Symbol(left), Constant::Symbol(right)) => left == right,
+            (Self::StaticBytes(left), Constant::StaticBytes(right)) => left == right,
+            (Self::Proto(left), Constant::Proto(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+fn copy_string(value: &str) -> Result<String> {
+    let mut copy = String::new();
+    copy.try_reserve_exact(value.len())
+        .map_err(|_| Error::host("bytecode constant-index string allocation failed"))?;
+    copy.push_str(value);
+    Ok(copy)
+}
+
+fn copy_bytes(value: &[u8]) -> Result<Box<[u8]>> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(value.len())
+        .map_err(|_| Error::host("bytecode constant-index bytes allocation failed"))?;
+    copy.extend_from_slice(value);
+    Ok(copy.into_boxed_slice())
 }
 
 #[derive(Debug, Clone)]
@@ -68,13 +136,17 @@ pub struct Chunk {
     pub structural_payloads: Vec<crate::StructuralPayloadRef>,
     pub required_capabilities: Vec<crate::CapabilityKind>,
     pub global_names: Vec<String>,
-    pub global_prototypes: Vec<Option<u32>>,
+    pub global_prototypes: Vec<Option<u64>>,
     pub products: Vec<ProductMetadata>,
     pub product_fields: Vec<ProductFieldRef>,
     pub enums: Vec<crate::EnumMetadata>,
     pub enum_constructions: Vec<crate::EnumConstructionRef>,
     pub enum_variants: Vec<crate::EnumVariantRef>,
     pub enum_fields: Vec<crate::EnumFieldRef>,
+    constant_indexes: HashMap<ConstantKey, ConstId>,
+    indexed_constants: usize,
+    global_indexes: HashMap<String, GlobalId>,
+    indexed_globals: usize,
 }
 
 impl Default for Chunk {
@@ -135,28 +207,122 @@ impl Chunk {
             enum_constructions: Vec::new(),
             enum_variants: Vec::new(),
             enum_fields: Vec::new(),
+            constant_indexes: HashMap::new(),
+            indexed_constants: 0,
+            global_indexes: HashMap::new(),
+            indexed_globals: 0,
         }
     }
 
-    pub fn add_const(&mut self, c: Constant) -> ConstId {
-        let id = self.constants.len() as u16;
-        self.constants.push(c);
-        ConstId(id)
+    pub fn add_const(&mut self, constant: Constant) -> Result<ConstId> {
+        self.rebuild_constant_indexes()?;
+        let key = ConstantKey::copy(&constant)?;
+        if let Some(id) = self.constant_indexes.get(&key).copied() {
+            if id
+                .index()
+                .and_then(|index| self.constants.get(index))
+                .is_some_and(|constant| key.matches(constant))
+            {
+                return Ok(id);
+            }
+            self.indexed_constants = usize::MAX;
+            self.rebuild_constant_indexes()?;
+            if let Some(id) = self.constant_indexes.get(&key).copied() {
+                return Ok(id);
+            }
+        }
+        let id = ConstId(
+            u64::try_from(self.constants.len())
+                .map_err(|_| Error::host("bytecode constant identity exceeds u64"))?,
+        );
+        self.constants
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode constant table allocation failed"))?;
+        self.constant_indexes
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode constant index allocation failed"))?;
+        self.constants.push(constant);
+        self.constant_indexes.insert(key, id);
+        self.indexed_constants = self.constants.len();
+        Ok(id)
     }
 
-    pub fn intern_global(&mut self, name: &str) -> u16 {
-        if let Some((i, _)) = self
-            .global_names
-            .iter()
-            .enumerate()
-            .find(|(_, n)| n.as_str() == name)
-        {
-            return i as u16;
+    pub fn intern_global(&mut self, name: &str) -> Result<GlobalId> {
+        self.rebuild_global_indexes()?;
+        if let Some(id) = self.global_indexes.get(name).copied() {
+            if id
+                .index()
+                .and_then(|index| self.global_names.get(index))
+                .is_some_and(|stored| stored == name)
+            {
+                return Ok(id);
+            }
+            self.indexed_globals = usize::MAX;
+            self.rebuild_global_indexes()?;
+            if let Some(id) = self.global_indexes.get(name).copied() {
+                return Ok(id);
+            }
         }
-        let id = self.global_names.len() as u16;
-        self.global_names.push(name.to_string());
+        let id = GlobalId(
+            u64::try_from(self.global_names.len())
+                .map_err(|_| Error::host("bytecode global identity exceeds u64"))?,
+        );
+        let vector_name = copy_string(name)?;
+        let index_name = copy_string(name)?;
+        self.global_names
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode global table allocation failed"))?;
+        self.global_prototypes
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode global prototype table allocation failed"))?;
+        self.global_indexes
+            .try_reserve(1)
+            .map_err(|_| Error::host("bytecode global index allocation failed"))?;
+        self.global_names.push(vector_name);
         self.global_prototypes.push(None);
-        id
+        self.global_indexes.insert(index_name, id);
+        self.indexed_globals = self.global_names.len();
+        Ok(id)
+    }
+
+    fn rebuild_constant_indexes(&mut self) -> Result<()> {
+        if self.indexed_constants == self.constants.len() {
+            return Ok(());
+        }
+        let mut indexes = HashMap::new();
+        indexes
+            .try_reserve(self.constants.len())
+            .map_err(|_| Error::host("bytecode constant index allocation failed"))?;
+        for (index, constant) in self.constants.iter().enumerate() {
+            let id = ConstId(
+                u64::try_from(index)
+                    .map_err(|_| Error::host("bytecode constant identity exceeds u64"))?,
+            );
+            indexes.entry(ConstantKey::copy(constant)?).or_insert(id);
+        }
+        self.constant_indexes = indexes;
+        self.indexed_constants = self.constants.len();
+        Ok(())
+    }
+
+    fn rebuild_global_indexes(&mut self) -> Result<()> {
+        if self.indexed_globals == self.global_names.len() {
+            return Ok(());
+        }
+        let mut indexes = HashMap::new();
+        indexes
+            .try_reserve(self.global_names.len())
+            .map_err(|_| Error::host("bytecode global index allocation failed"))?;
+        for (index, name) in self.global_names.iter().enumerate() {
+            let id = GlobalId(
+                u64::try_from(index)
+                    .map_err(|_| Error::host("bytecode global identity exceeds u64"))?,
+            );
+            indexes.entry(copy_string(name)?).or_insert(id);
+        }
+        self.global_indexes = indexes;
+        self.indexed_globals = self.global_names.len();
+        Ok(())
     }
 }
 

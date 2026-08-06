@@ -26,7 +26,7 @@ fn measure_constants(
                         "constant {index} references prototype {proto} out of range"
                     )));
                 }
-                encoded_bytes = checked_add(encoded_bytes, 4, "encoded byte size")?;
+                encoded_bytes = checked_add(encoded_bytes, 8, "encoded byte size")?;
             }
         }
     }

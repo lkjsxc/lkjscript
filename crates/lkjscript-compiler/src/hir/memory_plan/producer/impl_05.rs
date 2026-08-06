@@ -32,6 +32,9 @@ impl<'a> Producer<'a> {
         origin: MemoryOrigin,
     ) -> Result<MemoryEntryId> {
         self.charge_entries(1)?;
+        self.entries
+            .try_reserve(1)
+            .map_err(|_| Error::host("HIR memory-plan entry allocation failed"))?;
         let id = MemoryEntryId::new(
             u32::try_from(self.entries.len())
                 .map_err(|_| Error::msg("HIR memory-plan entry identity exceeds u32"))?,
@@ -134,12 +137,7 @@ impl<'a> Producer<'a> {
         )
     }
     fn charge_entries(&mut self, amount: usize) -> Result<()> {
-        charge(
-            &mut self.work.entries,
-            amount,
-            MAX_MEMORY_PLAN_ENTRIES,
-            "entries",
-        )
+        observe(&mut self.work.entries, amount, "entries")
     }
     fn charge_expressions(&mut self, amount: usize) -> Result<()> {
         let amount = u64::try_from(amount)
@@ -158,12 +156,7 @@ impl<'a> Producer<'a> {
         charge(&mut self.work.loans, amount, MAX_MEMORY_PLAN_LOANS, "loans")
     }
     fn charge_constants(&mut self, amount: usize) -> Result<()> {
-        charge(
-            &mut self.work.constants,
-            amount,
-            MAX_MEMORY_PLAN_CONSTANTS,
-            "constants",
-        )
+        observe(&mut self.work.constants, amount, "constants")
     }
     fn charge_calls(&mut self, amount: usize) -> Result<()> {
         charge(&mut self.work.calls, amount, MAX_MEMORY_PLAN_CALLS, "calls")

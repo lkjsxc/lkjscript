@@ -129,7 +129,7 @@ fn encode_value(out: &mut Encoder, value: Value) -> Result<()> {
         out.u8(5)
     } else if let Some(value) = value.as_symbol() {
         out.u8(9)?;
-        out.u32(value)
+        out.u64(value)
     } else if let Some(value) = value.as_owned_list() {
         out.u8(11)?;
         out.u32(value)
@@ -146,7 +146,7 @@ fn decode_value(input: &mut Decoder<'_>) -> Result<Value> {
         3 => Value::from_i64(input.u64()? as i64),
         4 => Value::from_f64_bits(input.u64()?),
         5 => Value::EMPTY_LIST,
-        9 => Value::from_symbol(input.u32()?),
+        9 => Value::from_symbol(input.u64()?),
         11 => Value::from_owned_list(input.u32()?),
         _ => return Err(Error::msg("unknown value tag")),
     })
@@ -175,7 +175,7 @@ fn validate_symbol(value: Value, symbols: &[Option<String>]) -> Result<()> {
     Ok(())
 }
 
-fn validate_symbol_index(index: u32, symbols: &[Option<String>]) -> Result<()> {
+fn validate_symbol_index(index: u64, symbols: &[Option<String>]) -> Result<()> {
     let index = usize::try_from(index).map_err(|_| Error::msg("symbol index overflow"))?;
     if symbols.get(index).and_then(Option::as_ref).is_none() {
         return Err(Error::msg("owned value references a missing symbol"));

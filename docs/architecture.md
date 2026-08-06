@@ -7,8 +7,8 @@ projection. The source loader validates paths and imports, the analyzer creates 
 HIR, ownership/effect/memory passes derive executable obligations, SSA lowering creates a typed
 control-flow program, and the IR verifier publishes an opaque verified program. Bytecode lowering
 and validation provide the generic executable representation used by the runtime. This trusted
-pipeline has no compiler resource profile or cross-phase budget ledger; source-file counts, phase
-durations, and HIR memory-plan expression work are observation only. Ownership analysis does not
+pipeline has no compiler resource profile or cross-phase budget ledger; source-file counts, phase durations, and HIR memory-plan expression, entry, constant, and verifier
+work are observation only. Ownership analysis does not
 perform a separate aggregate-expression admission scan. Source parsing and source-tree operations
 use explicit work stacks. Recursive expression mechanisms whose control and mutable compiler state
 make immediate continuation-stack rewrites disproportionately invasive use the localized `stacker` boundary,
@@ -28,16 +28,20 @@ preserves cleanup order without reconnecting an unchanged owner segment whenever
 changes. Code generation pre-indexes SSA value types, definitions, and moved call arguments, then
 maps nodes in producer order without iterating hash tables or searching whole plans.
 
-Executable-width ownership is now explicit at each boundary: analyzer/HIR arity and local storage,
-codegen colors, and bytecode prototypes use host indexes; SSA frame-state slots use `u64` identity
-values. Bytecode operand metadata selects one of no operand, retained `u16`, fixed `u64` index, or
-two independent fixed `u64` place/local indexes. Branch targets use the fixed `u64` index layout.
-The decoder checks complete operands and host conversion before publishing `DecodedInstruction`;
-validators and the VM consume the typed decoded shape or the same fixed layout. Bytecode links,
-call-witness instruction offsets, cleanup roots, and cleanup range offsets use canonical `u64`
-values with checked host conversion. Validator ownership tracking keeps instruction offsets and
-parameter indexes in tagged host-width identities rather than narrowing them to `u32`. Constants,
-globals, and product/enum/structural table, descriptor, and field operands remain a separate
+Executable-width ownership is explicit at each boundary: analyzer/HIR arity and local storage and
+codegen colors use host indexes; SSA frame-state slots use `u64` identity values. Bytecode constant
+and global IDs, prototype constants, global-prototype metadata, call-witness/link prototype
+references, and runtime function/symbol/static-constant references use `u64`. Constant/global
+interners own hash-backed lookup indexes alongside insertion-order vectors, including exact-bit
+floating keys and owned text/bytes keys. Hash iteration is never canonical order. Bytecode operand
+metadata selects one of no operand, retained `u16`, fixed `u64` index, or two independent fixed
+`u64` place/local indexes. Branch targets, constants, globals, and closure operands use the fixed
+`u64` index layout. The decoder checks complete operands and host conversion before publishing
+`DecodedInstruction`; validators and the VM consume the typed decoded shape or the same fixed
+layout. Bytecode links, call-witness instruction offsets, cleanup roots, and cleanup range offsets
+use canonical `u64` values with checked host conversion. Validator ownership tracking keeps
+instruction offsets and parameter indexes in tagged host-width identities rather than narrowing
+them to `u32`. Product/enum/structural table, descriptor, and field operands remain the separate
 `u16`/`u8` cutover.
 
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer

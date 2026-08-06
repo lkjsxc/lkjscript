@@ -3,7 +3,9 @@ use super::*;
 #[test]
 fn scalar_call_metadata_rejects_wrong_argument_kind() {
     let mut chunk = unit_chunk();
-    let prototype = chunk.add_const(Constant::Proto(0));
+    let prototype = chunk
+        .add_const(Constant::Proto(0))
+        .expect("add prototype constant");
     let mut proto = Chunk::new().main;
     proto.name = "i64-parameter".into();
     proto.arity = 1;
@@ -14,9 +16,8 @@ fn scalar_call_metadata_rejects_wrong_argument_kind() {
     chunk.protos.push(proto);
     chunk.main.code.clear();
     chunk.main.emit(Op::Unit);
-    chunk.main.emit_op_u16(Op::LoadConst, prototype.0);
-    chunk.main.emit(Op::MakeClosure);
-    chunk.main.emit_u16(0);
+    chunk.main.emit_op_u64(Op::LoadConst, prototype.0);
+    chunk.main.emit_op_u64(Op::MakeClosure, 0);
     chunk.main.emit_op_u8(Op::Call, 1);
     chunk.main.emit(Op::Return);
     assert!(error(chunk).contains("copy call argument does not match"));

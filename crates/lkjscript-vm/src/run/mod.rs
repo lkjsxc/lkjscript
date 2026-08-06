@@ -39,7 +39,7 @@ use crate::ExecutionInputs;
 use calls::{call, car, cdr, make_closure};
 
 pub(crate) struct Frame {
-    pub proto: u32,
+    pub proto: Option<usize>,
     pub ip: usize,
     pub instruction_offset: usize,
     pub stack_base: usize,
@@ -56,7 +56,7 @@ enum Stop {
 
 pub trait RuntimeTier {
     #[cfg(feature = "jit")]
-    fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision;
+    fn observe_function_entry(&mut self, prototype: u64) -> EntryDecision;
     #[cfg(feature = "jit")]
     fn scalar_signature(&self, function: FunctionId) -> Option<ScalarSignature>;
     #[cfg(feature = "jit")]
@@ -75,7 +75,7 @@ pub struct NoTier;
 
 impl RuntimeTier for NoTier {
     #[cfg(feature = "jit")]
-    fn observe_function_entry(&mut self, _prototype: u32) -> EntryDecision {
+    fn observe_function_entry(&mut self, _prototype: u64) -> EntryDecision {
         EntryDecision::Interpret
     }
 
@@ -102,7 +102,7 @@ impl RuntimeTier for NoTier {
 
 #[cfg(feature = "jit")]
 impl RuntimeTier for JitSession {
-    fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision {
+    fn observe_function_entry(&mut self, prototype: u64) -> EntryDecision {
         JitSession::observe_function_entry(self, prototype)
     }
 
@@ -138,6 +138,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) unique: unique::UniqueRuntime,
     pub(crate) structural: Option<structural_ops::StructuralInvocation>,
     structural_initialization_error: Option<Error>,
+    global_initialization_error: Option<Error>,
     list_initialization_error: Option<Error>,
     region_product_initialization_error: Option<Error>,
     config: ExecutionConfig,

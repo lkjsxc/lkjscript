@@ -11,6 +11,14 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         inputs: ExecutionInputs,
         config: ExecutionConfig,
     ) -> Self {
+        let mut globals = Vec::new();
+        let global_initialization_error = globals
+            .try_reserve_exact(chunk.global_names().len())
+            .map_err(|_| Error::host("VM global table allocation failed"))
+            .err();
+        if global_initialization_error.is_none() {
+            globals.resize(chunk.global_names().len(), Value::INVALID);
+        }
         let (structural, structural_initialization_error) =
             match structural_ops::StructuralInvocation::new(config.max_allocations) {
                 Ok(runtime) => (Some(runtime), None),
@@ -48,7 +56,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             };
         Self {
             chunk,
-            globals: vec![Value::INVALID; chunk.global_names().len()],
+            globals,
             stack: Vec::new(),
             frames: Vec::new(),
             lists,
@@ -60,6 +68,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             unique: unique::UniqueRuntime::new(&config),
             structural,
             structural_initialization_error,
+            global_initialization_error,
             list_initialization_error,
             region_product_initialization_error,
             fuel_remaining: config.instruction_fuel,

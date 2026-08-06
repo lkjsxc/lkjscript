@@ -68,11 +68,7 @@ impl Op {
 
 const fn operand_layout(op: Op) -> OperandLayout {
     match op {
-        Op::LoadConst
-        | Op::LoadGlobal
-        | Op::Car
-        | Op::StoreGlobal
-        | Op::MakeClosure
+        Op::Car
         | Op::MakeProduct
         | Op::LoadProductField
         | Op::WithProductField
@@ -94,7 +90,11 @@ const fn operand_layout(op: Op) -> OperandLayout {
         | Op::StructuralCopy => OperandLayout::U16,
         Op::Jump
         | Op::JumpIfFalse
+        | Op::LoadConst
         | Op::LoadLocal
+        | Op::LoadGlobal
+        | Op::StoreGlobal
+        | Op::MakeClosure
         | Op::StoreLocal
         | Op::Call
         | Op::ByteVectorBorrow

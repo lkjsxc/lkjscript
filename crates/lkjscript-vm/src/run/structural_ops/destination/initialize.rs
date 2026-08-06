@@ -38,8 +38,7 @@ fn initialize_unique_owner<J: RuntimeTier>(
         }
         let bytes = vm
             .chunk
-            .constants()
-            .get(usize::from(index))
+            .constant(index)
             .and_then(|constant| match constant {
                 lkjscript_core::Constant::StaticBytes(bytes) => Some(bytes.to_vec()),
                 _ => None,

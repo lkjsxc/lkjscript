@@ -5,9 +5,11 @@ fn print_chunk(required: lkjscript_core::CapabilityKind) -> lkjscript_core::Vali
     chunk.required_capabilities = vec![required];
     chunk.main.arity = 1;
     chunk.main.locals = 1;
-    let text = chunk.add_const(Constant::Str("not emitted".into()));
+    let text = chunk
+        .add_const(Constant::Str("not emitted".into()))
+        .expect("add text constant");
     chunk.main.emit_op_u64(Op::LoadLocal, 0);
-    chunk.main.emit_op_u16(Op::LoadConst, text.0);
+    chunk.main.emit_op_u64(Op::LoadConst, text.0);
     chunk.main.emit(Op::Print);
     chunk.main.emit(Op::Return);
     validate(chunk)
@@ -113,9 +115,11 @@ fn bytecode_cannot_use_one_capability_as_another() {
     chunk.required_capabilities = vec![lkjscript_core::CapabilityKind::Arguments];
     chunk.main.arity = 1;
     chunk.main.locals = 1;
-    let text = chunk.add_const(Constant::Str("not emitted".into()));
+    let text = chunk
+        .add_const(Constant::Str("not emitted".into()))
+        .expect("add text constant");
     chunk.main.emit_op_u64(Op::LoadLocal, 0);
-    chunk.main.emit_op_u16(Op::LoadConst, text.0);
+    chunk.main.emit_op_u64(Op::LoadConst, text.0);
     chunk.main.emit(Op::Print);
     chunk.main.emit(Op::Return);
     let error = validate_chunk(chunk, ValidationPolicy::Unrestricted)

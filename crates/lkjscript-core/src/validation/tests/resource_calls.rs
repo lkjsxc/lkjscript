@@ -3,7 +3,9 @@ use super::*;
 #[test]
 fn resource_call_and_return_metadata_is_enforced() {
     let mut call = unit_chunk();
-    let prototype = call.add_const(Constant::Proto(0));
+    let prototype = call
+        .add_const(Constant::Proto(0))
+        .expect("add prototype constant");
     call.protos.push(FunctionProto {
         name: "resource-parameter".into(),
         arity: 1,
@@ -37,9 +39,8 @@ fn resource_call_and_return_metadata_is_enforced() {
     });
     call.main.code.clear();
     call.main.emit(Op::Unit);
-    call.main.emit_op_u16(Op::LoadConst, prototype.0);
-    call.main.emit(Op::MakeClosure);
-    call.main.emit_u16(0);
+    call.main.emit_op_u64(Op::LoadConst, prototype.0);
+    call.main.emit_op_u64(Op::MakeClosure, 0);
     call.main.emit_op_u8(Op::Call, 1);
     call.main.emit(Op::Return);
     let message = error(call);

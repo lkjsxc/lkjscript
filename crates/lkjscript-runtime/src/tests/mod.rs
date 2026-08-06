@@ -17,7 +17,7 @@ fn chunk(trap: bool) -> Result<Arc<lkjscript_core::ValidatedChunk>, Box<dyn Erro
     let mut chunk = Chunk::new();
     if trap {
         chunk.constants.push(Constant::Str("isolated trap".into()));
-        chunk.main.emit_op_u16(Op::LoadConst, 0);
+        chunk.main.emit_op_u64(Op::LoadConst, 0);
         chunk.main.emit(Op::Trap);
     } else {
         chunk.main.emit(Op::Unit);

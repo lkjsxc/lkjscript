@@ -55,11 +55,6 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
         .and_then(|value| value.checked_add(placement_steps))
         .and_then(|value| value.checked_add(authority_steps))
         .ok_or_else(|| Error::msg("independent HIR memory-plan verifier work overflow"))?;
-    if steps > MAX_MEMORY_PLAN_VERIFIER_STEPS {
-        return Err(Error::msg(format!(
-            "independent HIR memory-plan verifier work exceeds {MAX_MEMORY_PLAN_VERIFIER_STEPS}"
-        )));
-    }
     Ok(steps)
 }
 

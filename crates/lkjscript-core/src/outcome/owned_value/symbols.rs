@@ -2,7 +2,7 @@ impl OwnedValue {
     #[doc(hidden)]
     pub fn retain_symbols<'a>(
         mut self,
-        mut resolve: impl FnMut(u32) -> Result<&'a str>,
+        mut resolve: impl FnMut(u64) -> Result<&'a str>,
     ) -> Result<Self> {
         let structural_symbols = self.structural_symbol_order()?;
         let mut pending = vec![self.root];
@@ -32,7 +32,7 @@ impl OwnedValue {
         Ok(self)
     }
 
-    fn structural_symbol_order(&self) -> Result<Vec<u32>> {
+    fn structural_symbol_order(&self) -> Result<Vec<u64>> {
         if let Some(snapshot) = self.semantic_dag.as_ref() {
             let mut symbols = Vec::new();
             symbols
@@ -110,7 +110,7 @@ impl OwnedValue {
             if is_new {
                 unique.push(old);
             }
-            mapping[old] = u32::try_from(unique.len() - 1).ok();
+            mapping[old] = u64::try_from(unique.len() - 1).ok();
         }
         rewrite_symbol(&mut self.root, &mapping)?;
         for node in &mut self.lists {
@@ -141,8 +141,9 @@ impl OwnedValue {
         Ok(())
     }
 
-    fn retain_symbol(&mut self, symbol: u32, source: &str) -> Result<()> {
-        let index = symbol as usize;
+    fn retain_symbol(&mut self, symbol: u64, source: &str) -> Result<()> {
+        let index = usize::try_from(symbol)
+            .map_err(|_| Error::msg("owned symbol index exceeds host usize"))?;
         if index >= self.symbols.len() {
             let added = index
                 .checked_add(1)
