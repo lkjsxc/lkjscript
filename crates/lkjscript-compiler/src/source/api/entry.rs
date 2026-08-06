@@ -4,8 +4,8 @@ use std::time::Duration;
 use lkjscript_core::{Limits, Result};
 
 use crate::source::{
-    load as loader, parse, validate as authority, SourceDiagnostic, SourceFoundationBudget,
-    SourceOrigin, SourceResult,
+    load as loader, parse, validate as authority, SourceBytePolicy, SourceDiagnostic, SourceOrigin,
+    SourceResult,
 };
 
 use super::ValidatedSourceTree;
@@ -33,16 +33,12 @@ fn validate_one_source(
     limits: &Limits,
 ) -> SourceResult<ValidatedSourceTree> {
     let source_len = u64::try_from(source.len()).map_err(|_| {
-        authority::foundation_resource_error(
+        SourceDiagnostic::host(
             origin.clone(),
-            "source-file-bytes",
-            u64::MAX,
-            crate::source::FOUNDATION_MAX_SOURCE_FILE_BYTES,
+            "source byte length overflowed its u64 representation",
         )
     })?;
-    let mut budget = SourceFoundationBudget::default();
-    budget.check_metadata(&origin, source_len)?;
-    budget.record_read(&origin, source_len)?;
+    SourceBytePolicy::Unrestricted.check_total(&origin, source_len)?;
     let parsed = parse::parse_file(source, origin.clone(), path.clone(), limits)?;
     authority::finish_tree(path, origin, vec![parsed])
 }
@@ -65,11 +61,9 @@ pub(crate) fn load_with_metrics(
 pub(crate) fn load_for_protocol(
     path: &Path,
     limits: &Limits,
-    max_source_bytes: u64,
-    max_source_units: u64,
+    byte_policy: SourceBytePolicy,
 ) -> SourceResult<ValidatedSourceTree> {
-    let budget = SourceFoundationBudget::with_limits(max_source_units, max_source_bytes);
-    loader::load_with_budget(path, limits, budget).map(|(tree, _)| tree)
+    loader::load_with_byte_policy(path, limits, byte_policy).map(|(tree, _)| tree)
 }
 
 pub(crate) fn validate_for_compiler(
@@ -93,8 +87,27 @@ pub(crate) fn rebuild_staged_sources(
     root: PathBuf,
     root_origin: SourceOrigin,
     limits: &Limits,
+    byte_policy: SourceBytePolicy,
 ) -> SourceResult<ValidatedSourceTree> {
-    let mut parsed = Vec::with_capacity(sources.len());
+    let mut aggregate_source_bytes = 0_u64;
+    for (_, origin, source) in sources {
+        let source_bytes = u64::try_from(source.len()).map_err(|_| {
+            SourceDiagnostic::host(
+                origin.clone(),
+                "staged source byte length overflowed its u64 representation",
+            )
+        })?;
+        aggregate_source_bytes =
+            byte_policy.account_source_bytes(origin, aggregate_source_bytes, source_bytes)?;
+    }
+
+    let mut parsed = Vec::new();
+    parsed.try_reserve(sources.len()).map_err(|_| {
+        SourceDiagnostic::host(
+            root_origin.clone(),
+            "host could not reserve memory for staged source units",
+        )
+    })?;
     for (path, origin, source) in sources {
         parsed.push(parse::parse_file(
             source,

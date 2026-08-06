@@ -1,6 +1,21 @@
 use super::*;
 use crate::semantic::schema::{FilePrecondition, ResponseResult, TransactionOperation};
 
+#[test]
+fn recovery_digest_accepts_publication_leaf_above_16_mib() {
+    let directory = case_dir("large-recovery-digest");
+    let leaf = directory.join("large.lkjscript");
+    let bytes = vec![b'x'; 16 * 1024 * 1024 + 1];
+    std::fs::write(&leaf, &bytes).expect("write large publication leaf");
+    let digest = crate::semantic::transaction::digest_publication_leaf(&leaf)
+        .expect("digest publication leaf without a source-size ceiling")
+        .expect("publication leaf exists");
+    assert_eq!(
+        digest,
+        crate::semantic::tree::hex(&lkjscript_core::sha256(&bytes))
+    );
+}
+
 fn snapshot(root: &std::path::Path) -> crate::semantic::schema::SnapshotResult {
     let decoded = response(
         &crate::semantic::execute(&request(root, "{\"kind\":\"snapshot\"}"))
@@ -41,8 +56,13 @@ fn publication_failure_restores_every_original_byte() {
     };
     let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
         .expect("load publication tree");
-    let mut staged = crate::semantic::transaction::stage(&tree, &[operation], &[precondition])
-        .expect("stage publication");
+    let mut staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &[precondition],
+        crate::source::SourceBytePolicy::Unrestricted,
+    )
+    .expect("stage publication");
     staged.sources[0].host_path = directory.join("missing/main.lkjscript");
     let before = std::fs::read(&root).expect("bytes before publication failure");
     assert!(crate::semantic::transaction::publish(&staged, &root).is_err());
@@ -90,8 +110,13 @@ fn publication_rejects_changed_ancestor_without_touching_alias() {
     };
     let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
         .expect("load publication tree");
-    let staged = crate::semantic::transaction::stage(&tree, &[operation], &[precondition])
-        .expect("stage publication");
+    let staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &[precondition],
+        crate::source::SourceBytePolicy::Unrestricted,
+    )
+    .expect("stage publication");
     let moved = directory.join("moved");
     std::fs::rename(&sources, &moved).expect("move validated parent");
     symlink(&alias, &sources).expect("replace parent with alias");
@@ -145,8 +170,13 @@ fn prepared_journal_is_rolled_back_before_the_next_read() {
         .collect();
     let tree =
         crate::source::load(&root, &lkjscript_core::Limits::default()).expect("load recovery tree");
-    let staged = crate::semantic::transaction::stage(&tree, &[operation], &preconditions)
-        .expect("stage recovery transaction");
+    let staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &preconditions,
+        crate::source::SourceBytePolicy::Unrestricted,
+    )
+    .expect("stage recovery transaction");
     let journal_path = crate::semantic::transaction::simulate_prepared_crash(&staged, &root)
         .expect("simulate interrupted publication");
     let recovered = crate::semantic::execute(&request(&root, "{\"kind\":\"snapshot\"}"))

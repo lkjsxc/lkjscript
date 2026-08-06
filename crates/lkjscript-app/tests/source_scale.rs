@@ -1,5 +1,6 @@
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
 use std::fs;
+use std::io::Write as IoWrite;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -29,6 +30,28 @@ impl Drop for TempDir {
     }
 }
 
+fn write_source_with_trailing_trivia(
+    path: &std::path::Path,
+    prefix: &str,
+    total_bytes: usize,
+) -> std::io::Result<()> {
+    let trivia_bytes = total_bytes
+        .checked_sub(prefix.len() + 3)
+        .ok_or_else(|| std::io::Error::other("source target is smaller than its prefix"))?;
+    let mut file = fs::File::create(path)?;
+    file.write_all(prefix.as_bytes())?;
+    file.write_all(b";;")?;
+    let chunk = vec![b'x'; 64 * 1024];
+    let mut remaining = trivia_bytes;
+    while remaining != 0 {
+        let write = remaining.min(chunk.len());
+        file.write_all(&chunk[..write])?;
+        remaining -= write;
+    }
+    file.write_all(b"\n")?;
+    file.sync_all()
+}
+
 #[test]
 fn wide_source_directory_compiles_and_executes_through_the_generic_path(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -52,6 +75,65 @@ fn wide_source_directory_compiles_and_executes_through_the_generic_path(
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
         other => return Err(format!("wide-directory program did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(42));
+    Ok(())
+}
+
+#[test]
+fn trusted_source_above_16_mib_compiles_to_validated_bytecode_and_executes(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const SOURCE_BYTES: usize = 16 * 1024 * 1024 + 1024;
+    let directory = TempDir::new()?;
+    let source = directory.0.join("main.lkjscript");
+    let prefix = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n42\n/main\n";
+    write_source_with_trailing_trivia(&source, prefix, SOURCE_BYTES)?;
+    assert_eq!(fs::metadata(&source)?.len(), u64::try_from(SOURCE_BYTES)?);
+
+    // ExecutableProgram exposes bytecode only after compiler-side validation.
+    let program = compile_path(&source, &Limits::default())?;
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("large trusted source did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(42));
+    Ok(())
+}
+
+#[test]
+#[ignore = "opt-in 258 MiB aggregate source stress geometry"]
+fn trusted_import_closure_above_256_mib_compiles_and_executes(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const SOURCE_BYTES_PER_UNIT: usize = 129 * 1024 * 1024;
+    let directory = TempDir::new()?;
+    let root = directory.0.join("main.lkjscript");
+    let library = directory.0.join("lib.lkjscript");
+    let root_prefix = concat!(
+        "imports/\nimport/\nmodule/\nlib.lkjscript\n/module\ndeclarations/\nf\n/declarations\n/import\n/imports\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nf/\n/f\n/main\n",
+    );
+    let library_prefix = concat!(
+        "def/\nname/\nf\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\n/params\n42\n/fn\n/def\n",
+    );
+    write_source_with_trailing_trivia(&root, root_prefix, SOURCE_BYTES_PER_UNIT)?;
+    write_source_with_trailing_trivia(&library, library_prefix, SOURCE_BYTES_PER_UNIT)?;
+    assert!(fs::metadata(&root)?.len() + fs::metadata(&library)?.len() > 256 * 1024 * 1024);
+
+    let program = compile_path(&root, &Limits::default())?;
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("aggregate source stress did not return: {other:?}").into()),
     };
     assert_eq!(value.as_i64(), Some(42));
     Ok(())

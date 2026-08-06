@@ -22,6 +22,7 @@ pub(crate) fn execute_request(
     request_bytes: usize,
 ) -> Result<EngineOutcome, ProtocolError> {
     let policy = super::charges::BoundaryPolicy::default();
+    let source_byte_policy = crate::source::SourceBytePolicy::limited(policy.source_bytes);
     let root = Path::new(&request.root);
     let request_charge = Charges {
         request_bytes: u64::try_from(request_bytes).unwrap_or(u64::MAX),
@@ -31,18 +32,19 @@ pub(crate) fn execute_request(
         Ok(guard) => guard,
         Err(failure) => return prepare(error_response(None, request_charge, failure), None, None),
     };
-    let tree = match crate::source::load_for_protocol(
-        root,
-        &Limits::default(),
-        policy.source_bytes,
-        crate::source::FOUNDATION_MAX_SOURCE_UNITS,
-    ) {
+    let tree = match crate::source::load_for_protocol(root, &Limits::default(), source_byte_policy)
+    {
         Ok(tree) => tree,
         Err(failure) => {
             let diagnostic = operations::diagnostics::source_failure(&failure).map(Box::new);
+            let code = if failure.category() == crate::source::DiagnosticCategory::ResourceLimit {
+                ProtocolErrorCode::ResourceLimit
+            } else {
+                ProtocolErrorCode::SourceLoad
+            };
             let response = Response {
                 result: ResponseResult::Error {
-                    error: Box::new(error(ProtocolErrorCode::SourceLoad, failure.render_human())),
+                    error: Box::new(error(code, failure.render_human())),
                     diagnostic,
                 },
                 ..base_response(None, request_charge)
@@ -66,7 +68,7 @@ pub(crate) fn execute_request(
         }
     };
     let revision = tree.revision().to_hex();
-    match super::dispatch::dispatch(&tree, request.operation, &mut charges) {
+    match super::dispatch::dispatch(&tree, request.operation, &mut charges, source_byte_policy) {
         Ok(dispatched) => {
             let response_revision = match &dispatched.result {
                 ResponseResult::ApplyTransaction { transaction } => {

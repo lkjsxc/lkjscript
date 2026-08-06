@@ -62,12 +62,13 @@ pub(super) fn load_frame(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .to_path_buf();
-    let source_bytes = super::read::read_bounded_source(
+    let source_bytes = super::read::read_source(
         &mut file,
         &metadata,
         &canonical,
         &origin,
-        &mut state.budget,
+        state.byte_policy,
+        &mut state.completed_source_bytes,
     )?;
     let final_canonical = super::containment::opened_source_path(
         &file,

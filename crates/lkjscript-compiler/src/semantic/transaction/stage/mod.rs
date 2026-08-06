@@ -13,6 +13,7 @@ pub(crate) fn stage(
     tree: &ValidatedSourceTree,
     requests: &[TransactionOperation],
     preconditions: &[FilePrecondition],
+    source_byte_policy: crate::source::SourceBytePolicy,
 ) -> Result<StagedTransaction, ProtocolError> {
     if requests.is_empty() {
         return Err(error(
@@ -66,8 +67,16 @@ pub(crate) fn stage(
         tree.root_path().to_path_buf(),
         tree.root_origin().clone(),
         &Limits::default(),
+        source_byte_policy,
     )
-    .map_err(|failure| error(ProtocolErrorCode::ValidationFailed, failure.render_human()))?;
+    .map_err(|failure| {
+        let code = if failure.category() == crate::source::DiagnosticCategory::ResourceLimit {
+            ProtocolErrorCode::ResourceLimit
+        } else {
+            ProtocolErrorCode::ValidationFailed
+        };
+        error(code, failure.render_human())
+    })?;
     let validation = if crate::semantic::tree::source_nodes(&rebuilt).iter().any(
         |node| matches!(&node.kind, crate::source::SyntaxKind::Call { name } if name == "hole"),
     ) {

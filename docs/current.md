@@ -37,17 +37,25 @@ line-oriented text and package files
 ```
 
 Trusted compiler entry points compile directly without selecting a compiler resource profile or
-charging source, HIR, or SSA shape to a budget ledger. The lexer-token, children-per-form, and
-top-level-forms validity quotas have been removed; generated coverage compiles and executes one
-program with 64 helper declarations, 128 children in one `do`, and more than 1,000 tokens. Compile
-metrics are observational phase timings and source-file counts only. Package manifests and
-prepared-program identities likewise do not carry compiler-profile identity.
+charging source, HIR, or SSA shape to a budget ledger. The lexer-token, children-per-form,
+top-level-forms, 16 MiB per-file source, 256 MiB aggregate-source, and 65,536 source-unit validity
+ceilings have been removed. Trusted validation, loading, package analysis, and compilation select
+an explicit unrestricted source-byte policy. Source files are read to EOF in checked, fallibly
+reserved chunks; metadata is a capacity and change-detection hint, not admission. Generated
+coverage compiles and executes a source 1,024 bytes beyond the former 16 MiB boundary and exercises
+the source authority with 65,537 in-memory units. Checked accounting crosses 256 MiB; the exact
+258 MiB compile-and-execute geometry is retained as an opt-in stress test and has not been run as
+part of normal verification. Compile metrics are observational phase timings and source-file
+counts only. Package manifests and prepared-program identities likewise do not carry
+compiler-profile identity.
 
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
-diagnostics, transactions, and a local stdio session. It uses direct boundary-local byte and
-request-count policy for untrusted framing and does not admit programs through compiler node/work
-profiles. It currently mirrors the text-oriented source tree and the compiler still recompiles
-from text, so it is a bootstrap editing service, not yet the intended semantic program authority.
+diagnostics, transactions, and a local stdio session. It supplies an explicit limited aggregate
+source-byte policy at its untrusted boundary; the same policy checks staged transaction source
+bytes before publication. It has no source-unit, token, node, or work admission quota. Other
+boundary-local byte and request-count policies remain for untrusted framing and persistence. It
+currently mirrors the text-oriented source tree and the compiler still recompiles from text, so it
+is a bootstrap editing service, not yet the intended semantic program authority.
 
 ## Tested platform
 
@@ -57,11 +65,11 @@ may build elsewhere, but no other host or native target is currently claimed as 
 ## Known gaps
 
 - The parser still imposes a nesting safety ceiling while recursive parsing and destruction remain;
-  removing it requires the separate stack-safe depth cutover. Source-foundation per-file and
-  aggregate byte ceilings and the source-unit ceiling also remain. HIR, ownership, memory-plan,
-  SSA, and structural-value paths retain other arbitrary count or recursion ceilings. Compact
-  executable bytecode operands and indexes retain width ceilings. These are follow-up validity and
-  representation gaps, not host policy.
+  removing it requires the separate stack-safe depth cutover. Source spans and positions remain
+  `u32`, so an individual source beyond that addressable range fails at a representation boundary.
+  HIR, ownership, memory-plan, SSA, and structural-value paths retain other arbitrary count or
+  recursion ceilings. Compact executable bytecode operands and indexes retain width ceilings.
+  These are follow-up validity and representation gaps, not host policy.
 - Several user-controlled compiler trees and analyses remain recursive or have poor large-input
   complexity.
 - The compiler cannot yet consume a syntax-independent semantic snapshot directly.

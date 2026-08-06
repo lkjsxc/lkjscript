@@ -15,6 +15,7 @@ pub(crate) fn dispatch(
     tree: &ValidatedSourceTree,
     operation: OperationRequest,
     charges: &mut Charges,
+    source_byte_policy: crate::source::SourceBytePolicy,
 ) -> Result<DispatchResult, ProtocolError> {
     let mut publication = None;
     let result = match operation {
@@ -90,7 +91,8 @@ pub(crate) fn dispatch(
             operations,
         } => {
             check_revision(tree, &base_revision)?;
-            let staged = transaction::stage(tree, &operations, &file_preconditions)?;
+            let staged =
+                transaction::stage(tree, &operations, &file_preconditions, source_byte_policy)?;
             add_staged_source(charges, &staged.tree)?;
             charges.transaction_impact_nodes =
                 u64::try_from(staged.tree.nodes().len()).map_err(|_| work_overflow())?;

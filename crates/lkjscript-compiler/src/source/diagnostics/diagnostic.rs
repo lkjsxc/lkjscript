@@ -168,6 +168,16 @@ impl SourceDiagnostic {
         )
     }
 
+    pub(crate) fn host(origin: SourceOrigin, message: impl Into<String>) -> Self {
+        Self::new(
+            "LKJ-SRC-HOST",
+            DiagnosticCategory::SourceLoading,
+            message,
+            origin,
+            SourceSpan::zero(),
+        )
+    }
+
     pub(crate) fn into_core(self) -> Error {
         let rendered = self.render_human();
         if self.code == "LKJ-SRC-HOST" {

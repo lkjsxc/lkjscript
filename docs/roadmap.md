@@ -2,15 +2,17 @@
 
 ## Now
 
-1. **Remove remaining source, HIR, ownership, and executable ceilings.** Flat lexer-token,
-   children-per-form, and top-level-form quotas are removed. Next, make source parsing and
-   destruction stack-safe before deleting the nesting guard, then address source-foundation byte
-   and source-unit ceilings, product/HIR/ownership/memory-plan/SSA checks, and compact executable
-   widths in dependency-closed slices. Completion requires just-beyond-old-boundary and
-   substantially larger positive programs, checked growth, and successful execution through the
-   retained generic path.
-2. **Complete resource-policy separation.** Trusted compiler profile/ledger admission is removed.
-   Continue replacing remaining validity-changing implementation ceilings with unrestricted local
+1. **Remove remaining source-representation, HIR, ownership, and executable ceilings.** Flat
+   lexer-token, children-per-form, top-level-form, per-file source-byte, aggregate source-byte, and
+   source-unit quotas are removed. Next, make source parsing and destruction stack-safe before
+   deleting the nesting guard and widening or segmenting `u32` source positions and spans. Then
+   address product/HIR/ownership/memory-plan/SSA checks and compact executable widths in
+   dependency-closed slices. Completion requires just-beyond-old-boundary and substantially larger
+   positive programs, checked growth, and successful execution through the retained generic path.
+2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte
+   admission are removed. The untrusted Semantic Source boundary now supplies only an aggregate
+   source-byte loader policy and applies it to staged transactions before publication. Continue
+   replacing remaining validity-changing implementation ceilings with unrestricted local
    compilation and explicit coarse input, memory, output, deadline, cancellation, and parallelism
    policy at untrusted request boundaries. The same program must exhaust under low policy and
    succeed unchanged under higher or unrestricted policy.

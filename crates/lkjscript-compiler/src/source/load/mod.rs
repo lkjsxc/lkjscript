@@ -11,7 +11,7 @@ use std::time::Instant;
 use lkjscript_core::Limits;
 
 use crate::source::{
-    api::LoadMetrics, validate::finish_tree, SourceFile, SourceFoundationBudget, SourceOrigin,
+    api::LoadMetrics, validate::finish_tree, SourceBytePolicy, SourceFile, SourceOrigin,
     SourceResult, SourceSpan, ValidatedSourceTree,
 };
 
@@ -23,7 +23,7 @@ pub(crate) use containment::{open_source_file, opened_source_path};
 #[cfg(test)]
 pub(crate) use imports::resolve_for_test;
 #[cfg(test)]
-pub(crate) use read::read_bounded_bytes;
+pub(crate) use read::read_source_bytes;
 
 struct LoadState<'a> {
     package_root: &'a Path,
@@ -32,7 +32,8 @@ struct LoadState<'a> {
     loading: HashSet<PathBuf>,
     done: HashSet<PathBuf>,
     files: Vec<SourceFile>,
-    budget: SourceFoundationBudget,
+    byte_policy: SourceBytePolicy,
+    completed_source_bytes: u64,
     metrics: LoadMetrics,
 }
 
@@ -55,13 +56,13 @@ pub(crate) fn load_with_metrics(
     path: &Path,
     limits: &Limits,
 ) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
-    load_with_budget(path, limits, SourceFoundationBudget::default())
+    load_with_byte_policy(path, limits, SourceBytePolicy::Unrestricted)
 }
 
-pub(crate) fn load_with_budget(
+pub(crate) fn load_with_byte_policy(
     path: &Path,
     limits: &Limits,
-    budget: SourceFoundationBudget,
+    byte_policy: SourceBytePolicy,
 ) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
     ensure_source_path(path)?;
     let loading_started = Instant::now();
@@ -79,7 +80,8 @@ pub(crate) fn load_with_budget(
         loading: HashSet::new(),
         done: HashSet::new(),
         files: Vec::new(),
-        budget,
+        byte_policy,
+        completed_source_bytes: 0,
         metrics: LoadMetrics {
             source_loading: loading_started.elapsed(),
             ..LoadMetrics::default()

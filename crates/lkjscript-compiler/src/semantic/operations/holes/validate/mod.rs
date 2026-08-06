@@ -113,6 +113,7 @@ fn rebuild(
         tree.root_path().to_path_buf(),
         tree.root_origin().clone(),
         &Limits::default(),
+        crate::source::SourceBytePolicy::Unrestricted,
     )
     .map_err(|failure| failure.render_human())
 }

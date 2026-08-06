@@ -7,6 +7,7 @@ use crate::semantic::schema::ProtocolError;
 use super::journal::{self, Journal, JournalFile, JournalState};
 
 const MAX_JOURNALS: usize = 64;
+const SOURCE_DIGEST_CHUNK_BYTES: usize = 64 * 1024;
 
 pub(super) fn recover_all(workspace: &Path, staging: &Path) -> Result<(), ProtocolError> {
     let mut journals = Vec::new();
@@ -114,29 +115,64 @@ fn restore_backup(backup: &Path, host: &Path) -> Result<(), ProtocolError> {
     fs::rename(backup, host).map_err(|cause| journal::io_failure("restore source backup", cause))
 }
 
-fn digest_existing(path: &Path) -> Result<Option<String>, ProtocolError> {
+pub(super) fn digest_existing(path: &Path) -> Result<Option<String>, ProtocolError> {
     let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
         Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(cause) => return Err(journal::io_failure("inspect publication leaf", cause)),
     };
-    if !metadata.is_file()
-        || metadata.file_type().is_symlink()
-        || metadata.len() > crate::source::FOUNDATION_MAX_SOURCE_FILE_BYTES
-    {
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(journal::failure("publication leaf is not a regular file"));
+    }
+
+    let mut file =
+        File::open(path).map_err(|cause| journal::io_failure("open publication leaf", cause))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|cause| journal::io_failure("inspect opened publication leaf", cause))?;
+    if !opened_metadata.is_file() || opened_metadata.len() != metadata.len() {
         return Err(journal::failure(
-            "publication leaf is not a bounded regular file",
+            "publication leaf identity or size changed before digesting",
         ));
     }
-    let limit = crate::source::FOUNDATION_MAX_SOURCE_FILE_BYTES;
+
+    let initial_capacity = usize::try_from(metadata.len())
+        .unwrap_or(usize::MAX)
+        .min(SOURCE_DIGEST_CHUNK_BYTES);
     let mut bytes = Vec::new();
-    File::open(path)
-        .map_err(|cause| journal::io_failure("open publication leaf", cause))?
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|cause| journal::io_failure("read publication leaf", cause))?;
-    if u64::try_from(bytes.len()).map_err(|_| journal::failure("source size overflow"))? > limit {
-        return Err(journal::failure("publication leaf exceeds source limit"));
+    bytes
+        .try_reserve(initial_capacity)
+        .map_err(|_| journal::failure("host could not reserve publication digest memory"))?;
+    let mut chunk = [0_u8; SOURCE_DIGEST_CHUNK_BYTES];
+    loop {
+        let read = match file.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(cause) if cause.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(cause) => return Err(journal::io_failure("read publication leaf", cause)),
+        };
+        let next_len = bytes
+            .len()
+            .checked_add(read)
+            .ok_or_else(|| journal::failure("publication digest size overflow"))?;
+        bytes
+            .try_reserve(read)
+            .map_err(|_| journal::failure("host could not reserve publication digest memory"))?;
+        bytes.extend_from_slice(&chunk[..read]);
+        debug_assert_eq!(bytes.len(), next_len);
+    }
+    let actual_bytes = u64::try_from(bytes.len())
+        .map_err(|_| journal::failure("publication digest size overflow"))?;
+    let final_metadata = file
+        .metadata()
+        .map_err(|cause| journal::io_failure("reinspect publication leaf", cause))?;
+    if !final_metadata.is_file()
+        || actual_bytes != metadata.len()
+        || final_metadata.len() != metadata.len()
+    {
+        return Err(journal::failure(
+            "publication leaf size changed while digesting",
+        ));
     }
     Ok(Some(journal::hex(&lkjscript_core::sha256(&bytes))))
 }

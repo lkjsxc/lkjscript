@@ -34,14 +34,7 @@ pub use identity::{
 };
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;
-pub(crate) use validate::SourceFoundationBudget;
-
-/// Always-enforced maximum for exact bytes in one source file.
-pub const FOUNDATION_MAX_SOURCE_FILE_BYTES: u64 = 16 * 1024 * 1024;
-/// Always-enforced maximum for exact bytes in a source closure.
-pub const FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
-/// Always-enforced maximum for source units in a source closure.
-pub const FOUNDATION_MAX_SOURCE_UNITS: u64 = 65_536;
+pub(crate) use validate::SourceBytePolicy;
 
 #[cfg(test)]
 mod tests;

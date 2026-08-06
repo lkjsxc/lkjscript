@@ -60,6 +60,13 @@ pub(crate) fn simulate_external_leaf_conflict(
 }
 
 #[cfg(test)]
+pub(crate) fn digest_publication_leaf(
+    path: &std::path::Path,
+) -> Result<Option<String>, crate::semantic::schema::ProtocolError> {
+    recovery::digest_existing(path)
+}
+
+#[cfg(test)]
 pub(crate) fn simulate_prepared_crash(
     transaction: &StagedTransaction,
     root: &std::path::Path,

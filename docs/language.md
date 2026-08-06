@@ -56,11 +56,17 @@ A future concise renderer may replace this projection.
 Type compatibility, ownership legality, capability authority, exhaustive matching, valid control
 flow, and artifact well-formedness are semantic laws. A declaration or expression count is not.
 
-The lexer-token, children-per-form, and top-level-form ceilings have been removed. The current
-implementation still retains a nesting safety ceiling until recursive source processing is made
-stack-safe, along with source-foundation byte and source-unit ceilings and later HIR, ownership,
-memory-plan, SSA, structural-value, and executable-width ceilings. These inherited ceilings are
-known defects, not permanent language rules. New work must remove the checks and repair the
-algorithms or representations rather than publish larger numbers. Real host exhaustion,
-cancellation, checked representation overflow, and explicit untrusted-request policy must report
-typed failures without partial publication.
+The lexer-token, children-per-form, top-level-form, 16 MiB per-source, 256 MiB aggregate-source,
+and 65,536 source-unit ceilings have been removed. Trusted source validation, loading, package
+analysis, and compilation are unrestricted by source-byte or source-unit policy. An untrusted
+Semantic Source request may apply an explicit aggregate source-byte policy; exhausting that policy
+is a typed host resource failure and does not make the unchanged program invalid.
+
+The current implementation still retains a nesting safety ceiling until recursive source
+processing is made stack-safe. Source positions and spans remain `u32`, creating a separate
+addressable representation boundary. Later HIR, ownership, memory-plan, SSA, structural-value, and
+executable-width ceilings also remain. These inherited ceilings are known defects, not permanent
+language rules. New work must remove the checks and repair the algorithms or representations
+rather than publish larger numbers. Real host exhaustion, cancellation, checked representation
+overflow, and explicit untrusted-request policy must report typed failures without partial
+publication.

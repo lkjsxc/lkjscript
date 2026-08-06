@@ -13,9 +13,7 @@ use std::path::PathBuf;
 
 use lkjscript_core::Limits;
 
-use crate::source::{
-    validate::check_foundation_file_bytes, SourceFile, SourceNode, SourceOrigin, SourceResult,
-};
+use crate::source::{SourceFile, SourceNode, SourceOrigin, SourceResult};
 
 pub(crate) use names::is_source_identifier;
 
@@ -32,7 +30,6 @@ pub(crate) fn parse_file(
             "source exceeds the byte-addressable span limit",
         )
     })?;
-    check_foundation_file_bytes(&origin, exact_source_len)?;
     if source.len() > u32::MAX as usize {
         return Err(limits::resource_error(
             &origin,
