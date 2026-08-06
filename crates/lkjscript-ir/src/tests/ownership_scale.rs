@@ -42,30 +42,37 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
             origin: Origin::SYNTHETIC,
         })
         .collect();
-    let cleanup = |id: u32, value_offset: u32| FailureCleanupPlan {
-        id: FailureCleanupId::new(id),
-        actions: (0..OWNED_PARAMETERS)
-            .rev()
-            .map(|index| FailureCleanupAction::DropOwner {
-                place: Some(PlaceId::new(index)),
-                value: ValueId::new(
-                    value_offset
-                        .checked_add(index)
-                        .expect("test ValueId geometry fits u32"),
-                ),
-                glue: DropGlueIdentity::Resource(resource_kind),
-            })
-            .collect(),
+    let cleanup = |start: u64, value_offset: u32| {
+        let mut nodes = Vec::with_capacity(OWNED_PARAMETERS as usize);
+        for index in 0..OWNED_PARAMETERS {
+            nodes.push(FailureCleanupNode {
+                action: FailureCleanupAction::DropOwner {
+                    place: Some(PlaceId::new(index)),
+                    value: ValueId::new(
+                        value_offset
+                            .checked_add(index)
+                            .expect("test ValueId geometry fits u32"),
+                    ),
+                    glue: DropGlueIdentity::Resource(resource_kind),
+                },
+                next: (index > 0).then(|| FailureCleanupId::new(start + u64::from(index) - 1)),
+            });
+        }
+        let root = FailureCleanupId::new(start + u64::from(OWNED_PARAMETERS) - 1);
+        (nodes, root)
     };
-    let entry_cleanup = cleanup(0, 0_u32);
-    let successor_cleanup = cleanup(1, OWNED_PARAMETERS);
+    let (mut failure_cleanups, entry_cleanup) = cleanup(0, 0_u32);
+    let successor_start =
+        u64::try_from(failure_cleanups.len()).expect("test cleanup geometry fits u64");
+    let (successor_nodes, successor_cleanup) = cleanup(successor_start, OWNED_PARAMETERS);
+    failure_cleanups.extend(successor_nodes);
     let call_id = ValueId::new(
         OWNED_PARAMETERS
             .checked_mul(2)
             .expect("test ValueId geometry fits u32"),
     );
     let mut call_metadata = metadata(EffectSet::PURE);
-    call_metadata.failure_cleanup = Some(successor_cleanup.id);
+    call_metadata.failure_cleanup = Some(FailureCleanupRoots::single(successor_cleanup));
     call_metadata.frame_state = Some(FrameState {
         bytecode_position: 0,
         locals: Vec::new(),
@@ -102,13 +109,13 @@ fn ownership_verification_accepts_more_than_former_retained_state_and_work_bound
         .expect("wide ownership fixture has cleanup instructions")
         .id;
     let mut entry_metadata = block_metadata();
-    entry_metadata.failure_cleanup = Some(entry_cleanup.id);
+    entry_metadata.failure_cleanup = Some(FailureCleanupRoots::single(entry_cleanup));
     let function = Function {
         id: FunctionId::new(1),
         name: "wide-ownership-state".into(),
         signature: Signature::monomorphic(parameters.clone(), SsaType::Unit),
         places,
-        failure_cleanups: vec![entry_cleanup, successor_cleanup],
+        failure_cleanups,
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![

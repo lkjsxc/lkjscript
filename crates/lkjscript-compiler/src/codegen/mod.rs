@@ -7,7 +7,9 @@ use lkjscript_core::{
     EnumFieldMetadata as BytecodeEnumFieldMetadata, EnumFieldRef, EnumId as BytecodeEnumId,
     EnumMetadata as BytecodeEnumMetadata, EnumVariantMetadata as BytecodeEnumVariantMetadata,
     EnumVariantRef, Error, FailureCleanupAction as BytecodeFailureCleanupAction,
-    FailureCleanupPlan as BytecodeFailureCleanupPlan, FailureCleanupRange, FunctionProto,
+    FailureCleanupId as BytecodeFailureCleanupId,
+    FailureCleanupInterner as BytecodeFailureCleanupInterner, FailureCleanupRange,
+    FailureCleanupRoots as BytecodeFailureCleanupRoots, FunctionProto,
     MemoryPlanId as BytecodeMemoryPlanId, MemoryWitnessId as BytecodeMemoryWitnessId, Op,
     ProductFieldRef, ProductId as BytecodeProductId, ProductMetadata as BytecodeProductMetadata,
     RegionProductFieldKind, ResourceReturnKind, Result, RuntimeLayoutId as BytecodeLayoutId,
@@ -28,9 +30,10 @@ use lkjscript_core::{
 };
 use lkjscript_ir::{
     BlockId, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget,
-    Constant, DropGlueIdentity, FailureCleanupAction as SsaFailureCleanupAction, Function,
-    FunctionBytecodeLink, FunctionId, Instruction, InstructionKind, RuntimeOp, SsaType,
-    StructuralDropGlueIdentity, StructuralValueCategory, Terminator, ValueId, VerifiedProgram,
+    Constant, DropGlueIdentity, FailureCleanupAction as SsaFailureCleanupAction,
+    FailureCleanupRoots as SsaFailureCleanupRoots, Function, FunctionBytecodeLink, FunctionId,
+    Instruction, InstructionKind, RuntimeOp, SsaType, StructuralDropGlueIdentity,
+    StructuralValueCategory, Terminator, ValueId, VerifiedProgram,
 };
 
 mod constants;

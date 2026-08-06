@@ -4,12 +4,10 @@ pub(crate) fn rewrite_function_values(
     function: &mut crate::Function,
     mut rewrite: impl FnMut(ValueId) -> ValueId,
 ) {
-    for plan in &mut function.failure_cleanups {
-        for action in &mut plan.actions {
-            match action {
-                FailureCleanupAction::EndBorrow { value, .. }
-                | FailureCleanupAction::DropOwner { value, .. } => *value = rewrite(*value),
-            }
+    for node in &mut function.failure_cleanups {
+        match &mut node.action {
+            FailureCleanupAction::EndBorrow { value, .. }
+            | FailureCleanupAction::DropOwner { value, .. } => *value = rewrite(*value),
         }
     }
     for block in &mut function.blocks {

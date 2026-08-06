@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
 use super::{Kind, State, UniquePlaceState};
-use crate::{
-    Error, FailureCleanupAction, FailureCleanupPlan, FunctionProto, Result, UniqueValueKind,
-};
+use crate::{Error, FailureCleanupAction, FunctionProto, Result, UniqueValueKind};
 use checks::{
     local_owner, validate_loan, validate_structural_drop, validate_structural_loan,
     validate_unique_drop,
@@ -16,10 +14,13 @@ pub(super) fn validate_at_offset(
     offset: usize,
     state: &State,
 ) -> Result<()> {
+    let host_offset = offset;
+    let offset = u64::try_from(host_offset)
+        .map_err(|_| Error::msg("bytecode instruction offset exceeds cleanup range width"))?;
     let range = proto
         .failure_cleanup_ranges
         .iter()
-        .find(|range| usize::from(range.start) <= offset && offset < usize::from(range.end));
+        .find(|range| range.start <= offset && offset < range.end);
     let required = state
         .unique_places
         .iter()
@@ -47,32 +48,30 @@ pub(super) fn validate_at_offset(
             Ok(())
         };
     };
-    if usize::from(range.start) != offset {
+    if range.start != offset {
         return Ok(());
     }
     if let Some(plan) = range.plan {
-        let plan = proto
-            .failure_cleanups
-            .get(usize::from(plan))
-            .ok_or_else(|| Error::msg("bytecode failure-cleanup range lost its plan"))?;
         validate_plan(proto, plan, state, true).map_err(|error| {
             Error::msg(format!(
                 "failure cleanup at byte {offset} opcode {}: {error}",
-                proto.code.get(offset).copied().unwrap_or(u8::MAX)
+                proto.code.get(host_offset).copied().unwrap_or(u8::MAX)
             ))
         })?;
     } else if required {
         return Err(Error::msg(format!(
             "bytecode live unique state has an empty failure-cleanup range at offset {offset} opcode {}",
-            proto.code.get(offset).copied().unwrap_or(u8::MAX)
+            proto.code.get(host_offset).copied().unwrap_or(u8::MAX)
         )));
     }
     if let Some(unentered) = range.unentered_plan {
-        let unentered = proto
-            .failure_cleanups
-            .get(usize::from(unentered))
-            .ok_or_else(|| Error::msg("bytecode unentered cleanup range lost its plan"))?;
-        validate_plan(proto, unentered, state, false).map_err(|error| {
+        validate_plan(
+            proto,
+            crate::FailureCleanupRoots::single(unentered),
+            state,
+            false,
+        )
+        .map_err(|error| {
             Error::msg(format!(
                 "unentered failure cleanup at byte {offset}: {error}"
             ))

@@ -21,8 +21,8 @@ pub use ids::{
 };
 pub use instruction::{BlockParameter, BorrowKind, CallTarget, Instruction, InstructionKind};
 pub use instruction_metadata::{
-    FailureBehavior, FailureCleanupAction, FailureCleanupPlan, FrameLocal, FrameState,
-    InstructionMetadata,
+    FailureBehavior, FailureCleanupAction, FailureCleanupInterner, FailureCleanupNode,
+    FailureCleanupRoots, FrameLocal, FrameState, InstructionMetadata,
 };
 pub use memory::{
     DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,
@@ -34,8 +34,8 @@ pub use metadata::{
     ProductMetadata, SourceMetadata,
 };
 pub use program::{
-    Block, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, Function,
-    FunctionBytecodeLink, PlaceMetadata, Program,
+    Block, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, FailureCleanupActions,
+    Function, FunctionBytecodeLink, PlaceMetadata, Program,
 };
 pub use runtime::RuntimeOp;
 pub use structural::{

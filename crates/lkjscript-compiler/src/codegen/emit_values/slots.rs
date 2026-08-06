@@ -1,10 +1,10 @@
 impl Emitter<'_> {
-    pub(in crate::codegen) fn offset(&self) -> Result<u16> {
-        let local = u16::try_from(self.proto.len())
-            .map_err(|_| Error::msg("bytecode function offset exceeds u16"))?;
+    pub(in crate::codegen) fn offset(&self) -> Result<u64> {
+        let local = u64::try_from(self.proto.len())
+            .map_err(|_| Error::msg("bytecode function offset exceeds u64"))?;
         self.code_base
             .checked_add(local)
-            .ok_or_else(|| Error::msg("bytecode function offset exceeds u16"))
+            .ok_or_else(|| Error::msg("bytecode function offset exceeds u64"))
     }
 
     pub(in crate::codegen) fn slot(&self, value: ValueId) -> Result<usize> {

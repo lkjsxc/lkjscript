@@ -6,7 +6,7 @@ pub(super) fn lower_edge(
     edge: lkjscript_native::BlockId,
     target: lkjscript_ir::BlockId,
     arguments: &[ValueId],
-    failure_cleanup: Option<lkjscript_ir::FailureCleanupId>,
+    failure_cleanup: Option<lkjscript_ir::FailureCleanupRoots>,
     blocks: &[lkjscript_native::BlockId],
     locals: &[LocalId],
     value_types: &[ValueType],

@@ -36,7 +36,7 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
     returned_original.functions[1].blocks[1].terminator = Terminator::Return(ValueId::new(0));
     returned_original.functions[1].blocks[1]
         .metadata
-        .failure_cleanup = Some(FailureCleanupId::new(2));
+        .failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(2)));
     let error = verify(returned_original)
         .expect_err("Move followed by Return of the original owner must fail");
     assert!(error.to_string().contains("unavailable affine"), "{error}");
@@ -46,13 +46,13 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
         name: "implicit-return".into(),
         signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
-        failure_cleanups: vec![FailureCleanupPlan {
-            id: FailureCleanupId::new(0),
-            actions: vec![FailureCleanupAction::DropOwner {
+        failure_cleanups: vec![FailureCleanupNode {
+            action: FailureCleanupAction::DropOwner {
                 place: Some(PlaceId::new(0)),
                 value: ValueId::new(0),
                 glue: DropGlueIdentity::ByteVector,
-            }],
+            },
+            next: None,
         }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),

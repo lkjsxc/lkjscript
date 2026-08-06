@@ -41,23 +41,26 @@ fn structural_failure_cleanup_checks_exact_action_identity() {
     proto.emit(Op::Pop);
     proto.emit(Op::Unit);
     proto.emit(Op::Return);
-    proto.failure_cleanups = vec![crate::FailureCleanupPlan {
-        actions: vec![crate::FailureCleanupAction::DropStructural {
+    proto.failure_cleanups = vec![crate::FailureCleanupNode {
+        action: crate::FailureCleanupAction::DropStructural {
             local: 0,
             place: Some(0),
             representation: crate::StructuralRepresentationId::new(0),
-        }],
+        },
+        next: None,
     }];
     proto.failure_cleanup_ranges = vec![crate::FailureCleanupRange {
         start: 0,
-        end: u16::try_from(proto.code.len()).expect("small fixture"),
-        plan: Some(0),
+        end: u64::try_from(proto.code.len()).expect("small fixture"),
+        plan: Some(crate::FailureCleanupRoots::single(
+            crate::FailureCleanupId::new(0),
+        )),
         unentered_plan: None,
     }];
     chunk.protos.push(proto);
     validate_chunk(chunk.clone(), &ValidationLimits::default())
         .expect("exact structural failure cleanup validates");
-    chunk.protos[0].failure_cleanups[0].actions[0] = crate::FailureCleanupAction::DropStructural {
+    chunk.protos[0].failure_cleanups[0].action = crate::FailureCleanupAction::DropStructural {
         local: 0,
         place: Some(0),
         representation: crate::StructuralRepresentationId::new(1),

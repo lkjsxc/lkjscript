@@ -62,7 +62,11 @@ fn instruction_meta(out: &mut Encoder, value: &InstructionMetadata) {
         FailureBehavior::StructuredOutcome => 2,
         FailureBehavior::TrapOrOutcome => 3,
     });
-    out.option(failure_cleanup.as_ref(), |out, value| out.u32(value.raw()));
+    out.option(failure_cleanup.as_ref(), |out, roots| {
+        out.option(roots.loans.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.unplaced.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.places.as_ref(), |out, value| out.u64(value.raw()));
+    });
     out.option(frame.as_ref(), frame_state);
 }
 pub(super) fn frame_state(out: &mut Encoder, value: &FrameState) {

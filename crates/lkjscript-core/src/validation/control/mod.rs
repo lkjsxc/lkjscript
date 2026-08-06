@@ -18,8 +18,10 @@ pub(super) fn validate_control_flow(
         .map(|(index, instruction)| (instruction.offset(), index))
         .collect();
     for range in &proto.failure_cleanup_ranges {
-        let start = usize::from(range.start);
-        let end = usize::from(range.end);
+        let start = usize::try_from(range.start)
+            .map_err(|_| Error::msg("bytecode failure-cleanup start exceeds host usize"))?;
+        let end = usize::try_from(range.end)
+            .map_err(|_| Error::msg("bytecode failure-cleanup end exceeds host usize"))?;
         if !by_offset.contains_key(&start)
             || (end != proto.code.len() && !by_offset.contains_key(&end))
         {

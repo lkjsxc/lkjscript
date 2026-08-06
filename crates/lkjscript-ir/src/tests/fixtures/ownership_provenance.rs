@@ -7,13 +7,13 @@ pub(crate) fn aliased_places() -> Function {
         name: "aliased-places".into(),
         signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
-        failure_cleanups: vec![FailureCleanupPlan {
-            id: FailureCleanupId::new(0),
-            actions: vec![FailureCleanupAction::DropOwner {
+        failure_cleanups: vec![FailureCleanupNode {
+            action: FailureCleanupAction::DropOwner {
                 place: Some(PlaceId::new(0)),
                 value: ValueId::new(0),
                 glue: DropGlueIdentity::ByteVector,
-            }],
+            },
+            next: None,
         }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),

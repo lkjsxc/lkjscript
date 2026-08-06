@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, Op};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, Op, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, FailureCode, JitConfig, JitSession};
 use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
@@ -131,6 +131,90 @@ fn wide_owned_parameter_source(count: usize) -> String {
     lines.join("\n")
 }
 
+fn many_owned_arguments_source(count: usize) -> String {
+    let mut lines = vec![
+        "def/".into(),
+        "name/".into(),
+        "drop-many-owned".into(),
+        "/name".into(),
+        "fn/".into(),
+        "sig/".into(),
+        "inputs/".into(),
+    ];
+    lines.extend((0..count).map(|_| "byte-vector".to_string()));
+    lines.extend([
+        "/inputs".into(),
+        "output/".into(),
+        "i64".into(),
+        "/output".into(),
+        "/sig".into(),
+        "params/".into(),
+    ]);
+    for index in 0..count {
+        lines.push(format!("p{index}"));
+        lines.push("byte-vector".into());
+    }
+    lines.extend([
+        "/params".into(),
+        "7".into(),
+        "/fn".into(),
+        "/def".into(),
+        "main/".into(),
+        "sig/".into(),
+        "inputs/".into(),
+        "/inputs".into(),
+        "output/".into(),
+        "i64".into(),
+        "/output".into(),
+        "/sig".into(),
+        "let/".into(),
+    ]);
+    for index in (0..count).rev() {
+        lines.extend([
+            "bind/".into(),
+            format!("owned{index}"),
+            "new-byte-vector/".into(),
+            "1".into(),
+            "/new-byte-vector".into(),
+            "/bind".into(),
+        ]);
+    }
+    lines.push("drop-many-owned/".into());
+    for index in 0..count {
+        lines.extend(["move/".into(), format!("owned{index}"), "/move".into()]);
+    }
+    lines.extend([
+        "/drop-many-owned".into(),
+        "/let".into(),
+        "/main".into(),
+        String::new(),
+    ]);
+    lines.join("\n")
+}
+
+fn logical_cleanup_actions(proto: &lkjscript_core::FunctionProto) -> usize {
+    let mut lengths = Vec::with_capacity(proto.failure_cleanups.len());
+    for node in &proto.failure_cleanups {
+        let tail = node
+            .next
+            .map(|next| lengths[next.index().expect("validated cleanup link")])
+            .unwrap_or(0_usize);
+        lengths.push(tail.checked_add(1).expect("test cleanup length fits usize"));
+    }
+    proto
+        .failure_cleanup_ranges
+        .iter()
+        .flat_map(|range| {
+            range
+                .plan
+                .into_iter()
+                .flat_map(lkjscript_core::FailureCleanupRoots::ids)
+                .chain(range.unentered_plan)
+        })
+        .map(|root| lengths[root.index().expect("validated cleanup root")])
+        .sum()
+}
+
 fn compile_wide() -> lkjscript_compiler::ExecutableProgram {
     compile_source(
         &wide_scalar_source(WIDE_COUNT),
@@ -240,14 +324,14 @@ fn owned_parameter_above_byte_width_executes_and_cleans_up() {
         .expect("wide owned function prototype");
     assert_eq!(function.parameter_unique_places[WIDE_COUNT - 1], Some(0));
     assert_eq!(function.unique_places, 1);
-    assert!(function.failure_cleanups.iter().any(|plan| {
-        plan.actions.iter().any(|action| match action {
+    assert!(function.failure_cleanups.iter().any(|node| {
+        match node.action {
             lkjscript_core::FailureCleanupAction::EndBorrow { local, .. }
             | lkjscript_core::FailureCleanupAction::DropUnique { local, .. } => {
-                *local > usize::from(u8::MAX)
+                local > usize::from(u8::MAX)
             }
             _ => false,
-        })
+        }
     }));
     let outcome = run_chunk(
         program.bytecode(),
@@ -255,6 +339,121 @@ fn owned_parameter_above_byte_width_executes_and_cleans_up() {
         &ExecutionConfig::default(),
     );
     assert_eq!(returned_i64(outcome), 7);
+}
+
+fn assert_many_owned_arguments(count: usize) {
+    let source = many_owned_arguments_source(count);
+    let program = compile_source(
+        &source,
+        "generated-many-owned-arguments.lkjscript",
+        &Limits::default(),
+    )
+    .expect("compile owned arguments through HIR, memory plan, SSA, and publication");
+    let function = program
+        .bytecode()
+        .protos()
+        .iter()
+        .find(|proto| proto.arity == count)
+        .expect("many-owned function prototype");
+    assert_eq!(function.unique_places, count);
+    assert!(function.failure_cleanups.iter().any(|node| {
+        matches!(
+            node.action,
+            lkjscript_core::FailureCleanupAction::DropUnique {
+                local,
+                place: Some(place),
+                ..
+            } if local > usize::from(u8::MAX) && place > usize::from(u8::MAX)
+        )
+    }));
+
+    let geometry: Vec<_> = std::iter::once(program.bytecode().main())
+        .chain(program.bytecode().protos())
+        .map(|proto| {
+            (
+                proto.name.as_str(),
+                logical_cleanup_actions(proto),
+                proto.failure_cleanups.len(),
+                proto
+                    .failure_cleanups
+                    .iter()
+                    .filter(|node| match node.action {
+                        lkjscript_core::FailureCleanupAction::DropUnique { place, .. }
+                        | lkjscript_core::FailureCleanupAction::DropResource { place, .. }
+                        | lkjscript_core::FailureCleanupAction::DropStructural { place, .. } => {
+                            place.is_some()
+                        }
+                        lkjscript_core::FailureCleanupAction::EndBorrow { .. }
+                        | lkjscript_core::FailureCleanupAction::EndStructuralBorrow { .. }
+                        | lkjscript_core::FailureCleanupAction::AbortStructuralDestination {
+                            ..
+                        } => false,
+                    })
+                    .count(),
+            )
+        })
+        .collect();
+    let (logical, physical) = geometry.iter().fold(
+        (0_usize, 0_usize),
+        |(logical, physical), (_, proto_logical, proto_physical, _)| {
+            (
+                logical
+                    .checked_add(*proto_logical)
+                    .expect("test logical cleanup geometry fits usize"),
+                physical
+                    .checked_add(*proto_physical)
+                    .expect("test physical cleanup geometry fits usize"),
+            )
+        },
+    );
+    assert!(logical > 65_535, "logical cleanup actions: {logical}");
+    assert!(
+        physical <= count.saturating_mul(12),
+        "physical cleanup nodes {physical} are not near-linear for {count} owners ({logical} logical actions): {geometry:?}",
+    );
+    assert_eq!(
+        evaluate(program.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::I64(7))
+    );
+
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    assert_eq!(returned_i64(outcome), 7);
+
+    let instructions = program.bytecode().main_instructions();
+    let call_index = instructions
+        .iter()
+        .position(|instruction| instruction.op() == Op::Call)
+        .expect("many-owned call instruction");
+    let ranges = &program.bytecode().main().failure_cleanup_ranges;
+    let boundaries_before_call = instructions[..call_index]
+        .iter()
+        .filter(|instruction| {
+            let offset = u64::try_from(instruction.offset()).expect("test offset fits u64");
+            ranges
+                .iter()
+                .find(|range| range.start <= offset && offset < range.end)
+                .is_none_or(|range| range.start == offset)
+        })
+        .count();
+    let fuel = u64::try_from(boundaries_before_call).expect("test boundary count fits u64");
+    let limited = ExecutionConfig {
+        instruction_fuel: fuel,
+        ..ExecutionConfig::default()
+    };
+    assert_eq!(
+        run_chunk(program.bytecode(), &ExecutionInputs::default(), &limited,),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel),
+        "call-unentered cleanup must run before ordinary frame cleanup without leaks or failures",
+    );
+}
+
+#[test]
+fn three_hundred_owned_parameters_and_arguments_publish_and_execute_with_shared_cleanup() {
+    assert_many_owned_arguments(WIDE_COUNT);
 }
 
 #[test]

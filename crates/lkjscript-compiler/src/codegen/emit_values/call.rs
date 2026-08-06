@@ -59,12 +59,8 @@ impl Emitter<'_> {
             .map(|binding| self.call_witness_binding(instantiation, binding))
             .collect::<Result<Vec<_>>>()?;
         self.proto.call_witnesses.push(lkjscript_core::CallWitnessSite {
-            offset: u32::from(self.code_base)
-                .checked_add(
-                    u32::try_from(self.proto.len())
-                        .map_err(|_| Error::msg("call witness offset exceeds u32"))?,
-                )
-                .ok_or_else(|| Error::msg("call witness offset overflow"))?,
+            offset: u32::try_from(self.offset()?)
+                .map_err(|_| Error::msg("call witness offset exceeds u32"))?,
             callee,
             bindings,
         });

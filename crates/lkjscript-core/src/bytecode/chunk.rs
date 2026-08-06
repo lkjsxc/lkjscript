@@ -45,7 +45,7 @@ pub struct FunctionProto {
     pub parameter_unique_places: Vec<Option<usize>>,
     pub return_unique: Option<UniqueValueKind>,
     pub unique_places: usize,
-    pub failure_cleanups: Vec<FailureCleanupPlan>,
+    pub failure_cleanups: Vec<FailureCleanupNode>,
     pub failure_cleanup_ranges: Vec<FailureCleanupRange>,
     pub code: Vec<u8>,
 }

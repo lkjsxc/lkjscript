@@ -39,16 +39,22 @@ fn explicit_publish_destination_and_finish_execute_in_structural_runtime() -> cr
         layout: StructuralLayoutId::new(1),
     });
     function.failure_cleanups = vec![
-        cleanup_plan(0, vec![drop_action(1, string_glue)]),
-        cleanup_plan(
-            1,
-            vec![
-                drop_action(2, destination_glue),
-                drop_action(1, string_glue),
-            ],
-        ),
-        cleanup_plan(2, vec![drop_action(3, destination_glue)]),
-        cleanup_plan(3, vec![drop_action(4, product_glue)]),
+        FailureCleanupNode {
+            action: drop_action(1, string_glue),
+            next: None,
+        },
+        FailureCleanupNode {
+            action: drop_action(2, destination_glue),
+            next: Some(FailureCleanupId::new(0)),
+        },
+        FailureCleanupNode {
+            action: drop_action(3, destination_glue),
+            next: None,
+        },
+        FailureCleanupNode {
+            action: drop_action(4, product_glue),
+            next: None,
+        },
     ];
     function.blocks[0].instructions = vec![
         Instruction {
@@ -99,7 +105,8 @@ fn explicit_publish_destination_and_finish_execute_in_structural_runtime() -> cr
         },
     ];
     function.blocks[0].terminator = Terminator::Return(ValueId::new(4));
-    function.blocks[0].metadata.failure_cleanup = Some(FailureCleanupId::new(3));
+    function.blocks[0].metadata.failure_cleanup =
+        Some(FailureCleanupRoots::single(FailureCleanupId::new(3)));
 
     let program = verify(program)?;
     let (outcome, observation) = evaluate_observed(&program, &EvalConfig::default());
@@ -134,8 +141,14 @@ fn affine_structural_copy_is_rejected_before_evaluation() {
         layout: StructuralLayoutId::new(0),
     });
     function.failure_cleanups = vec![
-        cleanup_plan(0, vec![drop_action(1, glue)]),
-        cleanup_plan(1, vec![drop_action(2, glue), drop_action(1, glue)]),
+        FailureCleanupNode {
+            action: drop_action(1, glue),
+            next: None,
+        },
+        FailureCleanupNode {
+            action: drop_action(2, glue),
+            next: Some(FailureCleanupId::new(0)),
+        },
     ];
     function.blocks[0].instructions = vec![
         Instruction {
@@ -164,18 +177,12 @@ fn affine_structural_copy_is_rejected_before_evaluation() {
         },
     ];
     function.blocks[0].terminator = Terminator::Return(ValueId::new(2));
-    function.blocks[0].metadata.failure_cleanup = Some(FailureCleanupId::new(1));
+    function.blocks[0].metadata.failure_cleanup =
+        Some(FailureCleanupRoots::single(FailureCleanupId::new(1)));
     assert!(matches!(
         verify(program),
         Err(error) if error.to_string().contains("cannot duplicate an affine owner")
     ));
-}
-
-fn cleanup_plan(id: u32, actions: Vec<FailureCleanupAction>) -> FailureCleanupPlan {
-    FailureCleanupPlan {
-        id: FailureCleanupId::new(id),
-        actions,
-    }
 }
 
 fn drop_action(value: u32, glue: DropGlueIdentity) -> FailureCleanupAction {

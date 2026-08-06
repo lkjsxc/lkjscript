@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::verify::*;
 use crate::{
-    Block, BlockId, FailureCleanupAction, FailureCleanupId, Function, Instruction, InstructionKind,
-    IrError, Program, SsaType, Terminator, ValueId,
+    Block, BlockId, FailureCleanupAction, Function, Instruction, InstructionKind, IrError, Program,
+    SsaType, Terminator, ValueId,
 };
 
 pub(crate) fn process_ownership_block(

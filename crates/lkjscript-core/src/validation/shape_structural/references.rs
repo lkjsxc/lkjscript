@@ -36,8 +36,8 @@ fn validate_operation_references(chunk: &Chunk, mut bytes: usize) -> Result<usiz
                 "bytecode function MemoryPlanId does not match its chunk",
             ));
         }
-        for action in proto.failure_cleanups.iter().flat_map(|plan| &plan.actions) {
-            match action {
+        for node in &proto.failure_cleanups {
+            match &node.action {
                 crate::FailureCleanupAction::EndStructuralBorrow { representation, .. }
                 | crate::FailureCleanupAction::DropStructural { representation, .. } => {
                     let _ = lookup_representation(chunk, *representation)?;

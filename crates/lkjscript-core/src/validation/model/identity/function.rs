@@ -73,9 +73,10 @@ pub(super) fn function(out: &mut Encoder, value: &FunctionProto) {
     out.sequence(failure_cleanup_ranges, cleanup_range);
     out.bytes(code);
 }
-fn cleanup(out: &mut Encoder, value: &FailureCleanupPlan) {
-    let FailureCleanupPlan { actions } = value;
-    out.sequence(actions, cleanup_action);
+fn cleanup(out: &mut Encoder, value: &FailureCleanupNode) {
+    let FailureCleanupNode { action, next } = value;
+    cleanup_action(out, action);
+    out.option(next.as_ref(), |out, value| out.u64(value.raw()));
 }
 fn cleanup_action(out: &mut Encoder, value: &FailureCleanupAction) {
     match value {
@@ -131,10 +132,14 @@ fn cleanup_range(out: &mut Encoder, value: &FailureCleanupRange) {
         plan,
         unentered_plan,
     } = value;
-    out.u16(*start);
-    out.u16(*end);
-    out.option(plan.as_ref(), |out, value| out.u16(*value));
-    out.option(unentered_plan.as_ref(), |out, value| out.u16(*value));
+    out.u64(*start);
+    out.u64(*end);
+    out.option(plan.as_ref(), |out, roots| {
+        out.option(roots.loans.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.unplaced.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.places.as_ref(), |out, value| out.u64(value.raw()));
+    });
+    out.option(unentered_plan.as_ref(), |out, value| out.u64(value.raw()));
 }
 fn resource_return(out: &mut Encoder, value: &ResourceReturnKind) {
     match value {

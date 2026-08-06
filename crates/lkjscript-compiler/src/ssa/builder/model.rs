@@ -43,7 +43,7 @@ impl<'a> FunctionBuilder<'a> {
             next_synthetic_binding,
             value_types: Vec::new(),
             places,
-            failure_cleanups: Vec::new(),
+            failure_cleanups: FailureCleanupInterner::default(),
             cleanup,
             current_memory_expression: None,
             current_placement: None,

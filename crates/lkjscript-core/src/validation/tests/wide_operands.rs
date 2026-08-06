@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FailureCleanupAction, FailureCleanupPlan, UniqueValueKind};
+use crate::{FailureCleanupAction, FailureCleanupNode, UniqueValueKind};
 
 const WIDE_COUNT: usize = 300;
 
@@ -129,27 +129,27 @@ fn high_cleanup_local_and_place_metadata_are_checked_without_byte_narrowing() {
     let mut chunk = unit_chunk();
     chunk.main.locals = WIDE_COUNT;
     chunk.main.unique_places = WIDE_COUNT;
-    chunk.main.failure_cleanups = vec![FailureCleanupPlan {
-        actions: vec![FailureCleanupAction::DropUnique {
+    chunk.main.failure_cleanups = vec![FailureCleanupNode {
+        action: FailureCleanupAction::DropUnique {
             local: WIDE_COUNT - 1,
             place: Some(WIDE_COUNT - 1),
             kind: UniqueValueKind::ByteVector,
-        }],
+        },
+        next: None,
     }];
     validate_chunk(chunk.clone(), &ValidationLimits::default())
         .expect("high cleanup metadata validates in range");
 
     let mut bad_local = chunk.clone();
     let FailureCleanupAction::DropUnique { local, .. } =
-        &mut bad_local.main.failure_cleanups[0].actions[0]
+        &mut bad_local.main.failure_cleanups[0].action
     else {
         unreachable!()
     };
     *local = WIDE_COUNT;
     assert!(error(bad_local).contains("local or place is out of range"));
 
-    let FailureCleanupAction::DropUnique { place, .. } =
-        &mut chunk.main.failure_cleanups[0].actions[0]
+    let FailureCleanupAction::DropUnique { place, .. } = &mut chunk.main.failure_cleanups[0].action
     else {
         unreachable!()
     };

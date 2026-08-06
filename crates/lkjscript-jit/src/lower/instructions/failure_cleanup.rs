@@ -30,7 +30,7 @@ pub(super) fn lower_failure_cleanup(
 
 pub(in crate::lower) fn lower_failure_cleanup_id(
     function: &Function,
-    cleanup: Option<lkjscript_ir::FailureCleanupId>,
+    cleanup: Option<lkjscript_ir::FailureCleanupRoots>,
     locals: &[LocalId],
     value_types: &[ValueType],
     layouts: &LayoutInterner,
@@ -39,19 +39,19 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
     let Some(cleanup) = cleanup else {
         return Ok(Vec::new());
     };
-    let plan = function
-        .failure_cleanups
-        .get(cleanup.index().unwrap_or(usize::MAX))
-        .filter(|plan| plan.id == cleanup)
-        .ok_or_else(|| {
-            LoweringError::new(
-                LoweringFailureCode::InvalidFunction,
-                Some(function.id),
-                "SSA native failure cleanup references an invalid plan",
-            )
-        })?;
-    plan.actions
-        .iter()
+    if cleanup.ids().any(|root| {
+        root.index()
+            .is_none_or(|index| index >= function.failure_cleanups.len())
+    }) {
+        return Err(LoweringError::new(
+            LoweringFailureCode::InvalidFunction,
+            Some(function.id),
+            "SSA native failure cleanup references an invalid chain",
+        ));
+    }
+    let excluded: HashSet<_> = excluded.iter().copied().collect();
+    function
+        .failure_cleanup_actions(Some(cleanup))
         .filter(|action| {
             let value = match action {
                 lkjscript_ir::FailureCleanupAction::EndBorrow { value, .. }

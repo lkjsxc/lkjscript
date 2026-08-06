@@ -37,10 +37,9 @@ pub(super) fn function(out: &mut Encoder, value: &Function) {
     metadata::origin(out, origin);
 }
 
-fn failure_cleanup(out: &mut Encoder, value: &FailureCleanupPlan) {
-    let FailureCleanupPlan { id, actions } = value;
-    out.u32(id.raw());
-    out.sequence(actions, |out, value| match value {
+fn failure_cleanup(out: &mut Encoder, value: &FailureCleanupNode) {
+    let FailureCleanupNode { action, next } = value;
+    match action {
         FailureCleanupAction::EndBorrow {
             place,
             loan,
@@ -59,7 +58,8 @@ fn failure_cleanup(out: &mut Encoder, value: &FailureCleanupPlan) {
             out.u32(value.raw());
             memory::drop_glue(out, *glue);
         }
-    });
+    }
+    out.option(next.as_ref(), |out, value| out.u64(value.raw()));
 }
 
 fn block(out: &mut Encoder, value: &Block) {
@@ -93,7 +93,11 @@ fn block(out: &mut Encoder, value: &Block) {
     } = block_metadata;
     out.bool(*loop_header);
     metadata::origin(out, origin);
-    out.option(failure_cleanup.as_ref(), |out, value| out.u32(value.raw()));
+    out.option(failure_cleanup.as_ref(), |out, roots| {
+        out.option(roots.loans.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.unplaced.as_ref(), |out, value| out.u64(value.raw()));
+        out.option(roots.places.as_ref(), |out, value| out.u64(value.raw()));
+    });
     out.option(frame_state.as_ref(), instruction::frame_state);
 }
 

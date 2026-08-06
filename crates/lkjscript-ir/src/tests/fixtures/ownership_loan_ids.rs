@@ -9,29 +9,22 @@ pub(crate) fn assert_cross_function_duplicate_loans() {
             signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::I64),
             places: vec![owned_place(0, 0)],
             failure_cleanups: vec![
-                FailureCleanupPlan {
-                    id: FailureCleanupId::new(0),
-                    actions: vec![FailureCleanupAction::DropOwner {
+                FailureCleanupNode {
+                    action: FailureCleanupAction::DropOwner {
                         place: Some(PlaceId::new(0)),
                         value: ValueId::new(0),
                         glue: DropGlueIdentity::ByteVector,
-                    }],
+                    },
+                    next: None,
                 },
-                FailureCleanupPlan {
-                    id: FailureCleanupId::new(1),
-                    actions: vec![
-                        FailureCleanupAction::EndBorrow {
-                            place: PlaceId::new(0),
-                            loan: LoanId::new(0),
-                            kind: BorrowKind::Shared,
-                            value: ValueId::new(1),
-                        },
-                        FailureCleanupAction::DropOwner {
-                            place: Some(PlaceId::new(0)),
-                            value: ValueId::new(0),
-                            glue: DropGlueIdentity::ByteVector,
-                        },
-                    ],
+                FailureCleanupNode {
+                    action: FailureCleanupAction::EndBorrow {
+                        place: PlaceId::new(0),
+                        loan: LoanId::new(0),
+                        kind: BorrowKind::Shared,
+                        value: ValueId::new(1),
+                    },
+                    next: Some(FailureCleanupId::new(0)),
                 },
             ],
             effects: EffectSet::READS_MEMORY,
@@ -88,7 +81,7 @@ pub(crate) fn assert_cross_function_duplicate_loans() {
             origin: Origin::SYNTHETIC,
         };
         function.blocks[0].instructions[3].metadata.failure_cleanup =
-            Some(FailureCleanupId::new(0));
+            Some(FailureCleanupRoots::single(FailureCleanupId::new(0)));
         function
     };
     let mut cross_function_duplicate = one_block_program();

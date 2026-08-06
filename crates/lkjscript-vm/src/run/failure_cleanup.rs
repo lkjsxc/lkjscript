@@ -3,7 +3,7 @@ use super::*;
 impl<J: RuntimeTier> Vm<'_, J> {
     pub(super) fn execute_failure_unwind(&mut self, top_offset: usize, include_unentered: bool) {
         let top = self.frames.len().saturating_sub(1);
-        let plans: Vec<_> = self
+        let roots: Vec<_> = self
             .frames
             .iter()
             .enumerate()
@@ -14,45 +14,72 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 } else {
                     frame.instruction_offset
                 };
+                let offset = u64::try_from(offset).ok()?;
                 let proto = if frame.proto == u32::MAX {
                     self.chunk.main()
                 } else {
                     self.chunk.protos().get(frame.proto as usize)?
                 };
-                let range = proto.failure_cleanup_ranges.iter().find(|range| {
-                    usize::from(range.start) <= offset && offset < usize::from(range.end)
-                })?;
-                let mut actions = Vec::new();
-                if index == top && include_unentered {
-                    if let Some(plan) = range.unentered_plan {
-                        actions.extend(
-                            proto
-                                .failure_cleanups
-                                .get(usize::from(plan))?
-                                .actions
-                                .clone(),
-                        );
-                    }
-                }
-                if let Some(plan) = range.plan {
-                    actions.extend(
-                        proto
-                            .failure_cleanups
-                            .get(usize::from(plan))?
-                            .actions
-                            .clone(),
-                    );
-                }
-                (!actions.is_empty()).then_some((index, actions))
+                let range = proto
+                    .failure_cleanup_ranges
+                    .iter()
+                    .find(|range| range.start <= offset && offset < range.end)?;
+                Some((
+                    index,
+                    frame.proto,
+                    (index == top && include_unentered)
+                        .then_some(range.unentered_plan)
+                        .flatten(),
+                    range.plan,
+                ))
             })
             .collect();
-        for (frame, actions) in plans {
-            for action in actions {
-                self.execute_failure_action(frame, action);
+        for (frame, proto, unentered, ordinary) in roots {
+            self.execute_failure_chain(frame, proto, unentered);
+            for root in ordinary
+                .into_iter()
+                .flat_map(lkjscript_core::FailureCleanupRoots::ids)
+            {
+                self.execute_failure_chain(frame, proto, Some(root));
             }
         }
         if let Err(error) = structural_ops::cleanup_failure_roots(self) {
             self.record_failure(CleanupSubject::UniqueStorage, error.to_string());
+        }
+    }
+
+    fn execute_failure_chain(
+        &mut self,
+        frame: usize,
+        prototype: u32,
+        mut root: Option<lkjscript_core::FailureCleanupId>,
+    ) {
+        while let Some(id) = root {
+            let Some(index) = id.index() else {
+                self.record_failure(
+                    CleanupSubject::UniqueStorage,
+                    "validated VM failure-cleanup ID exceeds host usize".into(),
+                );
+                return;
+            };
+            let node = if prototype == u32::MAX {
+                self.chunk.main().failure_cleanups.get(index).copied()
+            } else {
+                self.chunk
+                    .protos()
+                    .get(prototype as usize)
+                    .and_then(|proto| proto.failure_cleanups.get(index))
+                    .copied()
+            };
+            let Some(node) = node else {
+                self.record_failure(
+                    CleanupSubject::UniqueStorage,
+                    "validated VM failure-cleanup chain lost a node".into(),
+                );
+                return;
+            };
+            root = node.next;
+            self.execute_failure_action(frame, node.action);
         }
     }
 
@@ -167,10 +194,13 @@ impl<J: RuntimeTier> Vm<'_, J> {
             };
             proto
         };
+        let Some(offset) = u64::try_from(offset).ok() else {
+            return true;
+        };
         proto
             .failure_cleanup_ranges
             .iter()
-            .find(|range| usize::from(range.start) <= offset && offset < usize::from(range.end))
-            .is_none_or(|range| usize::from(range.start) == offset)
+            .find(|range| range.start <= offset && offset < range.end)
+            .is_none_or(|range| range.start == offset)
     }
 }

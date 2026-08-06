@@ -19,7 +19,9 @@ pub(crate) fn metadata(effects: EffectSet) -> InstructionMetadata {
 
 pub(crate) fn metadata_cleanup(effects: EffectSet, cleanup: u32) -> InstructionMetadata {
     let mut metadata = metadata(effects);
-    metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
+        u64::from(cleanup),
+    )));
     metadata
 }
 
@@ -34,7 +36,9 @@ pub(crate) fn block_metadata() -> BlockMetadata {
 
 pub(crate) fn block_metadata_cleanup(cleanup: u32) -> BlockMetadata {
     let mut metadata = block_metadata();
-    metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
+        u64::from(cleanup),
+    )));
     metadata
 }
 
@@ -145,13 +149,17 @@ pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
 
 pub(crate) fn drop_byte_cleanup(id: u32, place: u32, value: u32, cleanup: u32) -> Instruction {
     let mut instruction = drop_byte(id, place, value);
-    instruction.metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    instruction.metadata.failure_cleanup = Some(FailureCleanupRoots::single(
+        FailureCleanupId::new(u64::from(cleanup)),
+    ));
     instruction
 }
 
 pub(crate) fn place_end_cleanup(id: u32, place: u32, cleanup: u32) -> Instruction {
     let mut instruction = place_end(id, place);
-    instruction.metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    instruction.metadata.failure_cleanup = Some(FailureCleanupRoots::single(
+        FailureCleanupId::new(u64::from(cleanup)),
+    ));
     instruction
 }
 

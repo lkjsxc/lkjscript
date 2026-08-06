@@ -15,8 +15,9 @@ mod value;
 pub use bytecode::{
     runtime_product_contract_identity, CallWitnessSite, Chunk, ConstId, Constant,
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
-    EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupPlan,
-    FailureCleanupRange, FunctionProto, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
+    EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupId,
+    FailureCleanupInterner, FailureCleanupNode, FailureCleanupRange, FailureCleanupRoots,
+    FunctionProto, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
     InstalledMemoryWitnessGroupMember, MemoryPlanId, MemoryWitnessBinding, MemoryWitnessGroupId,
     MemoryWitnessId, MemoryWitnessParameter, MemoryWitnessValueKind, ProductFieldRef, ProductId,
     ProductMetadata, RegionProductFieldKind, ResourceReturnKind, RuntimeLayoutId,

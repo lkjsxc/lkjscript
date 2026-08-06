@@ -37,21 +37,21 @@ fn verifier_accepts_owned_and_rejects_reference_generic_substitution() {
         signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
         failure_cleanups: vec![
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(0),
-                actions: vec![FailureCleanupAction::DropOwner {
+            FailureCleanupNode {
+                action: FailureCleanupAction::DropOwner {
                     place: Some(PlaceId::new(0)),
                     value: ValueId::new(0),
                     glue: DropGlueIdentity::ByteVector,
-                }],
+                },
+                next: None,
             },
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(1),
-                actions: vec![FailureCleanupAction::DropOwner {
+            FailureCleanupNode {
+                action: FailureCleanupAction::DropOwner {
                     place: None,
                     value: ValueId::new(2),
                     glue: DropGlueIdentity::ByteVector,
-                }],
+                },
+                next: None,
             },
         ],
         effects: EffectSet::PURE,

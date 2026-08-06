@@ -47,16 +47,16 @@ fn static_and_dynamic_strings_use_artifacts_and_roots() -> crate::Result<()> {
         },
         metadata: allocating_metadata(0, RuntimeOp::EmptyStr.effects()),
     }];
-    function.failure_cleanups.push(FailureCleanupPlan {
-        id: FailureCleanupId::new(0),
-        actions: vec![FailureCleanupAction::DropOwner {
+    function.failure_cleanups.push(FailureCleanupNode {
+        action: FailureCleanupAction::DropOwner {
             place: None,
             value: ValueId::new(0),
             glue: DropGlueIdentity::Structural(StructuralDropGlueIdentity::String {
                 type_id: StructuralTypeId::new(0),
                 layout: StructuralLayoutId::new(0),
             }),
-        }],
+        },
+        next: None,
     });
     function.blocks[0].metadata = block_metadata_cleanup(0);
     let dynamic_program = verify(dynamic_program)?;
@@ -128,9 +128,8 @@ fn legacy_product_constructor_cannot_bypass_structural_destination() -> crate::R
         },
     ];
     function.blocks[0].terminator = Terminator::Return(ValueId::new(2));
-    function.failure_cleanups.push(FailureCleanupPlan {
-        id: FailureCleanupId::new(0),
-        actions: vec![FailureCleanupAction::DropOwner {
+    function.failure_cleanups.push(FailureCleanupNode {
+        action: FailureCleanupAction::DropOwner {
             place: None,
             value: ValueId::new(2),
             glue: DropGlueIdentity::Structural(StructuralDropGlueIdentity::Product {
@@ -138,7 +137,8 @@ fn legacy_product_constructor_cannot_bypass_structural_destination() -> crate::R
                 product,
                 layout: StructuralLayoutId::new(1),
             }),
-        }],
+        },
+        next: None,
     });
     function.blocks[0].metadata = block_metadata_cleanup(0);
     let error = verify(program)

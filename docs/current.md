@@ -76,8 +76,9 @@ Executable function arity and local slots now remain `usize` through HIR and cod
 frame-state slots use `u64`, and bytecode prototypes, owner-place metadata, and failure-cleanup
 locals/places use host indexes. The one active bytecode format encodes local indexes, call argument
 counts, memory-witness ordinals, and single place indexes as fixed little-endian `u64`; instructions
-that name both a place and local encode two separate `u64` operands. Existing `u16` table,
-function-offset, jump, descriptor, field, and cleanup-range operands remain unchanged. Decoding
+that name both a place and local encode two separate `u64` operands. Cleanup node identities and
+range offsets are also `u64` with checked host conversion. Existing `u16` table, function-offset,
+jump, descriptor, and field operands remain unchanged. Decoding
 classifies operands as no operand, `u16`, checked host index, or checked place/local pair, proves the
 complete operand is present, and rejects host-width overflow before validation or indexing. The VM
 uses checked frame arithmetic and fallible reservations, rejects a low stack host policy before
@@ -87,7 +88,17 @@ Generated production coverage compiles and executes 300 parameters, 300 argument
 that automatic execution remains on the generic VM route while forced native mode reports an
 unsupported signature. A larger generated stress case executes 1,024 parameters, arguments, and
 lexical locals through the VM and reads slot 1,023. A generated owned parameter in slot 299 also
-executes and cleans up. Direct
+executes and cleans up. Failure cleanup is represented in SSA and bytecode by deterministic
+hash-consed backward-only node chains. Ordinary cleanup has separate loan, unplaced-owner, and
+place roots so independently changing segments do not copy one another; call-unentered cleanup has
+its own root. The production 300-owned-byte-vector parameter/argument fixture publishes and runs in
+the VM with 315,450 logically expanded cleanup actions represented by 1,200 physical nodes, while
+exercising local and place indexes above 255. Validation rejects duplicate nodes, empty root sets,
+self, forward, and out-of-range links before indexing and checks aligned, sorted, nonoverlapping
+ranges plus exact live-owner coverage whenever cleanup metadata is present. The native machine-plan
+backend still materializes per-instruction cleanup calls, so preflight explicitly declines a shared
+shape whose expansion exceeds its private 65,535-call eligibility envelope; automatic execution
+keeps the validated generic VM path rather than failing publication. Direct
 validated-bytecode coverage executes unique local and place 299 and rejects equal-to-count,
 truncated, misaligned-jump, and malformed cleanup references. Prepared identity now records native
 transport specialization as an optional identity rather than substituting the semantic SSA identity
@@ -116,15 +127,14 @@ may build elsewhere, but no other host or native target is currently claimed as 
   destinations, borrow scopes, drop paths, and deterministic verifier/SCC work. The
   20,001-expression fixture does not cross those tables: it has one function, 20,003 entries, one
   constant and type fact, no uses, loans, calls, obligations, destinations, or borrow scopes, and
-  40,045 verifier steps. A source with 300 simultaneously owned byte-vector parameters now passes
-  the SSA ownership verifier but reaches the separately retained bytecode failure-cleanup aggregate
-  action ceiling before validated executable publication. Therefore the production source vertical
-  for 300 owned arguments is not yet claimed even though validated bytecode and the VM execute one
-  owned parameter in slot 299 and direct place 299. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function code
-  bytes, table entries, metadata bytes, and constant data during validation. Function offsets,
-  jumps, failure-cleanup ranges and plan indexes, constants, globals, product/enum/structural tables,
-  product fields, enum substitutions, and several structural descriptors retain `u16` or `u8`
-  representation ceilings. HIR/SSA place identities and validator-synthetic owner identities remain
+  40,045 verifier steps. Bytecode `ValidationLimits` still cap encoded chunk bytes, per-function
+  code bytes, physical table entries, metadata bytes, and constant data during validation. The
+  300-owner production geometry stays below those physical cleanup-node/range limits after sharing.
+  Function offsets, jumps, constants, globals, product/enum/structural tables, product fields, enum
+  substitutions, and several structural descriptors retain `u16` or `u8` representation ceilings;
+  in particular, the generated 1,024-owned-argument variant produces 115,754 main-function code
+  bytes and still reaches the retained 65,535-byte per-function validation boundary even though its
+  cleanup IDs and ranges are wide. HIR/SSA place identities and validator-synthetic owner identities remain
   `u32`, a separate above-`u32` representation gap rather than the removed executable byte width.
   Where these constrain trusted compiler output rather than an untrusted
   serialized boundary, they remain follow-up validity and representation gaps, not host policy.

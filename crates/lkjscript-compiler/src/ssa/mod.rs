@@ -1,6 +1,6 @@
 //! Lower resolved typed HIR into backend-independent typed SSA.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{Error, Result};
@@ -8,8 +8,8 @@ use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
     BorrowKind as SsaBorrowKind, CallTarget, Constant, DropEventKind, DropGlueIdentity, EffectSet,
     EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior,
-    FailureCleanupAction, FailureCleanupId, FailureCleanupPlan, FrameLocal, FrameState, Function,
-    FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
+    FailureCleanupAction, FailureCleanupInterner, FailureCleanupRoots, FrameLocal, FrameState,
+    Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
     InstructionMetadata, LoanId as SsaLoanId, MemoryWitnessBinding, MemoryWitnessId,
     MemoryWitnessParameter, Origin, PlaceId as SsaPlaceId, PlaceMetadata, ProductField, ProductId,
     ProductMetadata, Program, RegionProductMetadata, RuntimeLayoutId, RuntimeOp, Signature,
@@ -124,7 +124,7 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) next_synthetic_binding: u32,
     pub(in crate::ssa) value_types: Vec<SsaType>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
-    pub(in crate::ssa) failure_cleanups: Vec<FailureCleanupPlan>,
+    pub(in crate::ssa) failure_cleanups: FailureCleanupInterner,
     pub(in crate::ssa) cleanup: CleanupPlan,
     pub(in crate::ssa) current_memory_expression: Option<MemoryExpressionId>,
     pub(in crate::ssa) current_placement: Option<ActiveValuePlacement>,

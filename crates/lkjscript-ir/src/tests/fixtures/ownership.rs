@@ -128,13 +128,13 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
     }
 }
 
-fn drop_plan(id: u32, place: Option<u32>, value: u32) -> FailureCleanupPlan {
-    FailureCleanupPlan {
-        id: FailureCleanupId::new(id),
-        actions: vec![FailureCleanupAction::DropOwner {
+fn drop_plan(_id: u32, place: Option<u32>, value: u32) -> FailureCleanupNode {
+    FailureCleanupNode {
+        action: FailureCleanupAction::DropOwner {
             place: place.map(PlaceId::new),
             value: ValueId::new(value),
             glue: DropGlueIdentity::ByteVector,
-        }],
+        },
+        next: None,
     }
 }

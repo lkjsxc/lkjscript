@@ -22,13 +22,13 @@ pub(crate) fn ownership_callee() -> Function {
         ),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
         failure_cleanups: vec![
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(0),
-                actions: vec![drop_action(1, 1), drop_action(0, 0)],
+            FailureCleanupNode {
+                action: drop_action(0, 0),
+                next: None,
             },
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(1),
-                actions: vec![drop_action(0, 0)],
+            FailureCleanupNode {
+                action: drop_action(1, 1),
+                next: Some(FailureCleanupId::new(0)),
             },
         ],
         effects: EffectSet::PURE,
@@ -50,9 +50,9 @@ pub(crate) fn ownership_callee() -> Function {
                 },
             ],
             instructions: vec![
-                drop_byte_cleanup(2, 1, 1, 0),
-                place_end_cleanup(3, 1, 1),
-                drop_byte_cleanup(4, 0, 0, 1),
+                drop_byte_cleanup(2, 1, 1, 1),
+                place_end_cleanup(3, 1, 0),
+                drop_byte_cleanup(4, 0, 0, 0),
                 place_end(5, 0),
                 Instruction {
                     id: ValueId::new(6),
@@ -74,9 +74,9 @@ pub(crate) fn duplicate_call_caller() -> Function {
         name: "duplicate-call".into(),
         signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
-        failure_cleanups: vec![FailureCleanupPlan {
-            id: FailureCleanupId::new(0),
-            actions: vec![drop_action(0, 0)],
+        failure_cleanups: vec![FailureCleanupNode {
+            action: drop_action(0, 0),
+            next: None,
         }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),

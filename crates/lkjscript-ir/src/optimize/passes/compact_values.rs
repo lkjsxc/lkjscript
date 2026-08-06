@@ -4,8 +4,8 @@ pub(crate) use rewrite::rewrite_function_values;
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    CallTarget, FailureCleanupAction, FailureCleanupId, FrameState, InstructionKind, Program,
-    Terminator, ValueId,
+    CallTarget, FailureCleanupAction, FailureCleanupId, FailureCleanupNode, FailureCleanupRoots,
+    FrameState, InstructionKind, Program, Terminator, ValueId,
 };
 
 pub(crate) fn compact_values(program: &mut Program) -> crate::Result<()> {
@@ -55,24 +55,64 @@ pub(crate) fn compact_values(program: &mut Program) -> crate::Result<()> {
 
 fn compact_failure_cleanups(function: &mut crate::Function) -> crate::Result<()> {
     let mut used = HashSet::new();
+    let mut pending = Vec::new();
     for block in &function.blocks {
-        used.extend(block.metadata.failure_cleanup);
+        pending.extend(
+            block
+                .metadata
+                .failure_cleanup
+                .into_iter()
+                .flat_map(FailureCleanupRoots::ids),
+        );
         for instruction in &block.instructions {
-            used.extend(instruction.metadata.failure_cleanup);
+            pending.extend(
+                instruction
+                    .metadata
+                    .failure_cleanup
+                    .into_iter()
+                    .flat_map(FailureCleanupRoots::ids),
+            );
         }
     }
-    let mut mapping = HashMap::new();
-    let mut plans = Vec::with_capacity(used.len());
-    for plan in &function.failure_cleanups {
-        if used.contains(&plan.id) {
-            let raw = u32::try_from(plans.len())
-                .map_err(|_| crate::IrError::new("failure-cleanup plan count exceeds u32"))?;
-            let id = FailureCleanupId::new(raw);
-            mapping.insert(plan.id, id);
-            let mut plan = plan.clone();
-            plan.id = id;
-            plans.push(plan);
+    while let Some(id) = pending.pop() {
+        if !used.insert(id) {
+            continue;
         }
+        let node = function
+            .failure_cleanups
+            .get(id.index().unwrap_or(usize::MAX))
+            .ok_or_else(|| crate::IrError::new("pass found an invalid cleanup root"))?;
+        pending.extend(node.next);
+    }
+
+    let mut mapping = HashMap::with_capacity(used.len());
+    let mut nodes = Vec::with_capacity(used.len());
+    for (index, node) in function.failure_cleanups.iter().copied().enumerate() {
+        let old = FailureCleanupId::new(
+            u64::try_from(index)
+                .map_err(|_| crate::IrError::new("failure-cleanup node count exceeds u64"))?,
+        );
+        if !used.contains(&old) {
+            continue;
+        }
+        let next = node
+            .next
+            .map(|next| {
+                mapping
+                    .get(&next)
+                    .copied()
+                    .ok_or_else(|| crate::IrError::new("pass lost cleanup chain tail"))
+            })
+            .transpose()?;
+        let id = FailureCleanupId::new(
+            u64::try_from(nodes.len())
+                .map_err(|_| crate::IrError::new("failure-cleanup node count exceeds u64"))?,
+        );
+        mapping.insert(old, id);
+        nodes.push(FailureCleanupNode {
+            action: node.action,
+            next,
+        });
     }
     for block in &mut function.blocks {
         remap_failure_cleanup(&mut block.metadata.failure_cleanup, &mapping)?;
@@ -80,19 +120,25 @@ fn compact_failure_cleanups(function: &mut crate::Function) -> crate::Result<()>
             remap_failure_cleanup(&mut instruction.metadata.failure_cleanup, &mapping)?;
         }
     }
-    function.failure_cleanups = plans;
+    function.failure_cleanups = nodes;
     Ok(())
 }
 
 fn remap_failure_cleanup(
-    cleanup: &mut Option<FailureCleanupId>,
+    cleanup: &mut Option<FailureCleanupRoots>,
     mapping: &HashMap<FailureCleanupId, FailureCleanupId>,
 ) -> crate::Result<()> {
-    if let Some(id) = cleanup {
+    let Some(roots) = cleanup else {
+        return Ok(());
+    };
+    for id in [&mut roots.loans, &mut roots.unplaced, &mut roots.places]
+        .into_iter()
+        .flatten()
+    {
         *id = mapping
             .get(id)
             .copied()
-            .ok_or_else(|| crate::IrError::new("pass lost failure-cleanup plan"))?;
+            .ok_or_else(|| crate::IrError::new("pass lost failure-cleanup chain"))?;
     }
     Ok(())
 }

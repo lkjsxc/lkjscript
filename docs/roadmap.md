@@ -17,11 +17,13 @@
    case executes 1,024 parameters, arguments, and lexical locals. SSA ownership work and retained
    state-cell quotas are removed; generated coverage verifies 44,000 owned parameters and places,
    132,000 state cells per block, 264,000 cells under the former aggregate retained-state
-   accounting across propagation, and exact cleanup. A 300-owned-parameter source now reaches the
-   separate bytecode failure-cleanup aggregate action ceiling. Next widen or segment that cleanup
-   representation and retained `u16` function offsets, jumps, cleanup ranges/plans, constants,
-   globals, product/enum/structural tables and descriptors, plus byte-sized product fields and enum
-   substitutions. Completion requires just-beyond-old-boundary and substantially larger positive
+   accounting across propagation, and exact cleanup. SSA and bytecode cleanup now use wide,
+   backward-only hash-consed node arenas with segmented roots; a 300-owned-parameter/argument source
+   publishes and runs with 315,450 logical actions represented by 1,200 physical nodes. Next remove
+   retained `u16` function offsets, jumps, constants, globals, product/enum/structural tables and
+   descriptors, plus byte-sized product fields and enum substitutions. Cleanup range offsets and
+   roots are already `u64`, while physical cleanup-node/range counts remain subject to the general
+   bytecode table and metadata validation boundary. Completion requires just-beyond-old-boundary and substantially larger positive
    programs, checked growth, and successful execution through the retained generic path.
 2. **Complete resource-policy separation.** Trusted compiler profile/ledger and source-byte
    admission are removed. The untrusted Semantic Source boundary now supplies only an aggregate

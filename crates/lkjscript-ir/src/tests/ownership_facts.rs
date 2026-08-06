@@ -15,21 +15,21 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             drop_glue: Some(DropGlueIdentity::ByteVector),
         }],
         failure_cleanups: vec![
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(0),
-                actions: vec![FailureCleanupAction::DropOwner {
+            FailureCleanupNode {
+                action: FailureCleanupAction::DropOwner {
                     place: Some(PlaceId::new(0)),
                     value: ValueId::new(0),
                     glue: DropGlueIdentity::ByteVector,
-                }],
+                },
+                next: None,
             },
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(1),
-                actions: vec![FailureCleanupAction::DropOwner {
+            FailureCleanupNode {
+                action: FailureCleanupAction::DropOwner {
                     place: None,
                     value: ValueId::new(1),
                     glue: DropGlueIdentity::ByteVector,
-                }],
+                },
+                next: None,
             },
         ],
         effects: EffectSet::PURE,
@@ -90,7 +90,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
         .truncate(1);
     duplicate_place_end.functions[1].blocks[0].instructions[0]
         .metadata
-        .failure_cleanup = Some(FailureCleanupId::new(0));
+        .failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(0)));
     duplicate_place_end.functions[1].blocks[0]
         .metadata
         .failure_cleanup = None;

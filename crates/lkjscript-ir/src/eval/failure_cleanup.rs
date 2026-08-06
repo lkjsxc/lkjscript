@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use lkjscript_core::{CleanupPhase, CleanupSubject};
 
-use crate::{DropGlueIdentity, FailureCleanupAction, FailureCleanupId, Function};
+use crate::{DropGlueIdentity, FailureCleanupAction, FailureCleanupRoots, Function};
 
 use super::*;
 
@@ -14,17 +16,17 @@ impl Evaluator<'_> {
         let crate::InstructionKind::Call { arguments, .. } = &instruction.kind else {
             return;
         };
+        let moved: HashSet<_> = function
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .filter(|candidate| matches!(candidate.kind, crate::InstructionKind::Move { .. }))
+            .map(|candidate| candidate.id)
+            .collect();
         let transferred: Vec<_> = arguments
             .iter()
             .copied()
-            .filter(|argument| {
-                function.blocks.iter().any(|block| {
-                    block.instructions.iter().any(|candidate| {
-                        candidate.id == *argument
-                            && matches!(candidate.kind, crate::InstructionKind::Move { .. })
-                    })
-                })
-            })
+            .filter(|argument| moved.contains(argument))
             .collect();
         let mut owned = Vec::with_capacity(transferred.len());
         for value in transferred {
@@ -55,26 +57,24 @@ impl Evaluator<'_> {
     pub(crate) fn execute_failure_cleanup(
         &mut self,
         function: &Function,
-        cleanup: Option<FailureCleanupId>,
+        cleanup: Option<FailureCleanupRoots>,
         values: &mut [Option<EvalValue>],
     ) {
         let Some(cleanup) = cleanup else {
             return;
         };
-        let Some(plan) = function
-            .failure_cleanups
-            .get(cleanup.index().unwrap_or(usize::MAX))
-            .filter(|plan| plan.id == cleanup)
-        else {
+        if cleanup.ids().any(|root| {
+            root.index()
+                .is_none_or(|index| index >= function.failure_cleanups.len())
+        }) {
             self.cleanup_failures.push(
                 CleanupPhase::Ordinary,
                 CleanupSubject::UniqueStorage,
-                "verified evaluator failure-cleanup plan is unavailable",
+                "verified evaluator failure-cleanup chain is unavailable",
             );
             return;
-        };
-        let actions = plan.actions.clone();
-        for action in actions {
+        }
+        for action in function.failure_cleanup_actions(Some(cleanup)).copied() {
             match action {
                 FailureCleanupAction::EndBorrow { value, .. } => {
                     let result = take_cleanup_value(values, value)

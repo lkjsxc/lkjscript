@@ -10,13 +10,13 @@ pub(crate) fn implicit_call_caller() -> Function {
         ),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
         failure_cleanups: vec![
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(0),
-                actions: vec![drop_action(1, 1), drop_action(0, 0)],
+            FailureCleanupNode {
+                action: drop_action(0, 0),
+                next: None,
             },
-            FailureCleanupPlan {
-                id: FailureCleanupId::new(1),
-                actions: vec![drop_action(0, 0)],
+            FailureCleanupNode {
+                action: drop_action(1, 1),
+                next: Some(FailureCleanupId::new(0)),
             },
         ],
         effects: EffectSet::PURE,
@@ -45,7 +45,7 @@ pub(crate) fn implicit_call_caller() -> Function {
                         place: PlaceId::new(1),
                         value: ValueId::new(1),
                     },
-                    metadata: metadata_cleanup(EffectSet::PURE, 0),
+                    metadata: metadata_cleanup(EffectSet::PURE, 1),
                 },
                 Instruction {
                     id: ValueId::new(3),
@@ -64,7 +64,9 @@ pub(crate) fn implicit_call_caller() -> Function {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
                         failure: FailureBehavior::None,
-                        failure_cleanup: Some(FailureCleanupId::new(1)),
+                        failure_cleanup: Some(FailureCleanupRoots::single(FailureCleanupId::new(
+                            0,
+                        ))),
                         frame_state: Some(FrameState {
                             bytecode_position: 0,
                             locals: Vec::new(),

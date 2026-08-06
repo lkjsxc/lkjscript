@@ -88,6 +88,8 @@ pub(super) fn allocating_cleanup_metadata(
     cleanup: u32,
 ) -> InstructionMetadata {
     let mut metadata = allocating_metadata(position, effects);
-    metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    metadata.failure_cleanup = Some(FailureCleanupRoots::single(FailureCleanupId::new(
+        u64::from(cleanup),
+    )));
     metadata
 }

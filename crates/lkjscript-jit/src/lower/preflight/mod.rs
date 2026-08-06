@@ -4,7 +4,7 @@ use bytes::{bytes_mode_error, preflight_bytes_runtime};
 pub(in crate::lower) use bytes::{BytesMode, BytesModes};
 use bytes_edges::*;
 use bytes_graph::*;
-use failure_cleanup::preflight_failure_cleanups;
+pub(in crate::lower) use failure_cleanup::preflight_failure_cleanups;
 use runtime::*;
 pub(in crate::lower) use structural::{explicit_structural, unsupported_operation};
 use structural::{preflight_instruction_type, require_domain_type};

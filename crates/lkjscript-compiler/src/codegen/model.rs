@@ -7,7 +7,7 @@ pub(in crate::codegen) fn compile_function(
     chunk: &mut Chunk,
     globals: &HashMap<FunctionId, u16>,
     function: &Function,
-    code_base: u16,
+    code_base: u64,
     prototype: Option<u32>,
 ) -> Result<(FunctionProto, FunctionBytecodeLink)> {
     let slots = allocate_locals(function, chunk)?;
@@ -18,8 +18,9 @@ pub(in crate::codegen) fn compile_function(
         .ok_or_else(|| Error::msg("SSA function entry block is missing"))?;
     let locals = slots.len();
     let arity = function.signature.parameters.len();
+    let failure_index = FailureCodegenIndex::new(function)?;
     let (failure_cleanups, failure_cleanup_map) =
-        compile_failure_cleanups(function, &slots, chunk)?;
+        compile_failure_cleanups(function, &slots, chunk, &failure_index)?;
     let proto = FunctionProto {
         name: function.name.clone(),
         arity,
@@ -147,7 +148,7 @@ pub(in crate::codegen) fn compile_function(
             .collect::<Result<Vec<_>>>()?,
         return_unique: unique_value_kind(&function.signature.result),
         unique_places: function.places.len(),
-        failure_cleanups,
+        failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
         code: Vec::new(),
     };
@@ -163,9 +164,12 @@ pub(in crate::codegen) fn compile_function(
         block_links: Vec::new(),
         instruction_links: Vec::new(),
         failure_cleanup_map,
+        failure_cleanups,
+        failure_index,
     };
     emit_blocks(&mut emitter)?;
     emitter.patch_jumps()?;
+    emitter.proto.failure_cleanups = std::mem::take(&mut emitter.failure_cleanups).into_nodes();
     Ok((
         emitter.proto,
         FunctionBytecodeLink {

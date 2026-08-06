@@ -25,11 +25,50 @@ pub struct Function {
     pub name: String,
     pub signature: Signature,
     pub places: Vec<PlaceMetadata>,
-    pub failure_cleanups: Vec<FailureCleanupPlan>,
+    pub failure_cleanups: Vec<FailureCleanupNode>,
     pub effects: EffectSet,
     pub entry: BlockId,
     pub blocks: Vec<Block>,
     pub origin: Origin,
+}
+
+pub struct FailureCleanupActions<'a> {
+    nodes: &'a [FailureCleanupNode],
+    pending: std::array::IntoIter<Option<FailureCleanupId>, 3>,
+    current: Option<FailureCleanupId>,
+}
+
+impl<'a> Iterator for FailureCleanupActions<'a> {
+    type Item = &'a FailureCleanupAction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(id) = self.current {
+                let node = self.nodes.get(id.index()?)?;
+                self.current = node.next;
+                return Some(&node.action);
+            }
+            self.current = self.pending.find_map(|root| root);
+            self.current?;
+        }
+    }
+}
+
+impl Function {
+    #[must_use]
+    pub fn failure_cleanup_actions(
+        &self,
+        roots: Option<FailureCleanupRoots>,
+    ) -> FailureCleanupActions<'_> {
+        let roots = roots.map_or([None; 3], |roots| {
+            [roots.loans, roots.unplaced, roots.places]
+        });
+        FailureCleanupActions {
+            nodes: &self.failure_cleanups,
+            pending: roots.into_iter(),
+            current: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -101,11 +101,11 @@ pub(super) fn expected_failure_cleanup(
 
 pub(super) fn verify_failure_cleanup_plan(
     function: &Function,
-    id: Option<FailureCleanupId>,
+    roots: Option<FailureCleanupRoots>,
     expected: &[FailureCleanupAction],
     site: &str,
 ) -> crate::Result<()> {
-    let Some(id) = id else {
+    let Some(roots) = roots else {
         return if expected.is_empty() {
             Ok(())
         } else {
@@ -114,15 +114,21 @@ pub(super) fn verify_failure_cleanup_plan(
             ))
         };
     };
-    let plan = function
-        .failure_cleanups
-        .get(id.index().unwrap_or(usize::MAX))
-        .filter(|plan| plan.id == id)
-        .ok_or_else(|| IrError::new(format!("SSA {site} has invalid failure cleanup")))?;
-    if plan.actions != expected {
+    if roots.ids().any(|root| {
+        root.index()
+            .is_none_or(|index| index >= function.failure_cleanups.len())
+    }) {
+        return Err(IrError::new(format!(
+            "SSA {site} has invalid failure cleanup"
+        )));
+    }
+    let actual: Vec<_> = function
+        .failure_cleanup_actions(Some(roots))
+        .copied()
+        .collect();
+    if actual != expected {
         return fail(format!(
-            "SSA {site} failure cleanup {:?} does not match expected {:?}",
-            plan.actions, expected
+            "SSA {site} failure cleanup {actual:?} does not match expected {expected:?}",
         ));
     }
     Ok(())

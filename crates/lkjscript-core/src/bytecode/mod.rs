@@ -5,8 +5,9 @@ mod witness;
 
 pub use chunk::{
     runtime_product_contract_identity, Chunk, ConstId, Constant, FailureCleanupAction,
-    FailureCleanupPlan, FailureCleanupRange, FunctionProto, ProductFieldRef, ProductId,
-    ProductMetadata, RegionProductFieldKind, ResourceReturnKind, UniqueValueKind,
+    FailureCleanupId, FailureCleanupInterner, FailureCleanupNode, FailureCleanupRange,
+    FailureCleanupRoots, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
+    RegionProductFieldKind, ResourceReturnKind, UniqueValueKind,
 };
 pub use enum_metadata::{
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,

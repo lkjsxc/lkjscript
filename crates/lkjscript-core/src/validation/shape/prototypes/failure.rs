@@ -13,85 +13,90 @@ pub(super) fn validate_failure_cleanup_shape(
             proto.name
         )));
     }
-    let mut actions = 0usize;
     let mut seen = HashSet::new();
-    for plan in &proto.failure_cleanups {
-        actions = actions
-            .checked_add(plan.actions.len())
-            .ok_or_else(|| Error::msg("bytecode failure-cleanup action count overflow"))?;
-        if plan.actions.is_empty() || !seen.insert(plan) {
+    for (index, node) in proto.failure_cleanups.iter().enumerate() {
+        if node
+            .next
+            .is_some_and(|next| next.index().is_none_or(|next| next >= index))
+        {
             return Err(Error::msg(
-                "bytecode failure-cleanup plans must be nonempty and unique",
+                "bytecode failure-cleanup links must reference prior nodes",
             ));
         }
-        for action in &plan.actions {
-            let (local, place) = match action {
-                crate::FailureCleanupAction::EndBorrow { local, place, kind } => {
-                    if !matches!(
-                        kind,
-                        crate::UniqueValueKind::Bytes
-                            | crate::UniqueValueKind::ByteSlice
-                            | crate::UniqueValueKind::ByteSliceMut
-                    ) {
-                        return Err(Error::msg(
-                            "bytecode failure loan-end has an owner-only unique kind",
-                        ));
-                    }
-                    (*local, Some(*place))
+        if !seen.insert(*node) {
+            return Err(Error::msg(
+                "bytecode failure-cleanup nodes must be interned uniquely",
+            ));
+        }
+        let (local, place) = match &node.action {
+            crate::FailureCleanupAction::EndBorrow { local, place, kind } => {
+                if !matches!(
+                    kind,
+                    crate::UniqueValueKind::Bytes
+                        | crate::UniqueValueKind::ByteSlice
+                        | crate::UniqueValueKind::ByteSliceMut
+                ) {
+                    return Err(Error::msg(
+                        "bytecode failure loan-end has an owner-only unique kind",
+                    ));
                 }
-                crate::FailureCleanupAction::DropUnique { local, place, kind } => {
-                    if !matches!(
-                        kind,
-                        crate::UniqueValueKind::Bytes | crate::UniqueValueKind::ByteVector
-                    ) {
-                        return Err(Error::msg(
-                            "bytecode failure drop has a borrowed unique kind",
-                        ));
-                    }
-                    (*local, *place)
-                }
-                crate::FailureCleanupAction::DropResource { local, place, kind } => {
-                    if matches!(
-                        kind,
-                        crate::ResourceKind::InputStream | crate::ResourceKind::OutputStream
-                    ) {
-                        return Err(Error::msg(
-                            "bytecode failure cleanup cannot own borrowed standard streams",
-                        ));
-                    }
-                    (*local, *place)
-                }
-                crate::FailureCleanupAction::EndStructuralBorrow { local, place, .. } => {
-                    (*local, Some(*place))
-                }
-                crate::FailureCleanupAction::DropStructural { local, place, .. } => {
-                    (*local, *place)
-                }
-                crate::FailureCleanupAction::AbortStructuralDestination { local, .. } => {
-                    (*local, None)
-                }
-            };
-            if local >= proto.locals || place.is_some_and(|place| place >= proto.unique_places) {
-                return Err(Error::msg(
-                    "bytecode failure-cleanup local or place is out of range",
-                ));
+                (*local, Some(*place))
             }
+            crate::FailureCleanupAction::DropUnique { local, place, kind } => {
+                if !matches!(
+                    kind,
+                    crate::UniqueValueKind::Bytes | crate::UniqueValueKind::ByteVector
+                ) {
+                    return Err(Error::msg(
+                        "bytecode failure drop has a borrowed unique kind",
+                    ));
+                }
+                (*local, *place)
+            }
+            crate::FailureCleanupAction::DropResource { local, place, kind } => {
+                if matches!(
+                    kind,
+                    crate::ResourceKind::InputStream | crate::ResourceKind::OutputStream
+                ) {
+                    return Err(Error::msg(
+                        "bytecode failure cleanup cannot own borrowed standard streams",
+                    ));
+                }
+                (*local, *place)
+            }
+            crate::FailureCleanupAction::EndStructuralBorrow { local, place, .. } => {
+                (*local, Some(*place))
+            }
+            crate::FailureCleanupAction::DropStructural { local, place, .. } => (*local, *place),
+            crate::FailureCleanupAction::AbortStructuralDestination { local, .. } => {
+                (*local, None)
+            }
+        };
+        if local >= proto.locals || place.is_some_and(|place| place >= proto.unique_places) {
+            return Err(Error::msg(
+                "bytecode failure-cleanup local or place is out of range",
+            ));
         }
     }
-    if actions > limits.max_table_entries {
-        return Err(Error::msg(
-            "bytecode failure-cleanup aggregate actions exceed limit",
-        ));
-    }
-    let mut previous_end = 0u16;
+
+    let mut previous_end = 0_u64;
     for (index, range) in proto.failure_cleanup_ranges.iter().enumerate() {
+        let end = usize::try_from(range.end)
+            .map_err(|_| Error::msg("bytecode failure-cleanup range exceeds host usize"))?;
         if range.start >= range.end
-            || usize::from(range.end) > proto.code.len()
+            || end > proto.code.len()
+            || range
+                .plan
+                .is_some_and(|roots| roots.ids().next().is_none())
             || range
                 .plan
                 .into_iter()
+                .flat_map(crate::FailureCleanupRoots::ids)
                 .chain(range.unentered_plan)
-                .any(|plan| usize::from(plan) >= proto.failure_cleanups.len())
+                .any(|root| {
+                    root.index()
+                        .is_none_or(|root| root >= proto.failure_cleanups.len())
+                })
             || (index > 0 && range.start < previous_end)
         {
             return Err(Error::msg(
@@ -104,26 +109,17 @@ pub(super) fn validate_failure_cleanup_shape(
 }
 
 pub(super) fn failure_metadata_bytes(proto: &FunctionProto) -> Result<usize> {
-    let actions = proto
-        .failure_cleanups
-        .iter()
-        .try_fold(0usize, |total, plan| total.checked_add(plan.actions.len()))
-        .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
-    let plans = proto
+    let node_bytes = proto
         .failure_cleanups
         .len()
-        .checked_mul(4)
-        .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
-    let action_bytes = actions
-        .checked_mul(8)
+        .checked_mul(std::mem::size_of::<crate::FailureCleanupNode>())
         .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
     let range_bytes = proto
         .failure_cleanup_ranges
         .len()
-        .checked_mul(8)
+        .checked_mul(std::mem::size_of::<crate::FailureCleanupRange>())
         .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))?;
-    plans
-        .checked_add(action_bytes)
-        .and_then(|bytes| bytes.checked_add(range_bytes))
+    node_bytes
+        .checked_add(range_bytes)
         .ok_or_else(|| Error::msg("bytecode failure-cleanup metadata size overflow"))
 }

@@ -148,7 +148,9 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    pub(in crate::codegen) fn patch_at(&mut self, patch: usize, offset: u16) -> Result<()> {
+    pub(in crate::codegen) fn patch_at(&mut self, patch: usize, offset: u64) -> Result<()> {
+        let offset =
+            u16::try_from(offset).map_err(|_| Error::msg("bytecode jump target exceeds u16"))?;
         let end = patch
             .checked_add(2)
             .ok_or_else(|| Error::msg("bytecode jump patch overflow"))?;

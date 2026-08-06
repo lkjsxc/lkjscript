@@ -49,7 +49,7 @@ pub(in crate::lower) fn copy_call_argument(
 #[allow(clippy::too_many_arguments)]
 pub(in crate::lower) fn lower_terminal_cleanup(
     function: &Function,
-    cleanup: Option<lkjscript_ir::FailureCleanupId>,
+    cleanup: Option<lkjscript_ir::FailureCleanupRoots>,
     retained: Option<ValueId>,
     block: lkjscript_native::BlockId,
     locals: &[LocalId],
@@ -60,12 +60,15 @@ pub(in crate::lower) fn lower_terminal_cleanup(
     let Some(cleanup) = cleanup else {
         return Ok(());
     };
-    let plan = function
-        .failure_cleanups
-        .get(cleanup.index().unwrap_or(usize::MAX))
-        .filter(|plan| plan.id == cleanup)
-        .ok_or_else(|| invalid_structural("terminal structural cleanup plan is missing"))?;
-    for action in &plan.actions {
+    if cleanup.ids().any(|root| {
+        root.index()
+            .is_none_or(|index| index >= function.failure_cleanups.len())
+    }) {
+        return Err(invalid_structural(
+            "terminal structural cleanup chain is missing",
+        ));
+    }
+    for action in function.failure_cleanup_actions(Some(cleanup)) {
         match action {
             lkjscript_ir::FailureCleanupAction::EndBorrow { value, .. }
                 if matches!(

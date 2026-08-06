@@ -115,8 +115,8 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
             )),
         })
         .collect::<Result<Vec<_>>>()?;
-    let code_base = u16::try_from(chunk.main.len())
-        .map_err(|_| Error::msg("bytecode main closure prelude exceeds u16"))?;
+    let code_base = u64::try_from(chunk.main.len())
+        .map_err(|_| Error::msg("bytecode main closure prelude exceeds u64"))?;
     let (main_proto, main_link) = compile_function(&mut chunk, &globals, main, code_base, None)?;
     chunk.main.locals = main_proto.locals;
     chunk.main.arity = main_proto.arity;

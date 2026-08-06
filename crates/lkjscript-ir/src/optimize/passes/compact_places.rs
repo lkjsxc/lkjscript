@@ -54,19 +54,17 @@ pub(crate) fn compact_places(program: &mut Program) -> crate::Result<()> {
                 }
             }
         }
-        for plan in &function.failure_cleanups {
-            for action in &plan.actions {
-                match action {
-                    FailureCleanupAction::EndBorrow { place, .. } => {
-                        referenced.insert(*place);
-                    }
-                    FailureCleanupAction::DropOwner {
-                        place: Some(place), ..
-                    } => {
-                        referenced.insert(*place);
-                    }
-                    FailureCleanupAction::DropOwner { place: None, .. } => {}
+        for node in &function.failure_cleanups {
+            match &node.action {
+                FailureCleanupAction::EndBorrow { place, .. } => {
+                    referenced.insert(*place);
                 }
+                FailureCleanupAction::DropOwner {
+                    place: Some(place), ..
+                } => {
+                    referenced.insert(*place);
+                }
+                FailureCleanupAction::DropOwner { place: None, .. } => {}
             }
         }
         let retained: Vec<_> = function
@@ -88,19 +86,17 @@ pub(crate) fn compact_places(program: &mut Program) -> crate::Result<()> {
                 Ok(place)
             })
             .collect::<crate::Result<Vec<_>>>()?;
-        for plan in &mut function.failure_cleanups {
-            for action in &mut plan.actions {
-                match action {
-                    FailureCleanupAction::EndBorrow { place, .. } => {
-                        *place = mapped_place(&mapping, *place)?;
-                    }
-                    FailureCleanupAction::DropOwner {
-                        place: Some(place), ..
-                    } => {
-                        *place = mapped_place(&mapping, *place)?;
-                    }
-                    FailureCleanupAction::DropOwner { place: None, .. } => {}
+        for node in &mut function.failure_cleanups {
+            match &mut node.action {
+                FailureCleanupAction::EndBorrow { place, .. } => {
+                    *place = mapped_place(&mapping, *place)?;
                 }
+                FailureCleanupAction::DropOwner {
+                    place: Some(place), ..
+                } => {
+                    *place = mapped_place(&mapping, *place)?;
+                }
+                FailureCleanupAction::DropOwner { place: None, .. } => {}
             }
         }
         for block in &mut function.blocks {
