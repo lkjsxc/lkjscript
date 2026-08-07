@@ -33,7 +33,7 @@ pub fn evaluate_observed(
         );
     };
     let lists = match lkjscript_core::SegmentedListArena::new(
-        lkjscript_core::SegmentedListArenaLimits::default(),
+        lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(config.max_allocations),
     ) {
         Ok(lists) => lists,
         Err(error) => {

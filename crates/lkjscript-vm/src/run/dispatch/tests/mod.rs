@@ -1,4 +1,4 @@
-use lkjscript_core::{ExecutionConfig, Op, Value, MAX_LIST_EQUAL_STEPS};
+use lkjscript_core::{ExecutionConfig, Op, Value};
 
 use crate::run::NoTier as NullJit;
 

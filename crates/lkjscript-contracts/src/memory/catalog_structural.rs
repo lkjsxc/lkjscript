@@ -149,7 +149,7 @@ const fn segmented_list() -> MemoryObligation {
         candidate_placements: "sealed segment domains for immutable structural elements",
         reclamation_plan: "bulk region reset without reachability traversal",
         producers: "list constructors and generated runtime services",
-        tests: "all-engine list equality, limits, branching and snapshot suites",
+        tests: "all-engine complete list equality, policy, branching and snapshot suites",
         status: "current selected copy-leaf region; other witnesses fail closed",
     }
 }

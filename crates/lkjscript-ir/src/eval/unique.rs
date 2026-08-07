@@ -43,6 +43,9 @@ impl EvalUniqueRuntime {
     }
 
     pub(super) fn allocate(&mut self, size: usize) -> Result<EvalValue, Flow> {
+        self.store
+            .check_byte_vector_allocation(size)
+            .map_err(map_store_error)?;
         let mut bytes = Vec::new();
         bytes
             .try_reserve_exact(size)
@@ -194,5 +197,37 @@ fn view_token(value: &EvalValue) -> Result<u64, Flow> {
         | EvalValue::ByteSlice(token)
         | EvalValue::ByteSliceMut(token) => Ok(*token),
         _ => Err(Flow::Trap("expected exact byte view".into())),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evaluator_byte_vector_uses_explicit_heap_policy_beyond_former_limit() {
+        let size = 1_000_001;
+        let low = EvalConfig {
+            max_heap_bytes: size - 1,
+            ..EvalConfig::default()
+        };
+        let mut limited = EvalUniqueRuntime::new(&low).expect("limited runtime");
+        assert!(matches!(limited.allocate(size), Err(Flow::Resource(_))));
+
+        let high = EvalConfig {
+            max_heap_bytes: size * 2,
+            ..EvalConfig::default()
+        };
+        let mut runtime = EvalUniqueRuntime::new(&high).expect("high-policy runtime");
+        let owner = runtime.allocate(size).expect("large evaluator vector");
+        let view = runtime.borrow(&owner, false).expect("borrow large vector");
+        assert_eq!(
+            runtime.len(&view).ok(),
+            Some(i64::try_from(size).expect("test size fits i64"))
+        );
+        runtime.end_borrow(view).expect("end large borrow");
+        runtime.drop_owner(owner).expect("drop large vector");
+        runtime.verify_empty().expect("empty runtime");
     }
 }

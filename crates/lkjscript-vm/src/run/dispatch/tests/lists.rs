@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn list_equality_is_segmented_bounded_and_rejects_forged_handles() {
+fn list_equality_is_segmented_complete_and_rejects_forged_handles() {
     test_vm!(vm);
     assert!(compare(
         &mut vm,
@@ -17,11 +17,7 @@ fn list_equality_is_segmented_bounded_and_rejects_forged_handles() {
     assert!(!compare(&mut vm, Op::ListEqual, first, different));
     assert!(!compare(&mut vm, Op::ListEqual, first, shorter));
     let one_again = i64_list(&mut vm, &[1]);
-    assert_eq!(
-        list_values_equal(&vm, shorter, one_again, 1).ok(),
-        Some(true)
-    );
-    assert!(list_values_equal(&vm, first, same, 1).is_err());
+    assert_eq!(list_values_equal(&mut vm, shorter, one_again), Ok(true));
 
     let forged = Value::from_segmented_list(u64::MAX);
     vm.push(forged);
@@ -32,20 +28,21 @@ fn list_equality_is_segmented_bounded_and_rejects_forged_handles() {
     assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
 }
 #[test]
-fn list_equality_accepts_exact_global_limit_and_rejects_one_more() {
+#[ignore = "release stress crosses the former one-million-element ceiling"]
+fn list_equality_executes_beyond_former_limit() {
     test_vm!(vm);
-    let mut at_limit = Value::EMPTY_LIST;
-    for _ in 0..MAX_LIST_EQUAL_STEPS {
-        at_limit = vm
-            .list_prepend(Value::UNIT, at_limit)
-            .expect("prepend exact-bound list element");
+    let mut left = Value::EMPTY_LIST;
+    let mut right = Value::EMPTY_LIST;
+    for _ in 0..1_000_001 {
+        left = vm
+            .list_prepend(Value::UNIT, left)
+            .expect("prepend left stress element");
+        right = vm
+            .list_prepend(Value::UNIT, right)
+            .expect("prepend right stress element");
     }
-    assert_eq!(
-        list_values_equal(&vm, at_limit, at_limit, MAX_LIST_EQUAL_STEPS).ok(),
-        Some(true)
-    );
-    let over_limit = vm
-        .list_prepend(Value::UNIT, at_limit)
-        .expect("prepend over-bound list element");
-    assert!(list_values_equal(&vm, over_limit, over_limit, MAX_LIST_EQUAL_STEPS,).is_err());
+    vm.push(left);
+    vm.push(right);
+    dispatch(&mut vm, Op::ListEqual as u8).expect("execute complete list equality");
+    assert_eq!(vm.pop().ok().and_then(Value::as_bool), Some(true));
 }

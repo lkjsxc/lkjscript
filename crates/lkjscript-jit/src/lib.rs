@@ -14,8 +14,7 @@ use std::time::{Duration, Instant};
 use lkjscript_core::{
     CleanupFailures, CleanupPhase, CleanupSubject, ExecutionConfig, ExecutionOutcome, HostError,
     OwnedValue, ResourceLimitKind, SemanticValue, Trap, UniqueKeyWord, UniqueStore,
-    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value, MAX_BYTE_STORAGE_BYTES,
-    MAX_LIST_EQUAL_STEPS,
+    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value,
 };
 use lkjscript_executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,

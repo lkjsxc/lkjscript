@@ -11,7 +11,6 @@ impl JitIslandServices {
             .try_reserve(1)
             .map_err(|_| NativeServiceError::ResourceLimitExceeded)?;
         pending.push((left, right));
-        let mut steps = 0_usize;
         while let Some((mut left, mut right)) = pending.pop() {
             loop {
                 let left_view = self
@@ -32,12 +31,6 @@ impl JitIslandServices {
                     }
                     break;
                 };
-                if steps >= MAX_LIST_EQUAL_STEPS {
-                    self.structural
-                        .record_trap("nested structural list equality step limit exceeded");
-                    return Err(NativeServiceError::Trap);
-                }
-                steps = steps.saturating_add(1);
                 if left_value.as_structural_root().is_some()
                     || right_value.as_structural_root().is_some()
                 {
@@ -95,4 +88,35 @@ fn scalar_value_equal(left: Value, right: Value) -> Option<bool> {
         return Some(left.as_f64_bits()? == right.as_f64_bits()?);
     }
     None
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "release stress crosses the former one-million-element ceiling"]
+    fn native_list_equality_completes_beyond_former_limit() {
+        let config = ExecutionConfig {
+            max_allocations: 3_000_000,
+            max_heap_bytes: 256 * 1024 * 1024,
+            ..ExecutionConfig::default()
+        };
+        let scope = lkjscript_core::ScopeId::new(7).expect("nonzero stress scope");
+        let mut services = JitIslandServices::new(scope, &config).expect("native services");
+        let mut left = services.lists.empty();
+        let mut right = services.lists.empty();
+        for _ in 0..1_000_001 {
+            left = services
+                .lists
+                .prepend(Value::UNIT, left)
+                .expect("prepend left native element");
+            right = services
+                .lists
+                .prepend(Value::UNIT, right)
+                .expect("prepend right native element");
+        }
+        assert_eq!(services.compare_lists(left, right), Ok(true));
+    }
 }

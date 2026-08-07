@@ -64,7 +64,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let handle = vm.pop()?;
             let result = vm
                 .resources
-                .sqlite_column_text(handle, index, lkjscript_core::MAX_BYTE_STORAGE_BYTES)
+                .sqlite_column_text(handle, index, vm.config.max_heap_bytes)
                 .map(|value| {
                     crate::run::structural_ops::HostValue::option(
                         crate::run::structural_ops::HostValueType::String,
@@ -87,7 +87,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let handle = vm.pop()?;
             let result = vm
                 .resources
-                .sqlite_column_bytes(handle, index, lkjscript_core::MAX_BYTE_STORAGE_BYTES)
+                .sqlite_column_bytes(handle, index, vm.config.max_heap_bytes)
                 .map(|value| {
                     crate::run::structural_ops::HostValue::option(
                         crate::run::structural_ops::HostValueType::Bytes,

@@ -64,7 +64,7 @@ pub(super) fn column_text_bytes(
         return Ok(Vec::new());
     }
     let bytes = unsafe { std::slice::from_raw_parts(pointer, length) };
-    Ok(bytes.to_vec())
+    copy_column_bytes(bytes, "column text allocation")
 }
 
 pub(super) fn column_bytes(
@@ -86,5 +86,13 @@ pub(super) fn column_bytes(
         return Ok(Vec::new());
     }
     let bytes = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), length) };
-    Ok(bytes.to_vec())
+    copy_column_bytes(bytes, "column bytes allocation")
+}
+
+fn copy_column_bytes(bytes: &[u8], operation: &'static str) -> Result<Vec<u8>, SqliteError> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(bytes.len())
+        .map_err(|_| SqliteError::new(operation, -1))?;
+    copy.extend_from_slice(bytes);
+    Ok(copy)
 }

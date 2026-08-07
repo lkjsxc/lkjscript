@@ -25,7 +25,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 Err(error) => (None, Some(error)),
             };
         let (lists, list_initialization_error) = match lkjscript_core::SegmentedListArena::new(
-            lkjscript_core::SegmentedListArenaLimits::default(),
+            lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(config.max_allocations),
         ) {
             Ok(lists) => (Some(lists), None),
             Err(error) => (

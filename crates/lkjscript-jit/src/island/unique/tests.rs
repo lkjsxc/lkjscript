@@ -64,6 +64,59 @@ fn bytes_layout_transfers_and_forged_words_fail_closed() {
 }
 
 #[test]
+fn native_byte_vector_uses_explicit_heap_policy_beyond_former_buffer_limit() {
+    let size = 1_000_001_usize;
+    let low = ExecutionConfig {
+        max_heap_bytes: size - 1,
+        ..ExecutionConfig::default()
+    };
+    let mut limited = JitUniqueRuntime::new(&low).expect("limited unique runtime");
+    assert_eq!(
+        limited.allocate(i64::try_from(size).expect("test size fits i64")),
+        Err(NativeServiceError::ResourceLimitExceeded)
+    );
+    assert_eq!(limited.last_resource(), Some(ResourceLimitKind::HeapBytes));
+    let static_bytes = vec![0x5a; size];
+    assert_eq!(
+        limited.clone_static_bytes(&static_bytes),
+        Err(NativeServiceError::ResourceLimitExceeded)
+    );
+    assert_eq!(limited.last_resource(), Some(ResourceLimitKind::HeapBytes));
+    assert_eq!(limited.finish().live_owners, 0);
+
+    let high = ExecutionConfig {
+        max_heap_bytes: size * 2,
+        ..ExecutionConfig::default()
+    };
+    let mut runtime = JitUniqueRuntime::new(&high).expect("high-policy unique runtime");
+    let owner = runtime
+        .allocate(i64::try_from(size).expect("test size fits i64"))
+        .expect("large byte vector");
+    let view = runtime
+        .borrow(owner, LoanType::ByteSlice)
+        .expect("borrow large vector");
+    assert_eq!(
+        runtime.length(view),
+        Ok(i64::try_from(size).expect("test size fits i64"))
+    );
+    runtime.end_borrow(view).expect("end large borrow");
+    runtime.drop_owner(owner).expect("drop large owner");
+    let bytes = runtime
+        .clone_static_bytes(&static_bytes)
+        .expect("large static bytes clone");
+    let loan = runtime
+        .borrow(bytes, LoanType::Bytes)
+        .expect("borrow large bytes");
+    assert_eq!(
+        runtime.bytes_length(loan),
+        Ok(i64::try_from(size).expect("test size fits i64"))
+    );
+    runtime.end_borrow(loan).expect("end large bytes borrow");
+    runtime.drop_owner(bytes).expect("drop large bytes");
+    assert_eq!(runtime.finish().live_owners, 0);
+}
+
+#[test]
 fn configured_allocation_limit_is_structured_and_atomic() {
     let config = ExecutionConfig {
         max_allocations: 0,

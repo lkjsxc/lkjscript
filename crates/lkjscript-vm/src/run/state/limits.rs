@@ -1,5 +1,27 @@
 use super::*;
 
+pub(crate) struct Interruption {
+    deadline: Option<Instant>,
+    cancellation: Option<std::sync::Arc<dyn lkjscript_host::Cancellation>>,
+}
+
+impl Interruption {
+    pub(crate) fn check(&self) -> Result<()> {
+        if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            return Err(Error::deadline("execution wall deadline exceeded"));
+        }
+        if let Some(cancellation) = &self.cancellation {
+            cancellation
+                .check()
+                .map_err(|error| Error::host(format!("execution cancellation: {error}")))?;
+        }
+        Ok(())
+    }
+}
+
 impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(crate) fn check_runtime_limits(&mut self) -> Result<()> {
         if self.stack.len() > self.config.max_stack_values {
@@ -45,7 +67,29 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 "VM handle limit exceeded",
             ));
         }
-        self.check_deadline()
+        self.check_interruption()
+    }
+
+    pub(crate) fn interruption(&self) -> Result<Interruption> {
+        let deadline = self
+            .config
+            .wall_time
+            .map(|limit| {
+                self.started.checked_add(limit).ok_or_else(|| {
+                    Error::host("execution wall deadline exceeds monotonic clock range")
+                })
+            })
+            .transpose()?;
+        let interruption = Interruption {
+            deadline,
+            cancellation: self.inputs.host.cancellation.clone(),
+        };
+        interruption.check()?;
+        Ok(interruption)
+    }
+
+    pub(crate) fn check_interruption(&self) -> Result<()> {
+        self.interruption().map(|_| ())
     }
 
     pub(crate) fn check_deadline(&self) -> Result<()> {
@@ -93,6 +137,18 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         };
         let milliseconds = remaining.as_millis().max(1);
         Ok(Some(i32::try_from(milliseconds).unwrap_or(i32::MAX)))
+    }
+
+    pub(crate) fn remaining_output_capacity(&self) -> Result<usize> {
+        self.config
+            .max_output_bytes
+            .checked_sub(self.output_bytes)
+            .ok_or_else(|| {
+                Error::resource(
+                    ResourceLimitKind::OutputBytes,
+                    "VM output byte counter exceeds configured policy",
+                )
+            })
     }
 
     pub(crate) fn record_output(&mut self, bytes: usize) -> Result<()> {

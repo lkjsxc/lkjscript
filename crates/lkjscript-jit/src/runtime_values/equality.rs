@@ -47,7 +47,6 @@ impl JitValueServices<'_> {
         mut left: lkjscript_core::SegmentedListKey,
         mut right: lkjscript_core::SegmentedListKey,
     ) -> Result<bool, NativeServiceError> {
-        let mut steps = 0_usize;
         loop {
             let left_view = self
                 .lists
@@ -62,9 +61,6 @@ impl JitValueServices<'_> {
             else {
                 return Ok(left_view.is_none() && right_view.is_none());
             };
-            if steps >= MAX_LIST_EQUAL_STEPS {
-                return self.trap("list-equal step limit exceeded");
-            }
             if !scalar_value_equal(*left_value, *right_value).ok_or_else(|| {
                 self.last_trap = Some("list-equal element type mismatch".into());
                 NativeServiceError::Trap
@@ -73,7 +69,6 @@ impl JitValueServices<'_> {
             }
             left = left_tail;
             right = right_tail;
-            steps = steps.saturating_add(1);
         }
     }
 }

@@ -1,17 +1,27 @@
 use super::*;
 
 pub(crate) fn value_equal<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+    vm: &mut Vm<'_, J>,
     left: Value,
     right: Value,
 ) -> Result<bool> {
-    let mut pending = vec![(left, right)];
-    let mut steps = 0_usize;
+    let mut pending = Vec::new();
+    pending.try_reserve(1).map_err(|_| {
+        Error::resource(
+            ResourceLimitKind::HeapBytes,
+            "equal-value work allocation failed",
+        )
+    })?;
+    pending.push((left, right));
+    let mut until_poll = 0_usize;
     while let Some((left, right)) = pending.pop() {
-        if steps == MAX_LIST_EQUAL_STEPS {
-            return Err(Error::msg("equal-value step limit exceeded"));
+        if until_poll == 0 {
+            vm.check_interruption()?;
         }
-        steps += 1;
+        until_poll += 1;
+        if until_poll == 4_096 {
+            until_poll = 0;
+        }
         if left.is_unit() || right.is_unit() {
             if left.is_unit() && right.is_unit() {
                 continue;
@@ -85,6 +95,12 @@ pub(crate) fn value_equal<J: RuntimeTier>(
             match (vm.list_view(left)?, vm.list_view(right)?) {
                 (None, None) => continue,
                 (Some((left_head, left_tail)), Some((right_head, right_tail))) => {
+                    pending.try_reserve(2).map_err(|_| {
+                        Error::resource(
+                            ResourceLimitKind::HeapBytes,
+                            "equal-value work allocation failed",
+                        )
+                    })?;
                     pending.push((left_tail, right_tail));
                     pending.push((left_head, right_head));
                     continue;
@@ -96,7 +112,7 @@ pub(crate) fn value_equal<J: RuntimeTier>(
         let right_structural = crate::run::structural_ops::semantic_snapshot(vm, right).ok();
         if left_structural.is_some() || right_structural.is_some() {
             return match (left_structural, right_structural) {
-                (Some(left), Some(right)) => Ok(left == right),
+                (Some(left), Some(right)) => left.try_equal(&right),
                 _ => Err(Error::msg("equal-value runtime type mismatch")),
             };
         }

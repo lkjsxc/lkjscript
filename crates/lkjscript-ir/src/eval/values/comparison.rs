@@ -20,62 +20,68 @@ pub(crate) fn compare_values<T: PartialOrd>(
 }
 
 pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::Result<bool, Flow> {
-    match (left, right) {
-        (EvalValue::Unit, EvalValue::Unit) => Ok(true),
-        (EvalValue::Bool(left), EvalValue::Bool(right)) => Ok(left == right),
-        (EvalValue::I64(left), EvalValue::I64(right)) => Ok(left == right),
-        (EvalValue::F64(left), EvalValue::F64(right)) => Ok(left == right),
-        (EvalValue::StaticSymbol(left), EvalValue::StaticSymbol(right)) => Ok(left == right),
-        (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
-        (EvalValue::Resource(_), _) | (_, EvalValue::Resource(_)) => Err(Flow::Trap(
-            "typed resources cannot be compared as values".into(),
-        )),
-        (EvalValue::StaticString(_), _)
-        | (_, EvalValue::StaticString(_))
-        | (EvalValue::StructuralOwner(_), _)
-        | (_, EvalValue::StructuralOwner(_))
-        | (EvalValue::StructuralView(_), _)
-        | (_, EvalValue::StructuralView(_)) => Err(Flow::Trap(
-            "legacy list cannot contain structural values".into(),
-        )),
-        (
-            EvalValue::Enum {
-                enum_id: left_enum,
-                variant: left_variant,
-                ..
-            },
-            EvalValue::Enum {
-                enum_id: right_enum,
-                variant: right_variant,
-                ..
-            },
-        ) if left_enum == right_enum && left_variant != right_variant => Ok(false),
-        (
-            EvalValue::Enum {
-                enum_id: left_enum,
-                variant: left_variant,
-                payload: left_payload,
-                ..
-            },
-            EvalValue::Enum {
-                enum_id: right_enum,
-                variant: right_variant,
-                payload: right_payload,
-                ..
-            },
-        ) if left_enum == right_enum && left_variant == right_variant => {
-            if left_payload.len() != right_payload.len() {
-                return Err(Flow::Trap("enum payload shape mismatch".into()));
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Flow::Resource("heap bytes".into()))?;
+    pending.push((left, right));
+    while let Some((left, right)) = pending.pop() {
+        match (left, right) {
+            (EvalValue::Unit, EvalValue::Unit) => {}
+            (EvalValue::Bool(left), EvalValue::Bool(right)) if left == right => {}
+            (EvalValue::I64(left), EvalValue::I64(right)) if left == right => {}
+            (EvalValue::F64(left), EvalValue::F64(right)) if left == right => {}
+            (EvalValue::StaticSymbol(left), EvalValue::StaticSymbol(right)) if left == right => {}
+            (EvalValue::Symbol(left), EvalValue::Symbol(right)) if left == right => {}
+            (EvalValue::Bool(_), EvalValue::Bool(_))
+            | (EvalValue::I64(_), EvalValue::I64(_))
+            | (EvalValue::F64(_), EvalValue::F64(_))
+            | (EvalValue::StaticSymbol(_), EvalValue::StaticSymbol(_))
+            | (EvalValue::Symbol(_), EvalValue::Symbol(_)) => return Ok(false),
+            (EvalValue::Resource(_), _) | (_, EvalValue::Resource(_)) => {
+                return Err(Flow::Trap(
+                    "typed resources cannot be compared as values".into(),
+                ));
             }
-            for (left, right) in left_payload.iter().zip(right_payload) {
-                if !value_equal(left, right)? {
+            (EvalValue::StaticString(_), _)
+            | (_, EvalValue::StaticString(_))
+            | (EvalValue::StructuralOwner(_), _)
+            | (_, EvalValue::StructuralOwner(_))
+            | (EvalValue::StructuralView(_), _)
+            | (_, EvalValue::StructuralView(_)) => {
+                return Err(Flow::Trap(
+                    "legacy list cannot contain structural values".into(),
+                ));
+            }
+            (
+                EvalValue::Enum {
+                    enum_id: left_enum,
+                    variant: left_variant,
+                    payload: left_payload,
+                    ..
+                },
+                EvalValue::Enum {
+                    enum_id: right_enum,
+                    variant: right_variant,
+                    payload: right_payload,
+                    ..
+                },
+            ) if left_enum == right_enum => {
+                if left_variant != right_variant {
                     return Ok(false);
                 }
+                if left_payload.len() != right_payload.len() {
+                    return Err(Flow::Trap("enum payload shape mismatch".into()));
+                }
+                pending
+                    .try_reserve(left_payload.len())
+                    .map_err(|_| Flow::Resource("heap bytes".into()))?;
+                pending.extend(left_payload.iter().zip(right_payload).rev());
             }
-            Ok(true)
+            _ => return Err(Flow::Trap("equal-value category mismatch".into())),
         }
-        _ => Err(Flow::Trap("equal-value category mismatch".into())),
     }
+    Ok(true)
 }
 
 pub(crate) fn unary<F>(

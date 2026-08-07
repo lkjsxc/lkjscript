@@ -33,21 +33,19 @@ pub(crate) fn as_numeric_f64(value: &EvalValue) -> std::result::Result<f64, Flow
 pub(crate) fn list_values_equal(
     left: &[EvalValue],
     right: &[EvalValue],
-    limit: usize,
 ) -> std::result::Result<bool, Flow> {
-    let mut steps = 0_usize;
+    let mut index = 0_usize;
     loop {
-        let left_head = left.get(steps);
-        let right_head = right.get(steps);
+        let left_head = left.get(index);
+        let right_head = right.get(index);
         let (left_head, right_head) = match (left_head, right_head) {
             (None, None) => return Ok(true),
             (None, Some(_)) | (Some(_), None) => return Ok(false),
             (Some(left_head), Some(right_head)) => (left_head, right_head),
         };
-        if steps == limit {
-            return Err(Flow::Trap("list-equal step limit exceeded".into()));
-        }
-        steps += 1;
+        index = index
+            .checked_add(1)
+            .ok_or_else(|| Flow::Resource("heap bytes".into()))?;
         if !value_equal(left_head, right_head)? {
             return Ok(false);
         }

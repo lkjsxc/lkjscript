@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use lkjscript_core::{
     Error, ExecutionConfig, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId,
-    UniqueStoreLimits, Value, MAX_BYTE_STORAGE_BYTES,
+    UniqueStoreLimits, Value,
 };
 
 mod access;
@@ -56,14 +56,18 @@ impl UniqueRuntime {
     }
 
     pub(crate) fn allocate(&mut self, size: i64) -> Result<Value> {
-        let size = usize::try_from(size)
-            .ok()
-            .filter(|size| *size <= MAX_BYTE_STORAGE_BYTES)
-            .ok_or_else(|| Error::msg("new-byte-vector size out of range"))?;
+        let size =
+            usize::try_from(size).map_err(|_| Error::msg("new-byte-vector size out of range"))?;
+        self.store
+            .check_byte_vector_allocation(size)
+            .map_err(map_store_error)?;
         let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(size)
-            .map_err(|_| Error::msg("byte-vector backing capacity unavailable"))?;
+        bytes.try_reserve_exact(size).map_err(|_| {
+            Error::resource(
+                lkjscript_core::ResourceLimitKind::HeapBytes,
+                "byte-vector backing capacity unavailable",
+            )
+        })?;
         bytes.resize(size, 0);
         let key = self
             .store

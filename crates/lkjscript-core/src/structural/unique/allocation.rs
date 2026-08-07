@@ -18,6 +18,13 @@ impl UniqueStore {
             .map(ByteVectorKey::from_raw)
     }
 
+    /// Checks explicit store policy before allocating a byte-vector backing buffer.
+    /// The actual retained capacity is checked again when the buffer is published.
+    pub fn check_byte_vector_allocation(&self, bytes: usize) -> Result<(), UniqueStoreError> {
+        let bytes = u64::try_from(bytes).map_err(|_| UniqueStoreError::StorageCapacity)?;
+        self.check_allocation(bytes)
+    }
+
     pub fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<BytesKey, UniqueStoreError> {
         self.allocate(Payload::Bytes(bytes)).map(BytesKey::from_raw)
     }

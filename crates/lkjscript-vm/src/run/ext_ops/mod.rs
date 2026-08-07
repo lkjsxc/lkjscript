@@ -1,6 +1,6 @@
 //! Dispatch for string and file opcodes.
 
-use lkjscript_core::{Error, Op, Result, Value};
+use lkjscript_core::{Error, ErrorClass, Op, Result, Value};
 
 use crate::run::{RuntimeTier, Vm};
 
@@ -29,6 +29,13 @@ fn push_runtime_result<J: RuntimeTier>(
     let result = result
         .and_then(|value| crate::run::structural_ops::value_from_runtime(vm, &success, value));
     push_language_result(vm, kind, success, result);
+}
+
+fn execution_policy<T>(result: Result<T>) -> Result<Result<T>> {
+    match result {
+        Err(error) if !matches!(error.class(), ErrorClass::Ordinary) => Err(error),
+        result => Ok(result),
+    }
 }
 
 fn push_i64_result<J: RuntimeTier>(

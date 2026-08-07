@@ -30,9 +30,7 @@ pub use bytecode::{
     VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
-pub use limits::{
-    ExecutionConfig, MAX_BULK_IO_BYTES, MAX_BYTE_STORAGE_BYTES, MAX_LIST_EQUAL_STEPS,
-};
+pub use limits::ExecutionConfig;
 pub use lkjscript_contracts::{sha256, MemoryWitnessOperation, Sha256};
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,

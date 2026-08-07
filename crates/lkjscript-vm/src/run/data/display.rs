@@ -40,7 +40,7 @@ pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Res
     if value.as_segmented_list().is_some() {
         let mut cursor = value;
         let mut elements = Vec::new();
-        for _ in 0..MAX_LIST_EQUAL_STEPS {
+        loop {
             let Some((head, tail)) = vm.list_view(cursor)? else {
                 return Ok(format!("({})", elements.join(" ")));
             };
@@ -50,7 +50,6 @@ pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Res
             elements.push(self::value(vm, head)?);
             cursor = tail;
         }
-        return Err(Error::msg("list display step limit exceeded"));
     }
     if value.as_structural_root().is_some() {
         if let Ok(text) = crate::run::structural_ops::copy_string(vm, value) {

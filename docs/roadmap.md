@@ -72,8 +72,11 @@
    source-byte loader policy and applies it to staged transactions before publication. Continue
    replacing remaining validity-changing implementation ceilings with unrestricted local
    compilation and explicit coarse input, memory, output, deadline, cancellation, and parallelism
-   policy at untrusted request boundaries. The same program must exhaust under low policy and
-   succeed unchanged under higher or unrestricted policy.
+   policy at untrusted request boundaries. Runtime list equality no longer has an independent
+   million-step trap, byte storage no longer has a per-buffer 1 MiB rejection, and file/socket bulk
+   views no longer have a 64 KiB validity rule. Explicit heap/allocation/output/deadline/cancellation
+   policy now governs those paths. The same program must exhaust under low policy and succeed
+   unchanged under higher or unrestricted policy.
 
 ## Next
 

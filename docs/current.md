@@ -232,6 +232,13 @@ may build elsewhere, but no other host or native target is currently claimed as 
   admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
   trusted compilation and prepared binding use unrestricted validation. VM `ExecutionConfig`
   remains explicit runtime host policy over execution resources rather than language validity.
+  Structural list equality in the VM, evaluator, and native runtime is iterative and complete for
+  the acyclic segmented-list representation; there is no independent comparison-step quota.
+  Dynamic byte vectors and static-byte clones have no per-buffer size rule: checked, fallible
+  allocation is charged to explicit heap/allocation policy. File and socket byte-view operations
+  accept views beyond the former 64 KiB boundary. Private 256 KiB syscall chunks are tuning only;
+  partial-count operations remain partial, full socket send iterates, and output, deadline, and
+  cancellation policy is checked across chunks.
 - Type and SSA type ownership, identity, verification, trait solving, and the ordinary memory-plan
   and lowering path have deep-stack coverage. Other recursive semantic-operation, transaction,
   runtime structural-value, and specialization paths still need explicit work-stack conversion or

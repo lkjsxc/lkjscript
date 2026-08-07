@@ -60,7 +60,10 @@ impl Evaluator<'_> {
                     .runtime
                     .projected(right_view)
                     .map_err(map_structural_error)
-                    .map(|right| left == right)
+                    .and_then(|right| {
+                        left.try_equal(&right)
+                            .map_err(|_| Flow::Resource("heap bytes".into()))
+                    })
             });
         let right_end = self
             .structural

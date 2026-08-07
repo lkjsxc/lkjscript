@@ -109,15 +109,31 @@ impl SegmentedListArenaLimits {
             segment_capacity,
         }
     }
+
+    pub fn for_allocation_policy(max_allocations: u64) -> Self {
+        let requested = max_allocations.min(u64::from(u32::MAX)).max(1);
+        let maximum_segments = u64::from(u16::MAX) + 1;
+        let capacity = requested
+            .div_ceil(maximum_segments)
+            .clamp(1, u64::from(u16::MAX));
+        let entries = requested.min(maximum_segments * capacity);
+        let segments = entries.div_ceil(capacity);
+        Self {
+            max_segments: NonZeroU32::new(
+                u32::try_from(segments).unwrap_or(u32::from(u16::MAX) + 1),
+            )
+            .unwrap_or(NonZeroU32::MIN),
+            max_entries: NonZeroU32::new(u32::try_from(entries).unwrap_or(u32::MAX))
+                .unwrap_or(NonZeroU32::MIN),
+            segment_capacity: NonZeroU16::new(u16::try_from(capacity).unwrap_or(u16::MAX))
+                .unwrap_or(NonZeroU16::MIN),
+        }
+    }
 }
 
 impl Default for SegmentedListArenaLimits {
     fn default() -> Self {
-        Self {
-            max_segments: NonZeroU32::new(65_536).unwrap_or(NonZeroU32::MIN),
-            max_entries: NonZeroU32::new(1_000_001).unwrap_or(NonZeroU32::MIN),
-            segment_capacity: NonZeroU16::new(32).unwrap_or(NonZeroU16::MIN),
-        }
+        Self::for_allocation_policy(u64::from(u32::MAX))
     }
 }
 

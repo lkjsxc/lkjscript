@@ -114,9 +114,14 @@ constant-data-byte, cleanup-node/range, region-product, witness, structural-dest
 structural-operation-reference counts. An untrusted artifact caller may explicitly select
 `ValidationPolicy::Limited { max_total_bytes }`; this checks only one checked-arithmetic total-byte
 observation, reports byte-policy exhaustion separately from malformed bytecode, and does not alter
-validity under `Unrestricted`. VM `ExecutionConfig` remains explicit runtime host policy. Bytes
-literals have no project-selected size rule: decoding validates hexadecimal syntax and reserves
-storage fallibly. Validator-synthetic owner identity preserves instruction offsets and parameter
+validity under `Unrestricted`. VM `ExecutionConfig` remains explicit runtime host policy. List
+value equality is complete and iterative for the implemented acyclic immutable list
+representation; it has no independent step quota. Byte vectors, static-byte clones, and bytes
+literals have no project-selected per-buffer size rule: decoding and runtime storage use checked,
+fallible reservation and explicit heap/allocation policy. Bulk file/socket views have no 64 KiB
+operation-validity rule. Private chunks are implementation tuning, partial-count operations report
+the exact partial count, full-transfer operations iterate, and output/deadline/cancellation policy
+is enforced between chunks. Validator-synthetic owner identity preserves instruction offsets and parameter
 indexes at host width. Some pre-existing core structural type/layout/representation lookup helpers
 still turn host-width overflow into a failed sentinel lookup, and recursive semantic operation,
 runtime structural-value, and specialization paths retain incomplete stack-safety coverage. These

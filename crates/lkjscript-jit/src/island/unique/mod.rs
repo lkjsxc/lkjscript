@@ -50,10 +50,10 @@ impl JitUniqueRuntime {
     }
 
     pub(super) fn allocate(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError> {
-        let size = usize::try_from(size)
-            .ok()
-            .filter(|size| *size <= MAX_BYTE_STORAGE_BYTES)
-            .ok_or_else(|| self.reject())?;
+        let size = usize::try_from(size).map_err(|_| self.reject())?;
+        if let Err(error) = self.store.check_byte_vector_allocation(size) {
+            return Err(self.store_error(error));
+        }
         self.owners.try_reserve(1).map_err(|_| self.heap_limit())?;
         let mut bytes = Vec::new();
         bytes

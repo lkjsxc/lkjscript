@@ -64,7 +64,6 @@ impl Evaluator<'_> {
         right: lkjscript_core::SegmentedListKey,
     ) -> std::result::Result<bool, Flow> {
         let mut pending = vec![(left, right)];
-        let mut steps = 0_usize;
         while let Some((mut left, mut right)) = pending.pop() {
             loop {
                 let left_view = self
@@ -83,12 +82,6 @@ impl Evaluator<'_> {
                     }
                     break;
                 };
-                if steps >= self.config.max_list_equal_steps {
-                    return Err(Flow::Trap("list-equal step limit exceeded".into()));
-                }
-                steps = steps
-                    .checked_add(1)
-                    .ok_or_else(|| Flow::Trap("list-equal step overflow".into()))?;
                 let left_value = observation_marker(left_value)?;
                 let right_value = observation_marker(right_value)?;
                 match (&left_value, &right_value) {

@@ -12,9 +12,6 @@ impl Evaluator<'_> {
             Op::ByteVectorNew => unary(&arguments, |size| {
                 let size = usize::try_from(as_i64(size)?)
                     .map_err(|_| Flow::Trap("new-byte-vector size out of range".into()))?;
-                if size > self.config.max_byte_storage_bytes || size > 1_000_000 {
-                    return Err(Flow::Trap("new-byte-vector size out of range".into()));
-                }
                 self.unique.allocate(size)
             }),
             Op::ByteSliceLength => {

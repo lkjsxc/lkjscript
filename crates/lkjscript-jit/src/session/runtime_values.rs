@@ -58,7 +58,7 @@ impl JitSession {
     ) -> Result<(), EngineError> {
         self.lists = Some(
             lkjscript_core::SegmentedListArena::new(
-                lkjscript_core::SegmentedListArenaLimits::default(),
+                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(max_allocations),
             )
             .map_err(|error| arena_error(function, "segmented-list", error))?,
         );

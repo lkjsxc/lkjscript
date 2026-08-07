@@ -78,7 +78,7 @@ fn wrong_arena_empty_and_limits_fail_without_mutation() -> Result<(), SegmentedL
 }
 
 #[test]
-fn equality_counts_elements_not_segments_at_the_exact_bound() -> Result<(), SegmentedListError> {
+fn equality_is_complete_across_segments() -> Result<(), SegmentedListError> {
     let mut arena = SegmentedListArena::new(limits(8, 16, 2))?;
     let mut left = arena.empty();
     let mut right = arena.empty();
@@ -86,16 +86,10 @@ fn equality_counts_elements_not_segments_at_the_exact_bound() -> Result<(), Segm
         left = arena.prepend(value, left)?;
         right = arena.prepend(value, right)?;
     }
-    assert!(arena.equal_by(left, right, 4, |a, b| a == b)?);
-    assert_eq!(
-        arena.equal_by(left, right, 3, |a, b| a == b),
-        Err(SegmentedListError::Limit(
-            SegmentedListLimit::TraversalSteps
-        ))
-    );
+    assert!(arena.equal_by(left, right, |a, b| a == b)?);
     let empty = arena.empty();
     let different = arena.prepend(9, empty)?;
-    assert!(!arena.equal_by(left, different, 4, |a, b| a == b)?);
+    assert!(!arena.equal_by(left, different, |a, b| a == b)?);
     Ok(())
 }
 

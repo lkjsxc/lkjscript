@@ -109,8 +109,8 @@ impl Statement {
         }
         let bytes = column_text_bytes(self.raw, index, max_bytes)?;
         let text =
-            std::str::from_utf8(&bytes).map_err(|_| SqliteError::new("column text UTF-8", -1))?;
-        Ok(Some(text.to_owned()))
+            String::from_utf8(bytes).map_err(|_| SqliteError::new("column text UTF-8", -1))?;
+        Ok(Some(text))
     }
 
     pub fn column_bytes(

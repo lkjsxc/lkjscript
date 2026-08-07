@@ -68,19 +68,10 @@ impl ResourceTable {
         Ok(text.to_owned())
     }
 
-    pub fn sys_send(&self, handle: Value, data: &str) -> Result<i64> {
+    pub fn sys_send_chunk(&self, handle: Value, data: &[u8]) -> Result<usize> {
         let raw = self.socket_raw(handle, ResourceKind::TcpStream, "send-string")?;
-        let bytes = data.as_bytes();
-        let mut sent = 0_usize;
-        while sent < bytes.len() {
-            let count = lkjscript_sys::send_sock(raw, &bytes[sent..])
-                .map_err(|error| Error::msg(format!("sys-send: {error}")))?;
-            if count == 0 {
-                return Err(Error::msg("sys-send: zero-byte progress"));
-            }
-            sent += count;
-        }
-        let sent = i64::try_from(sent).map_err(|_| Error::msg("sys-send count out of range"))?;
-        Ok(sent)
+        let chunk = &data[..data.len().min(crate::host_bytes::IO_CHUNK_BYTES)];
+        lkjscript_sys::send_sock(raw, chunk)
+            .map_err(|error| Error::msg(format!("sys-send: {error}")))
     }
 }

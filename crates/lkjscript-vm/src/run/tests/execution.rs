@@ -139,6 +139,53 @@ fn high_unique_local_and_place_execute_without_byte_narrowing() {
 }
 
 #[test]
+fn byte_vector_program_crosses_former_limit_only_under_sufficient_heap_policy() {
+    let size = 1_000_001_i64;
+    let mut chunk = Chunk::new();
+    chunk.main.locals = 1;
+    chunk.main.unique_places = 1;
+    let size_constant = chunk
+        .add_const(Constant::I64(size))
+        .expect("add large size constant");
+    chunk.main.emit_op_u64(Op::LoadConst, size_constant.0);
+    chunk.main.emit(Op::ByteVectorNew);
+    chunk.main.emit_op_u64(Op::StoreUniqueLocal, 0);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit_op_u64_pair(Op::ByteVectorDropPlace, 0, 0);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit_op_u64(Op::ByteVectorPlaceEnd, 0);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let chunk = validate(chunk);
+
+    let low = ExecutionConfig {
+        max_heap_bytes: usize::try_from(size - 1).expect("test size fits usize"),
+        ..ExecutionConfig::default()
+    };
+    assert_eq!(
+        Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), low).run(),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
+    );
+
+    let high = ExecutionConfig {
+        max_heap_bytes: usize::try_from(size * 2).expect("test size fits usize"),
+        ..ExecutionConfig::default()
+    };
+    assert!(matches!(
+        Vm::new(
+            &chunk,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            high
+        )
+        .run(),
+        ExecutionOutcome::Returned(value) if value.is_unit()
+    ));
+}
+
+#[test]
 fn removed_buffer_opcode_bytes_are_rejected_before_execution() {
     for removed in [66_u8, 67, 68, 69, 72, 73, 85, 191] {
         let mut chunk = Chunk::new();

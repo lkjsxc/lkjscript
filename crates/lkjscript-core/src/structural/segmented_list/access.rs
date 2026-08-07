@@ -10,22 +10,15 @@ impl<T> SegmentedListArena<T> {
         &mut self,
         mut left: SegmentedListKey,
         mut right: SegmentedListKey,
-        max_steps: u32,
         mut equal: impl FnMut(&T, &T) -> bool,
     ) -> Result<bool, SegmentedListError> {
         self.validate_key(left)?;
         self.validate_key(right)?;
-        let mut steps = 0_u32;
         loop {
             match (left.location(), right.location()) {
                 (None, None) => return Ok(true),
                 (None, Some(_)) | (Some(_), None) => return Ok(false),
                 (Some(left_location), Some(right_location)) => {
-                    if steps >= max_steps {
-                        return Err(SegmentedListError::Limit(
-                            SegmentedListLimit::TraversalSteps,
-                        ));
-                    }
                     let left_entry = self.entry(left_location)?;
                     let right_entry = self.entry(right_location)?;
                     if !equal(&left_entry.element, &right_entry.element) {
@@ -33,9 +26,6 @@ impl<T> SegmentedListArena<T> {
                     }
                     left = left_entry.tail;
                     right = right_entry.tail;
-                    steps = steps.checked_add(1).ok_or(SegmentedListError::Limit(
-                        SegmentedListLimit::TraversalSteps,
-                    ))?;
                 }
             }
         }

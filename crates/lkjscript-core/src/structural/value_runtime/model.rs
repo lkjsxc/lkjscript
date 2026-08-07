@@ -95,6 +95,60 @@ impl SemanticValue {
             _ => None,
         }
     }
+
+    /// Complete stack-safe equality for the owned, acyclic semantic value tree.
+    pub fn try_equal(&self, other: &Self) -> crate::Result<bool> {
+        let mut pending = Vec::new();
+        pending.try_reserve(1).map_err(|_| {
+            crate::Error::resource(
+                crate::ResourceLimitKind::HeapBytes,
+                "semantic equality work allocation failed",
+            )
+        })?;
+        pending.push((self, other));
+        while let Some((left, right)) = pending.pop() {
+            if left.value_type != right.value_type {
+                return Ok(false);
+            }
+            use SemanticPayload as Payload;
+            let children = match (&left.payload, &right.payload) {
+                (Payload::Inline(left), Payload::Inline(right)) if left == right => None,
+                (Payload::Static(left), Payload::Static(right)) if left == right => None,
+                (Payload::String(left), Payload::String(right)) if left == right => None,
+                (Payload::Path(left), Payload::Path(right)) if left == right => None,
+                (Payload::Bytes(left), Payload::Bytes(right)) if left == right => None,
+                (Payload::ByteVector(left), Payload::ByteVector(right)) if left == right => None,
+                (Payload::Product(left), Payload::Product(right)) => {
+                    Some((left.as_slice(), right.as_slice()))
+                }
+                (
+                    Payload::Enum {
+                        tag: left_tag,
+                        active_payload: left,
+                    },
+                    Payload::Enum {
+                        tag: right_tag,
+                        active_payload: right,
+                    },
+                ) if left_tag == right_tag => Some((left.as_slice(), right.as_slice())),
+                _ => return Ok(false),
+            };
+            let Some((left, right)) = children else {
+                continue;
+            };
+            if left.len() != right.len() {
+                return Ok(false);
+            }
+            pending.try_reserve(left.len()).map_err(|_| {
+                crate::Error::resource(
+                    crate::ResourceLimitKind::HeapBytes,
+                    "semantic equality work allocation failed",
+                )
+            })?;
+            pending.extend(left.iter().zip(right).rev());
+        }
+        Ok(true)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

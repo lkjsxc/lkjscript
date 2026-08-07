@@ -108,6 +108,13 @@ transport specialization as optional and does not equate semantic SSA identity w
 support. Baseline and optimizing selections remain available as diagnostic modes while the reset
 measures their representative value. They are not separate language definitions.
 The SSA evaluator remains useful as a semantic test oracle but is not the product source authority.
+List equality uses explicit work stacks in evaluator, VM, baseline-native, and structural-native
+services; allocation failure is resource exhaustion, not a comparison-count trap. Unique byte
+storage preflights `ExecutionConfig`/`EvalConfig` heap and allocation policy, reserves fallibly, and
+rechecks actual retained capacity at publication. Bulk file/socket byte views are processed with
+private syscall chunks. Read/write preserve their partial-count contract, socket string send loops
+for its full-transfer contract, and output, wall-deadline, and cancellation policy is checked at
+chunk boundaries.
 
 No optimization result is allowed to reinterpret source semantics. Forced native modes must enter
 a synchronous generated entry or fail explicitly.

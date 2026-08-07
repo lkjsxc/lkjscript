@@ -22,8 +22,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.ensure_host_deadline_support("read-into", false)?;
             let view = vm.pop()?;
             let resource = vm.pop()?;
-            let result =
-                crate::host_bytes::read_into(&mut vm.unique, &vm.resources, resource, view);
+            let result = execution_policy(crate::host_bytes::read_into(vm, resource, view))?;
             push_i64_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
@@ -31,8 +30,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.ensure_host_deadline_support("write-from", false)?;
             let view = vm.pop()?;
             let resource = vm.pop()?;
-            let result =
-                crate::host_bytes::write_from(&mut vm.unique, &vm.resources, resource, view);
+            let result = execution_policy(crate::host_bytes::write_from(vm, resource, view))?;
             push_i64_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
@@ -40,7 +38,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.ensure_host_deadline_support("fill-random", false)?;
             let view = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Entropy)?;
-            let result = crate::host_bytes::fill_random(&mut vm.unique, view);
+            let result = execution_policy(crate::host_bytes::fill_random(vm, view))?;
             push_runtime_result(
                 vm,
                 lkjscript_core::SystemErrorKind::Random,
