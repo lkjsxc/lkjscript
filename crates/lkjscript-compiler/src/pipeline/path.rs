@@ -9,7 +9,7 @@ use crate::source::{load_for_compiler, load_with_metrics};
 use crate::ssa::lower_program_with_metrics;
 use crate::{CompileMetrics, ExecutableProgram};
 
-use super::common::{checked_memory_inventory, compile_analyzed};
+use super::common::compile_analyzed;
 
 pub fn compile_path(path: &Path) -> Result<ExecutableProgram> {
     compile_path_with_sources(path).map(|(program, _)| program)
@@ -44,9 +44,6 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
     let memory_planning = memory_started.elapsed();
     let (ssa, ssa_metrics) = lower_program_with_metrics(&memory_verified)?;
     let memory_plan = memory_verified.plan().clone();
-    let inventory_started = Instant::now();
-    let memory_inventory = checked_memory_inventory(&ssa)?;
-    let memory_inventory_time = inventory_started.elapsed();
     let bytecode_started = Instant::now();
     let (chunk, bytecode_links) = compile_program(&ssa)?;
     let bytecode_lowering = bytecode_started.elapsed();
@@ -74,7 +71,6 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
         bytecode,
         ssa,
         memory_plan,
-        memory_inventory,
         bytecode_links,
     };
     Ok((
@@ -89,7 +85,6 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
             ssa_construction: ssa_metrics.construction,
             ssa_verification: ssa_metrics.verification,
             normalization: ssa_metrics.normalization,
-            memory_inventory: memory_inventory_time,
             bytecode_lowering,
             bytecode_validation,
             preparation,

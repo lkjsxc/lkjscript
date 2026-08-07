@@ -107,7 +107,8 @@
    aggregate, byte, cleanup, error, and host workloads. Select one production path and delete the
    losing product-tier surface.
 2. Remove duplicated in-process witness and digest reconstruction while retaining artifact,
-   process, capability, path, and executable-memory validation.
+   process, capability, path, and executable-memory validation. The unconsumed always-built SSA
+   memory-obligation inventory and its immediate re-derivation check are removed.
 3. Implement the first semantic-program vertical described in [`source-model.md`](source-model.md),
    including direct compilation without text rendering and reparsing.
 4. Add dependency-aware incremental name, type, effect, ownership, and lowering queries after

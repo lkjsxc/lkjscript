@@ -3,7 +3,6 @@
 
 mod eval;
 mod identity;
-mod memory;
 mod model;
 mod numeric_contract;
 mod optimize;
@@ -21,7 +20,6 @@ pub use eval::{
 };
 pub use identity::{verified_program_identity, VerifiedProgramIdentity};
 pub use lkjscript_contracts::PreparedProgramIdentity;
-pub use memory::{derive_memory_inventory, verify_memory_inventory};
 pub use model::{
     runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
     runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
@@ -31,20 +29,17 @@ pub use model::{
     EnumVariantMetadata, FailureBehavior, FailureCleanupAction, FailureCleanupActions,
     FailureCleanupId, FailureCleanupInterner, FailureCleanupNode, FailureCleanupRoots, FrameLocal,
     FrameState, Function, FunctionBytecodeLink, FunctionId, GenericInstantiation, ImplId,
-    ImplMetadata, Instruction, InstructionKind, InstructionMetadata, IrError, LoanId,
-    MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity, MemoryLocality,
-    MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPlanId, MemoryPortability,
-    MemoryStorage, MemoryWitnessBinding, MemoryWitnessDescriptor, MemoryWitnessGroupDescriptor,
+    ImplMetadata, Instruction, InstructionKind, InstructionMetadata, IrError, LoanId, MemoryPlanId,
+    MemoryWitnessBinding, MemoryWitnessDescriptor, MemoryWitnessGroupDescriptor,
     MemoryWitnessGroupId, MemoryWitnessGroupMember, MemoryWitnessId, MemoryWitnessParameter,
     Origin, PlaceId, PlaceMetadata, ProductField, ProductId, ProductMetadata, Program,
-    RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp, Signature, SourceMetadata,
-    SsaMemoryInventory, SsaMemoryObligation, SsaType, StructuralDropGlueIdentity,
-    StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
-    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
-    StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
-    StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound, TraitId, TraitMetadata,
-    TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VariantFieldId,
-    VariantId,
+    RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp, Signature, SourceMetadata, SsaType,
+    StructuralDropGlueIdentity, StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata,
+    StructuralMemoryMetadata, StructuralRepresentationId, StructuralRepresentationMetadata,
+    StructuralStorage, StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode,
+    StructuralValueCategory, StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound,
+    TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
+    VariantFieldId, VariantId,
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,

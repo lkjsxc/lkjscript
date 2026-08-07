@@ -45,6 +45,11 @@ line-oriented text and package files
     -> default VM/native execution path
 ```
 
+The compiled program retains verified SSA, the verified HIR memory plan, validated bytecode, and
+bytecode links used by their direct consumers. It does not derive, independently compare, or store
+a separate SSA memory-obligation inventory; that former always-built representation had no VM,
+automatic, baseline, optimizing, bytecode, JIT, or native consumer.
+
 Trusted compiler entry points compile directly without selecting a compiler resource profile or
 charging source, HIR, or SSA shape to a budget ledger. The lexer-token, children-per-form,
 top-level-form, source nesting, 16 MiB per-file source, 256 MiB aggregate-source, and 65,536

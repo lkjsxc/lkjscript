@@ -40,6 +40,11 @@ and executable structural type/layout/representation/destination IDs use checked
 and synthetic origins are typed variants rather than reserved numeric values. Placement retains only two private seal-selection thresholds;
 when they are not met, the total generic placement route is selected. They do not reject a program.
 
+The compiler does not derive, re-verify, or retain a second SSA memory-obligation inventory after
+SSA verification. Executable owners consume the verified SSA places, borrow instructions, cleanup
+metadata, memory plan, and bytecode links directly; no ordinary VM or native path pays for a
+parallel diagnostic representation.
+
 The memory-plan producer indexes expression entries, destination children, source places, direct
 functions, declaration metadata, binding loads, and loan uses. Its implementation is organized by
 lifecycle and expression dispatch, expression walking and place registration, and record

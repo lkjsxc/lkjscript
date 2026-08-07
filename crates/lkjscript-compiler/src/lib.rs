@@ -21,7 +21,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use lkjscript_core::ValidatedChunk;
-use lkjscript_ir::{BytecodeLinkMetadata, SsaMemoryInventory, VerifiedProgram};
+use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
 
 pub use memory_plan::{
     HirMemoryPlan, MemoryDomain, MemoryValueCategory, MemoryValueFailureCleanup,
@@ -48,7 +48,6 @@ pub struct CompileMetrics {
     pub ssa_construction: Duration,
     pub ssa_verification: Duration,
     pub normalization: Duration,
-    pub memory_inventory: Duration,
     pub bytecode_lowering: Duration,
     pub bytecode_validation: Duration,
     pub preparation: Duration,
@@ -62,7 +61,6 @@ pub struct ExecutableProgram {
     bytecode: ValidatedChunk,
     ssa: VerifiedProgram,
     memory_plan: HirMemoryPlan,
-    memory_inventory: SsaMemoryInventory,
     bytecode_links: BytecodeLinkMetadata,
 }
 
@@ -85,10 +83,6 @@ impl ExecutableProgram {
 
     pub fn memory_plan(&self) -> &HirMemoryPlan {
         &self.memory_plan
-    }
-
-    pub fn memory_inventory(&self) -> &SsaMemoryInventory {
-        &self.memory_inventory
     }
 
     pub fn bytecode_links(&self) -> &BytecodeLinkMetadata {

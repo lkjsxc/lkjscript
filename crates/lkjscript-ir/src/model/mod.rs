@@ -24,11 +24,7 @@ pub use instruction_metadata::{
     FailureBehavior, FailureCleanupAction, FailureCleanupInterner, FailureCleanupNode,
     FailureCleanupRoots, FrameLocal, FrameState, InstructionMetadata,
 };
-pub use memory::{
-    DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,
-    MemoryIdentity, MemoryLocality, MemoryMode, MemoryMultiplicity, MemoryObligationSubject,
-    MemoryPortability, MemoryStorage, SsaMemoryInventory, SsaMemoryObligation,
-};
+pub use memory::{DropEventKind, DropGlueIdentity};
 pub use metadata::{
     EffectSet, EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, ProductField,
     ProductMetadata, SourceMetadata,
