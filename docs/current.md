@@ -62,7 +62,18 @@ source into more than 4,096 SSA blocks, publishes bytecode, and executes the res
 Generated SSA coverage verifies 44,000 owned resource
 parameters and places with 132,000 active-place, owner, and affine state cells per block, 264,000
 cells under the former aggregate retained-state accounting across a two-block propagation, one
-44,000-argument consuming call, and exact cleanup of every place. Compiler and SSA type validation
+44,000-argument consuming call, and exact cleanup of every place. Match usefulness and
+exhaustiveness no longer use computed specialization-work or witness-byte reservations. The
+checker interns patterns and deterministic matrix rows, memoizes default and constructor
+specializations, and evaluates continuations on fallibly grown explicit stacks. Canonical witnesses
+use a flat arena and a fallible iterative renderer, so compiler diagnostics remain complete rather
+than being rejected or truncated by a preallocation estimate. Generated coverage executes a
+32-product-deep exhaustive match through validated VM bytecode, diagnoses complete and malformed
+2,048-product-deep patterns on a 256 KiB native stack, and emits a complete 300-field missing-variant
+witness beyond the former 32,832-byte single-pattern reservation. The same broad fixture preserves
+useless-arm detection. Match lowering's placement-fact walk is iterative, while producer and
+verifier structural placement estimates use repeatable heap-backed stack segments for nested
+nominal types. Compiler and SSA type validation
 no longer use depth or work admission fuel. Their type shape, substitution, ownership, identity,
 formatting, clone, equality, hashing, and destruction paths use explicit worklists or repeatable
 heap-backed stack segments. Auto-trait solvers canonicalize type nodes, memoize obligations, and

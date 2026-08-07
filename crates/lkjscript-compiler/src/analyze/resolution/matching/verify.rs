@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::{charges, plan::flatten_plan, usefulness::Usefulness};
+use super::{plan::flatten_plan, usefulness::Usefulness};
 use crate::analyze::*;
 
 pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
@@ -25,12 +25,11 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
             &mut locals,
             &mut places,
         )?;
-        let patterns: Vec<_> = plan.arms.iter().map(|arm| arm.pattern.clone()).collect();
-        let charges = charges::plan(&patterns, plan.arms.len())?;
-        if plan.charges != charges {
-            return Err(Error::msg("match plan logical charges are stale"));
-        }
-        let mut matrix = Vec::with_capacity(plan.arms.len());
+        let mut matrix = Vec::new();
+        matrix
+            .try_reserve(plan.arms.len())
+            .map_err(|_| Error::host("match verifier usefulness matrix allocation failed"))?;
+        let mut usefulness = Usefulness::new(&program.enums, &program.products)?;
         for (arm_index, arm) in plan.arms.iter().enumerate() {
             let arm_id = u64::try_from(arm_index)
                 .map_err(|_| Error::msg("match arm identity exceeds u64"))?;
@@ -48,37 +47,39 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
                 &mut locals,
                 &mut places,
             )?;
-            let mut useful = Usefulness::new(
-                &program.enums,
-                &program.products,
-                charges.specialization_work,
-            );
-            if useful
+            if usefulness
                 .useful(
                     &matrix,
-                    std::slice::from_ref(&arm.pattern),
+                    &[&arm.pattern],
                     std::slice::from_ref(&plan.scrutinee.ty),
                 )?
                 .is_none()
             {
                 return Err(Error::msg("match plan contains a stale useless arm"));
             }
-            matrix.push(vec![arm.pattern.clone()]);
+            matrix.push(&arm.pattern);
         }
-        verify_exhaustive(program, plan, &matrix, charges.specialization_work)?;
-        let (tests, projections, bindings) = flatten_plan(&plan.arms);
+        verify_exhaustive(&mut usefulness, plan, &matrix)?;
+        let (tests, projections, bindings) = flatten_plan(&plan.arms)?;
         if plan.tests != tests || plan.projections != projections || plan.bindings != bindings {
             return Err(Error::msg(
                 "match plan tests, active projections, or bindings are stale",
             ));
         }
-        let mut edges = (1..plan.arms.len())
-            .map(|item| {
-                u64::try_from(item)
-                    .map(MatchEdgeTarget::Arm)
-                    .map_err(|_| Error::msg("match arm index exceeds u64"))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let edge_capacity = plan
+            .arms
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| Error::host("match verifier edge count overflow"))?;
+        let mut edges = Vec::new();
+        edges
+            .try_reserve(edge_capacity)
+            .map_err(|_| Error::host("match verifier edge allocation failed"))?;
+        for item in 1..plan.arms.len() {
+            edges.push(MatchEdgeTarget::Arm(
+                u64::try_from(item).map_err(|_| Error::msg("match arm index exceeds u64"))?,
+            ));
+        }
         edges.extend([MatchEdgeTarget::Default, MatchEdgeTarget::Unreachable]);
         if plan.edges != edges {
             return Err(Error::msg("match plan default/unreachable edges are stale"));
@@ -88,18 +89,17 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
 }
 
 fn verify_exhaustive(
-    program: &hir::Program,
+    usefulness: &mut Usefulness<'_>,
     plan: &MatchPlan,
-    matrix: &[Vec<MatchPattern>],
-    work: u64,
+    matrix: &[&MatchPattern],
 ) -> Result<()> {
-    let mut useful = Usefulness::new(&program.enums, &program.products, work);
-    if useful
+    let wildcard = MatchPattern::Wildcard {
+        ty: plan.scrutinee.ty.clone(),
+    };
+    if usefulness
         .useful(
             matrix,
-            &[MatchPattern::Wildcard {
-                ty: plan.scrutinee.ty.clone(),
-            }],
+            &[&wildcard],
             std::slice::from_ref(&plan.scrutinee.ty),
         )?
         .is_some()

@@ -14,65 +14,75 @@ pub(super) fn collect_placement_facts(program: &hir::Program) -> Result<Vec<Plac
         walk_placement(
             &function.body,
             MemoryFunctionId::new(index_u64(index)?),
-            None,
-            0,
             &mut output,
         )?;
     }
     walk_placement(
         &program.main.body,
         MemoryFunctionId::new(index_u64(program.functions.len())?),
-        None,
-        0,
         &mut output,
     )?;
     Ok(output)
 }
 
 fn walk_placement<'a>(
-    expression: &'a Expr,
+    root: &'a Expr,
     function: MemoryFunctionId,
-    parent: Option<MemoryExpressionId>,
-    child_index: u64,
     output: &mut Vec<PlacementFact<'a>>,
 ) -> Result<()> {
-    crate::stack::grow(|| walk_placement_inner(expression, function, parent, child_index, output))
-}
-
-fn walk_placement_inner<'a>(
-    expression: &'a Expr,
-    function: MemoryFunctionId,
-    parent: Option<MemoryExpressionId>,
-    child_index: u64,
-    output: &mut Vec<PlacementFact<'a>>,
-) -> Result<()> {
-    let id = MemoryExpressionId::new(index_u64(output.len())?);
-    output.push(PlacementFact {
-        id,
-        function,
-        expression,
-        parent,
-        child_index,
-    });
-    for (index, child) in placement_children(expression).into_iter().enumerate() {
-        walk_placement(child, function, Some(id), index_u64(index)?, output)?;
+    let mut work = Vec::new();
+    work.try_reserve(1)
+        .map_err(|_| Error::host("placement fact work stack allocation failed"))?;
+    work.push((root, None, 0_u64));
+    while let Some((expression, parent, child_index)) = work.pop() {
+        let id = MemoryExpressionId::new(index_u64(output.len())?);
+        output
+            .try_reserve(1)
+            .map_err(|_| Error::host("placement fact allocation failed"))?;
+        output.push(PlacementFact {
+            id,
+            function,
+            expression,
+            parent,
+            child_index,
+        });
+        let children = placement_children(expression)?;
+        work.try_reserve(children.len())
+            .map_err(|_| Error::host("placement fact work stack allocation failed"))?;
+        for (index, child) in children.into_iter().enumerate().rev() {
+            work.push((child, Some(id), index_u64(index)?));
+        }
     }
     Ok(())
 }
 
-fn placement_children(expression: &Expr) -> Vec<&Expr> {
+fn placement_children(expression: &Expr) -> Result<Vec<&Expr>> {
+    let mut children = Vec::new();
     match &expression.kind {
         ExprKind::Call { args, .. }
         | ExprKind::Operation { args, .. }
         | ExprKind::Do(args)
         | ExprKind::Loop { body: args, .. }
         | ExprKind::ProductValue { fields: args, .. }
-        | ExprKind::EnumValue { fields: args, .. } => args.iter().collect(),
+        | ExprKind::EnumValue { fields: args, .. } => {
+            children
+                .try_reserve(args.len())
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.extend(args);
+        }
         ExprKind::While {
             condition, body, ..
-        } => std::iter::once(condition.as_ref())
-            .chain(body.iter())
-            .collect(),
+        } => {
+            let count = body
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| Error::host("placement child count overflow"))?;
+            children
+                .try_reserve(count)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.push(condition);
+            children.extend(body);
+        }
         ExprKind::F64FromI64Exact(value)
         | ExprKind::F64FromI64Rounded(value)
         | ExprKind::I64FromF64Exact(value)
@@ -85,25 +95,54 @@ fn placement_children(expression: &Expr) -> Vec<&Expr> {
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. }
-        | ExprKind::EnumUnwrap { value, .. } => vec![value],
+        | ExprKind::EnumUnwrap { value, .. } => {
+            children
+                .try_reserve(1)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.push(value);
+        }
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            vec![condition, then_branch, else_branch]
+            children
+                .try_reserve(3)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.extend([
+                condition.as_ref(),
+                then_branch.as_ref(),
+                else_branch.as_ref(),
+            ]);
         }
-        ExprKind::Let { bindings, body } => bindings
-            .iter()
-            .map(|binding| &binding.value)
-            .chain(std::iter::once(body.as_ref()))
-            .collect(),
-        ExprKind::MutableLocal { initial, body, .. } => vec![initial, body],
+        ExprKind::Let { bindings, body } => {
+            let count = bindings
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| Error::host("placement child count overflow"))?;
+            children
+                .try_reserve(count)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.extend(bindings.iter().map(|binding| &binding.value));
+            children.push(body);
+        }
+        ExprKind::MutableLocal { initial, body, .. } => {
+            children
+                .try_reserve(2)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.extend([initial.as_ref(), body.as_ref()]);
+        }
         ExprKind::WithProductField {
             value, replacement, ..
-        } => vec![value, replacement],
-        _ => Vec::new(),
+        } => {
+            children
+                .try_reserve(2)
+                .map_err(|_| Error::host("placement child allocation failed"))?;
+            children.extend([value.as_ref(), replacement.as_ref()]);
+        }
+        _ => {}
     }
+    Ok(children)
 }
 
 pub(super) fn expression_binding(

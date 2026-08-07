@@ -2,6 +2,10 @@ use crate::analyze::*;
 
 impl Resolver<'_> {
     pub(super) fn match_condition(&self, pattern: &MatchPattern, value: Expr) -> Result<Expr> {
+        crate::stack::grow(|| self.match_condition_inner(pattern, value))
+    }
+
+    fn match_condition_inner(&self, pattern: &MatchPattern, value: Expr) -> Result<Expr> {
         match pattern {
             MatchPattern::Wildcard { .. } | MatchPattern::Binding { .. } => {
                 Ok(self.expression(Type::Bool, ExprKind::LitBool(true)))
@@ -71,6 +75,15 @@ impl Resolver<'_> {
     }
 
     pub(super) fn match_success(
+        &self,
+        pattern: &MatchPattern,
+        value: Expr,
+        body: Expr,
+    ) -> Result<Expr> {
+        crate::stack::grow(|| self.match_success_inner(pattern, value, body))
+    }
+
+    fn match_success_inner(
         &self,
         pattern: &MatchPattern,
         value: Expr,

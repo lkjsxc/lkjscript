@@ -1,116 +1,127 @@
 use crate::analyze::*;
 
+use super::usefulness::reserve;
+
 pub(super) fn flatten_plan(
     arms: &[PlannedMatchArm],
-) -> (
+) -> Result<(
     Vec<MatchTest>,
     Vec<MatchProjection>,
     Vec<MatchBindingAssignment>,
-) {
+)> {
+    enum Work<'a> {
+        Pattern(&'a MatchPattern, Option<VariantId>),
+        Field(&'a MatchFieldPattern, usize, Option<VariantId>),
+        PopPath,
+    }
+
     let mut tests = Vec::new();
     let mut projections = Vec::new();
     let mut bindings = Vec::new();
+    let mut path = Vec::new();
+    let mut work = Vec::new();
     for arm in arms {
-        flatten_pattern(
-            arm.id,
-            &arm.pattern,
-            &mut Vec::new(),
-            None,
-            &mut tests,
-            &mut projections,
-            &mut bindings,
-        );
+        reserve(&mut work, 1, "match plan flatten work stack")?;
+        work.push(Work::Pattern(&arm.pattern, None));
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Pattern(pattern, active) => {
+                    match pattern {
+                        MatchPattern::Wildcard { .. } => {}
+                        MatchPattern::Binding { local } => {
+                            reserve(&mut bindings, 1, "match binding plan")?;
+                            bindings.push(MatchBindingAssignment {
+                                arm: arm.id,
+                                path: clone_path(&path)?,
+                                local: local.clone(),
+                            });
+                        }
+                        MatchPattern::Bool(value) => {
+                            reserve(&mut tests, 1, "match test plan")?;
+                            tests.push(MatchTest {
+                                arm: arm.id,
+                                path: clone_path(&path)?,
+                                kind: MatchTestKind::Bool(*value),
+                            });
+                        }
+                        MatchPattern::I64(value) => {
+                            reserve(&mut tests, 1, "match test plan")?;
+                            tests.push(MatchTest {
+                                arm: arm.id,
+                                path: clone_path(&path)?,
+                                kind: MatchTestKind::I64(*value),
+                            });
+                        }
+                        MatchPattern::Variant {
+                            enum_id,
+                            variant,
+                            layout,
+                            fields,
+                            ..
+                        } => {
+                            reserve(&mut tests, 1, "match test plan")?;
+                            tests.push(MatchTest {
+                                arm: arm.id,
+                                path: clone_path(&path)?,
+                                kind: MatchTestKind::Variant {
+                                    enum_id: *enum_id,
+                                    variant: *variant,
+                                    layout: *layout,
+                                },
+                            });
+                            reserve(&mut work, fields.len(), "match plan flatten work stack")?;
+                            work.extend(
+                                fields.iter().enumerate().rev().map(|(index, field)| {
+                                    Work::Field(field, index, Some(*variant))
+                                }),
+                            );
+                        }
+                        MatchPattern::Product { fields, .. } => {
+                            reserve(&mut work, fields.len(), "match plan flatten work stack")?;
+                            work.extend(
+                                fields
+                                    .iter()
+                                    .enumerate()
+                                    .rev()
+                                    .map(|(index, field)| Work::Field(field, index, active)),
+                            );
+                        }
+                    }
+                }
+                Work::Field(field, index, active) => {
+                    let index = u64::try_from(index)
+                        .map_err(|_| Error::host("match pattern path index exceeds u64"))?;
+                    reserve(&mut path, 1, "match pattern path")?;
+                    path.push(index);
+                    if let Some(local) = &field.projection {
+                        reserve(&mut projections, 1, "match projection plan")?;
+                        projections.push(MatchProjection {
+                            arm: arm.id,
+                            path: clone_path(&path)?,
+                            local: local.clone(),
+                            active_variant: active,
+                        });
+                    }
+                    reserve(&mut work, 2, "match plan flatten work stack")?;
+                    work.push(Work::PopPath);
+                    work.push(Work::Pattern(&field.pattern, active));
+                }
+                Work::PopPath => {
+                    path.pop()
+                        .ok_or_else(|| Error::msg("match plan flatten path underflow"))?;
+                }
+            }
+        }
+        if !path.is_empty() {
+            return Err(Error::msg("match plan flatten left a stale field path"));
+        }
     }
-    (tests, projections, bindings)
+    Ok((tests, projections, bindings))
 }
 
-fn flatten_pattern(
-    arm: u64,
-    pattern: &MatchPattern,
-    path: &mut Vec<u64>,
-    active: Option<VariantId>,
-    tests: &mut Vec<MatchTest>,
-    projections: &mut Vec<MatchProjection>,
-    bindings: &mut Vec<MatchBindingAssignment>,
-) {
-    match pattern {
-        MatchPattern::Wildcard { .. } => {}
-        MatchPattern::Binding { local } => bindings.push(MatchBindingAssignment {
-            arm,
-            path: path.clone(),
-            local: local.clone(),
-        }),
-        MatchPattern::Bool(value) => tests.push(MatchTest {
-            arm,
-            path: path.clone(),
-            kind: MatchTestKind::Bool(*value),
-        }),
-        MatchPattern::I64(value) => tests.push(MatchTest {
-            arm,
-            path: path.clone(),
-            kind: MatchTestKind::I64(*value),
-        }),
-        MatchPattern::Variant {
-            enum_id,
-            variant,
-            layout,
-            fields,
-            ..
-        } => {
-            tests.push(MatchTest {
-                arm,
-                path: path.clone(),
-                kind: MatchTestKind::Variant {
-                    enum_id: *enum_id,
-                    variant: *variant,
-                    layout: *layout,
-                },
-            });
-            flatten_fields(
-                arm,
-                fields,
-                path,
-                Some(*variant),
-                tests,
-                projections,
-                bindings,
-            );
-        }
-        MatchPattern::Product { fields, .. } => {
-            flatten_fields(arm, fields, path, active, tests, projections, bindings)
-        }
-    }
-}
-
-fn flatten_fields(
-    arm: u64,
-    fields: &[MatchFieldPattern],
-    path: &mut Vec<u64>,
-    active: Option<VariantId>,
-    tests: &mut Vec<MatchTest>,
-    projections: &mut Vec<MatchProjection>,
-    bindings: &mut Vec<MatchBindingAssignment>,
-) {
-    for (index, field) in fields.iter().enumerate() {
-        let index = index as u64;
-        path.push(index);
-        if let Some(local) = &field.projection {
-            projections.push(MatchProjection {
-                arm,
-                path: path.clone(),
-                local: local.clone(),
-                active_variant: active,
-            });
-        }
-        flatten_pattern(
-            arm,
-            &field.pattern,
-            path,
-            active,
-            tests,
-            projections,
-            bindings,
-        );
-        path.pop();
-    }
+fn clone_path(path: &[u64]) -> Result<Vec<u64>> {
+    let mut output = Vec::new();
+    reserve(&mut output, path.len(), "match plan path copy")?;
+    output.extend_from_slice(path);
+    Ok(output)
 }

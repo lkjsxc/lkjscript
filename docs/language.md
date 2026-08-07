@@ -23,7 +23,10 @@ than structurally interchangeable.
 
 Integer arithmetic and conversions are checked where specified by their operations. Floating-point
 values retain IEEE-754 bit behavior tested by the differential suites. Equality is type-directed.
-Pattern matching is checked for type correctness and exhaustiveness.
+Pattern matching is checked for type correctness and exhaustiveness. Usefulness specialization
+work, pattern depth, and canonical witness bytes are not semantic limits; allocation or host-width
+failure is a host failure, while every completed nonexhaustive diagnostic carries its complete
+deterministically ordered witness.
 
 ## Effects, capabilities, and ownership
 

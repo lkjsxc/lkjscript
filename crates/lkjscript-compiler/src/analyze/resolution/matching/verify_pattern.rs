@@ -9,6 +9,17 @@ pub(super) fn pattern(
     locals: &mut BTreeSet<BindingId>,
     places: &mut BTreeSet<PlaceId>,
 ) -> Result<()> {
+    crate::stack::grow(|| pattern_inner(program, origin, pattern, expected, locals, places))
+}
+
+fn pattern_inner(
+    program: &hir::Program,
+    origin: SourceId,
+    pattern: &MatchPattern,
+    expected: &Type,
+    locals: &mut BTreeSet<BindingId>,
+    places: &mut BTreeSet<PlaceId>,
+) -> Result<()> {
     if &pattern.ty() != expected {
         return Err(Error::msg("match plan pattern type is stale"));
     }

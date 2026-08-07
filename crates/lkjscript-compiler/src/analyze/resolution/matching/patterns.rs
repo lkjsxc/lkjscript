@@ -6,6 +6,14 @@ impl Resolver<'_> {
         form: &AstExpr,
         expected: &Type,
     ) -> Result<MatchPattern> {
+        crate::stack::grow(|| self.parse_match_pattern_inner(form, expected))
+    }
+
+    fn parse_match_pattern_inner(
+        &mut self,
+        form: &AstExpr,
+        expected: &Type,
+    ) -> Result<MatchPattern> {
         let AstExpr::Call { name, args } = form else {
             return Err(self.error("match arm pattern must be one closed pattern marker"));
         };

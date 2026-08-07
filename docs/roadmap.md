@@ -55,8 +55,12 @@
    VM in automatic mode. Total memory witness/group/dependency and structural type/layout/
    representation table ceilings are removed; generated coverage verifies 32,769 HIR declarations
    with more than 65,536 SCC steps, 16,385 executable witness groups, and semantic descriptors past
-   the former declaration, type-node, edge, and 16 MiB byte boundaries. Per-call witness arity,
-   recursive-group ordinals, region products, structural destination/operation-reference counts,
+   the former declaration, type-node, edge, and 16 MiB byte boundaries. Match usefulness
+   specialization-work and witness-byte reservations are removed; deterministic memoized matrix
+   specialization and explicit continuation stacks now produce complete exhaustiveness witnesses
+   through 2,048 nested product patterns on a 256 KiB native stack, while a 300-field witness
+   crosses the former computed byte reservation. Per-call witness arity, recursive-group ordinals,
+   region products, structural destination/operation-reference counts,
    and related witness transport now use unrestricted vectors plus wide checked identities where
    identities cross a boundary. Remaining narrow representation work is concentrated in
    pre-existing semantic-DAG snapshot IDs, structural runtime slot/generation keys, scheduler IDs,

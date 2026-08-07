@@ -47,6 +47,14 @@ fn estimate_type(
     ty: &Type,
     active: &mut BTreeSet<String>,
 ) -> Result<(u64, u64)> {
+    crate::stack::grow(|| estimate_type_inner(index, ty, active))
+}
+
+fn estimate_type_inner(
+    index: &EstimateIndex<'_>,
+    ty: &Type,
+    active: &mut BTreeSet<String>,
+) -> Result<(u64, u64)> {
     match ty {
         Type::Unit | Type::Never => Ok((0, 0)),
         Type::Bool => Ok((0, 1)),

@@ -226,7 +226,12 @@ fn generated_deep_malformed_source(depth: usize, mismatched: bool) -> String {
     source
 }
 
-fn generated_nested_match_source(depth: usize, result: i64) -> Result<String, std::fmt::Error> {
+fn generated_nested_match_source(
+    depth: usize,
+    result: i64,
+    leaf_pattern: &str,
+    trailing_arms: &str,
+) -> Result<String, std::fmt::Error> {
     let mut source = String::new();
     for index in 0..depth {
         let field_type = if index + 1 == depth {
@@ -262,12 +267,76 @@ fn generated_nested_match_source(depth: usize, result: i64) -> Result<String, st
             index,
         )?;
     }
-    source.push_str("bool-pattern/\ntrue\n/bool-pattern\n");
+    source.push_str(leaf_pattern);
+    source.push('\n');
     for _ in 0..depth {
         source.push_str("/product-field-pattern\n/fields\n/product-pattern\n");
     }
     writeln!(source, "{result}")?;
-    source.push_str("/arm\narm/\nwildcard/\n/wildcard\n0\n/arm\n/arms\n/match\n/main\n");
+    source.push_str("/arm\n");
+    source.push_str(trailing_arms);
+    source.push_str("/arms\n/match\n/main\n");
+    Ok(source)
+}
+
+fn generated_broad_match_source(
+    fields: usize,
+    type_arguments: usize,
+    include_missing_arm: bool,
+    duplicate_covered_arm: bool,
+) -> Result<String, std::fmt::Error> {
+    let mut source = String::from("enum/\nname/\npayload\n/name\nforall/\n");
+    for index in 0..type_arguments {
+        writeln!(source, "t{index}")?;
+    }
+    source.push_str(concat!(
+        "/forall\nvariants/\nvariant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n",
+        "/variants\n/enum\nenum/\nname/\nbroad\n/name\nvariants/\n",
+        "variant/\nname/\ncovered\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nmissing\n/name\nfields/\n",
+    ));
+    for field in 0..fields {
+        write!(
+            source,
+            "variant-field/\nname/\nf{field}\n/name\ntype/\npayload/\n"
+        )?;
+        for _ in 0..type_arguments {
+            source.push_str("i64\n");
+        }
+        source.push_str("/payload\n/type\n/variant-field\n");
+    }
+    source.push_str(concat!(
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nbroad/\n/broad\n/type\nvariant/\ncovered\n/variant\n",
+        "fields/\n/fields\n/variant-value\narms/\n",
+        "arm/\nvariant-pattern/\ntype/\nbroad/\n/broad\n/type\nvariant/\ncovered\n/variant\n",
+        "fields/\n/fields\n/variant-pattern\n707\n/arm\n",
+    ));
+    if include_missing_arm {
+        source.push_str(concat!(
+            "arm/\nvariant-pattern/\ntype/\nbroad/\n/broad\n/type\nvariant/\nmissing\n/variant\n",
+            "fields/\n",
+        ));
+        for field in 0..fields {
+            write!(
+                source,
+                concat!(
+                    "variant-field-pattern/\nname/\nf{}\n/name\n",
+                    "wildcard/\n/wildcard\n/variant-field-pattern\n"
+                ),
+                field,
+            )?;
+        }
+        source.push_str("/fields\n/variant-pattern\n0\n/arm\n");
+    }
+    if duplicate_covered_arm {
+        source.push_str(concat!(
+            "arm/\nvariant-pattern/\ntype/\nbroad/\n/broad\n/type\nvariant/\ncovered\n/variant\n",
+            "fields/\n/fields\n/variant-pattern\n1\n/arm\n",
+        ));
+    }
+    source.push_str("/arms\n/match\n/main\n");
     Ok(source)
 }
 
@@ -456,12 +525,103 @@ fn malformed_deep_source_is_deterministic_and_drops_partial_trees_on_a_small_sta
 }
 
 #[test]
-fn nested_match_markers_beyond_the_former_physical_depth_execute(
-) -> Result<(), Box<dyn std::error::Error>> {
-    const DEPTH: usize = 16;
+fn deep_match_usefulness_diagnostics_and_lowering_are_stack_safe(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    const EXECUTION_DEPTH: usize = 32;
+    const DIAGNOSTIC_DEPTH: usize = 2_048;
     const RESULT: i64 = 4_040;
-    let source = generated_nested_match_source(DEPTH, RESULT)?;
-    let program = compile_source(&source, "nested-match-scale.lkjscript")?;
+    const TRUE_PATTERN: &str = "bool-pattern/\ntrue\n/bool-pattern";
+    const WILDCARD_ARM: &str = "arm/\nwildcard/\n/wildcard\n0\n/arm\n";
+    let exhaustive =
+        generated_nested_match_source(EXECUTION_DEPTH, RESULT, TRUE_PATTERN, WILDCARD_ARM)?;
+    let nonexhaustive = generated_nested_match_source(DIAGNOSTIC_DEPTH, RESULT, TRUE_PATTERN, "")?;
+    let malformed = generated_nested_match_source(
+        DIAGNOSTIC_DEPTH,
+        RESULT,
+        "i64-pattern/\n0\n/i64-pattern",
+        WILDCARD_ARM,
+    )?;
+    let worker = std::thread::Builder::new()
+        .name("deep-match-small-stack".into())
+        .stack_size(256 * 1024)
+        .spawn(
+            move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                let program = compile_source(&exhaustive, "deep-match-scale.lkjscript")?;
+                let outcome = run_chunk(
+                    program.bytecode(),
+                    &ExecutionInputs::default(),
+                    &ExecutionConfig::default(),
+                );
+                let value = match outcome {
+                    ExecutionOutcome::Returned(value) => value,
+                    other => {
+                        return Err(format!("deep match program did not return: {other:?}").into())
+                    }
+                };
+                if value.as_i64() != Some(RESULT) {
+                    return Err(format!("deep match returned {value:?}, expected {RESULT}").into());
+                }
+                drop(value);
+                drop(program);
+
+                let diagnose = |source: &str, name: &str| {
+                    compile_source(source, name).map_err(|error| error.to_string())
+                };
+                let first = diagnose(&nonexhaustive, "deep-match-nonexhaustive.lkjscript")
+                    .err()
+                    .ok_or_else(|| {
+                        std::io::Error::other("deep match without a fallback unexpectedly compiled")
+                    })?;
+                let second = diagnose(&nonexhaustive, "deep-match-nonexhaustive.lkjscript")
+                    .err()
+                    .ok_or_else(|| {
+                        std::io::Error::other("deep match unexpectedly compiled twice")
+                    })?;
+                if first != second
+                    || !first.contains("nonexhaustive match; canonical typed witness:")
+                    || !first.contains("bool::false")
+                    || first.matches("product::product#").count() != DIAGNOSTIC_DEPTH
+                {
+                    return Err(format!(
+                        "deep nonexhaustive diagnostic was incomplete or unstable: {first}"
+                    )
+                    .into());
+                }
+
+                let first = diagnose(&malformed, "deep-match-malformed.lkjscript")
+                    .err()
+                    .ok_or_else(|| {
+                        std::io::Error::other("deep malformed match unexpectedly compiled")
+                    })?;
+                let second = diagnose(&malformed, "deep-match-malformed.lkjscript")
+                    .err()
+                    .ok_or_else(|| {
+                        std::io::Error::other("deep malformed match unexpectedly compiled twice")
+                    })?;
+                if first != second || !first.contains("i64-pattern requires an I64 scrutinee") {
+                    return Err(format!(
+                        "deep malformed match diagnostic was incomplete or unstable: {first}"
+                    )
+                    .into());
+                }
+                Ok(())
+            },
+        )?;
+    worker
+        .join()
+        .map_err(|_| std::io::Error::other("deep match worker panicked"))??;
+    Ok(())
+}
+
+#[test]
+fn broad_match_crosses_the_former_witness_reservation_and_preserves_semantics(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const FIELDS: usize = 300;
+    const TYPE_ARGUMENTS: usize = 16;
+    const OLD_SINGLE_PATTERN_WITNESS_RESERVATION: usize = 32_768 + 64;
+
+    let exhaustive = generated_broad_match_source(FIELDS, TYPE_ARGUMENTS, true, false)?;
+    let program = compile_source(&exhaustive, "broad-match-exhaustive.lkjscript")?;
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
@@ -469,9 +629,37 @@ fn nested_match_markers_beyond_the_former_physical_depth_execute(
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
-        other => return Err(format!("nested match program did not return: {other:?}").into()),
+        other => return Err(format!("broad match program did not return: {other:?}").into()),
     };
-    assert_eq!(value.as_i64(), Some(RESULT));
+    assert_eq!(value.as_i64(), Some(707));
+
+    let nonexhaustive = generated_broad_match_source(FIELDS, TYPE_ARGUMENTS, false, false)?;
+    let diagnose = || {
+        compile_source(&nonexhaustive, "broad-match-nonexhaustive.lkjscript")
+            .err()
+            .map(|error| error.to_string())
+    };
+    let first = diagnose().ok_or("broad match unexpectedly compiled")?;
+    assert_eq!(Some(first.clone()), diagnose());
+    let marker = "nonexhaustive match; canonical typed witness: ";
+    let witness = first
+        .split_once(marker)
+        .map(|(_, witness)| witness)
+        .ok_or("broad match diagnostic omitted its canonical witness")?;
+    assert!(
+        witness.len() > OLD_SINGLE_PATTERN_WITNESS_RESERVATION,
+        "witness length {} did not cross former reservation",
+        witness.len()
+    );
+    assert_eq!(witness.matches("wildcard<Enum#").count(), FIELDS);
+    assert!(witness.ends_with(')'), "witness was truncated: {witness}");
+
+    let useless = generated_broad_match_source(FIELDS, TYPE_ARGUMENTS, true, true)?;
+    let error = compile_source(&useless, "broad-match-useless.lkjscript")
+        .err()
+        .map(|error| error.to_string())
+        .ok_or("duplicate covered variant arm unexpectedly compiled")?;
+    assert!(error.contains("useless or subsumed match arm 2"), "{error}");
     Ok(())
 }
 

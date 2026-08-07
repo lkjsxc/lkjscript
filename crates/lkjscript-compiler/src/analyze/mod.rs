@@ -9,10 +9,10 @@ use crate::hir::{
     EffectSet, EnumDefinition, EnumId, EnumLayoutFacts, EnumVariant, EnumVariantField, Expr,
     ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition,
     LoopId, Main, MatchBindingAssignment, MatchEdgeTarget, MatchFieldPattern, MatchLocal,
-    MatchPattern, MatchPlan, MatchPlanCharges, MatchPlanId, MatchProjection, MatchTest,
-    MatchTestKind, Operation, Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField,
-    RuntimeLayoutId, Source, SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness,
-    TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId,
+    MatchPattern, MatchPlan, MatchPlanId, MatchProjection, MatchTest, MatchTestKind, Operation,
+    Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField, RuntimeLayoutId, Source,
+    SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
+    TypeSubstitution, VariantFieldId, VariantId,
 };
 use crate::source::Expr as AstExpr;
 

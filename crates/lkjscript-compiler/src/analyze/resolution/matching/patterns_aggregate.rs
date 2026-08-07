@@ -53,7 +53,10 @@ impl Resolver<'_> {
             .cloned()
             .zip(arguments.iter().cloned())
             .collect();
-        let mut fields = Vec::with_capacity(forms.len());
+        let mut fields = Vec::new();
+        fields
+            .try_reserve(forms.len())
+            .map_err(|_| Error::host("variant match pattern field allocation failed"))?;
         for (index, (form, declared)) in forms.iter().zip(&variant.fields).enumerate() {
             let (name, nested) = named_pattern(form, "variant-field-pattern")
                 .map_err(|message| self.error(message))?;
@@ -119,7 +122,10 @@ impl Resolver<'_> {
                 forms.len(),
             )));
         }
-        let mut fields = Vec::with_capacity(forms.len());
+        let mut fields = Vec::new();
+        fields
+            .try_reserve(forms.len())
+            .map_err(|_| Error::host("product match pattern field allocation failed"))?;
         for (index, (form, declared)) in forms.iter().zip(&definition.fields).enumerate() {
             let (field_name, nested) = named_pattern(form, "product-field-pattern")
                 .map_err(|message| self.error(message))?;

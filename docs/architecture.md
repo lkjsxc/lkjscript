@@ -47,7 +47,14 @@ builds separate expression/child/use/load, call/place/scope, loan-entry, destina
 declaration, witness, and drop-path indexes and still reconstructs authority rather than trusting
 producer indexes. SSA lowering and bytecode installation use indexed witness, placement, owner,
 layout, and structural-destination routes. Deterministic vectors remain canonical; hash indexes are
-lookup accelerators only. Checked telemetry and allocation failure remain explicit.
+lookup accelerators only. Checked telemetry and allocation failure remain explicit. Match usefulness is a deterministic
+explicit-continuation state machine over interned pattern and matrix arenas. Default matrices,
+constructor specializations, and complete usefulness states are memoized through lookup-only hash
+indexes; constructor and witness order always comes from declaration and source vectors. Witnesses
+remain flat until a fallible iterative renderer produces the complete semantic diagnostic. Match
+patterns use stack-safe clone/destruction, recursive pattern parsing, lowering, and verification use
+the localized repeatable heap-stack boundary, and match-plan flattening plus HIR placement-fact
+collection use explicit stacks.
 
 SSA control-flow verification indexes sorted successor and
 predecessor adjacency once, uses iterative DFS/SCC worklists, computes immediate dominators in
