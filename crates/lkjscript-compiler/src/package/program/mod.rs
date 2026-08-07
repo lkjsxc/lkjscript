@@ -6,14 +6,8 @@ pub use model::PreparedProgram;
 use lkjscript_contracts::{
     PackageProvenanceKind, PreparedContractDigests, PreparedProgramDescriptor,
 };
-use lkjscript_core::{
-    bind_prepared_identity as bind_bytecode, validated_bytecode_identity, Error, Result,
-    ValidatedChunk,
-};
-use lkjscript_ir::{
-    bind_prepared_identity as bind_ssa, specialize_native_transport, verified_program_identity,
-    VerifiedProgram,
-};
+use lkjscript_core::{validated_bytecode_identity, Error, Result, ValidatedChunk};
+use lkjscript_ir::{specialize_native_transport, verified_program_identity, VerifiedProgram};
 
 use crate::HirMemoryPlan;
 
@@ -52,8 +46,10 @@ pub(crate) fn bind(
     let identity = descriptor
         .identity()
         .map_err(|error| Error::msg(error.to_string()))?;
-    let ssa = bind_ssa(ssa, identity).map_err(|error| Error::msg(error.to_string()))?;
-    let bytecode = bind_bytecode(bytecode, identity)?;
+    let ssa = ssa
+        .bind_prepared_identity(identity)
+        .map_err(|error| Error::msg(error.to_string()))?;
+    let bytecode = bytecode.bind_prepared_identity(identity)?;
     Ok((
         PreparedProgram {
             descriptor,

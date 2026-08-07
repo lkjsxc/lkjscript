@@ -20,6 +20,22 @@ impl ValidatedChunk {
         Ok(())
     }
 
+    pub fn bind_prepared_identity(
+        mut self,
+        identity: lkjscript_contracts::PreparedProgramIdentity,
+    ) -> Result<Self> {
+        if !identity.is_bound()
+            || (self.chunk.prepared_identity.is_bound()
+                && self.chunk.prepared_identity != identity)
+        {
+            return Err(Error::msg(
+                "bytecode prepared program identity is zero or stale",
+            ));
+        }
+        self.chunk.prepared_identity = identity;
+        Ok(self)
+    }
+
     pub fn constants(&self) -> &[Constant] {
         &self.chunk.constants
     }

@@ -13,7 +13,7 @@ mod substitution;
 mod traits;
 mod types;
 
-pub use api::{bind_prepared_identity, verify, VerifiedProgram};
+pub use api::{verify, VerifiedProgram};
 pub(crate) use calls::*;
 pub(crate) use cfg::*;
 pub(crate) use enums::*;

@@ -54,4 +54,4 @@ pub use specialize::{
     MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_DECLARATION,
     MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_PACKAGE,
 };
-pub use verify::{bind_prepared_identity, verify, VerifiedProgram};
+pub use verify::{verify, VerifiedProgram};

@@ -34,21 +34,25 @@ fn canonical_known_vector_and_repeat_stability() {
     );
 }
 #[test]
-fn prepared_binding_rejects_zero_and_stale_identity() {
+fn prepared_binding_preserves_validated_authority_and_rejects_zero_and_stale_identity() {
     let validated = unit();
-    assert!(crate::bind_prepared_identity(
-        validated.clone(),
-        lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
-    )
-    .is_err());
+    let bytecode_identity = identity(&validated);
+    assert!(validated
+        .clone()
+        .bind_prepared_identity(lkjscript_contracts::PreparedProgramIdentity::UNBOUND)
+        .is_err());
     let first = lkjscript_contracts::PreparedProgramIdentity::new([31; 32])
         .expect("first prepared identity");
     let second = lkjscript_contracts::PreparedProgramIdentity::new([32; 32])
         .expect("second prepared identity");
-    let bound = crate::bind_prepared_identity(validated, first).expect("bind prepared bytecode");
+    let bound = validated
+        .bind_prepared_identity(first)
+        .expect("bind prepared bytecode");
     assert!(bound.require_prepared_identity(first).is_ok());
     assert!(bound.require_prepared_identity(second).is_err());
-    assert!(crate::bind_prepared_identity(bound, second).is_err());
+    assert!(bytecode_identity == identity(&bound));
+    assert!(bound.clone().bind_prepared_identity(first).is_ok());
+    assert!(bound.bind_prepared_identity(second).is_err());
 }
 
 #[test]

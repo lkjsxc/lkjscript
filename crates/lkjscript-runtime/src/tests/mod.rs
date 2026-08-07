@@ -26,9 +26,7 @@ fn chunk(trap: bool) -> Result<Arc<lkjscript_core::ValidatedChunk>, Box<dyn Erro
     let validated = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let prepared =
         lkjscript_contracts::PreparedProgramIdentity::new([if trap { 2 } else { 1 }; 32])?;
-    Ok(Arc::new(lkjscript_core::bind_prepared_identity(
-        validated, prepared,
-    )?))
+    Ok(Arc::new(validated.bind_prepared_identity(prepared)?))
 }
 
 fn manifest(kind: ApplicationKind, concurrent: usize, total: u64) -> ApplicationManifest {

@@ -30,21 +30,25 @@ fn canonical_known_vector_and_repeat_stability() {
 }
 
 #[test]
-fn prepared_binding_rejects_zero_and_stale_identity() {
+fn prepared_binding_preserves_verified_authority_and_rejects_zero_and_stale_identity() {
     let verified = verify(base()).expect("verify unbound fixture");
-    assert!(bind_prepared_identity(
-        verified.clone(),
-        lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
-    )
-    .is_err());
+    let semantic_identity = verified_program_identity(&verified).expect("identity must compute");
+    assert!(verified
+        .clone()
+        .bind_prepared_identity(lkjscript_contracts::PreparedProgramIdentity::UNBOUND)
+        .is_err());
     let first = lkjscript_contracts::PreparedProgramIdentity::new([21; 32])
         .expect("first prepared identity");
     let second = lkjscript_contracts::PreparedProgramIdentity::new([22; 32])
         .expect("second prepared identity");
-    let bound = bind_prepared_identity(verified, first).expect("bind prepared identity");
+    let bound = verified
+        .bind_prepared_identity(first)
+        .expect("bind prepared identity");
     assert!(bound.require_prepared_identity(first).is_ok());
     assert!(bound.require_prepared_identity(second).is_err());
-    assert!(bind_prepared_identity(bound, second).is_err());
+    assert!(semantic_identity == verified_program_identity(&bound).expect("identity must compute"));
+    assert!(bound.clone().bind_prepared_identity(first).is_ok());
+    assert!(bound.bind_prepared_identity(second).is_err());
 }
 
 #[test]

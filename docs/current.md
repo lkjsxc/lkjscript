@@ -155,10 +155,12 @@ cycle detection and shared dependency reuse do not consume the native stack or r
 packages. Generated ordinary check-and-compile coverage uses a valid manifest and canonical lock
 larger than 17 MiB, a 512-package chain on a 256 KiB thread stack, and 512 direct dependencies;
 the deep fixture also reports a real terminal cycle identically on repeated builds. Package
-manifests and prepared-program identities likewise do not carry compiler-profile identity. Trusted compiler
-output and prepared-identity rebinding now validate bytecode with an explicit unrestricted mode:
-there is no finite default, total encoded-byte ceiling, physical-table count ceiling, metadata-byte
-ceiling, or per-constant data ceiling. The boundary-local `ValidationPolicy::Limited` variant checks
+manifests and prepared-program identities likewise do not carry compiler-profile identity. Trusted compiler output is initially validated with an explicit unrestricted mode. Prepared-identity
+binding then consumes the opaque validated-bytecode and verified-SSA wrappers, attaches only a
+nonzero identity, and preserves the existing decoded and verified authority without rerunning full
+validation or verification. Different-identity rebinding remains rejected, and canonical SSA and
+bytecode identities exclude the prepared identity. There is no finite default, total encoded-byte
+ceiling, physical-table count ceiling, metadata-byte ceiling, or per-constant data ceiling. The boundary-local `ValidationPolicy::Limited` variant checks
 only one checked total-byte observation and reports a distinct bytecode-policy failure; the same
 chunk remains valid under `Unrestricted`. Bytes-literal decoding checks exact lowercase hexadecimal
 syntax and reserves decoded storage fallibly without a constant-size admission rule. Generated
@@ -278,7 +280,8 @@ may build elsewhere, but no other host or native target is currently claimed as 
   Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
   constant-size, cleanup-node/range, witness, region-product, or structural-operation table
   admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
-  trusted compilation and prepared binding use unrestricted validation. Ordinary local
+  initial trusted compilation uses unrestricted validation and prepared binding preserves the
+  resulting opaque validation authority without a second validation pass. Ordinary local
   `lkjscript run` explicitly selects `ExecutionPolicy::Unrestricted`; the type has no `Default`.
   Isolated process manifests and workers require `ExecutionPolicy::Limited`, whose current
   conservative values preserve the prior process behavior. Fuel, VM values/frames, heap bytes,

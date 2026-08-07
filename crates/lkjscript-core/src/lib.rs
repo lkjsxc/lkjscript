@@ -81,7 +81,7 @@ pub use structural::{
     UniqueStoreStats, WeakSealedRef,
 };
 pub use validation::{
-    bind_prepared_identity, validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity,
-    ValidatedChunk, ValidationPolicy,
+    validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity, ValidatedChunk,
+    ValidationPolicy,
 };
 pub use value::{CapabilityKind, ResourceKind, Value};

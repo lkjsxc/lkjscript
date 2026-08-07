@@ -70,10 +70,13 @@ predecessor adjacency once, uses iterative DFS/SCC worklists, computes immediate
 reverse-postorder, and publishes dominator-tree intervals for constant-time dominance queries.
 Neither block count nor CFG work is a validity rule. Active-enum provenance consumes the same
 indexed graph and preindexed values through explicit visited worklists. Bytecode validation separates well-formedness from resource policy:
-trusted compiler output and prepared binding select `ValidationPolicy::Unrestricted`, while an
-explicit untrusted artifact boundary may select a limited policy over only the checked total-byte
-observation. There is no finite default or per-table, metadata, cleanup-action, or constant-data
-admission policy. Failure cleanup is a deterministic hash-consed arena in SSA and
+trusted compiler output selects `ValidationPolicy::Unrestricted`, while an explicit untrusted
+artifact boundary may select a limited policy over only the checked total-byte observation. Once
+SSA or bytecode has crossed its initial verifier or validator, its opaque consuming wrapper binds a
+nonzero prepared identity without repeating semantic verification, bytecode decoding, or control-flow
+validation. The binding mutation is private, rejects a different identity on rebinding, and cannot
+change canonical SSA or bytecode identity. There is no finite default or per-table, metadata,
+cleanup-action, or constant-data admission policy. Failure cleanup is a deterministic hash-consed arena in SSA and
 bytecode: each node stores one action and an optional backward-only link, while instruction and
 range metadata store optional loan, unplaced-owner, and place roots. The fixed segmentation
 preserves cleanup order without reconnecting an unchanged owner segment whenever another segment
@@ -230,7 +233,8 @@ limited and unrestricted modes. Semantic node, hole, transaction, HIR, SSA, byte
 metadata, and constant counts do not grant language validity.
 
 Within one synchronous typed compiler pipeline, ordinary Rust ownership and opaque verified
-wrappers should replace repeated governance identities as later slices reach them.
+wrappers replace repeated verification after prepared-identity binding; remaining repeated
+governance identities should be removed as later slices reach them.
 
 ## Unsafe code
 

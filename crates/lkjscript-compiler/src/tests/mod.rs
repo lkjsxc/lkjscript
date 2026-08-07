@@ -22,6 +22,18 @@ fn stdio_unit_main(body: &str) -> String {
     )
 }
 
+#[test]
+fn preparation_binds_the_same_identity_to_verified_ssa_and_validated_bytecode() {
+    let executable = compile_source(&unit_main(""), "prepared-identity.lkjscript")
+        .expect("unit source must compile");
+    let identity = executable.prepared_identity();
+    assert!(executable.ssa().require_prepared_identity(identity).is_ok());
+    assert!(executable
+        .bytecode()
+        .require_prepared_identity(identity)
+        .is_ok());
+}
+
 fn ownership_source(body: &str, result: &str) -> String {
     let result = match result.split_once(' ') {
         Some((constructor, inner)) => {

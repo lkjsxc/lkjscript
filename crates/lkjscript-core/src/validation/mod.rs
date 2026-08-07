@@ -25,7 +25,7 @@ use crate::{
 include!("model/validated_chunk.rs");
 include!("model/state.rs");
 
-pub use entry::{bind_prepared_identity, validate_chunk};
+pub use entry::validate_chunk;
 pub use identity::{validated_bytecode_identity, ValidatedBytecodeIdentity};
 pub use policy::ValidationPolicy;
 

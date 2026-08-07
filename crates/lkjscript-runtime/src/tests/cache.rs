@@ -157,7 +157,5 @@ fn capability_chunk(
     let prepared = lkjscript_contracts::PreparedProgramIdentity::new(
         [(capability as u8).saturating_add(1); 32],
     )?;
-    Ok(Arc::new(lkjscript_core::bind_prepared_identity(
-        validated, prepared,
-    )?))
+    Ok(Arc::new(validated.bind_prepared_identity(prepared)?))
 }
