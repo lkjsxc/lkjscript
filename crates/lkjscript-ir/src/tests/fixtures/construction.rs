@@ -47,25 +47,6 @@ pub(crate) fn constant(id: u64, value: i64) -> Instruction {
     }
 }
 
-pub(crate) fn runtime(
-    id: u64,
-    operation: RuntimeOp,
-    arguments: Vec<ValueId>,
-    effects: EffectSet,
-) -> Instruction {
-    let parameters = arguments.iter().map(|_| SsaType::I64).collect();
-    Instruction {
-        id: ValueId::new(id),
-        ty: SsaType::I64,
-        kind: InstructionKind::Runtime {
-            operation,
-            arguments,
-            signature: Signature::monomorphic(parameters, SsaType::I64),
-        },
-        metadata: metadata(effects),
-    }
-}
-
 pub(crate) fn one_block_program() -> Program {
     Program {
         prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,

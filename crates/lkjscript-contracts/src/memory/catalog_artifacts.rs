@@ -64,7 +64,7 @@ pub(super) const ARTIFACTS: &[MemoryObligation] = &[
         "typed SSA CFG and metadata",
         "VerifiedProgram owner",
         "SSA construction and independent verification",
-        "SSA verification, optimization and differential suites",
+        "SSA verification, normalization and differential suites",
     ),
     host_owned(
         "typed-hole-candidates",

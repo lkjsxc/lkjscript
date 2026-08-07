@@ -1,11 +1,5 @@
 use crate::*;
 
-#[derive(Debug)]
-pub struct JitExecution {
-    pub outcome: ExecutionOutcome,
-    pub stats: JitStats,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarInvocationOutcome {
     Returned(NativeValue),

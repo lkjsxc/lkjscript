@@ -2,7 +2,6 @@ use crate::*;
 
 impl NativeRun {
     pub(crate) fn stats(&self) -> JitStats {
-        let optimization_totals = self.optimization_totals();
         JitStats {
             code_objects: self
                 .object
@@ -18,11 +17,6 @@ impl NativeRun {
                     numeric_conversion_sites: object.numeric_conversion_sites,
                     diagnostic_machine_code: object.diagnostic_machine_code.clone(),
                     compile_stats: object.compile_stats.clone(),
-                    optimization_certificate: object.optimization_certificate.clone(),
-                    optimization_stats: object.optimization_stats,
-                    optimization_metadata_bytes_estimate: optimization_metadata_bytes_estimate(
-                        object.optimization_stats.as_ref(),
-                    ),
                     native_entry_count: object.native_entry_count,
                     wx_transition_verified: object.installed.wx_transition_verified(),
                 })
@@ -56,17 +50,6 @@ impl NativeRun {
             native_structural: self.native_structural,
             peak_native_frame_depth: self.peak_native_frame_depth,
             peak_native_stack_bytes: self.peak_native_stack_bytes,
-            optimizing_passes: optimization_totals.optimizing_passes,
-            optimization_discovery_passes: optimization_totals.discovery_passes,
-            optimization_checker_passes: optimization_totals.checker_passes,
-            optimization_reconstruction_passes: optimization_totals.reconstruction_passes,
-            optimization_cleanup_passes: optimization_totals.cleanup_passes,
-            optimization_validation_passes: optimization_totals.validation_passes,
-            optimization_certificate_records: optimization_totals.certificate_records,
-            optimization_certificate_bytes_estimate: optimization_totals.certificate_bytes_estimate,
-            algebraic_rewrites: optimization_totals.algebraic_rewrites,
-            gvn_rewrites: optimization_totals.gvn_rewrites,
-            checked_i64_rewrites: optimization_totals.checked_i64_rewrites,
         }
     }
 }

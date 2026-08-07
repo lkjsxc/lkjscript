@@ -37,7 +37,7 @@ fn borrowed_string_call_source() -> &'static str {
 }
 
 #[test]
-fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
+fn immutable_direct_call_has_no_prebackend_copy_and_evaluator_vm_agree() {
     let program = compile_source(
         borrowed_string_call_source(),
         "borrowed-string-call.lkjscript",
@@ -70,31 +70,10 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
         panic!("VM must borrow the string call argument")
     };
     assert_eq!(value.as_i64(), Some(3));
-    for execution in [
-        execute_forced(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("baseline executes the string call"),
-        execute_optimizing(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("proof executes the string call"),
-    ] {
-        assert!(matches!(
-            execution.outcome,
-            ExecutionOutcome::Returned(ref value) if value.as_i64() == Some(3)
-        ));
-        assert_eq!(execution.stats.native_structural.live_roots, 0);
-        assert_eq!(execution.stats.native_structural.release_backlog, 0);
-    }
 }
 
 #[test]
-fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
+fn thirty_two_thousand_node_value_builds_and_releases_on_evaluator_and_vm() {
     let program = compile_source(&structural_scale_source(), "structural-scale.lkjscript")
         .expect("compile structural scale source");
     assert_eq!(
@@ -109,29 +88,4 @@ fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
         panic!("VM must build and release the structural tree")
     };
     assert_eq!(value.as_i64(), Some(7));
-    for execution in [
-        execute_forced(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("baseline builds structural scale tree"),
-        execute_optimizing(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("proof builds structural scale tree"),
-    ] {
-        assert!(matches!(
-            execution.outcome,
-            ExecutionOutcome::Returned(ref value) if value.as_i64() == Some(7)
-        ));
-        assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.native_structural.live_roots, 0);
-        assert_eq!(execution.stats.native_structural.live_loans, 0);
-        assert_eq!(execution.stats.native_structural.live_destinations, 0);
-        assert_eq!(execution.stats.native_structural.release_backlog, 0);
-        assert_eq!(execution.stats.native_structural.teardown_failures, 0);
-    }
 }

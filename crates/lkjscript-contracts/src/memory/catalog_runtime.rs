@@ -4,7 +4,7 @@ use super::MemoryObligation;
 pub(super) const RUNTIME: &[MemoryObligation] = &[
     runtime_state(
         "evaluator-state",
-        "recursive EvalValue plus deterministic unique byte owners and loans",
+        "test-oracle value graph plus deterministic unique byte owners and loans",
         "validated unique owners and shared or exclusive byte loans",
         "one evaluation",
         "deterministic cumulative accounting",

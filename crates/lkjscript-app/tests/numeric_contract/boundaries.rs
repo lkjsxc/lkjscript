@@ -2,7 +2,7 @@ use super::support::{assert_allocation_free_scalar, assert_scalar, program, Expe
 use super::*;
 
 #[test]
-fn rounded_i64_boundaries_preserve_exact_f64_bits_on_four_engines() {
+fn rounded_i64_boundaries_preserve_exact_f64_bits_on_test_oracle_and_vm() {
     let cases = [
         (-9_007_199_254_740_993_i64, 0xc340_0000_0000_0000_u64),
         (-9_007_199_254_740_992, 0xc340_0000_0000_0000),
@@ -88,7 +88,7 @@ fn error_code(expression: &str) -> String {
 }
 
 #[test]
-fn numeric_error_cases_are_stable_nominal_values_on_four_engines() {
+fn numeric_error_cases_are_stable_nominal_values_on_test_oracle_and_vm() {
     let cases = [
         (
             "convert-i64-to-f64-exact/\n9007199254740993\n/convert-i64-to-f64-exact",

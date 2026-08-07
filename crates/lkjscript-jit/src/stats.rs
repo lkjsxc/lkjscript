@@ -44,17 +44,12 @@ impl NativeResourceStats {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompileStats {
-    pub(crate) optimization: Duration,
     pub(crate) lowering_and_encoding: Duration,
     pub(crate) installation: Duration,
     pub(crate) work_units: u64,
 }
 
 impl CompileStats {
-    pub const fn optimization(&self) -> Duration {
-        self.optimization
-    }
-
     pub const fn lowering_and_encoding(&self) -> Duration {
         self.lowering_and_encoding
     }
@@ -91,15 +86,4 @@ pub struct JitStats {
     pub structural_runtime_calls: u64,
     pub peak_native_frame_depth: usize,
     pub peak_native_stack_bytes: usize,
-    pub optimizing_passes: u64,
-    pub optimization_discovery_passes: u64,
-    pub optimization_checker_passes: u64,
-    pub optimization_reconstruction_passes: u64,
-    pub optimization_cleanup_passes: u64,
-    pub optimization_validation_passes: u64,
-    pub optimization_certificate_records: u64,
-    pub optimization_certificate_bytes_estimate: u64,
-    pub algebraic_rewrites: u64,
-    pub gvn_rewrites: u64,
-    pub checked_i64_rewrites: u64,
 }

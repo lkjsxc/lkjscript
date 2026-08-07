@@ -13,13 +13,11 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    and OS/ABI bounds. Keep only genuine external representation boundaries and a small explicit
    coarse policy for untrusted requests. Preserve typed exhaustion, cancellation safety, and atomic
    publication.
-2. **Delete the remaining proof optimizer and forced helpers.** The app now synchronously prepares
-   one eligible baseline-native reachable group before effects, runs it when preparation succeeds,
-   otherwise runs the VM, and never falls back after entry. The VM has no JIT dependency. Public
-   engine controls and all threshold, observation, retry, invalidation, transition, and runtime
-   session machinery are deleted. Remove the forced baseline/proof-optimizing helpers and optimizer
-   retained only by current tests, then rerun representative measurements with peak-memory,
-   generated-code, release-size, and target evidence.
+2. **Record the post-cutover runtime baseline.** The selected one-shot baseline-native attempt plus
+   VM fallback is the only product execution path, and the losing optimizer and forced helpers are
+   deleted. Rerun representative measurements with sample counts, tail latency, peak memory,
+   generated-code size, release binary size, and target evidence. Reverse only if equivalent
+   evidence shows the selected attempt costs more than it saves.
 3. **Address measured scale costs without restoring quotas.** Start with preparation, bytecode
    validation, and peak memory exposed by the retained 16,385-call/borrow-scope harness. Profile
    repeated scans, whole-program clones, duplicate identity/serialization work, and unconditional

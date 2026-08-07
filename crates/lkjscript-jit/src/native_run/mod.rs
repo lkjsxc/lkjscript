@@ -6,4 +6,3 @@ mod lifecycle;
 mod list_snapshot;
 mod runtime_values;
 mod state;
-mod stats_support;

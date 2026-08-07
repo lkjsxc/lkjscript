@@ -1,19 +1,22 @@
-//! Backend-independent typed SSA, verification, evaluation, and baseline passes.
+//! Backend-independent typed SSA, verification, and normalization.
 #![forbid(unsafe_code)]
 
+#[cfg(any(test, feature = "test-oracle"))]
 mod eval;
 mod identity;
 mod model;
+mod normalize;
 mod numeric_contract;
-mod optimize;
 pub mod prelude_contract;
 mod specialize;
+#[cfg(any(test, feature = "test-oracle"))]
 mod utf8_contract;
 mod verify;
 
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "test-oracle"))]
 pub use eval::{
     evaluate, evaluate_observed, EvalConfig, EvalOutcome, EvalResourcePolicy,
     EvalStructuralObservation, EvalValue,
@@ -41,13 +44,10 @@ pub use model::{
     TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
     VariantFieldId, VariantId,
 };
-pub use optimize::{
+pub use normalize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
-    effect_aware_dce, empty_block_forwarding, normalize_baseline, optimize, optimize_scheduled,
-    optimize_scheduled_with_binder, simplify_branches, unreachable_blocks, verify_optimization,
-    OptimizationCertificate, OptimizationCertificateRecord, OptimizationEditKind,
-    OptimizationError, OptimizationFailureCode, OptimizationLimits, OptimizationStats,
-    ScheduledOptimizationReport, VerifiedOptimizedProgram,
+    effect_aware_dce, empty_block_forwarding, normalize_baseline, simplify_branches,
+    unreachable_blocks,
 };
 pub use specialize::{
     specialize_native_transport, NativeSpecializationStats, MAX_NATIVE_TRANSPORT_SPECIALIZATIONS,

@@ -8,12 +8,7 @@ fn verified_ssa_trap_and_structured_outcome_reach_native_status() {
         },
         EffectSet::MAY_TRAP,
     );
-    let executed = execute_forced(
-        &trap,
-        &ExecutionPolicy::unrestricted(),
-        JitConfig::default(),
-    )
-    .expect("execute explicit native trap");
+    let executed = execute_preferred(&trap);
     assert!(matches!(
         executed.outcome,
         ExecutionOutcome::Trapped(trap) if trap.as_str() == "exact native trap"
@@ -26,11 +21,6 @@ fn verified_ssa_trap_and_structured_outcome_reach_native_status() {
         },
         EffectSet::PURE,
     );
-    let executed = execute_forced(
-        &deadline,
-        &ExecutionPolicy::unrestricted(),
-        JitConfig::default(),
-    )
-    .expect("execute native structured outcome");
+    let executed = execute_preferred(&deadline);
     assert_eq!(executed.outcome, ExecutionOutcome::DeadlineExceeded);
 }

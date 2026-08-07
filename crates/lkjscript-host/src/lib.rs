@@ -32,7 +32,7 @@ pub use providers::{
     HostEnvironment, StdioProvider,
 };
 pub use spec::{
-    Architecture, CallingConventionId, Endianness, ExecutablePolicy, ExecutionBackendId, HostSpec,
-    OperatingSystem, PointerWidth, TargetSpec,
+    Architecture, CallingConventionId, Endianness, ExecutablePolicy, OperatingSystem, PointerWidth,
+    TargetSpec,
 };
 pub use stdio::{BufferedStdio, PortableStdio};

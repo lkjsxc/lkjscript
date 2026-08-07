@@ -66,7 +66,9 @@ fn inventory_is_sorted_unique_and_contains_current_families() {
         ResourceKind::ALL.len(),
     );
     let bytes = records.iter().find(|record| record.identity == "bytes");
-    assert!(matches!(bytes, Some(record) if record.status.contains("current exact evaluator/VM")));
+    assert!(
+        matches!(bytes, Some(record) if record.status.contains("current exact test-oracle/VM"))
+    );
     let builtin = records.iter().find(|record| record.identity == "builtin");
     assert!(matches!(builtin, Some(record) if record.current_trace_fields == "none"));
     assert!(

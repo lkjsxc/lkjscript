@@ -3,7 +3,6 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
 fn enum_match_source() -> String {
@@ -32,7 +31,7 @@ fn single_evaluation_source() -> String {
     .into()
 }
 
-fn assert_all_engines(source: &str, expected: i64) {
+fn assert_evaluator_and_vm(source: &str, expected: i64) {
     let program = compile_source(source, "match-engine.lkjscript").expect("compile match source");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
@@ -46,34 +45,14 @@ fn assert_all_engines(source: &str, expected: i64) {
         panic!("VM must return")
     };
     assert_eq!(vm.as_i64(), Some(expected));
-    for execution in [
-        execute_forced(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("forced baseline match"),
-        execute_optimizing(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("forced proof match"),
-    ] {
-        let ExecutionOutcome::Returned(value) = execution.outcome else {
-            panic!("generated match must return")
-        };
-        assert_eq!(value.as_i64(), Some(expected));
-        assert!(execution.stats.native_entries > 0);
-    }
 }
 
 #[test]
-fn enum_match_is_differential_through_all_forced_engines() {
-    assert_all_engines(&enum_match_source(), 42);
+fn enum_match_is_differential_on_evaluator_and_vm() {
+    assert_evaluator_and_vm(&enum_match_source(), 42);
 }
 
 #[test]
-fn match_scrutinee_evaluates_exactly_once_through_all_engines() {
-    assert_all_engines(&single_evaluation_source(), 1);
+fn match_scrutinee_evaluates_exactly_once_on_evaluator_and_vm() {
+    assert_evaluator_and_vm(&single_evaluation_source(), 1);
 }

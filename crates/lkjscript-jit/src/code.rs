@@ -18,8 +18,6 @@ pub(crate) struct CodeObject {
     pub(crate) numeric_conversion_sites: NumericConversionSiteCounts,
     pub(crate) entry_stack_requirements: Vec<(FunctionId, usize)>,
     pub(crate) compile_stats: CompileStats,
-    pub(crate) optimization_certificate: Option<OptimizationCertificate>,
-    pub(crate) optimization_stats: Option<OptimizationStats>,
     pub(crate) explicit_traps: Vec<(u64, String)>,
     pub(crate) diagnostic_machine_code: Option<Vec<u8>>,
     pub(crate) native_entry_count: u64,
@@ -38,9 +36,6 @@ pub struct CodeObjectRecord {
     pub numeric_conversion_sites: NumericConversionSiteCounts,
     pub diagnostic_machine_code: Option<Vec<u8>>,
     pub compile_stats: CompileStats,
-    pub optimization_certificate: Option<OptimizationCertificate>,
-    pub optimization_stats: Option<OptimizationStats>,
-    pub optimization_metadata_bytes_estimate: u64,
     pub native_entry_count: u64,
     pub wx_transition_verified: bool,
 }

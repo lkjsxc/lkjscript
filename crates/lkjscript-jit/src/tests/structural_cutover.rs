@@ -1,27 +1,20 @@
 use super::*;
 
 #[test]
-fn forced_source_string_entry_fails_closed_in_both_tiers_until_producer_exists() {
+fn source_string_entry_declines_before_native_entry_until_producer_exists() {
     let program = source_string_entry_program();
-    let baseline = execute_forced(
+    let BaselineAttempt::Declined(decline) = attempt_baseline(
         &program,
         &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
-    )
-    .expect_err("baseline source string entry must fail before native entry");
-    assert_eq!(baseline.code(), FailureCode::UnsupportedType);
-    assert!(baseline
-        .to_string()
-        .contains("no compiler-produced native structural owner"));
-
-    let optimizing = crate::execute_optimizing(
-        &program,
-        &ExecutionPolicy::unrestricted(),
-        JitConfig::default(),
-    )
-    .expect_err("optimizing source string entry must fail before native entry");
-    assert_eq!(optimizing.code(), FailureCode::UnsupportedType);
-    assert!(optimizing
+    ) else {
+        panic!("source string entry must decline before native entry")
+    };
+    let BaselineDeclineReason::Lowering(error) = decline.reason else {
+        panic!("source string entry must be a lowering decline")
+    };
+    assert_eq!(error.code(), FailureCode::UnsupportedType);
+    assert!(error
         .to_string()
         .contains("no compiler-produced native structural owner"));
 }

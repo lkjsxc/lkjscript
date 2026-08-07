@@ -36,14 +36,6 @@ impl TargetSpec {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExecutionBackendId {
-    Evaluator,
-    BytecodeVm,
-    BaselineJit,
-    OptimizingJit,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CallingConventionId {
     SystemV64,
 }
@@ -52,12 +44,4 @@ pub enum CallingConventionId {
 pub enum ExecutablePolicy {
     Forbidden,
     WritableThenExecutable,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HostSpec {
-    pub target: TargetSpec,
-    pub backend: ExecutionBackendId,
-    pub calling_convention: CallingConventionId,
-    pub executable_policy: ExecutablePolicy,
 }

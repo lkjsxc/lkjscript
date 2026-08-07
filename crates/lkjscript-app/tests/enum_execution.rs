@@ -3,7 +3,6 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, OwnedValue};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
 #[path = "enum_execution/adversarial.rs"]
@@ -12,10 +11,6 @@ mod adversarial;
 mod authenticated_option_result;
 #[path = "enum_execution/authenticated_rehydration.rs"]
 mod authenticated_rehydration;
-#[path = "enum_execution/enum_source_variants.rs"]
-mod enum_source_variants;
-#[path = "enum_execution/native_ssa.rs"]
-mod native_ssa;
 #[path = "enum_execution/recursive.rs"]
 mod recursive;
 #[path = "enum_execution/scale.rs"]
@@ -100,38 +95,4 @@ fn fields_evaluate_once_in_declaration_order() {
     };
     assert_eq!(value.enum_field_i64(0), Some(1));
     assert_eq!(value.enum_field_i64(1), Some(2));
-}
-
-#[test]
-fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
-    let program =
-        compile_source(&source(), "enum-jit.lkjscript").expect("compile enum construction");
-    let physical_tag = evaluator_owned(&program)
-        .enum_physical_tag()
-        .expect("evaluator returns structural enum tag");
-    for execution in [
-        execute_forced(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("baseline executes enum"),
-        execute_optimizing(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("proof tier executes enum"),
-    ] {
-        let ExecutionOutcome::Returned(value) = execution.outcome else {
-            panic!("native helper must return enum")
-        };
-        assert_eq!(value.enum_physical_tag(), Some(physical_tag));
-        assert_eq!(value.enum_field_i64(0), Some(42));
-        assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert!(execution.stats.structural_runtime_calls > 0);
-        assert_eq!(execution.stats.native_structural.live_roots, 0);
-        assert_eq!(execution.stats.native_structural.live_destinations, 0);
-    }
 }

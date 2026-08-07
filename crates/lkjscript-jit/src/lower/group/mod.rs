@@ -11,14 +11,6 @@ pub(crate) fn lower_baseline_group(
     lower_group(verified.program(), root, limits)
 }
 
-pub(crate) fn lower_optimizing_group(
-    verified: &VerifiedOptimizedProgram,
-    root: FunctionId,
-    limits: BackendLimits,
-) -> Result<LoweredGroup, LoweringError> {
-    lower_group(verified.program(), root, limits)
-}
-
 pub(super) fn lower_group(
     program: &lkjscript_ir::Program,
     root: FunctionId,

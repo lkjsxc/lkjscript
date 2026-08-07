@@ -2,17 +2,6 @@ use crate::attempt::BaselineRegionAttempt;
 use crate::*;
 
 impl NativeRun {
-    pub(super) fn invoke_invocation_region(
-        &mut self,
-        function: FunctionId,
-        native: lkjscript_native::FunctionId,
-        arguments: &[NativeValue],
-        config: &NativeInvocationConfig,
-        execution: &ExecutionPolicy,
-    ) -> Result<InvocationReport, EngineError> {
-        self.invoke_value_services(function, native, arguments, config, execution)
-    }
-
     pub(crate) fn invoke_baseline_region_attempt(
         &mut self,
         function: FunctionId,
@@ -82,51 +71,6 @@ impl NativeRun {
             preparation,
             native_execution,
         }
-    }
-
-    fn invoke_value_services(
-        &mut self,
-        function: FunctionId,
-        native: lkjscript_native::FunctionId,
-        arguments: &[NativeValue],
-        config: &NativeInvocationConfig,
-        execution: &ExecutionPolicy,
-    ) -> Result<InvocationReport, EngineError> {
-        self.initialize_region_arenas(function, execution.max_allocations())?;
-        let lists = self
-            .lists
-            .as_mut()
-            .ok_or_else(|| missing_arena(function, "list"))?;
-        let products = self
-            .region_products
-            .as_mut()
-            .ok_or_else(|| missing_arena(function, "region-product"))?;
-        let mut services = JitValueServices::new(
-            lists,
-            products,
-            JitValueLimits {
-                allocations: execution.max_allocations(),
-                runtime_bytes: execution
-                    .max_heap_bytes()
-                    .and_then(|bytes| u64::try_from(bytes).ok()),
-            },
-        );
-        let installed = &self
-            .object
-            .as_ref()
-            .ok_or_else(|| missing_object(function))?
-            .installed;
-        let report = installed
-            .prepare_region_invocation(native, arguments, config, &mut services)
-            .map_err(|error| pre_entry_error(function, error))
-            .and_then(|prepared| {
-                prepared
-                    .enter()
-                    .map_err(|error| entered_invocation_error(function, error))
-            });
-        self.last_runtime_trap = services.last_trap.take();
-        self.last_runtime_resource = services.last_resource;
-        report
     }
 
     pub(crate) fn initialize_region_arenas(

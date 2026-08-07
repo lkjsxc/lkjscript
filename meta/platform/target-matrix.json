@@ -8,7 +8,7 @@
       "operating_system_abi": "linux-gnu",
       "status": "accepted",
       "vm": "executed",
-      "native_backend": "owned-baseline-and-proof-executed",
+      "native_backend": "preferred-baseline-attempt-executed",
       "node": "experimental-in-process-slice",
       "evidence": [
         "baseline gates passed at 3971756d29e01fa8f8ea4abd95a2e311df152099"

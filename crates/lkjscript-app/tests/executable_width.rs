@@ -3,7 +3,9 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, Op, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{attempt_baseline, execute_forced, BaselineAttempt, FailureCode, JitConfig};
+use lkjscript_jit::{
+    attempt_baseline, BaselineAttempt, BaselineDeclineReason, FailureCode, JitConfig,
+};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 const WIDE_COUNT: usize = 300;
@@ -782,11 +784,15 @@ fn preferred_execution_falls_back_for_an_unsupported_high_signature() {
         i64::try_from(WIDE_COUNT - 1).expect("test width fits i64")
     );
 
-    let error = execute_forced(
+    let BaselineAttempt::Declined(decline) = attempt_baseline(
         program.ssa(),
         &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
-    )
-    .expect_err("forced native mode reports the unsupported high signature");
+    ) else {
+        panic!("preferred baseline attempt must decline the unsupported high signature")
+    };
+    let BaselineDeclineReason::Lowering(error) = decline.reason else {
+        panic!("unsupported high signature must be a lowering decline")
+    };
     assert_eq!(error.code(), FailureCode::UnsupportedSignature);
 }

@@ -3,7 +3,7 @@ use std::fmt;
 
 use lkjscript_ir::{
     Block, CallTarget, Constant, Function, FunctionId, Instruction, InstructionKind, RuntimeOp,
-    SsaType, StructuredOutcome, Terminator, ValueId, VerifiedOptimizedProgram, VerifiedProgram,
+    SsaType, StructuredOutcome, Terminator, ValueId, VerifiedProgram,
 };
 use lkjscript_native::{
     AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
@@ -20,9 +20,9 @@ mod instructions;
 mod layout;
 mod numeric;
 mod preflight;
-mod proof;
 mod reachability;
 mod runtime_calls;
+mod scalar_helpers;
 mod terminators;
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -33,14 +33,14 @@ mod values;
 use enum_types::*;
 use enums::*;
 use functions::*;
-pub(crate) use group::{lower_baseline_group, lower_optimizing_group};
+pub(crate) use group::lower_baseline_group;
 use instructions::*;
 use layout::*;
 use numeric::*;
 use preflight::*;
-use proof::*;
 pub(crate) use reachability::reachable_group;
 use runtime_calls::*;
+use scalar_helpers::*;
 use terminators::*;
 use types::*;
 use values::*;

@@ -173,7 +173,7 @@ pub(super) fn lower_type(
             format!(
                 concat!(
                     "source structural type {:?} has no compiler-produced native structural ",
-                    "owner; forced native fails closed",
+                    "owner; preferred baseline attempt declines",
                 ),
                 ty,
             ),

@@ -1,13 +1,11 @@
 use super::*;
 use lkjscript_ir::{evaluate as evaluate_ssa, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 
 pub(super) fn program(return_type: &str, expression: &str) -> String {
     format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n")
 }
 
 pub(super) fn assert_scalar(source: &str, expected: Expected) {
-    let rounded_i64 = source.contains("convert-i64-to-f64-rounded/");
     let program = compile_source(source, "conversion.lkjscript").expect("compile conversion");
     assert_eval(
         evaluate_ssa(program.ssa(), &EvalConfig::default()),
@@ -21,42 +19,6 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
         ),
         expected,
     );
-    for execution in [
-        execute_forced(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("forced baseline conversion"),
-        execute_optimizing(
-            program.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("forced proof conversion"),
-    ] {
-        assert_owned(execution.outcome, expected);
-        assert!(execution.stats.native_entries > 0);
-        if rounded_i64 {
-            assert_eq!(execution.stats.runtime_heap_attempts, 0);
-            assert!(execution.stats.code_objects.iter().any(|object| {
-                object.numeric_conversion_sites == Default::default()
-                    && !object
-                        .runtime_calls
-                        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
-            }));
-        } else {
-            assert_eq!(execution.stats.runtime_heap_attempts, 0);
-            assert!(execution.stats.structural_runtime_calls > 0);
-            assert!(execution.stats.code_objects.iter().all(|object| {
-                let sites = object.numeric_conversion_sites;
-                sites.f64_from_i64_exact + sites.i64_from_f64_exact + sites.i64_from_f64_trunc == 1
-                    && !object
-                        .runtime_calls
-                        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
-            }));
-        }
-    }
 }
 
 pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
@@ -78,17 +40,6 @@ pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
         ),
         expected,
     );
-    for result in [
-        execute_forced(program.ssa(), &execution, JitConfig::default())
-            .expect("forced baseline inline scalar"),
-        execute_optimizing(program.ssa(), &execution, JitConfig::default())
-            .expect("forced proof inline scalar"),
-    ] {
-        assert_owned(result.outcome, expected);
-        assert!(result.stats.native_entries > 0);
-        assert_eq!(result.stats.runtime_heap_attempts, 0);
-        assert_eq!(result.stats.runtime_heap_successes, 0);
-    }
 }
 
 #[derive(Clone, Copy)]

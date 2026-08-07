@@ -1,51 +1,14 @@
 use crate::*;
 
 impl NativeRun {
-    pub(crate) fn new_baseline(program: &VerifiedProgram, config: JitConfig) -> Self {
-        Self::new(
-            ProgramAuthority::Baseline(program.clone()),
-            config,
-            Duration::ZERO,
-            false,
-        )
-    }
-
     pub(crate) fn new_baseline_attempt(program: &VerifiedProgram, config: JitConfig) -> Self {
-        Self::new(
-            ProgramAuthority::Baseline(program.clone()),
-            config,
-            Duration::ZERO,
-            true,
-        )
-    }
-
-    pub(crate) fn new_optimizing(
-        program: VerifiedOptimizedProgram,
-        config: JitConfig,
-        optimization_time: Duration,
-    ) -> Self {
-        Self::new(
-            ProgramAuthority::Optimizing(program),
-            config,
-            optimization_time,
-            false,
-        )
-    }
-
-    fn new(
-        program: ProgramAuthority,
-        config: JitConfig,
-        optimization_time: Duration,
-        require_pre_entry_stack_check: bool,
-    ) -> Self {
         Self {
-            program,
+            program: program.clone(),
             installer: ExecutableInstaller::new(config.executable_limits),
             config,
             object: None,
-            require_pre_entry_stack_check,
-            total_compile_time: optimization_time,
-            optimization_time,
+            require_pre_entry_stack_check: true,
+            total_compile_time: Duration::ZERO,
             native_entries: 0,
             direct_native_calls: 0,
             poll_calls: 0,

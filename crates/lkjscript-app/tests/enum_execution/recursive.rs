@@ -45,7 +45,7 @@ fn match_source() -> &'static str {
 }
 
 #[test]
-fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers() {
+fn finite_generic_recursive_tree_is_structural_on_evaluator_and_vm() {
     let compiled = compile_source(tree_source(), "recursive-tree.lkjscript")
         .expect("compile finite recursive tree");
     let evaluated = evaluator_owned(&compiled);
@@ -58,29 +58,6 @@ fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers(
         panic!("VM returns recursive tree")
     };
     assert_eq!(vm.snapshot_object_count(), 5);
-    for execution in [
-        execute_forced(
-            compiled.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("baseline returns recursive tree"),
-        execute_optimizing(
-            compiled.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("proof returns recursive tree"),
-    ] {
-        let ExecutionOutcome::Returned(value) = execution.outcome else {
-            panic!("native helper returns recursive tree")
-        };
-        assert_eq!(value.snapshot_object_count(), 5);
-        assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert_eq!(execution.stats.native_structural.live_roots, 0);
-        assert_eq!(execution.stats.native_structural.live_destinations, 0);
-    }
 }
 
 #[test]

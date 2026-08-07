@@ -111,7 +111,6 @@ version = "0.0.0"
 dependencies = [
  "lkjscript-contracts",
  "lkjscript-core",
- "lkjscript-resource",
 ]
 
 [[package]]
@@ -122,7 +121,6 @@ dependencies = [
  "lkjscript-executable",
  "lkjscript-ir",
  "lkjscript-native",
- "lkjscript-resource",
 ]
 
 [[package]]

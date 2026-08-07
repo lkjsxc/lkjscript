@@ -9,9 +9,6 @@ pub struct JitConfig {
     pub retain_machine_code_diagnostics: bool,
     pub collect_metrics: bool,
     pub max_diagnostic_bytes: u64,
-    pub optimization_limits: OptimizationLimits,
-    /// Force bounded scheduled proof discovery; zero or one remains sequential.
-    pub proof_discovery_workers: u16,
 }
 
 impl Default for JitConfig {
@@ -24,8 +21,6 @@ impl Default for JitConfig {
             retain_machine_code_diagnostics: false,
             collect_metrics: false,
             max_diagnostic_bytes: 16 * 1024 * 1024,
-            optimization_limits: OptimizationLimits::default(),
-            proof_discovery_workers: 0,
         }
     }
 }

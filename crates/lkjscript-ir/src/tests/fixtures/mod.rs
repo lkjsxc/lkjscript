@@ -1,6 +1,5 @@
 mod calls;
 mod construction;
-mod optimization;
 mod ownership;
 mod ownership_calls;
 mod ownership_loan_ids;
@@ -8,7 +7,6 @@ mod ownership_provenance;
 mod passes;
 pub(crate) use calls::*;
 pub(crate) use construction::*;
-pub(crate) use optimization::*;
 pub(crate) use ownership::*;
 pub(crate) use ownership_calls::*;
 pub(crate) use ownership_loan_ids::*;

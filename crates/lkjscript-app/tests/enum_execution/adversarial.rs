@@ -1,5 +1,4 @@
 use super::*;
-use lkjscript_core::ResourceLimitKind;
 use lkjscript_ir::InstructionKind;
 
 fn two_payload_variants() -> String {
@@ -19,48 +18,6 @@ fn two_payload_variants() -> String {
         "/fields\n/variant-value\n/main\n",
     )
     .into()
-}
-
-#[test]
-fn structural_enum_uses_coarse_allocation_policy_in_native_tiers() {
-    let float_source = source().replace("i64", "f64").replace("42", "1.5");
-    let compiled =
-        compile_source(&float_source, "enum-float-limit.lkjscript").expect("compile F64 enum");
-    let execution = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
-        max_allocations: 0,
-        ..lkjscript_core::LimitedExecutionPolicy::conservative()
-    });
-    for result in [
-        execute_forced(compiled.ssa(), &execution, JitConfig::default())
-            .expect("baseline returns enum allocation resource outcome"),
-        execute_optimizing(compiled.ssa(), &execution, JitConfig::default())
-            .expect("proof returns enum allocation resource outcome"),
-    ] {
-        assert_eq!(
-            result.outcome,
-            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
-        );
-        assert_eq!(result.stats.runtime_heap_successes, 0);
-        assert!(result.stats.structural_runtime_calls > 0);
-        assert!(result.stats.native_entries > 0);
-        assert_eq!(result.stats.native_structural.teardown_failures, 0);
-    }
-    for result in [
-        execute_forced(
-            compiled.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("baseline returns enum without a structural count ceiling"),
-        execute_optimizing(
-            compiled.ssa(),
-            &ExecutionPolicy::unrestricted(),
-            JitConfig::default(),
-        )
-        .expect("optimizing returns enum without a structural count ceiling"),
-    ] {
-        assert!(matches!(result.outcome, ExecutionOutcome::Returned(_)));
-    }
 }
 
 #[test]

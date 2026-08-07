@@ -47,7 +47,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     assert!(!description.contains("\"engines\":"));
 
     let fixture =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/optimizing-loop.lkjscript");
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scalar-loop.lkjscript");
     let metrics = std::env::temp_dir().join(format!(
         "lkjscript-product-metrics-{}-{}.json",
         std::process::id(),
@@ -189,5 +189,5 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(explain.stderr.is_empty());
     let text = String::from_utf8(explain.stdout).expect("explanation is UTF-8");
     assert!(text.contains("memory-identity=byte-vector"));
-    assert!(text.contains("current exact evaluator/VM/forced-native byte-vector subset"));
+    assert!(text.contains("current exact test-oracle/VM/preferred-baseline byte-vector subset"));
 }

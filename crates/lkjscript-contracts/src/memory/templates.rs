@@ -75,7 +75,7 @@ pub const fn borrowed(
         reclamation_plan: "owner destruction after final loan",
         producers,
         tests,
-        status: "current exact evaluator/VM/forced-native byte-vector subset",
+        status: "current exact test-oracle/VM/preferred-baseline byte-vector subset",
     }
 }
 

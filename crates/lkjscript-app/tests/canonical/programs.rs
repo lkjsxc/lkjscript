@@ -1,6 +1,4 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::ExecutionPolicy;
-use lkjscript_jit::{execute_forced, JitConfig};
 
 pub fn compile(source: &str, name: &str) -> lkjscript_compiler::ExecutableProgram {
     let marked;
@@ -11,16 +9,6 @@ pub fn compile(source: &str, name: &str) -> lkjscript_compiler::ExecutableProgra
         &marked
     };
     compile_source(source, name).expect("compile JIT source fixture")
-}
-
-pub fn forced(source: &str, name: &str) -> lkjscript_jit::JitExecution {
-    let program = compile(source, name);
-    execute_forced(
-        program.ssa(),
-        &ExecutionPolicy::unrestricted(),
-        JitConfig::default(),
-    )
-    .expect("forced native execution")
 }
 
 pub fn f64_loop() -> String {

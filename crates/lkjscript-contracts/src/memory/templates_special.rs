@@ -44,14 +44,15 @@ pub const fn affine_byte_vector(
 ) -> MemoryObligation {
     MemoryObligation {
         identity,
-        authority: "source, HIR, SSA, evaluator, validated bytecode, VM",
+        authority: "source, HIR, SSA, opt-in test oracle, validated bytecode, VM",
         semantic_type: "exact affine byte-vector",
         runtime_layout: "execution-owned UniqueStore ByteVectorKey",
         value_semantics: "unique owned value",
         mutability: "exclusive borrow only",
         possible_aliases: "verified temporary loans",
         copyability: "affine",
-        current_ownership: "whole-place unique owner through evaluator, VM, and forced native",
+        current_ownership:
+            "whole-place unique owner through test oracle, VM, and preferred baseline attempt",
         escape_behavior: "explicit move or return",
         lifetime: "owner and inferred same-block loans",
         strong_cycles: "impossible",
@@ -65,19 +66,20 @@ pub const fn affine_byte_vector(
         current_trace_fields: "none",
         current_exact_roots: "none in evaluator/VM/native unique island",
         object_identity: "runtime-local generation-bearing owner key",
-        current_placement: "execution-owned unique store in evaluator, VM, and forced native",
+        current_placement:
+            "execution-owned unique store in test oracle, VM, and preferred baseline attempt",
         candidate_placements: "stack header plus unique allocation or owned region",
         reclamation_plan: "exact owner drop after final loan",
         producers,
         tests,
-        status: "current exact evaluator/VM/forced-native byte-vector subset",
+        status: "current exact test-oracle/VM/preferred-baseline byte-vector subset",
     }
 }
 
 pub const fn immutable_bytes() -> MemoryObligation {
     MemoryObligation {
         identity: "bytes",
-        authority: "source, HIR, SSA, evaluator, validated bytecode, VM, and forced native helpers",
+        authority: "source, HIR, SSA, opt-in test oracle, validated bytecode, VM, and preferred baseline attempt",
         semantic_type: "exact immutable bytes",
         runtime_layout: "static constant or execution-owned UniqueStore BytesKey",
         value_semantics: "copyable static value or affine dynamic value",
@@ -91,7 +93,7 @@ pub const fn immutable_bytes() -> MemoryObligation {
         weak_links: "none",
         destructor: "dynamic exact Bytes drop glue",
         external_resources: "prohibited",
-        portability: "evaluator/VM portable; native Current on Linux x86-64",
+        portability: "test oracle and VM portable; preferred native attempt Current on Linux x86-64",
         contention: "single dynamic owner",
         allocation_frequency: "clone, slice copy, or static thaw",
         size_class: "bounded constant or retained unique bytes",
@@ -102,8 +104,8 @@ pub const fn immutable_bytes() -> MemoryObligation {
         candidate_placements: "owned region for broader island composition",
         reclamation_plan: "exact owner drop after final loan",
         producers: "bytes-literal, clone, slice copy, freeze",
-        tests: "literal, ownership, four-engine differential, allocation and identity suites",
-        status: "current exact evaluator/VM/forced-native immutable-bytes subset",
+        tests: "literal, ownership, test-oracle/VM differential, allocation and identity suites",
+        status: "current exact test-oracle/VM/preferred-baseline immutable-bytes subset",
     }
 }
 

@@ -22,10 +22,7 @@ use lkjscript_executable::{
     InvocationReport, NativeInvocationConfig, NativeResourceLimitKind, NativeRuntimeServices,
     NativeServiceError,
 };
-use lkjscript_ir::{
-    optimize, optimize_scheduled, OptimizationCertificate, OptimizationFailureCode,
-    OptimizationLimits, OptimizationStats, SsaType, VerifiedOptimizedProgram, VerifiedProgram,
-};
+use lkjscript_ir::{SsaType, VerifiedProgram};
 use lkjscript_native::{
     BackendLimits, CodeAccounting, EntryMetadata, HeapOperation, HeapRuntimeSite, ImageContracts,
     LoanType, NativeLoan, NativeUnique, ReferenceType, Relocation, RuntimeCallSlot,
@@ -38,66 +35,43 @@ pub use lower::{LoweringError, LoweringFailureCode};
 mod code;
 mod config;
 mod error;
-mod execute;
 mod island;
 mod native_run;
-mod resource_plan;
 mod runtime_values;
 mod scalar;
 mod stats;
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::panic)]
 mod tests;
 
 use code::CodeObject;
-use execute::{capability_arguments, optimization_metadata_bytes_estimate};
 use island::*;
 use runtime_values::*;
 use scalar::scalar_to_execution;
 
 pub use attempt::{
-    attempt_baseline, attempt_baseline_with_capabilities,
-    attempt_baseline_with_capabilities_from_start, BaselineAttempt, BaselineAttemptTimings,
-    BaselineDecline, BaselineDeclineReason, BaselineEnteredError, BaselineEnteredFailure,
-    BaselineExecution,
+    attempt_baseline, attempt_baseline_with_capabilities_from_start, BaselineAttempt,
+    BaselineAttemptTimings, BaselineDecline, BaselineDeclineReason, BaselineEnteredError,
+    BaselineEnteredFailure, BaselineExecution,
 };
 pub use code::{CodeObjectRecord, NumericConversionSiteCounts};
 pub use config::JitConfig;
 pub use error::{EngineError, FailureCode};
-pub use execute::{
-    execute_forced, execute_forced_with_capabilities, execute_optimizing,
-    execute_optimizing_with_capabilities,
-};
 pub use lkjscript_executable::{EnteredInvocationError, PreEntryError};
-pub use scalar::{native_type, JitExecution, ScalarInvocation, ScalarInvocationOutcome};
+pub use scalar::{native_type, ScalarInvocation, ScalarInvocationOutcome};
 pub use stats::{
     CompileStats, JitStats, NativeResourceStats, NativeStructuralStats, NativeUniqueStats,
 };
 
 struct ReturnedStructuralValue(SemanticValue);
 
-enum ProgramAuthority {
-    Baseline(VerifiedProgram),
-    Optimizing(VerifiedOptimizedProgram),
-}
-
-impl ProgramAuthority {
-    fn program(&self) -> &lkjscript_ir::Program {
-        match self {
-            Self::Baseline(program) => program.program(),
-            Self::Optimizing(program) => program.program(),
-        }
-    }
-}
-
 struct NativeRun {
-    program: ProgramAuthority,
+    program: VerifiedProgram,
     installer: ExecutableInstaller,
     config: JitConfig,
     object: Option<CodeObject>,
     require_pre_entry_stack_check: bool,
     total_compile_time: Duration,
-    optimization_time: Duration,
     native_entries: u64,
     direct_native_calls: u64,
     poll_calls: u64,

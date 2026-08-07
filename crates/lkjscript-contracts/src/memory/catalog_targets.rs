@@ -4,7 +4,7 @@ use super::MemoryObligation;
 pub(super) const TARGETS: &[MemoryObligation] = &[
     target(
         "compiler-phase",
-        "parse, HIR, SSA or optimization phase owner",
+        "parse, HIR, SSA or normalization phase owner",
         "owned phase graph",
         "phase-private mutable then immutable",
         "internal cycles allowed",

@@ -32,9 +32,6 @@ pub fn print_jit_diagnostics(
     );
     for object in &stats.code_objects {
         eprintln!("jit.code_object={object:?}");
-        if let Some(certificate) = &object.optimization_certificate {
-            eprintln!("jit.optimization_certificate={certificate:?}");
-        }
         if let Some(bytes) = &object.diagnostic_machine_code {
             let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
             eprintln!("jit.machine_code={hex}");

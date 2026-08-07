@@ -11,7 +11,26 @@ use lkjscript_ir::{
     Terminator, TraitId, TraitMetadata, TraitRole, ValueId,
 };
 
-use super::{execute_forced, JitConfig};
+use super::JitConfig;
+
+fn execute_preferred(program: &lkjscript_ir::VerifiedProgram) -> BaselineExecution {
+    match attempt_baseline(
+        program,
+        &ExecutionPolicy::unrestricted(),
+        JitConfig::default(),
+    ) {
+        BaselineAttempt::Executed(execution) => execution,
+        BaselineAttempt::Declined(decline) => {
+            panic!(
+                "preferred baseline unexpectedly declined: {}",
+                decline.reason
+            )
+        }
+        BaselineAttempt::EnteredFailure(failure) => {
+            panic!("preferred baseline entered failure: {}", failure.error)
+        }
+    }
+}
 
 fn core_traits() -> Vec<TraitMetadata> {
     [

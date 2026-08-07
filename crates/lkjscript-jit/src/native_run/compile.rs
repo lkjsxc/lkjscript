@@ -10,19 +10,11 @@ impl NativeRun {
             ));
         }
         let started = Instant::now();
-        let lowered = match &self.program {
-            ProgramAuthority::Baseline(program) => {
-                lower::lower_baseline_group(program, root, self.config.backend_limits)?
-            }
-            ProgramAuthority::Optimizing(program) => {
-                lower::lower_optimizing_group(program, root, self.config.backend_limits)?
-            }
-        };
+        let lowered = lower::lower_baseline_group(&self.program, root, self.config.backend_limits)?;
         let lowering_and_encoding = started.elapsed();
         self.last_lowering_and_encoding = lowering_and_encoding;
         self.last_installation = Duration::ZERO;
-        if self.optimization_time.saturating_add(lowering_and_encoding)
-            > self.config.max_object_compile_time
+        if lowering_and_encoding > self.config.max_object_compile_time
             || self
                 .total_compile_time
                 .saturating_add(lowering_and_encoding)
@@ -87,7 +79,7 @@ impl NativeRun {
         self.last_installation = installation;
         let accounted_allocation_bytes = installed.accounted_allocation_bytes();
         let total = lowering_and_encoding.saturating_add(installation);
-        if self.optimization_time.saturating_add(total) > self.config.max_object_compile_time
+        if total > self.config.max_object_compile_time
             || self.total_compile_time.saturating_add(total) > self.config.max_total_compile_time
         {
             return Err(EngineError::new(
@@ -97,12 +89,6 @@ impl NativeRun {
             ));
         }
         self.total_compile_time = self.total_compile_time.saturating_add(total);
-        let (optimization_certificate, optimization_stats) = match &self.program {
-            ProgramAuthority::Baseline(_) => (None, None),
-            ProgramAuthority::Optimizing(program) => {
-                (Some(program.certificate().clone()), Some(*program.stats()))
-            }
-        };
         let object = CodeObject {
             functions: lowered.functions.clone(),
             contracts,
@@ -114,15 +100,10 @@ impl NativeRun {
             numeric_conversion_sites,
             entry_stack_requirements,
             compile_stats: CompileStats {
-                optimization: self.optimization_time,
                 lowering_and_encoding,
                 installation,
-                work_units: accounting
-                    .work_units()
-                    .saturating_add(optimization_stats.map_or(0, |stats| stats.work_units)),
+                work_units: accounting.work_units(),
             },
-            optimization_certificate,
-            optimization_stats,
             explicit_traps: lowered.explicit_traps,
             diagnostic_machine_code,
             native_entry_count: 0,

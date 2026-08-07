@@ -5,7 +5,7 @@
   "source_root": ".",
   "modules": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
-    "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/scalar-loop.lkjscript",
     "src/examples/bench/leibniz-loop.lkjscript", "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/io.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/bulk-bytes/roundtrip.lkjscript", "src/examples/bulk-bytes/support.lkjscript",
@@ -13,10 +13,8 @@
     "src/examples/hello/base.lkjscript",
     "src/examples/hello/dec.lkjscript", "src/examples/hello/fact.lkjscript", "src/examples/hello/main.lkjscript",
     "src/examples/http/crlf.lkjscript", "src/examples/http/hello.lkjscript", "src/examples/http/resp.lkjscript",
-    "src/examples/jit-optimizing/kernel.lkjscript",
-    "src/examples/jit-optimizing/kernel/redundant-divisions.lkjscript",
-    "src/examples/jit-optimizing/main.lkjscript", "src/examples/jit-scalar/kernel.lkjscript",
-    "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
+    "src/examples/jit-scalar/kernel.lkjscript", "src/examples/jit-scalar/main.lkjscript",
+    "src/examples/lkjedit/buffer-demo.lkjscript",
     "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
     "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/core/escape.lkjscript",
     "src/examples/mandel/core/iter.lkjscript", "src/examples/mandel/core/mandel.lkjscript",
@@ -32,6 +30,9 @@
     "src/examples/polymorphic-transport/history-workload.lkjscript",
     "src/examples/polymorphic-transport/history/history.lkjscript",
     "src/examples/polymorphic-transport/main.lkjscript",
+    "src/examples/scalar-redundancy/kernel.lkjscript",
+    "src/examples/scalar-redundancy/kernel/redundant-divisions.lkjscript",
+    "src/examples/scalar-redundancy/main.lkjscript",
     "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript",
     "src/examples/sqlite/read-number.lkjscript", "src/lib/lkjedit/input.lkjscript",
     "src/lib/lkjedit/launch.lkjscript", "src/lib/lkjedit/session/command.lkjscript",
@@ -52,17 +53,18 @@
   ],
   "public": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
-    "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/scalar-loop.lkjscript",
     "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/durable-files/main.lkjscript", "src/examples/hello/main.lkjscript",
-    "src/examples/http/hello.lkjscript", "src/examples/jit-optimizing/main.lkjscript",
-    "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
+    "src/examples/http/hello.lkjscript", "src/examples/jit-scalar/main.lkjscript",
+    "src/examples/lkjedit/buffer-demo.lkjscript",
     "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
     "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/main.lkjscript",
     "src/examples/polymorphic-transport/history-snapshot.lkjscript",
     "src/examples/polymorphic-transport/history-workload.lkjscript",
     "src/examples/polymorphic-transport/main.lkjscript",
+    "src/examples/scalar-redundancy/main.lkjscript",
     "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript"
   ],
   "dependencies": [],
@@ -103,10 +105,6 @@
       "module": "src/examples/http/hello.lkjscript"
     },
 {
-      "name": "jit-optimizing-main",
-      "module": "src/examples/jit-optimizing/main.lkjscript"
-    },
-{
       "name": "jit-scalar-main",
       "module": "src/examples/jit-scalar/main.lkjscript"
     },
@@ -123,10 +121,6 @@
       "module": "src/examples/mandel/main.lkjscript"
     },
 {
-      "name": "optimizing-loop",
-      "module": "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript"
-    },
-{
       "name": "polymorphic-history-snapshot",
       "module": "src/examples/polymorphic-transport/history-snapshot.lkjscript"
     },
@@ -137,6 +131,14 @@
 {
       "name": "polymorphic-transport-main",
       "module": "src/examples/polymorphic-transport/main.lkjscript"
+    },
+{
+      "name": "scalar-loop",
+      "module": "crates/lkjscript-app/tests/fixtures/scalar-loop.lkjscript"
+    },
+{
+      "name": "scalar-redundancy-main",
+      "module": "src/examples/scalar-redundancy/main.lkjscript"
     },
 {
       "name": "sha256-main",

@@ -14,5 +14,8 @@ serde_json.workspace = true
 serde_stacker.workspace = true
 stacker.workspace = true
 
+[dev-dependencies]
+lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }
+
 [lints]
 workspace = true

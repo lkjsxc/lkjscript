@@ -12,7 +12,6 @@ pub(crate) enum FactSchema {
     SsaValuesBlocks,
     FrameStatesCleanupHomes,
     Layout,
-    Proof,
     Bytecode,
     NativeLocation,
 }
@@ -41,7 +40,6 @@ pub(crate) enum ProducerStage {
     Ownership,
     Ssa,
     Runtime,
-    ProofChecker,
     Bytecode,
     Native,
 }
@@ -89,7 +87,6 @@ pub(crate) enum FactReference {
     SsaBlock { function: String, block: u64 },
     FrameState { function: String, state: u64 },
     Layout { identity: String },
-    Proof { identity: String },
     Bytecode { function: String, instruction: u64 },
     NativeCode { artifact: String, offset: u64 },
 }
@@ -144,7 +141,6 @@ pub(crate) struct NodeFacts {
     pub ssa_values_blocks: FactRecord,
     pub frame_states_cleanup_homes: FactRecord,
     pub layout: FactRecord,
-    pub proof: FactRecord,
     pub bytecode: FactRecord,
     pub native_location: FactRecord,
 }

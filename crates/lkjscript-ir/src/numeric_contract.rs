@@ -1,4 +1,4 @@
-//! Independent host-free oracle for canonical numeric conversions.
+//! Numeric error contract plus opt-in host-free conversion oracle.
 
 #[derive(Clone, Copy)]
 pub(super) enum NumericError {
@@ -32,6 +32,7 @@ impl NumericError {
     }
 }
 
+#[cfg(any(test, feature = "test-oracle"))]
 pub(super) fn f64_from_i64_rounded(value: i64) -> f64 {
     let sign = if value < 0 { 1_u64 << 63 } else { 0 };
     let magnitude = value.unsigned_abs();
@@ -59,6 +60,7 @@ pub(super) fn f64_from_i64_rounded(value: i64) -> f64 {
     f64::from_bits(sign | (u64::from(exponent + 1023) << 52) | significand)
 }
 
+#[cfg(any(test, feature = "test-oracle"))]
 pub(super) fn f64_from_i64_exact(value: i64) -> Result<f64, NumericError> {
     let magnitude = value.unsigned_abs();
     if magnitude != 0 {
@@ -70,14 +72,17 @@ pub(super) fn f64_from_i64_exact(value: i64) -> Result<f64, NumericError> {
     Ok(f64_from_i64_rounded(value))
 }
 
+#[cfg(any(test, feature = "test-oracle"))]
 pub(super) fn i64_from_f64_exact(value: f64) -> Result<i64, NumericError> {
     decode_f64(value, true)
 }
 
+#[cfg(any(test, feature = "test-oracle"))]
 pub(super) fn i64_from_f64_trunc(value: f64) -> Result<i64, NumericError> {
     decode_f64(value, false)
 }
 
+#[cfg(any(test, feature = "test-oracle"))]
 fn decode_f64(value: f64, exact: bool) -> Result<i64, NumericError> {
     let bits = value.to_bits();
     let negative = bits >> 63 != 0;

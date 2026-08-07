@@ -106,7 +106,6 @@ pub(crate) fn query(
                 UnavailableReason::NotProduced,
             ),
             layout: unavailable_fact(FactSchema::Layout, ProducerStage::Runtime, &revision),
-            proof: unavailable_fact(FactSchema::Proof, ProducerStage::ProofChecker, &revision),
             bytecode: unavailable_fact(FactSchema::Bytecode, ProducerStage::Bytecode, &revision),
             native_location: unavailable_fact(
                 FactSchema::NativeLocation,

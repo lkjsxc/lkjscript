@@ -100,15 +100,13 @@ memory pressure.
 
 ## Accepted runtime selection
 
-**Accepted architecture; automatic-transition deletion implemented, optimizer deletion pending.**
-The product synchronously prepares one eligible baseline-native reachable group before effects. It
-enters that group when preparation succeeds and otherwise executes the unchanged program in the VM.
-Native entry is a commit point: there is no VM retry afterward. Baseline native is a specialization
-inside one product path, not a public engine contract. The VM has no JIT dependency or native
-transition branches. The CLI and implementation no longer expose automatic thresholds, call
-observation, retries, invalidation, or runtime sessions. Forced baseline/proof-optimizing helpers and
-optimizing machinery remain temporarily only for existing differential tests and the next deletion
-commit.
+**Accepted architecture; losing-path deletion implemented.** The product synchronously prepares
+one eligible baseline-native reachable group before effects. It enters that group when preparation
+succeeds and otherwise executes the unchanged program in the VM. Native entry is a commit point:
+there is no VM retry afterward. Baseline native is a specialization inside one product path, not a
+public engine contract. The VM has no JIT dependency or native transition branches. Automatic
+thresholds, call observation, retries, invalidation, runtime sessions, forced helpers, optimizing
+native lowering, proof metadata, and the optimizer implementation are deleted.
 
 The selection hypothesis was that baseline native materially helps closed scalar groups, while the
 VM remains the complete generic route and repeated automatic transitions cost more than they save.
@@ -121,15 +119,18 @@ running equivalent semantics.
 |---|---:|---:|---:|---:|
 | hello | 235 | 236 | unsupported | unsupported |
 | scalar | 474 | 1,700 | 245 | 244 |
-| optimizing | 379 | 395 | 244 | 251 |
+| scalar redundancy (historical `optimizing`) | 379 | 395 | 244 | 251 |
 | bench | 1,005 | 3,493 | unsupported | unsupported |
 | mandel | 302 | 331 | unsupported | unsupported |
 
 The same records show current `auto` performing 99,936 native invocations for `scalar`, 199,937 for
 `bench`, and 600,129 VM fallbacks for `bench`, while each supported forced baseline run enters one
-native invocation. Optimizing-JIT provides no representative advantage over baseline in the two
-supported cells and shares the same unsupported cells. This supports one synchronous baseline-group
-attempt rather than per-entry automatic transitions or optimizer retention.
+native invocation. The measured optimizing tier provides no representative advantage over baseline
+in the two supported cells and shares the same unsupported cells. This supports one synchronous
+baseline-group attempt and complete deletion of the losing tier. The comparable source workload was
+renamed to `src/examples/scalar-redundancy`; its operation mix is
+retained rather than presented as an engine-specific example. The CLI scalar fixture is likewise
+`scalar-loop.lkjscript`.
 
 The artifact does not record machine/compiler metadata, peak memory, generated-code size, release
 binary size, or target coverage, so it is selection evidence rather than the final post-cutover
@@ -138,7 +139,9 @@ fallback reason, whether native entry began, and preflight/lower/install/prepare
 durations. Threshold, automatic-transition, public engine, and tier fields are absent. Retain the
 harness, record the missing dimensions with environment metadata after internal losing-path deletion, and reverse the
 choice if equivalent representative measurements show the group preflight cost or baseline
-maintenance cost outweighs its scalar benefit.
+maintenance cost outweighs its scalar benefit. This deletion commit does not claim a new timing
+measurement; the recorded matrix is the selection evidence and a post-deletion multi-sample
+baseline remains pending.
 
 ### Cutover path smoke evidence
 

@@ -22,8 +22,10 @@ package manifest, lock, and line-oriented .lkjscript files
 Text and package files are the current authority. The compiler does not accept a
 syntax-independent semantic snapshot. The compiled program retains typed HIR memory authority,
 verified SSA, validated bytecode, and bytecode links used only while constructing the validated
-fallback artifact. Native execution consumes verified SSA directly. It no longer constructs the
-former unconsumed parallel SSA memory-obligation inventory.
+fallback artifact. Native execution consumes verified SSA directly. The compiler's neutral SSA
+normalization module owns the retained simple verified passes; the discarded optimizer pipeline and
+its metadata are absent. Native execution no longer
+constructs the former unconsumed parallel SSA memory-obligation inventory.
 
 Trusted compilation has no compiler profile, cross-phase budget ledger, source-shape quota, HIR
 memory count quota, or SSA work/count quota. Checked phase timings and work totals are observation.
@@ -61,7 +63,7 @@ source fingerprints. This shape does not provide edit-stable semantic identity o
 
 `lkjscript run` selects `ExecutionPolicy::Unrestricted` and exposes no engine selection. The app
 lowers the complete supported group reachable from `main`, installs one baseline image, and
-and prepares one invocation before source effects. Executable installation is failure-atomic: image
+prepares one invocation before source effects. Executable installation is failure-atomic: image
 integrity, contracts, relocation, accounting, and the RW-to-RX transition complete before an
 installed mapping is published. Eligibility, lowering, installation, setup, or typed
 `PreEntryError` decline destroys the complete native attempt before the unchanged validated
@@ -73,10 +75,10 @@ deadline, and whole-group native-stack requirements. It returns either an affine
 `PreparedInvocation` or `PreEntryError`. `PreparedInvocation::enter` consumes the preparation and
 crosses the unsafe generated ABI boundary exactly once. Every later malformed-state or native-stack
 failure is an `EnteredInvocationError`, while traps, exits, deadlines, resource exhaustion, and host
-failure are entered outcomes. Both are post-commit results: neither can run or re-run the VM. The former forced and automatic-transition CLI contracts are deleted. Automatic transition,
-threshold, retry, invalidation, and session APIs are also deleted from the implementation. Forced
-baseline and proof-optimizing helpers remain internal to differential tests for one final deletion
-commit; they are not app execution choices.
+failure are entered outcomes. Both are post-commit results: neither can run or re-run the VM. The former forced and
+automatic-transition CLI contracts are deleted. Automatic transition, threshold, retry,
+invalidation, session, forced execution, optimizing lowering, certificate, and optimization
+scheduling APIs are also deleted from the implementation.
 
 Untrusted or isolated process callers construct `ExecutionPolicy::Limited` explicitly. Limited
 execution owns coarse fuel, values/frames, heap/allocation, handle, output, deadline, and cleanup
@@ -110,11 +112,15 @@ This is a conceptual grouping, not an exhaustive dependency graph:
 - core language execution data and policies live in `lkjscript-core`;
 - source/package analysis, HIR, memory planning, lowering, and Semantic Source live in
   `lkjscript-compiler`;
-- SSA, verification, normalization, and the reference evaluator live in `lkjscript-ir`;
+- SSA, verification, and normalization live in `lkjscript-ir`; its evaluator is an opt-in
+  `test-oracle` feature enabled only by development and differential-test consumers. Production
+  dependency edges leave it disabled. Workspace `--all-features` checks compile it by design, but
+  neither the host model nor the app exposes it as a runtime engine;
 - generic validated-bytecode execution and runtime values live in `lkjscript-vm`, which has no JIT
   dependency or native-transition state;
-- one-shot native lowering, code generation, and executable installation span `lkjscript-native`,
-  `lkjscript-jit`, and the `lkjscript-executable` mechanism crate;
+- one-shot baseline-native lowering, code generation, and executable installation span
+  `lkjscript-native`, `lkjscript-jit`, and the `lkjscript-executable` mechanism crate; neither
+  `lkjscript-ir` nor `lkjscript-jit` depends on `lkjscript-resource` after optimizer deletion;
 - CLI and integration wiring live in `lkjscript-app`;
 - host, resource, database, daemon/process, scheduler, and platform mechanisms remain split across
   the corresponding host/resource/database/runtime/system crates; and
@@ -159,12 +165,11 @@ atomic batch edits, deterministic paginated semantic queries, semantic and text 
 snapshot, and direct compilation tests. It begins in memory; persistence or distributed
 collaboration waits for measured need.
 
-**Accepted runtime implemented in the app; optimizer deletion remains:** synchronously prepare one
-eligible baseline-native reachable group before effects; enter it when preparation succeeds,
-otherwise run the retained VM; never retry after native entry. Direct generated calls and eligible
-structural, resource, and unique islands execute inside the installed group. The VM is an ordinary
-validated interpreter with no JIT dependency. Automatic transition/session architecture is deleted.
-Forced baseline/proof-optimizing helpers and the optimizer remain solely for existing tests and must
-be deleted in the next cutover commit. Afterward consolidate
-platform/process crates and one coarse untrusted host policy without weakening genuine path,
-process, artifact, executable-memory, FFI, or database boundaries.
+**Accepted runtime implemented:** synchronously prepare one eligible baseline-native reachable
+group before effects; enter it when preparation succeeds, otherwise run the retained VM; never
+retry after native entry. Direct generated calls and eligible structural, resource, and unique
+islands execute inside the installed group. The VM is an ordinary validated interpreter with no JIT
+dependency. Automatic transition/session architecture, forced helpers, optimizing native lowering,
+and the proof optimizer are deleted. Next consolidate platform/process crates and one coarse
+untrusted host policy without weakening genuine path, process, artifact, executable-memory, FFI, or
+database boundaries.

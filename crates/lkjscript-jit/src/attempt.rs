@@ -135,21 +135,6 @@ pub fn attempt_baseline(
     attempt_baseline_with_capabilities_from_start(program, &[], execution, config, Instant::now())
 }
 
-pub fn attempt_baseline_with_capabilities(
-    program: &VerifiedProgram,
-    capabilities: &[lkjscript_core::CapabilityKind],
-    execution: &ExecutionPolicy,
-    config: JitConfig,
-) -> BaselineAttempt {
-    attempt_baseline_with_capabilities_from_start(
-        program,
-        capabilities,
-        execution,
-        config,
-        Instant::now(),
-    )
-}
-
 pub fn attempt_baseline_with_capabilities_from_start(
     program: &VerifiedProgram,
     capabilities: &[lkjscript_core::CapabilityKind],
@@ -246,6 +231,45 @@ pub fn attempt_baseline_with_capabilities_from_start(
             })
         }
     }
+}
+
+fn capability_arguments(
+    program: &VerifiedProgram,
+    capabilities: &[lkjscript_core::CapabilityKind],
+) -> Result<Vec<NativeValue>, EngineError> {
+    let Some(index) = program.program().main.index() else {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main identity is invalid",
+        ));
+    };
+    let Some(main) = program.program().functions.get(index) else {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main is absent",
+        ));
+    };
+    if main.signature.parameters.len() != capabilities.len()
+        || main
+            .signature
+            .parameters
+            .iter()
+            .zip(capabilities)
+            .any(|(parameter, capability)| parameter != &SsaType::Capability(*capability))
+    {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main capability arguments do not exactly match verified SSA",
+        ));
+    }
+    Ok(capabilities
+        .iter()
+        .copied()
+        .map(NativeValue::Capability)
+        .collect())
 }
 
 fn remaining_execution_policy(

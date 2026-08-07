@@ -1,6 +1,6 @@
-use crate::oracle::{compare_source, evaluator_outcome, main_source};
+use crate::oracle::{compare_source, main_source};
 use lkjscript_compiler::compile_source;
-use lkjscript_ir::{evaluate, optimize, EvalConfig, EvalOutcome, OptimizationLimits, RuntimeOp};
+use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, RuntimeOp};
 
 struct Generator(u64);
 
@@ -105,18 +105,6 @@ fn bounded_randomized_type_correct_scalar_programs_match() {
         };
         let source = main_source(return_type, &expression);
         let name = format!("random-{index}.lkjscript");
-        let expected = compare_source(&source, &name);
-        let program =
-            compile_source(&source, &name).expect("compile randomized optimization input");
-        let optimized = optimize(program.ssa(), OptimizationLimits::default())
-            .expect("proof-optimize randomized scalar program");
-        assert_eq!(
-            evaluator_outcome(evaluate(
-                optimized.verified_program(),
-                &EvalConfig::default()
-            )),
-            expected,
-            "optimized randomized evaluator case {index}"
-        );
+        compare_source(&source, &name);
     }
 }

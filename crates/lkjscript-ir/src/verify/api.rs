@@ -9,10 +9,6 @@ impl VerifiedProgram {
         &self.0
     }
 
-    pub(crate) fn into_program(self) -> Program {
-        self.0
-    }
-
     pub const fn prepared_identity(&self) -> lkjscript_contracts::PreparedProgramIdentity {
         self.0.prepared_identity
     }

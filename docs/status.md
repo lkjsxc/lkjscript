@@ -52,9 +52,11 @@ bytecode, inputs, and `ExecutionPolicy`. The VM is non-generic and has no JIT de
 branches, or transition state. Product metrics report the actual `baseline-native` or `vm-fallback`
 path, a nullable decline reason, the native-entry commit fact, and
 preflight/lower/install/prepare/native/VM/total durations. Automatic thresholds, per-function call
-records, retries, invalidation, lookup, and runtime session APIs are deleted. Forced baseline and
-proof-optimizing helpers remain only for existing differential tests until the next cutover commit;
-optimizing machinery is not a product path.
+records, retries, invalidation, lookup, runtime sessions, forced execution helpers, optimization
+certificates, and the proof-oriented optimizer are deleted. Baseline normalization remains a small
+independently verified sequence of constant folding, copy propagation, branch simplification,
+reachability, empty-block forwarding, effect-aware dead-code elimination, direct-call resolution,
+and canonical block ordering.
 
 ## Phase 1 scale and policy result
 
@@ -146,11 +148,14 @@ transport specialization does not claim native support when no specialization ex
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
 - The app has one baseline-native-with-VM-fallback product path, and the VM has no JIT knowledge.
-  The evaluator plus forced baseline and proof-oriented optimizing helpers still multiply internal
-  test and maintenance surface. Their public CLI surface and all automatic-transition machinery are
-  gone; deleting the retained proof optimizer and forced helpers is the next runtime cutover commit.
+  Forced baseline and optimizing helpers and the proof optimizer are deleted. The SSA evaluator is
+  an explicit test oracle behind the opt-in `lkjscript-ir/test-oracle` feature. Production
+  dependencies leave it disabled; app and compiler development dependencies enable it for
+  differential tests. Workspace `--all-features` verification necessarily compiles the oracle, but
+  it is not a public runtime engine or app execution choice.
 - Daemon, process-cell, scheduler, database, resource-topology, and platform crates remain in the
-  workspace even though the local language foundation does not require all of them.
+  workspace even though the local language foundation does not require all of them. The IR and JIT
+  crates no longer depend on `lkjscript-resource`; the resource crate remains for other consumers.
 - Process/daemon policy is broader and more fragmented than the intended small coarse boundary
   policy. Existing transport and OS/ABI limits remain real boundaries or pending audits, not
   language validity rules.

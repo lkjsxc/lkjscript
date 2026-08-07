@@ -21,7 +21,10 @@ cargo run --locked -p lkjscript-app --bin lkjscript -- \
 A successful run prints `3628800`. `run` has one product execution policy: it attempts one eligible
 baseline-native group before effects, otherwise executes the unchanged validated program in the VM.
 The VM has no JIT dependency or native-transition state. There is no engine, threshold, or forced
-native CLI selection, and native entry is a commit point with no VM retry.
+native CLI selection, and native entry is a commit point with no VM retry. The discarded
+optimizing runtime and forced execution helpers are deleted. The SSA evaluator is available
+only as the opt-in `lkjscript-ir/test-oracle` feature used by development and differential tests;
+production dependencies do not enable it.
 
 ## Verification
 

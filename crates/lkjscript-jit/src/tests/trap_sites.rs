@@ -133,12 +133,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
         main: FunctionId::new(1),
     })
     .expect("verify selected trap SSA");
-    let executed = execute_forced(
-        &program,
-        &ExecutionPolicy::unrestricted(),
-        JitConfig::default(),
-    )
-    .expect("execute selected native trap");
+    let executed = execute_preferred(&program);
     assert!(matches!(
         executed.outcome,
         ExecutionOutcome::Trapped(trap) if trap.as_str() == "selected callee trap"

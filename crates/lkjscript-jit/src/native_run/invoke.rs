@@ -4,92 +4,6 @@ mod cleanup;
 use cleanup::native_cleanup_failures;
 
 impl NativeRun {
-    pub(crate) fn invoke_scalar(
-        &mut self,
-        function: FunctionId,
-        arguments: &[NativeValue],
-        execution: &ExecutionPolicy,
-    ) -> Result<ScalarInvocation, EngineError> {
-        let (native, execution_domain, native_stack_requirement) = {
-            let object = self.object.as_ref().ok_or_else(|| {
-                EngineError::new(
-                    FailureCode::InvocationFailure,
-                    Some(function),
-                    "native run has no installed group",
-                )
-            })?;
-            let native = object
-                .entries
-                .iter()
-                .find(|entry| entry.source_function().get() == function.raw())
-                .map(EntryMetadata::function)
-                .ok_or_else(|| {
-                    EngineError::new(
-                        FailureCode::InvocationFailure,
-                        Some(function),
-                        "installed group has no source-function entry",
-                    )
-                })?;
-            let requirement = object
-                .entry_stack_requirements
-                .iter()
-                .find_map(|(candidate, bytes)| (*candidate == function).then_some(*bytes));
-            (native, object.installed.execution_domain(), requirement)
-        };
-        self.reset_invocation_state();
-        let mut config = invocation_config(execution);
-        if let Some(required_bytes) = native_stack_requirement {
-            config = config.with_native_stack_requirement(required_bytes);
-        }
-        let invocation_started = self.config.collect_metrics.then(Instant::now);
-        let report = match execution_domain {
-            lkjscript_native::NativeExecutionDomain::CollectorFree => {
-                self.invoke_collector_free(function, native, arguments, &config, execution)
-            }
-            lkjscript_native::NativeExecutionDomain::InvocationRegion => {
-                self.invoke_invocation_region(function, native, arguments, &config, execution)
-            }
-        };
-        let entry_begun = report
-            .as_ref()
-            .map_or_else(|error| !is_pre_entry_failure(error.code()), |_| true);
-        if entry_begun {
-            self.record_native_timing(invocation_started, None);
-        }
-        if let Err(error) = &report {
-            let outcome = match error.code() {
-                FailureCode::PreEntryCancelled => Some(ScalarInvocationOutcome::HostFailure),
-                FailureCode::PreEntryDeadline => Some(ScalarInvocationOutcome::DeadlineExceeded),
-                FailureCode::PreEntryPollFuel => {
-                    Some(ScalarInvocationOutcome::ResourceLimitExceeded(
-                        ResourceLimitKind::InstructionFuel,
-                    ))
-                }
-                FailureCode::PreEntryActiveFrames => Some(
-                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth),
-                ),
-                FailureCode::PreEntryActiveValues => Some(
-                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues),
-                ),
-                FailureCode::PreEntryRuntimeService => Some(
-                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations),
-                ),
-                _ => None,
-            };
-            if let Some(outcome) = outcome {
-                return Ok(ScalarInvocation {
-                    outcome,
-                    poll_count: 0,
-                    cleanup_failures: CleanupFailures::with_retention(
-                        execution.cleanup_retention(),
-                    ),
-                });
-            }
-        }
-        let report = report?;
-        Ok(self.complete_scalar_invocation(function, report, execution))
-    }
-
     pub(crate) fn invoke_baseline_scalar_attempt(
         &mut self,
         function: FunctionId,
@@ -415,19 +329,4 @@ fn invocation_config(execution: &ExecutionPolicy) -> NativeInvocationConfig {
             .with_max_cleanup_failures(policy.cleanup_retention.max_failures()),
         None => NativeInvocationConfig::unrestricted(),
     }
-}
-
-const fn is_pre_entry_failure(code: FailureCode) -> bool {
-    matches!(
-        code,
-        FailureCode::NativeBookkeeping
-            | FailureCode::NativeStackBoundary
-            | FailureCode::PreEntryCancelled
-            | FailureCode::PreEntryDeadline
-            | FailureCode::PreEntryPollFuel
-            | FailureCode::PreEntryActiveFrames
-            | FailureCode::PreEntryActiveValues
-            | FailureCode::PreEntryRuntimeService
-            | FailureCode::PreEntryFailure
-    )
 }
