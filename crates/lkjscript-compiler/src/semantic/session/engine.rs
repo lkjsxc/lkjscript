@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use crate::semantic::session::limits::{MAX_REQUEST_ID_BYTES, MAX_SESSION_REQUESTS};
 
 use super::schema::{
@@ -6,17 +8,24 @@ use super::schema::{
 };
 use super::SemanticSession;
 
+fn session_json_error(error: serde_json::Error) -> SessionProcessError {
+    SessionProcessError::new(
+        ProcessCode::InvalidJson,
+        format!("strict session JSON rejected: {error}"),
+    )
+}
+
 impl SemanticSession {
     pub(super) fn handle(&mut self, input: &[u8]) -> Result<Vec<u8>, SessionProcessError> {
         std::str::from_utf8(input).map_err(|_| {
             SessionProcessError::new(ProcessCode::InvalidJson, "session request is not UTF-8")
         })?;
-        let envelope: SessionRequest = serde_json::from_slice(input).map_err(|error| {
-            SessionProcessError::new(
-                ProcessCode::InvalidJson,
-                format!("strict session JSON rejected: {error}"),
-            )
-        })?;
+        let mut deserializer = serde_json::Deserializer::from_slice(input);
+        deserializer.disable_recursion_limit();
+        let mut stacked = serde_stacker::Deserializer::new(&mut deserializer);
+        stacked.red_zone = crate::semantic::codec::SERDE_STACK_RED_ZONE_BYTES;
+        let envelope = SessionRequest::deserialize(stacked).map_err(session_json_error)?;
+        deserializer.end().map_err(session_json_error)?;
         if envelope.schema != super::SCHEMA {
             return Err(SessionProcessError::new(
                 ProcessCode::InvalidJson,

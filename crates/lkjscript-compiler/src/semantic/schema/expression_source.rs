@@ -8,6 +8,10 @@ use build::{
 };
 
 pub(super) fn to_source(expression: &Expression, span: SourceSpan) -> Result<SourceNode, String> {
+    crate::stack::grow(|| to_source_inner(expression, span))
+}
+
+fn to_source_inner(expression: &Expression, span: SourceSpan) -> Result<SourceNode, String> {
     let source = match expression {
         Expression::Unit {} => leaf(SyntaxKind::Unit, span),
         Expression::Bool { value } => leaf(SyntaxKind::Bool { value: *value }, span),

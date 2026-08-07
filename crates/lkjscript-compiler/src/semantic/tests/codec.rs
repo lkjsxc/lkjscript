@@ -33,10 +33,51 @@ fn strict_codec_rejects_every_json_boundary_and_removed_profile_field() {
         );
     }
     assert!(crate::semantic::execute(&[b'{', b'"', 0xff, b'"', b'}']).is_err());
-    let deeply_nested = format!("{}0{}", "[".repeat(65), "]".repeat(65));
-    assert!(crate::semantic::execute(deeply_nested.as_bytes()).is_err());
     let oversized = vec![b' '; crate::semantic::MAX_REQUEST_BYTES + 1];
     assert!(crate::semantic::execute(&oversized).is_err());
+}
+
+#[test]
+fn deeply_nested_json_decodes_and_malformed_input_is_deterministic() {
+    let root = case_dir("deep-json").join("main.lkjscript");
+    let depth = 1024;
+    let mut expression = "{\"kind\":\"unit\"}".to_string();
+    for _ in 0..depth {
+        expression = format!("{{\"kind\":\"do\",\"expressions\":[{expression}]}}");
+    }
+    let operation = format!(
+        concat!(
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
+            "\"base_revision\":\"r\",\"file_preconditions\":[],",
+            "\"operations\":[{{\"kind\":\"replace-expression\",",
+            "\"declaration_key\":\"k\",\"entity_fingerprint\":\"f\",",
+            "\"node\":0,\"node_fingerprint\":\"n\",\"expression\":{expression}}}]}}"
+        ),
+        expression = expression,
+    );
+    let encoded = request(&root, &operation);
+    assert!(encoded.len() < crate::semantic::MAX_REQUEST_BYTES);
+    let malformed = encoded[..encoded.len() - depth].to_vec();
+    std::thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(move || {
+            let decoded = crate::semantic::codec::decode_request(&encoded).expect("deep request");
+            assert_eq!(
+                crate::semantic::codec::measure_json(&decoded).expect("measure deep request"),
+                encoded.len()
+            );
+            drop(decoded);
+            let first = crate::semantic::codec::decode_request(&malformed)
+                .expect_err("malformed deep request")
+                .message;
+            let second = crate::semantic::codec::decode_request(&malformed)
+                .expect_err("repeat malformed deep request")
+                .message;
+            assert_eq!(first, second);
+        })
+        .expect("spawn small-stack JSON test")
+        .join()
+        .expect("deep JSON test thread");
 }
 
 #[test]
@@ -120,7 +161,11 @@ fn response_output_byte_policy_fails_before_publication() {
             diagnostic: None,
         },
     };
-    assert!(crate::semantic::codec::prepare_response(response).is_err());
+    assert!(crate::semantic::codec::prepare_response(
+        response,
+        crate::semantic::codec::MAX_OUTPUT_BYTES,
+    )
+    .is_err());
 }
 
 #[test]

@@ -72,11 +72,11 @@ pub(super) fn completed_tree(
                 .expected
                 .as_ref()
                 .map_err(|reason| format!("hole expected type unavailable: {reason:?}"))?;
-            witness(tree, ty, 0)
+            witness(tree, ty)
                 .or_else(|| scoped_witness(&site, ty))
                 .ok_or_else(|| {
                     format!(
-                        "no bounded validation witness for {}",
+                        "no finite validation witness for {}",
                         super::types::canonical(ty)
                     )
                 })?

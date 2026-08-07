@@ -16,7 +16,7 @@ pub(crate) struct MatchPatternField {
     pub pattern: MatchPatternExpression,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum MatchPatternExpression {
     Wildcard {},
@@ -38,6 +38,92 @@ pub(crate) enum MatchPatternExpression {
         value_type: TypeExpression,
         fields: Vec<MatchPatternField>,
     },
+}
+
+#[derive(Deserialize)]
+#[serde(
+    remote = "MatchPatternExpression",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
+enum MatchPatternExpressionDef {
+    Wildcard {},
+    Binding {
+        name: String,
+    },
+    Bool {
+        value: bool,
+    },
+    I64 {
+        value: i64,
+    },
+    Variant {
+        value_type: TypeExpression,
+        variant: String,
+        fields: Vec<MatchPatternField>,
+    },
+    Product {
+        value_type: TypeExpression,
+        fields: Vec<MatchPatternField>,
+    },
+}
+
+impl<'de> Deserialize<'de> for MatchPatternExpression {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        crate::stack::grow(|| MatchPatternExpressionDef::deserialize(deserializer))
+    }
+}
+
+impl Clone for MatchPatternExpression {
+    fn clone(&self) -> Self {
+        crate::stack::grow(|| match self {
+            Self::Wildcard {} => Self::Wildcard {},
+            Self::Binding { name } => Self::Binding { name: name.clone() },
+            Self::Bool { value } => Self::Bool { value: *value },
+            Self::I64 { value } => Self::I64 { value: *value },
+            Self::Variant {
+                value_type,
+                variant,
+                fields,
+            } => Self::Variant {
+                value_type: value_type.clone(),
+                variant: variant.clone(),
+                fields: fields.clone(),
+            },
+            Self::Product { value_type, fields } => Self::Product {
+                value_type: value_type.clone(),
+                fields: fields.clone(),
+            },
+        })
+    }
+}
+
+impl Drop for MatchPatternExpression {
+    fn drop(&mut self) {
+        let mut pending = Vec::new();
+        take_children(self, &mut pending);
+        while let Some(mut pattern) = pending.pop() {
+            take_children(&mut pattern, &mut pending);
+        }
+    }
+}
+
+fn take_children(pattern: &mut MatchPatternExpression, pending: &mut Vec<MatchPatternExpression>) {
+    match pattern {
+        MatchPatternExpression::Variant { fields, .. }
+        | MatchPatternExpression::Product { fields, .. } => {
+            pending.extend(
+                std::mem::take(fields)
+                    .into_iter()
+                    .map(|field| field.pattern),
+            );
+        }
+        _ => {}
+    }
 }
 
 pub(super) fn measure_arms(

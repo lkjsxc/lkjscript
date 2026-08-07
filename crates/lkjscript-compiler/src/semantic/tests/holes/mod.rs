@@ -31,7 +31,9 @@ pub(super) fn snapshot(root: &std::path::Path) -> (String, Box<SnapshotResult>) 
     let encoded = crate::semantic::execute(&request(root, "{\"kind\":\"snapshot\"}"))
         .expect("execute snapshot");
     let decoded = response(&encoded);
-    let revision = decoded.revision.expect("snapshot revision");
+    let revision = decoded
+        .revision
+        .unwrap_or_else(|| panic!("snapshot had no revision: {:?}", decoded.result));
     let ResponseResult::Snapshot { snapshot } = decoded.result else {
         panic!("expected snapshot")
     };

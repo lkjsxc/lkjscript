@@ -50,9 +50,24 @@ pub fn execute(input: &[u8]) -> Result<Vec<u8>, SemanticProcessError> {
     let request = codec::decode_request(input).map_err(SemanticProcessError::from_protocol)?;
     let mut outcome = engine::execute_request(request, input.len())
         .map_err(SemanticProcessError::from_protocol)?;
+    finish(&mut outcome)
+}
+
+#[cfg(test)]
+pub(crate) fn execute_with_policy(
+    input: &[u8],
+    policy: charges::BoundaryPolicy,
+) -> Result<Vec<u8>, SemanticProcessError> {
+    let request = codec::decode_request(input).map_err(SemanticProcessError::from_protocol)?;
+    let mut outcome = engine::execute_request_with_policy(request, input.len(), policy)
+        .map_err(SemanticProcessError::from_protocol)?;
+    finish(&mut outcome)
+}
+
+fn finish(outcome: &mut engine::EngineOutcome) -> Result<Vec<u8>, SemanticProcessError> {
     let response =
         codec::encode_prepared(&outcome.prepared).map_err(SemanticProcessError::from_protocol)?;
-    publish_outcome(&mut outcome).map_err(SemanticProcessError::from_protocol)?;
+    publish_outcome(outcome).map_err(SemanticProcessError::from_protocol)?;
     Ok(response)
 }
 

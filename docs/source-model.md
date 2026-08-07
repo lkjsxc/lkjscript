@@ -53,7 +53,10 @@ Text patches may be imported into transactions but are not the foundational edit
 Queries are deterministic and revision-labelled. The first useful set is entity lookup, qualified
 name resolution, definition/references, callers/callees, type and expected type, diagnostics, hole
 context/legal actions, and dependency/impact slices. Large results require stable ordering and
-continuations rather than truncation.
+continuations rather than truncation. The current bootstrap does not paginate hole candidates: it
+constructs the complete deterministically ordered result and returns typed `OutputLimit` before
+publication when the untrusted response-byte policy cannot carry that result. It must never mark an
+incomplete candidate exploration as `truncated: false`.
 
 Semantic diffs report declaration creation/deletion/movement, rename, signature/type change,
 reference rewiring, control replacement, effect/capability change, and hole introduction or

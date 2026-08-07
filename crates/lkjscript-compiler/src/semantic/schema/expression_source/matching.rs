@@ -61,6 +61,10 @@ pub(super) fn match_expression(
 }
 
 fn pattern(value: &MatchPatternExpression, span: SourceSpan) -> Result<SourceNode, String> {
+    crate::stack::grow(|| pattern_inner(value, span))
+}
+
+fn pattern_inner(value: &MatchPatternExpression, span: SourceSpan) -> Result<SourceNode, String> {
     Ok(match value {
         MatchPatternExpression::Wildcard {} => build::call("wildcard", Vec::new(), span),
         MatchPatternExpression::Binding { name } => {

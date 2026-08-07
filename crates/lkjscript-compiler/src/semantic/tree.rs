@@ -68,17 +68,14 @@ pub(crate) fn source_nodes(tree: &ValidatedSourceTree) -> Vec<&SourceNode> {
     let mut output = Vec::new();
     for file in files {
         for form in &file.syntax {
-            flatten(form, &mut output);
+            let mut pending = vec![form];
+            while let Some(node) = pending.pop() {
+                output.push(node);
+                pending.extend(node.children.iter().rev());
+            }
         }
     }
     output
-}
-
-fn flatten<'a>(node: &'a SourceNode, output: &mut Vec<&'a SourceNode>) {
-    output.push(node);
-    for child in &node.children {
-        flatten(child, output);
-    }
 }
 
 pub(crate) fn declaration_record(

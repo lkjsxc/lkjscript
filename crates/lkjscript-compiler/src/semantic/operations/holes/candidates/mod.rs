@@ -56,7 +56,7 @@ pub(super) fn enumerate(
         scope
             .iter()
             .find_map(|entity| binding_expression(entity, ty))
-            .or_else(|| super::validate::witness(site.tree, ty, 0))
+            .or_else(|| super::validate::witness(site.tree, ty))
     };
     for operation in crate::hir::Operation::ALL {
         let record = operation.record();

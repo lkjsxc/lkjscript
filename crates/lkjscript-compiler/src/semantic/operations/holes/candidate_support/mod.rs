@@ -106,7 +106,7 @@ fn function_effects(site: &HoleSite<'_>, name: &str) -> EffectSet {
         .expected
         .as_ref()
         .ok()
-        .and_then(|ty| super::validate::witness(site.tree, ty, 0))
+        .and_then(|ty| super::validate::witness(site.tree, ty))
     else {
         return EffectSet::CONSERVATIVE_CALL;
     };

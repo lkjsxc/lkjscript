@@ -10,7 +10,7 @@ pub(super) fn expressions(
     let mut result = Vec::new();
     if let (Some(result_type), Some(value)) = (
         super::super::validate::type_expression(expected),
-        super::super::validate::witness(site.tree, expected, 0),
+        super::super::validate::witness(site.tree, expected),
     ) {
         result.push((
             CandidateCategory::ControlForm,
@@ -22,7 +22,7 @@ pub(super) fn expressions(
             },
         ));
     }
-    if let Some(value) = super::super::validate::witness(site.tree, &site.return_type, 0) {
+    if let Some(value) = super::super::validate::witness(site.tree, &site.return_type) {
         result.push((
             CandidateCategory::ControlForm,
             Expression::Return {
@@ -31,7 +31,7 @@ pub(super) fn expressions(
         ));
     }
     if let Some(loop_type) = nearest_loop_type(site) {
-        if let Some(value) = super::super::validate::witness(site.tree, &loop_type, 0) {
+        if let Some(value) = super::super::validate::witness(site.tree, &loop_type) {
             result.push((
                 CandidateCategory::ControlForm,
                 Expression::Break {

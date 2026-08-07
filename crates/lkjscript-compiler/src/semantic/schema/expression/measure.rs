@@ -4,6 +4,10 @@ use super::{Expression, ExpressionCounts};
 #[allow(clippy::expect_used)]
 impl Expression {
     pub(crate) fn measure(&self, depth: u64, counts: &mut ExpressionCounts) {
+        crate::stack::grow(|| self.measure_inner(depth, counts));
+    }
+
+    fn measure_inner(&self, depth: u64, counts: &mut ExpressionCounts) {
         counts.nodes = counts
             .nodes
             .checked_add(1)

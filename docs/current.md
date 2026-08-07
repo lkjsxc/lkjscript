@@ -224,12 +224,20 @@ transport specialization as an optional identity rather than substituting the se
 when specialization is unavailable.
 
 A Semantic Source service already exposes snapshots, stable node queries, typed holes,
-diagnostics, transactions, and a local stdio session. It supplies an explicit limited aggregate
-source-byte policy at its untrusted boundary; the same policy checks staged transaction source
-bytes before publication. It has no source-unit, token, node, or work admission quota. Other
-boundary-local byte and request-count policies remain for untrusted framing and persistence. It
-currently mirrors the text-oriented source tree and the compiler still recompiles from text, so it
-is a bootstrap editing service, not yet the intended semantic program authority.
+diagnostics, transactions, and a local stdio session. Its untrusted boundary applies coarse
+request-, aggregate-source-, and response-byte policy; the same source-byte policy checks staged
+transaction source before publication. JSON shape and nesting have no separate admission quota:
+strict typed decoding and encoding use dynamically grown Serde stacks, and recursive request values
+are destroyed iteratively. Semantic source-node flattening, transaction node lookup, and expression
+path validation use explicit work stacks. Hole validation witnesses traverse complete finite product
+shapes without a depth cutoff, including product chains beyond depth 8. Candidate and legal-action
+responses remain deterministically complete when returned; if the complete response exceeds the
+response-byte policy, preparation returns typed `OutputLimit` before any staged publication rather
+than emitting a falsely complete partial result. The service has no source-unit, token, node, JSON
+nesting, witness-depth, or work admission quota. Other boundary-local byte and request-count policies
+remain for untrusted framing and persistence. It currently mirrors the text-oriented source tree and
+the compiler still recompiles from text, so it is a bootstrap editing service, not yet the intended
+semantic program authority.
 
 ## Tested platform
 

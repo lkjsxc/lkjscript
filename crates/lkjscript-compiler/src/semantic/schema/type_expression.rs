@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::source::{SourceNode, SourceSpan, SyntaxKind};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum TypeExpression {
     Never {},
@@ -45,6 +45,128 @@ pub(crate) enum TypeExpression {
     },
 }
 
+#[derive(Deserialize)]
+#[serde(
+    remote = "TypeExpression",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
+enum TypeExpressionDef {
+    Never {},
+    Unit {},
+    Bool {},
+    I64 {},
+    F64 {},
+    String {},
+    Bytes {},
+    ByteVector {},
+    ByteSlice {},
+    ByteSliceMut {},
+    Path {},
+    Capability {
+        capability: String,
+    },
+    Symbol {},
+    Resource {
+        resource: String,
+    },
+    Product {
+        name: String,
+    },
+    Enum {
+        name: String,
+        arguments: Vec<TypeExpression>,
+    },
+    Variable {
+        name: String,
+    },
+    List {
+        element: Box<TypeExpression>,
+    },
+    Option {
+        value: Box<TypeExpression>,
+    },
+    Result {
+        ok: Box<TypeExpression>,
+        error: Box<TypeExpression>,
+    },
+}
+
+impl<'de> Deserialize<'de> for TypeExpression {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        crate::stack::grow(|| TypeExpressionDef::deserialize(deserializer))
+    }
+}
+
+impl Clone for TypeExpression {
+    fn clone(&self) -> Self {
+        crate::stack::grow(|| match self {
+            Self::Never {} => Self::Never {},
+            Self::Unit {} => Self::Unit {},
+            Self::Bool {} => Self::Bool {},
+            Self::I64 {} => Self::I64 {},
+            Self::F64 {} => Self::F64 {},
+            Self::String {} => Self::String {},
+            Self::Bytes {} => Self::Bytes {},
+            Self::ByteVector {} => Self::ByteVector {},
+            Self::ByteSlice {} => Self::ByteSlice {},
+            Self::ByteSliceMut {} => Self::ByteSliceMut {},
+            Self::Path {} => Self::Path {},
+            Self::Capability { capability } => Self::Capability {
+                capability: capability.clone(),
+            },
+            Self::Symbol {} => Self::Symbol {},
+            Self::Resource { resource } => Self::Resource {
+                resource: resource.clone(),
+            },
+            Self::Product { name } => Self::Product { name: name.clone() },
+            Self::Enum { name, arguments } => Self::Enum {
+                name: name.clone(),
+                arguments: arguments.clone(),
+            },
+            Self::Variable { name } => Self::Variable { name: name.clone() },
+            Self::List { element } => Self::List {
+                element: element.clone(),
+            },
+            Self::Option { value } => Self::Option {
+                value: value.clone(),
+            },
+            Self::Result { ok, error } => Self::Result {
+                ok: ok.clone(),
+                error: error.clone(),
+            },
+        })
+    }
+}
+
+impl Drop for TypeExpression {
+    fn drop(&mut self) {
+        let mut pending = Vec::new();
+        take_children(self, &mut pending);
+        while let Some(mut expression) = pending.pop() {
+            take_children(&mut expression, &mut pending);
+        }
+    }
+}
+
+fn take_children(expression: &mut TypeExpression, pending: &mut Vec<TypeExpression>) {
+    match expression {
+        TypeExpression::Enum { arguments, .. } => pending.append(arguments),
+        TypeExpression::List { element } | TypeExpression::Option { value: element } => {
+            pending.push(std::mem::replace(element.as_mut(), TypeExpression::Unit {}));
+        }
+        TypeExpression::Result { ok, error } => {
+            pending.push(std::mem::replace(ok.as_mut(), TypeExpression::Unit {}));
+            pending.push(std::mem::replace(error.as_mut(), TypeExpression::Unit {}));
+        }
+        _ => {}
+    }
+}
+
 // Measurements traverse a materialized host tree; checked u64 arithmetic documents the invariant.
 #[allow(clippy::expect_used)]
 impl TypeExpression {
@@ -55,6 +177,14 @@ impl TypeExpression {
     }
 
     fn collect_nodes(&self, span: SourceSpan, output: &mut Vec<SourceNode>) -> Result<(), String> {
+        crate::stack::grow(|| self.collect_nodes_inner(span, output))
+    }
+
+    fn collect_nodes_inner(
+        &self,
+        span: SourceSpan,
+        output: &mut Vec<SourceNode>,
+    ) -> Result<(), String> {
         match self {
             Self::Never {} => output.push(atom("never".into(), span)),
             Self::Unit {} => output.push(atom("unit".into(), span)),
@@ -113,6 +243,10 @@ impl TypeExpression {
     }
 
     pub(crate) fn measure(&self, depth: u64, counts: &mut super::ExpressionCounts) {
+        crate::stack::grow(|| self.measure_inner(depth, counts));
+    }
+
+    fn measure_inner(&self, depth: u64, counts: &mut super::ExpressionCounts) {
         counts.nodes = counts
             .nodes
             .checked_add(1)

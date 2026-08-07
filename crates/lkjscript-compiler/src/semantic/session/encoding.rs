@@ -57,7 +57,7 @@ impl SemanticSession {
                 format!("reserve session response: {error}"),
             )
         })?;
-        serde_json::to_writer(&mut encoded, envelope).map_err(|error| {
+        crate::semantic::codec::write_json(&mut encoded, envelope).map_err(|error| {
             SessionProcessError::new(
                 ProcessCode::OutputFailure,
                 format!("encode session response: {error}"),

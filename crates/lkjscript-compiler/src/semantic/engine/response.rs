@@ -10,8 +10,9 @@ pub(super) fn prepare(
     response: Response,
     publication: Option<crate::semantic::transaction::StagedTransaction>,
     guard: Option<crate::semantic::transaction::PublicationGuard>,
+    response_limit: usize,
 ) -> Result<EngineOutcome, ProtocolError> {
-    let prepared = codec::prepare_response(response)?;
+    let prepared = codec::prepare_response(response, response_limit)?;
     Ok(EngineOutcome {
         prepared,
         publication,

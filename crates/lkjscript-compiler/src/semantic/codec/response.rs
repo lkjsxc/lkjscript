@@ -8,8 +8,10 @@ pub(crate) struct PreparedResponse {
     pub bytes: usize,
 }
 
-pub(crate) fn prepare_response(mut response: Response) -> Result<PreparedResponse, ProtocolError> {
-    let limit = crate::semantic::charges::BoundaryPolicy::default().response_bytes;
+pub(crate) fn prepare_response(
+    mut response: Response,
+    limit: usize,
+) -> Result<PreparedResponse, ProtocolError> {
     for _ in 0..4 {
         let measured = count(&response, limit)?;
         let measured_u64 = u64::try_from(measured).map_err(|_| {
@@ -40,7 +42,7 @@ pub(crate) fn encode_prepared(prepared: &PreparedResponse) -> Result<Vec<u8>, Pr
             format!("reserve exact response bytes: {cause}"),
         )
     })?;
-    serde_json::to_writer(&mut bytes, &prepared.response).map_err(|cause| {
+    serialize(&prepared.response, &mut bytes).map_err(|cause| {
         error(
             ProtocolErrorCode::OutputLimit,
             format!("serialize reserved response: {cause}"),
@@ -63,7 +65,7 @@ pub(crate) fn encode_prepared(prepared: &PreparedResponse) -> Result<Vec<u8>, Pr
 
 fn count(response: &Response, limit: usize) -> Result<usize, ProtocolError> {
     let mut output = CountingOutput { bytes: 0, limit };
-    serde_json::to_writer(&mut output, response).map_err(|cause| {
+    serialize(response, &mut output).map_err(|cause| {
         error(
             ProtocolErrorCode::OutputLimit,
             format!("measure bounded response: {cause}"),
@@ -76,6 +78,10 @@ fn count(response: &Response, limit: usize) -> Result<usize, ProtocolError> {
         )
     })?;
     Ok(output.bytes)
+}
+
+fn serialize(response: &Response, output: &mut impl Write) -> Result<(), serde_json::Error> {
+    super::write_json(output, response)
 }
 
 struct CountingOutput {

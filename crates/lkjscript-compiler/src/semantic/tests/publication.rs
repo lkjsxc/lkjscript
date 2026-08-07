@@ -28,6 +28,62 @@ fn snapshot(root: &std::path::Path) -> crate::semantic::schema::SnapshotResult {
 }
 
 #[test]
+fn output_limit_discards_staged_publication() {
+    let directory = case_dir("publication-output-limit");
+    let root = directory.join("main.lkjscript");
+    let original = concat!(
+        "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
+        "params/\n/params\nunit\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
+    );
+    std::fs::write(&root, original).expect("write output-limit source");
+    let snapshot = snapshot(&root);
+    let revision = crate::source::load(&root)
+        .expect("load output-limit source")
+        .revision()
+        .to_hex();
+    let declaration = snapshot
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "f")
+        .expect("output-limit declaration");
+    let file = snapshot
+        .source_units
+        .first()
+        .expect("output-limit source unit");
+    let operation = format!(
+        concat!(
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"publish\",",
+            "\"base_revision\":\"{revision}\",",
+            "\"file_preconditions\":[{{\"path\":{},\"bytes\":{},\"sha256\":\"{}\"}}],",
+            "\"operations\":[{{\"kind\":\"rename-declaration\",",
+            "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
+            "\"new_name\":\"renamed\"}}]}}"
+        ),
+        serde_json::to_string(&file.path).expect("encode source path"),
+        file.bytes,
+        file.sha256,
+        declaration.key,
+        declaration.fingerprint,
+        revision = revision,
+    );
+    let default = crate::semantic::charges::BoundaryPolicy::default();
+    let failure = crate::semantic::execute_with_policy(
+        &request(&root, &operation),
+        crate::semantic::charges::BoundaryPolicy {
+            source_bytes: default.source_bytes,
+            response_bytes: 1,
+        },
+    )
+    .expect_err("response policy must fail before publication");
+    assert!(failure.to_string().contains("output-limit"));
+    assert_eq!(
+        std::fs::read_to_string(&root).expect("source after output limit"),
+        original
+    );
+}
+
+#[test]
 fn publication_failure_restores_every_original_byte() {
     let directory = case_dir("publication-failure");
     let root = directory.join("main.lkjscript");

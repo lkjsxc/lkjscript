@@ -256,3 +256,100 @@ fn valid_transaction_crosses_the_removed_64_operation_admission_boundary() {
         source
     );
 }
+
+#[test]
+fn deep_expression_replacement_crosses_json_and_source_depth_boundaries() {
+    let directory = case_dir("deep-expression-transaction");
+    let root = directory.join("main.lkjscript");
+    let original = "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
+    std::fs::write(&root, original).expect("write deep transaction source");
+    let (revision, snapshot) = take_snapshot(&root);
+    let main = snapshot
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "$main")
+        .expect("main declaration");
+    let body = snapshot
+        .nodes
+        .iter()
+        .rfind(|node| {
+            node.kind == crate::semantic::schema::SemanticNodeKind::UnitLiteral
+                && node.declaration.as_deref() == Some(&main.key)
+        })
+        .expect("main body");
+    let depth = 192;
+    let mut expression = "{\"kind\":\"unit\"}".to_string();
+    for _ in 0..depth {
+        expression = format!("{{\"kind\":\"do\",\"expressions\":[{expression}]}}");
+    }
+    let publish = format!(
+        concat!(
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"publish\",",
+            "\"base_revision\":\"{revision}\",\"file_preconditions\":[{}],",
+            "\"operations\":[{{\"kind\":\"replace-expression\",",
+            "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
+            "\"node\":{},\"node_fingerprint\":\"{}\",\"expression\":{expression}}}]}}"
+        ),
+        preconditions(&snapshot),
+        main.key,
+        main.fingerprint,
+        body.index,
+        body.fingerprint,
+        revision = revision,
+        expression = expression,
+    );
+    assert!(request(&root, &publish).len() < crate::semantic::MAX_REQUEST_BYTES);
+    let published = response(
+        &crate::semantic::execute(&request(&root, &publish)).expect("publish deep expression"),
+    );
+    assert!(matches!(
+        published.result,
+        ResponseResult::ApplyTransaction { .. }
+    ));
+    assert_eq!(
+        std::fs::read_to_string(&root)
+            .expect("read deep source")
+            .matches("do/\n")
+            .count(),
+        depth
+    );
+
+    let (revision, snapshot) = take_snapshot(&root);
+    let main = snapshot
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "$main")
+        .expect("deep main declaration");
+    let deepest = snapshot
+        .nodes
+        .iter()
+        .rfind(|node| {
+            node.kind == crate::semantic::schema::SemanticNodeKind::UnitLiteral
+                && node.declaration.as_deref() == Some(&main.key)
+        })
+        .expect("deepest unit");
+    let preview = format!(
+        concat!(
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
+            "\"base_revision\":\"{revision}\",\"file_preconditions\":[{}],",
+            "\"operations\":[{{\"kind\":\"replace-expression\",",
+            "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
+            "\"node\":{},\"node_fingerprint\":\"{}\",",
+            "\"expression\":{{\"kind\":\"do\",\"expressions\":[{{\"kind\":\"unit\"}}]}}}}]}}"
+        ),
+        preconditions(&snapshot),
+        main.key,
+        main.fingerprint,
+        deepest.index,
+        deepest.fingerprint,
+        revision = revision,
+    );
+    let previewed = response(
+        &crate::semantic::execute(&request(&root, &preview)).expect("preview deepest replacement"),
+    );
+    assert!(
+        matches!(previewed.result, ResponseResult::ApplyTransaction { .. }),
+        "unexpected deep replacement response: {:?}",
+        previewed.result
+    );
+}

@@ -1,14 +1,14 @@
 mod response;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::semantic::schema::{ProtocolError, ProtocolErrorCode, Request};
 
 pub(crate) use response::{encode_prepared, prepare_response, PreparedResponse};
 
 pub const MAX_REQUEST_BYTES: usize = 1024 * 1024;
-pub(crate) const MAX_JSON_DEPTH: u32 = 64;
 pub(crate) const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+pub(super) const SERDE_STACK_RED_ZONE_BYTES: usize = 256 * 1024;
 
 pub(crate) fn decode_request(input: &[u8]) -> Result<Request, ProtocolError> {
     if input.len() > MAX_REQUEST_BYTES {
@@ -23,13 +23,12 @@ pub(crate) fn decode_request(input: &[u8]) -> Result<Request, ProtocolError> {
             "request is not well-formed UTF-8",
         )
     })?;
-    check_json_depth(input)?;
-    let request: Request = serde_json::from_slice(input).map_err(|failure| {
-        error(
-            ProtocolErrorCode::InvalidJson,
-            format!("strict JSON request rejected: {failure}"),
-        )
-    })?;
+    let mut deserializer = serde_json::Deserializer::from_slice(input);
+    deserializer.disable_recursion_limit();
+    let mut stacked = serde_stacker::Deserializer::new(&mut deserializer);
+    stacked.red_zone = SERDE_STACK_RED_ZONE_BYTES;
+    let request = Request::deserialize(stacked).map_err(json_error)?;
+    deserializer.end().map_err(json_error)?;
     if request.schema != super::SCHEMA {
         return Err(error(
             ProtocolErrorCode::InvalidSchema,
@@ -53,37 +52,11 @@ pub(crate) fn decode_request(input: &[u8]) -> Result<Request, ProtocolError> {
     Ok(request)
 }
 
-fn check_json_depth(input: &[u8]) -> Result<(), ProtocolError> {
-    let mut depth = 0_u32;
-    let mut quoted = false;
-    let mut escaped = false;
-    for byte in input {
-        if quoted {
-            if escaped {
-                escaped = false;
-            } else if *byte == b'\\' {
-                escaped = true;
-            } else if *byte == b'"' {
-                quoted = false;
-            }
-            continue;
-        }
-        match *byte {
-            b'"' => quoted = true,
-            b'{' | b'[' => {
-                depth = depth.saturating_add(1);
-                if depth > MAX_JSON_DEPTH {
-                    return Err(error(
-                        ProtocolErrorCode::ResourceLimit,
-                        format!("JSON nesting exceeds {MAX_JSON_DEPTH}"),
-                    ));
-                }
-            }
-            b'}' | b']' => depth = depth.saturating_sub(1),
-            _ => {}
-        }
-    }
-    Ok(())
+fn json_error(failure: serde_json::Error) -> ProtocolError {
+    error(
+        ProtocolErrorCode::InvalidJson,
+        format!("strict JSON request rejected: {failure}"),
+    )
 }
 
 pub(crate) fn error(code: ProtocolErrorCode, message: impl Into<String>) -> ProtocolError {
@@ -108,11 +81,21 @@ pub(crate) fn measure_json<T: Serialize>(value: &T) -> Result<usize, ProtocolErr
         }
     }
     let mut counter = Counter(0);
-    serde_json::to_writer(&mut counter, value).map_err(|failure| {
+    write_json(&mut counter, value).map_err(|failure| {
         error(
             ProtocolErrorCode::ResourceLimit,
             format!("measure typed JSON: {failure}"),
         )
     })?;
     Ok(counter.0)
+}
+
+pub(crate) fn write_json<T: Serialize>(
+    output: &mut impl std::io::Write,
+    value: &T,
+) -> Result<(), serde_json::Error> {
+    let mut serializer = serde_json::Serializer::new(output);
+    let mut stacked = serde_stacker::Serializer::new(&mut serializer);
+    stacked.red_zone = SERDE_STACK_RED_ZONE_BYTES;
+    value.serialize(stacked)
 }

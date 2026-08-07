@@ -140,6 +140,59 @@ fn canonical_source_numeric_conversion_candidates_use_canonical_operations() {
 }
 
 #[test]
+fn deep_product_witness_keeps_candidate_coverage_complete() {
+    let directory = case_dir("deep-hole-witness");
+    let root = directory.join("main.lkjscript");
+    let depth = 12;
+    let mut source = String::new();
+    for index in 0..depth {
+        source.push_str(&format!(
+            concat!(
+                "product/\nname/\np{index}\n/name\nfields/\nfield/\n",
+                "name/\nvalue\n/name\ntype/\nproduct\np{}\n/type\n",
+                "/field\n/fields\n/product\n"
+            ),
+            index + 1,
+            index = index,
+        ));
+    }
+    source.push_str(&format!(
+        concat!(
+            "product/\nname/\np{depth}\n/name\nfields/\nfield/\n",
+            "name/\nvalue\n/name\ntype/\nunit\n/type\n/field\n/fields\n/product\n"
+        ),
+        depth = depth,
+    ));
+    source.push_str(concat!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nproduct/\np0\n/product\n/output\n/sig\n",
+        "hole/\nname/\ndeep\n/name\n/hole\n/main\n",
+    ));
+    std::fs::write(&root, source).expect("write deep witness source");
+    let context = context(&root);
+    assert!(
+        context.exploration.supported,
+        "unexpected exploration: {:?}",
+        context.exploration
+    );
+    assert!(!context.exploration.truncated);
+    let call = context
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.category == crate::semantic::schema::CandidateCategory::ProductConstructor
+                && candidate.snippets[0]
+                    .source
+                    .starts_with("product-value/\np0\n")
+        })
+        .expect("product witness deeper than eight");
+    assert!(call.snippets[0].complete);
+    assert_eq!(
+        call.snippets[0].source.matches("product-value/\n").count(),
+        depth + 1
+    );
+}
+
+#[test]
 fn typed_hole_entity_roundtrips_and_legal_actions_are_closed() {
     let directory = case_dir("hole-roundtrip");
     let root = directory.join("main.lkjscript");

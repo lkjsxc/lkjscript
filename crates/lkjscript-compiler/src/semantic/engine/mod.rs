@@ -19,7 +19,18 @@ pub(crate) fn execute_request(
     request: Request,
     request_bytes: usize,
 ) -> Result<EngineOutcome, ProtocolError> {
-    let policy = super::charges::BoundaryPolicy::default();
+    execute_request_with_policy(
+        request,
+        request_bytes,
+        super::charges::BoundaryPolicy::default(),
+    )
+}
+
+pub(crate) fn execute_request_with_policy(
+    request: Request,
+    request_bytes: usize,
+    policy: super::charges::BoundaryPolicy,
+) -> Result<EngineOutcome, ProtocolError> {
     let source_byte_policy = crate::source::SourceBytePolicy::limited(policy.source_bytes);
     let root = Path::new(&request.root);
     let request_charge = Charges {
@@ -28,7 +39,14 @@ pub(crate) fn execute_request(
     };
     let guard = match super::transaction::begin(root) {
         Ok(guard) => guard,
-        Err(failure) => return prepare(error_response(None, request_charge, failure), None, None),
+        Err(failure) => {
+            return prepare(
+                error_response(None, request_charge, failure),
+                None,
+                None,
+                policy.response_bytes,
+            )
+        }
     };
     let tree = match crate::source::load_for_protocol(root, source_byte_policy) {
         Ok(tree) => tree,
@@ -46,7 +64,7 @@ pub(crate) fn execute_request(
                 },
                 ..base_response(None, request_charge)
             };
-            return prepare(response, None, guard);
+            return prepare(response, None, guard, policy.response_bytes);
         }
     };
     if let Err(message) = operations::holes::validate::source_holes(&tree) {
@@ -55,13 +73,13 @@ pub(crate) fn execute_request(
             request_charge,
             error(ProtocolErrorCode::ValidationFailed, message),
         );
-        return prepare(response, None, guard);
+        return prepare(response, None, guard, policy.response_bytes);
     }
     let mut charges = match super::charges::measure(&tree, request_bytes, &request.operation) {
         Ok(charges) => charges,
         Err(failure) => {
             let response = error_response(Some(tree.revision().to_hex()), request_charge, failure);
-            return prepare(response, None, guard);
+            return prepare(response, None, guard, policy.response_bytes);
         }
     };
     let revision = tree.revision().to_hex();
@@ -77,7 +95,12 @@ pub(crate) fn execute_request(
                 result: dispatched.result,
                 ..base_response(Some(response_revision), charges)
             };
-            prepare(response, dispatched.publication, guard)
+            prepare(
+                response,
+                dispatched.publication,
+                guard,
+                policy.response_bytes,
+            )
         }
         Err(failure) => {
             let diagnostic = failure.diagnostic.as_deref().cloned().or_else(|| {
@@ -99,7 +122,7 @@ pub(crate) fn execute_request(
             {
                 *slot = diagnostic.map(Box::new);
             }
-            prepare(response, None, guard)
+            prepare(response, None, guard, policy.response_bytes)
         }
     }
 }
