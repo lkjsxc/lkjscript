@@ -39,19 +39,15 @@ extern "C" fn runtime_enter_function(state: *mut NativeCallState<'_>, function: 
     if state.status != 0 {
         return;
     }
-    let Ok(index) = usize::try_from(function) else {
+    let Some(ordinal) = state.entry_mapping.ordinal_for_source(function) else {
+        state.invalid_entry_accounting = Some(function);
         state.status = 5;
         return;
     };
-    let Some(entries) = state
-        .native_entries
-        .get(index)
-        .and_then(|entries| entries.checked_add(1))
-    else {
+    if !record_native_entry(&mut state.native_entries, ordinal) {
+        state.invalid_entry_accounting = Some(function);
         state.status = 5;
-        return;
-    };
-    state.native_entries[index] = entries;
+    }
 }
 
 extern "C" fn runtime_reserve_frame(

@@ -11,28 +11,31 @@ impl IslandCallState<'_> {
         };
         if reservation.function_ordinal != function_ordinal
             || reservation.rbp != rbp
-            || self.active_depth >= self.maximum_active_frames
+            || self.active_frames.len() >= self.maximum_active_frames
         {
             self.invalidate_frame();
             return;
         }
-        let Some(source) = usize::try_from(function_ordinal)
-            .ok()
-            .and_then(|function| self.image.entries().get(function))
-            .and_then(|entry| usize::try_from(entry.source_function().get()).ok())
-        else {
+        let Ok(ordinal) = usize::try_from(function_ordinal) else {
             self.invalidate_frame();
             return;
         };
-        let Some(next_entries) = self
-            .native_entries
-            .get(source)
-            .and_then(|entries| entries.checked_add(1))
-        else {
-            self.invalidate_frame();
+        if !record_native_entry(&mut self.native_entries, ordinal) {
+            self.invalid_entry_accounting = self
+                .image
+                .entries()
+                .get(ordinal)
+                .map(|entry| entry.source_function().get())
+                .or(Some(function_ordinal));
+            self.status = 5;
             return;
-        };
-        self.native_entries[source] = next_entries;
+        }
+        if self.active_frames.len() == self.active_frames.capacity()
+            && self.active_frames.try_reserve(1).is_err()
+        {
+            self.fail_bookkeeping_allocation();
+            return;
+        }
         self.poll();
         if self.status != 0 {
             self.pending_reservation = None;
@@ -53,23 +56,21 @@ impl IslandCallState<'_> {
             return;
         }
         self.pending_reservation = None;
-        self.active_frames[self.active_depth] = IslandFrame {
-            function_ordinal: Some(function_ordinal),
+        self.active_frames.push(IslandFrame {
+            function_ordinal,
             rbp,
             reserved_bytes: reservation.frame_bytes,
             value_homes: reservation.value_homes,
-        };
-        self.active_depth += 1;
-        self.peak_active_depth = self.peak_active_depth.max(self.active_depth);
+        });
+        self.peak_active_depth = self.peak_active_depth.max(self.active_frames.len());
     }
 
     pub(in crate::executable) fn unregister_frame(&mut self, function_ordinal: u64, rbp: *mut u8) {
-        let Some(index) = self.active_depth.checked_sub(1) else {
+        let Some(frame) = self.active_frames.last().copied() else {
             self.invalidate_frame();
             return;
         };
-        let frame = self.active_frames[index];
-        if frame.function_ordinal != Some(function_ordinal) || frame.rbp != rbp {
+        if frame.function_ordinal != function_ordinal || frame.rbp != rbp {
             self.invalidate_frame();
             return;
         }
@@ -84,8 +85,7 @@ impl IslandCallState<'_> {
             self.invalidate_frame();
             return;
         };
-        self.active_frames[index] = EMPTY_ISLAND_FRAME;
-        self.active_depth = index;
+        self.active_frames.pop();
         self.reserved_native_stack_bytes = next_bytes;
         self.active_value_homes = next_values;
     }

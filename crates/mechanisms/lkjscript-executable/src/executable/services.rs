@@ -24,7 +24,7 @@ impl NativeInvocationConfig {
         Self {
             poll_fuel,
             wall_time,
-            max_active_frames: MAX_ACTIVE_FRAMES,
+            max_active_frames: usize::MAX,
             max_active_values: usize::MAX,
             max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
             max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,

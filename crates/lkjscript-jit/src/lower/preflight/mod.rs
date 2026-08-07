@@ -25,13 +25,6 @@ pub(super) fn preflight_function(
     {
         require_domain_type(function.id, ty, layouts, domain)?;
     }
-    if function.id.raw() >= 64 {
-        return Err(LoweringError::new(
-            LoweringFailureCode::UnsupportedSignature,
-            Some(function.id),
-            "native entry accounting supports at most 64 dense source functions",
-        ));
-    }
     for block in &function.blocks {
         for parameter in &block.parameters {
             lower_value_type(function.id, parameter.id, &parameter.ty, modes, layouts)?;

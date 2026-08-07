@@ -66,11 +66,12 @@ pub(crate) fn install_error(function: FunctionId, error: InstallError) -> Engine
 }
 
 pub(crate) fn invocation_error(function: FunctionId, error: InvocationError) -> EngineError {
-    EngineError::new(
-        FailureCode::InvocationFailure,
-        Some(function),
-        error.to_string(),
-    )
+    let code = if error == InvocationError::NativeBookkeepingAllocationFailed {
+        FailureCode::NativeBookkeeping
+    } else {
+        FailureCode::InvocationFailure
+    };
+    EngineError::new(code, Some(function), error.to_string())
 }
 
 #[cfg(test)]

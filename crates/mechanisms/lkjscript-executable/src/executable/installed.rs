@@ -6,6 +6,7 @@ mod island;
 pub struct InstalledImage {
     pub(super) installer: Arc<InstallerState>,
     pub(super) image: InstallableImage,
+    pub(super) entry_mapping: NativeEntryMapping,
     pub(super) mapping: platform::Mapping,
     pub(super) usage: ExecutableUsage,
 }
@@ -69,19 +70,25 @@ impl InstalledImage {
             .find(|candidate| candidate.function() == entry)
             .ok_or(InvocationError::UnknownEntry)?;
         validate_arguments(entry.signature(), arguments)?;
-        let mut state = NativeCallState::new(&self.image, config, services)?;
+        let mut state = NativeCallState::new(&self.image, &self.entry_mapping, config, services)?;
         let raw = self.mapping.invoke(
             entry.offset() as usize,
             entry.signature(),
             arguments,
             &mut state,
         )?;
+        if let Some(source) = state.invalid_entry_accounting {
+            return Err(InvocationError::InvalidNativeEntryAccounting(source));
+        }
+        if state.bookkeeping_allocation_failed {
+            return Err(InvocationError::NativeBookkeepingAllocationFailed);
+        }
         if state.metadata_invalid {
             return Err(InvocationError::InvalidActiveFrame);
         }
-        if state.active_depth != 0 {
-            let leaked = state.active_depth;
-            state.active_depth = 0;
+        if !state.active_frames.is_empty() {
+            let leaked = state.active_frames.len();
+            state.active_frames.clear();
             state.pending_reservation = None;
             state.reserved_native_stack_bytes = 0;
             state.active_value_homes = 0;
@@ -118,24 +125,14 @@ impl InstalledImage {
             5 => InvocationOutcome::HostFailure,
             other => return Err(InvocationError::InvalidNativeStatus(other)),
         };
-        let native_entries = state
-            .native_entries
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|(_, entries)| *entries != 0)
-            .map(|(source_function, entries)| NativeEntryCount {
-                source_function: source_function as u64,
-                entries,
-            })
-            .collect();
+        state.native_entries.retain(|count| count.entries != 0);
         Ok(InvocationReport {
             outcome,
             trap_site,
             poll_count: state.poll_count,
-            native_entries,
+            native_entries: state.native_entries,
             peak_active_frame_depth: state.peak_active_depth,
-            active_frame_depth: state.active_depth,
+            active_frame_depth: state.active_frames.len(),
             peak_native_stack_bytes: state.peak_native_stack_bytes,
             reserved_native_stack_bytes: state.reserved_native_stack_bytes,
             heap_operation_attempts: state.heap_operation_attempts,

@@ -3,6 +3,54 @@ use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_jit::{JitConfig, JitSession, TierState};
 use lkjscript_vm::{run_chunk, run_chunk_auto};
 
+fn generated_scalar_helpers(count: usize) -> String {
+    let mut source = String::new();
+    for index in 0..count {
+        source.push_str("def/\nname/\n");
+        source.push_str(&format!("helper-{index}\n"));
+        source.push_str("/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nvalue\ni64\n/params\nvalue\n");
+        source.push_str("/fn\n/def\n");
+    }
+    let hot = count - 1;
+    source.push_str("main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\n");
+    for _ in 0..3 {
+        source.push_str(&format!("helper-{hot}/\n99\n/helper-{hot}\n"));
+    }
+    source.push_str("/do\n/main\n");
+    source
+}
+
+#[test]
+fn auto_executes_hot_high_function_id_natively() {
+    let program = compile(
+        &generated_scalar_helpers(100),
+        "auto-high-function.lkjscript",
+    );
+    let mut config = JitConfig::default();
+    config.auto_threshold = 2;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(99)));
+    let hot = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "helper-99")
+        .expect("hot high-ID helper tier record");
+    assert!(
+        hot.function().raw() > 63,
+        "generated helper must cross the former source-ID ceiling"
+    );
+    assert!(hot.auto_entry_eligible());
+    assert_eq!(hot.state(), TierState::BaselineNative, "{hot:?}");
+    assert!(hot.native_entries() > 0);
+    assert_eq!(stats.compile_failures, 0);
+}
+
 #[test]
 fn auto_group_structural_string_helper_remains_vm_entry_ineligible() {
     let source = "def/\nname/\ntext\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nparams/\n/params\nempty-string/\n/empty-string\n/fn\n/def\ndef/\nname/\nsize\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\n/params\nstring-byte-length/\ntext/\n/text\n/string-byte-length\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\nsize/\n/size\ntext/\n/text\nsize/\n/size\n/do\n/main\n";

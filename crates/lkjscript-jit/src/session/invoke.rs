@@ -100,7 +100,25 @@ impl JitSession {
                 self.first_native_call = Some(elapsed);
             }
         }
-        let report = report?;
+        let report = match report {
+            Ok(report) => report,
+            Err(error)
+                if self.links.is_some() && error.code() == FailureCode::NativeBookkeeping =>
+            {
+                let object = self.objects[object_index].identity;
+                self.objects[object_index].invalidated = true;
+                for record in &mut self.functions {
+                    if record.code_object == Some(object) {
+                        record.code_object = None;
+                        record.state = TierState::Disabled;
+                        record.last_failure = Some(FailureCode::NativeBookkeeping);
+                    }
+                }
+                self.vm_fallbacks = self.vm_fallbacks.saturating_add(1);
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
         self.poll_calls = self.poll_calls.saturating_add(report.poll_count());
         self.resource_runtime_calls = self
             .resource_runtime_calls

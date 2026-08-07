@@ -3,14 +3,19 @@ use super::*;
 impl<'a> NativeCallState<'a> {
     pub(in crate::executable) fn new(
         image: &'a InstallableImage,
+        entry_mapping: &'a NativeEntryMapping,
         config: &NativeInvocationConfig,
         services: &'a mut dyn NativeRuntimeServices,
     ) -> Result<Self, InvocationError> {
-        let maximum_active_frames = config.max_active_frames.min(MAX_ACTIVE_FRAMES);
+        let native_entries = try_entry_counts(image)?;
+        let mut active_frames = Vec::new();
+        active_frames
+            .try_reserve_exact(config.max_active_frames.min(image.entries().len()))
+            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         let mut heap_arguments = Vec::new();
         heap_arguments
             .try_reserve_exact(16)
-            .map_err(|_| InvocationError::RuntimeValueCapacityExceeded)?;
+            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         // One generated invocation cannot migrate threads. Cache the current
         // thread's fixed stack bounds once instead of repeating pthread
         // attribute queries at every generated function entry.
@@ -34,12 +39,12 @@ impl<'a> NativeCallState<'a> {
             poll_fuel_remaining: config.poll_fuel,
             deadline_ms,
             poll_count: 0,
-            native_entries: [0; MAX_NATIVE_ENTRY_COUNTS],
+            native_entries,
+            entry_mapping,
             image,
             services,
-            active_frames: [EMPTY_ACTIVE_FRAME; MAX_ACTIVE_FRAMES],
-            active_depth: 0,
-            maximum_active_frames,
+            active_frames,
+            maximum_active_frames: config.max_active_frames,
             maximum_active_values: config.max_active_values,
             maximum_native_stack_bytes: config.max_native_stack_bytes,
             maximum_native_frame_bytes: config.max_native_frame_bytes,
@@ -54,8 +59,23 @@ impl<'a> NativeCallState<'a> {
             heap_arguments,
             heap_operation_attempts: 0,
             heap_operation_successes: 0,
+            invalid_entry_accounting: None,
+            bookkeeping_allocation_failed: false,
             metadata_invalid: false,
         })
+    }
+
+    pub(in crate::executable) fn fail_bookkeeping_allocation(&mut self) {
+        if let Some(reservation) = self.pending_reservation.take() {
+            self.reserved_native_stack_bytes = self
+                .reserved_native_stack_bytes
+                .saturating_sub(reservation.frame_bytes);
+            self.active_value_homes = self
+                .active_value_homes
+                .saturating_sub(reservation.value_homes);
+        }
+        self.bookkeeping_allocation_failed = true;
+        self.status = 5;
     }
 
     pub(in crate::executable) fn invalidate_active_frame(&mut self) {

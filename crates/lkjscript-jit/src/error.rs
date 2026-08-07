@@ -14,6 +14,7 @@ pub enum FailureCode {
     CompileWallTime,
     InstallLimit,
     InstallFailure,
+    NativeBookkeeping,
     InvocationFailure,
 }
 

@@ -11,26 +11,17 @@ mod stack;
 
 pub(super) use island::*;
 
-pub(super) const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
-pub(super) const MAX_ACTIVE_FRAMES: usize = 64;
 pub(super) const DEFAULT_MAX_NATIVE_STACK_BYTES: usize = 4 * 1024 * 1024;
 pub(super) const DEFAULT_MAX_NATIVE_FRAME_BYTES: usize = 1024 * 1024;
 pub(super) const NATIVE_STACK_GUARD_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy)]
 pub(super) struct ActiveFrame {
-    pub(super) function_ordinal: Option<u64>,
+    pub(super) function_ordinal: u64,
     pub(super) rbp: *mut u8,
     pub(super) reserved_bytes: usize,
     pub(super) value_homes: usize,
 }
-
-const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
-    function_ordinal: None,
-    rbp: std::ptr::null_mut(),
-    reserved_bytes: 0,
-    value_homes: 0,
-};
 
 #[derive(Clone, Copy)]
 pub(super) struct PendingFrameReservation {
@@ -54,11 +45,11 @@ pub(super) struct NativeCallState<'a> {
     pub(super) poll_fuel_remaining: u64,
     pub(super) deadline_ms: i64,
     pub(super) poll_count: u64,
-    pub(super) native_entries: [u64; MAX_NATIVE_ENTRY_COUNTS],
+    pub(super) native_entries: Vec<NativeEntryCount>,
+    pub(super) entry_mapping: &'a NativeEntryMapping,
     pub(super) image: &'a InstallableImage,
     pub(super) services: &'a mut dyn NativeRuntimeServices,
-    pub(super) active_frames: [ActiveFrame; MAX_ACTIVE_FRAMES],
-    pub(super) active_depth: usize,
+    pub(super) active_frames: Vec<ActiveFrame>,
     pub(super) maximum_active_frames: usize,
     pub(super) maximum_active_values: usize,
     pub(super) maximum_native_stack_bytes: usize,
@@ -74,5 +65,58 @@ pub(super) struct NativeCallState<'a> {
     pub(super) heap_arguments: Vec<NativeValue>,
     pub(super) heap_operation_attempts: u64,
     pub(super) heap_operation_successes: u64,
+    pub(super) invalid_entry_accounting: Option<u64>,
+    pub(super) bookkeeping_allocation_failed: bool,
     pub(super) metadata_invalid: bool,
+}
+
+#[derive(Debug)]
+pub(super) struct NativeEntryMapping {
+    by_source: Vec<(u64, usize)>,
+}
+
+impl NativeEntryMapping {
+    pub(super) fn try_new(image: &InstallableImage) -> Result<Self, InstallError> {
+        let mut by_source = Vec::new();
+        by_source
+            .try_reserve_exact(image.entries().len())
+            .map_err(|_| InstallError::AllocationFailed)?;
+        for (ordinal, entry) in image.entries().iter().enumerate() {
+            by_source.push((entry.source_function().get(), ordinal));
+        }
+        by_source.sort_unstable_by_key(|(source, _)| *source);
+        Ok(Self { by_source })
+    }
+
+    pub(super) fn ordinal_for_source(&self, source: u64) -> Option<usize> {
+        self.by_source
+            .binary_search_by_key(&source, |(candidate, _)| *candidate)
+            .ok()
+            .map(|index| self.by_source[index].1)
+    }
+}
+
+pub(super) fn try_entry_counts(
+    image: &InstallableImage,
+) -> Result<Vec<NativeEntryCount>, InvocationError> {
+    let mut counts = Vec::new();
+    counts
+        .try_reserve_exact(image.entries().len())
+        .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
+    counts.extend(image.entries().iter().map(|entry| NativeEntryCount {
+        source_function: entry.source_function().get(),
+        entries: 0,
+    }));
+    Ok(counts)
+}
+
+pub(super) fn record_native_entry(counts: &mut [NativeEntryCount], ordinal: usize) -> bool {
+    let Some(count) = counts.get_mut(ordinal) else {
+        return false;
+    };
+    let Some(entries) = count.entries.checked_add(1) else {
+        return false;
+    };
+    count.entries = entries;
+    true
 }

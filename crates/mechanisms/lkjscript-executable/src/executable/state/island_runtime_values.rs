@@ -19,16 +19,11 @@ impl IslandCallState<'_> {
             self.invalidate_frame();
             return;
         }
-        let Some(frame_index) = self.active_depth.checked_sub(1) else {
+        let Some(frame) = self.active_frames.last().copied() else {
             self.invalidate_frame();
             return;
         };
-        let frame = self.active_frames[frame_index];
-        let Some(function_ordinal) = frame.function_ordinal else {
-            self.invalidate_frame();
-            return;
-        };
-        let Some(entry) = usize::try_from(function_ordinal)
+        let Some(entry) = usize::try_from(frame.function_ordinal)
             .ok()
             .and_then(|function| self.image.entries().get(function))
         else {

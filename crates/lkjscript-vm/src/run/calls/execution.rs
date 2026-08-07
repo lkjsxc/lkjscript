@@ -88,6 +88,14 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                                 }
                             }
                         }
+                        Err(error)
+                            if error.code() == lkjscript_jit::FailureCode::NativeBookkeeping =>
+                        {
+                            // Automatic native bookkeeping is allocated before a valid
+                            // acyclic JIT group enters generated code. The session has
+                            // invalidated that optimization, so this call
+                            // safely continues through the existing VM path.
+                        }
                         Err(error) => {
                             return Err(Error::msg(format!(
                                 "native invocation failed without VM fallback: {error}"

@@ -61,7 +61,8 @@ pub enum InvocationError {
     InvalidNativeStatus(u32),
     InvalidNativeTrap(u32),
     InvalidBoolReturn(u64),
-    RuntimeValueCapacityExceeded,
+    NativeBookkeepingAllocationFailed,
+    InvalidNativeEntryAccounting(u64),
     InvalidActiveFrame,
     LeakedActiveFrames(usize),
     ExecutionDomain,
@@ -98,9 +99,13 @@ impl fmt::Display for InvocationError {
                 formatter,
                 "generated code returned non-canonical Bool {value}"
             ),
-            Self::RuntimeValueCapacityExceeded => {
-                formatter.write_str("native runtime-value capacity is exceeded")
+            Self::NativeBookkeepingAllocationFailed => {
+                formatter.write_str("native invocation bookkeeping allocation failed")
             }
+            Self::InvalidNativeEntryAccounting(source) => write!(
+                formatter,
+                "generated code accounted an unknown native source function {source}"
+            ),
             Self::InvalidActiveFrame => {
                 formatter.write_str("generated active-frame metadata is invalid")
             }

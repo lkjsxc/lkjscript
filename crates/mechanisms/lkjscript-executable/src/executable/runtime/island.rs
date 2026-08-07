@@ -14,19 +14,18 @@ pub(super) extern "C" fn runtime_island_enter(state: *mut IslandCallState<'_>, f
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
     };
-    let Ok(index) = usize::try_from(function) else {
+    if state.status != 0 {
+        return;
+    }
+    let Some(ordinal) = state.entry_mapping.ordinal_for_source(function) else {
+        state.invalid_entry_accounting = Some(function);
         state.status = 5;
         return;
     };
-    let Some(entries) = state
-        .native_entries
-        .get(index)
-        .and_then(|entries| entries.checked_add(1))
-    else {
+    if !record_native_entry(&mut state.native_entries, ordinal) {
+        state.invalid_entry_accounting = Some(function);
         state.status = 5;
-        return;
-    };
-    state.native_entries[index] = entries;
+    }
 }
 
 pub(super) extern "C" fn runtime_island_stdin(

@@ -46,6 +46,10 @@ impl ExecutableInstaller {
                 actual: Box::new(image.contracts()),
             });
         }
+        // Build the deterministic wide source-ID to installed-entry mapping before
+        // allocating or publishing executable state. Bookkeeping allocation failure
+        // therefore leaves both installer usage and W^X mappings unchanged.
+        let entry_mapping = NativeEntryMapping::try_new(&image)?;
         let accounting = image.accounting();
         check_object_limit(
             accounting.code_bytes(),
@@ -90,6 +94,7 @@ impl ExecutableInstaller {
         Ok(InstalledImage {
             installer: Arc::clone(&self.state),
             image,
+            entry_mapping,
             mapping,
             usage: ExecutableUsage {
                 code_bytes: accounting.code_bytes(),

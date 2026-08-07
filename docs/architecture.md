@@ -95,7 +95,12 @@ frame-home identities are wide. Native layout identities separate builtin, struc
 nominal-product domains. Native reference-layout hashing includes the typed domain, full `u64`
 value, and nominal digest instead of collision-prone arithmetic tags. Native frame ordinals and trap, heap, and structural runtime-site identities remain `u64` across
 generated code and runtime dispatch; an explicit presence word carries optional trap sites without
-reserving a numeric value. Machine-code offsets, x86 frame sizes/displacements, registers, opcodes,
+reserving a numeric value. Executable installation fallibly builds a sorted wide source-ID to
+installed-entry mapping before publishing W^X state. Invocation entry counters are indexed only by
+checked local ordinals, and invocation-local active-frame vectors grow under explicit execution
+policy instead of imposing a native source-count or depth ceiling. Automatic bookkeeping failure
+invalidates the optimization and retains VM execution; diagnostic forced-native entry reports a
+typed backend failure. Machine-code offsets, x86 frame sizes/displacements, registers, opcodes,
 and closed ABI tags remain checked narrow machine boundaries. The native planner retains compact calling-convention aggregate
 eligibility where required; checked preflight declines unsupported shapes and automatic execution
 uses validated VM bytecode.

@@ -10,7 +10,7 @@ impl IslandCallState<'_> {
         if self.status != 0 {
             return;
         }
-        if self.active_depth >= self.maximum_active_frames {
+        if self.active_frames.len() >= self.maximum_active_frames {
             self.status = 4;
             self.payload = 2;
             return;

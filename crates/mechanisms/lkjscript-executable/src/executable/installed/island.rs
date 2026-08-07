@@ -18,18 +18,26 @@ impl InstalledImage {
             .find(|candidate| candidate.function() == entry)
             .ok_or(InvocationError::UnknownEntry)?;
         validate_arguments(entry.signature(), arguments)?;
-        let mut state = IslandCallState::new(&self.image, config, services);
+        let mut state = IslandCallState::new(&self.image, &self.entry_mapping, config, services)?;
         let raw = self.mapping.invoke_island(
             entry.offset() as usize,
             entry.signature(),
             arguments,
             &mut state,
         )?;
+        if let Some(source) = state.invalid_entry_accounting {
+            return Err(InvocationError::InvalidNativeEntryAccounting(source));
+        }
+        if state.bookkeeping_allocation_failed {
+            return Err(InvocationError::NativeBookkeepingAllocationFailed);
+        }
         if state.metadata_invalid {
             return Err(InvocationError::InvalidActiveFrame);
         }
-        if state.active_depth != 0 {
-            return Err(InvocationError::LeakedActiveFrames(state.active_depth));
+        if !state.active_frames.is_empty() {
+            return Err(InvocationError::LeakedActiveFrames(
+                state.active_frames.len(),
+            ));
         }
         if state.pending_reservation.is_some()
             || state.reserved_native_stack_bytes != 0
@@ -62,22 +70,12 @@ impl InstalledImage {
             5 => InvocationOutcome::HostFailure,
             other => return Err(InvocationError::InvalidNativeStatus(other)),
         };
-        let native_entries = state
-            .native_entries
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|(_, count)| *count != 0)
-            .map(|(source, entries)| NativeEntryCount {
-                source_function: source as u64,
-                entries,
-            })
-            .collect();
+        state.native_entries.retain(|count| count.entries != 0);
         Ok(InvocationReport {
             outcome,
             trap_site,
             poll_count: state.poll_count,
-            native_entries,
+            native_entries: state.native_entries,
             peak_active_frame_depth: state.peak_active_depth,
             active_frame_depth: 0,
             peak_native_stack_bytes: state.peak_native_stack_bytes,

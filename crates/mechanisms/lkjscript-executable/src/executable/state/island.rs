@@ -2,18 +2,11 @@ use super::*;
 
 #[derive(Clone, Copy)]
 pub(in crate::executable) struct IslandFrame {
-    pub(in crate::executable) function_ordinal: Option<u64>,
+    pub(in crate::executable) function_ordinal: u64,
     pub(in crate::executable) rbp: *mut u8,
     pub(in crate::executable) reserved_bytes: usize,
     pub(in crate::executable) value_homes: usize,
 }
-
-pub(in crate::executable) const EMPTY_ISLAND_FRAME: IslandFrame = IslandFrame {
-    function_ordinal: None,
-    rbp: std::ptr::null_mut(),
-    reserved_bytes: 0,
-    value_homes: 0,
-};
 
 #[derive(Clone, Copy)]
 pub(in crate::executable) struct IslandFrameReservation {
@@ -34,11 +27,11 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) poll_fuel_remaining: u64,
     pub(in crate::executable) deadline_ms: i64,
     pub(in crate::executable) poll_count: u64,
-    pub(in crate::executable) native_entries: [u64; MAX_NATIVE_ENTRY_COUNTS],
+    pub(in crate::executable) native_entries: Vec<NativeEntryCount>,
+    pub(in crate::executable) entry_mapping: &'a NativeEntryMapping,
     pub(in crate::executable) image: &'a InstallableImage,
     pub(in crate::executable) services: &'a mut dyn NativeIslandRuntimeServices,
-    pub(in crate::executable) active_frames: [IslandFrame; MAX_ACTIVE_FRAMES],
-    pub(in crate::executable) active_depth: usize,
+    pub(in crate::executable) active_frames: Vec<IslandFrame>,
     pub(in crate::executable) maximum_active_frames: usize,
     pub(in crate::executable) maximum_active_values: usize,
     pub(in crate::executable) maximum_native_stack_bytes: usize,
@@ -61,15 +54,23 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) omitted_cleanup_failures: usize,
     pub(in crate::executable) maximum_cleanup_failures: usize,
     pub(in crate::executable) entry_rejected: bool,
+    pub(in crate::executable) invalid_entry_accounting: Option<u64>,
+    pub(in crate::executable) bookkeeping_allocation_failed: bool,
     pub(in crate::executable) metadata_invalid: bool,
 }
 
 impl<'a> IslandCallState<'a> {
     pub(in crate::executable) fn new(
         image: &'a InstallableImage,
+        entry_mapping: &'a NativeEntryMapping,
         config: &NativeInvocationConfig,
         services: &'a mut dyn NativeIslandRuntimeServices,
-    ) -> Self {
+    ) -> Result<Self, InvocationError> {
+        let native_entries = try_entry_counts(image)?;
+        let mut active_frames = Vec::new();
+        active_frames
+            .try_reserve_exact(config.max_active_frames.min(image.entries().len()))
+            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         let (native_stack_low, native_stack_high) =
             platform::native_stack_bounds().unwrap_or((0, 0));
         let (deadline_ms, status) = match config.wall_time {
@@ -80,7 +81,7 @@ impl<'a> IslandCallState<'a> {
             }
             None => (-1, 0),
         };
-        Self {
+        Ok(Self {
             status,
             trap: 0,
             payload: 0,
@@ -90,12 +91,12 @@ impl<'a> IslandCallState<'a> {
             poll_fuel_remaining: config.poll_fuel,
             deadline_ms,
             poll_count: 0,
-            native_entries: [0; MAX_NATIVE_ENTRY_COUNTS],
+            native_entries,
+            entry_mapping,
             image,
             services,
-            active_frames: [EMPTY_ISLAND_FRAME; MAX_ACTIVE_FRAMES],
-            active_depth: 0,
-            maximum_active_frames: config.max_active_frames.min(MAX_ACTIVE_FRAMES),
+            active_frames,
+            maximum_active_frames: config.max_active_frames,
             maximum_active_values: config.max_active_values,
             maximum_native_stack_bytes: config.max_native_stack_bytes,
             maximum_native_frame_bytes: config.max_native_frame_bytes,
@@ -117,8 +118,10 @@ impl<'a> IslandCallState<'a> {
             omitted_cleanup_failures: 0,
             maximum_cleanup_failures: config.max_cleanup_failures,
             entry_rejected: false,
+            invalid_entry_accounting: None,
+            bookkeeping_allocation_failed: false,
             metadata_invalid: false,
-        }
+        })
     }
 
     pub(in crate::executable) fn poll(&mut self) {
@@ -135,6 +138,19 @@ impl<'a> IslandCallState<'a> {
         if self.deadline_ms >= 0 && crate::now_ms_monotonic() >= self.deadline_ms {
             self.status = 3;
         }
+    }
+
+    pub(in crate::executable) fn fail_bookkeeping_allocation(&mut self) {
+        if let Some(reservation) = self.pending_reservation.take() {
+            self.reserved_native_stack_bytes = self
+                .reserved_native_stack_bytes
+                .saturating_sub(reservation.frame_bytes);
+            self.active_value_homes = self
+                .active_value_homes
+                .saturating_sub(reservation.value_homes);
+        }
+        self.bookkeeping_allocation_failed = true;
+        self.status = 5;
     }
 
     pub(in crate::executable) fn invalidate_frame(&mut self) {

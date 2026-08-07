@@ -14,7 +14,11 @@ compatibility.
   numeric conversions, bytes, byte vectors, lists, typed errors, and explicit capabilities.
 - The command-line runtime supports a default automatic path and diagnostic `vm`, `baseline-jit`,
   and `optimizing-jit` selections. Forced native selections preflight support and report failure
-  rather than claiming generated execution after fallback.
+  rather than claiming generated execution after fallback. Native entry accounting uses a
+  fallibly installed wide source-ID mapping and invocation-local counts keyed by installed entry,
+  so a hot eligible function above source ID 63 can enter native code. Active native frames grow
+  dynamically under `ExecutionConfig`; bookkeeping allocation failure disables an automatic
+  optimization before VM continuation, while forced native mode reports a typed backend failure.
 - Host adapters cover standard I/O and selected filesystem, TCP, hashing, terminal, and SQLite
   operations behind typed capability checks.
 - Ordinary runtime memory is collector-free. Unique storage, invocation regions, structural
