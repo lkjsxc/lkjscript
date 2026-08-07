@@ -1,11 +1,10 @@
+mod noop;
 mod structural;
 mod traits;
 use super::*;
+pub use noop::*;
 pub use structural::*;
 pub use traits::*;
-
-mod noop;
-pub(super) use noop::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NativeInvocationConfig {
@@ -15,6 +14,7 @@ pub struct NativeInvocationConfig {
     pub(super) max_active_values: Option<usize>,
     pub(super) native_stack_requirement: Option<usize>,
     pub(super) max_cleanup_failures: Option<usize>,
+    pub(super) cancellation_requested: bool,
 }
 
 impl NativeInvocationConfig {
@@ -27,6 +27,7 @@ impl NativeInvocationConfig {
             max_active_values: None,
             native_stack_requirement: None,
             max_cleanup_failures: None,
+            cancellation_requested: false,
         }
     }
 
@@ -39,6 +40,7 @@ impl NativeInvocationConfig {
             max_active_values: None,
             native_stack_requirement: None,
             max_cleanup_failures: None,
+            cancellation_requested: false,
         }
     }
 
@@ -63,6 +65,12 @@ impl NativeInvocationConfig {
     #[must_use]
     pub const fn with_native_stack_requirement(mut self, required_bytes: usize) -> Self {
         self.native_stack_requirement = Some(required_bytes);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_cancellation_requested(mut self, requested: bool) -> Self {
+        self.cancellation_requested = requested;
         self
     }
 }

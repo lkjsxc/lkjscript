@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Default)]
-pub(in crate::executable) struct NoopNativeIslandRuntimeServices;
+pub struct NoopNativeIslandRuntimeServices;
 
 impl NativeStructuralRuntimeServices for NoopNativeIslandRuntimeServices {}
 impl NativeRuntimeServices for NoopNativeIslandRuntimeServices {}
@@ -143,6 +143,6 @@ impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
 }
 
 #[derive(Default)]
-pub(in crate::executable) struct NoopNativeRuntimeServices;
+pub struct NoopNativeRuntimeServices;
 
 impl NativeRuntimeServices for NoopNativeRuntimeServices {}

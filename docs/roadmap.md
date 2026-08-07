@@ -13,11 +13,13 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    and OS/ABI bounds. Keep only genuine external representation boundaries and a small explicit
    coarse policy for untrusted requests. Preserve typed exhaustion, cancellation safety, and atomic
    publication.
-2. **Measure and select one production execution path.** Run equivalent representative workloads
-   across generic VM, automatic native, baseline-JIT, and optimizing machinery. Record compile and
-   startup latency, steady-state execution, peak memory, generated code, release size, target
-   support, safety, and maintenance cost. Select one product architecture and delete or demote the
-   losing public tier surface.
+2. **Complete the selected production runtime cutover.** The accepted path synchronously prepares
+   one baseline-native reachable group before effects, runs it when preparation succeeds, otherwise
+   runs the VM, and never falls back after entry. The typed executable preparation/entry boundary is
+   implemented. Replace repeated automatic transitions with the single group decision, then delete
+   or demote forced tier CLI surface and optimizing machinery. Retain representative runtime
+   measurements and add peak-memory, generated-code, release-size, and target evidence as the
+   cutover changes those outcomes.
 3. **Address measured scale costs without restoring quotas.** Start with preparation, bytecode
    validation, and peak memory exposed by the retained 16,385-call/borrow-scope harness. Profile
    repeated scans, whole-program clones, duplicate identity/serialization work, and unconditional

@@ -46,7 +46,7 @@ impl fmt::Display for InstallError {
 impl std::error::Error for InstallError {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum InvocationError {
+pub enum PreEntryError {
     UnknownEntry,
     ArgumentCount {
         expected: usize,
@@ -58,30 +58,23 @@ pub enum InvocationError {
         actual: Box<ValueType>,
     },
     UnsupportedSignature,
-    InvalidNativeStatus(u32),
-    InvalidNativeTrap(u32),
-    InvalidBoolReturn(u64),
-    NativeBookkeepingAllocationFailed,
-    NativeStackBoundary {
-        boundary: NativeStackBoundary,
-        retry_safe: bool,
-    },
-    InvalidNativeEntryAccounting(u64),
-    InvalidActiveFrame,
-    LeakedActiveFrames(usize),
+    EntryAddressRepresentation,
+    BookkeepingAllocationFailed,
+    NativeStackUnavailable(NativeStackError),
+    Cancelled,
+    DeadlineExceeded,
+    ResourceLimitExceeded(NativeResourceLimitKind),
     ExecutionDomain,
 }
 
-impl fmt::Display for InvocationError {
+impl fmt::Display for PreEntryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownEntry => formatter.write_str("unknown native entry"),
-            Self::ArgumentCount { expected, actual } => {
-                write!(
-                    formatter,
-                    "native entry expected {expected} arguments, received {actual}"
-                )
-            }
+            Self::ArgumentCount { expected, actual } => write!(
+                formatter,
+                "native entry expected {expected} arguments, received {actual}"
+            ),
             Self::ArgumentType {
                 index,
                 expected,
@@ -93,6 +86,50 @@ impl fmt::Display for InvocationError {
             Self::UnsupportedSignature => {
                 formatter.write_str("native entry signature is unsupported")
             }
+            Self::EntryAddressRepresentation => {
+                formatter.write_str("native entry offset exceeds host address representation")
+            }
+            Self::BookkeepingAllocationFailed => {
+                formatter.write_str("native pre-entry bookkeeping allocation failed")
+            }
+            Self::NativeStackUnavailable(error) => {
+                write!(formatter, "native stack pre-entry check failed: {error}")
+            }
+            Self::Cancelled => formatter.write_str("native invocation was cancelled before entry"),
+            Self::DeadlineExceeded => {
+                formatter.write_str("native invocation deadline expired before entry")
+            }
+            Self::ResourceLimitExceeded(kind) => {
+                write!(
+                    formatter,
+                    "native invocation policy declined entry: {kind:?}"
+                )
+            }
+            Self::ExecutionDomain => {
+                formatter.write_str("native invocation selected the wrong execution domain")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PreEntryError {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EnteredInvocationError {
+    InvalidNativeStatus(u32),
+    InvalidNativeTrap(u32),
+    InvalidBoolReturn(u64),
+    InvalidNativeReturn,
+    BookkeepingAllocationFailed,
+    NativeStackViolation(NativeStackError),
+    InvalidNativeEntryAccounting(u64),
+    InvalidActiveFrame,
+    LeakedActiveFrames(usize),
+}
+
+impl fmt::Display for EnteredInvocationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
             Self::InvalidNativeStatus(status) => {
                 write!(formatter, "generated code returned invalid status {status}")
             }
@@ -103,16 +140,18 @@ impl fmt::Display for InvocationError {
                 formatter,
                 "generated code returned non-canonical Bool {value}"
             ),
-            Self::NativeBookkeepingAllocationFailed => {
-                formatter.write_str("native invocation bookkeeping allocation failed")
+            Self::InvalidNativeReturn => {
+                formatter.write_str("generated code returned an invalid typed value")
             }
-            Self::NativeStackBoundary {
-                boundary,
-                retry_safe,
-            } => write!(
-                formatter,
-                "native stack boundary: {boundary} (VM retry safe: {retry_safe})"
-            ),
+            Self::BookkeepingAllocationFailed => {
+                formatter.write_str("entered native invocation bookkeeping allocation failed")
+            }
+            Self::NativeStackViolation(error) => {
+                write!(
+                    formatter,
+                    "entered native invocation reached a stack boundary: {error}"
+                )
+            }
             Self::InvalidNativeEntryAccounting(source) => write!(
                 formatter,
                 "generated code accounted an unknown native source function {source}"
@@ -126,24 +165,21 @@ impl fmt::Display for InvocationError {
                     "generated invocation leaked {depth} active frames"
                 )
             }
-            Self::ExecutionDomain => {
-                formatter.write_str("native invocation selected the wrong execution domain")
-            }
         }
     }
 }
 
-impl std::error::Error for InvocationError {}
+impl std::error::Error for EnteredInvocationError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NativeStackBoundary {
+pub enum NativeStackError {
     ThreadExtentUnavailable,
     FrameArithmeticOverflow,
     FrameOutsideThreadExtent,
     GuardReached,
 }
 
-impl fmt::Display for NativeStackBoundary {
+impl fmt::Display for NativeStackError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::ThreadExtentUnavailable => "current thread stack extent is unavailable",

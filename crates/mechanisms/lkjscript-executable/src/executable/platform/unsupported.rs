@@ -1,6 +1,6 @@
 use crate::executable::{
-    InstallError, InvocationError, MappingPermissions, NativeCallState, NativeStackBoundary,
-    NativeValue, PermissionProbeError, RawReturn, Signature,
+    InstallError, IslandCallState, MachineArgument, MappingPermissions, NativeCallState,
+    NativeStackError, PermissionProbeError, PreEntryError, RawReturn, Signature,
 };
 
 #[derive(Clone, Copy)]
@@ -14,8 +14,15 @@ pub(in crate::executable) fn native_stack_reservation_fits(
     _rbp: *mut u8,
     _frame_bytes: usize,
     _bounds: NativeStackBounds,
-) -> Result<(), NativeStackBoundary> {
-    Err(NativeStackBoundary::ThreadExtentUnavailable)
+) -> Result<(), NativeStackError> {
+    Err(NativeStackError::ThreadExtentUnavailable)
+}
+
+pub(in crate::executable) fn native_stack_requirement_fits(
+    _required_bytes: usize,
+    _bounds: NativeStackBounds,
+) -> Result<(), NativeStackError> {
+    Err(NativeStackError::ThreadExtentUnavailable)
 }
 
 #[derive(Debug)]
@@ -46,14 +53,31 @@ impl Mapping {
         Err(InstallError::UnsupportedPlatform)
     }
 
-    pub(in crate::executable) fn invoke(
+    pub(in crate::executable) fn validate_entry(
+        &self,
+        _offset: usize,
+    ) -> Result<(), PreEntryError> {
+        Err(PreEntryError::UnknownEntry)
+    }
+
+    pub(in crate::executable) fn enter(
         &self,
         _offset: usize,
         _signature: &Signature,
-        _arguments: &[NativeValue],
+        _arguments: &[MachineArgument],
         _state: &mut NativeCallState,
-    ) -> Result<RawReturn, InvocationError> {
-        Err(InvocationError::UnsupportedSignature)
+    ) -> RawReturn {
+        unreachable!("unsupported platform cannot install a prepared invocation")
+    }
+
+    pub(in crate::executable) fn enter_island(
+        &self,
+        _offset: usize,
+        _signature: &Signature,
+        _arguments: &[MachineArgument],
+        _state: &mut IslandCallState,
+    ) -> RawReturn {
+        unreachable!("unsupported platform cannot install a prepared invocation")
     }
 
     pub(in crate::executable) fn permissions(

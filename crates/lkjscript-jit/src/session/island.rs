@@ -70,7 +70,13 @@ impl JitSession {
         let mut services = JitIslandServices::with_witnesses(scope, execution, witnesses)?;
         let report = self.objects[object_index]
             .installed
-            .invoke_island_with_services(native, arguments, config, &mut services);
+            .prepare_invocation(native, arguments, config, &mut services)
+            .map_err(|error| pre_entry_error(function, error))
+            .and_then(|prepared| {
+                prepared
+                    .enter()
+                    .map_err(|error| entered_invocation_error(function, error))
+            });
         let unique_export = report
             .as_ref()
             .ok()
@@ -138,6 +144,6 @@ impl JitSession {
             }
             None => {}
         }
-        report.map_err(|error| invocation_error(function, error))
+        report
     }
 }

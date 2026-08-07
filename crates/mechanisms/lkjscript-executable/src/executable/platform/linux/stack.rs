@@ -55,21 +55,29 @@ pub(in crate::executable) fn native_stack_reservation_fits(
     rbp: *mut u8,
     frame_bytes: usize,
     bounds: NativeStackBounds,
-) -> Result<(), NativeStackBoundary> {
+) -> Result<(), NativeStackError> {
     let frame_base = rbp as usize;
     if !(bounds.low <= frame_base && frame_base < bounds.high) {
-        return Err(NativeStackBoundary::FrameOutsideThreadExtent);
+        return Err(NativeStackError::FrameOutsideThreadExtent);
     }
     let requested_low = frame_base
         .checked_sub(frame_bytes)
-        .ok_or(NativeStackBoundary::FrameArithmeticOverflow)?;
+        .ok_or(NativeStackError::FrameArithmeticOverflow)?;
     let guarded_low = bounds
         .low
         .checked_add(bounds.guard_bytes)
         .filter(|guarded| *guarded < bounds.high)
-        .ok_or(NativeStackBoundary::FrameArithmeticOverflow)?;
+        .ok_or(NativeStackError::FrameArithmeticOverflow)?;
     if requested_low < guarded_low {
-        return Err(NativeStackBoundary::GuardReached);
+        return Err(NativeStackError::GuardReached);
     }
     Ok(())
+}
+
+pub(in crate::executable) fn native_stack_requirement_fits(
+    required_bytes: usize,
+    bounds: NativeStackBounds,
+) -> Result<(), NativeStackError> {
+    let marker = 0_u8;
+    native_stack_reservation_fits((&raw const marker).cast_mut(), required_bytes, bounds)
 }

@@ -65,15 +65,40 @@ pub(crate) fn install_error(function: FunctionId, error: InstallError) -> Engine
     EngineError::new(code, Some(function), error.to_string())
 }
 
-pub(crate) fn invocation_error(function: FunctionId, error: InvocationError) -> EngineError {
+pub(crate) fn pre_entry_error(function: FunctionId, error: PreEntryError) -> EngineError {
     let code = match error {
-        InvocationError::NativeBookkeepingAllocationFailed => FailureCode::NativeBookkeeping,
-        InvocationError::NativeStackBoundary {
-            retry_safe: true, ..
-        } => FailureCode::NativeStackBoundary,
-        InvocationError::NativeStackBoundary {
-            retry_safe: false, ..
-        } => FailureCode::NativeStackBoundaryAfterEntry,
+        PreEntryError::BookkeepingAllocationFailed => FailureCode::NativeBookkeeping,
+        PreEntryError::NativeStackUnavailable(_) => FailureCode::NativeStackBoundary,
+        PreEntryError::Cancelled => FailureCode::PreEntryCancelled,
+        PreEntryError::DeadlineExceeded => FailureCode::PreEntryDeadline,
+        PreEntryError::ResourceLimitExceeded(NativeResourceLimitKind::PollFuel) => {
+            FailureCode::PreEntryPollFuel
+        }
+        PreEntryError::ResourceLimitExceeded(NativeResourceLimitKind::ActiveFrames) => {
+            FailureCode::PreEntryActiveFrames
+        }
+        PreEntryError::ResourceLimitExceeded(NativeResourceLimitKind::ActiveValues) => {
+            FailureCode::PreEntryActiveValues
+        }
+        PreEntryError::ResourceLimitExceeded(NativeResourceLimitKind::RuntimeService) => {
+            FailureCode::PreEntryRuntimeService
+        }
+        _ => FailureCode::PreEntryFailure,
+    };
+    EngineError::new(code, Some(function), error.to_string())
+}
+
+pub(crate) fn entered_invocation_error(
+    function: FunctionId,
+    error: EnteredInvocationError,
+) -> EngineError {
+    let code = match error {
+        EnteredInvocationError::BookkeepingAllocationFailed => {
+            FailureCode::NativeBookkeepingAfterEntry
+        }
+        EnteredInvocationError::NativeStackViolation(_) => {
+            FailureCode::NativeStackBoundaryAfterEntry
+        }
         _ => FailureCode::InvocationFailure,
     };
     EngineError::new(code, Some(function), error.to_string())

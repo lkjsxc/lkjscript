@@ -89,9 +89,6 @@ impl JitSession {
         if let Some(required_bytes) = native_stack_requirement {
             config = config.with_native_stack_requirement(required_bytes);
         }
-        if self.time_to_first_native_entry.is_none() {
-            self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
-        }
         let invocation_started = self.config.collect_metrics.then(Instant::now);
         if self.links.is_some() {
             self.vm_to_native_transitions = self.vm_to_native_transitions.saturating_add(1);
@@ -118,12 +115,51 @@ impl JitSession {
         if self.links.is_some() {
             self.native_to_vm_transitions = self.native_to_vm_transitions.saturating_add(1);
         }
-        if let Some(started) = invocation_started {
-            let elapsed = started.elapsed();
-            self.native_invocations = self.native_invocations.saturating_add(1);
-            self.native_execution = self.native_execution.saturating_add(elapsed);
-            if self.first_native_call.is_none() {
-                self.first_native_call = Some(elapsed);
+        let entry_begun = report
+            .as_ref()
+            .map_or_else(|error| !is_pre_entry_failure(error.code()), |_| true);
+        if entry_begun {
+            if self.time_to_first_native_entry.is_none() {
+                self.time_to_first_native_entry =
+                    self.metrics_started.map(|started| started.elapsed());
+            }
+            if let Some(started) = invocation_started {
+                let elapsed = started.elapsed();
+                self.native_invocations = self.native_invocations.saturating_add(1);
+                self.native_execution = self.native_execution.saturating_add(elapsed);
+                if self.first_native_call.is_none() {
+                    self.first_native_call = Some(elapsed);
+                }
+            }
+        }
+        if let Err(error) = &report {
+            let outcome = match error.code() {
+                FailureCode::PreEntryCancelled => Some(ScalarInvocationOutcome::HostFailure),
+                FailureCode::PreEntryDeadline => Some(ScalarInvocationOutcome::DeadlineExceeded),
+                FailureCode::PreEntryPollFuel => {
+                    Some(ScalarInvocationOutcome::ResourceLimitExceeded(
+                        ResourceLimitKind::InstructionFuel,
+                    ))
+                }
+                FailureCode::PreEntryActiveFrames => Some(
+                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth),
+                ),
+                FailureCode::PreEntryActiveValues => Some(
+                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues),
+                ),
+                FailureCode::PreEntryRuntimeService => Some(
+                    ScalarInvocationOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations),
+                ),
+                _ => None,
+            };
+            if let Some(outcome) = outcome {
+                return Ok(ScalarInvocation {
+                    outcome,
+                    poll_count: 0,
+                    cleanup_failures: CleanupFailures::with_retention(
+                        execution.cleanup_retention(),
+                    ),
+                });
             }
         }
         let report = match report {
@@ -232,4 +268,19 @@ impl JitSession {
             cleanup_failures,
         })
     }
+}
+
+const fn is_pre_entry_failure(code: FailureCode) -> bool {
+    matches!(
+        code,
+        FailureCode::NativeBookkeeping
+            | FailureCode::NativeStackBoundary
+            | FailureCode::PreEntryCancelled
+            | FailureCode::PreEntryDeadline
+            | FailureCode::PreEntryPollFuel
+            | FailureCode::PreEntryActiveFrames
+            | FailureCode::PreEntryActiveValues
+            | FailureCode::PreEntryRuntimeService
+            | FailureCode::PreEntryFailure
+    )
 }

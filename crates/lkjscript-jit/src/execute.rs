@@ -98,10 +98,11 @@ pub fn execute_optimizing_with_capabilities(
         .with_cleanup_failures(invocation.cleanup_failures);
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
+    let pre_entry_policy_outcome = is_pre_entry_policy_outcome(&outcome, &stats);
     if stats.baseline_code_objects != 0
         || stats.baseline_native_entries != 0
         || stats.optimizing_code_objects == 0
-        || stats.optimizing_native_entries == 0
+        || (!pre_entry_policy_outcome && stats.optimizing_native_entries == 0)
         || stats.vm_fallbacks != 0
     {
         return Err(EngineError::new(
@@ -114,12 +115,12 @@ pub fn execute_optimizing_with_capabilities(
 }
 
 fn verify_forced_entry(
-    _outcome: &ExecutionOutcome,
+    outcome: &ExecutionOutcome,
     stats: &JitStats,
     main: FunctionId,
     expected_state: TierState,
 ) -> Result<(), EngineError> {
-    if stats.native_entries == 0
+    if (!is_pre_entry_policy_outcome(outcome, stats) && stats.native_entries == 0)
         || stats.vm_fallbacks != 0
         || stats.vm_to_native_transitions != 0
         || stats.native_to_vm_transitions != 0
@@ -136,6 +137,16 @@ fn verify_forced_entry(
         ));
     }
     Ok(())
+}
+
+fn is_pre_entry_policy_outcome(outcome: &ExecutionOutcome, stats: &JitStats) -> bool {
+    stats.native_entries == 0
+        && matches!(
+            outcome.primary(),
+            ExecutionOutcome::DeadlineExceeded
+                | ExecutionOutcome::ResourceLimitExceeded(_)
+                | ExecutionOutcome::HostFailure(_)
+        )
 }
 
 fn capability_arguments(

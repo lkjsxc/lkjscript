@@ -98,10 +98,38 @@ cargo test --locked --release -p lkjscript-ir \
 Do not run the 16,385-call geometry on a constrained host without expecting near-machine-capacity
 memory pressure.
 
-## Pending production decision
+## Accepted runtime selection
 
-No current evidence selects VM-only, automatic baseline-native, baseline-JIT, or optimizing-JIT as
-the production architecture. The next comparison must measure compile latency, time to first result,
-steady-state execution, peak memory, generated code, release binary size, supported targets, safety,
-and maintenance cost on equivalent representative workloads. Selection requires deleting or
-demoting losing product paths rather than preserving permanent public parity.
+**Accepted architecture; runtime cutover incomplete.** The product will synchronously prepare one
+baseline-native reachable group before effects. It enters that group when preparation succeeds and
+otherwise executes the unchanged program in the VM. Native entry is a commit point: there is no VM
+retry afterward. Baseline native is a specialization inside one product path, not a public engine
+contract. Forced tier selections and optimizing machinery remain temporarily for diagnostics and
+cutover work.
+
+The selection hypothesis was that baseline native materially helps closed scalar groups, while the
+VM remains the complete generic route and repeated automatic transitions cost more than they save.
+`target/reset-audit/final/runtime-matrix.json` recorded three runs for each workload/engine cell. The
+following compact values are median process wall milliseconds; `unsupported` means the forced native
+engine rejected a required type or operation rather than running equivalent semantics.
+
+| Workload | VM | current auto | baseline-JIT | optimizing-JIT |
+|---|---:|---:|---:|---:|
+| hello | 235 | 236 | unsupported | unsupported |
+| scalar | 474 | 1,700 | 245 | 244 |
+| optimizing | 379 | 395 | 244 | 251 |
+| bench | 1,005 | 3,493 | unsupported | unsupported |
+| mandel | 302 | 331 | unsupported | unsupported |
+
+The same records show current `auto` performing 99,936 native invocations for `scalar`, 199,937 for
+`bench`, and 600,129 VM fallbacks for `bench`, while each supported forced baseline run enters one
+native invocation. Optimizing-JIT provides no representative advantage over baseline in the two
+supported cells and shares the same unsupported cells. This supports one synchronous baseline-group
+attempt rather than per-entry auto tiering or optimizer retention.
+
+The artifact does not record machine/compiler metadata, peak memory, generated-code size, release
+binary size, or target coverage, so it is selection evidence rather than the final post-cutover
+baseline. Retain the harness, record those dimensions with environment metadata after the cutover,
+and reverse the choice if equivalent representative measurements show the group preflight cost or
+baseline maintenance cost outweighs its scalar benefit. Completion still requires deleting or
+demoting the losing public paths.

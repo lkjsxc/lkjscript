@@ -2,7 +2,7 @@ use super::*;
 use crate::scalar::owned_scalar;
 
 #[test]
-fn automatic_stack_representation_decline_is_retry_safe_before_native_entry() {
+fn automatic_stack_representation_decline_is_typed_before_native_entry() {
     let program = terminal_program(
         Terminator::Outcome {
             outcome: StructuredOutcome::DeadlineExceeded,
@@ -46,12 +46,11 @@ fn automatic_stack_representation_decline_is_retry_safe_before_native_entry() {
         Some(FailureCode::NativeStackBoundary)
     );
 
-    let after_entry = invocation_error(
+    let after_entry = entered_invocation_error(
         main,
-        InvocationError::NativeStackBoundary {
-            boundary: lkjscript_executable::NativeStackBoundary::GuardReached,
-            retry_safe: false,
-        },
+        EnteredInvocationError::NativeStackViolation(
+            lkjscript_executable::NativeStackError::GuardReached,
+        ),
     );
     assert_eq!(
         after_entry.code(),

@@ -14,51 +14,40 @@ pub(super) enum RawReturn {
 }
 
 impl RawReturn {
-    pub(super) fn into_value(self, value_type: ValueType) -> Result<NativeValue, InvocationError> {
+    pub(super) fn into_value(
+        self,
+        value_type: ValueType,
+    ) -> Result<NativeValue, EnteredInvocationError> {
         match (self, value_type) {
             (Self::Integer(value), ValueType::I64) => Ok(NativeValue::I64(value as i64)),
             (Self::Integer(value), ValueType::Bool) if value <= 1 => {
                 Ok(NativeValue::Bool(value == 1))
             }
             (Self::Integer(value), ValueType::Bool) => {
-                Err(InvocationError::InvalidBoolReturn(value))
+                Err(EnteredInvocationError::InvalidBoolReturn(value))
             }
             (Self::Float(value), ValueType::F64) => Ok(NativeValue::F64Bits(value.to_bits())),
             (Self::Unit, ValueType::Unit) => Ok(NativeValue::Unit),
             (Self::Integer(value), ValueType::StaticBytes) if value != 0 => {
                 Ok(NativeValue::StaticBytes(NativeStaticBytes::new(value)))
             }
-            (Self::Integer(_), ValueType::StaticBytes) => {
-                Err(InvocationError::UnsupportedSignature)
-            }
             (Self::Integer(value), ValueType::StaticString(value_type)) if value != 0 => Ok(
                 NativeValue::StaticString(NativeStaticString::new(value_type, value)),
             ),
-            (Self::Integer(_), ValueType::StaticString(_)) => {
-                Err(InvocationError::UnsupportedSignature)
-            }
             (Self::Integer(value), ValueType::Capability(kind))
                 if value == capability_word(kind) =>
             {
                 Ok(NativeValue::Capability(kind))
             }
-            (Self::Integer(_), ValueType::Capability(_)) => {
-                Err(InvocationError::UnsupportedSignature)
-            }
             (Self::Integer(value), ValueType::Resource(kind)) if value != 0 => {
                 Ok(NativeValue::Resource(NativeResource::new(kind, value)))
-            }
-            (Self::Integer(_), ValueType::Resource(_)) => {
-                Err(InvocationError::UnsupportedSignature)
             }
             (Self::Integer(value), ValueType::Unique(kind)) if value != 0 => {
                 Ok(NativeValue::Unique(NativeUnique::new(kind, value)))
             }
-            (Self::Integer(_), ValueType::Unique(_)) => Err(InvocationError::UnsupportedSignature),
             (Self::Integer(value), ValueType::Loan(kind)) if value != 0 => {
                 Ok(NativeValue::Loan(NativeLoan::new(kind, value)))
             }
-            (Self::Integer(_), ValueType::Loan(_)) => Err(InvocationError::UnsupportedSignature),
             (Self::Integer(value), ValueType::StructuralKey) if value != 0 => {
                 Ok(NativeValue::StructuralKey(value))
             }
@@ -75,17 +64,10 @@ impl RawReturn {
                     NativeStructuralDestination::new(destination_type, value),
                 ))
             }
-            (
-                Self::Integer(_),
-                ValueType::StructuralKey
-                | ValueType::StructuralOwner(_)
-                | ValueType::StructuralView(_)
-                | ValueType::StructuralDestination(_),
-            ) => Err(InvocationError::UnsupportedSignature),
             (Self::Integer(value), ValueType::Reference(reference_type)) => Ok(
                 NativeValue::Reference(NativeReference::new(reference_type, value)),
             ),
-            _ => Err(InvocationError::UnsupportedSignature),
+            _ => Err(EnteredInvocationError::InvalidNativeReturn),
         }
     }
 }
@@ -116,9 +98,9 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
 pub(super) fn validate_arguments(
     signature: &Signature,
     arguments: &[NativeValue],
-) -> Result<(), InvocationError> {
+) -> Result<(), PreEntryError> {
     if signature.parameters().len() != arguments.len() {
-        return Err(InvocationError::ArgumentCount {
+        return Err(PreEntryError::ArgumentCount {
             expected: signature.parameters().len(),
             actual: arguments.len(),
         });
@@ -131,7 +113,7 @@ pub(super) fn validate_arguments(
         .enumerate()
     {
         if expected != actual.value_type() {
-            return Err(InvocationError::ArgumentType {
+            return Err(PreEntryError::ArgumentType {
                 index,
                 expected: Box::new(expected),
                 actual: Box::new(actual.value_type()),
@@ -141,10 +123,16 @@ pub(super) fn validate_arguments(
     Ok(())
 }
 
-pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgument> {
-    arguments
-        .iter()
-        .filter_map(|argument| match argument {
+pub(super) fn prepare_machine_arguments(
+    signature: &Signature,
+    arguments: &[NativeValue],
+) -> Result<Vec<MachineArgument>, PreEntryError> {
+    let mut machine = Vec::new();
+    machine
+        .try_reserve_exact(arguments.len())
+        .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
+    for argument in arguments {
+        let value = match argument {
             NativeValue::I64(value) => Some(MachineArgument::Integer(*value as u64)),
             NativeValue::F64Bits(bits) => Some(MachineArgument::Float(f64::from_bits(*bits))),
             NativeValue::Bool(value) => Some(MachineArgument::Integer(u64::from(*value))),
@@ -172,8 +160,33 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             NativeValue::Reference(reference) => {
                 Some(MachineArgument::Integer(reference.opaque_word()))
             }
-        })
-        .collect()
+        };
+        if let Some(value) = value {
+            machine.push(value);
+        }
+    }
+    if machine.len() > 2 || !abi_result_supported(signature.result()) {
+        return Err(PreEntryError::UnsupportedSignature);
+    }
+    Ok(machine)
+}
+
+const fn abi_result_supported(result: ValueType) -> bool {
+    matches!(
+        result,
+        ValueType::I64
+            | ValueType::Bool
+            | ValueType::StaticBytes
+            | ValueType::StaticString(_)
+            | ValueType::Unique(_)
+            | ValueType::Loan(_)
+            | ValueType::StructuralOwner(_)
+            | ValueType::StructuralView(_)
+            | ValueType::StructuralDestination(_)
+            | ValueType::Reference(_)
+            | ValueType::F64
+            | ValueType::Unit
+    )
 }
 
 pub(super) const fn capability_word(kind: lkjscript_native::CapabilityKind) -> u64 {

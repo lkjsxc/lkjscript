@@ -50,7 +50,7 @@ pub(super) struct NativeCallState<'a> {
     pub(super) maximum_active_values: Option<usize>,
     pub(super) native_stack_requirement: Option<usize>,
     pub(super) native_stack_bounds: Option<platform::NativeStackBounds>,
-    pub(super) native_stack_boundary: Option<NativeStackBoundary>,
+    pub(super) native_stack_error: Option<NativeStackError>,
     pub(super) pending_reservation: Option<PendingFrameReservation>,
     pub(super) reserved_native_stack_bytes: usize,
     pub(super) peak_native_stack_bytes: usize,
@@ -63,6 +63,7 @@ pub(super) struct NativeCallState<'a> {
     pub(super) invalid_entry_accounting: Option<u64>,
     pub(super) bookkeeping_allocation_failed: bool,
     pub(super) metadata_invalid: bool,
+    pub(super) entry_started: bool,
 }
 
 #[derive(Debug)]
@@ -93,11 +94,11 @@ impl NativeEntryMapping {
 
 pub(super) fn try_entry_counts(
     image: &InstallableImage,
-) -> Result<Vec<NativeEntryCount>, InvocationError> {
+) -> Result<Vec<NativeEntryCount>, PreEntryError> {
     let mut counts = Vec::new();
     counts
         .try_reserve_exact(image.entries().len())
-        .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
+        .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
     counts.extend(image.entries().iter().map(|entry| NativeEntryCount {
         source_function: entry.source_function().get(),
         entries: 0,

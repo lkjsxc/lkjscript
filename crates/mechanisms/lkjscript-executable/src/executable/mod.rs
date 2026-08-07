@@ -28,7 +28,7 @@ mod state;
 
 use accounting::*;
 pub use errors::*;
-pub use installed::InstalledImage;
+pub use installed::{InstalledImage, PreparedInvocation};
 pub use installer::ExecutableInstaller;
 use installer::InstallerState;
 use invocation::*;
@@ -37,5 +37,4 @@ pub use permissions::*;
 pub use report::*;
 use runtime::*;
 pub use services::*;
-use services::{NoopNativeIslandRuntimeServices, NoopNativeRuntimeServices};
 use state::*;

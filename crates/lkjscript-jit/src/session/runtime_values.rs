@@ -41,15 +41,18 @@ impl JitSession {
                     .and_then(|bytes| u64::try_from(bytes).ok()),
             },
         );
-        let report = self.objects[object_index].installed.invoke_with_services(
-            native,
-            arguments,
-            config,
-            &mut services,
-        );
+        let report = self.objects[object_index]
+            .installed
+            .prepare_region_invocation(native, arguments, config, &mut services)
+            .map_err(|error| pre_entry_error(function, error))
+            .and_then(|prepared| {
+                prepared
+                    .enter()
+                    .map_err(|error| entered_invocation_error(function, error))
+            });
         self.last_runtime_trap = services.last_trap.take();
         self.last_runtime_resource = services.last_resource;
-        report.map_err(|error| invocation_error(function, error))
+        report
     }
 
     fn initialize_region_arenas(

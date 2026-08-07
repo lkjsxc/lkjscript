@@ -17,9 +17,9 @@ use lkjscript_core::{
     UniqueStoreError, UniqueStoreId, Value,
 };
 use lkjscript_executable::{
-    ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
+    EnteredInvocationError, ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage,
     InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
-    NativeRuntimeServices, NativeServiceError,
+    NativeRuntimeServices, NativeServiceError, PreEntryError,
 };
 use lkjscript_ir::{
     optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,

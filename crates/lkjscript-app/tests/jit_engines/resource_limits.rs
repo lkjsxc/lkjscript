@@ -96,7 +96,7 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
             optimized.outcome,
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
         );
-        assert!(optimized.stats.optimizing_native_entries > 0);
+        assert_eq!(optimized.stats.optimizing_native_entries, 0);
         assert_eq!(optimized.stats.baseline_native_entries, 0);
     }
 
@@ -112,7 +112,7 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
         optimized.outcome,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
     );
-    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert_eq!(optimized.stats.optimizing_native_entries, 0);
     assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     let allocation = compile(

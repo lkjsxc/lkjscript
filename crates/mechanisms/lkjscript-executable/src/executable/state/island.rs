@@ -36,7 +36,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) maximum_active_values: Option<usize>,
     pub(in crate::executable) native_stack_requirement: Option<usize>,
     pub(in crate::executable) native_stack_bounds: Option<platform::NativeStackBounds>,
-    pub(in crate::executable) native_stack_boundary: Option<NativeStackBoundary>,
+    pub(in crate::executable) native_stack_error: Option<NativeStackError>,
     pub(in crate::executable) pending_reservation: Option<IslandFrameReservation>,
     pub(in crate::executable) reserved_native_stack_bytes: usize,
     pub(in crate::executable) peak_native_stack_bytes: usize,
@@ -56,6 +56,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) invalid_entry_accounting: Option<u64>,
     pub(in crate::executable) bookkeeping_allocation_failed: bool,
     pub(in crate::executable) metadata_invalid: bool,
+    pub(in crate::executable) entry_started: bool,
 }
 
 impl<'a> IslandCallState<'a> {
@@ -63,18 +64,15 @@ impl<'a> IslandCallState<'a> {
         image: &'a InstallableImage,
         entry_mapping: &'a NativeEntryMapping,
         config: &NativeInvocationConfig,
+        deadline_ms: i64,
+        native_stack_bounds: Option<platform::NativeStackBounds>,
         services: &'a mut dyn NativeIslandRuntimeServices,
-    ) -> Result<Self, InvocationError> {
+    ) -> Result<Self, PreEntryError> {
         let native_entries = try_entry_counts(image)?;
         let mut active_frames = Vec::new();
         active_frames
-            .try_reserve_exact(
-                config
-                    .max_active_frames
-                    .unwrap_or(image.entries().len())
-                    .min(image.entries().len()),
-            )
-            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
+            .try_reserve_exact(config.max_active_frames.unwrap_or(image.entries().len()))
+            .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
         let mut heap_arguments = Vec::new();
         let maximum_heap_arguments = image
             .heap_runtime_sites()
@@ -84,18 +82,15 @@ impl<'a> IslandCallState<'a> {
             .unwrap_or(0);
         heap_arguments
             .try_reserve_exact(maximum_heap_arguments)
-            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
-        let native_stack_bounds = platform::native_stack_bounds();
-        let (deadline_ms, status) = match config.wall_time {
-            Some(duration) => {
-                let now = crate::now_ms_monotonic();
-                let delta = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
-                (now.saturating_add(delta), 0)
-            }
-            None => (-1, 0),
-        };
+            .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
+        let mut cleanup_failures = Vec::new();
+        if let Some(maximum) = config.max_cleanup_failures {
+            cleanup_failures
+                .try_reserve_exact(maximum)
+                .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
+        }
         Ok(Self {
-            status,
+            status: 0,
             trap: 0,
             payload: 0,
             trap_site_present: 0,
@@ -113,7 +108,7 @@ impl<'a> IslandCallState<'a> {
             maximum_active_values: config.max_active_values,
             native_stack_requirement: config.native_stack_requirement,
             native_stack_bounds,
-            native_stack_boundary: None,
+            native_stack_error: None,
             pending_reservation: None,
             reserved_native_stack_bytes: 0,
             peak_native_stack_bytes: 0,
@@ -126,13 +121,14 @@ impl<'a> IslandCallState<'a> {
             heap_arguments,
             heap_operation_attempts: 0,
             heap_operation_successes: 0,
-            cleanup_failures: Vec::new(),
+            cleanup_failures,
             omitted_cleanup_failures: 0,
             maximum_cleanup_failures: config.max_cleanup_failures,
             entry_rejected: false,
             invalid_entry_accounting: None,
             bookkeeping_allocation_failed: false,
             metadata_invalid: false,
+            entry_started: false,
         })
     }
 
@@ -154,9 +150,32 @@ impl<'a> IslandCallState<'a> {
         }
     }
 
-    pub(in crate::executable) fn decline_native_stack(&mut self, boundary: NativeStackBoundary) {
-        self.native_stack_boundary = Some(boundary);
+    pub(in crate::executable) fn decline_native_stack(&mut self, error: NativeStackError) {
+        self.native_stack_error = Some(error);
         self.status = 6;
+    }
+
+    pub(in crate::executable) fn record_cleanup_failure(
+        &mut self,
+        slot: RuntimeCallSlot,
+        error: NativeServiceError,
+    ) {
+        if self
+            .maximum_cleanup_failures
+            .is_some_and(|maximum| self.cleanup_failures.len() >= maximum)
+        {
+            self.omitted_cleanup_failures = self.omitted_cleanup_failures.saturating_add(1);
+            return;
+        }
+        if self.cleanup_failures.len() == self.cleanup_failures.capacity()
+            && self.cleanup_failures.try_reserve(1).is_err()
+        {
+            self.bookkeeping_allocation_failed = true;
+            self.omitted_cleanup_failures = self.omitted_cleanup_failures.saturating_add(1);
+            return;
+        }
+        self.cleanup_failures
+            .push(NativeCleanupFailure::new(slot, error));
     }
 
     pub(in crate::executable) fn fail_bookkeeping_allocation(&mut self) {

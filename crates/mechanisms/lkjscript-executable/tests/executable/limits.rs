@@ -51,7 +51,9 @@ fn rejects_unknown_high_source_entry_accounting() -> Result<(), Box<dyn std::err
     let installed = ExecutableInstaller::default().install(image)?;
     assert_eq!(
         installed.invoke(function, &[]),
-        Err(InvocationError::InvalidNativeEntryAccounting(unknown))
+        Err(TestInvocationError::Entered(
+            EnteredInvocationError::InvalidNativeEntryAccounting(unknown)
+        ))
     );
     Ok(())
 }
@@ -201,11 +203,9 @@ fn unrestricted_large_frame_runs_or_reports_actual_thread_boundary(
         .name("native-stack-boundary".into())
         .stack_size(256 * 1024)
         .spawn(move || {
-            match small_stack.invoke_with_config(
-                function,
-                &[],
-                &NativeInvocationConfig::unrestricted(),
-            ) {
+            let config = NativeInvocationConfig::unrestricted()
+                .with_native_stack_requirement(LOCAL_COUNT * std::mem::size_of::<i64>());
+            match small_stack.invoke_with_config(function, &[], &config) {
                 Err(error) => error,
                 Ok(report) => panic!(
                     "actual small thread stack entered the frame: {:?}",
@@ -217,10 +217,9 @@ fn unrestricted_large_frame_runs_or_reports_actual_thread_boundary(
         .map_err(|_| "small native stack thread panicked")?;
     assert_eq!(
         boundary,
-        InvocationError::NativeStackBoundary {
-            boundary: lkjscript_executable::NativeStackBoundary::GuardReached,
-            retry_safe: true,
-        }
+        TestInvocationError::PreEntry(PreEntryError::NativeStackUnavailable(
+            lkjscript_executable::NativeStackError::GuardReached,
+        ))
     );
     Ok(())
 }

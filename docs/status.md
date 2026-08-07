@@ -2,7 +2,7 @@
 
 **Status: currently implemented in this checkout.** This is a concise report of checkout behavior,
 not a compatibility promise or normative specification. Code, tests, CLI definitions, schemas, and
-manifests remain the executable authority. This documentation cutover changes no executable code.
+manifests remain the executable authority.
 
 ## User path
 
@@ -25,6 +25,28 @@ fallback was native execution.
 
 The broadly tested host is Linux x86-64. Portable Rust may build elsewhere, but another host or
 native target is not claimed as tested.
+
+## Phase 4 executable boundary result
+
+Native image installation remains a pre-entry, failure-atomic operation. It validates image
+integrity and contracts, accounts the object, applies relocations in a private RW mapping, seals the
+mapping RX, and publishes installer usage only after success. Dropping an installed image releases
+both its mapping and accounted lease.
+
+Native invocation no longer returns one mixed `InvocationError` or a
+`NativeStackBoundary { retry_safe }` heuristic. Collector-free `prepare_invocation` and explicit
+`prepare_region_invocation` validate entry and typed arguments, materialize and reserve the
+machine-call and runtime bookkeeping state, and perform immediate cancellation, deadline, resource,
+and configured whole-group stack checks. Success returns a non-cloneable `PreparedInvocation`.
+`enter(self)` consumes that value immediately across the unsafe generated ABI call and returns an
+`InvocationReport` or `EnteredInvocationError`. Pre-entry and entered failures are disjoint types;
+after entry, traps and host/resource/deadline results remain outcomes and no error is VM-retry safe.
+
+The accepted final runtime is one synchronous baseline-native reachable-group attempt before
+effects, with VM execution when preparation declines and no fallback after entry. This commit
+implements the executable decision boundary and routes current JIT callers through it. It does not
+yet replace current repeated automatic transitions, remove forced tier CLI selections, or delete
+the optimizer.
 
 ## Phase 1 scale and policy result
 
@@ -116,8 +138,9 @@ transport specialization does not claim native support when no specialization ex
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
 - Evaluator, VM, automatic baseline-native, baseline-JIT, and proof-oriented optimizing machinery
-  still multiply runtime and maintenance surface. No representative measurement has selected one
-  production path.
+  still multiply runtime and maintenance surface. The production path is selected, but repeated
+  automatic transitions, forced tier CLI surface, and optimizing machinery have not yet been cut
+  over or deleted.
 - Daemon, process-cell, scheduler, database, resource-topology, and platform crates remain in the
   workspace even though the local language foundation does not require all of them.
 - Process/daemon policy is broader and more fragmented than the intended small coarse boundary

@@ -4,9 +4,8 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 
 use crate::executable::{
-    machine_arguments, InstallError, InvocationError, IslandCallState, MachineArgument,
-    MappingPermissions, NativeCallState, NativeStackBoundary, NativeValue, PermissionProbeError,
-    RawReturn, Signature, ValueType,
+    InstallError, IslandCallState, MachineArgument, MappingPermissions, NativeCallState,
+    NativeStackError, PermissionProbeError, PreEntryError, RawReturn, Signature, ValueType,
 };
 
 const PROT_READ: i32 = 0x1;
@@ -65,5 +64,6 @@ mod stack;
 use abi_call::invoke_typed;
 
 pub(in crate::executable) use stack::{
-    native_stack_bounds, native_stack_reservation_fits, NativeStackBounds,
+    native_stack_bounds, native_stack_requirement_fits, native_stack_reservation_fits,
+    NativeStackBounds,
 };

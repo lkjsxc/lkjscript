@@ -41,7 +41,7 @@ impl NativeCallState<'_> {
             return;
         };
         let Ok(frame_bytes) = usize::try_from(frame_bytes) else {
-            self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
+            self.decline_native_stack(NativeStackError::FrameArithmeticOverflow);
             return;
         };
         if usize::try_from(descriptor_bytes).ok() != Some(frame_bytes)
@@ -56,7 +56,7 @@ impl NativeCallState<'_> {
                 self.status = 4;
                 self.payload = 6;
             } else {
-                self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
+                self.decline_native_stack(NativeStackError::FrameArithmeticOverflow);
             }
             return;
         };
@@ -70,11 +70,11 @@ impl NativeCallState<'_> {
         }
         let Some(next_reserved_bytes) = self.reserved_native_stack_bytes.checked_add(frame_bytes)
         else {
-            self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
+            self.decline_native_stack(NativeStackError::FrameArithmeticOverflow);
             return;
         };
         let Some(bounds) = self.native_stack_bounds else {
-            self.decline_native_stack(NativeStackBoundary::ThreadExtentUnavailable);
+            self.decline_native_stack(NativeStackError::ThreadExtentUnavailable);
             return;
         };
         if self.active_frames.is_empty() {

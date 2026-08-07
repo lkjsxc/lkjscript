@@ -81,12 +81,16 @@ impl ExecutableInstaller {
                         .iter()
                         .find(|entry| entry.function() == function)
                         .ok_or(InstallError::RelocationAddress)?;
-                    mapping.address_at(entry.offset() as usize)?
+                    let offset = usize::try_from(entry.offset())
+                        .map_err(|_| InstallError::RelocationAddress)?;
+                    mapping.address_at(offset)?
                 }
                 RelocationTarget::Runtime(slot) => runtime_symbol(image.execution_domain(), slot)
                     .ok_or(InstallError::RelocationAddress)?,
             };
-            mapping.write_absolute64(item.offset() as usize, address)?;
+            let offset =
+                usize::try_from(item.offset()).map_err(|_| InstallError::RelocationAddress)?;
+            mapping.write_absolute64(offset, address)?;
         }
         mapping.seal_rx()?;
         *usage = next_usage;

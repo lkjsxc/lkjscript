@@ -7,7 +7,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
     result: ValueType,
     arguments: &[MachineArgument],
     state: *mut c_void,
-) -> Result<RawReturn, InvocationError> {
+) -> RawReturn {
     let state = state.cast::<NativeCallState>();
     macro_rules! call {
             ($type:ty $(, $argument:expr)*) => {{
@@ -18,7 +18,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             }};
         }
 
-    match (arguments, result) {
+    let prepared: Result<RawReturn, ()> = match (arguments, result) {
         ([], result) if integer_result(result) => Ok(RawReturn::Integer(call!(
             extern "C" fn(*mut NativeCallState) -> u64
         ))),
@@ -153,7 +153,11 @@ pub(in crate::executable) unsafe fn invoke_typed(
             );
             Ok(RawReturn::Unit)
         }
-        _ => Err(InvocationError::UnsupportedSignature),
+        _ => Err(()),
+    };
+    match prepared {
+        Ok(raw) => raw,
+        Err(()) => unreachable!("prepared native ABI signature changed before entry"),
     }
 }
 

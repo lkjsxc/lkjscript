@@ -95,12 +95,13 @@ pub(super) fn invoke(
     assert!(installed.wx_transition_verified());
     let scope = ScopeId::new(1).ok_or_else(|| std::io::Error::other("scope"))?;
     let mut services = JitIslandServices::new(scope, &ExecutionPolicy::unrestricted())?;
-    let report = installed.invoke_island_with_services(
+    let prepared = installed.prepare_invocation(
         entry,
         arguments,
         &NativeInvocationConfig::unrestricted(),
         &mut services,
     )?;
+    let report = prepared.enter()?;
     let exported = match report.outcome() {
         InvocationOutcome::Returned(NativeValue::StructuralOwner(owner)) => Some(
             services

@@ -35,17 +35,7 @@ pub(super) fn dispatch_structural(
         state.status = 0;
         let result = execute(state, &descriptor, first, second, third);
         if let Err(error) = result {
-            if state
-                .maximum_cleanup_failures
-                .is_none_or(|maximum| state.cleanup_failures.len() < maximum)
-            {
-                state.cleanup_failures.push(NativeCleanupFailure::new(
-                    RuntimeCallSlot::StructuralDispatch,
-                    error,
-                ));
-            } else {
-                state.omitted_cleanup_failures = state.omitted_cleanup_failures.saturating_add(1);
-            }
+            state.record_cleanup_failure(RuntimeCallSlot::StructuralDispatch, error);
         }
         state.status = primary;
         return 0;

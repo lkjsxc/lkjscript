@@ -5,18 +5,15 @@ impl<'a> NativeCallState<'a> {
         image: &'a InstallableImage,
         entry_mapping: &'a NativeEntryMapping,
         config: &NativeInvocationConfig,
+        deadline_ms: i64,
+        native_stack_bounds: Option<platform::NativeStackBounds>,
         services: &'a mut dyn NativeRuntimeServices,
-    ) -> Result<Self, InvocationError> {
+    ) -> Result<Self, PreEntryError> {
         let native_entries = try_entry_counts(image)?;
         let mut active_frames = Vec::new();
         active_frames
-            .try_reserve_exact(
-                config
-                    .max_active_frames
-                    .unwrap_or(image.entries().len())
-                    .min(image.entries().len()),
-            )
-            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
+            .try_reserve_exact(config.max_active_frames.unwrap_or(image.entries().len()))
+            .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
         let mut heap_arguments = Vec::new();
         let maximum_heap_arguments = image
             .heap_runtime_sites()
@@ -26,21 +23,9 @@ impl<'a> NativeCallState<'a> {
             .unwrap_or(0);
         heap_arguments
             .try_reserve_exact(maximum_heap_arguments)
-            .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
-        // One generated invocation cannot migrate threads. Cache the current
-        // thread's discovered stack extent and guard once instead of repeating
-        // pthread attribute queries at every generated function entry.
-        let native_stack_bounds = platform::native_stack_bounds();
-        let (deadline_ms, status) = match config.wall_time {
-            Some(duration) => {
-                let now = crate::now_ms_monotonic();
-                let delta = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
-                (now.saturating_add(delta), 0)
-            }
-            None => (-1, 0),
-        };
+            .map_err(|_| PreEntryError::BookkeepingAllocationFailed)?;
         Ok(Self {
-            status,
+            status: 0,
             trap: 0,
             payload: 0,
             trap_site_present: 0,
@@ -58,7 +43,7 @@ impl<'a> NativeCallState<'a> {
             maximum_active_values: config.max_active_values,
             native_stack_requirement: config.native_stack_requirement,
             native_stack_bounds,
-            native_stack_boundary: None,
+            native_stack_error: None,
             pending_reservation: None,
             reserved_native_stack_bytes: 0,
             peak_native_stack_bytes: 0,
@@ -71,11 +56,12 @@ impl<'a> NativeCallState<'a> {
             invalid_entry_accounting: None,
             bookkeeping_allocation_failed: false,
             metadata_invalid: false,
+            entry_started: false,
         })
     }
 
-    pub(in crate::executable) fn decline_native_stack(&mut self, boundary: NativeStackBoundary) {
-        self.native_stack_boundary = Some(boundary);
+    pub(in crate::executable) fn decline_native_stack(&mut self, error: NativeStackError) {
+        self.native_stack_error = Some(error);
         self.status = 6;
     }
 
