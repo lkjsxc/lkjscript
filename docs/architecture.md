@@ -41,7 +41,11 @@ and synthetic origins are typed variants rather than reserved numeric values. Pl
 when they are not met, the total generic placement route is selected. They do not reject a program.
 
 The memory-plan producer indexes expression entries, destination children, source places, direct
-functions, declaration metadata, binding loads, and loan uses. Placement precomputes binding-use,
+functions, declaration metadata, binding loads, and loan uses. Its implementation is organized by
+lifecycle and expression dispatch, expression walking and place registration, and record
+publication, while the producer root owns shared type and memory-authority support. The former
+mechanically numbered producer fragments and their include path are gone; there is no parallel
+producer implementation. Placement precomputes binding-use,
 independent-owner, branch-divergence, and aggregate-estimate indexes. The independent verifier
 builds separate expression/child/use/load, call/place/scope, loan-entry, destination-child,
 declaration, witness, and drop-path indexes and still reconstructs authority rather than trusting
