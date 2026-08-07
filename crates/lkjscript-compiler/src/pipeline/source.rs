@@ -1,35 +1,14 @@
-use std::path::Path;
-
 use lkjscript_core::Result;
 
-use crate::analyze::analyze_program;
-use crate::source::validate_for_compiler;
-use crate::ExecutableProgram;
+use crate::{ExecutableProgram, WorkspaceSnapshot};
 
-use super::common::compile_analyzed;
+use super::common::compile_snapshot;
 
 pub fn compile_source(source: &str, path: &str) -> Result<ExecutableProgram> {
-    crate::ensure_source_path(Path::new(path))?;
-    let program = validate_for_compiler(source, path)?;
-    let source_identity = program
-        .files()
-        .first()
-        .ok_or_else(|| lkjscript_core::Error::msg("development source closure is empty"))?
-        .exact_source_sha256;
-    let projection = program
-        .module_scoped_projection()
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
-    let analyzed = analyze_program(&projection)?;
-    compile_analyzed(&analyzed, |plan| {
-        Ok(crate::package::program::development(
-            source_identity,
-            path,
-            plan,
-        ))
-    })
+    let snapshot = crate::workspace::import_source(source, path)?;
+    compile_snapshot(&snapshot)
 }
 
-pub fn validate_source(source: &str, path: &str) -> Result<()> {
-    crate::ensure_source_path(Path::new(path))?;
-    validate_for_compiler(source, path).map(|_| ())
+pub fn validate_source(source: &str, path: &str) -> Result<WorkspaceSnapshot> {
+    crate::workspace::import_source(source, path)
 }

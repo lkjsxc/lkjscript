@@ -8,21 +8,33 @@ responsibility, data flow, ownership, and trust boundaries; it is not a second d
 
 ```text
 package manifest, lock, and line-oriented .lkjscript files
-    -> checked package/source loading and exact import resolution
-    -> source tree
-    -> resolved typed HIR
-    -> type, effect, ownership, and HIR memory-plan analysis
+    -> private checked text/path importer and exact import resolution
+    -> source tree and type/effect/ownership analysis
+    -> immutable complete WorkspaceSnapshot owning typed HIR and captured provenance
+    -> compile_snapshot consistency and completeness validation
+    -> HIR memory planning
     -> typed SSA lowering, verification, and simple normalization
     -> bytecode lowering and unrestricted trusted validation
     -> in-process prepared descriptor and bound prepared identity
     -> one baseline-native group attempt, otherwise validated VM execution
 ```
 
-Text and package files remain current authority. The compiler does not accept a syntax-independent
-semantic snapshot. A compiled program retains HIR memory authority, verified SSA, validated
-bytecode, and one prepared identity. Native execution consumes verified SSA directly; the VM
-consumes validated bytecode. The deleted optimizer pipeline, proof metadata, automatic transition,
-and redundant SSA memory inventory are not constructed.
+Text and package files remain persistent import authority, but they are not a post-HIR compiler
+input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA, bytecode, and
+preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns
+`Arc`-shared typed HIR, immutable locked/development provenance captured during import, optional
+presentation/source attachments, and deterministic semantic indexes. Package preparation after
+import uses captured lock facts and performs no file-system provenance reconstruction.
+
+Opaque public workspace identities are separate from HIR dense IDs. Entity and node IDs carry a
+workspace namespace, logical slot, and generation; a revision carries the same namespace. Import
+assigns them deterministically inside a fresh namespace, and cross-workspace use fails before
+lookup. Iterative index construction records stable entity/node maps, containment, references,
+calls, dependencies, actual/expected type headers, and diagnostic headers. Compilation revalidates
+HIR dense references/signatures/origins and compares rebuilt indexes before lowering. Native
+execution consumes verified SSA directly; the VM consumes validated bytecode. The deleted optimizer
+pipeline, proof metadata, automatic transition, and redundant SSA memory inventory are not
+constructed.
 
 Trusted compilation has no compiler profile, cross-phase budget ledger, source-shape quota, HIR
 memory count quota, or SSA work quota. Checked timings and work totals are observation. User-scale
@@ -43,10 +55,12 @@ JSON or stdio Semantic Source request
     -> later text compilation through the ordinary compiler flow
 ```
 
-This service is bootstrap infrastructure, not semantic authority. Node identity is a revision plus
-dense `u64` index. Transactions have base revisions and typed preconditions, but successful edits
-publish text files. Snapshot records include paths, spans, canonical subtrees, and source
-fingerprints. Direct semantic compilation and edit-stable identity are not implemented.
+This service is bootstrap infrastructure, not the new compiler snapshot authority. Node identity in
+this old service is a revision plus dense `u64` index. Transactions have base revisions and typed
+preconditions, but successful edits publish text files; a later compile imports those files into a
+new `WorkspaceSnapshot`. Old-service records include paths, spans, canonical subtrees, and source
+fingerprints. It remains internal only for commits 2/3 of the same direct cutover. Semantic
+transactions over the new snapshot and edit-stable identity across revisions are not implemented.
 
 ## Current execution and local host flow
 
@@ -74,9 +88,11 @@ index arithmetic. Cleanup continues even when diagnostic retention is exhausted.
 
 ## Prepared identity and snapshots
 
-The compiler constructs `PreparedProgramDescriptor` and `PreparedProgram` in-process from:
+The importer captures immutable locked or development compilation provenance in the workspace
+snapshot. After memory planning, the compiler constructs `PreparedProgramDescriptor` and
+`PreparedProgram` in-process from:
 
-- locked or explicit development package content, root, entry, and memory closure;
+- the captured package content, root, entry, and memory closure;
 - verified HIR memory-plan and witness-closure identities;
 - semantic SSA and optional native-specialization SSA identities;
 - validated bytecode identity; and
@@ -100,8 +116,9 @@ Cargo metadata currently reports 11 workspace members and one app binary. Concep
   descriptors and content identities;
 - `lkjscript-core` owns values, execution policy/outcomes, validated bytecode, memory witnesses,
   structural storage, semantic snapshots, and resource tables;
-- `lkjscript-compiler` owns source/package analysis, HIR, memory planning, lowering, package locks,
-  and Semantic Source;
+- `lkjscript-compiler` owns the public immutable semantic workspace snapshot and direct snapshot
+  compiler boundary, plus the private source/package importer, HIR, memory planning, lowering,
+  package locks, and temporary Semantic Source bootstrap;
 - `lkjscript-ir` owns SSA, verification, normalization, and the opt-in test oracle;
 - `lkjscript-vm` owns generic validated-bytecode execution and typed host-operation dispatch;
 - `lkjscript-native`, `lkjscript-jit`, and `lkjscript-executable` own baseline-native lowering,
@@ -138,7 +155,11 @@ capability checking; they are not a replacement service sandbox.
 
 ## Target delta
 
-**Target, not implemented:** replace the current source/editing/compiler flow with:
+**Transitional current fact:** the immutable revision-labelled snapshot and direct executable
+lowering boundary are implemented for complete imported programs. Directness tests prove snapshot
+compilation does not invoke the parser, and attachment-free typed snapshots execute through the VM.
+
+**Target, not implemented:** move editing and queries onto that same authority:
 
 ```text
 text or structured import
@@ -148,8 +169,8 @@ text or structured import
     -> the selected baseline-native-with-VM-fallback product path
 ```
 
-The target requires edit-stable logical identities, first-class incomplete semantic states, typed
-atomic batch edits, deterministic paginated semantic queries, semantic and text projections from one
-snapshot, and direct compilation tests. It begins in memory. Persistence, collaboration, daemon,
-database service, scheduler, and broader platform work wait for measured need after the local
-semantic model works.
+The remaining target requires identity preservation across edits, first-class incomplete semantic
+states, typed atomic batch edits, deterministic paginated semantic queries, semantic and text
+projections from one snapshot, and deletion of the temporary syntax-shaped Semantic Source path in
+commits 2/3 of this cutover. Persistence, collaboration, daemon, database service, scheduler, and
+broader platform work wait for measured need after the local semantic model works.

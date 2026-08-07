@@ -7,10 +7,14 @@ manifests remain the executable authority.
 ## User path
 
 The active product is local package compile/run plus the Semantic Source stdio interface. Package
-files and the provisional line-oriented `.lkjscript` notation remain program authority. The
-compiler loads exact package modules and imports, produces resolved typed HIR, checks
-types/effects/ownership and a HIR memory plan, lowers and verifies SSA, validates bytecode, binds an
-in-process prepared identity, and executes the program.
+files and the provisional line-oriented `.lkjscript` notation remain persistent import authority
+until semantic transactions replace the editing path. Text and path entry points now import exactly
+once into an immutable `WorkspaceSnapshot`. The snapshot owns clone-safe resolved typed HIR,
+immutable compilation provenance, optional source attachments, opaque namespace-scoped stable
+entity/node identities, semantic indexes, type facts, and diagnostic headers. Every product compile
+API delegates to public `compile_snapshot`, the sole post-import boundary, before HIR memory
+planning, SSA lowering and verification, bytecode validation, prepared-identity binding, and
+execution.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -118,26 +122,38 @@ The execution-outcome wire codec is absent. `SemanticDagSnapshot` and authentica
 structural snapshot import/export remain in memory for VM/JIT behavior and differential tests.
 Their memory witness facts are named semantic-snapshot facts rather than process-codec facts.
 
-## Semantic Source bootstrap
+## Semantic workspace compiler cutover and bootstrap service
 
-The current Semantic Source JSON/stdio service provides source-derived snapshots, revision-labelled
-node and entity reads, diagnostics, typed-hole context and legal-action queries, and atomic preview
-or publish transactions for declaration rename, expression replacement, and typed-hole operations.
-It stages and validates source publication and rejects stale revisions and failed preconditions.
-Candidate and legal-action responses are complete when returned; if response policy cannot carry a
-complete result, the service returns typed `OutputLimit` before publication rather than truncating.
+The compiler's public `workspace` module now owns one syntax-independent in-memory
+`WorkspaceSnapshot` representation. Public `WorkspaceNamespace`, `RevisionId`, `EntityId`, and
+`NodeId` values are opaque; entity/node IDs contain a namespace, logical slot, and generation rather
+than exposing HIR vector positions. Import builds containment, reference, call, and dependency
+indexes iteratively and records actual/expected type facts in deterministic order. Snapshot
+consistency validation checks dense HIR references, signatures, origins, declaration/index facts,
+and rebuilt semantic indexes before compilation. Snapshot clones share typed HIR through `Arc`, and
+presentation attachments can be removed without changing semantic identities or compilation.
 
-This is not the target semantic workspace. Its schema mirrors the current syntax tree, spans,
-canonical text subtrees, and source files. A `NodeId` contains a revision and dense `u64` index;
-identity is not stable across edits. Transactions rewrite text, and compilation reparses text.
-General incomplete semantic states, edit-stable identity, broad semantic queries, pagination, and
-direct semantic compilation are not implemented.
+The source/path importer privately owns source loading, parsing, analysis, package verification, and
+capture of locked or development preparation provenance. `compile_path`, its metrics/source
+variants, `compile_source`, and `validate_source` all import a snapshot; only `compile_snapshot`
+continues past typed HIR. A parser-invocation seam proves direct snapshot compilation does not parse,
+render, or round-trip text, and an attachment-free programmatically rebuilt typed snapshot compiles
+and executes in the VM.
+
+The existing Semantic Source JSON/stdio service remains temporarily as internal bootstrap machinery
+for commits 2/3 of the same cutover. It still provides source-derived revision-labelled queries and
+staged text transactions, and its old schema still mirrors syntax, spans, canonical subtrees, and
+source files. Its transactions publish text, after which a later compile performs a fresh import.
+It does not yet edit the new workspace snapshot or provide edit-stable identity across revisions.
+General incomplete states, semantic transactions, broad queries, and pagination are not implemented.
 
 ## Known gaps
 
-- Text is still source authority; direct compilation from a syntax-independent semantic snapshot is
-  absent.
-- Semantic Source remains syntax-shaped and its wide dense IDs are not edit-stable semantic IDs.
+- Text remains persistent editing/import authority because semantic transactions and rendering from
+  the new snapshot are not implemented yet; it is no longer a post-HIR compiler input.
+- Semantic Source remains syntax-shaped and separate from the new compiler snapshot. Its wide dense
+  IDs are not edit-stable semantic IDs, and deleting that temporary service path is scheduled for
+  commits 2/3 of the same cutover.
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public

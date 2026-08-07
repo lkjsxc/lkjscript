@@ -37,6 +37,7 @@ pub(crate) struct SsaMetrics {
 
 #[cfg(test)]
 pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
+    crate::analyze::verify_match_plans(program)?;
     let memory_verified = crate::memory_plan::verify_hir_memory(program)?;
     lower_program_with_metrics(&memory_verified).map(|(program, _)| program)
 }
@@ -46,7 +47,6 @@ pub(crate) fn lower_program_with_metrics(
 ) -> Result<(VerifiedProgram, SsaMetrics)> {
     let program = memory_verified.hir();
     let construction_started = Instant::now();
-    crate::analyze::verify_match_plans(program)?;
     let ssa = construct_program(program, memory_verified.plan())?;
     let construction = construction_started.elapsed();
     let verification_started = Instant::now();

@@ -13,22 +13,26 @@ pub(crate) mod module_names;
 mod modules;
 pub(crate) use modules::public_names as module_public_names;
 mod parse;
+#[cfg(test)]
+pub(crate) use parse::{
+    invocation_count as parser_invocation_count,
+    reset_invocation_count as reset_parser_invocation_count,
+};
 mod validate;
 
 #[cfg(test)]
 pub(crate) use api::validate_source_set_for_analysis;
 pub(crate) use api::{
-    ensure_source_path_for_compiler, load_for_compiler, load_for_protocol, load_with_metrics,
-    rebuild_staged_sources, validate_for_compiler, ValidatedSourceParts,
+    ensure_source_path_for_compiler, load_for_protocol, load_with_metrics, rebuild_staged_sources,
+    validate_for_compiler, ValidatedSourceParts,
 };
-pub use api::{load, validate, ValidatedSourceTree};
-pub use diagnostics::{
-    DiagnosticCategory, DiagnosticCertainty, DiagnosticSeverity, RelatedSourceSpan,
-    SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
+pub(crate) use api::{load, validate, ValidatedSourceTree};
+pub(crate) use diagnostics::{
+    DiagnosticCategory, SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
 };
 pub(crate) use format::{format_f64, format_file, format_node_identity, format_node_source};
 pub(crate) use identity::{enum_member_identity, product_field_identity};
-pub use identity::{
+pub(crate) use identity::{
     DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
     SourceIdentity, SourceTreeIdentity, StaleNodeId,
 };

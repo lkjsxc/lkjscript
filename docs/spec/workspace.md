@@ -7,18 +7,27 @@ not a claim that the target exists. Current checkout status remains owned by
 
 ## Current bootstrap
 
-**Currently implemented.** Text files and the provisional source tree remain program authority. The
-Semantic Source service exposes snapshots, revision-labelled source nodes, selected entity/node/hole
-queries, diagnostics, preview or publish transactions, and a local JSON/stdio session. It can rename
-declarations, replace expressions, and insert, fill, refine, or delete typed holes with base-revision
-and file preconditions. Publication stages and validates source files before replacement.
+**Currently implemented.** Text files remain persistent import/editing authority, but product
+compilation now imports them exactly once into a syntax-independent immutable `WorkspaceSnapshot`.
+The snapshot owns complete typed HIR, captured preparation provenance, optional source attachments,
+opaque namespace/slot/generation entity and node IDs, revision identity, semantic indexes, type
+facts, and diagnostic headers. Every text/path compile API delegates to `compile_snapshot`; direct
+snapshot compilation performs consistency validation and executable lowering without source,
+parser, formatter, or text-roundtrip dependency. Current snapshots represent only complete programs
+and identity stability is proven only within an immutable snapshot. Transactions over this
+representation are not implemented.
 
-The schema mirrors physical sources, spans, marker-shaped expressions, canonical rendered subtrees,
-and source fingerprints. `NodeId` is a revision plus a dense `u64` index; widening prevents numeric
-aliasing but does not preserve identity across an edit. Transactions ultimately rewrite text, and
-compilation reparses that text. Unresolved references, ambiguities, general conflicts, and recovery
-nodes are not first-class semantic snapshot states. Query coverage and result pagination are not the
-target interface.
+The older Semantic Source service remains temporarily internal for commits 2/3 of the same cutover.
+It exposes revision-labelled source nodes, selected entity/node/hole queries, diagnostics, preview or
+publish transactions, and a local JSON/stdio session. It can rename declarations, replace
+expressions, and insert, fill, refine, or delete typed holes with base-revision and file
+preconditions. Publication stages and validates source files before replacement. Its schema still
+mirrors physical sources, spans, marker-shaped expressions, canonical rendered subtrees, and source
+fingerprints. Its `NodeId` is a revision plus a dense `u64` index and does not preserve identity
+across an edit. Transactions ultimately rewrite text; a later compile imports the resulting text
+into a new compiler snapshot. Unresolved references, ambiguities, general conflicts, and recovery
+nodes are not first-class workspace states. Query coverage and result pagination are not the target
+interface.
 
 Everything below is the target contract.
 

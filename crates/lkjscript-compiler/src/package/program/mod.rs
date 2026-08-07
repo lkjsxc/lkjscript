@@ -63,17 +63,36 @@ pub(crate) fn development(
     source_identity: [u8; 32],
     path: &str,
     plan: &HirMemoryPlan,
-) -> PreparationProvenance {
+) -> Result<PreparationProvenance> {
+    let path_len = u64::try_from(path.len())
+        .map_err(|_| Error::host("development package path length exceeds u64"))?;
+    let source_capacity = 40_usize
+        .checked_add(path.len())
+        .ok_or_else(|| Error::host("development package source identity size overflow"))?;
     let mut source = Vec::new();
+    source
+        .try_reserve_exact(source_capacity)
+        .map_err(|_| Error::host("development package source identity allocation failed"))?;
     source.extend_from_slice(&source_identity);
-    source.extend_from_slice(&(path.len() as u64).to_be_bytes());
+    source.extend_from_slice(&path_len.to_be_bytes());
     source.extend_from_slice(path.as_bytes());
-    let content = domain_hash(b"lkjscript.development-package-content", &source);
+    let content = domain_hash(b"lkjscript.development-package-content", &source)?;
     let mut witness = Vec::new();
     for group in &plan.witness_groups {
+        let member_count = u64::try_from(group.members.len())
+            .map_err(|_| Error::host("development witness member count exceeds u64"))?;
+        let member_bytes = group
+            .members
+            .len()
+            .checked_mul(72)
+            .and_then(|bytes| bytes.checked_add(41))
+            .ok_or_else(|| Error::host("development witness group size overflow"))?;
+        witness
+            .try_reserve(member_bytes)
+            .map_err(|_| Error::host("development witness group allocation failed"))?;
         witness.extend_from_slice(&group.id.as_bytes());
         witness.push(u8::from(group.recursive));
-        witness.extend_from_slice(&(group.members.len() as u64).to_be_bytes());
+        witness.extend_from_slice(&member_count.to_be_bytes());
         for member in &group.members {
             witness.extend_from_slice(&member.witness.as_bytes());
             witness.extend_from_slice(&member.ordinal.to_be_bytes());
@@ -81,24 +100,29 @@ pub(crate) fn development(
         }
     }
     for member in &plan.witnesses {
-        witness.extend_from_slice(&member.id.as_bytes());
-        witness.extend_from_slice(
-            &lkjscript_contracts::canonical_executable_memory_witness_dependencies(
-                &member.facts.dependencies,
-            ),
+        let dependencies = lkjscript_contracts::canonical_executable_memory_witness_dependencies(
+            &member.facts.dependencies,
         );
+        let additional = 32_usize
+            .checked_add(dependencies.len())
+            .ok_or_else(|| Error::host("development witness dependency size overflow"))?;
+        witness
+            .try_reserve(additional)
+            .map_err(|_| Error::host("development witness dependency allocation failed"))?;
+        witness.extend_from_slice(&member.id.as_bytes());
+        witness.extend_from_slice(&dependencies);
     }
-    PreparationProvenance {
+    Ok(PreparationProvenance {
         kind: PackageProvenanceKind::Development,
         package_content: content,
-        package_root: domain_hash(b"lkjscript.development-package-root", path.as_bytes()),
-        entry: domain_hash(b"lkjscript.development-package-entry", path.as_bytes()),
+        package_root: domain_hash(b"lkjscript.development-package-root", path.as_bytes())?,
+        entry: domain_hash(b"lkjscript.development-package-entry", path.as_bytes())?,
         module_memory_closure: domain_hash(
             b"lkjscript.development-module-memory",
             &plan.id.as_bytes(),
-        ),
-        witness_closure: domain_hash(b"lkjscript.development-witness-closure", &witness),
-    }
+        )?,
+        witness_closure: domain_hash(b"lkjscript.development-witness-closure", &witness)?,
+    })
 }
 
 pub(crate) fn locked(value: crate::package::PreparedPackageFacts) -> PreparationProvenance {
@@ -130,10 +154,20 @@ fn contract_digests() -> Result<PreparedContractDigests> {
     })
 }
 
-fn domain_hash(domain: &[u8], value: &[u8]) -> [u8; 32] {
-    let mut bytes = Vec::with_capacity(domain.len() + 8 + value.len());
+fn domain_hash(domain: &[u8], value: &[u8]) -> Result<[u8; 32]> {
+    let value_len = u64::try_from(value.len())
+        .map_err(|_| Error::host("prepared identity value length exceeds u64"))?;
+    let capacity = domain
+        .len()
+        .checked_add(8)
+        .and_then(|length| length.checked_add(value.len()))
+        .ok_or_else(|| Error::host("prepared identity byte count overflow"))?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(capacity)
+        .map_err(|_| Error::host("prepared identity allocation failed"))?;
     bytes.extend_from_slice(domain);
-    bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(&value_len.to_be_bytes());
     bytes.extend_from_slice(value);
-    lkjscript_contracts::sha256(&bytes)
+    Ok(lkjscript_contracts::sha256(&bytes))
 }

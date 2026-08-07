@@ -1,5 +1,5 @@
-//! Compile canonical line-oriented `.lkjscript` source into verified typed SSA
-//! and validated reference bytecode.
+//! Import text into immutable typed semantic workspace snapshots, then compile
+//! snapshots into verified typed SSA and validated reference bytecode.
 
 mod analyze;
 mod codegen;
@@ -12,10 +12,14 @@ mod ownership;
 pub mod package;
 mod pipeline;
 pub mod semantic;
-pub mod source;
+// Internal bootstrap source machinery remains only for import and the existing
+// Semantic Source service; commits 2/3 of this cutover delete that service.
+#[allow(dead_code)]
+mod source;
 mod ssa;
 mod stack;
 mod types;
+pub mod workspace;
 
 use std::path::Path;
 use std::time::Duration;
@@ -30,9 +34,10 @@ pub use memory_plan::{
 pub use package::program::PreparedProgram;
 
 pub use pipeline::{
-    compile_path, compile_path_with_metrics, compile_path_with_sources, compile_source,
-    validate_source,
+    compile_path, compile_path_with_metrics, compile_path_with_sources, compile_snapshot,
+    compile_source, validate_source,
 };
+pub use workspace::WorkspaceSnapshot;
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 

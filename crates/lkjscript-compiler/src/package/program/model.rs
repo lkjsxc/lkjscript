@@ -2,6 +2,7 @@ use lkjscript_contracts::{
     PackageProvenanceKind, PreparedProgramDescriptor, PreparedProgramIdentity,
 };
 
+#[derive(Clone)]
 pub(crate) struct PreparationProvenance {
     pub kind: PackageProvenanceKind,
     pub package_content: [u8; 32],

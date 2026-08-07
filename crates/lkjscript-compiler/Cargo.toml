@@ -16,6 +16,7 @@ stacker.workspace = true
 
 [dev-dependencies]
 lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }
+lkjscript-vm = { path = "../lkjscript-vm" }
 
 [lints]
 workspace = true

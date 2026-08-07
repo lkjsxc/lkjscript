@@ -10,6 +10,11 @@ mod text;
 
 use std::path::PathBuf;
 
+#[cfg(test)]
+std::thread_local! {
+    static PARSER_INVOCATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 use crate::source::{SourceFile, SourceNode, SourceOrigin, SourceResult};
 
 pub(crate) use names::is_source_identifier;
@@ -19,6 +24,8 @@ pub(crate) fn parse_file(
     origin: SourceOrigin,
     path: PathBuf,
 ) -> SourceResult<SourceFile> {
+    #[cfg(test)]
+    PARSER_INVOCATIONS.with(|count| count.set(count.get().saturating_add(1)));
     let exact_source_len = u64::try_from(source.len()).map_err(|_| {
         crate::source::SourceDiagnostic::new(
             "LKJ-SRC-HOST",
@@ -61,4 +68,14 @@ pub(crate) fn parse_file(
         tokens: lexed.tokens,
         trailing_trivia: lexed.trailing_trivia,
     })
+}
+
+#[cfg(test)]
+pub(crate) fn reset_invocation_count() {
+    PARSER_INVOCATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn invocation_count() -> u64 {
+    PARSER_INVOCATIONS.with(std::cell::Cell::get)
 }

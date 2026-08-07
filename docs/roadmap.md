@@ -15,20 +15,22 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    repeated startup, execution, peak-memory, and generated-code measurements across equivalent
    scalar, branch, call, structural, collection, ownership, failure, and host workloads. Reverse a
    runtime choice only on equivalent evidence.
-3. **Implement the first semantic-workspace vertical.** Build one in-memory immutable typed snapshot
-   supporting a module with `main`, ordinary functions, primitives, calls, bindings, conditionals,
-   and one incomplete-expression state. Provide edit-stable logical IDs, stale-revision rejection,
-   atomic rename/replace/fill transactions, type/reference/hole queries, deterministic import and
-   rendering, semantic diffs, and direct compilation without a text round trip.
+3. **Finish the semantic-workspace cutover on the implemented compiler snapshot.** Complete text
+   programs now import into one immutable typed `WorkspaceSnapshot`, and all compilation proceeds
+   directly from it without a parser or rendering round trip. Next add identity-preserving revisions,
+   one incomplete-expression state, stale-revision rejection, atomic rename/replace/fill
+   transactions, type/reference/hole queries, deterministic rendering, and semantic diffs over this
+   same representation. Delete the temporary syntax-shaped Semantic Source path in commits 2/3 of
+   this cutover rather than creating a second semantic model.
 4. **Complete stack-safety evidence for the selected local architecture.** Convert or otherwise
    prove the remaining recursive Semantic Source, transaction, runtime structural-value,
    serialization, and specialization paths under deep generated tests.
 
 ## Next
 
-1. **Cut text over to importer/projection status.** Remove syntax-shaped source authority and the
-   bootstrap transaction compiler round trip once the semantic vertical owns compilation. Do not
-   retain parallel text and semantic compiler paths.
+1. **Cut editing and projection over to workspace authority.** Text already enters compilation only
+   through the importer. Remove syntax-shaped editing authority and the bootstrap text transaction
+   path once replacement operations land; do not retain parallel source and semantic services.
 2. **Add measured incremental recomputation.** Compare a small dependency-aware cache with a mature
    query framework on edit latency, invalidation precision, retained memory, cycle handling,
    cancellation, and debugging cost before choosing an implementation.

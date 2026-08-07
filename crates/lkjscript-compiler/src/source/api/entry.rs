@@ -64,10 +64,6 @@ pub(crate) fn validate_for_compiler(
     validate(source, logical_path).map_err(SourceDiagnostic::into_core)
 }
 
-pub(crate) fn load_for_compiler(path: &Path) -> Result<ValidatedSourceTree> {
-    load(path).map_err(SourceDiagnostic::into_core)
-}
-
 pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
     loader::ensure_source_path(path).map_err(SourceDiagnostic::into_core)
 }

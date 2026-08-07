@@ -26,7 +26,9 @@ pub use model::{
 
 pub const MANIFEST_FILE: &str = manifest::MANIFEST;
 pub const LOCK_FILE: &str = manifest::LOCK;
-pub(crate) use prepared::{facts as prepared_facts, PreparedPackageFacts};
+pub(crate) use prepared::{
+    capture as capture_preparation, CapturedPackageProvenance, PreparedPackageFacts,
+};
 
 pub fn root(entry: &Path) -> Result<PathBuf> {
     manifest::find_root(entry)
