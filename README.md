@@ -1,17 +1,16 @@
 # lkjscript
 
-`lkjscript` is an experimental, AI-primary, statically typed, memory-safe language and
-runtime implemented in Rust. The project is undergoing an architectural reset toward a typed
-semantic program model, scalable compiler algorithms, and one coherent production runtime path.
+`lkjscript` is an experimental, AI-primary, statically typed, memory-safe language and runtime
+implemented in Rust. The project is in an architectural reset toward a typed semantic workspace,
+scale-safe compilation, and one measured production execution path.
 
-Today, programs are imported from the provisional line-oriented `.lkjscript` projection. The
-compiler resolves and checks them, builds typed HIR and verified SSA, emits validated bytecode,
-and runs them through the default automatic VM/native path. Linux x86-64 is the currently tested
-native platform.
+## Prerequisites
 
-## Build and run
+- a current stable Rust toolchain with Cargo, Rustfmt, and Clippy;
+- the SQLite runtime library (`libsqlite3` on Linux);
+- Linux x86-64 for the currently tested native path.
 
-A current Rust toolchain and SQLite runtime library are required.
+## Build and first run
 
 ```sh
 cargo build --locked -p lkjscript-app
@@ -19,44 +18,9 @@ cargo run --locked -p lkjscript-app --bin lkjscript -- \
   run src/examples/hello/main.lkjscript
 ```
 
-The example prints `3628800`, the factorial of 10.
-
-The text projection is intentionally verbose and is not the permanent source schema. A small
-ordinary function currently looks like this:
-
-```text
-def/
-name/
-dec
-/name
-public
-fn/
-sig/
-inputs/
-i64
-/inputs
-output/
-i64
-/output
-/sig
-params/
-n
-i64
-/params
-subtract/
-n
-1
-/subtract
-/fn
-/def
-```
-
-See [`src/examples/hello/dec.lkjscript`](src/examples/hello/dec.lkjscript) for the executable
-source.
+A successful run prints `3628800`.
 
 ## Verification
-
-The reset uses transparent commands rather than the removed governance wrapper:
 
 ```sh
 cargo fmt --all -- --check
@@ -65,18 +29,19 @@ cargo test --workspace --all-targets --locked
 cargo build --workspace --release --locked
 ```
 
-Docker also runs these commands and the retained application smoke tests:
+The retained container verification also runs application smoke tests:
 
 ```sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 ```
 
-## Active documentation
+## Documentation
 
-- [Documentation authority](docs/authority.md)
-- [Current implementation](docs/current.md)
-- [Architecture and trust boundaries](docs/architecture.md)
-- [Current language semantics](docs/language.md)
-- [Semantic source-model direction](docs/source-model.md)
-- [Ordered roadmap](docs/roadmap.md)
+- [Authority and conflict rules](docs/authority.md)
+- [Normative language semantics](docs/spec/language.md)
+- [Semantic workspace contract](docs/spec/workspace.md)
+- [Current implementation status](docs/status.md)
+- [Current architecture and target deltas](docs/architecture.md)
+- [Performance method and baselines](docs/performance.md)
+- [Roadmap](docs/roadmap.md)
 - [Engineering policy](AGENTS.md)
