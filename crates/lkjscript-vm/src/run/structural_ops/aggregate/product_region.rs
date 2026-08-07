@@ -1,7 +1,7 @@
 use super::*;
 
-pub(super) fn region_product_key<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+pub(super) fn region_product_key(
+    vm: &Vm<'_>,
     value: Value,
 ) -> Result<lkjscript_core::RegionProductKey> {
     let word = value
@@ -15,8 +15,8 @@ pub(super) fn region_product_key<J: RuntimeTier>(
         .ok_or_else(|| Error::msg("region-product key is stale or malformed"))
 }
 
-pub(super) fn region_field_value<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+pub(super) fn region_field_value(
+    vm: &Vm<'_>,
     route: lkjscript_core::RegionProductFieldKind,
     value: Value,
 ) -> Result<bool> {
@@ -41,10 +41,7 @@ pub(super) fn region_field_value<J: RuntimeTier>(
     })
 }
 
-pub(super) fn charge_region_product<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    fields: usize,
-) -> Result<()> {
+pub(super) fn charge_region_product(vm: &mut Vm<'_>, fields: usize) -> Result<()> {
     vm.preflight_allocation(1)?;
     let region = vm
         .region_products

@@ -4,10 +4,10 @@ mod canonical;
 
 #[path = "jit_engines/allocation.rs"]
 mod allocation;
-#[path = "jit_engines/auto_tiering.rs"]
-mod auto_tiering;
 #[path = "jit_engines/collector_free_scalar.rs"]
 mod collector_free_scalar;
+#[path = "jit_engines/forced_native.rs"]
+mod forced_native;
 #[path = "jit_engines/generic_products/history.rs"]
 mod generic_history;
 #[path = "jit_engines/generic_products.rs"]
@@ -28,7 +28,5 @@ mod scheduled_kernels;
 mod segmented_lists;
 #[path = "jit_engines/structural_products.rs"]
 mod structural_products;
-#[path = "jit_engines/tiering.rs"]
-mod tiering;
 #[path = "jit_engines/unique_island/mod.rs"]
 mod unique_island;

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::canonical::{compile, execution, f64_loop, Scalar};
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, ResourceLimitKind};
-use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, JitSession};
+use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
 
 #[test]
 fn limited_recursive_frame_exhaustion_is_identical_across_tiers() {
@@ -33,18 +33,6 @@ fn limited_recursive_frame_exhaustion_is_identical_across_tiers() {
             .outcome,
         expected
     );
-
-    let mut config = JitConfig::default();
-    config.auto_threshold = 1;
-    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
-    let (automatic, stats) = lkjscript_vm::run_chunk_auto(
-        program.bytecode(),
-        &lkjscript_vm::ExecutionInputs::default(),
-        &execution,
-        session,
-    );
-    assert_eq!(automatic, expected);
-    assert_eq!(stats.native_entries, 0);
 }
 
 #[test]
@@ -62,7 +50,6 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let optimized = execute_optimizing(program.ssa(), &deadline, JitConfig::default())
         .expect("optimizing deadline is a language outcome");
     assert_eq!(execution(optimized.outcome), Scalar::Deadline);
-    assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     let mut fuel = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy::conservative());
     fuel.limited_policy_mut()
@@ -74,7 +61,6 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let optimized = execute_optimizing(program.ssa(), &fuel, JitConfig::default())
         .expect("optimizing fuel is a language outcome");
     assert_eq!(execution(optimized.outcome), Scalar::Fuel);
-    assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     for maximum in [0, 1] {
         let mut stack =
@@ -96,8 +82,7 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
             optimized.outcome,
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
         );
-        assert_eq!(optimized.stats.optimizing_native_entries, 0);
-        assert_eq!(optimized.stats.baseline_native_entries, 0);
+        assert_eq!(optimized.stats.native_entries, 0);
     }
 
     let mut no_frames =
@@ -112,8 +97,7 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
         optimized.outcome,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
     );
-    assert_eq!(optimized.stats.optimizing_native_entries, 0);
-    assert_eq!(optimized.stats.baseline_native_entries, 0);
+    assert_eq!(optimized.stats.native_entries, 0);
 
     let allocation = compile(
         "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nempty-string/\n/empty-string\n/main\n",

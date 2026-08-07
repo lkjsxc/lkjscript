@@ -17,7 +17,6 @@ macro_rules! symbol_vm {
         .expect("symbol comparison chunk validates");
         let mut $name = Vm::new(
             &symbol_chunk,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted(),
         );

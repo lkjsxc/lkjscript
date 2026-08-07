@@ -1,6 +1,6 @@
 use super::*;
 
-pub(in crate::run) fn is_byte_view<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> bool {
+pub(in crate::run) fn is_byte_view(vm: &Vm<'_>, value: Value) -> bool {
     value.as_structural_view().is_some_and(|word| {
         vm.structural
             .as_ref()
@@ -9,7 +9,7 @@ pub(in crate::run) fn is_byte_view<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value)
     })
 }
 
-pub(in crate::run) fn len<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<i64> {
+pub(in crate::run) fn len(vm: &Vm<'_>, value: Value) -> Result<i64> {
     let (key, record) = invocation(vm)?.view(value)?;
     if !record.utf8 {
         return Err(Error::msg("structural view is not a UTF-8 byte view"));
@@ -21,11 +21,7 @@ pub(in crate::run) fn len<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Resul
     i64::try_from(text.len()).map_err(|_| Error::msg("structural UTF-8 view length exceeds i64"))
 }
 
-pub(in crate::run) fn byte_at<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    value: Value,
-    index: i64,
-) -> Result<i64> {
+pub(in crate::run) fn byte_at(vm: &Vm<'_>, value: Value, index: i64) -> Result<i64> {
     let index = usize::try_from(index)
         .map_err(|_| Error::msg("structural UTF-8 byte index is out of range"))?;
     let (key, record) = invocation(vm)?.view(value)?;
@@ -43,11 +39,7 @@ pub(in crate::run) fn byte_at<J: RuntimeTier>(
         .ok_or_else(|| Error::msg("structural UTF-8 byte index is out of bounds"))
 }
 
-pub(in crate::run) fn read_u32_little_endian<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    value: Value,
-    index: i64,
-) -> Result<i64> {
+pub(in crate::run) fn read_u32_little_endian(vm: &Vm<'_>, value: Value, index: i64) -> Result<i64> {
     let index = usize::try_from(index)
         .map_err(|_| Error::msg("structural UTF-8 u32 index is out of range"))?;
     let end = index
@@ -70,10 +62,7 @@ pub(in crate::run) fn read_u32_little_endian<J: RuntimeTier>(
     Ok(i64::from(u32::from_le_bytes(word)))
 }
 
-pub(in crate::run) fn end_byte_view<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    value: Value,
-) -> Result<()> {
+pub(in crate::run) fn end_byte_view(vm: &mut Vm<'_>, value: Value) -> Result<()> {
     let (key, record) = invocation(vm)?.view(value)?;
     if !record.utf8 {
         return Err(Error::msg("structural view is not a UTF-8 byte view"));

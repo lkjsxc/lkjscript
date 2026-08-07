@@ -4,19 +4,17 @@ mod limits;
 
 use super::*;
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub fn new(
         chunk: &'a ValidatedChunk,
-        jit: J,
         inputs: ExecutionInputs,
         config: ExecutionPolicy,
     ) -> Self {
-        Self::new_started(chunk, jit, inputs, config, Instant::now())
+        Self::new_started(chunk, inputs, config, Instant::now())
     }
 
     pub(crate) fn new_started(
         chunk: &'a ValidatedChunk,
-        jit: J,
         inputs: ExecutionInputs,
         config: ExecutionPolicy,
         started: Instant,
@@ -60,7 +58,6 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             frames: Vec::new(),
             lists,
             region_products,
-            jit,
             exit_code: None,
             inputs,
             resources: ResourceTable::new(config.max_handles(), config.cleanup_retention()),

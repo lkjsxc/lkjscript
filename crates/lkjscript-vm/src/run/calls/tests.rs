@@ -1,8 +1,6 @@
 use super::*;
 use lkjscript_core::{validate_chunk, Chunk, ExecutionPolicy, FunctionProto, ValidationPolicy};
 
-use crate::run::NoTier as NullJit;
-
 fn index_instruction(op: Op, index: u64) -> Vec<u8> {
     let mut code = vec![op as u8];
     code.extend_from_slice(&index.to_le_bytes());
@@ -76,7 +74,6 @@ fn tail_call_reuses_the_current_frame() {
         validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("call test chunk validates");
     let mut vm = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     );
@@ -124,7 +121,6 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         .expect("borrowed-resource call validates");
     let mut vm = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     );

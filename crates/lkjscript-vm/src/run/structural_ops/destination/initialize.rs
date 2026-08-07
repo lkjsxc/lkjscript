@@ -1,5 +1,5 @@
-fn initialize_structural_owner<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn initialize_structural_owner(
+    vm: &mut Vm<'_>,
     destination: StructuralDestinationKey,
     field: usize,
     source: Value,
@@ -22,8 +22,8 @@ fn initialize_structural_owner<J: RuntimeTier>(
     Ok(())
 }
 
-fn initialize_unique_owner<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn initialize_unique_owner(
+    vm: &mut Vm<'_>,
     destination: StructuralDestinationKey,
     field: usize,
     source: Value,

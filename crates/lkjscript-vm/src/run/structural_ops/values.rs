@@ -20,10 +20,7 @@ fn host_type(kind: StructuralKind) -> StructuralType {
     )
 }
 
-pub(in crate::run) fn publish_string<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    text: String,
-) -> Result<Value> {
+pub(in crate::run) fn publish_string(vm: &mut Vm<'_>, text: String) -> Result<Value> {
     publish_host_leaf(
         vm,
         SemanticValue::new(
@@ -33,7 +30,7 @@ pub(in crate::run) fn publish_string<J: RuntimeTier>(
     )
 }
 
-fn publish_host_leaf<J: RuntimeTier>(vm: &mut Vm<'_, J>, semantic: SemanticValue) -> Result<Value> {
+fn publish_host_leaf(vm: &mut Vm<'_>, semantic: SemanticValue) -> Result<Value> {
     let value_type = semantic.value_type;
     let key = invocation_mut(vm)?
         .runtime
@@ -42,10 +39,7 @@ fn publish_host_leaf<J: RuntimeTier>(vm: &mut Vm<'_, J>, semantic: SemanticValue
     invocation_mut(vm)?.register_host_owner(key, value_type)
 }
 
-pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    value: Value,
-) -> Result<SemanticValue> {
+pub(in crate::run) fn semantic_snapshot(vm: &Vm<'_>, value: Value) -> Result<SemanticValue> {
     let key = value
         .as_structural_root()
         .ok_or_else(|| Error::msg("value is not a structural owner"))?;
@@ -58,7 +52,7 @@ pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
         .map_err(map_value_error)
 }
 
-pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<String> {
+pub(in crate::run) fn copy_string(vm: &Vm<'_>, value: Value) -> Result<String> {
     if let Some(index) = value.as_static_string() {
         return match vm.chunk.constant(index) {
             Some(Constant::Str(text)) => Ok(text.clone()),
@@ -78,7 +72,7 @@ pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) 
         .map_err(|_| Error::msg("structural string payload is not UTF-8"))
 }
 
-pub(in crate::run) fn copy_path<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Vec<u8>> {
+pub(in crate::run) fn copy_path(vm: &Vm<'_>, value: Value) -> Result<Vec<u8>> {
     let (key, value_type) = leaf_owner(vm, value, StructuralKind::Path)?;
     let node = invocation(vm)?
         .runtime
@@ -90,8 +84,8 @@ pub(in crate::run) fn copy_path<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) ->
     Ok(bytes.to_vec())
 }
 
-fn leaf_owner<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn leaf_owner(
+    vm: &Vm<'_>,
     value: Value,
     expected: StructuralKind,
 ) -> Result<(StructuralValueKey, StructuralType)> {
@@ -109,10 +103,7 @@ fn leaf_owner<J: RuntimeTier>(
     Ok((key, value_type))
 }
 
-pub(in crate::run) fn static_string_semantic<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    value: Value,
-) -> Result<SemanticValue> {
+pub(in crate::run) fn static_string_semantic(vm: &Vm<'_>, value: Value) -> Result<SemanticValue> {
     let index = value
         .as_static_string()
         .ok_or_else(|| Error::msg("expected static string artifact"))?;
@@ -126,8 +117,8 @@ pub(in crate::run) fn static_string_semantic<J: RuntimeTier>(
     ))
 }
 
-pub(in crate::run) fn export_plain_return<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn export_plain_return(
+    vm: &mut Vm<'_>,
     value: Value,
 ) -> Result<Option<OwnedValue>> {
     if let Some(index) = value.as_static_string() {
@@ -176,7 +167,7 @@ pub(super) fn is_host_owner(invocation: &StructuralInvocation, value: Value) -> 
         .is_some_and(|key| invocation.host_owners.contains_key(&key.get()))
 }
 
-pub(super) fn drop_host_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: Value) -> Result<()> {
+pub(super) fn drop_host_owner(vm: &mut Vm<'_>, value: Value) -> Result<()> {
     let key = value
         .as_structural_root()
         .ok_or_else(|| Error::msg("host structural owner changed category"))?;

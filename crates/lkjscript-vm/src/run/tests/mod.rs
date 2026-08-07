@@ -5,7 +5,7 @@ use lkjscript_core::{
     ValidationPolicy,
 };
 
-use super::{NoTier as NullJit, Vm};
+use super::Vm;
 
 fn validated(ops: &[Op]) -> lkjscript_core::ValidatedChunk {
     let mut chunk = Chunk::new();

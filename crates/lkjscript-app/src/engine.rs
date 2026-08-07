@@ -45,7 +45,6 @@ pub fn execute(
     let execution_started = Instant::now();
     match attempt_baseline_with_capabilities_from_start(
         program.ssa(),
-        program.bytecode_links(),
         &inputs.capabilities,
         config,
         jit_config,
@@ -131,6 +130,113 @@ mod tests {
     }
 
     #[test]
+    fn one_shot_baseline_executes_direct_generated_calls() {
+        let program = scalar(concat!(
+            "def/\nname/\nadd-one\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\n",
+            "output/\ni64\n/output\n/sig\nparams/\nvalue\ni64\n/params\n",
+            "add/\nvalue\n1\n/add\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\n",
+            "output/\ni64\n/output\n/sig\nadd-one/\n41\n/add-one\n/main\n",
+        ));
+        let execution = execute(
+            &program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            false,
+        )
+        .expect("execute direct-call group");
+        assert_eq!(execution.path, ExecutionPath::BaselineNative);
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        ));
+        assert!(execution
+            .stats
+            .as_ref()
+            .is_some_and(|stats| stats.direct_native_calls > 0));
+    }
+
+    #[test]
+    fn one_shot_baseline_executes_structural_unique_and_resource_islands() {
+        let structural = scalar(concat!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\n",
+            "empty-string/\n/empty-string\n/main\n",
+        ));
+        let structural = execute(
+            &structural,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            false,
+        )
+        .expect("execute structural island");
+        assert_eq!(structural.path, ExecutionPath::BaselineNative);
+        assert!(
+            matches!(
+                structural.outcome,
+                ExecutionOutcome::Returned(ref value) if value.as_str() == Some("")
+            ),
+            "{:?}",
+            structural.outcome
+        );
+        assert!(structural
+            .stats
+            .as_ref()
+            .is_some_and(|stats| stats.structural_runtime_calls > 0));
+
+        let unique = scalar(concat!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+            "let/\nbind/\nb\nnew-byte-vector/\n3\n/new-byte-vector\n/bind\n",
+            "byte-slice-length/\nborrow/\nb\n/borrow\n/byte-slice-length\n/let\n/main\n",
+        ));
+        let unique = execute(
+            &unique,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            false,
+        )
+        .expect("execute unique island");
+        assert_eq!(unique.path, ExecutionPath::BaselineNative);
+        assert!(matches!(
+            unique.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(3)
+        ));
+        assert!(unique
+            .stats
+            .as_ref()
+            .is_some_and(|stats| stats.unique_runtime_calls > 0));
+
+        let resource = scalar(concat!(
+            "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\n",
+            "output/\nunit\n/output\n/sig\nparams/\nstdio\ncapability/\nstdio\n",
+            "/capability\n/params\ndo/\nstandard-input/\nstdio\n/standard-input\n",
+            "standard-input/\nstdio\n/standard-input\nunit\n/do\n/main\n",
+        ));
+        let resource = execute(
+            &resource,
+            &ExecutionInputs {
+                arguments: Vec::new(),
+                capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
+                host: lkjscript_host::HostEnvironment::portable(),
+            },
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            false,
+        )
+        .expect("execute resource island");
+        assert_eq!(resource.path, ExecutionPath::BaselineNative);
+        assert!(matches!(
+            resource.outcome,
+            ExecutionOutcome::Returned(value) if value.is_unit()
+        ));
+        assert!(resource
+            .stats
+            .as_ref()
+            .is_some_and(|stats| stats.resource_runtime_calls == 2));
+    }
+
+    #[test]
     fn typed_pre_entry_decline_runs_the_vm_once_with_the_original_policy() {
         let program = scalar_main("add/\n40\n2\n/add");
         let policy = ExecutionPolicy::limited(LimitedExecutionPolicy {
@@ -167,7 +273,6 @@ mod tests {
             .expect("past monotonic instant");
         let attempt = attempt_baseline_with_capabilities_from_start(
             program.ssa(),
-            program.bytecode_links(),
             &[],
             &policy,
             JitConfig::default(),

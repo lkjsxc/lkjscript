@@ -2,18 +2,14 @@
 
 use crate::host_ext::ResourceTable;
 use crate::run::unique::UniqueRuntime;
-use crate::run::{RuntimeTier, Vm};
+use crate::run::Vm;
 use lkjscript_core::{Error, ResourceLimitKind, Result, Value};
 
 // Private syscall and polling geometry. A larger language view remains valid;
 // partial-count operations process one chunk and full operations iterate.
 pub(crate) const IO_CHUNK_BYTES: usize = 256 * 1024;
 
-pub(crate) fn read_into<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    resource: Value,
-    view: Value,
-) -> Result<i64> {
+pub(crate) fn read_into(vm: &mut Vm<'_>, resource: Value, view: Value) -> Result<i64> {
     let interruption = vm.interruption()?;
     let destination = vm.unique.exclusive_bytes(view)?;
     let chunk_len = destination.len().min(IO_CHUNK_BYTES);
@@ -23,11 +19,7 @@ pub(crate) fn read_into<J: RuntimeTier>(
     i64::try_from(count).map_err(|_| Error::msg("read-into count out of range"))
 }
 
-pub(crate) fn write_from<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    resource: Value,
-    view: Value,
-) -> Result<i64> {
+pub(crate) fn write_from(vm: &mut Vm<'_>, resource: Value, view: Value) -> Result<i64> {
     let interruption = vm.interruption()?;
     let remaining_output = vm.remaining_output_capacity()?;
     let source = vm.unique.shared_bytes(view)?;
@@ -46,7 +38,7 @@ pub(crate) fn write_from<J: RuntimeTier>(
     i64::try_from(count).map_err(|_| Error::msg("write-from count out of range"))
 }
 
-pub(crate) fn fill_random<J: RuntimeTier>(vm: &mut Vm<'_, J>, view: Value) -> Result<Value> {
+pub(crate) fn fill_random(vm: &mut Vm<'_>, view: Value) -> Result<Value> {
     let interruption = vm.interruption()?;
     let destination = vm.unique.exclusive_bytes(view)?;
     for chunk in destination.chunks_mut(IO_CHUNK_BYTES) {
@@ -126,7 +118,6 @@ pub(crate) fn is_terminal(resources: &ResourceTable, resource: Value) -> Result<
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::run::NoTier;
     use std::os::unix::ffi::OsStrExt;
 
     fn chunk() -> lkjscript_core::ValidatedChunk {
@@ -159,7 +150,7 @@ mod tests {
                 max_output_bytes: len * 2,
                 ..lkjscript_core::LimitedExecutionPolicy::conservative()
             });
-        let mut vm = Vm::new(&chunk, NoTier, crate::ExecutionInputs::default(), config);
+        let mut vm = Vm::new(&chunk, crate::ExecutionInputs::default(), config);
 
         let writer = vm.resources.sys_open_write(path.as_os_str().as_bytes())?;
         let owner = vm.unique.allocate(len_i64)?;
@@ -203,7 +194,7 @@ mod tests {
                 max_output_bytes: len - 1,
                 ..lkjscript_core::LimitedExecutionPolicy::conservative()
             });
-        let mut vm = Vm::new(&chunk, NoTier, crate::ExecutionInputs::default(), config);
+        let mut vm = Vm::new(&chunk, crate::ExecutionInputs::default(), config);
         let writer = vm.resources.sys_open_write(path.as_os_str().as_bytes())?;
         let owner = vm.unique.allocate(len_i64)?;
         let view = vm.unique.borrow(owner, false)?;
@@ -234,7 +225,6 @@ mod tests {
         };
         let mut cancelled = Vm::new(
             &chunk,
-            NoTier,
             inputs,
             lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_heap_bytes: len * 2,

@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysOpenRead as u8 => {
             vm.ensure_host_deadline_support("open-file-reader", false)?;
@@ -186,7 +186,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     }
 }
 
-fn pop_filesystem_path<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<Vec<u8>> {
+fn pop_filesystem_path(vm: &mut Vm<'_>) -> Result<Vec<u8>> {
     let path = vm.pop()?;
     vm.require_capability(lkjscript_core::CapabilityKind::FileSystem)?;
     crate::run::structural_ops::copy_path(vm, path)

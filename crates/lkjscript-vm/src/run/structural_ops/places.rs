@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: lkjscript_core::Op) -> Result<()> {
     match op {
         lkjscript_core::Op::StructuralPlaceInit => place_init(vm),
         lkjscript_core::Op::StructuralMove => move_owner(vm),
@@ -10,7 +10,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
     }
 }
 
-fn place_init<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn place_init(vm: &mut Vm<'_>) -> Result<()> {
     let (place, slot) = place_and_slot(vm)?;
     let value = locals::local(vm, slot)?;
     let (mut key, record) = invocation(vm)?.owner(value)?;
@@ -77,7 +77,7 @@ fn place_init<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn move_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn move_owner(vm: &mut Vm<'_>) -> Result<()> {
     let (place, slot) = place_and_slot(vm)?;
     let value = locals::local(vm, slot)?;
     let (key, record) = invocation(vm)?.owner(value)?;
@@ -101,7 +101,7 @@ fn move_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn drop_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn drop_owner(vm: &mut Vm<'_>) -> Result<()> {
     let (place, slot) = place_and_slot(vm)?;
     let value = locals::local(vm, slot)?;
     let (key, record) = invocation(vm)?.owner(value)?;
@@ -133,7 +133,7 @@ fn drop_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn place_end<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn place_end(vm: &mut Vm<'_>) -> Result<()> {
     let place = vm.read_index()?;
     let target = place_mut(vm, place)?;
     match *target {

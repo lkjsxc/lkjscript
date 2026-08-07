@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(super) fn compare(vm: &mut Vm<'_>) -> Result<()> {
     let parameter = u64::try_from(vm.read_index()?)
         .map_err(|_| Error::msg("memory compare witness parameter exceeds u64"))?;
     let binding = vm
@@ -36,7 +36,7 @@ pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(super) fn dispose_owner(vm: &mut Vm<'_>) -> Result<()> {
     let parameter = u64::try_from(vm.read_index()?)
         .map_err(|_| Error::msg("memory dispose witness parameter exceeds u64"))?;
     let binding = vm
@@ -83,7 +83,7 @@ pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn independent_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(super) fn independent_owner(vm: &mut Vm<'_>) -> Result<()> {
     let parameter = u64::try_from(vm.read_index()?)
         .map_err(|_| Error::msg("memory independent-owner witness parameter exceeds u64"))?;
     let binding = vm

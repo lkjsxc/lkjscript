@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub(crate) fn code_len(&self) -> Result<usize> {
         Ok(self.code()?.len())
     }

@@ -4,8 +4,6 @@ mod invoke;
 mod island;
 mod lifecycle;
 mod list_snapshot;
-mod lookup;
 mod runtime_values;
 mod state;
 mod stats_support;
-mod tiering;

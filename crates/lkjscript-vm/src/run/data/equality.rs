@@ -1,10 +1,6 @@
 use super::*;
 
-pub(crate) fn value_equal<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    left: Value,
-    right: Value,
-) -> Result<bool> {
+pub(crate) fn value_equal(vm: &mut Vm<'_>, left: Value, right: Value) -> Result<bool> {
     let mut pending = Vec::new();
     pending.try_reserve(1).map_err(|_| {
         Error::resource(
@@ -128,7 +124,7 @@ fn symbol_text(chunk: &lkjscript_core::ValidatedChunk, symbol: u64) -> Result<&s
     }
 }
 
-pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(crate) fn equal_value(vm: &mut Vm<'_>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = value_equal(vm, left, right)?;
@@ -136,7 +132,7 @@ pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(crate) fn same_object(vm: &mut Vm<'_>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = match (left.as_resource(), right.as_resource()) {
@@ -152,7 +148,7 @@ pub(crate) fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 
 include!("equality/list.rs");
 
-pub(crate) fn f64_bits_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(crate) fn f64_bits_equal(vm: &mut Vm<'_>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let right = right

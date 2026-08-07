@@ -3,8 +3,8 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, Op, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, FailureCode, JitConfig, JitSession};
-use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
+use lkjscript_jit::{attempt_baseline, execute_forced, BaselineAttempt, FailureCode, JitConfig};
+use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 const WIDE_COUNT: usize = 300;
 const STRESS_COUNT: usize = 1_024;
@@ -371,6 +371,19 @@ fn returned_i64(outcome: ExecutionOutcome) -> i64 {
     }
 }
 
+fn preferred_outcome(program: &lkjscript_compiler::ExecutableProgram) -> ExecutionOutcome {
+    let policy = ExecutionPolicy::unrestricted();
+    match attempt_baseline(program.ssa(), &policy, JitConfig::default()) {
+        BaselineAttempt::Executed(execution) => execution.outcome,
+        BaselineAttempt::Declined(_) => {
+            run_chunk(program.bytecode(), &ExecutionInputs::default(), &policy)
+        }
+        BaselineAttempt::EnteredFailure(failure) => {
+            panic!("entered baseline execution failed: {}", failure.error)
+        }
+    }
+}
+
 #[test]
 fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
     let program = compile_source(
@@ -409,22 +422,7 @@ fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
         777
     );
 
-    let session = JitSession::new_auto(
-        program.ssa(),
-        program.bytecode_links(),
-        JitConfig {
-            auto_threshold: 1,
-            ..JitConfig::default()
-        },
-    );
-    let (outcome, stats) = run_chunk_auto(
-        program.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
-        session,
-    );
-    assert_eq!(returned_i64(outcome), 777);
-    assert!(stats.vm_fallbacks > 0);
+    assert_eq!(returned_i64(preferred_outcome(&program)), 777);
 }
 
 #[test]
@@ -486,25 +484,10 @@ fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm
     };
     assert_eq!(value.enum_physical_tag(), Some(high.physical_tag));
 
-    let session = JitSession::new_auto(
-        high_program.ssa(),
-        high_program.bytecode_links(),
-        JitConfig {
-            auto_threshold: 1,
-            ..JitConfig::default()
-        },
-    );
-    let (outcome, stats) = run_chunk_auto(
-        high_program.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
-        session,
-    );
-    let ExecutionOutcome::Returned(value) = outcome else {
-        panic!("auto execution must return the high-tag enum")
+    let ExecutionOutcome::Returned(value) = preferred_outcome(&high_program) else {
+        panic!("preferred execution must return the high-tag enum")
     };
     assert_eq!(value.enum_physical_tag(), Some(high.physical_tag));
-    assert!(stats.vm_fallbacks > 0);
 }
 
 #[test]
@@ -715,29 +698,7 @@ fn assert_many_owned_arguments(count: usize) {
     );
     assert_eq!(returned_i64(outcome), 7);
 
-    let session = JitSession::new_auto(
-        program.ssa(),
-        program.bytecode_links(),
-        JitConfig {
-            auto_threshold: 1,
-            ..JitConfig::default()
-        },
-    );
-    let (auto_outcome, stats) = run_chunk_auto(
-        program.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
-        session,
-    );
-    assert_eq!(returned_i64(auto_outcome), 7);
-    let tier = stats
-        .functions
-        .iter()
-        .find(|item| item.name().ends_with("drop-many-owned"))
-        .expect("many-owned function tier record");
-    assert!(!tier.auto_entry_eligible());
-    assert_eq!(tier.native_entries(), 0);
-    assert!(stats.vm_fallbacks > 0);
+    assert_eq!(returned_i64(preferred_outcome(&program)), 7);
 
     let instructions = program.bytecode().main_instructions();
     let call_index = instructions
@@ -814,30 +775,12 @@ fn generated_wide_jump_executes_both_source_branch_paths() {
 }
 
 #[test]
-fn automatic_engine_keeps_high_signature_on_the_generic_vm_path() {
+fn preferred_execution_falls_back_for_an_unsupported_high_signature() {
     let program = compile_wide();
-    let config = JitConfig {
-        auto_threshold: 1,
-        ..JitConfig::default()
-    };
-    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
-    let (outcome, stats) = run_chunk_auto(
-        program.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
-        session,
-    );
     assert_eq!(
-        returned_i64(outcome),
+        returned_i64(preferred_outcome(&program)),
         i64::try_from(WIDE_COUNT - 1).expect("test width fits i64")
     );
-    let function = stats
-        .functions
-        .iter()
-        .find(|function| function.name() == "select-high")
-        .expect("wide function tier record");
-    assert!(!function.auto_entry_eligible());
-    assert_eq!(function.native_entries(), 0);
 
     let error = execute_forced(
         program.ssa(),

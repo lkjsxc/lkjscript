@@ -2,9 +2,9 @@
 
 use lkjscript_core::{Error, Result};
 
-use super::{RuntimeTier, Vm};
+use super::Vm;
 
-pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     if super::structural_ops::handles(op) {
         return super::structural_ops::dispatch(vm, op);
     }

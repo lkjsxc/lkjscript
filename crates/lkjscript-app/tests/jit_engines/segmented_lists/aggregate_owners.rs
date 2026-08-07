@@ -34,7 +34,6 @@ fn product_elements_execute_in_all_four_tiers() {
         .expect("proof product list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 1);
     }
 }
@@ -72,7 +71,6 @@ fn nested_option_lists_execute_in_all_four_tiers() {
         .expect("proof nested option list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 2);
     }
 }
@@ -110,6 +108,5 @@ fn nested_structural_list_equality_is_iterative_in_all_tiers() {
         .expect("proof nested structural equality"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
     }
 }

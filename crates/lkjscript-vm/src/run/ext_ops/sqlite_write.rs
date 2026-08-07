@@ -1,6 +1,6 @@
 use super::*;
 
-fn push_unit_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
+fn push_unit_result(vm: &mut Vm<'_>, result: Result<Value>) {
     super::push_runtime_result(
         vm,
         lkjscript_core::SystemErrorKind::Sqlite,
@@ -9,8 +9,8 @@ fn push_unit_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
     );
 }
 
-fn push_resource_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn push_resource_result(
+    vm: &mut Vm<'_>,
     kind: lkjscript_core::ResourceKind,
     result: Result<Value>,
 ) {
@@ -22,11 +22,11 @@ fn push_resource_result<J: RuntimeTier>(
     );
 }
 
-fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
+fn push_i64_result(vm: &mut Vm<'_>, result: Result<i64>) {
     super::push_i64_result(vm, lkjscript_core::SystemErrorKind::Sqlite, result);
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysSqliteOpen as u8 => {
             vm.ensure_host_deadline_support("open-sqlite", false)?;

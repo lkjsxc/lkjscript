@@ -1,6 +1,6 @@
 use super::super::*;
 
-impl<J: RuntimeTier> Vm<'_, J> {
+impl Vm<'_> {
     pub(crate) fn list_prepend(&mut self, head: Value, tail: Value) -> Result<Value> {
         let tail = self.list_key(tail)?;
         self.preflight_allocation(1)?;

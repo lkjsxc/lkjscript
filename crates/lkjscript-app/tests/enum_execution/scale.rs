@@ -88,7 +88,6 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
             execution.outcome,
             ExecutionOutcome::Returned(ref value) if value.as_i64() == Some(3)
         ));
-        assert_eq!(execution.stats.vm_fallbacks, 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.release_backlog, 0);
     }
@@ -129,7 +128,6 @@ fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
             ExecutionOutcome::Returned(ref value) if value.as_i64() == Some(7)
         ));
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_loans, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);

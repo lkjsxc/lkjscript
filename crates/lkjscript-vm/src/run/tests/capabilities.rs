@@ -21,7 +21,6 @@ fn missing_and_wrong_grants_fail_before_host_dispatch() {
     for capabilities in [Vec::new(), vec![lkjscript_core::CapabilityKind::Arguments]] {
         let outcome = Vm::new(
             &chunk,
-            NullJit,
             crate::ExecutionInputs {
                 arguments: Vec::new(),
                 capabilities,
@@ -47,7 +46,6 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
     };
     let output = Vm::new(
         &print_chunk(lkjscript_core::CapabilityKind::Stdio),
-        NullJit,
         crate::ExecutionInputs {
             arguments: Vec::new(),
             capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
@@ -70,7 +68,6 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
     let clock = validate(chunk);
     let output = Vm::new(
         &clock,
-        NullJit,
         crate::ExecutionInputs {
             arguments: Vec::new(),
             capabilities: vec![lkjscript_core::CapabilityKind::Clock],
@@ -90,7 +87,6 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
 fn matching_capability_without_provider_fails_before_ambient_effect() {
     let outcome = Vm::new(
         &print_chunk(lkjscript_core::CapabilityKind::Stdio),
-        NullJit,
         crate::ExecutionInputs {
             arguments: Vec::new(),
             capabilities: vec![lkjscript_core::CapabilityKind::Stdio],

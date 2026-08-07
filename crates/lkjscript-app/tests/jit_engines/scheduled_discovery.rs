@@ -29,6 +29,5 @@ fn forced_scheduled_proof_discovery_preserves_native_output_and_proof_counts() {
         scheduled.stats.optimizing_passes,
         sequential.stats.optimizing_passes
     );
-    assert!(scheduled.stats.optimizing_native_entries > 0);
-    assert_eq!(scheduled.stats.vm_fallbacks, 0);
+    assert!(scheduled.stats.native_entries > 0);
 }

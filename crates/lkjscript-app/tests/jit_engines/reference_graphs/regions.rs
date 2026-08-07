@@ -19,10 +19,7 @@ fn nested_region_product_and_list_graph_is_collector_free_in_all_engines() {
     assert_eq!(vm, expected);
     assert_eq!(execution(native.outcome), expected);
     assert_eq!(execution(optimized.outcome), expected);
-    assert_eq!(native.stats.vm_fallbacks, 0);
-    assert_eq!(optimized.stats.vm_fallbacks, 0);
-    assert_eq!(optimized.stats.baseline_native_entries, 0);
-    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert!(optimized.stats.native_entries > 0);
     assert_eq!(
         optimized.stats.runtime_heap_attempts,
         native.stats.runtime_heap_attempts

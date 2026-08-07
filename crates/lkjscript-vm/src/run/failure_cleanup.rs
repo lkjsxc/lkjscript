@@ -1,6 +1,6 @@
 use super::*;
 
-impl<J: RuntimeTier> Vm<'_, J> {
+impl Vm<'_> {
     pub(super) fn execute_failure_unwind(&mut self, top_offset: usize, include_unentered: bool) {
         let top = self.frames.len().saturating_sub(1);
         let roots: Vec<_> = self

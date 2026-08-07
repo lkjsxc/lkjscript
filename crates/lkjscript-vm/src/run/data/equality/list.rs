@@ -1,9 +1,9 @@
-fn list_node<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Option<(Value, Value)>> {
+fn list_node(vm: &Vm<'_>, value: Value) -> Result<Option<(Value, Value)>> {
     vm.list_view(value)
 }
 
-pub(crate) fn list_values_equal<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(crate) fn list_values_equal(
+    vm: &mut Vm<'_>,
     mut left: Value,
     mut right: Value,
 ) -> Result<bool> {
@@ -25,7 +25,7 @@ pub(crate) fn list_values_equal<J: RuntimeTier>(
     }
 }
 
-pub(crate) fn list_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(crate) fn list_equal(vm: &mut Vm<'_>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = list_values_equal(vm, left, right)?;

@@ -1,9 +1,6 @@
 use super::*;
 
-fn definition<'a, J: RuntimeTier>(
-    vm: &'a Vm<'_, J>,
-    id: EnumId,
-) -> Result<&'a lkjscript_core::EnumMetadata> {
+fn definition<'a>(vm: &'a Vm<'_>, id: EnumId) -> Result<&'a lkjscript_core::EnumMetadata> {
     vm.chunk
         .enums()
         .iter()
@@ -22,7 +19,7 @@ fn variant(
         .ok_or_else(|| Error::msg("enum variant identity is invalid"))
 }
 
-fn variant_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<EnumVariantRef> {
+fn variant_ref(vm: &Vm<'_>, index: usize) -> Result<EnumVariantRef> {
     vm.chunk
         .enum_variants()
         .get(index)
@@ -30,7 +27,7 @@ fn variant_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<EnumVaria
         .ok_or_else(|| Error::msg("enum variant descriptor index out of range"))
 }
 
-fn field_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<EnumFieldRef> {
+fn field_ref(vm: &Vm<'_>, index: usize) -> Result<EnumFieldRef> {
     vm.chunk
         .enum_fields()
         .get(index)
@@ -38,12 +35,12 @@ fn field_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<EnumFieldRe
         .ok_or_else(|| Error::msg("enum field descriptor index out of range"))
 }
 
-fn make_enum<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn make_enum(vm: &mut Vm<'_>) -> Result<()> {
     let _index = vm.read_u64()?;
     Err(Error::msg("legacy enum construction is removed"))
 }
 
-fn is_variant<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn is_variant(vm: &mut Vm<'_>) -> Result<()> {
     let index = vm.read_index()?;
     let descriptor = variant_ref(vm, index)?;
     let definition = definition(vm, descriptor.enum_id)?;
@@ -67,7 +64,7 @@ fn is_variant<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn load_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn load_field(vm: &mut Vm<'_>) -> Result<()> {
     let descriptor_index = vm.read_index()?;
     let descriptor = field_ref(vm, descriptor_index)?;
     let definition = definition(vm, descriptor.enum_id)?;
@@ -106,7 +103,7 @@ pub(super) fn handles(op: u8) -> bool {
     )
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match Op::from_byte(op) {
         Some(Op::MakeEnum) => make_enum(vm),
         Some(Op::IsEnumVariant) => is_variant(vm),

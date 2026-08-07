@@ -1,6 +1,6 @@
 use super::*;
 
-pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<String> {
+pub(in crate::run) fn value(vm: &Vm<'_>, value: Value) -> Result<String> {
     if value.is_invalid() {
         return Err(Error::msg("invalid VM value escaped initialized storage"));
     }

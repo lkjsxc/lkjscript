@@ -169,7 +169,6 @@ version = "0.0.0"
 dependencies = [
  "lkjscript-core",
  "lkjscript-host",
- "lkjscript-jit",
  "lkjscript-sys",
 ]
 

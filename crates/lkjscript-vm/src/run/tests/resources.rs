@@ -24,7 +24,7 @@ fn call_frame_stack_policy_rejects_before_wide_local_allocation() {
         .expect("limited test policy")
         .max_stack_values = 10;
     assert_eq!(
-        Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), policy,).run(),
+        Vm::new(&chunk, crate::ExecutionInputs::default(), policy,).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
     );
 }
@@ -40,7 +40,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .expect("limited test policy")
         .max_stack_values = 0;
     assert_eq!(
-        Vm::new(&returned, NullJit, crate::ExecutionInputs::default(), stack).run(),
+        Vm::new(&returned, crate::ExecutionInputs::default(), stack).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
     );
 
@@ -58,7 +58,6 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     assert_eq!(
         Vm::new(
             &wide_frame,
-            NullJit,
             crate::ExecutionInputs::default(),
             narrow_policy,
         )
@@ -73,13 +72,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .expect("limited test policy")
         .max_frames = 0;
     assert_eq!(
-        Vm::new(
-            &returned,
-            NullJit,
-            crate::ExecutionInputs::default(),
-            frames
-        )
-        .run(),
+        Vm::new(&returned, crate::ExecutionInputs::default(), frames).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
     );
 
@@ -102,7 +95,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .expect("limited test policy")
         .max_allocations = 0;
     assert_eq!(
-        Vm::new(&string, NullJit, crate::ExecutionInputs::default(), no_heap).run(),
+        Vm::new(&string, crate::ExecutionInputs::default(), no_heap).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
     );
 
@@ -118,7 +111,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .expect("limited test policy")
         .max_heap_bytes = 0;
     assert_eq!(
-        Vm::new(&aggregate, NullJit, crate::ExecutionInputs::default(), heap).run(),
+        Vm::new(&aggregate, crate::ExecutionInputs::default(), heap).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
     );
 
@@ -129,13 +122,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .expect("limited test policy")
         .max_allocations = 0;
     assert_eq!(
-        Vm::new(
-            &aggregate,
-            NullJit,
-            crate::ExecutionInputs::default(),
-            allocations
-        )
-        .run(),
+        Vm::new(&aggregate, crate::ExecutionInputs::default(), allocations).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
     );
 
@@ -160,7 +147,6 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     assert_eq!(
         Vm::new(
             &output_chunk,
-            NullJit,
             capability_inputs(lkjscript_core::CapabilityKind::Stdio),
             output
         )
@@ -177,7 +163,6 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     assert!(matches!(
         Vm::new(
             &output_chunk,
-            NullJit,
             capability_inputs(lkjscript_core::CapabilityKind::Stdio),
             hard_deadline,
         )
@@ -209,7 +194,6 @@ fn configured_handle_and_wall_limits_are_structured() {
     assert_eq!(
         Vm::new(
             &socket,
-            NullJit,
             capability_inputs(lkjscript_core::CapabilityKind::Network),
             handles,
         )
@@ -227,13 +211,7 @@ fn configured_handle_and_wall_limits_are_structured() {
         .expect("limited test policy")
         .wall_time = Some(Duration::ZERO);
     assert_eq!(
-        Vm::new(
-            &loop_chunk,
-            NullJit,
-            crate::ExecutionInputs::default(),
-            deadline
-        )
-        .run(),
+        Vm::new(&loop_chunk, crate::ExecutionInputs::default(), deadline).run(),
         ExecutionOutcome::DeadlineExceeded
     );
 
@@ -258,7 +236,6 @@ fn configured_handle_and_wall_limits_are_structured() {
     assert_eq!(
         Vm::new(
             &wait,
-            NullJit,
             capability_inputs(lkjscript_core::CapabilityKind::Clock),
             deadline,
         )

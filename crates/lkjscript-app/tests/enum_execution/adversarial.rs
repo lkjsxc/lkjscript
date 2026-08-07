@@ -44,7 +44,6 @@ fn structural_enum_uses_coarse_allocation_policy_in_native_tiers() {
         assert!(result.stats.structural_runtime_calls > 0);
         assert!(result.stats.native_entries > 0);
         assert_eq!(result.stats.native_structural.teardown_failures, 0);
-        assert_eq!(result.stats.vm_fallbacks, 0);
     }
     for result in [
         execute_forced(

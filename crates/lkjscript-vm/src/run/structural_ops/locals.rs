@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: lkjscript_core::Op) -> Result<()> {
     let slot = vm.read_index()?;
     match op {
         lkjscript_core::Op::StoreStructuralLocal => store(vm, slot),
@@ -12,7 +12,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
     }
 }
 
-fn store<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+fn store(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let value = vm.pop()?;
     {
         let structural = invocation(vm)?;
@@ -66,7 +66,7 @@ fn store<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
     commit_handoff(vm, value)
 }
 
-fn take<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+fn take(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let absolute = local_index(vm, slot)?;
     let value = vm
         .stack
@@ -103,14 +103,14 @@ fn take<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
     Ok(())
 }
 
-fn load_view<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+fn load_view(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let value = local(vm, slot)?;
     let _ = invocation(vm)?.view(value)?;
     vm.push(value);
     Ok(())
 }
 
-fn end_view<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+fn end_view(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let absolute = local_index(vm, slot)?;
     let value = local(vm, slot)?;
     let (key, _) = invocation(vm)?.view(value)?;
@@ -127,7 +127,7 @@ fn end_view<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
     Ok(())
 }
 
-fn load_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+fn load_owner(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let value = local(vm, slot)?;
     let key = value
         .as_structural_root()
@@ -142,7 +142,7 @@ fn load_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn local<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<Value> {
+pub(super) fn local(vm: &Vm<'_>, slot: usize) -> Result<Value> {
     let absolute = local_index(vm, slot)?;
     let value = vm
         .stack
@@ -156,15 +156,11 @@ pub(super) fn local<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<Value
     }
 }
 
-pub(super) fn clear_local<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+pub(super) fn clear_local(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     replace_local(vm, slot, Value::INVALID)
 }
 
-pub(super) fn replace_local<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    slot: usize,
-    value: Value,
-) -> Result<()> {
+pub(super) fn replace_local(vm: &mut Vm<'_>, slot: usize, value: Value) -> Result<()> {
     let absolute = local_index(vm, slot)?;
     let target = vm
         .stack
@@ -174,7 +170,7 @@ pub(super) fn replace_local<J: RuntimeTier>(
     Ok(())
 }
 
-fn local_index<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<usize> {
+fn local_index(vm: &Vm<'_>, slot: usize) -> Result<usize> {
     vm.frames
         .last()
         .and_then(|frame| frame.locals_base.checked_add(slot))

@@ -1,8 +1,8 @@
 use crate::*;
 
-impl JitSession {
+impl NativeRun {
     pub(super) fn optimization_totals(&self) -> OptimizationStats {
-        self.objects
+        self.object
             .iter()
             .filter_map(|object| object.optimization_stats.as_ref())
             .fold(OptimizationStats::default(), |mut total, stats| {

@@ -1,22 +1,21 @@
+use crate::attempt::BaselineRegionAttempt;
 use crate::*;
 
-impl JitSession {
+impl NativeRun {
     pub(super) fn invoke_invocation_region(
         &mut self,
         function: FunctionId,
-        object_index: usize,
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
         execution: &ExecutionPolicy,
     ) -> Result<InvocationReport, EngineError> {
-        self.invoke_value_services(function, object_index, native, arguments, config, execution)
+        self.invoke_value_services(function, native, arguments, config, execution)
     }
 
     pub(crate) fn invoke_baseline_region_attempt(
         &mut self,
         function: FunctionId,
-        object_index: usize,
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
@@ -51,9 +50,16 @@ impl JitSession {
                     .and_then(|bytes| u64::try_from(bytes).ok()),
             },
         );
-        let prepared = self.objects[object_index]
-            .installed
-            .prepare_region_invocation(native, arguments, config, &mut services);
+        let Some(object) = self.object.as_ref() else {
+            return BaselineRegionAttempt::PreparationFailure {
+                error: missing_object(function),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let prepared =
+            object
+                .installed
+                .prepare_region_invocation(native, arguments, config, &mut services);
         let prepared = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -81,7 +87,6 @@ impl JitSession {
     fn invoke_value_services(
         &mut self,
         function: FunctionId,
-        object_index: usize,
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
@@ -106,8 +111,12 @@ impl JitSession {
                     .and_then(|bytes| u64::try_from(bytes).ok()),
             },
         );
-        let report = self.objects[object_index]
-            .installed
+        let installed = &self
+            .object
+            .as_ref()
+            .ok_or_else(|| missing_object(function))?
+            .installed;
+        let report = installed
             .prepare_region_invocation(native, arguments, config, &mut services)
             .map_err(|error| pre_entry_error(function, error))
             .and_then(|prepared| {
@@ -135,6 +144,14 @@ impl JitSession {
         );
         Ok(())
     }
+}
+
+fn missing_object(function: FunctionId) -> EngineError {
+    EngineError::new(
+        FailureCode::InvocationFailure,
+        Some(function),
+        "native run lost its installed group",
+    )
 }
 
 fn missing_arena(function: FunctionId, name: &str) -> EngineError {

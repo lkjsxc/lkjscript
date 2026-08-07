@@ -29,7 +29,7 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::EmptyList as u8
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Nop as u8 => Ok(()),
         x if x == Op::LoadConst as u8 => {

@@ -79,14 +79,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     ] {
         assert!(json.contains(field), "missing metrics field {field}");
     }
-    for removed in [
-        "\"engine\":",
-        "configured_auto_threshold",
-        "auto_enabled",
-        "auto_threshold",
-        "\"tier\":",
-        "\"jit\":",
-    ] {
+    for removed in ["\"engine\":", "\"tier\":", "\"jit\":"] {
         assert!(
             !json.contains(removed),
             "removed metrics field remains: {removed}"
@@ -107,7 +100,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     let fallback_json = std::fs::read_to_string(&metrics).expect("read fallback metrics output");
     std::fs::remove_file(&metrics).expect("remove fallback metrics output");
     assert!(fallback_json.contains("\"execution_path\":\"vm-fallback\""));
-    assert!(fallback_json.contains("\"fallback_reason\":\"unsupported-shape\""));
+    assert!(fallback_json.contains("\"fallback_reason\":\"lowering-declined\""));
     assert!(fallback_json.contains("\"native_entered\":false"));
 
     for arguments in [

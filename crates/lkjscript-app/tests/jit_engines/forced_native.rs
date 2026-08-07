@@ -1,11 +1,11 @@
 use crate::canonical::{compile, evaluator, execution, f64_loop, Scalar};
 use lkjscript_core::ExecutionPolicy;
 use lkjscript_ir::{evaluate, EvalConfig, OptimizationLimits};
-use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, Tier, TierState};
+use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
 use lkjscript_vm::run_chunk;
 
 #[test]
-fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
+fn canonical_source_ssa_installs_one_group_and_calls_generated_callee() {
     let program = compile(&f64_loop(), "f64-loop.lkjscript");
     let vm = execution(run_chunk(
         program.bytecode(),
@@ -36,13 +36,7 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
         .contains(&lkjscript_native::RuntimeCallSlot::EnterFunction));
     assert!(native.stats.poll_calls > 0);
     assert!(native.stats.direct_native_calls > 0);
-    assert_eq!(native.stats.vm_fallbacks, 0);
-    assert_eq!(native.stats.functions.len(), 2);
-    assert!(native
-        .stats
-        .functions
-        .iter()
-        .all(|function| function.native_entries() > 0));
+    assert_eq!(native.stats.code_objects[0].functions.len(), 2);
 
     let optimized = execute_optimizing(
         program.ssa(),
@@ -51,13 +45,14 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
     )
     .expect("source-derived forced optimizing JIT");
     assert_eq!(execution(optimized.outcome), vm);
-    assert!(optimized.stats.optimizing_native_entries > 0);
-    assert_eq!(optimized.stats.baseline_native_entries, 0);
-    assert_eq!(optimized.stats.vm_fallbacks, 0);
+    assert!(optimized.stats.native_entries > 0);
+    assert!(optimized.stats.code_objects[0]
+        .optimization_certificate
+        .is_some());
 }
 
 #[test]
-fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade() {
+fn forced_proof_helper_executes_fewer_generated_operations() {
     let source = include_str!("../fixtures/optimizing-loop.lkjscript");
     let program = compile(source, "optimizing-loop.lkjscript");
     let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
@@ -83,22 +78,13 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
     assert_eq!(vm, evaluated);
     assert_eq!(execution(baseline.outcome), evaluated);
     assert_eq!(execution(optimizing.outcome), evaluated);
-    assert_eq!(optimizing.stats.vm_fallbacks, 0);
-    assert_eq!(optimizing.stats.baseline_code_objects, 0);
-    assert_eq!(optimizing.stats.baseline_native_entries, 0);
-    assert_eq!(optimizing.stats.optimizing_code_objects, 1);
-    assert!(optimizing.stats.optimizing_native_entries > 0);
+    assert_eq!(optimizing.stats.code_objects.len(), 1);
+    assert!(optimizing.stats.native_entries > 0);
     assert!(optimizing.stats.algebraic_rewrites >= 3);
     assert!(optimizing.stats.gvn_rewrites >= 1);
     assert!(optimizing.stats.checked_i64_rewrites >= 1);
-    assert!(optimizing
-        .stats
-        .functions
-        .iter()
-        .all(|function| function.state() == TierState::OptimizedNative));
     let baseline_object = &baseline.stats.code_objects[0];
     let optimized_object = &optimizing.stats.code_objects[0];
-    assert_eq!(optimized_object.tier, Tier::Optimizing);
     assert!(optimized_object.wx_transition_verified);
     assert!(optimized_object.native_entry_count > 0);
     assert!(optimized_object.optimization_certificate.is_some());
@@ -122,7 +108,7 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
 }
 
 #[test]
-fn forced_native_tiers_reject_path_entries_without_fallback() {
+fn forced_native_helpers_reject_path_entries() {
     let path = compile(
         concat!(
             "main/\nsig/\ninputs/\n/inputs\noutput/\npath\n/output\n/sig\nunwrap-ok/\nconvert-string-to-path/\n",
@@ -153,7 +139,7 @@ fn forced_native_tiers_reject_path_entries_without_fallback() {
 }
 
 #[test]
-fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() {
+fn forced_optimizing_rejects_unsupported_and_budget_failure() {
     let unsupported = compile(
         concat!(
             "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",

@@ -1,7 +1,5 @@
 use lkjscript_core::{ExecutionPolicy, Op, Value};
 
-use crate::run::NoTier as NullJit;
-
 use super::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
 use crate::run::{test_chunk, Vm};
 
@@ -10,27 +8,26 @@ macro_rules! test_vm {
         let chunk = test_chunk();
         let mut $name = Vm::new(
             &chunk,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted(),
         );
     };
 }
 
-fn test_i64(_vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
+fn test_i64(_vm: &mut Vm<'_>, number: i64) -> Value {
     Value::from_i64(number)
 }
 
-fn test_float(_vm: &mut Vm<'_, NullJit>, number: f64) -> Value {
+fn test_float(_vm: &mut Vm<'_>, number: f64) -> Value {
     Value::from_f64_bits(number.to_bits())
 }
 
-fn pop_i64(vm: &mut Vm<'_, NullJit>) -> i64 {
+fn pop_i64(vm: &mut Vm<'_>) -> i64 {
     let value = vm.pop().expect("numeric result on stack");
     vm.as_i64(value).expect("I64 result")
 }
 
-fn pop_f64(vm: &mut Vm<'_, NullJit>) -> f64 {
+fn pop_f64(vm: &mut Vm<'_>) -> f64 {
     let value = vm.pop().expect("numeric result on stack");
     vm.as_f64(value).expect("F64 result")
 }

@@ -48,8 +48,8 @@ pub(in crate::run) fn initialize_call_places(
     Ok(())
 }
 
-pub(in crate::run) fn commit_call_arguments<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn commit_call_arguments(
+    vm: &mut Vm<'_>,
     arguments: &[Value],
     proto: &lkjscript_core::FunctionProto,
 ) -> Result<()> {
@@ -71,8 +71,8 @@ pub(in crate::run) fn commit_call_arguments<J: RuntimeTier>(
     Ok(())
 }
 
-fn cleanup_copy_roots<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn cleanup_copy_roots(
+    vm: &mut Vm<'_>,
     returned: Value,
     entry: bool,
 ) -> Result<()> {
@@ -119,8 +119,8 @@ fn cleanup_copy_roots<J: RuntimeTier>(
     Ok(())
 }
 
-pub(in crate::run) fn cleanup_tail_copy_roots<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn cleanup_tail_copy_roots(
+    vm: &mut Vm<'_>,
     arguments_start: usize,
     retained: &[Value],
 ) -> Result<()> {
@@ -154,7 +154,7 @@ pub(in crate::run) fn cleanup_tail_copy_roots<J: RuntimeTier>(
     Ok(())
 }
 
-fn is_copy_root<J: RuntimeTier>(vm: &Vm<'_, J>, key: StructuralValueKey) -> Result<bool> {
+fn is_copy_root(vm: &Vm<'_>, key: StructuralValueKey) -> Result<bool> {
     let Some(record) = invocation(vm)?.owners.get(&key.get()) else {
         return Ok(false);
     };

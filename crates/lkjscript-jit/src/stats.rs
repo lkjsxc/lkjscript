@@ -43,62 +43,6 @@ impl NativeResourceStats {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FunctionTierRecord {
-    pub(crate) function: FunctionId,
-    pub(crate) name: String,
-    pub(crate) state: TierState,
-    pub(crate) call_count: u64,
-    pub(crate) attempts: u8,
-    pub(crate) last_failure: Option<FailureCode>,
-    pub(crate) code_object: Option<u64>,
-    pub(crate) epoch: u64,
-    pub(crate) native_entries: u64,
-    pub(crate) auto_entry_eligible: bool,
-}
-
-impl FunctionTierRecord {
-    pub const fn function(&self) -> FunctionId {
-        self.function
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub const fn state(&self) -> TierState {
-        self.state
-    }
-
-    pub const fn call_count(&self) -> u64 {
-        self.call_count
-    }
-
-    pub const fn attempts(&self) -> u8 {
-        self.attempts
-    }
-
-    pub const fn last_failure(&self) -> Option<FailureCode> {
-        self.last_failure
-    }
-
-    pub const fn code_object(&self) -> Option<u64> {
-        self.code_object
-    }
-
-    pub const fn epoch(&self) -> u64 {
-        self.epoch
-    }
-
-    pub const fn native_entries(&self) -> u64 {
-        self.native_entries
-    }
-
-    pub const fn auto_entry_eligible(&self) -> bool {
-        self.auto_entry_eligible
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompileStats {
     pub(crate) optimization: Duration,
     pub(crate) lowering_and_encoding: Duration,
@@ -126,23 +70,14 @@ impl CompileStats {
 
 #[derive(Debug)]
 pub struct JitStats {
-    pub functions: Vec<FunctionTierRecord>,
     pub code_objects: Vec<CodeObjectRecord>,
     pub native_entries: u64,
     pub direct_native_calls: u64,
     pub poll_calls: u64,
-    pub vm_fallbacks: u64,
-    pub compile_failures: u64,
     pub native_invocations: u64,
     pub time_to_first_native_entry: Option<Duration>,
     pub first_native_call: Option<Duration>,
     pub native_execution: Duration,
-    pub auto_threshold: u64,
-    pub auto_enabled: bool,
-    pub code_cache_peak_objects: u64,
-    pub code_cache_peak_bytes: u64,
-    pub metadata_cache_peak_bytes: u64,
-    pub accounted_allocation_peak_bytes: u64,
     pub runtime_heap_attempts: u64,
     pub runtime_heap_successes: u64,
     pub segmented_lists: lkjscript_core::SegmentedListMetrics,
@@ -156,12 +91,6 @@ pub struct JitStats {
     pub structural_runtime_calls: u64,
     pub peak_native_frame_depth: usize,
     pub peak_native_stack_bytes: usize,
-    pub vm_to_native_transitions: u64,
-    pub native_to_vm_transitions: u64,
-    pub baseline_native_entries: u64,
-    pub optimizing_native_entries: u64,
-    pub baseline_code_objects: u64,
-    pub optimizing_code_objects: u64,
     pub optimizing_passes: u64,
     pub optimization_discovery_passes: u64,
     pub optimization_checker_passes: u64,

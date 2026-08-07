@@ -5,7 +5,7 @@ use lkjscript_core::{
 
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: lkjscript_core::Op) -> Result<()> {
     match op {
         lkjscript_core::Op::StructuralDestinationCreate => create(vm),
         lkjscript_core::Op::StructuralDestinationFieldInit => initialize(vm),
@@ -17,7 +17,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
     }
 }
 
-fn create<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn create(vm: &mut Vm<'_>) -> Result<()> {
     let id = StructuralDestinationId::new(vm.read_u64()?);
     let metadata = destination_metadata(vm.chunk, id)?.clone();
     let value_type = representation_type(
@@ -72,7 +72,7 @@ fn create<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn initialize<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn initialize(vm: &mut Vm<'_>) -> Result<()> {
     let reference_index = vm.read_index()?;
     let reference = vm
         .chunk

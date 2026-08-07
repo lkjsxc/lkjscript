@@ -10,8 +10,8 @@ fn require_resource_result_metadata(chunk: &ValidatedChunk) -> Result<()> {
     Ok(())
 }
 
-pub(in crate::run) fn adapter_is_variant<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+pub(in crate::run) fn adapter_is_variant(
+    vm: &Vm<'_>,
     value: Value,
     enum_id: EnumId,
     layout: RuntimeLayoutId,
@@ -29,8 +29,8 @@ pub(in crate::run) fn adapter_is_variant<J: RuntimeTier>(
     Ok(Some(record.variant == variant))
 }
 
-pub(in crate::run) fn adapter_take_field<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn adapter_take_field(
+    vm: &mut Vm<'_>,
     value: Value,
     enum_id: EnumId,
     layout: RuntimeLayoutId,
@@ -51,8 +51,8 @@ pub(in crate::run) fn adapter_take_field<J: RuntimeTier>(
     }))
 }
 
-pub(in crate::run) fn drop_resource_adapter<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn drop_resource_adapter(
+    vm: &mut Vm<'_>,
     value: Value,
     expected: ResourceKind,
 ) -> Option<Result<()>> {
@@ -64,7 +64,7 @@ pub(in crate::run) fn drop_resource_adapter<J: RuntimeTier>(
     )
 }
 
-pub(super) fn cleanup_all_adapters<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(super) fn cleanup_all_adapters(vm: &mut Vm<'_>) -> Result<()> {
     let values = invocation(vm)?.adapters.live_values();
     for value in values {
         let record = invocation_mut(vm)?.adapters.take(value)?;
@@ -73,8 +73,8 @@ pub(super) fn cleanup_all_adapters<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result
     Ok(())
 }
 
-fn cleanup_adapter_payload<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn cleanup_adapter_payload(
+    vm: &mut Vm<'_>,
     payload: AdapterPayload,
     expected: Option<ResourceKind>,
 ) -> Result<()> {
@@ -93,8 +93,8 @@ fn cleanup_adapter_payload<J: RuntimeTier>(
     }
 }
 
-pub(in crate::run) fn drop_registered_owner<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn drop_registered_owner(
+    vm: &mut Vm<'_>,
     value: Value,
 ) -> Result<()> {
     let (key, record) = invocation(vm)?.owner(value)?;

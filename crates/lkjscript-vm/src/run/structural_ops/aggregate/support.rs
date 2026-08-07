@@ -20,8 +20,8 @@ fn require_owner_representation(
     Ok(())
 }
 
-fn require_active_variant<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn require_active_variant(
+    vm: &Vm<'_>,
     owner: StructuralValueKey,
     value_type: StructuralType,
     variant: Option<VariantId>,
@@ -45,8 +45,8 @@ fn require_active_variant<J: RuntimeTier>(
     }
 }
 
-fn preflight_payload<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn preflight_payload(
+    vm: &Vm<'_>,
     owner: StructuralValueKey,
     value_type: StructuralType,
     reference: StructuralPayloadRef,
@@ -151,8 +151,8 @@ fn semantic_to_value(chunk: &ValidatedChunk, value: &SemanticValue) -> Result<Va
     }
 }
 
-fn register_view_or_end<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn register_view_or_end(
+    vm: &mut Vm<'_>,
     view: lkjscript_core::StructuralViewKey,
     representation: StructuralRepresentationId,
     expected: StructuralType,

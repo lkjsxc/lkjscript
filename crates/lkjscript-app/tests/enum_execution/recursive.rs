@@ -73,12 +73,11 @@ fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers(
         .expect("proof returns recursive tree"),
     ] {
         let ExecutionOutcome::Returned(value) = execution.outcome else {
-            panic!("native tier returns recursive tree")
+            panic!("native helper returns recursive tree")
         };
         assert_eq!(value.snapshot_object_count(), 5);
         assert!(execution.stats.native_entries > 0);
         assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);
     }

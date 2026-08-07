@@ -1,6 +1,6 @@
 use crate::*;
 
-impl JitSession {
+impl NativeRun {
     pub(crate) fn take_returned_unique(
         &mut self,
         function: FunctionId,
@@ -46,7 +46,6 @@ impl JitSession {
     pub(super) fn invoke_collector_free(
         &mut self,
         function: FunctionId,
-        object_index: usize,
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
@@ -68,8 +67,18 @@ impl JitSession {
         })?;
         let witnesses = NativeWitnessCatalog::build(self.program.program())?;
         let mut services = JitIslandServices::with_witnesses(scope, execution, witnesses)?;
-        let report = self.objects[object_index]
-            .installed
+        let installed = &self
+            .object
+            .as_ref()
+            .ok_or_else(|| {
+                EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "native run lost its installed group",
+                )
+            })?
+            .installed;
+        let report = installed
             .prepare_invocation(native, arguments, config, &mut services)
             .map_err(|error| pre_entry_error(function, error))
             .and_then(|prepared| {
@@ -85,8 +94,7 @@ impl JitSession {
                     Some(services.export_unique(owner))
                 }
                 InvocationOutcome::Returned(NativeValue::StaticBytes(identity)) => Some(
-                    self.objects[object_index]
-                        .installed
+                    installed
                         .resolve_static_bytes(identity)
                         .map(<[u8]>::to_vec)
                         .ok_or(NativeServiceError::Trap),

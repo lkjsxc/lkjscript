@@ -7,7 +7,7 @@ mod region;
 use metadata::*;
 use region::*;
 
-fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn make_product(vm: &mut Vm<'_>) -> Result<()> {
     let product = ProductId::new(vm.read_u64()?);
     let (field_count, identity, routes) = {
         let metadata = product_metadata(vm, product)?;
@@ -49,7 +49,7 @@ fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn load_product_field(vm: &mut Vm<'_>) -> Result<()> {
     let descriptor = vm.read_index()?;
     let field_ref = product_field_ref(vm, descriptor)?;
     let identity = {
@@ -78,7 +78,7 @@ fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn with_product_field(vm: &mut Vm<'_>) -> Result<()> {
     let descriptor = vm.read_index()?;
     let field_ref = product_field_ref(vm, descriptor)?;
     let (identity, route) = {
@@ -144,7 +144,7 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::WithProductField as u8
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match op {
         x if x == Op::MakeProduct as u8 => make_product(vm),
         x if x == Op::LoadProductField as u8 => load_product_field(vm),

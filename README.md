@@ -18,10 +18,10 @@ cargo run --locked -p lkjscript-app --bin lkjscript -- \
   run src/examples/hello/main.lkjscript
 ```
 
-A successful run prints `3628800`. `run` has one product execution policy: it attempts one
-baseline-native scalar group before effects, otherwise executes the unchanged validated program in
-the VM. There is no engine, threshold, or forced-tier CLI selection, and native entry is a commit
-point with no VM retry.
+A successful run prints `3628800`. `run` has one product execution policy: it attempts one eligible
+baseline-native group before effects, otherwise executes the unchanged validated program in the VM.
+The VM has no JIT dependency or native-transition state. There is no engine, threshold, or forced
+native CLI selection, and native entry is a commit point with no VM retry.
 
 ## Verification
 

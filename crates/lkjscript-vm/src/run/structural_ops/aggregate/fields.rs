@@ -1,4 +1,4 @@
-fn field_borrow<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn field_borrow(vm: &mut Vm<'_>) -> Result<()> {
     let (reference, owner, root_type, expected) = field_projection_input(vm)?;
     let representation = match reference.result.route {
         StructuralFieldRoute::Copy => None,
@@ -35,7 +35,7 @@ fn field_borrow<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn field_copy<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn field_copy(vm: &mut Vm<'_>) -> Result<()> {
     let (reference, owner, root_type, expected) = field_projection_input(vm)?;
     match reference.result.route {
         StructuralFieldRoute::Copy => {
@@ -85,8 +85,8 @@ fn field_copy<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn field_projection_input<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn field_projection_input(
+    vm: &mut Vm<'_>,
 ) -> Result<(
     lkjscript_core::StructuralAggregateFieldRef,
     lkjscript_core::StructuralValueKey,
@@ -110,8 +110,8 @@ fn field_projection_input<J: RuntimeTier>(
     Ok((reference, owner, record.value_type, expected))
 }
 
-fn borrow_field<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn borrow_field(
+    vm: &mut Vm<'_>,
     owner: lkjscript_core::StructuralValueKey,
     root_type: lkjscript_core::StructuralType,
     field: u64,
@@ -132,8 +132,8 @@ fn borrow_field<J: RuntimeTier>(
         .map_err(map_value_error)
 }
 
-fn end_projected_view<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn end_projected_view(
+    vm: &mut Vm<'_>,
     view: lkjscript_core::StructuralViewKey,
 ) -> Result<()> {
     invocation_mut(vm)?

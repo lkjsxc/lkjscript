@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysSocket as u8 => {
             vm.ensure_host_deadline_support("open-tcp-socket", false)?;
@@ -113,7 +113,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     }
 }
 
-fn send_string<J: RuntimeTier>(vm: &mut Vm<'_, J>, handle: Value, data: &[u8]) -> Result<i64> {
+fn send_string(vm: &mut Vm<'_>, handle: Value, data: &[u8]) -> Result<i64> {
     if vm
         .remaining_output_capacity()?
         .is_some_and(|remaining| data.len() > remaining)
@@ -143,7 +143,6 @@ fn send_string<J: RuntimeTier>(vm: &mut Vm<'_, J>, handle: Value, data: &[u8]) -
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::run::NoTier;
     use std::io::{Read, Write};
 
     fn chunk() -> lkjscript_core::ValidatedChunk {
@@ -169,7 +168,6 @@ mod tests {
         let chunk = chunk();
         let mut vm = Vm::new(
             &chunk,
-            NoTier,
             crate::ExecutionInputs::default(),
             lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_heap_bytes: len * 4,

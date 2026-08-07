@@ -1,10 +1,10 @@
 use super::super::*;
 
-pub(super) fn place_and_slot<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<(usize, usize)> {
+pub(super) fn place_and_slot(vm: &mut Vm<'_>) -> Result<(usize, usize)> {
     vm.read_place_local()
 }
 
-pub(super) fn local<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<Value> {
+pub(super) fn local(vm: &Vm<'_>, slot: usize) -> Result<Value> {
     let base = vm
         .frames
         .last()
@@ -22,7 +22,7 @@ pub(super) fn local<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<Value
     }
 }
 
-pub(super) fn clear_local<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Result<()> {
+pub(super) fn clear_local(vm: &mut Vm<'_>, slot: usize) -> Result<()> {
     let base = vm
         .frames
         .last()
@@ -36,11 +36,7 @@ pub(super) fn clear_local<J: RuntimeTier>(vm: &mut Vm<'_, J>, slot: usize) -> Re
     Ok(())
 }
 
-pub(super) fn store_empty_local<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    slot: usize,
-    value: Value,
-) -> Result<()> {
+pub(super) fn store_empty_local(vm: &mut Vm<'_>, slot: usize, value: Value) -> Result<()> {
     let base = vm
         .frames
         .last()
@@ -59,15 +55,15 @@ pub(super) fn store_empty_local<J: RuntimeTier>(
     Ok(())
 }
 
-pub(super) fn current_places<'a, J: RuntimeTier>(vm: &'a Vm<'_, J>) -> &'a [unique::RuntimePlace] {
+pub(super) fn current_places<'a>(vm: &'a Vm<'_>) -> &'a [unique::RuntimePlace] {
     vm.frames
         .last()
         .map(|frame| frame.unique_places.as_slice())
         .unwrap_or_default()
 }
 
-pub(super) fn place_mut<'a, J: RuntimeTier>(
-    vm: &'a mut Vm<'_, J>,
+pub(super) fn place_mut<'a>(
+    vm: &'a mut Vm<'_>,
     place: usize,
 ) -> Result<&'a mut unique::RuntimePlace> {
     vm.frames
@@ -76,7 +72,7 @@ pub(super) fn place_mut<'a, J: RuntimeTier>(
         .ok_or_else(|| Error::msg("VM byte-vector place index out of range"))
 }
 
-pub(super) fn expect_place<J: RuntimeTier>(vm: &Vm<'_, J>, place: usize, owner: u64) -> Result<()> {
+pub(super) fn expect_place(vm: &Vm<'_>, place: usize, owner: u64) -> Result<()> {
     if current_places(vm).get(place)
         == Some(&unique::RuntimePlace::Active {
             owner: Some(owner),

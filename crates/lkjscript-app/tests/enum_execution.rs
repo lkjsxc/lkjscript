@@ -124,7 +124,7 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
         .expect("proof tier executes enum"),
     ] {
         let ExecutionOutcome::Returned(value) = execution.outcome else {
-            panic!("native tier must return enum")
+            panic!("native helper must return enum")
         };
         assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert_eq!(value.enum_field_i64(0), Some(42));
@@ -133,6 +133,5 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
         assert!(execution.stats.structural_runtime_calls > 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }

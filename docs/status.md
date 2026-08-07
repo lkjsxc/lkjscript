@@ -17,13 +17,14 @@ subsets, numeric conversions, bytes and byte vectors, lists, typed host resource
 explicit capabilities. Executable examples and compiler/runtime tests own the exact accepted
 surface; this document does not copy their tables.
 
-`lkjscript run` exposes one execution policy. It synchronously attempts the scalar
-baseline-native group reachable from `main`; eligibility, lowering, installation, or typed
-pre-entry decline drops the complete native attempt and executes the unchanged validated program in
-the VM. Once native entry begins, its returned value, trap, exit, resource/deadline/host outcome, or
-entered failure is final and the VM is not run. Structural, I/O, generic, recursive-stack, and other
-unsupported native shapes therefore remain valid through the generic VM path. There is no public
-engine, threshold, auto-tier, or forced-tier option.
+`lkjscript run` exposes one execution policy. It synchronously attempts the supported
+baseline-native group reachable from `main`; lowering, installation, or typed pre-entry decline
+drops the complete native attempt and executes the unchanged validated program in the VM. Direct
+generated calls and eligible structural, resource, and unique islands execute inside the installed
+group. Once native entry begins, its returned value, trap, exit, resource/deadline/host outcome, or
+entered failure is final and the VM is not run. Unsupported I/O, generic, recursive-stack, and other
+native shapes therefore remain valid through the generic VM path. There is no public engine,
+threshold, automatic-transition, or forced-native option.
 
 The broadly tested host is Linux x86-64. Portable Rust may build elsewhere, but another host or
 native target is not claimed as tested.
@@ -44,14 +45,16 @@ and configured whole-group stack checks. Success returns a non-cloneable `Prepar
 `InvocationReport` or `EnteredInvocationError`. Pre-entry and entered failures are disjoint types;
 after entry, traps and host/resource/deadline results remain outcomes and no error is VM-retry safe.
 
-The product runtime now uses that boundary for one synchronous scalar baseline-native
-reachable-group attempt before effects, with VM execution after any typed decline and no fallback
-after entry. Declined installed images and session state are dropped before VM construction; the VM
-receives the original validated bytecode, inputs, and `ExecutionPolicy`. Product metrics report the
-actual `baseline-native` or `vm-fallback` path, a nullable decline reason, the native-entry commit
-fact, and preflight/lower/install/prepare/native/VM/total durations. Forced and repeated-auto JIT
-APIs remain internal only for existing differential tests until their deletion in the next cutover
-commit; optimizing machinery is not a product path.
+The product runtime now uses that boundary for one synchronous baseline-native reachable-group
+attempt before effects, with VM execution after any typed decline and no fallback after entry.
+Declined installed state is dropped before VM construction; the VM receives the original validated
+bytecode, inputs, and `ExecutionPolicy`. The VM is non-generic and has no JIT dependency, native
+branches, or transition state. Product metrics report the actual `baseline-native` or `vm-fallback`
+path, a nullable decline reason, the native-entry commit fact, and
+preflight/lower/install/prepare/native/VM/total durations. Automatic thresholds, per-function call
+records, retries, invalidation, lookup, and runtime session APIs are deleted. Forced baseline and
+proof-optimizing helpers remain only for existing differential tests until the next cutover commit;
+optimizing machinery is not a product path.
 
 ## Phase 1 scale and policy result
 
@@ -142,17 +145,17 @@ transport specialization does not claim native support when no specialization ex
 - Semantic Source remains syntax-shaped and its wide dense IDs are not edit-stable semantic IDs.
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
-- The app has one baseline-native-with-VM-fallback product path, but evaluator, repeated-auto,
-  forced baseline, and proof-oriented optimizing APIs still multiply internal test and maintenance
-  surface. Their public CLI surface is gone; deleting the retained internal losing paths is the next
-  runtime cutover commit.
+- The app has one baseline-native-with-VM-fallback product path, and the VM has no JIT knowledge.
+  The evaluator plus forced baseline and proof-oriented optimizing helpers still multiply internal
+  test and maintenance surface. Their public CLI surface and all automatic-transition machinery are
+  gone; deleting the retained proof optimizer and forced helpers is the next runtime cutover commit.
 - Daemon, process-cell, scheduler, database, resource-topology, and platform crates remain in the
   workspace even though the local language foundation does not require all of them.
 - Process/daemon policy is broader and more fragmented than the intended small coarse boundary
   policy. Existing transport and OS/ABI limits remain real boundaries or pending audits, not
   language validity rules.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and
-  host `usize` are private or external representation boundaries. Automatic execution must keep the
+  host `usize` are private or external representation boundaries. Preferred execution must keep the
   generic VM fallback when a native representation cannot carry an otherwise supported program.
 - Final post-reset cold build, startup, execution, memory, and runtime-path comparisons are pending;
   see [`performance.md`](performance.md).

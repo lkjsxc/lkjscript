@@ -37,7 +37,6 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
     ] {
         assert_owned(execution.outcome, expected);
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
         if rounded_i64 {
             assert_eq!(execution.stats.runtime_heap_attempts, 0);
             assert!(execution.stats.code_objects.iter().any(|object| {
@@ -87,7 +86,6 @@ pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
     ] {
         assert_owned(result.outcome, expected);
         assert!(result.stats.native_entries > 0);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.runtime_heap_attempts, 0);
         assert_eq!(result.stats.runtime_heap_successes, 0);
     }

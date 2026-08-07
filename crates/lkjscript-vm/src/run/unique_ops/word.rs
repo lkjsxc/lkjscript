@@ -7,7 +7,7 @@ pub(super) fn handles(op: u8) -> bool {
     )
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match Op::from_byte(op).ok_or_else(|| Error::msg("unknown byte-word opcode"))? {
         Op::ByteSliceReadU32Le => {
             let index = vm.pop()?;

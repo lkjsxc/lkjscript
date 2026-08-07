@@ -65,7 +65,6 @@ fn assert_all_engines(source: &str, expected: i64) {
         };
         assert_eq!(value.as_i64(), Some(expected));
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
 

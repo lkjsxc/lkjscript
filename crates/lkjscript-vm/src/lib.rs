@@ -9,10 +9,8 @@ mod run;
 use std::time::Instant;
 
 use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy, ValidatedChunk};
-#[cfg(feature = "jit")]
-use lkjscript_jit::{JitSession, JitStats};
 
-pub use run::{NoTier, Vm};
+pub use run::Vm;
 
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionInputs {
@@ -36,17 +34,7 @@ pub fn run_chunk_from_start(
     config: &ExecutionPolicy,
     started: Instant,
 ) -> ExecutionOutcome {
-    Vm::new_started(chunk, NoTier, inputs.clone(), config.clone(), started).run()
-}
-
-#[cfg(feature = "jit")]
-pub fn run_chunk_auto(
-    chunk: &ValidatedChunk,
-    inputs: &ExecutionInputs,
-    config: &ExecutionPolicy,
-    session: JitSession,
-) -> (ExecutionOutcome, JitStats) {
-    Vm::new(chunk, session, inputs.clone(), config.clone()).run_auto()
+    Vm::new_started(chunk, inputs.clone(), config.clone(), started).run()
 }
 
 #[cfg(test)]

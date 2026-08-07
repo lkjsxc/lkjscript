@@ -1,90 +1,14 @@
 use crate::*;
 
-impl JitSession {
-    pub fn advance_epoch(&mut self, epoch: u64) {
-        if epoch == self.config.epoch {
-            return;
-        }
-        self.config.epoch = epoch;
-        for record in &mut self.functions {
-            record.epoch = epoch;
-            if record.state == TierState::Disabled
-                && record.attempts < self.config.max_attempts_per_function
-            {
-                record.state = TierState::Observed;
-                record.last_failure = None;
-            }
-        }
-    }
-
-    pub fn invalidate_object(&mut self, identity: u64, next_epoch: u64) -> bool {
-        let Some(object) = self
-            .objects
-            .iter_mut()
-            .find(|object| object.identity == identity)
-        else {
-            return false;
-        };
-        object.invalidated = true;
-        for record in &mut self.functions {
-            if record.code_object == Some(identity) {
-                record.code_object = None;
-                record.state = TierState::Observed;
-            }
-        }
-        self.advance_epoch(next_epoch);
-        true
-    }
-
-    pub fn stats(&self) -> JitStats {
-        let code_cache_peak_objects = u64::try_from(self.objects.len()).unwrap_or(u64::MAX);
-        let code_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
-            total.saturating_add(object.accounting.code_bytes())
-        });
-        let metadata_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
-            total
-                .saturating_add(object.accounting.metadata_bytes())
-                .saturating_add(optimization_metadata_bytes_estimate(
-                    object.optimization_stats.as_ref(),
-                ))
-        });
-        let accounted_allocation_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
-            total.saturating_add(object.accounted_allocation_bytes)
-        });
-        let baseline_native_entries = self
-            .objects
-            .iter()
-            .filter(|object| object.tier == Tier::Baseline)
-            .fold(0_u64, |total, object| {
-                total.saturating_add(object.native_entry_count)
-            });
-        let optimizing_native_entries = self
-            .objects
-            .iter()
-            .filter(|object| object.tier == Tier::Optimizing)
-            .fold(0_u64, |total, object| {
-                total.saturating_add(object.native_entry_count)
-            });
-        let baseline_code_objects = self
-            .objects
-            .iter()
-            .filter(|object| object.tier == Tier::Baseline)
-            .count() as u64;
-        let optimizing_code_objects = self
-            .objects
-            .iter()
-            .filter(|object| object.tier == Tier::Optimizing)
-            .count() as u64;
+impl NativeRun {
+    pub(crate) fn stats(&self) -> JitStats {
         let optimization_totals = self.optimization_totals();
         JitStats {
-            functions: self.functions.clone(),
             code_objects: self
-                .objects
+                .object
                 .iter()
                 .map(|object| CodeObjectRecord {
-                    identity: object.identity,
                     functions: object.functions.clone(),
-                    tier: object.tier,
                     contracts: object.contracts,
                     code_bytes: object.accounting.code_bytes(),
                     metadata_bytes: object.accounting.metadata_bytes(),
@@ -99,26 +23,17 @@ impl JitSession {
                     optimization_metadata_bytes_estimate: optimization_metadata_bytes_estimate(
                         object.optimization_stats.as_ref(),
                     ),
-                    invalidated: object.invalidated,
                     native_entry_count: object.native_entry_count,
-                    wx_transition_verified: object.wx_transition_verified(),
+                    wx_transition_verified: object.installed.wx_transition_verified(),
                 })
                 .collect(),
             native_entries: self.native_entries,
             direct_native_calls: self.direct_native_calls,
             poll_calls: self.poll_calls,
-            vm_fallbacks: self.vm_fallbacks,
-            compile_failures: self.compile_failures,
             native_invocations: self.native_invocations,
             time_to_first_native_entry: self.time_to_first_native_entry,
             first_native_call: self.first_native_call,
             native_execution: self.native_execution,
-            auto_threshold: self.config.auto_threshold,
-            auto_enabled: self.config.auto_enabled,
-            code_cache_peak_objects,
-            code_cache_peak_bytes,
-            metadata_cache_peak_bytes,
-            accounted_allocation_peak_bytes,
             runtime_heap_attempts: self.runtime_heap_attempts,
             runtime_heap_successes: self.runtime_heap_successes,
             segmented_lists: self.lists.as_ref().map_or_else(
@@ -141,12 +56,6 @@ impl JitSession {
             native_structural: self.native_structural,
             peak_native_frame_depth: self.peak_native_frame_depth,
             peak_native_stack_bytes: self.peak_native_stack_bytes,
-            vm_to_native_transitions: self.vm_to_native_transitions,
-            native_to_vm_transitions: self.native_to_vm_transitions,
-            baseline_native_entries,
-            optimizing_native_entries,
-            baseline_code_objects,
-            optimizing_code_objects,
             optimizing_passes: optimization_totals.optimizing_passes,
             optimization_discovery_passes: optimization_totals.discovery_passes,
             optimization_checker_passes: optimization_totals.checker_passes,

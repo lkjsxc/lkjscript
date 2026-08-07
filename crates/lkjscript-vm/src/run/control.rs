@@ -12,7 +12,7 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::Trap as u8
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Jump as u8 => {
             let at = vm.read_index()?;
@@ -77,7 +77,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
     }
 }
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub(crate) fn step(&mut self) -> Result<()> {
         let code_len = self.code_len()?;
         let ip = self
@@ -95,6 +95,3 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         dispatch::dispatch(self, op)
     }
 }
-
-#[cfg(feature = "jit")]
-impl<'a> Vm<'a, JitSession> {}

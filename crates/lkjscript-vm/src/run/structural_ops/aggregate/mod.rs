@@ -6,7 +6,7 @@ use lkjscript_core::{
 
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: lkjscript_core::Op) -> Result<()> {
     match op {
         lkjscript_core::Op::StructuralAggregateFieldBorrow => field_borrow(vm),
         lkjscript_core::Op::StructuralAggregateFieldCopy => field_copy(vm),
@@ -17,7 +17,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
     }
 }
 
-fn tag<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn tag(vm: &mut Vm<'_>) -> Result<()> {
     let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let source = vm.pop()?;
     let (owner, record) = invocation(vm)?.owner(source)?;
@@ -35,7 +35,7 @@ fn tag<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn consume_payload<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn consume_payload(vm: &mut Vm<'_>) -> Result<()> {
     let index = vm.read_index()?;
     let reference = *vm
         .chunk
@@ -89,7 +89,7 @@ fn consume_payload<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn string_utf8_view<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn string_utf8_view(vm: &mut Vm<'_>) -> Result<()> {
     let view_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected =
         representation_type(vm.chunk, view_representation, StructuralValueCategory::View)?;

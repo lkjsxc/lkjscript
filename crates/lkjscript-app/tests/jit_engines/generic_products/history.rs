@@ -40,7 +40,6 @@ fn run_workload() {
     )
     .expect("baseline nested generic history");
     assert!(baseline.stats.direct_native_calls > 0);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
     assert!(baseline.stats.segmented_lists.prepends > 0);
     let proof = execute_optimizing(
         program.ssa(),
@@ -48,8 +47,7 @@ fn run_workload() {
         JitConfig::default(),
     )
     .expect("proof nested generic history");
-    assert!(proof.stats.optimizing_native_entries > 0);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
+    assert!(proof.stats.native_entries > 0);
     assert!(proof.stats.segmented_lists.prepends > 0);
     for outcome in [vm, baseline.outcome, proof.outcome] {
         assert_history(outcome);
@@ -126,13 +124,11 @@ fn multiple_transport_instances_are_canonical_deduplicated_and_native() {
         .expect("multiple generic instances enter baseline native code");
     assert_eq!(execution(baseline.outcome), expected);
     assert!(baseline.stats.direct_native_calls >= 3);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
     let proof = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("multiple generic instances enter proof native code");
     assert_eq!(execution(proof.outcome), expected);
     assert!(proof.stats.direct_native_calls >= 3);
-    assert!(proof.stats.optimizing_native_entries > 0);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
+    assert!(proof.stats.native_entries > 0);
 }
 
 #[test]

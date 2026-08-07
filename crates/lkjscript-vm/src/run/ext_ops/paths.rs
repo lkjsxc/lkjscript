@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::PathFromStr as u8 => {
             let value = vm.pop()?;
@@ -52,7 +52,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     }
 }
 
-fn exact_bytes<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: Value) -> Result<Vec<u8>> {
+fn exact_bytes(vm: &mut Vm<'_>, value: Value) -> Result<Vec<u8>> {
     if let Some(index) = value.as_static_bytes() {
         return match vm.chunk.constant(index) {
             Some(lkjscript_core::Constant::StaticBytes(bytes)) => Ok(bytes.to_vec()),
@@ -68,8 +68,6 @@ mod tests {
     use super::*;
     use lkjscript_core::{validate_chunk, Chunk, ExecutionPolicy, ValidationPolicy};
 
-    use crate::run::NoTier;
-
     fn validated_unit() -> lkjscript_core::ValidatedChunk {
         let mut chunk = Chunk::new();
         chunk.main.emit(Op::Unit);
@@ -82,7 +80,6 @@ mod tests {
         let chunk = validated_unit();
         let mut vm = Vm::new(
             &chunk,
-            NoTier,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted(),
         );

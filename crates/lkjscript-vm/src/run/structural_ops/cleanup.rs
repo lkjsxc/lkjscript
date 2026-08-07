@@ -2,8 +2,8 @@ use lkjscript_core::{FailureCleanupAction, OwnedValue, StructuralValueCategory};
 
 use super::*;
 
-pub(in crate::run) fn cleanup_failure_action<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn cleanup_failure_action(
+    vm: &mut Vm<'_>,
     frame: usize,
     action: FailureCleanupAction,
 ) -> Option<Result<()>> {
@@ -27,8 +27,8 @@ pub(in crate::run) fn cleanup_failure_action<J: RuntimeTier>(
     }
 }
 
-fn cleanup_view<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn cleanup_view(
+    vm: &mut Vm<'_>,
     frame: usize,
     local: usize,
     representation: StructuralRepresentationId,
@@ -50,8 +50,8 @@ fn cleanup_view<J: RuntimeTier>(
     Ok(())
 }
 
-fn cleanup_owner<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn cleanup_owner(
+    vm: &mut Vm<'_>,
     frame: usize,
     local: usize,
     place: Option<usize>,
@@ -87,8 +87,8 @@ fn cleanup_owner<J: RuntimeTier>(
     Ok(())
 }
 
-fn cleanup_destination<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn cleanup_destination(
+    vm: &mut Vm<'_>,
     frame: usize,
     local: usize,
     destination: StructuralDestinationId,
@@ -110,18 +110,14 @@ fn cleanup_destination<J: RuntimeTier>(
     Ok(())
 }
 
-fn cleanup_local_index<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    frame: usize,
-    local: usize,
-) -> Result<usize> {
+fn cleanup_local_index(vm: &Vm<'_>, frame: usize, local: usize) -> Result<usize> {
     vm.frames
         .get(frame)
         .and_then(|frame| frame.locals_base.checked_add(local))
         .ok_or_else(|| Error::msg("structural failure cleanup lost its frame local"))
 }
 
-fn cleanup_local_value<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<Value> {
+fn cleanup_local_value(vm: &Vm<'_>, index: usize) -> Result<Value> {
     let value = vm
         .stack
         .get(index)
@@ -135,8 +131,8 @@ fn cleanup_local_value<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<V
     Ok(value)
 }
 
-pub(in crate::run) fn export_return<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn export_return(
+    vm: &mut Vm<'_>,
     value: Value,
     representation: StructuralRepresentationId,
 ) -> Result<OwnedValue> {
@@ -160,7 +156,7 @@ pub(in crate::run) fn export_return<J: RuntimeTier>(
     Ok(owned)
 }
 
-pub(in crate::run) fn cleanup_failure_roots<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(in crate::run) fn cleanup_failure_roots(vm: &mut Vm<'_>) -> Result<()> {
     let owners = invocation(vm)?
         .owners
         .iter()

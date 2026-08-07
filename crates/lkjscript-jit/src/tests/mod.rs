@@ -1,5 +1,4 @@
 mod outcomes;
-mod scalars;
 mod structural_cutover;
 mod trap_sites;
 

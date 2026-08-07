@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,15 +48,6 @@ impl EngineError {
             function,
             detail: detail.into(),
         }
-    }
-
-    #[doc(hidden)]
-    pub fn new_unavailable(function: FunctionId) -> Self {
-        Self::new(
-            FailureCode::InvocationFailure,
-            Some(function),
-            "native tier is unavailable",
-        )
     }
 
     pub const fn code(&self) -> FailureCode {

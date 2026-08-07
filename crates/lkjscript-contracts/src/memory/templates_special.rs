@@ -77,7 +77,7 @@ pub const fn affine_byte_vector(
 pub const fn immutable_bytes() -> MemoryObligation {
     MemoryObligation {
         identity: "bytes",
-        authority: "source, HIR, SSA, evaluator, validated bytecode, VM, forced native tiers",
+        authority: "source, HIR, SSA, evaluator, validated bytecode, VM, and forced native helpers",
         semantic_type: "exact immutable bytes",
         runtime_layout: "static constant or execution-owned UniqueStore BytesKey",
         value_semantics: "copyable static value or affine dynamic value",

@@ -91,8 +91,7 @@ fn sealed_residual_generic_executes_in_all_four_tiers() {
     );
     assert!(baseline.stats.native_entries > 0);
     assert!(baseline.stats.direct_native_calls > 0);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
-    assert_sealed_native_metrics(&baseline.stats.native_structural);
+        assert_sealed_native_metrics(&baseline.stats.native_structural);
     let proof = execute_optimizing(
         program.ssa(),
         &ExecutionPolicy::unrestricted(),
@@ -100,10 +99,9 @@ fn sealed_residual_generic_executes_in_all_four_tiers() {
     )
     .expect("residual generic enters proof tier with hidden witness ABI");
     assert_eq!(execution(proof.outcome), expected);
-    assert!(proof.stats.optimizing_native_entries > 0);
+    assert!(proof.stats.native_entries > 0);
     assert!(proof.stats.direct_native_calls > 0);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
-    assert_sealed_native_metrics(&proof.stats.native_structural);
+        assert_sealed_native_metrics(&proof.stats.native_structural);
 }
 
 fn assert_sealed_native_metrics(metrics: &lkjscript_jit::NativeStructuralStats) {

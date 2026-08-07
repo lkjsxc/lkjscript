@@ -1,4 +1,4 @@
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     if bytes_ops::handles(op) {
         return bytes_ops::dispatch(vm, op);
     }

@@ -1,5 +1,5 @@
-pub(in crate::run) fn publish_option<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn publish_option(
+    vm: &mut Vm<'_>,
     element: HostValueType,
     value: Option<HostValue>,
 ) -> Result<Value> {
@@ -11,8 +11,8 @@ pub(in crate::run) fn publish_option<J: RuntimeTier>(
     publish_deterministic(vm, HostValue::option(element, value))
 }
 
-pub(in crate::run) fn publish_numeric_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn publish_numeric_result(
+    vm: &mut Vm<'_>,
     success: HostValueType,
     result: std::result::Result<HostValue, lkjscript_core::NumericError>,
 ) -> Result<Value> {
@@ -29,8 +29,8 @@ pub(in crate::run) fn publish_numeric_result<J: RuntimeTier>(
     )
 }
 
-pub(in crate::run) fn publish_utf8_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn publish_utf8_result(
+    vm: &mut Vm<'_>,
     result: std::result::Result<HostValue, Utf8Failure>,
 ) -> Result<Value> {
     let value = HostValue::Result {
@@ -44,8 +44,8 @@ pub(in crate::run) fn publish_utf8_result<J: RuntimeTier>(
     publish_deterministic(vm, value)
 }
 
-pub(in crate::run) fn publish_system_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn publish_system_result(
+    vm: &mut Vm<'_>,
     success: HostValueType,
     kind: SystemErrorKind,
     result: std::result::Result<HostValue, Error>,
@@ -75,8 +75,8 @@ pub(in crate::run) fn publish_system_result<J: RuntimeTier>(
     publish_deterministic(vm, value)
 }
 
-pub(in crate::run) fn publish_system_utf8_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn publish_system_utf8_result(
+    vm: &mut Vm<'_>,
     error: Utf8Failure,
 ) -> Result<Value> {
     publish_deterministic(
@@ -89,8 +89,8 @@ pub(in crate::run) fn publish_system_utf8_result<J: RuntimeTier>(
     )
 }
 
-fn publish_resource_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn publish_resource_result(
+    vm: &mut Vm<'_>,
     resource_kind: ResourceKind,
     error_kind: SystemErrorKind,
     result: std::result::Result<HostValue, Error>,
@@ -136,7 +136,7 @@ fn publish_resource_result<J: RuntimeTier>(
     }
 }
 
-fn publish_deterministic<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: HostValue) -> Result<Value> {
+fn publish_deterministic(vm: &mut Vm<'_>, value: HostValue) -> Result<Value> {
     let value_type = declared_type(&value);
     let type_id = exact_structural_type(vm.chunk, &value_type)?;
     let semantic = semantic_for_type(vm.chunk, type_id, value)?;

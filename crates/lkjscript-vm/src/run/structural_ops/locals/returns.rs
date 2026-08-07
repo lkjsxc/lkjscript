@@ -1,5 +1,5 @@
-pub(in crate::run) fn prepare_return<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn prepare_return(
+    vm: &mut Vm<'_>,
     value: Value,
     prototype: Option<usize>,
 ) -> Result<()> {
@@ -91,8 +91,8 @@ pub(in crate::run) fn prepare_return<J: RuntimeTier>(
     }
 }
 
-fn structural_value_matches_copy_representation<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn structural_value_matches_copy_representation(
+    vm: &Vm<'_>,
     value: Value,
     expected: StructuralRepresentationId,
 ) -> Result<bool> {

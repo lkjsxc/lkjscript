@@ -100,19 +100,22 @@ memory pressure.
 
 ## Accepted runtime selection
 
-**Accepted architecture; app cutover implemented, internal deletion pending.** The product
-synchronously prepares one scalar baseline-native reachable group before effects. It enters that
-group when preparation succeeds and otherwise executes the unchanged program in the VM. Native
-entry is a commit point: there is no VM retry afterward. Baseline native is a specialization inside
-one product path, not a public engine contract. The CLI no longer exposes forced tiers, thresholds,
-or auto controls. Forced/auto APIs and optimizing machinery remain temporarily only for existing
-differential tests and deletion work.
+**Accepted architecture; automatic-transition deletion implemented, optimizer deletion pending.**
+The product synchronously prepares one eligible baseline-native reachable group before effects. It
+enters that group when preparation succeeds and otherwise executes the unchanged program in the VM.
+Native entry is a commit point: there is no VM retry afterward. Baseline native is a specialization
+inside one product path, not a public engine contract. The VM has no JIT dependency or native
+transition branches. The CLI and implementation no longer expose automatic thresholds, call
+observation, retries, invalidation, or runtime sessions. Forced baseline/proof-optimizing helpers and
+optimizing machinery remain temporarily only for existing differential tests and the next deletion
+commit.
 
 The selection hypothesis was that baseline native materially helps closed scalar groups, while the
 VM remains the complete generic route and repeated automatic transitions cost more than they save.
-`target/reset-audit/final/runtime-matrix.json` recorded three runs for each workload/engine cell. The
-following compact values are median process wall milliseconds; `unsupported` means the forced native
-engine rejected a required type or operation rather than running equivalent semantics.
+`target/reset-audit/final/runtime-matrix.json` recorded three runs for each historical
+workload/engine cell. The following compact values are median process wall milliseconds;
+`unsupported` means the then-forced native engine rejected a required type or operation rather than
+running equivalent semantics.
 
 | Workload | VM | current auto | baseline-JIT | optimizing-JIT |
 |---|---:|---:|---:|---:|
@@ -126,14 +129,14 @@ The same records show current `auto` performing 99,936 native invocations for `s
 `bench`, and 600,129 VM fallbacks for `bench`, while each supported forced baseline run enters one
 native invocation. Optimizing-JIT provides no representative advantage over baseline in the two
 supported cells and shares the same unsupported cells. This supports one synchronous baseline-group
-attempt rather than per-entry auto tiering or optimizer retention.
+attempt rather than per-entry automatic transitions or optimizer retention.
 
 The artifact does not record machine/compiler metadata, peak memory, generated-code size, release
 binary size, or target coverage, so it is selection evidence rather than the final post-cutover
 baseline. Product metrics now identify `execution_path=baseline-native|vm-fallback`, a nullable
 fallback reason, whether native entry began, and preflight/lower/install/prepare/native/VM/total
-durations. Threshold, auto, public engine, and tier fields are absent. Retain the harness, record the
-missing dimensions with environment metadata after internal losing-path deletion, and reverse the
+durations. Threshold, automatic-transition, public engine, and tier fields are absent. Retain the
+harness, record the missing dimensions with environment metadata after internal losing-path deletion, and reverse the
 choice if equivalent representative measurements show the group preflight cost or baseline
 maintenance cost outweighs its scalar benefit.
 

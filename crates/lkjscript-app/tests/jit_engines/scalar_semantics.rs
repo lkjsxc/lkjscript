@@ -48,7 +48,6 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         )
         .expect("optimizing trap remains structured");
         assert_eq!(execution(optimized.outcome), Scalar::Trapped);
-        assert_eq!(optimized.stats.baseline_native_entries, 0);
     }
 
     for (name, operation, left, right, expected_trap) in [
@@ -92,8 +91,6 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
             optimized.outcome,
             ExecutionOutcome::Trapped(ref trap) if trap.as_str() == expected_trap
         ));
-        assert_eq!(optimized.stats.baseline_native_entries, 0);
-        assert_eq!(optimized.stats.vm_fallbacks, 0);
         assert_eq!(optimized.stats.checked_i64_rewrites, 1);
     }
 

@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::Arg as u8 => {
             let value = vm.pop()?;
@@ -85,7 +85,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     }
 }
 
-fn clock<J: RuntimeTier>(vm: &Vm<'_, J>) -> Result<std::sync::Arc<dyn lkjscript_host::Clock>> {
+fn clock(vm: &Vm<'_>) -> Result<std::sync::Arc<dyn lkjscript_host::Clock>> {
     vm.inputs
         .host
         .clock

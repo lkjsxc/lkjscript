@@ -1,6 +1,6 @@
 pub(super) mod conversion;
 
-fn bin_bits<J: RuntimeTier>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
+fn bin_bits(vm: &mut Vm<'_>, f: fn(i64, i64) -> i64) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let right = vm
@@ -33,7 +33,7 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::F64BitsEqual as u8
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Add as u8 => bin_arithmetic(vm, Arithmetic::Add),
         x if x == Op::Sub as u8 => bin_arithmetic(vm, Arithmetic::Subtract),
@@ -64,7 +64,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
 
 use lkjscript_core::{Error, Result, Value};
 
-use crate::run::{RuntimeTier, Vm};
+use crate::run::Vm;
 
 #[derive(Clone, Copy)]
 enum Number {
@@ -88,7 +88,7 @@ pub enum Ordering {
     GreaterEqual,
 }
 
-fn number<J: RuntimeTier>(_vm: &Vm<'_, J>, value: Value) -> Result<Number> {
+fn number(_vm: &Vm<'_>, value: Value) -> Result<Number> {
     if let Some(number) = value.as_i64() {
         return Ok(Number::I64(number));
     }
@@ -98,7 +98,7 @@ fn number<J: RuntimeTier>(_vm: &Vm<'_, J>, value: Value) -> Result<Number> {
     Err(Error::msg("expected I64 or F64"))
 }
 
-fn push_number<J: RuntimeTier>(vm: &mut Vm<'_, J>, number: Number) -> Result<()> {
+fn push_number(vm: &mut Vm<'_>, number: Number) -> Result<()> {
     let value = match number {
         Number::I64(number) => Value::from_i64(number),
         Number::F64(number) => Value::from_f64_bits(number.to_bits()),
@@ -107,7 +107,7 @@ fn push_number<J: RuntimeTier>(vm: &mut Vm<'_, J>, number: Number) -> Result<()>
     Ok(())
 }
 
-pub fn bin_arithmetic<J: RuntimeTier>(vm: &mut Vm<'_, J>, operation: Arithmetic) -> Result<()> {
+pub fn bin_arithmetic(vm: &mut Vm<'_>, operation: Arithmetic) -> Result<()> {
     let right_value = vm.pop()?;
     let left_value = vm.pop()?;
     let right = number(vm, right_value)?;
@@ -159,7 +159,7 @@ impl Arithmetic {
     }
 }
 
-pub fn bin_ordering<J: RuntimeTier>(vm: &mut Vm<'_, J>, ordering: Ordering) -> Result<()> {
+pub fn bin_ordering(vm: &mut Vm<'_>, ordering: Ordering) -> Result<()> {
     let right_value = vm.pop()?;
     let left_value = vm.pop()?;
     let right = number(vm, right_value)?;

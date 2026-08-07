@@ -1,5 +1,5 @@
-pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+pub(in crate::run) fn call_memory_witnesses(
+    vm: &Vm<'_>,
     callee_index: u64,
     proto: &lkjscript_core::FunctionProto,
     arguments: &[Value],
@@ -59,8 +59,8 @@ pub(in crate::run) fn call_memory_witnesses<J: RuntimeTier>(
     Ok(site.bindings.clone())
 }
 
-fn runtime_witness_matches<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn runtime_witness_matches(
+    vm: &Vm<'_>,
     kind: lkjscript_core::MemoryWitnessValueKind,
     value: Value,
 ) -> Result<bool> {

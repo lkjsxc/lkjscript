@@ -47,7 +47,6 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_loans, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
 
@@ -85,7 +84,6 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
         };
         assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
 
@@ -120,6 +118,5 @@ fn nested_generic_enum_uses_structural_storage_in_generated_tiers() {
                 .runtime_calls
                 .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
         }));
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }

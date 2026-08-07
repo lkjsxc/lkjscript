@@ -30,7 +30,6 @@ fn list_only_execution_uses_segmented_invocation_storage() {
             .expect("proof segmented list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 4);
         assert_eq!(result.stats.segmented_lists.live_entries, 4);
         assert_eq!(result.stats.segmented_lists.segment_allocations, 1);

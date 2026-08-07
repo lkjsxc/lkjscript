@@ -35,7 +35,6 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0))
     );
     assert!(executed.stats.direct_native_calls >= 3);
-    assert_eq!(executed.stats.vm_fallbacks, 0);
 
     let allocation = compile(
         "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nempty-string/\n/empty-string\n/main\n",
@@ -50,7 +49,6 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     assert!(
         matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_str() == Some(""))
     );
-    assert_eq!(executed.stats.vm_fallbacks, 0);
     assert_eq!(executed.stats.runtime_heap_attempts, 0);
     assert_eq!(executed.stats.runtime_heap_successes, 0);
     assert!(executed.stats.structural_runtime_calls > 0);

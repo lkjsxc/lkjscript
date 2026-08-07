@@ -10,7 +10,7 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::WriteStr as u8
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Print as u8 => {
             vm.ensure_host_deadline_support("print", false)?;
@@ -60,9 +60,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
     }
 }
 
-fn stdio<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-) -> Result<std::sync::Arc<dyn lkjscript_host::StdioProvider>> {
+fn stdio(vm: &Vm<'_>) -> Result<std::sync::Arc<dyn lkjscript_host::StdioProvider>> {
     vm.inputs
         .host
         .stdio

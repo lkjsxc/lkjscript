@@ -1,6 +1,6 @@
 use crate::*;
 
-impl JitSession {
+impl NativeRun {
     pub(crate) fn snapshot_reference_return(
         &self,
         function: FunctionId,

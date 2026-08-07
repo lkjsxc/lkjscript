@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub(super) fn run_loop(&mut self) -> Result<Stop> {
         if let Some(error) = self.structural_initialization_error.take() {
             return Err(error);
@@ -113,14 +113,5 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 }
             }
         }
-    }
-}
-
-#[cfg(feature = "jit")]
-impl<'a> Vm<'a, JitSession> {
-    pub fn run_auto(mut self) -> (ExecutionOutcome, JitStats) {
-        let outcome = self.run_inner();
-        let stats = self.jit.stats();
-        (outcome, stats)
     }
 }

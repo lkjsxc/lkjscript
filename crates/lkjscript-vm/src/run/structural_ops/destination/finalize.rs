@@ -1,6 +1,6 @@
 use lkjscript_core::StructuralStorage;
 
-fn finish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn finish(vm: &mut Vm<'_>) -> Result<()> {
     let expected = StructuralDestinationId::new(vm.read_u64()?);
     let destination_value = vm.pop()?;
     let (destination, record) = invocation(vm)?.destination(destination_value)?;
@@ -35,7 +35,7 @@ fn finish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn abort<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn abort(vm: &mut Vm<'_>) -> Result<()> {
     let expected = StructuralDestinationId::new(vm.read_u64()?);
     let destination_value = vm.pop()?;
     let (destination, record) = invocation(vm)?.destination(destination_value)?;

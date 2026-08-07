@@ -2,10 +2,10 @@
 
 use lkjscript_core::{Error, ErrorClass, Op, Result, Value};
 
-use crate::run::{RuntimeTier, Vm};
+use crate::run::Vm;
 
-fn push_language_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn push_language_result(
+    vm: &mut Vm<'_>,
     kind: lkjscript_core::SystemErrorKind,
     success: crate::run::structural_ops::HostValueType,
     result: Result<crate::run::structural_ops::HostValue>,
@@ -20,8 +20,8 @@ fn push_language_result<J: RuntimeTier>(
     }
 }
 
-fn push_runtime_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn push_runtime_result(
+    vm: &mut Vm<'_>,
     kind: lkjscript_core::SystemErrorKind,
     success: crate::run::structural_ops::HostValueType,
     result: Result<Value>,
@@ -38,11 +38,7 @@ fn execution_policy<T>(result: Result<T>) -> Result<Result<T>> {
     }
 }
 
-fn push_i64_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    kind: lkjscript_core::SystemErrorKind,
-    result: Result<i64>,
-) {
+fn push_i64_result(vm: &mut Vm<'_>, kind: lkjscript_core::SystemErrorKind, result: Result<i64>) {
     push_language_result(
         vm,
         kind,
@@ -58,8 +54,8 @@ fn sleep_result(clock: &dyn lkjscript_host::Clock, milliseconds: u64) -> Result<
         .map_err(|error| lkjscript_core::Error::msg(format!("sys-wait-ms: {error}")))
 }
 
-fn wait_readable<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn wait_readable(
+    vm: &Vm<'_>,
     handle: Value,
     operation: &str,
 ) -> Result<Option<lkjscript_core::Error>> {
@@ -75,7 +71,7 @@ fn wait_readable<J: RuntimeTier>(
     }
 }
 
-pub(super) fn clear_resource_aliases<J: RuntimeTier>(vm: &mut Vm<'_, J>, handle: Value) {
+pub(super) fn clear_resource_aliases(vm: &mut Vm<'_>, handle: Value) {
     for value in &mut vm.stack {
         if *value == handle {
             *value = Value::INVALID;
@@ -93,7 +89,7 @@ mod sqlite_write;
 mod strings;
 mod terminal;
 
-pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub fn dispatch_ext(vm: &mut Vm<'_>, op: u8) -> Result<bool> {
     if byte_data::dispatch(vm, op)? {
         return Ok(true);
     }

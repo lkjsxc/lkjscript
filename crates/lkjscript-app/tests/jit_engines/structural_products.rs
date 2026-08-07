@@ -96,7 +96,6 @@ fn copy_product_returns_are_flat_key_free_and_codec_stable() {
         };
         assert_eq!(native_value.as_structural(), value.as_structural());
         assert_eq!(result.outcome, expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.native_structural.live_roots, 0);
         assert_eq!(result.stats.native_structural.live_views, 0);
         assert_eq!(result.stats.native_structural.live_destinations, 0);

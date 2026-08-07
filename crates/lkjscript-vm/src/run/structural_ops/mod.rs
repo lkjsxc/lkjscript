@@ -7,7 +7,7 @@ use lkjscript_core::{
     StructuralValueRuntime, StructuralViewKey, ValidatedChunk, Value,
 };
 
-use super::{unique, RuntimeTier, Vm};
+use super::{unique, Vm};
 
 mod adapter;
 mod aggregate;
@@ -72,7 +72,7 @@ pub(super) fn handles(op: u8) -> bool {
     )
 }
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     let op =
         lkjscript_core::Op::from_byte(op).ok_or_else(|| Error::msg("unknown structural opcode"))?;
     if matches!(
@@ -119,8 +119,8 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
     }
 }
 
-fn preflight_export<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn preflight_export(
+    vm: &mut Vm<'_>,
     key: StructuralValueKey,
     value_type: StructuralType,
 ) -> Result<lkjscript_core::StructuralExportAccounting> {
@@ -136,8 +136,8 @@ fn preflight_export<J: RuntimeTier>(
     Ok(accounting)
 }
 
-fn preflight_owned_export<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn preflight_owned_export(
+    vm: &mut Vm<'_>,
     key: StructuralValueKey,
     value_type: StructuralType,
     host_owner: bool,
@@ -163,8 +163,8 @@ fn preflight_owned_export<J: RuntimeTier>(
     }
 }
 
-fn commit_export_output<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn commit_export_output(
+    vm: &mut Vm<'_>,
     accounting: lkjscript_core::StructuralExportAccounting,
 ) -> Result<()> {
     let output = usize::try_from(accounting.output_bytes)
@@ -172,15 +172,13 @@ fn commit_export_output<J: RuntimeTier>(
     vm.record_output(output)
 }
 
-fn invocation<'vm, J: RuntimeTier>(vm: &'vm Vm<'_, J>) -> Result<&'vm StructuralInvocation> {
+fn invocation<'vm>(vm: &'vm Vm<'_>) -> Result<&'vm StructuralInvocation> {
     vm.structural
         .as_ref()
         .ok_or_else(|| Error::msg("structural opcode lacks invocation runtime"))
 }
 
-fn invocation_mut<'vm, J: RuntimeTier>(
-    vm: &'vm mut Vm<'_, J>,
-) -> Result<&'vm mut StructuralInvocation> {
+fn invocation_mut<'vm>(vm: &'vm mut Vm<'_>) -> Result<&'vm mut StructuralInvocation> {
     vm.structural
         .as_mut()
         .ok_or_else(|| Error::msg("structural opcode lacks invocation runtime"))

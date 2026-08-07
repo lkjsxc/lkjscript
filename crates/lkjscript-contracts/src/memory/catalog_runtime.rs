@@ -3,20 +3,6 @@ use super::MemoryObligation;
 
 pub(super) const RUNTIME: &[MemoryObligation] = &[
     runtime_state(
-        "cache-object",
-        "JIT code/metadata cache owned records",
-        "immutable code object references",
-        "JitSession",
-        "none for liveness",
-        "frame cleanup metadata is separate",
-        "artifact identity",
-        "bounded session cache",
-        "explicit cache owner and artifact lifetime",
-        "drop cache object at session/invalidation boundary",
-        "JIT compilation and installation",
-        "code-cache accounting, W^X and repeated installation suites",
-    ),
-    runtime_state(
         "evaluator-state",
         "recursive EvalValue plus deterministic unique byte owners and loans",
         "validated unique owners and shared or exclusive byte loans",

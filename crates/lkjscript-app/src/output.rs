@@ -26,28 +26,9 @@ pub fn print_jit_diagnostics(
         return;
     };
     eprintln!("jit.verified_baseline_ssa={:?}", program.program());
-    if stats.optimizing_code_objects > 0 {
-        match lkjscript_ir::optimize(program, lkjscript_ir::OptimizationLimits::default()) {
-            Ok(optimized) => eprintln!("jit.verified_optimized_ssa={:?}", optimized.program()),
-            Err(error) => eprintln!("jit.optimized_ssa_diagnostic_error={error}"),
-        }
-    }
     eprintln!(
-        concat!(
-            "jit.native_entries={} jit.baseline_entries={} jit.optimizing_entries={} ",
-            "jit.direct_native_calls={} jit.poll_calls={} ",
-            "jit.compile_failures={} jit.algebraic_rewrites={} jit.gvn_rewrites={} ",
-            "jit.checked_i64_rewrites={}"
-        ),
-        stats.native_entries,
-        stats.baseline_native_entries,
-        stats.optimizing_native_entries,
-        stats.direct_native_calls,
-        stats.poll_calls,
-        stats.compile_failures,
-        stats.algebraic_rewrites,
-        stats.gvn_rewrites,
-        stats.checked_i64_rewrites,
+        "jit.native_entries={} jit.direct_native_calls={} jit.poll_calls={}",
+        stats.native_entries, stats.direct_native_calls, stats.poll_calls,
     );
     for object in &stats.code_objects {
         eprintln!("jit.code_object={object:?}");
@@ -56,10 +37,10 @@ pub fn print_jit_diagnostics(
         }
         if let Some(bytes) = &object.diagnostic_machine_code {
             let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-            eprintln!("jit.machine_code.{}={hex}", object.identity);
+            eprintln!("jit.machine_code={hex}");
             if let Some(directory) = env::var_os("LKJSCRIPT_JIT_DUMP_DIR") {
                 let directory = PathBuf::from(directory);
-                let path = directory.join(format!("code-object-{}.bin", object.identity));
+                let path = directory.join("baseline-native.bin");
                 match std::fs::create_dir_all(&directory)
                     .and_then(|()| std::fs::write(&path, bytes))
                 {
@@ -73,9 +54,6 @@ pub fn print_jit_diagnostics(
                 }
             }
         }
-    }
-    for function in &stats.functions {
-        eprintln!("jit.function={function:?}");
     }
 }
 

@@ -1,15 +1,15 @@
 //! Verified typed-SSA to callable Linux x86-64 baseline-JIT runtime.
 //!
-//! This crate is deliberately scalar and allocation-free on generated paths.
-//! It never consumes syntax, HIR, or bytecode semantics. Bytecode link metadata
-//! is used only to identify a VM function entry for automatic tiering.
+//! The product entry point makes one baseline compilation and pre-entry
+//! preparation attempt, then either executes the installed native group or
+//! declines without entering generated code. It never consumes syntax, HIR,
+//! or bytecode semantics.
 
 #![forbid(unsafe_code)]
 
 mod attempt;
 mod lower;
 
-use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
@@ -20,17 +20,15 @@ use lkjscript_core::{
 use lkjscript_executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationOutcome,
     InvocationReport, NativeInvocationConfig, NativeResourceLimitKind, NativeRuntimeServices,
-    NativeServiceError, NoopNativeIslandRuntimeServices,
+    NativeServiceError,
 };
 use lkjscript_ir::{
-    optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,
-    OptimizationFailureCode, OptimizationLimits, OptimizationStats, Signature as IrSignature,
-    SsaType, VerifiedOptimizedProgram, VerifiedProgram,
+    optimize, optimize_scheduled, OptimizationCertificate, OptimizationFailureCode,
+    OptimizationLimits, OptimizationStats, SsaType, VerifiedOptimizedProgram, VerifiedProgram,
 };
 use lkjscript_native::{
-    BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
-    ImageContracts, LoanType, NativeLoan, NativeUnique, OutcomeMapEntry, ReferenceType, Relocation,
-    RuntimeCallSlot, SourceMapEntry, TrapMapEntry,
+    BackendLimits, CodeAccounting, EntryMetadata, HeapOperation, HeapRuntimeSite, ImageContracts,
+    LoanType, NativeLoan, NativeUnique, ReferenceType, Relocation, RuntimeCallSlot,
 };
 
 pub use lkjscript_ir::FunctionId;
@@ -42,16 +40,16 @@ mod config;
 mod error;
 mod execute;
 mod island;
+mod native_run;
 mod resource_plan;
 mod runtime_values;
 mod scalar;
-mod session;
 mod stats;
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests;
 
-use attempt::{BaselineRegionAttempt, BaselineScalarAttempt};
+use code::CodeObject;
 use execute::{capability_arguments, optimization_metadata_bytes_estimate};
 use island::*;
 use runtime_values::*;
@@ -63,21 +61,17 @@ pub use attempt::{
     BaselineDecline, BaselineDeclineReason, BaselineEnteredError, BaselineEnteredFailure,
     BaselineExecution,
 };
-pub use code::{CodeObject, CodeObjectRecord, NumericConversionSiteCounts};
-pub use config::{JitConfig, Tier, TierState};
+pub use code::{CodeObjectRecord, NumericConversionSiteCounts};
+pub use config::JitConfig;
 pub use error::{EngineError, FailureCode};
 pub use execute::{
     execute_forced, execute_forced_with_capabilities, execute_optimizing,
     execute_optimizing_with_capabilities,
 };
 pub use lkjscript_executable::{EnteredInvocationError, PreEntryError};
-pub use scalar::{
-    native_type, EntryDecision, JitExecution, ScalarInvocation, ScalarInvocationOutcome,
-    ScalarSignature,
-};
+pub use scalar::{native_type, JitExecution, ScalarInvocation, ScalarInvocationOutcome};
 pub use stats::{
-    CompileStats, FunctionTierRecord, JitStats, NativeResourceStats, NativeStructuralStats,
-    NativeUniqueStats,
+    CompileStats, JitStats, NativeResourceStats, NativeStructuralStats, NativeUniqueStats,
 };
 
 struct ReturnedStructuralValue(SemanticValue);
@@ -94,30 +88,19 @@ impl ProgramAuthority {
             Self::Optimizing(program) => program.program(),
         }
     }
-
-    const fn tier(&self) -> Tier {
-        match self {
-            Self::Baseline(_) => Tier::Baseline,
-            Self::Optimizing(_) => Tier::Optimizing,
-        }
-    }
 }
 
-pub struct JitSession {
+struct NativeRun {
     program: ProgramAuthority,
-    links: Option<BytecodeLinkMetadata>,
     installer: ExecutableInstaller,
     config: JitConfig,
-    functions: Vec<FunctionTierRecord>,
-    objects: Vec<CodeObject>,
-    next_object: u64,
+    object: Option<CodeObject>,
+    require_pre_entry_stack_check: bool,
     total_compile_time: Duration,
     optimization_time: Duration,
     native_entries: u64,
     direct_native_calls: u64,
     poll_calls: u64,
-    vm_fallbacks: u64,
-    compile_failures: u64,
     native_invocations: u64,
     metrics_started: Option<Instant>,
     time_to_first_native_entry: Option<Duration>,
@@ -139,24 +122,11 @@ pub struct JitSession {
     next_resource_scope: u64,
     peak_native_frame_depth: usize,
     peak_native_stack_bytes: usize,
-    vm_to_native_transitions: u64,
-    native_to_vm_transitions: u64,
     last_runtime_trap: Option<String>,
     last_runtime_resource: Option<ResourceLimitKind>,
     last_runtime_failure: Option<NativeServiceError>,
     last_lowering_and_encoding: Duration,
     last_installation: Duration,
-}
-
-impl fmt::Debug for JitSession {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("JitSession")
-            .field("config", &self.config)
-            .field("functions", &self.functions)
-            .field("objects", &self.objects.len())
-            .finish()
-    }
 }
 
 #[derive(Clone, Copy)]

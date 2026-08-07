@@ -12,7 +12,6 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
     let trap = validate(trap);
     let mut trapped_vm = Vm::new(
         &trap,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     );
@@ -32,7 +31,6 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
     let exit = validate(exit);
     let mut exited_vm = Vm::new(
         &exit,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     );
@@ -58,7 +56,6 @@ fn runtime_teardown_failure_attaches_without_replacing_trap() {
     let trap = validate(trap);
     let mut vm = Vm::new(
         &trap,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     );

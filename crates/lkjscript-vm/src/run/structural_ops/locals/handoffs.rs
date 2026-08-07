@@ -1,5 +1,5 @@
-pub(in crate::run) fn commit_handoff<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn commit_handoff(
+    vm: &mut Vm<'_>,
     value: Value,
 ) -> Result<()> {
     let Some(structural) = vm.structural.as_mut() else {
@@ -21,7 +21,7 @@ pub(in crate::run) fn commit_handoff<J: RuntimeTier>(
     Ok(())
 }
 
-pub(in crate::run) fn restore_handoffs<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(in crate::run) fn restore_handoffs(vm: &mut Vm<'_>) -> Result<()> {
     let Some(structural) = vm.structural.as_ref() else {
         return Ok(());
     };

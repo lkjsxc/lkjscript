@@ -68,20 +68,12 @@ fn copy_product_hidden_witness_executes_in_all_four_tiers() {
     assert_eq!(execution(baseline.outcome), expected);
     assert!(baseline.stats.native_entries > 0);
     assert!(baseline.stats.direct_native_calls > 0);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
-    assert!(baseline
-        .stats
-        .functions
-        .iter()
-        .all(|function| function.native_entries() > 0));
 
     let proof = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("bounded transport specialization enters proof native code");
     assert_eq!(execution(proof.outcome), expected);
-    assert!(proof.stats.optimizing_native_entries > 0);
-    assert_eq!(proof.stats.baseline_native_entries, 0);
+    assert!(proof.stats.native_entries > 0);
     assert!(proof.stats.direct_native_calls > 0);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
 }
 
 #[test]
@@ -145,14 +137,12 @@ fn cross_package_transport_witness_executes_in_all_four_tiers() {
     .expect("cross-package generic baseline specialization");
     assert_eq!(execution(baseline.outcome), expected);
     assert!(baseline.stats.direct_native_calls > 0);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
-    let proof = execute_optimizing(
+        let proof = execute_optimizing(
         program.ssa(),
         &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("cross-package generic proof specialization");
     assert_eq!(execution(proof.outcome), expected);
-    assert!(proof.stats.optimizing_native_entries > 0);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
-}
+    assert!(proof.stats.native_entries > 0);
+    }

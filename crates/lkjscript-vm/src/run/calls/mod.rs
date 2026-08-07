@@ -1,12 +1,10 @@
 //! Call and list opcodes.
 
 use lkjscript_core::{Error, Op, Result, Value};
-#[cfg(feature = "jit")]
-use lkjscript_jit::{EntryDecision, NativeValue, ScalarInvocationOutcome, ValueType};
 
-use crate::run::{Frame, RuntimeTier, Vm};
+use crate::run::{Frame, Vm};
 
-pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub fn make_closure(vm: &mut Vm<'_>) -> Result<()> {
     let captures = vm.read_index()?;
     if captures != 0 {
         return Err(Error::msg("captured closures are unsupported"));
@@ -19,8 +17,8 @@ pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub fn car<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub fn car(
+    vm: &mut Vm<'_>,
     representation: Option<lkjscript_core::StructuralRepresentationId>,
 ) -> Result<()> {
     let list = vm.pop()?;
@@ -29,7 +27,7 @@ pub fn car<J: RuntimeTier>(
     Ok(())
 }
 
-pub fn cdr<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub fn cdr(vm: &mut Vm<'_>) -> Result<()> {
     let list = vm.pop()?;
     let value = vm.list_rest(list)?;
     vm.push(value);

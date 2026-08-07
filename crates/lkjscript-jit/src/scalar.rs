@@ -6,28 +6,6 @@ pub struct JitExecution {
     pub stats: JitStats,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScalarSignature {
-    pub(crate) parameters: Vec<ValueType>,
-    pub(crate) result: ValueType,
-}
-
-impl ScalarSignature {
-    pub fn parameters(&self) -> &[ValueType] {
-        &self.parameters
-    }
-
-    pub const fn result(&self) -> ValueType {
-        self.result
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EntryDecision {
-    Interpret,
-    Native(FunctionId),
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarInvocationOutcome {
     Returned(NativeValue),
@@ -46,7 +24,7 @@ pub struct ScalarInvocation {
 }
 
 pub(crate) fn scalar_to_execution(
-    session: &mut JitSession,
+    run: &mut NativeRun,
     function: FunctionId,
     outcome: ScalarInvocationOutcome,
 ) -> Result<ExecutionOutcome, EngineError> {
@@ -54,21 +32,21 @@ pub(crate) fn scalar_to_execution(
         ScalarInvocationOutcome::Returned(value) => {
             let owned = match value {
                 NativeValue::Reference(reference) => {
-                    session.snapshot_reference_return(function, reference)?
+                    run.snapshot_reference_return(function, reference)?
                 }
-                NativeValue::StaticBytes(_) => session.take_returned_unique(function, true)?,
+                NativeValue::StaticBytes(_) => run.take_returned_unique(function, true)?,
                 NativeValue::Unique(owner)
                     if owner.unique_type() == lkjscript_native::UniqueType::ByteVector =>
                 {
-                    session.take_returned_unique(function, false)?
+                    run.take_returned_unique(function, false)?
                 }
                 NativeValue::Unique(owner)
                     if owner.unique_type() == lkjscript_native::UniqueType::Bytes =>
                 {
-                    session.take_returned_unique(function, true)?
+                    run.take_returned_unique(function, true)?
                 }
                 NativeValue::StructuralOwner(_) => {
-                    let value = session.take_returned_structural(function)?;
+                    let value = run.take_returned_structural(function)?;
                     OwnedValue::from_structural(value).map_err(|error| {
                         EngineError::new(
                             FailureCode::InvocationFailure,
@@ -100,7 +78,7 @@ pub(crate) fn scalar_to_execution(
             ExecutionOutcome::Returned(owned)
         }
         ScalarInvocationOutcome::Trapped(trap, site) => {
-            ExecutionOutcome::Trapped(Trap::new(session.trap_message(function, trap, site)))
+            ExecutionOutcome::Trapped(Trap::new(run.trap_message(function, trap, site)))
         }
         ScalarInvocationOutcome::Exited(code) => match i32::try_from(code) {
             Ok(code) => ExecutionOutcome::Exited(code),

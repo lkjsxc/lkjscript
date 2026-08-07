@@ -15,7 +15,6 @@ struct KernelEvidence {
     returned: bool,
     native_entries: u64,
     direct_calls: u64,
-    vm_fallbacks: u64,
     unique_calls: u64,
     live_owners: u64,
     live_loans: u64,
@@ -115,7 +114,6 @@ fn scheduled_tasks_execute_actual_collector_free_generated_kernels() {
         assert!(evidence.returned);
         assert!(evidence.native_entries > 0);
         assert!(evidence.direct_calls > 0);
-        assert_eq!(evidence.vm_fallbacks, 0);
         assert_eq!(evidence.live_owners, 0);
         assert_eq!(evidence.live_loans, 0);
         assert_eq!(evidence.release_backlog, 0);
@@ -132,7 +130,6 @@ fn evidence(execution: JitExecution) -> KernelEvidence {
         returned: matches!(execution.outcome, ExecutionOutcome::Returned(_)),
         native_entries: execution.stats.native_entries,
         direct_calls: execution.stats.direct_native_calls,
-        vm_fallbacks: execution.stats.vm_fallbacks,
         unique_calls: execution.stats.unique_runtime_calls,
         live_owners: execution.stats.native_unique.live_owners,
         live_loans: execution.stats.native_unique.live_loans,

@@ -46,7 +46,6 @@ fn assert_i64_all(source: &str, expected: i64) {
         };
         assert_eq!(value.as_i64(), Some(expected));
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
 
@@ -114,8 +113,6 @@ fn value_trap_is_exact_in_all_engines() {
     assert_eq!(optimized.stats.optimization_certificate_records, 0);
     assert!(optimized.stats.optimization_checker_passes > 0);
     assert!(optimized.stats.optimization_reconstruction_passes > 0);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
-    assert_eq!(optimized.stats.vm_fallbacks, 0);
     let outcomes = [
         run_chunk(
             program.bytecode(),
@@ -171,7 +168,6 @@ fn exit_is_structured_in_all_engines() {
     ] {
         assert_eq!(execution.outcome, ExecutionOutcome::Exited(23));
         assert!(execution.stats.native_entries > 0);
-        assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
 

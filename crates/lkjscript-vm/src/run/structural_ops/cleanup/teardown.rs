@@ -1,4 +1,4 @@
-pub(in crate::run) fn teardown<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(in crate::run) fn teardown(vm: &mut Vm<'_>) -> Result<()> {
     cleanup_list_owners(vm)?;
     cleanup_host_owners(vm)?;
     let Some(structural) = vm.structural.as_ref() else {
@@ -19,7 +19,7 @@ pub(in crate::run) fn teardown<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()>
     )))
 }
 
-fn cleanup_list_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn cleanup_list_owners(vm: &mut Vm<'_>) -> Result<()> {
     let mut owners: Vec<_> = invocation(vm)?
         .list_owners
         .iter()
@@ -39,7 +39,7 @@ fn cleanup_list_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn cleanup_host_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn cleanup_host_owners(vm: &mut Vm<'_>) -> Result<()> {
     let owners: Vec<_> = invocation(vm)?
         .host_owners
         .iter()
@@ -58,7 +58,7 @@ fn cleanup_host_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub(in crate::run) fn prepare_exit<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub(in crate::run) fn prepare_exit(vm: &mut Vm<'_>) -> Result<()> {
     cleanup_all(vm)?;
     cleanup_host_owners(vm)?;
     invocation(vm)?
@@ -67,7 +67,7 @@ pub(in crate::run) fn prepare_exit<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result
         .map_err(map_value_error)
 }
 
-fn cleanup_all<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn cleanup_all(vm: &mut Vm<'_>) -> Result<()> {
     adapter::cleanup_all_adapters(vm)?;
     let mut view_words: Vec<_> = invocation(vm)?.views.keys().copied().collect();
     view_words.sort_unstable();

@@ -89,9 +89,6 @@ fn resource_island_rejects_unsupported_and_legacy_reachable_operations() {
 
 fn assert_resource_metrics(stats: &JitStats) {
     assert!(stats.native_entries > 0);
-    assert_eq!(stats.vm_fallbacks, 0);
-    assert_eq!(stats.vm_to_native_transitions, 0);
-    assert_eq!(stats.native_to_vm_transitions, 0);
     assert_eq!(stats.resource_runtime_calls, 2);
     assert_eq!(stats.runtime_heap_attempts, 0);
     assert_eq!(stats.native_resources.reservations, 1);

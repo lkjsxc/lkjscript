@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub fn run(mut self) -> ExecutionOutcome {
         self.run_inner()
     }

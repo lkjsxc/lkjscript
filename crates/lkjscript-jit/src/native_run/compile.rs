@@ -1,19 +1,13 @@
 use crate::*;
 
-impl JitSession {
-    pub(crate) fn compile_group(&mut self, root: FunctionId) -> Result<u64, EngineError> {
-        if self.links.is_some() && self.scalar_signature(root).is_none() {
+impl NativeRun {
+    pub(crate) fn compile_group(&mut self, root: FunctionId) -> Result<(), EngineError> {
+        if self.object.is_some() {
             return Err(EngineError::new(
-                FailureCode::UnsupportedType,
+                FailureCode::InvocationFailure,
                 Some(root),
-                "automatic tiering conservatively keeps reference-typed functions in the VM",
+                "native run already has an installed group",
             ));
-        }
-        let tier = self.program.tier();
-        if tier == Tier::Optimizing {
-            if let Some(record) = root.index().and_then(|index| self.functions.get_mut(index)) {
-                record.state = TierState::OptimizingCompiling;
-            }
         }
         let started = Instant::now();
         let lowered = match &self.program {
@@ -74,9 +68,8 @@ impl JitSession {
         let relocations = lowered.image.relocations().to_vec();
         let runtime_calls = lowered.image.runtime_calls().to_vec();
         let numeric_conversion_sites = numeric_conversion_sites(&lowered.image);
-        let frames = lowered.image.frames().to_vec();
-        let automatic_stack_requirements = if self.links.is_some() {
-            automatic_stack_requirements(
+        let entry_stack_requirements = if self.require_pre_entry_stack_check {
+            entry_stack_requirements(
                 self.program.program(),
                 &lowered.functions,
                 &lowered.image,
@@ -85,14 +78,13 @@ impl JitSession {
         } else {
             Vec::new()
         };
-        let source_map = lowered.image.source_map().to_vec();
-        let trap_map = lowered.image.trap_map().to_vec();
-        let outcome_map = lowered.image.outcome_map().to_vec();
         let install_started = Instant::now();
-        let installed = self.installer.install(lowered.image);
+        let installed = self
+            .installer
+            .install(lowered.image)
+            .map_err(|error| install_error(root, error))?;
         let installation = install_started.elapsed();
         self.last_installation = installation;
-        let installed = installed.map_err(|error| install_error(root, error))?;
         let accounted_allocation_bytes = installed.accounted_allocation_bytes();
         let total = lowering_and_encoding.saturating_add(installation);
         if self.optimization_time.saturating_add(total) > self.config.max_object_compile_time
@@ -105,8 +97,6 @@ impl JitSession {
             ));
         }
         self.total_compile_time = self.total_compile_time.saturating_add(total);
-        let identity = self.next_object;
-        self.next_object = self.next_object.saturating_add(1);
         let (optimization_certificate, optimization_stats) = match &self.program {
             ProgramAuthority::Baseline(_) => (None, None),
             ProgramAuthority::Optimizing(program) => {
@@ -114,9 +104,7 @@ impl JitSession {
             }
         };
         let object = CodeObject {
-            identity,
             functions: lowered.functions.clone(),
-            tier,
             contracts,
             entries,
             accounting,
@@ -124,11 +112,7 @@ impl JitSession {
             relocations,
             runtime_calls,
             numeric_conversion_sites,
-            frames,
-            automatic_stack_requirements,
-            source_map,
-            trap_map,
-            outcome_map,
+            entry_stack_requirements,
             compile_stats: CompileStats {
                 optimization: self.optimization_time,
                 lowering_and_encoding,
@@ -139,36 +123,14 @@ impl JitSession {
             },
             optimization_certificate,
             optimization_stats,
-            invalidated: false,
             explicit_traps: lowered.explicit_traps,
             diagnostic_machine_code,
             native_entry_count: 0,
             installed,
         };
-        self.objects.push(object);
-        for function in lowered.functions {
-            if let Some(index) = function.index() {
-                if let Some(record) = self.functions.get_mut(index) {
-                    record.code_object = Some(identity);
-                    record.epoch = self.config.epoch;
-                    if self.links.is_none() || record.auto_entry_eligible {
-                        record.attempts = record.attempts.max(1);
-                        record.state = match tier {
-                            Tier::Baseline => TierState::BaselineNative,
-                            Tier::Optimizing => TierState::OptimizedNative,
-                        };
-                        record.last_failure = None;
-                    }
-                }
-            }
-        }
-        // This deterministic mapping assertion catches a backend metadata
-        // mismatch before any generated entry can be selected.
         for (source, native) in lowered.native_functions {
-            if !self.objects.last().is_some_and(|object| {
-                object.entries.iter().any(|entry| {
-                    entry.source_function().get() == source.raw() && entry.function() == native
-                })
+            if !object.entries.iter().any(|entry| {
+                entry.source_function().get() == source.raw() && entry.function() == native
             }) {
                 return Err(EngineError::new(
                     FailureCode::BackendVerification,
@@ -177,11 +139,12 @@ impl JitSession {
                 ));
             }
         }
-        Ok(identity)
+        self.object = Some(object);
+        Ok(())
     }
 }
 
-fn automatic_stack_requirements(
+fn entry_stack_requirements(
     program: &lkjscript_ir::Program,
     functions: &[FunctionId],
     image: &lkjscript_native::InstallableImage,
@@ -194,7 +157,7 @@ fn automatic_stack_requirements(
             return Err(EngineError::new(
                 FailureCode::NativeStackBoundary,
                 Some(root),
-                "automatic native stack planning cannot index a source function",
+                "native pre-entry stack planning cannot index a source function",
             ));
         };
         let Some(entry) = image
@@ -342,7 +305,7 @@ fn automatic_stack_requirements(
                 return Err(EngineError::new(
                     FailureCode::NativeStackBoundary,
                     program.functions.get(index).map(|item| item.id),
-                    "automatic native entry declines a recursive call graph",
+                    "native pre-entry validation declines a recursive call graph",
                 ));
             }
             visiting[index] = true;

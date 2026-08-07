@@ -42,7 +42,7 @@ fn initial_unique_places(
     Ok(places)
 }
 
-fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
+fn is_tail_position(vm: &Vm<'_>) -> bool {
     let Some(frame) = vm.frames.last() else {
         return false;
     };

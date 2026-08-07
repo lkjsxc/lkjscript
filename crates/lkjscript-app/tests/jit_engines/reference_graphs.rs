@@ -39,7 +39,6 @@ fn nested_copy_product_projection_and_update_are_collector_free() {
             .expect("proof copy product"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.native_structural.live_roots, 0);
         assert_eq!(result.stats.native_structural.live_loans, 0);
         assert_eq!(result.stats.native_structural.live_views, 0);
@@ -76,7 +75,6 @@ fn structural_string_length_uses_generated_calls_without_collector_metadata() {
     assert_eq!(execution(native.outcome), execution(vm.clone()));
     assert_eq!(execution(optimized.outcome), execution(vm));
     for stats in [&native.stats, &optimized.stats] {
-        assert_eq!(stats.vm_fallbacks, 0);
         assert_eq!(stats.runtime_heap_successes, 0);
         assert!(stats.structural_runtime_calls > 0);
         assert_eq!(stats.native_structural.live_roots, 0);
@@ -90,7 +88,7 @@ fn structural_string_length_uses_generated_calls_without_collector_metadata() {
         }));
     }
     assert!(native.stats.native_entries > 0);
-    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert!(optimized.stats.native_entries > 0);
 }
 
 #[test]
@@ -129,7 +127,6 @@ fn recursive_structural_string_calls_teardown_every_owner() {
     assert!(native.stats.peak_native_frame_depth >= 5);
     assert!(optimized.stats.peak_native_frame_depth >= 5);
     for stats in [&native.stats, &optimized.stats] {
-        assert_eq!(stats.vm_fallbacks, 0);
         assert_eq!(stats.runtime_heap_successes, 0);
         assert_eq!(stats.native_structural.live_roots, 0);
         assert_eq!(stats.native_structural.live_loans, 0);

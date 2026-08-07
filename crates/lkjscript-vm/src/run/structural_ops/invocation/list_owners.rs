@@ -16,8 +16,8 @@ fn registered_owner_type(
         .or_else(|| structural.host_owners.get(&key.get()).copied())
 }
 
-pub(in crate::run) fn copy_into_list<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn copy_into_list(
+    vm: &mut Vm<'_>,
     value: Value,
 ) -> Result<Value> {
     reject_affine_list_value(value)?;
@@ -89,8 +89,8 @@ pub(in crate::run) fn copy_into_list<J: RuntimeTier>(
     Ok(value)
 }
 
-pub(in crate::run) fn copy_from_list<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+pub(in crate::run) fn copy_from_list(
+    vm: &mut Vm<'_>,
     value: Value,
     expected: Option<StructuralRepresentationId>,
 ) -> Result<Value> {
@@ -148,8 +148,8 @@ pub(in crate::run) fn copy_from_list<J: RuntimeTier>(
     }
 }
 
-fn register_list_owner<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
+fn register_list_owner(
+    vm: &mut Vm<'_>,
     key: StructuralValueKey,
     record: ListOwnerRecord,
 ) -> Result<()> {

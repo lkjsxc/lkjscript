@@ -24,10 +24,8 @@ fn forced_scalar_groups_have_structurally_zero_collector_interaction() {
     assert_eq!(execution(proof.outcome), Scalar::Bool(true));
     assert_scalar_runtime(&baseline.stats);
     assert_scalar_runtime(&proof.stats);
-    assert!(baseline.stats.baseline_native_entries > 0);
-    assert_eq!(baseline.stats.optimizing_native_entries, 0);
-    assert_eq!(proof.stats.baseline_native_entries, 0);
-    assert!(proof.stats.optimizing_native_entries > 0);
+    assert!(baseline.stats.native_entries > 0);
+    assert!(proof.stats.native_entries > 0);
     assert!(proof
         .stats
         .code_objects
@@ -39,9 +37,6 @@ fn assert_scalar_runtime(stats: &JitStats) {
     assert!(stats.native_entries > 0);
     assert!(stats.direct_native_calls > 0);
     assert!(stats.poll_calls > 0);
-    assert_eq!(stats.vm_fallbacks, 0);
-    assert_eq!(stats.vm_to_native_transitions, 0);
-    assert_eq!(stats.native_to_vm_transitions, 0);
     assert_eq!(stats.runtime_heap_attempts, 0);
     assert_eq!(stats.runtime_heap_successes, 0);
     assert_eq!(stats.resource_runtime_calls, 0);

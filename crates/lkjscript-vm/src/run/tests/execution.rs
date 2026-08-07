@@ -5,7 +5,6 @@ fn fuel_and_returned_values_use_structured_outcomes() {
     let chunk = validated(&[Op::Unit, Op::Return]);
     let returned = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -18,14 +17,13 @@ fn fuel_and_returned_values_use_structured_outcomes() {
         .limited_policy_mut()
         .expect("limited test policy")
         .instruction_fuel = 1;
-    let exhausted = Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), config).run();
+    let exhausted = Vm::new(&chunk, crate::ExecutionInputs::default(), config).run();
     assert_eq!(
         exhausted,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)
     );
     let unchanged = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -42,7 +40,6 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
     assert_eq!(
         Vm::new(
             &exit,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted()
         )
@@ -54,7 +51,6 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
     assert!(matches!(
         Vm::new(
             &returned,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted()
         )
@@ -75,7 +71,6 @@ fn trap_does_not_contaminate_a_later_vm() {
     assert!(matches!(
         Vm::new(
             &trap,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted()
         )
@@ -87,7 +82,6 @@ fn trap_does_not_contaminate_a_later_vm() {
     assert!(matches!(
         Vm::new(
             &returned,
-            NullJit,
             crate::ExecutionInputs::default(),
             ExecutionPolicy::unrestricted()
         )
@@ -106,7 +100,6 @@ fn returned_heap_values_own_their_storage() {
     let chunk = validate(chunk);
     let outcome = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -142,7 +135,6 @@ fn high_unique_local_and_place_execute_without_byte_narrowing() {
     let chunk = validate(chunk);
     let outcome = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -177,7 +169,7 @@ fn byte_vector_program_crosses_former_limit_only_under_sufficient_heap_policy() 
         ..lkjscript_core::LimitedExecutionPolicy::conservative()
     });
     assert_eq!(
-        Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), low).run(),
+        Vm::new(&chunk, crate::ExecutionInputs::default(), low).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
     );
 
@@ -188,7 +180,6 @@ fn byte_vector_program_crosses_former_limit_only_under_sufficient_heap_policy() 
     assert!(matches!(
         Vm::new(
             &chunk,
-            NullJit,
             crate::ExecutionInputs::default(),
             high
         )
@@ -237,7 +228,6 @@ fn wide_constant_index_validates_and_executes_without_aliasing() {
     );
     let outcome = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -272,7 +262,6 @@ fn wide_global_index_stores_loads_and_executes() {
     let chunk = validate(chunk);
     let outcome = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )
@@ -314,7 +303,6 @@ fn wide_prototype_reference_constructs_and_calls_the_high_closure() {
     let chunk = validate(chunk);
     let outcome = Vm::new(
         &chunk,
-        NullJit,
         crate::ExecutionInputs::default(),
         ExecutionPolicy::unrestricted(),
     )

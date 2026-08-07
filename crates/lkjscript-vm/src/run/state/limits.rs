@@ -22,7 +22,7 @@ impl Interruption {
     }
 }
 
-impl<'a, J: RuntimeTier> Vm<'a, J> {
+impl<'a> Vm<'a> {
     pub(crate) fn check_runtime_limits(&mut self) -> Result<()> {
         if let Some(policy) = self.config.limited_policy() {
             if self.stack.len() > policy.max_stack_values {

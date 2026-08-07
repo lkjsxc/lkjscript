@@ -1,5 +1,5 @@
-pub(in crate::run) fn value_from_runtime<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+pub(in crate::run) fn value_from_runtime(
+    vm: &Vm<'_>,
     expected: &HostValueType,
     value: Value,
 ) -> Result<HostValue> {

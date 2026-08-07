@@ -10,7 +10,7 @@ pub(in crate::run) fn handles(op: u8) -> bool {
     )
 }
 
-pub(in crate::run) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub(in crate::run) fn dispatch(vm: &mut Vm<'_>, op: u8) -> Result<()> {
     match Op::from_byte(op) {
         Some(Op::F64FromI64Exact) => {
             let input = pop_i64(vm)?;
@@ -37,22 +37,19 @@ pub(in crate::run) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Re
     }
 }
 
-fn pop_i64<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<i64> {
+fn pop_i64(vm: &mut Vm<'_>) -> Result<i64> {
     let value = vm.pop()?;
     vm.as_i64(value)
         .map_err(|_| Error::msg("I64-to-F64 conversion expects I64"))
 }
 
-fn pop_f64<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<f64> {
+fn pop_f64(vm: &mut Vm<'_>) -> Result<f64> {
     let value = vm.pop()?;
     vm.as_f64(value)
         .map_err(|_| Error::msg("F64-to-I64 conversion expects F64"))
 }
 
-fn push_f64_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    result: std::result::Result<f64, NumericError>,
-) -> Result<()> {
+fn push_f64_result(vm: &mut Vm<'_>, result: std::result::Result<f64, NumericError>) -> Result<()> {
     let result = match result {
         Ok(value) => structural_ops::publish_numeric_result(
             vm,
@@ -69,10 +66,7 @@ fn push_f64_result<J: RuntimeTier>(
     Ok(())
 }
 
-fn push_i64_result<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    result: std::result::Result<i64, NumericError>,
-) -> Result<()> {
+fn push_i64_result(vm: &mut Vm<'_>, result: std::result::Result<i64, NumericError>) -> Result<()> {
     let result = match result {
         Ok(value) => structural_ops::publish_numeric_result(
             vm,

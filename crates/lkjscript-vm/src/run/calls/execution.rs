@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize) -> Result<()> {
+pub fn call(vm: &mut Vm<'_>, argc: usize, call_offset: usize) -> Result<()> {
     let callee = vm.pop()?;
     match callee.as_function() {
         Some(prototype) => {
@@ -24,111 +24,6 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                 .len()
                 .checked_sub(argument_count)
                 .ok_or_else(|| Error::msg("call argument stack underflow"))?;
-            #[cfg(feature = "jit")]
-            if let EntryDecision::Native(function) = vm.jit.observe_function_entry(prototype) {
-                if !vm.chunk.proto_has_structural_execution(proto_index) {
-                    let signature = vm.jit.scalar_signature(function).ok_or_else(|| {
-                        Error::msg("installed native function has no scalar signature")
-                    })?;
-                    if signature.parameters().len() != argument_count {
-                        return Err(Error::msg("native scalar signature arity mismatch"));
-                    }
-                    let argument_values = vm.stack[args_start..].to_vec();
-                    let native_arguments = signature
-                        .parameters()
-                        .iter()
-                        .copied()
-                        .zip(argument_values)
-                        .map(|(ty, value)| native_from_value(ty, value))
-                        .collect::<Result<Vec<_>>>()?;
-                    let mut execution = vm.config.clone();
-                    if let Some(policy) = execution.limited_policy_mut() {
-                        policy.instruction_fuel = vm.fuel_remaining.ok_or_else(|| {
-                            Error::host("limited VM execution lost its fuel counter")
-                        })?;
-                        policy.wall_time = vm.remaining_wall_time()?;
-                        policy.max_stack_values = policy
-                            .max_stack_values
-                            .checked_sub(vm.stack.len())
-                            .ok_or_else(|| {
-                                Error::resource(
-                                    lkjscript_core::ResourceLimitKind::StackValues,
-                                    "VM stack already exceeds policy before native transition",
-                                )
-                            })?;
-                        policy.max_frames = policy
-                            .max_frames
-                            .checked_sub(vm.frames.len())
-                            .ok_or_else(|| {
-                                Error::resource(
-                                    lkjscript_core::ResourceLimitKind::FrameDepth,
-                                    "VM frame depth already exceeds policy before native transition",
-                                )
-                            })?;
-                    }
-                    match vm
-                        .jit
-                        .invoke_scalar(function, &native_arguments, &execution)
-                    {
-                        Ok(invocation) => {
-                            if let Some(fuel) = &mut vm.fuel_remaining {
-                                *fuel = fuel.saturating_sub(invocation.poll_count);
-                            }
-                            vm.cleanup_failures.append(invocation.cleanup_failures);
-                            match invocation.outcome {
-                                ScalarInvocationOutcome::Returned(value) => {
-                                    vm.stack.truncate(args_start);
-                                    let value = value_from_native(value)?;
-                                    vm.push(value);
-                                    return Ok(());
-                                }
-                                ScalarInvocationOutcome::Trapped(trap, site) => {
-                                    let message = vm.jit.trap_message(function, trap, site);
-                                    return Err(Error::msg(message));
-                                }
-                                ScalarInvocationOutcome::Exited(code) => {
-                                    let code = i32::try_from(code)
-                                        .map_err(|_| Error::msg("exit code out of range"))?;
-                                    vm.stack.truncate(args_start);
-                                    vm.exit_code = Some(code);
-                                    return Ok(());
-                                }
-                                ScalarInvocationOutcome::DeadlineExceeded => {
-                                    return Err(Error::deadline(
-                                        "execution wall deadline exceeded in native Poll",
-                                    ));
-                                }
-                                ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
-                                    return Err(Error::resource(
-                                        kind,
-                                        "native execution resource limit exceeded",
-                                    ));
-                                }
-                                ScalarInvocationOutcome::HostFailure => {
-                                    return Err(Error::host("native Poll host clock failure"));
-                                }
-                            }
-                        }
-                        Err(error)
-                            if matches!(
-                                error.code(),
-                                lkjscript_jit::FailureCode::NativeBookkeeping
-                                    | lkjscript_jit::FailureCode::NativeStackBoundary
-                            ) =>
-                        {
-                            // Automatic recursive groups remain in the VM. Acyclic
-                            // native groups preallocate invocation bookkeeping and
-                            // check their complete generated stack requirement before
-                            // the first frame enters, so retry cannot duplicate effects.
-                        }
-                        Err(error) => {
-                            return Err(Error::msg(format!(
-                                "native invocation failed without VM fallback: {error}"
-                            )))
-                        }
-                    }
-                }
-            }
             let tail_position = is_tail_position(vm);
             let stack_base = if tail_position {
                 vm.frames.last().map_or(0, |frame| frame.stack_base)
@@ -254,9 +149,6 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
 }
 
 include!("execution/setup.rs");
-
-#[cfg(feature = "jit")]
-include!("execution/native.rs");
 
 #[cfg(test)]
 mod forwarding_tests {

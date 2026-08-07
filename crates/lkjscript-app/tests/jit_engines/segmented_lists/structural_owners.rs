@@ -41,7 +41,6 @@ fn static_string_lists_execute_without_native_fallback() {
         .expect("proof static string list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 2);
     }
 }
@@ -79,7 +78,6 @@ fn option_owners_execute_in_all_four_tiers() {
         .expect("proof option list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 2);
         assert_eq!(result.stats.native_structural.live_roots, 0);
     }
@@ -123,7 +121,6 @@ fn structural_string_elements_are_owned_by_the_list_region() {
         .expect("proof dynamic string list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 2);
         assert_eq!(result.stats.native_structural.live_roots, 0);
     }
@@ -180,7 +177,6 @@ fn list_first_clones_a_dynamic_structural_owner() {
             value.as_structural().map(|value| &value.payload),
             Some(lkjscript_core::SemanticPayload::String(bytes)) if bytes == b"42"
         ));
-        assert_eq!(result.stats.vm_fallbacks, 0);
         assert_eq!(result.stats.segmented_lists.prepends, 1);
         assert_eq!(result.stats.native_structural.live_roots, 0);
     }

@@ -1,7 +1,7 @@
 use super::*;
 
-pub(super) fn product_metadata<'a, J: RuntimeTier>(
-    vm: &'a Vm<'_, J>,
+pub(super) fn product_metadata<'a>(
+    vm: &'a Vm<'_>,
     product: ProductId,
 ) -> Result<&'a lkjscript_core::ProductMetadata> {
     let metadata = vm
@@ -17,10 +17,7 @@ pub(super) fn product_metadata<'a, J: RuntimeTier>(
     Ok(metadata)
 }
 
-pub(super) fn product_field_ref<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    index: usize,
-) -> Result<ProductFieldRef> {
+pub(super) fn product_field_ref(vm: &Vm<'_>, index: usize) -> Result<ProductFieldRef> {
     let field_ref = vm
         .chunk
         .product_fields()

@@ -10,7 +10,7 @@ mod witness;
 use borrow::borrow;
 use witness::{compare, dispose_owner, independent_owner};
 
-pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
+pub(super) fn dispatch(vm: &mut Vm<'_>, op: lkjscript_core::Op) -> Result<()> {
     match op {
         lkjscript_core::Op::StructuralBorrow | lkjscript_core::Op::StructuralBorrowMut => {
             borrow(vm, op == lkjscript_core::Op::StructuralBorrowMut)
@@ -24,7 +24,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
     }
 }
 
-fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn copy_owner(vm: &mut Vm<'_>) -> Result<()> {
     let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected_type = representation_type(
         vm.chunk,
@@ -71,7 +71,7 @@ fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn publish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn publish(vm: &mut Vm<'_>) -> Result<()> {
     let expected_representation = StructuralRepresentationId::new(vm.read_u64()?);
     let expected_type = representation_type(
         vm.chunk,
@@ -145,8 +145,8 @@ fn publish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn semantic_from_input<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
+fn semantic_from_input(
+    vm: &Vm<'_>,
     value: Value,
     representation_id: StructuralRepresentationId,
     expected: StructuralType,

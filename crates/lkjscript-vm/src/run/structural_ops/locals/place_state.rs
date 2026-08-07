@@ -1,8 +1,8 @@
-fn place_and_slot<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<(usize, usize)> {
+fn place_and_slot(vm: &mut Vm<'_>) -> Result<(usize, usize)> {
     vm.read_place_local()
 }
 
-pub(super) fn clear_consumed_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, owner: u64) {
+pub(super) fn clear_consumed_owner(vm: &mut Vm<'_>, owner: u64) {
     let Some(frame) = vm.frames.last_mut() else {
         return;
     };
@@ -25,15 +25,15 @@ pub(super) fn clear_consumed_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, owner: u6
     }
 }
 
-fn current_places<'vm, J: RuntimeTier>(vm: &'vm Vm<'_, J>) -> &'vm [unique::RuntimePlace] {
+fn current_places<'vm>(vm: &'vm Vm<'_>) -> &'vm [unique::RuntimePlace] {
     vm.frames
         .last()
         .map(|frame| frame.unique_places.as_slice())
         .unwrap_or_default()
 }
 
-fn place_mut<'vm, J: RuntimeTier>(
-    vm: &'vm mut Vm<'_, J>,
+fn place_mut<'vm>(
+    vm: &'vm mut Vm<'_>,
     place: usize,
 ) -> Result<&'vm mut unique::RuntimePlace> {
     vm.frames
@@ -42,7 +42,7 @@ fn place_mut<'vm, J: RuntimeTier>(
         .ok_or_else(|| Error::msg("structural place index is out of range"))
 }
 
-fn require_place<J: RuntimeTier>(vm: &Vm<'_, J>, place: usize, owner: u64) -> Result<()> {
+fn require_place(vm: &Vm<'_>, place: usize, owner: u64) -> Result<()> {
     if current_places(vm).get(place)
         == Some(&unique::RuntimePlace::Active {
             owner: Some(owner),

@@ -26,19 +26,23 @@ pub fn execute_forced_with_capabilities(
         lkjscript_ir::specialize_native_transport(program).map_err(specialization_error)?;
     let program = &specialized;
     let main = program.program().main;
-    let mut session = JitSession::new_baseline(program, config);
-    session.compile_group(main)?;
+    let mut run = NativeRun::new_baseline(program, config);
+    run.compile_group(main)?;
     let arguments = capability_arguments(program, capabilities)?;
-    let invocation = session.invoke_scalar(main, &arguments, execution)?;
-    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?
+    let invocation = run.invoke_scalar(main, &arguments, execution)?;
+    let outcome = scalar_to_execution(&mut run, main, invocation.outcome)?
         .with_cleanup_failures(invocation.cleanup_failures);
-    let stats = session.stats();
-    verify_forced_entry(&outcome, &stats, main, TierState::BaselineNative)?;
-    if stats.optimizing_code_objects != 0 || stats.optimizing_native_entries != 0 {
+    let stats = run.stats();
+    verify_forced_entry(&outcome, &stats, main)?;
+    if stats
+        .code_objects
+        .iter()
+        .any(|object| object.optimization_certificate.is_some())
+    {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
             Some(main),
-            "forced baseline engine installed or entered optimizing code",
+            "forced baseline helper installed optimizing code",
         ));
     }
     Ok(JitExecution { outcome, stats })
@@ -90,25 +94,19 @@ pub fn execute_optimizing_with_capabilities(
         ));
     }
     let main = optimized.program().main;
-    let mut session = JitSession::new_optimizing(optimized, config, optimization_time);
-    session.compile_group(main)?;
+    let mut run = NativeRun::new_optimizing(optimized, config, optimization_time);
+    run.compile_group(main)?;
     let arguments = capability_arguments(program, capabilities)?;
-    let invocation = session.invoke_scalar(main, &arguments, execution)?;
-    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?
+    let invocation = run.invoke_scalar(main, &arguments, execution)?;
+    let outcome = scalar_to_execution(&mut run, main, invocation.outcome)?
         .with_cleanup_failures(invocation.cleanup_failures);
-    let stats = session.stats();
-    verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
-    let pre_entry_policy_outcome = is_pre_entry_policy_outcome(&outcome, &stats);
-    if stats.baseline_code_objects != 0
-        || stats.baseline_native_entries != 0
-        || stats.optimizing_code_objects == 0
-        || (!pre_entry_policy_outcome && stats.optimizing_native_entries == 0)
-        || stats.vm_fallbacks != 0
-    {
+    let stats = run.stats();
+    verify_forced_entry(&outcome, &stats, main)?;
+    if stats.code_objects.len() != 1 || stats.code_objects[0].optimization_certificate.is_none() {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
             Some(main),
-            "forced optimizing engine did not remain optimizing-only",
+            "forced optimizing helper did not install its optimized group",
         ));
     }
     Ok(JitExecution { outcome, stats })
@@ -118,22 +116,14 @@ fn verify_forced_entry(
     outcome: &ExecutionOutcome,
     stats: &JitStats,
     main: FunctionId,
-    expected_state: TierState,
 ) -> Result<(), EngineError> {
-    if (!is_pre_entry_policy_outcome(outcome, stats) && stats.native_entries == 0)
-        || stats.vm_fallbacks != 0
-        || stats.vm_to_native_transitions != 0
-        || stats.native_to_vm_transitions != 0
-        || stats
-            .functions
-            .iter()
-            .filter(|record| record.code_object.is_some())
-            .any(|record| record.state != expected_state)
+    if stats.code_objects.len() != 1
+        || (!is_pre_entry_policy_outcome(outcome, stats) && stats.native_entries == 0)
     {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
             Some(main),
-            "forced engine did not remain generated-only in the selected tier",
+            "forced native helper did not install and enter one generated group",
         ));
     }
     Ok(())
