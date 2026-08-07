@@ -55,18 +55,13 @@ pub(crate) fn parse_file(
             "projected source forms",
         )
     })?);
-    let identity =
-        crate::source::identity::source_identity(&origin, exact_source_len, exact_source_sha256)?;
     Ok(SourceFile {
         path,
         origin,
-        identity,
         exact_source_len,
         exact_source_sha256,
         forms,
         syntax,
-        tokens: lexed.tokens,
-        trailing_trivia: lexed.trailing_trivia,
     })
 }
 

@@ -8,10 +8,7 @@ pub struct SourcePosition {
 }
 
 impl SourcePosition {
-    pub const fn new(byte: u64, line: u64, column: u64) -> Self {
-        Self { byte, line, column }
-    }
-
+    #[cfg(test)]
     pub const fn byte(self) -> u64 {
         self.byte
     }
@@ -36,10 +33,12 @@ impl SourceSpan {
         self.start
     }
 
+    #[cfg(test)]
     pub const fn end(self) -> SourcePosition {
         self.end
     }
 
+    #[cfg(test)]
     pub const fn byte_range(self) -> std::ops::Range<u64> {
         self.start.byte..self.end.byte
     }
@@ -70,6 +69,7 @@ impl SourceOrigin {
 
     /// Canonical host path after containment checking. In-memory source has no
     /// host path and still has an independent canonical logical origin.
+    #[cfg(test)]
     pub fn host_containment_path(&self) -> Option<&Path> {
         self.host_containment_path.as_deref()
     }
@@ -99,30 +99,16 @@ impl DiagnosticSeverity {
 pub enum DiagnosticCategory {
     SourceSyntax,
     Declaration,
-    ResourceLimit,
     SourceLoading,
 }
 
 impl DiagnosticCategory {
+    #[cfg(test)]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::SourceSyntax => "source-syntax",
             Self::Declaration => "declaration",
-            Self::ResourceLimit => "resource-limit",
             Self::SourceLoading => "source-loading",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DiagnosticCertainty {
-    Guaranteed,
-}
-
-impl DiagnosticCertainty {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Guaranteed => "guaranteed",
         }
     }
 }
@@ -132,18 +118,4 @@ pub struct RelatedSourceSpan {
     pub(super) label: String,
     pub(super) origin: SourceOrigin,
     pub(super) span: SourceSpan,
-}
-
-impl RelatedSourceSpan {
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-
-    pub fn origin(&self) -> &SourceOrigin {
-        &self.origin
-    }
-
-    pub const fn span(&self) -> SourceSpan {
-        self.span
-    }
 }

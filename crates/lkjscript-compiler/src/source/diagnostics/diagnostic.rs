@@ -2,17 +2,14 @@ use std::fmt;
 
 use lkjscript_core::Error;
 
-use super::{
-    DiagnosticCategory, DiagnosticCertainty, DiagnosticSeverity, RelatedSourceSpan, SourceOrigin,
-    SourceSpan,
-};
+use super::{DiagnosticCategory, DiagnosticSeverity, RelatedSourceSpan, SourceOrigin, SourceSpan};
 /// Structured source-foundation diagnostic rendered by compiler entry points.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceDiagnostic {
     code: &'static str,
     severity: DiagnosticSeverity,
+    #[cfg(test)]
     category: DiagnosticCategory,
-    certainty: DiagnosticCertainty,
     message: String,
     origin: Box<SourceOrigin>,
     primary_span: Box<SourceSpan>,
@@ -20,33 +17,23 @@ pub struct SourceDiagnostic {
 }
 
 impl SourceDiagnostic {
-    pub const fn schema(&self) -> &'static str {
-        lkjscript_contracts::DIAGNOSTICS
-    }
-    pub const fn contract(&self) -> lkjscript_contracts::ContractDigest {
-        lkjscript_contracts::DIAGNOSTICS_DIGEST
-    }
+    #[cfg(test)]
     pub const fn code(&self) -> &'static str {
         self.code
     }
-    pub const fn severity(&self) -> DiagnosticSeverity {
-        self.severity
-    }
+    #[cfg(test)]
     pub const fn category(&self) -> DiagnosticCategory {
         self.category
     }
-    pub const fn certainty(&self) -> DiagnosticCertainty {
-        self.certainty
-    }
+    #[cfg(test)]
     pub fn message(&self) -> &str {
         &self.message
     }
-    pub fn origin(&self) -> &SourceOrigin {
-        self.origin.as_ref()
-    }
+    #[cfg(test)]
     pub fn primary_span(&self) -> SourceSpan {
         *self.primary_span
     }
+    #[cfg(test)]
     pub fn related_spans(&self) -> &[RelatedSourceSpan] {
         &self.related
     }
@@ -73,51 +60,6 @@ impl SourceDiagnostic {
         }
         rendered
     }
-    pub fn render_compact_agent(&self) -> String {
-        let start = self.primary_span.start();
-        let end = self.primary_span.end();
-        let mut rendered = format!(
-            concat!(
-                "schema={};contract={};",
-                "code={};severity={};category={};certainty={};origin={};",
-                "span={}:{}:{}-{}:{}:{};message={}"
-            ),
-            lkjscript_contracts::DIAGNOSTICS,
-            lkjscript_contracts::DIAGNOSTICS_DIGEST,
-            self.code,
-            self.severity.as_str(),
-            self.category.as_str(),
-            self.certainty.as_str(),
-            crate::source::identity::escape_compact(self.origin.logical_path()),
-            start.byte(),
-            start.line(),
-            start.column(),
-            end.byte(),
-            end.line(),
-            end.column(),
-            crate::source::identity::escape_compact(&self.message)
-        );
-        for (index, related) in self.related.iter().enumerate() {
-            let start = related.span.start();
-            let end = related.span.end();
-            rendered.push_str(&format!(
-                concat!(
-                    ";related[{index}].label={};related[{index}].origin={};",
-                    "related[{index}].span={}:{}:{}-{}:{}:{}"
-                ),
-                crate::source::identity::escape_compact(&related.label),
-                crate::source::identity::escape_compact(related.origin.logical_path()),
-                start.byte(),
-                start.line(),
-                start.column(),
-                end.byte(),
-                end.line(),
-                end.column(),
-                index = index
-            ));
-        }
-        rendered
-    }
     pub(crate) fn new(
         code: &'static str,
         category: DiagnosticCategory,
@@ -125,11 +67,13 @@ impl SourceDiagnostic {
         origin: SourceOrigin,
         primary_span: SourceSpan,
     ) -> Self {
+        #[cfg(not(test))]
+        let _ = category;
         Self {
             code,
             severity: DiagnosticSeverity::Error,
+            #[cfg(test)]
             category,
-            certainty: DiagnosticCertainty::Guaranteed,
             message: message.into(),
             origin: Box::new(origin),
             primary_span: Box::new(primary_span),

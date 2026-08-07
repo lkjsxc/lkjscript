@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::source::{
-    api::LoadMetrics, validate::finish_tree, SourceBytePolicy, SourceFile, SourceOrigin,
-    SourceResult, SourceSpan, ValidatedSourceTree,
+    api::LoadMetrics, validate::finish_tree, SourceFile, SourceOrigin, SourceResult, SourceSpan,
+    ValidatedSourceTree,
 };
 
 pub(crate) use containment::ensure_source_path;
@@ -29,7 +29,6 @@ struct LoadState<'a> {
     loading: HashSet<PathBuf>,
     done: HashSet<PathBuf>,
     files: Vec<SourceFile>,
-    byte_policy: SourceBytePolicy,
     completed_source_bytes: u64,
     metrics: LoadMetrics,
 }
@@ -50,13 +49,6 @@ struct LoadFrame {
 }
 
 pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
-    load_with_byte_policy(path, SourceBytePolicy::Unrestricted)
-}
-
-pub(crate) fn load_with_byte_policy(
-    path: &Path,
-    byte_policy: SourceBytePolicy,
-) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
     ensure_source_path(path)?;
     let loading_started = Instant::now();
     let entry = path.canonicalize().map_err(|error| {
@@ -72,7 +64,6 @@ pub(crate) fn load_with_byte_policy(
         loading: HashSet::new(),
         done: HashSet::new(),
         files: Vec::new(),
-        byte_policy,
         completed_source_bytes: 0,
         metrics: LoadMetrics {
             source_loading: loading_started.elapsed(),

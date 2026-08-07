@@ -16,6 +16,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     assert!(help.contains("run <file.lkjscript> [--] [script-args...]"));
     assert!(help.contains("one baseline-native attempt, then VM fallback before entry"));
     assert!(help.contains("memory inventory [--json]"));
+    assert!(!help.contains("semantic"));
     assert!(!help.contains("runtime topology"));
     assert!(!help.contains("host-scheduler"));
     for removed in [
@@ -38,6 +39,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     let description = String::from_utf8(description.stdout).expect("describe is UTF-8");
     assert!(description.contains("\"execution_path\":\"baseline-native-with-vm-fallback\""));
     assert!(!description.contains("\"engines\":"));
+    assert!(!description.contains("semantic_operations"));
     assert!(!description.contains("platform_revision"));
 
     let fixture =
@@ -121,7 +123,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
 #[test]
 fn deleted_platform_commands_are_rejected() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
-    for command in ["runtime", "system"] {
+    for command in ["runtime", "semantic", "system"] {
         let output = Command::new(binary)
             .arg(command)
             .output()

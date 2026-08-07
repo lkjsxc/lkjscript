@@ -26,11 +26,15 @@ optimizing runtime and forced execution helpers are deleted. The SSA evaluator i
 only as the opt-in `lkjscript-ir/test-oracle` feature used by development and differential tests;
 production dependencies do not enable it.
 
-The active product scope is local package compile/run plus the Semantic Source stdio interface. The
-workspace has one application binary, `lkjscript`. Daemon, process-cell, session, scheduler,
-resource-topology, service-database, and Linux-observation products are intentionally absent. The
-language's SQLite capability remains implemented directly by the VM and `lkjscript-sys`, alongside
-stdio, clock, filesystem, network, and terminal operations.
+The active product scope is local package compile/run plus the compiler's in-process semantic
+workspace library. Text and paths are importer conveniences; an immutable typed
+`WorkspaceSnapshot` is the direct compiler input, and typed transactions, revision-labelled
+queries, holes, and concise review projections operate without rendering and reparsing source. The
+workspace has one application binary, `lkjscript`; there is no semantic wire service pending a
+measured consumer. Daemon, process-cell, session, scheduler, resource-topology, service-database,
+and Linux-observation products are intentionally absent. The language's SQLite capability remains
+implemented directly by the VM and `lkjscript-sys`, alongside stdio, clock, filesystem, network,
+and terminal operations.
 
 ## Verification
 

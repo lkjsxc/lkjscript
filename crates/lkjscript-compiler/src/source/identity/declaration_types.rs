@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::source::{NodeId, RevisionId, SourceOrigin, SourceSpan};
+use crate::source::SourceOrigin;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DeclarationKind {
@@ -29,16 +29,11 @@ impl DeclarationKind {
 pub struct DeclarationKey {
     pub(crate) digest: [u8; 32],
     pub(crate) exact_identity: Vec<u8>,
-    pub(crate) canonical_identity: String,
 }
 
 impl DeclarationKey {
     pub const fn digest(&self) -> [u8; 32] {
         self.digest
-    }
-
-    pub fn canonical_identity(&self) -> &str {
-        &self.canonical_identity
     }
 
     pub fn to_hex(&self) -> String {
@@ -58,8 +53,6 @@ pub struct DeclarationSummary {
     pub(crate) kind: DeclarationKind,
     pub(crate) name: String,
     pub(crate) origin: SourceOrigin,
-    pub(crate) span: SourceSpan,
-    pub(crate) node: NodeId,
 }
 
 impl DeclarationSummary {
@@ -78,40 +71,4 @@ impl DeclarationSummary {
     pub fn origin(&self) -> &SourceOrigin {
         &self.origin
     }
-
-    pub const fn span(&self) -> SourceSpan {
-        self.span
-    }
-
-    pub const fn node(&self) -> NodeId {
-        self.node
-    }
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StaleNodeId {
-    pub(crate) expected: RevisionId,
-    pub(crate) actual: RevisionId,
-}
-
-impl StaleNodeId {
-    pub const fn expected_revision(&self) -> RevisionId {
-        self.expected
-    }
-
-    pub const fn actual_revision(&self) -> RevisionId {
-        self.actual
-    }
-}
-
-impl fmt::Display for StaleNodeId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "node belongs to revision {}, expected {}",
-            self.actual, self.expected
-        )
-    }
-}
-
-impl std::error::Error for StaleNodeId {}

@@ -1,26 +1,6 @@
 use super::*;
 
 #[test]
-fn exact_utf8_byte_line_column_spans_are_retained() {
-    let source = unit_main("string-literal/\néλ\n/string-literal");
-    let tree = validate(&source, "src/utf8.lkjscript").expect("validate");
-    let string = tree
-        .nodes()
-        .iter()
-        .find(|node| node.kind() == NodeKind::StringLiteral)
-        .expect("string node");
-    let span = string.span();
-    let start = source.find("string-literal/\n").expect("string open");
-    let end = source.find("\n/string-literal").expect("string close") + "\n/string-literal".len();
-    assert_eq!(usize::try_from(span.start().byte()).ok(), Some(start));
-    assert_eq!(usize::try_from(span.end().byte()).ok(), Some(end));
-    assert_eq!(span.start().line(), 9);
-    assert_eq!(span.start().column(), 1);
-    assert_eq!(span.end().line(), 11);
-    assert_eq!(span.end().column(), 16);
-}
-
-#[test]
 fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
     for removed in lkjscript_contracts::REMOVED_SPELLINGS {
         let expression = if removed.old == "->" {
@@ -44,25 +24,10 @@ fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
 #[test]
 fn marker_diagnostics_have_stable_schema_spans_and_renderings() {
     let mismatched = validate("main/\n/wrong\n", "bad.lkjscript").expect_err("mismatch");
-    assert_eq!(mismatched.schema(), lkjscript_contracts::DIAGNOSTICS);
-    assert_eq!(
-        mismatched.contract(),
-        lkjscript_contracts::DIAGNOSTICS_DIGEST
-    );
     assert_eq!(mismatched.code(), "LKJ-SRC-UNMATCHED-MARKER");
     assert_eq!(mismatched.primary_span().start().line(), 2);
     assert_eq!(mismatched.related_spans().len(), 1);
     assert!(mismatched.render_human().contains("expected /main"));
-    let compact = mismatched.render_compact_agent();
-    assert!(compact.starts_with(&format!(
-        "schema={};contract={};code=LKJ-SRC-UNMATCHED-MARKER",
-        lkjscript_contracts::DIAGNOSTICS,
-        lkjscript_contracts::DIAGNOSTICS_DIGEST
-    )));
-    assert!(compact.contains("related[0].label=opening marker main/"));
-    assert!(compact.contains("related[0].origin=bad.lkjscript"));
-    assert_eq!(compact, mismatched.render_compact_agent());
-
     let unexpected = validate("/main\n", "bad.lkjscript").expect_err("unexpected close");
     assert_eq!(unexpected.code(), "LKJ-SRC-UNMATCHED-MARKER");
     assert_eq!(unexpected.primary_span().byte_range(), 0..5);

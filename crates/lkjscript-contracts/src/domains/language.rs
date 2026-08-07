@@ -1,6 +1,6 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, ContractItemKind};
 
-use super::{name, AGENT_PROTOCOL, DIAGNOSTICS, LANGUAGE, SEMANTIC_SOURCE, SOURCE};
+use super::{name, DIAGNOSTICS, LANGUAGE, SOURCE};
 
 mod vocabulary;
 
@@ -111,78 +111,6 @@ pub(super) fn diagnostics(language: ContractDigest) -> ContractDescriptor {
                     "contract",
                     "optional exact ContractDigest",
                 )),
-        )
-}
-
-pub(super) fn semantic_source(
-    source: ContractDigest,
-    diagnostics: ContractDigest,
-) -> ContractDescriptor {
-    descriptor(SEMANTIC_SOURCE)
-        .dependency(name(SOURCE), source.as_bytes())
-        .dependency(name(DIAGNOSTICS), diagnostics.as_bytes())
-        .item(
-            ContractItem::new("envelope", ContractItemKind::Type)
-                .fact(fact("schema", "schema", "lkjscript.semantic-source"))
-                .fact(fact("contract", "contract", "full lowercase SHA-256"))
-                .fact(fact("root", "root", "contained logical source root"))
-                .fact(fact("operation", "operation", "closed operation request")),
-        )
-        .item(
-            ContractItem::new("operations", ContractItemKind::Operation)
-                .semantic_order()
-                .fact(fact("snapshot", "snapshot", "read exact semantic closure"))
-                .fact(fact(
-                    "read-entity",
-                    "read-entity",
-                    "read stable semantic entity",
-                ))
-                .fact(fact(
-                    "query-node",
-                    "query-node",
-                    "query exact derived facts",
-                ))
-                .fact(fact(
-                    "hole-context",
-                    "hole-context",
-                    "read typed hole context",
-                ))
-                .fact(fact(
-                    "legal-actions",
-                    "legal-actions",
-                    "bounded checker-valid actions",
-                ))
-                .fact(fact("diagnostics", "diagnostics", "structured diagnostics"))
-                .fact(fact(
-                    "transaction",
-                    "apply-transaction",
-                    "atomic checked publication",
-                )),
-        )
-}
-
-pub(super) fn agent_protocol(semantic: ContractDigest) -> ContractDescriptor {
-    descriptor(AGENT_PROTOCOL)
-        .dependency(name(SEMANTIC_SOURCE), semantic.as_bytes())
-        .item(
-            ContractItem::new("session", ContractItemKind::Operation)
-                .fact(fact(
-                    "handshake",
-                    "handshake",
-                    "current descriptors and full digests",
-                ))
-                .fact(fact("framing", "framing", "eight-byte big-endian length"))
-                .fact(fact(
-                    "request",
-                    "request",
-                    "exact current Semantic Source digest",
-                ))
-                .fact(fact(
-                    "stale",
-                    "stale session",
-                    "fail closed without translation",
-                ))
-                .fact(fact("unknown", "unknown fields", "rejected")),
         )
 }
 

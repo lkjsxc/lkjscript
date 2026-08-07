@@ -92,6 +92,19 @@ repeated equivalent builds show a material cold-build or binary-size regression.
 No startup, execution throughput, generated-code, allocation, or peak-memory comparison was made in
 this Phase 2 measurement. Existing runtime-selection evidence below is unchanged.
 
+## Phase 5 semantic-workspace cutover
+
+**Architectural/correctness evidence, not a performance result.** The compiler now consumes
+`WorkspaceSnapshot` directly, and the former syntax-shaped stdio/session/text-publication path is
+deleted rather than retained as a comparison path. Parser-counter tests cover direct compilation,
+rename, replacement, and hole fill. Concise entity/body/type/reference/hole projection is iterative
+and fallible; the retained ignored 20,000-level small-stack geometry also exercises body projection.
+No latency, allocation, peak-RSS, or output-byte samples were recorded for this cutover, so no
+projection or edit-performance claim is made. Future incremental measurements should use the
+implemented operations described in [`status.md`](status.md), the flow in
+[`architecture.md`](architecture.md), and the contract in
+[`spec/workspace.md`](spec/workspace.md) rather than reviving the deleted wire service.
+
 ## Retained generated-scale evidence
 
 **Recorded before this documentation cutover; harnesses remain committed.** The measurements below

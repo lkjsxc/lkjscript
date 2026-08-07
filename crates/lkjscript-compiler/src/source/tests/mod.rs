@@ -5,10 +5,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::{
-    load, parse as parser, validate, validate::finish_tree, validate_source_set_for_analysis,
-    DeclarationKind, NodeKind, SourceBytePolicy, SourceOrigin,
-};
+use super::{load, validate, validate_source_set_for_analysis, DeclarationKind, SourceOrigin};
 
 static NEXT_DIR: AtomicU64 = AtomicU64::new(0);
 
@@ -43,9 +40,6 @@ fn named_def(name: &str) -> String {
 }
 
 mod diagnostics;
-mod edition;
-mod format;
-mod identity;
 mod limits;
 mod linux_safety;
 mod loading;

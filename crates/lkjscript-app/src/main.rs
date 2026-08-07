@@ -11,7 +11,6 @@ mod metrics;
 mod metrics_json;
 mod output;
 mod package;
-mod semantic;
 
 use std::env;
 use std::process::ExitCode;
@@ -39,7 +38,6 @@ fn real_main() -> Result<ExitCode, String> {
         Some("disasm") => disasm::command(&args),
         Some("package") => package::command(&args),
         Some("memory") => memory::command(&args),
-        Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }
 }

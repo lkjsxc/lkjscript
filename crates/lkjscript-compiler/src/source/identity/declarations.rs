@@ -1,16 +1,15 @@
 use std::collections::HashMap;
 
 use crate::source::{
-    parse, DeclarationKey, DeclarationKind, DeclarationSummary, DiagnosticCategory, NodeId,
+    parse, DeclarationKey, DeclarationKind, DeclarationSummary, DiagnosticCategory,
     SourceDiagnostic, SourceFile, SourceOrigin, SourceResult, SourceSpan,
 };
 
-use super::{declaration_identity, declaration_key_bytes, declaration_key_human_identity};
+use super::{declaration_identity, declaration_key_bytes};
 
 pub(crate) fn build_declarations(
     files: &[SourceFile],
     ordered: &[usize],
-    top_ids: &HashMap<(usize, usize), NodeId>,
 ) -> SourceResult<Vec<DeclarationSummary>> {
     let mut declarations = Vec::new();
     let mut exact_keys: HashMap<Vec<u8>, (SourceOrigin, SourceSpan)> = HashMap::new();
@@ -18,7 +17,7 @@ pub(crate) fn build_declarations(
         let file = &files[*file_index];
         let mut module_names: HashMap<String, (DeclarationKind, SourceOrigin, SourceSpan)> =
             HashMap::new();
-        for (form_index, form) in file.syntax.iter().enumerate() {
+        for form in &file.syntax {
             let Some((kind, name)) = declaration_identity(form) else {
                 continue;
             };
@@ -109,27 +108,14 @@ pub(crate) fn build_declarations(
                 ));
             }
             exact_keys.insert(exact.clone(), (file.origin.clone(), form.span));
-            let node = top_ids
-                .get(&(*file_index, form_index))
-                .copied()
-                .ok_or_else(|| {
-                    SourceDiagnostic::generic(file.origin.clone(), "missing dense declaration node")
-                })?;
             declarations.push(DeclarationSummary {
                 key: DeclarationKey {
                     digest: lkjscript_core::sha256(&exact),
                     exact_identity: exact,
-                    canonical_identity: declaration_key_human_identity(
-                        &file.origin.logical_path,
-                        kind,
-                        &name,
-                    ),
                 },
                 kind,
                 name,
                 origin: file.origin.clone(),
-                span: form.span,
-                node,
             });
         }
     }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::source::{SourceIdentity, SourceOrigin, SourceSpan};
+use crate::source::{SourceOrigin, SourceSpan};
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -257,11 +257,8 @@ pub(crate) struct Token {
 pub(crate) struct SourceFile {
     pub(crate) path: PathBuf,
     pub(crate) origin: SourceOrigin,
-    pub(crate) identity: SourceIdentity,
     pub(crate) exact_source_len: u64,
     pub(crate) exact_source_sha256: [u8; 32],
     pub(crate) forms: Vec<Expr>,
     pub(crate) syntax: Vec<SourceNode>,
-    pub(crate) tokens: Vec<Token>,
-    pub(crate) trailing_trivia: Vec<String>,
 }

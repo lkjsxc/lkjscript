@@ -129,6 +129,61 @@ fn removing_attachments_preserves_semantic_identity_and_revision() {
 }
 
 #[test]
+fn concise_projection_is_deterministic_attachment_independent_and_exact() {
+    let namespace = WorkspaceNamespace::deterministic(13);
+    let first =
+        importer::import_source_with_namespace(SCALAR, "workspace-projection.lkjscript", namespace)
+            .expect("first projection import");
+    let formatted_source = format!(";; formatting attachment only\n\n{SCALAR}\n");
+    let formatted = importer::import_source_with_namespace(
+        &formatted_source,
+        "workspace-projection.lkjscript",
+        namespace,
+    )
+    .expect("formatted projection import");
+    assert_ne!(
+        first.attachments().expect("first attachment").files()[0].exact_source_sha256(),
+        formatted
+            .attachments()
+            .expect("formatted attachment")
+            .files()[0]
+            .exact_source_sha256()
+    );
+    assert_eq!(first.entities(), formatted.entities());
+    assert_eq!(first.nodes(), formatted.nodes());
+
+    let main = first.entities()[0].id;
+    let root = first.nodes()[0].id;
+    let selection = [
+        ProjectionSlice::Entity(main),
+        ProjectionSlice::Body(main),
+        ProjectionSlice::Type(root),
+    ];
+    let expected = concat!(
+        "workspace revision=1 state=complete\n",
+        "entity e0g1 kind=main name=\"main\" owner=-\n",
+        "body e0g1 name=\"main\"\n",
+        "  node n0g1 kind=literal type=\"i64\" expected=\"i64\"\n",
+        "type n0g1 actual=\"i64\" expected=\"i64\"\n",
+    );
+    assert_eq!(
+        first.project(&selection).expect("first projection"),
+        expected
+    );
+    assert_eq!(
+        formatted.project(&selection).expect("formatted projection"),
+        expected
+    );
+    assert_eq!(
+        first
+            .without_attachments()
+            .project(&selection)
+            .expect("detached projection"),
+        expected
+    );
+}
+
+#[test]
 fn atomic_rename_replace_queries_and_direct_compile_use_no_parser() {
     let snapshot = importer::import_source_with_namespace(
         FUNCTION_PROGRAM,
@@ -334,6 +389,22 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
         .hole_context(introduced.snapshot.revision(), hole)
         .expect("hole context");
     assert_eq!(context.expected_type, crate::Type::I64);
+    let projection = introduced
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(main),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Type(root),
+            ProjectionSlice::References(function),
+            ProjectionSlice::Hole(hole),
+        ])
+        .expect("incomplete projection");
+    assert!(projection.starts_with("workspace revision=2 state=incomplete\n"));
+    assert!(projection.contains("node n0g1 kind=hole type=\"i64\" expected=\"i64\" [HOLE]"));
+    assert!(projection.contains("type n0g1 actual=\"i64\" expected=\"i64\" [HOLE]"));
+    assert!(projection.contains(" count=0\n"));
+    assert!(projection.contains("hole n0g1 [HOLE] expected=\"i64\""));
+    assert!(projection.contains("goal=\"compute the result\""));
     assert_eq!(introduced.snapshot.diagnostics().len(), 1);
     assert_eq!(
         introduced
@@ -559,6 +630,7 @@ fn twenty_thousand_level_edit_and_drop_complete_on_a_small_native_stack() {
         WorkspaceNamespace::deterministic(26),
     )
     .expect("scalar import");
+    let main = snapshot.entities()[0].id;
     let root = snapshot.nodes()[0].id;
     let mut nodes = Vec::new();
     nodes
@@ -601,6 +673,11 @@ fn twenty_thousand_level_edit_and_drop_complete_on_a_small_native_stack() {
                 })
                 .expect("deep semantic edit");
             assert_eq!(edited.snapshot.nodes().len(), DEPTH * 3 + 1);
+            let projection = edited
+                .snapshot
+                .project(&[ProjectionSlice::Body(main)])
+                .expect("deep body projection");
+            assert_eq!(projection.matches("node n").count(), DEPTH * 3 + 1);
             drop(edited);
             drop(workspace);
         })

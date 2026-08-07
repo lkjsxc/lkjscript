@@ -4,8 +4,7 @@ use std::time::Duration;
 use lkjscript_core::Result;
 
 use crate::source::{
-    load as loader, parse, validate as authority, SourceBytePolicy, SourceDiagnostic, SourceOrigin,
-    SourceResult,
+    load as loader, parse, validate as authority, SourceDiagnostic, SourceOrigin, SourceResult,
 };
 
 use super::ValidatedSourceTree;
@@ -27,13 +26,6 @@ fn validate_one_source(
     path: PathBuf,
     origin: SourceOrigin,
 ) -> SourceResult<ValidatedSourceTree> {
-    let source_len = u64::try_from(source.len()).map_err(|_| {
-        SourceDiagnostic::host(
-            origin.clone(),
-            "source byte length overflowed its u64 representation",
-        )
-    })?;
-    SourceBytePolicy::Unrestricted.check_total(&origin, source_len)?;
     let parsed = parse::parse_file(source, origin.clone(), path.clone())?;
     authority::finish_tree(path, origin, vec![parsed])
 }
@@ -50,13 +42,6 @@ pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTre
     loader::load_with_metrics(path)
 }
 
-pub(crate) fn load_for_protocol(
-    path: &Path,
-    byte_policy: SourceBytePolicy,
-) -> SourceResult<ValidatedSourceTree> {
-    loader::load_with_byte_policy(path, byte_policy).map(|(tree, _)| tree)
-}
-
 pub(crate) fn validate_for_compiler(
     source: &str,
     logical_path: &str,
@@ -66,37 +51,6 @@ pub(crate) fn validate_for_compiler(
 
 pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
     loader::ensure_source_path(path).map_err(SourceDiagnostic::into_core)
-}
-
-pub(crate) fn rebuild_staged_sources(
-    sources: &[(PathBuf, SourceOrigin, String)],
-    root: PathBuf,
-    root_origin: SourceOrigin,
-    byte_policy: SourceBytePolicy,
-) -> SourceResult<ValidatedSourceTree> {
-    let mut aggregate_source_bytes = 0_u64;
-    for (_, origin, source) in sources {
-        let source_bytes = u64::try_from(source.len()).map_err(|_| {
-            SourceDiagnostic::host(
-                origin.clone(),
-                "staged source byte length overflowed its u64 representation",
-            )
-        })?;
-        aggregate_source_bytes =
-            byte_policy.account_source_bytes(origin, aggregate_source_bytes, source_bytes)?;
-    }
-
-    let mut parsed = Vec::new();
-    parsed.try_reserve(sources.len()).map_err(|_| {
-        SourceDiagnostic::host(
-            root_origin.clone(),
-            "host could not reserve memory for staged source units",
-        )
-    })?;
-    for (path, origin, source) in sources {
-        parsed.push(parse::parse_file(source, origin.clone(), path.clone())?);
-    }
-    authority::finish_tree(root, root_origin, parsed)
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ pub use names::{
 pub use operation::{
     operation_by_id, operation_by_source_name, operation_semantics_by_id, OperationCategory,
     OperationEffects, OperationIdentity, OperationOwnership, OperationSemanticsRecord,
-    OperationVocabularyRecord, RuntimeLowering, SemanticSourceRelationship, OPERATION_COUNT,
+    OperationVocabularyRecord, RuntimeLowering, SemanticConstructor, OPERATION_COUNT,
 };
 pub use removed::{removed_spelling, RemovedSpelling, REMOVED_SPELLINGS};
 

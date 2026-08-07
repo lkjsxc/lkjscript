@@ -68,10 +68,8 @@ fn loader_cycle_diagnostic_retains_deterministic_related_import_spans() -> std::
     assert_eq!(error.code(), "LKJ-SRC-LOAD");
     assert_eq!(error.primary_span().start().line(), 2);
     assert_eq!(error.related_spans().len(), 2);
-    let compact = error.render_compact_agent();
-    assert!(compact.contains("related[0].label=earlier import in cycle"));
-    assert!(compact.contains("related[1].label=earlier import in cycle"));
-    assert_eq!(compact, error.render_compact_agent());
+    let rendered = error.render_human();
+    assert_eq!(rendered.matches("earlier import in cycle").count(), 2);
     Ok(())
 }
 
@@ -90,8 +88,9 @@ fn loader_retains_logical_origin_separate_from_canonical_host_path() -> std::io:
         ),
     )?;
     let tree = load(&root).map_err(|error| std::io::Error::other(error.to_string()))?;
-    assert_eq!(tree.source_origins().len(), 2);
-    for origin in tree.source_origins() {
+    assert_eq!(tree.files().len(), 2);
+    for file in tree.files() {
+        let origin = &file.origin;
         assert!(!origin.logical_path().starts_with('/'));
         let host = origin.host_containment_path().expect("loaded host origin");
         assert!(host.is_absolute());
@@ -134,7 +133,7 @@ fn loader_accepts_wide_directories_and_imported_declarations() -> std::io::Resul
         ),
     )?;
     let tree = load(&root).map_err(|error| std::io::Error::other(error.to_string()))?;
-    assert_eq!(tree.source_origins().len(), 2);
+    assert_eq!(tree.files().len(), 2);
     assert_eq!(tree.declarations().len(), 4);
     Ok(())
 }

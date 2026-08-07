@@ -19,7 +19,10 @@ define language semantics, report implementation status, describe architecture, 
 
 A specification may intentionally lead the implementation. That difference is an implementation gap
 to record in `status.md`; it does not silently amend the specification. An architecture decision may
-constrain implementation but does not silently amend externally visible semantics.
+constrain implementation but does not silently amend externally visible semantics. The semantic
+workspace's Rust types and tests currently own its executable operation/query/projection surface.
+There is no semantic wire schema or protocol contract in this checkout; a future service must earn
+and define a new boundary rather than reviving deleted text-publication authority.
 
 ## Conflict handling
 

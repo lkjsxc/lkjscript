@@ -4,7 +4,6 @@ use super::lines::Line;
 
 pub(super) struct Lexed {
     pub(super) tokens: Vec<Token>,
-    pub(super) trailing_trivia: Vec<String>,
 }
 
 pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lexed> {
@@ -70,10 +69,7 @@ pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lex
         }
         index += 1;
     }
-    Ok(Lexed {
-        tokens: output,
-        trailing_trivia: pending_trivia,
-    })
+    Ok(Lexed { tokens: output })
 }
 
 fn text_open_name(line: &str) -> Option<&'static str> {

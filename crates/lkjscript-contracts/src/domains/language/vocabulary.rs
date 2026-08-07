@@ -1,7 +1,7 @@
 use crate::{
     CapabilityKind, ContractDescriptor, ContractFact, ContractItem, ContractItemKind,
     OperationCategory, OperationIdentity, OperationOwnership, ResourceKind, RuntimeLowering,
-    SemanticSourceRelationship, BUILTIN_ERROR_NAMES, BYTE_TEXT_FOUNDATION_TYPE_NAMES,
+    SemanticConstructor, BUILTIN_ERROR_NAMES, BYTE_TEXT_FOUNDATION_TYPE_NAMES,
     COMPILER_TRAIT_NAMES, CONTEXTUAL_FORM_NAMES, OPERATION_COUNT, PRELUDE_TYPE_NAMES,
     PRELUDE_VARIANT_NAMES, REMOVED_SPELLINGS, RESERVED_WORDS, SIMPLE_TYPE_NAMES,
     TYPE_CONSTRUCTOR_NAMES,
@@ -102,8 +102,8 @@ fn add_operations(descriptor: &mut ContractDescriptor) {
         let value = format!(
             concat!(
                 "category={};arity={};type={};generic={};constraints={};effects={};capabilities={};",
-                "ownership={};may-trap={};may-diverge={};lowering={};semantic-source={};",
-                "legal-action={};summary={}"
+                "ownership={};may-trap={};may-diverge={};lowering={};semantic-constructor={};",
+                "legal-constructor={};summary={}"
             ),
             category(record.category),
             semantics.arity,
@@ -116,8 +116,8 @@ fn add_operations(descriptor: &mut ContractDescriptor) {
             semantics.may_trap,
             semantics.may_diverge,
             lowering(semantics.runtime_lowering),
-            semantic_source(semantics.semantic_source),
-            semantics.legal_action_available,
+            semantic_constructor(semantics.semantic_constructor),
+            semantics.legal_constructor_available,
             record.summary,
         );
         item.facts
@@ -149,10 +149,10 @@ fn lowering(lowering: RuntimeLowering) -> &'static str {
     }
 }
 
-fn semantic_source(relationship: SemanticSourceRelationship) -> &'static str {
+fn semantic_constructor(relationship: SemanticConstructor) -> &'static str {
     match relationship {
-        SemanticSourceRelationship::BuiltinCall => "builtin-call",
-        SemanticSourceRelationship::ControlForm => "control-form",
+        SemanticConstructor::BuiltinCall => "builtin-call",
+        SemanticConstructor::ControlForm => "control-form",
     }
 }
 

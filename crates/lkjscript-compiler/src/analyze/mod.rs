@@ -19,17 +19,11 @@ use crate::source::Expr as AstExpr;
 use crate::source::ValidatedSourceTree;
 use crate::types::parse_one;
 
+#[cfg(test)]
 pub(crate) fn analyze_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
     let mut program = analyze_program_without_effects(program)?;
     crate::effects::infer(&mut program);
     Ok(program)
-}
-
-pub(crate) fn analyze_module_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
-    let projection = program
-        .module_scoped_projection()
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
-    analyze_program(&projection)
 }
 
 pub(crate) fn analyze_program_without_effects(

@@ -20,14 +20,6 @@ pub(crate) fn append_framed(
     Ok(())
 }
 
-pub(crate) fn escape_compact(text: &str) -> String {
-    text.replace('%', "%25")
-        .replace(';', "%3B")
-        .replace('=', "%3D")
-        .replace('\n', "%0A")
-        .replace('\r', "%0D")
-}
-
 pub(crate) fn hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len().saturating_mul(2));

@@ -9,9 +9,6 @@ pub fn print() {
     println!("  lkjscript memory inventory [--json]");
     println!("  lkjscript memory explain <identity>");
     println!("  lkjscript disasm <file.lkjscript>");
-    println!("  lkjscript semantic describe");
-    println!("  lkjscript semantic [-] < request.json");
-    println!("  lkjscript semantic serve --stdio");
     println!("  lkjscript --help");
     println!("  lkjscript --version");
     println!();

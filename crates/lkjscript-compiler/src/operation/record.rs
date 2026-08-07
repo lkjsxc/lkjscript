@@ -1,7 +1,5 @@
 use crate::operation::*;
-use lkjscript_contracts::{
-    CapabilityKind, OperationOwnership, RuntimeLowering, SemanticSourceRelationship,
-};
+use lkjscript_contracts::{CapabilityKind, OperationOwnership, RuntimeLowering};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedOperationRecord {
@@ -14,8 +12,6 @@ pub struct TypedOperationRecord {
     pub may_trap: bool,
     pub may_diverge: bool,
     pub runtime_lowering: RuntimeLowering,
-    pub semantic_source_builtin_call: bool,
-    pub legal_action_available: bool,
 }
 
 impl Operation {
@@ -35,13 +31,6 @@ impl Operation {
             runtime_lowering: semantics.map_or(RuntimeLowering::RuntimeCall, |record| {
                 record.runtime_lowering
             }),
-            semantic_source_builtin_call: semantics.is_some_and(|record| {
-                matches!(
-                    record.semantic_source,
-                    SemanticSourceRelationship::BuiltinCall
-                )
-            }),
-            legal_action_available: semantics.is_some_and(|record| record.legal_action_available),
         }
     }
 }

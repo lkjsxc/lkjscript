@@ -11,10 +11,8 @@ mod operation;
 mod ownership;
 pub mod package;
 mod pipeline;
-pub mod semantic;
-// Internal bootstrap source machinery remains only for import and the existing
-// Semantic Source service; commits 2/3 of this cutover delete that service.
-#[allow(dead_code)]
+// Text parsing is private importer machinery. Semantic authority begins at the
+// immutable workspace snapshot returned by the public import conveniences.
 mod source;
 mod ssa;
 mod stack;
@@ -38,7 +36,16 @@ pub use pipeline::{
     compile_source, validate_source,
 };
 pub use types::Type;
-pub use workspace::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceSnapshot};
+pub use workspace::{
+    import_path, import_path_with_metrics, import_source, CallEdge, CompileSnapshotError,
+    Continuation, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, DraftNode, DraftNodeId,
+    Edit, EntityHeader, EntityId, EntityKind, EntityPage, ExpressionDraft, HoleId, HoleState,
+    ImportMetrics, IncompleteSnapshotError, InvalidatedDomain, LegalConstructor, NodeHeader,
+    NodeId, NodeKind, NodeTypeFacts, PageRequest, PresentationAttachments, ProgramState,
+    ProjectionSlice, QueryPage, ReferenceEdge, RevisionId, SemanticChild, SemanticDiff,
+    SemanticDiffEntry, SemanticOwner, SourceAttachment, Transaction, TransactionOutcome, Workspace,
+    WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+};
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 

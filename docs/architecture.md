@@ -20,9 +20,9 @@ package manifest, lock, and line-oriented .lkjscript files
     -> one baseline-native group attempt, otherwise validated VM execution
 ```
 
-Text and package files remain persistent import authority, but they are not a post-HIR compiler
-input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA, bytecode, and
-preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns `Arc`-shared typed HIR, complete or typed-hole-overlay
+Text and package files remain persistent importer inputs, not semantic authority and not a post-HIR
+compiler input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA,
+bytecode, and preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns `Arc`-shared typed HIR, complete or typed-hole-overlay
 state, immutable import provenance or deterministic post-edit development provenance, optional
 presentation/source attachments, and deterministic semantic indexes. Package preparation after an
 unedited import uses captured lock facts and performs no file-system provenance reconstruction. A
@@ -72,10 +72,12 @@ identity queries. A continuation is bound to its namespace, revision, and query.
 report rename, replacement, created/deleted descendants, hole transitions, and reference/call
 rewiring; invalidation currently reports coarse truthful domains rather than incremental cache work.
 
-The JSON/stdio Semantic Source service remains separate bootstrap infrastructure for commit 3. Its
-node identity is a revision plus dense `u64` index, and its successful transactions still publish
-text files for later import. Old-service records include paths, spans, canonical subtrees, and source
-fingerprints. It is not used by the in-process workspace editing vertical.
+Selected entity, body, type, reference, and hole headers have one concise deterministic projection.
+It traverses body ownership iteratively, reports allocation failure, marks holes as `[HOLE]`, and
+requires no source attachments. Projection labels are review/debug spellings, never identity input.
+The former syntax-shaped service, dense source-node IDs, stdio/session schemas, text publication and
+journal machinery, CLI routes, and protocol contracts are deleted. No wire replacement exists
+without a measured consumer.
 
 ## Current execution and local host flow
 
@@ -127,13 +129,13 @@ facts call this capability `semantic_snapshot`; it is not a process transport pr
 
 Cargo metadata currently reports 11 workspace members and one app binary. Conceptually:
 
-- `lkjscript-contracts` owns retained language, IR, memory, package, prepared, and semantic protocol
-  descriptors and content identities;
+- `lkjscript-contracts` owns retained language, IR, memory, package, and prepared descriptors and
+  content identities;
 - `lkjscript-core` owns values, execution policy/outcomes, validated bytecode, memory witnesses,
   structural storage, semantic snapshots, and resource tables;
 - `lkjscript-compiler` owns the public immutable semantic workspace snapshot and direct snapshot
   compiler boundary, plus the private source/package importer, HIR, memory planning, lowering,
-  package locks, and temporary Semantic Source bootstrap;
+  package locks, and concise semantic projection;
 - `lkjscript-ir` owns SSA, verification, normalization, and the opt-in test oracle;
 - `lkjscript-vm` owns generic validated-bytecode execution and typed host-operation dispatch;
 - `lkjscript-native`, `lkjscript-jit`, and `lkjscript-executable` own baseline-native lowering,
@@ -150,7 +152,7 @@ edge or shadow implementation.
 
 Fail-closed validation remains at:
 
-- source and Semantic Source input;
+- text importer and typed semantic transaction input;
 - package manifest/lock/import resolution and compiler path/symlink handling;
 - capability grants and typed host-operation dispatch;
 - bytecode validation and malformed operand/index handling;
@@ -170,15 +172,15 @@ capability checking; they are not a replacement service sandbox.
 
 ## Target delta
 
-**Transitional current fact:** complete text imports and in-process semantic edits share one
-revision-labelled snapshot authority. Stable identity, one typed-hole incomplete state, atomic batch
-edits, deterministic paginated queries, semantic diffs, and direct executable lowering are
-implemented for the selected vertical. Directness tests prove editing and compilation do not invoke
-the parser; attachment-free and edited complete snapshots execute through the VM.
+**Current fact:** complete text imports and in-process semantic edits share one revision-labelled
+snapshot authority. Stable identity, one typed-hole incomplete state, atomic batch edits,
+deterministic paginated queries and concise projections, semantic diffs, and direct executable
+lowering are implemented for the selected vertical. Directness tests prove editing and compilation
+do not invoke the parser; attachment-free and edited complete snapshots execute through the VM.
+Formatting-only attachment changes preserve IDs and projection.
 
-**Target, not implemented:** commit 3 removes the syntax-shaped Semantic Source editing path and
-adds the deterministic projection needed for ordinary review/import workflows. Later workspace
-expansion adds declaration and node movement/creation/deletion, local storage, generics, matches,
-unresolved references, ambiguities, conflicts, recovery nodes, and finer analysis contexts without
-adding another semantic AST. Persistence, collaboration, daemon, database service, scheduler, and
-broader platform work wait for measured need after the local semantic model works.
+**Target, not implemented:** later workspace expansion adds declaration and node
+movement/creation/deletion, local storage, generics, matches, unresolved references, ambiguities,
+conflicts, recovery nodes, and finer analysis contexts without adding another semantic AST.
+Persistence, collaboration, a measured wire consumer, incremental recomputation, daemon, database
+service, scheduler, and broader platform work wait for evidence after the local semantic model.

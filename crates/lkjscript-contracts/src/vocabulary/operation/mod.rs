@@ -8,7 +8,7 @@ mod sqlite;
 
 pub use semantics::{
     operation_semantics_by_id, OperationEffects, OperationOwnership, OperationSemanticsRecord,
-    RuntimeLowering, SemanticSourceRelationship,
+    RuntimeLowering, SemanticConstructor,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

@@ -10,6 +10,7 @@ mod ids;
 mod importer;
 mod index;
 mod model;
+mod projection;
 mod query;
 mod transaction;
 mod validate;
@@ -29,6 +30,7 @@ pub use model::{
     ProgramState, ReferenceEdge, SemanticChild, SemanticOwner, SourceAttachment,
 };
 use model::{HoleOverlay, SnapshotIndexes};
+pub use projection::ProjectionSlice;
 pub use query::{
     Continuation, EntityPage, LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
 };

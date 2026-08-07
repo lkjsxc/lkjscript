@@ -15,31 +15,25 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    repeated startup, execution, peak-memory, and generated-code measurements across equivalent
    scalar, branch, call, structural, collection, ownership, failure, and host workloads. Reverse a
    runtime choice only on equivalent evidence.
-3. **Finish semantic-workspace cutover commit 3.** Complete text imports and the implemented
-   in-process rename/flat-expression/typed-hole vertical now share one `WorkspaceSnapshot` authority
-   with edit-stable IDs, atomic revisions, paginated queries, semantic diffs, and direct compilation.
-   Next add the deterministic review projection required by the local workflow and delete the
-   temporary syntax-shaped Semantic Source service. Do not retain its text transaction model or add
-   a second semantic AST.
-4. **Complete stack-safety evidence for the selected local architecture.** Convert or otherwise
-   prove the remaining recursive Semantic Source, transaction, runtime structural-value,
-   serialization, and specialization paths under deep generated tests.
+3. **Complete stack-safety evidence for the selected local architecture.** Convert or otherwise
+   prove remaining recursive transaction, runtime structural-value, serialization, and
+   specialization paths under deep generated tests. Keep concise workspace projection iterative and
+   fallible as its semantic slices expand.
+4. **Expand the implemented workspace vertical without adding another authority.** Add declaration
+   and node create/delete/move, local-storage construction, generic calls, matches, and broader
+   incomplete states on the retained identity/transaction/query/projection model.
 
 ## Next
 
-1. **Expand the one workspace model after the direct cutover.** Add declaration and node
-   create/delete/move, local-storage construction, generic calls, matches, and additional incomplete
-   states only on the existing identity/transaction/query model. Keep text as an importer and
-   projection, not parallel editing authority.
-2. **Add measured incremental recomputation.** Compare a small dependency-aware cache with a mature
+1. **Add measured incremental recomputation.** Compare a small dependency-aware cache with a mature
    query framework on edit latency, invalidation precision, retained memory, cycle handling,
    cancellation, and debugging cost before choosing an implementation.
-3. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
+2. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
-4. **Refine untrusted request policy when an untrusted product exists.** Semantic Source already has
-   coarse request policy and reusable execution supports explicit limited policy. Do not rebuild
-   daemon/process framing or multi-tenant admission machinery speculatively.
+3. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
+   supports explicit limited policy, but there is no semantic wire service. Do not rebuild framing,
+   text publication, or multi-tenant admission machinery speculatively.
 
 ## Later
 

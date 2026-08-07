@@ -1,4 +1,4 @@
-use crate::source::{format, DeclarationKind, SourceNode, SyntaxKind};
+use crate::source::{constructor_identity, DeclarationKind, SourceNode, SyntaxKind};
 
 use super::IdentityEncodingError;
 
@@ -16,7 +16,7 @@ pub(crate) fn declaration_identity(node: &SourceNode) -> Option<(DeclarationKind
             DeclarationKind::Implementation,
             node.children
                 .iter()
-                .map(format::format_node_identity)
+                .map(constructor_identity::constructor_identity)
                 .collect::<Vec<_>>()
                 .join("|"),
         )),
@@ -79,24 +79,14 @@ pub(crate) fn product_field_identity(
 
 pub(crate) fn enum_member_identity(parent: [u8; 32], kind: &str, name: &str) -> [u8; 32] {
     let mut exact = [0_u8; 160];
-    exact[..32].copy_from_slice(&lkjscript_contracts::SEMANTIC_SOURCE_DIGEST.as_bytes());
+    // Member identity is independent of both text syntax and workspace protocol.
+    // This neutral domain is local to semantic constructor identity.
+    exact[..32].copy_from_slice(&lkjscript_core::sha256(
+        b"lkjscript.identity.enum-member.v1",
+    ));
     exact[32..64].copy_from_slice(&lkjscript_core::sha256(b"enum-member"));
     exact[64..96].copy_from_slice(&parent);
     exact[96..128].copy_from_slice(&lkjscript_core::sha256(kind.as_bytes()));
     exact[128..].copy_from_slice(&lkjscript_core::sha256(name.as_bytes()));
     lkjscript_core::sha256(&exact)
-}
-
-pub(crate) fn declaration_key_human_identity(
-    logical_path: &str,
-    kind: DeclarationKind,
-    name: &str,
-) -> String {
-    format!(
-        "contract={};package=root;origin={};kind={};name={}",
-        lkjscript_contracts::SOURCE_DIGEST,
-        super::escape_compact(logical_path),
-        super::escape_compact(kind.as_str()),
-        super::escape_compact(name),
-    )
 }

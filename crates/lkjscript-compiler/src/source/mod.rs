@@ -4,8 +4,8 @@
 //! public source representation is the opaque [`ValidatedSourceTree`].
 
 mod api;
+mod constructor_identity;
 mod diagnostics;
-mod format;
 mod identity;
 mod load;
 mod model;
@@ -23,22 +23,16 @@ mod validate;
 #[cfg(test)]
 pub(crate) use api::validate_source_set_for_analysis;
 pub(crate) use api::{
-    ensure_source_path_for_compiler, load_for_protocol, load_with_metrics, rebuild_staged_sources,
-    validate_for_compiler, ValidatedSourceParts,
+    ensure_source_path_for_compiler, load_with_metrics, validate_for_compiler, ValidatedSourceParts,
 };
 pub(crate) use api::{load, validate, ValidatedSourceTree};
 pub(crate) use diagnostics::{
     DiagnosticCategory, SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
 };
-pub(crate) use format::{format_f64, format_file, format_node_identity, format_node_source};
 pub(crate) use identity::{enum_member_identity, product_field_identity};
-pub(crate) use identity::{
-    DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
-    SourceIdentity, SourceTreeIdentity, StaleNodeId,
-};
+pub(crate) use identity::{DeclarationKey, DeclarationKind, DeclarationSummary};
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;
-pub(crate) use validate::SourceBytePolicy;
 
 #[cfg(test)]
 mod tests;

@@ -2,15 +2,6 @@ use std::process::ExitCode;
 
 use lkjscript_contracts::{current_contracts, ContractSet};
 
-const SEMANTIC_OPERATIONS: &[&str] = &[
-    "snapshot",
-    "read-entity",
-    "query-node",
-    "hole-context",
-    "legal-actions",
-    "diagnostics",
-    "apply-transaction",
-];
 const LANGUAGE_FORMS: &[&str] = &[
     "generic-enum",
     "exhaustive-match",
@@ -50,20 +41,6 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-pub fn semantic() -> Result<ExitCode, String> {
-    let contracts = current_contracts().map_err(|error| error.to_string())?;
-    let semantic = contracts
-        .get(lkjscript_contracts::SEMANTIC_SOURCE)
-        .ok_or_else(|| "Semantic Source contract is not registered".to_string())?;
-    println!(
-        "schema={} contract={} operations={}",
-        lkjscript_contracts::SEMANTIC_SOURCE,
-        semantic.digest(),
-        SEMANTIC_OPERATIONS.join(",")
-    );
-    Ok(ExitCode::SUCCESS)
-}
-
 fn print_human(contracts: &ContractSet) {
     println!("compiler: lkjscript");
     println!("target: linux-x86-64");
@@ -75,7 +52,6 @@ fn print_human(contracts: &ContractSet) {
             contract.digest()
         );
     }
-    println!("semantic-operations: {}", SEMANTIC_OPERATIONS.join(", "));
     println!("language-forms: {}", LANGUAGE_FORMS.join(", "));
     println!("execution-path: {EXECUTION_PATH}");
     println!("package-capabilities: local-content-addressed");
@@ -102,7 +78,6 @@ fn json_description(contracts: &ContractSet) -> String {
         output.push('}');
     }
     output.push(']');
-    push_array(&mut output, "semantic_operations", SEMANTIC_OPERATIONS);
     push_array(&mut output, "language_forms", LANGUAGE_FORMS);
     output.push(',');
     push_string(&mut output, "execution_path", EXECUTION_PATH);

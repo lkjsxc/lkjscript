@@ -1,53 +1,45 @@
 # Semantic workspace contract
 
 **Status: normative target contract, not current implementation.** Sections labelled **Target** define
-the intended semantic-workspace behavior. The **Current bootstrap** section is descriptive and is
-not a claim that the target exists. Current checkout status remains owned by
+the intended semantic-workspace behavior. The **Current implementation** section is descriptive and
+is not a claim that every target exists. Current checkout status remains owned by
 [`../status.md`](../status.md).
 
-## Current bootstrap
+## Current implementation
 
-**Currently implemented.** Text files remain persistent import authority, but product compilation
-imports them exactly once into a syntax-independent immutable `WorkspaceSnapshot`. An in-process
-`Workspace` now owns the current `Arc<WorkspaceSnapshot>`, revision publication, and generation-aware
-entity/node allocation. A snapshot is either complete or has a private typed-hole overlay over
-non-executable backing HIR. It owns captured or deterministic post-edit development provenance,
-optional source attachments, opaque namespace/slot/generation entity and node IDs, semantic indexes,
-type facts, diagnostics, and hole contexts.
+**Currently implemented.** Text and path APIs are private-parser importer conveniences that create
+one syntax-independent immutable `WorkspaceSnapshot`; they are not a sibling compiler or editing
+authority. `compile_snapshot` consumes a complete snapshot directly. Parser-counter tests prove
+direct compilation and semantic edits do not render or reparse text.
+
+An in-process `Workspace` owns the current `Arc<WorkspaceSnapshot>`, one-revision atomic publication,
+and generation-aware entity/node allocation. Snapshots own complete or typed-hole program state,
+private typed HIR, deterministic post-edit provenance, optional source attachments, opaque
+namespace/slot/generation IDs, semantic indexes, type facts, diagnostics, and hole contexts. IDs
+survive rename, formatting attachment changes, attachment removal, unrelated edits, and meaning-
+preserving descendant movement; removed identities are tombstoned.
 
 Transactions atomically batch function/binding rename, flat typed expression replacement, and typed
 hole introduce/refine/fill. They reject foreign namespaces, stale generations and revisions,
-invalid or cyclic drafts, invisible references, type/arity/effect/ownership failures, and the
-currently unsupported storage/generic/match creation cases before publication. Stable IDs are
-reconciled through private entity/node addresses: edited roots and unchanged descendants retain
-identity, removed descendants are tombstoned, and newly created descendants receive allocator IDs.
-A successful transaction publishes one revision and returns deterministic semantic diff,
-diagnostics, and coarse invalidation domains; a failed transaction consumes no ID or revision.
+invalid or cyclic drafts, invisible references, type/arity/effect/ownership failures, and currently
+unsupported storage/generic/match constructors before publication. Failure consumes no identity or
+revision. Success returns deterministic semantic diff, diagnostics, and coarse invalidation domains.
 
 Revision-labelled in-process queries cover paginated entity listing/search, definitions/references,
 callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
-Continuations are bound to the namespace, revision, and query. `compile_snapshot` directly lowers a
-complete snapshot and returns a typed incomplete error containing stable hole IDs otherwise. Parser
-counter tests prove rename, replacement, hole fill, and direct compilation do not parse, render, or
-round-trip text.
+Continuations bind namespace, revision, and query. A fallible, iterative concise projection renders
+selected entity, body, type, reference, and explicit `[HOLE]` headers without source attachments.
+Projection labels and formatting never construct semantic identity.
 
-The older Semantic Source service remains temporarily internal for commit 3 of the same cutover.
-It exposes revision-labelled source nodes, selected entity/node/hole queries, diagnostics, preview or
-publish transactions, and a local JSON/stdio session. It can rename declarations, replace
-expressions, and insert, fill, refine, or delete typed holes with base-revision and file
-preconditions. Publication stages and validates source files before replacement. Its schema still
-mirrors physical sources, spans, marker-shaped expressions, canonical rendered subtrees, and source
-fingerprints. Its `NodeId` is a revision plus a dense `u64` index and does not preserve identity
-across an edit. Transactions ultimately rewrite text; a later compile imports the resulting text
-into a new compiler snapshot. Unresolved references, ambiguities, general conflicts, and recovery
-nodes are not first-class workspace states. Query coverage and result pagination are not the target
-interface.
+The former syntax-shaped editing service, source-node protocol identities, stdio/session schemas,
+text journal/publication path, CLI routes, and protocol descriptors are deleted. There is no
+replacement wire service until a measured consumer justifies a process boundary and explicit host
+policy.
 
-It is not the authority for the in-process vertical above. General unresolved references, ambiguities,
-conflicts, recovery nodes, declaration creation/deletion/movement, local-storage construction,
-generic-call construction, match construction, and deterministic text rendering remain target-only.
-
-Everything below is the target contract.
+General unresolved references, ambiguities, conflicts, recovery nodes, declaration
+creation/deletion/movement, local-storage construction, generic-call construction, match
+construction, complete source rendering, persistence, collaboration, and incremental recomputation
+remain gaps. Everything below continues to define the target contract.
 
 ## 1. Snapshot authority
 

@@ -6,11 +6,11 @@ manifests remain the executable authority.
 
 ## User path
 
-The active product is local package compile/run plus an in-process semantic workspace API and the
-temporary Semantic Source stdio interface. Package files and the provisional line-oriented
-`.lkjscript` notation remain persistent import authority. Text and path entry points import exactly
-once into an immutable `WorkspaceSnapshot`; in-process `Workspace` transactions then edit that
-semantic snapshot directly without text publication. Snapshots own clone-safe resolved typed HIR,
+The active product is local package compile/run plus an in-process semantic workspace API. Package
+files and the provisional line-oriented `.lkjscript` notation remain persistent importer inputs, not
+a sibling semantic authority. Text and path entry points import exactly once into an immutable
+`WorkspaceSnapshot`; in-process `Workspace` transactions then edit that semantic snapshot directly
+without text publication. Snapshots own clone-safe resolved typed HIR,
 complete or typed-hole-overlay state, deterministic post-edit development provenance, optional
 source attachments, opaque namespace-scoped stable entity/node identities, semantic indexes, type
 facts, diagnostics, and hole contexts. Every product compile API delegates to public
@@ -89,7 +89,7 @@ and local execution explicitly select unrestricted policy. The former token, chi
 nesting, source-unit, HIR-memory, SSA-CFG, SSA-ownership-work, and retained-state-cell admission
 quotas are removed.
 
-Source positions and spans, revision-scoped source nodes, HIR and SSA identities, executable
+Source positions and spans, semantic workspace entity/node IDs, HIR and SSA identities, executable
 operands and links, structural metadata, and runtime structural identities use wide representations
 where they carry user-scale data, with checked conversion before host indexing. Parser/source-tree,
 package, type/match, CFG, structural graph, and tested deep-destruction paths use explicit work
@@ -105,16 +105,16 @@ runtime and memory cost.
 
 ## Retained validation and host boundaries
 
-Semantic Source requests retain explicit coarse request/source/response byte, request-count, and
-cancellation policy. Artifact validation may select a total-artifact-byte policy. The reusable
-execution API still supports explicit limited policy for fuel, VM values/frames, heap/allocation,
-handles, output, wall time, and cleanup-report retention; ordinary local compile/run selects the
-unrestricted form. These policies control a request and do not redefine language validity.
+Artifact validation may select a total-artifact-byte policy. The reusable execution API still
+supports explicit limited policy for fuel, VM values/frames, heap/allocation, handles, output, wall
+time, and cleanup-report retention; ordinary local compile/run selects the unrestricted form.
+These policies control an execution or artifact boundary and do not redefine language validity.
+There is currently no untrusted semantic request service or request-byte policy.
 
-Fail-closed validation remains at source and Semantic Source input, package/manifest/lock/import and
-compiler path/symlink entry, capability dispatch, bytecode validation, relocation and W^X
-installation, generated native entry, FFI, SQLite, filesystem/socket/terminal calls, and operating-
-system errors. Filesystem/network/SQLite language operations use the current process's explicitly
+Fail-closed validation remains at source importer input, package/manifest/lock/import and compiler
+path/symlink entry, typed workspace transactions, capability dispatch, bytecode validation,
+relocation and W^X installation, generated native entry, FFI, SQLite,
+filesystem/socket/terminal calls, and operating-system errors. Filesystem/network/SQLite language operations use the current process's explicitly
 granted capability and direct system mechanism; the deleted service sandbox, process framing,
 peer-authorization, database-tenant, durable-store, and platform-observation boundaries are not
 claimed as retained.
@@ -123,7 +123,7 @@ The execution-outcome wire codec is absent. `SemanticDagSnapshot` and authentica
 structural snapshot import/export remain in memory for VM/JIT behavior and differential tests.
 Their memory witness facts are named semantic-snapshot facts rather than process-codec facts.
 
-## Semantic workspace compiler cutover and bootstrap service
+## Semantic workspace compiler cutover
 
 The compiler's public `workspace` module owns one syntax-independent in-memory
 `WorkspaceSnapshot` representation and an in-process `Workspace` owner for its current `Arc` and
@@ -152,28 +152,31 @@ with stable hole IDs and never installs an executable placeholder.
 Revision-labelled queries implement paginated entity listing/search, definition and references,
 callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
 Continuations are stable over one result ordering and reject another namespace, revision, or query.
-The source/path importer still privately owns loading, parsing, initial analysis, package validation,
-and initial provenance capture. Parser-counter tests prove rename, replacement, hole fill, and direct
-compile perform no parse, render, or text round trip; complete edited snapshots execute in the VM.
-An opt-in 20,000-level small-stack edit/drop stress test covers the flat draft, HIR clone, index,
-diff, and destruction path.
+A deterministic concise projection renders selected entity, body, type, reference, and explicit
+`[HOLE]` headers. It uses stable snapshot-local labels, works without source attachments, and does
+not create identity. Projection body traversal is iterative and allocation failure is typed.
 
-The existing Semantic Source JSON/stdio service remains temporarily as internal bootstrap machinery
-for commit 3. It still provides source-derived queries and staged text transactions whose schema
-mirrors syntax, spans, canonical subtrees, and source files. It is not connected to the new
-in-process API and is not a second authority for that vertical.
+The source/path importer privately owns loading, parsing, initial analysis, package validation, and
+initial provenance capture. Parser-counter tests prove rename, replacement, hole fill, and direct
+compile perform no parse, render, or text round trip; complete edited snapshots execute in the VM.
+Attachment-change tests prove formatting and source attachment removal do not alter semantic IDs or
+projection. An opt-in 20,000-level small-stack edit/drop/projection stress test covers the flat
+draft, HIR clone, index, diff, rendering, and destruction path. The former syntax-shaped editing
+service, dense source-node identities, protocol/session schemas, text journal/publication path, CLI
+routing, and protocol contracts are deleted. No replacement wire service exists pending a measured
+consumer.
 
 ## Known gaps
 
-- Text remains persistent import authority and deterministic workspace text rendering is not
-  implemented. In-process semantic transactions cover only rename, scalar/load/non-generic-call/if
-  replacement, and one typed-hole state; declaration creation/deletion/movement, local storage,
-  generic/match creation, unresolved names, ambiguities, conflicts, and recovery states remain.
-- Semantic Source remains syntax-shaped and separate from the in-process workspace API. Its dense
-  IDs are not edit-stable semantic IDs, and deleting that temporary service path is scheduled for
-  commit 3 of the same cutover.
-- Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
-  not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
+- Text remains a persistent package/import format, but not a compiler or editing authority. The
+  implemented concise projection is review/debug output, not a complete source renderer. Semantic
+  transactions cover only rename, scalar/load/non-generic-call/if replacement, and one typed-hole
+  state; declaration creation/deletion/movement, local storage, generic/match creation, unresolved
+  names, ambiguities, conflicts, and recovery states remain.
+- There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
+  Add one only after a measured consumer establishes the boundary and resource policy.
+- Recursive transaction, runtime structural-value, and specialization paths do not all have
+  deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

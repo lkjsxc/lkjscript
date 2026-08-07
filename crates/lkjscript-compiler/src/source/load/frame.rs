@@ -67,7 +67,6 @@ pub(super) fn load_frame(
         &metadata,
         &canonical,
         &origin,
-        state.byte_policy,
         &mut state.completed_source_bytes,
     )?;
     let final_canonical = super::containment::opened_source_path(
