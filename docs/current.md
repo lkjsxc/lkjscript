@@ -97,8 +97,10 @@ IDs, and bytecode structural type/layout/representation/destination IDs use the 
 host-index boundary. SSA
 function, block, value, binding, trait, implementation, place, loan, origin, frame-state bytecode
 position, and bytecode-link identities are canonical `u64`; synthetic origins and unresolved
-witness group membership are typed states rather than numeric sentinels. The two retained seal
-thresholds select a total generic placement fallback and cannot reject a program. Uses, loan ends,
+witness group membership are typed states rather than numeric sentinels. Residual generic lowering
+preserves every independently owned dynamic parameter in declaration order; multi-witness generic
+source executes through the validated VM path without owner alias or local-reuse loss. The two
+retained seal thresholds select a total generic placement fallback and cannot reject a program. Uses, loan ends,
 direct calls, expression entries, source places, destination children, borrow scopes, drop paths,
 declaration metadata, and structural destination metadata are preindexed instead of repeatedly
 scanning complete tables. Generated HIR coverage derives and independently verifies 65,537 uses

@@ -52,11 +52,7 @@ impl FunctionBuilder<'_> {
             u64::try_from(self.places.len())
                 .map_err(|_| Error::msg("SSA synthetic place count exceeds u64"))?,
         );
-        let binding = BindingId::new(self.next_synthetic_binding);
-        self.next_synthetic_binding = self
-            .next_synthetic_binding
-            .checked_add(1)
-            .ok_or_else(|| Error::msg("SSA synthetic binding identity overflow"))?;
+        let binding = allocate_synthetic_binding(&mut self.next_synthetic_binding)?;
         self.places.push(PlaceMetadata {
             id: place,
             binding: SsaBindingId::new(binding.raw()),
@@ -148,5 +144,38 @@ impl FunctionBuilder<'_> {
             self.end_owned_place(owner.binding, expression_origin)?;
         }
         Ok(())
+    }
+}
+
+fn allocate_synthetic_binding(next: &mut Option<u64>) -> Result<BindingId> {
+    let raw = next.take().ok_or_else(|| {
+        Error::host("SSA synthetic binding identity exceeds u64 representation")
+    })?;
+    *next = raw.checked_add(1);
+    Ok(BindingId::new(raw))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synthetic_binding_allocator_uses_final_identity_once() {
+        let mut next = Some(u64::MAX);
+        assert_eq!(
+            allocate_synthetic_binding(&mut next).map(BindingId::raw),
+            Ok(u64::MAX)
+        );
+        assert_eq!(next, None);
+
+        let exhausted = allocate_synthetic_binding(&mut next);
+        assert!(exhausted.is_err());
+        if let Err(error) = exhausted {
+            assert_eq!(error.class(), lkjscript_core::ErrorClass::Host);
+            assert_eq!(
+                error.as_str(),
+                "SSA synthetic binding identity exceeds u64 representation"
+            );
+        }
     }
 }

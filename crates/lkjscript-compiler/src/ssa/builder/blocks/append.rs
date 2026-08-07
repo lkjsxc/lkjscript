@@ -36,7 +36,7 @@ impl FunctionBuilder<'_> {
         let failure = failure_behavior(effects);
         let failure_cleanup = self.intern_failure_cleanup(&call_handoff)?;
         let metadata = InstructionMetadata {
-            origin: self.next_origin(expression_origin.raw()),
+            origin: self.next_origin(expression_origin.raw())?,
             effects,
             failure,
             failure_cleanup,
@@ -56,10 +56,8 @@ impl FunctionBuilder<'_> {
         Ok(id)
     }
 
-    pub(in crate::ssa) fn next_origin(&mut self, source: u64) -> Origin {
-        let position = self.next_position;
-        self.next_position = self.next_position.saturating_add(1);
-        origin(source, position)
+    pub(in crate::ssa) fn next_origin(&mut self, source: u64) -> Result<Origin> {
+        allocate_origin(&mut self.next_position, source)
     }
 
     pub(in crate::ssa) fn frame_state(&self) -> FrameState {
@@ -94,6 +92,14 @@ impl FunctionBuilder<'_> {
         )?;
         self.publish_structural_source(ty, source, expression_origin)
     }
+}
+
+fn allocate_origin(next_position: &mut u64, source: u64) -> Result<Origin> {
+    let position = *next_position;
+    *next_position = next_position
+        .checked_add(1)
+        .ok_or_else(|| Error::host("SSA instruction origin position exceeds u64"))?;
+    Ok(origin(source, position))
 }
 
 struct SuccessOwnership {
@@ -173,5 +179,34 @@ fn success_ownership(
     SuccessOwnership {
         consumed,
         publishes_owner,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_allocation_fails_before_identity_collision() {
+        let source = 7;
+        let mut next_position = u64::MAX - 1;
+        assert_eq!(
+            allocate_origin(&mut next_position, source),
+            Ok(Origin::source(source, u64::MAX - 1))
+        );
+
+        let exhausted = allocate_origin(&mut next_position, source);
+        assert!(
+            exhausted.is_err(),
+            "exhausted origin representation allocated {exhausted:?}"
+        );
+        if let Err(error) = exhausted {
+            assert_eq!(error.class(), lkjscript_core::ErrorClass::Host);
+            assert_eq!(
+                error.as_str(),
+                "SSA instruction origin position exceeds u64"
+            );
+        }
+        assert_eq!(next_position, u64::MAX);
     }
 }

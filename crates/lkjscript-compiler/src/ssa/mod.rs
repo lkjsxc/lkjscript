@@ -121,7 +121,7 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) current: Option<BlockId>,
     pub(in crate::ssa) next_value: u64,
     pub(in crate::ssa) next_position: u64,
-    pub(in crate::ssa) next_synthetic_binding: u64,
+    pub(in crate::ssa) next_synthetic_binding: Option<u64>,
     pub(in crate::ssa) value_types: Vec<SsaType>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) failure_cleanups: FailureCleanupInterner,

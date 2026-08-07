@@ -21,7 +21,7 @@ impl<'a> FunctionBuilder<'a> {
             .iter()
             .map(|place| place.binding.raw())
             .max()
-            .map_or(0, |binding| binding.saturating_add(1));
+            .map_or(Some(0), |binding| binding.checked_add(1));
         let places = cleanup.places.clone();
         Self {
             product_ids,

@@ -4,6 +4,7 @@ use crate::codegen::*;
 pub(super) enum LocalStorageClass {
     Plain,
     StructuralOwner,
+    StructuralOwnerRef,
     StructuralView,
     StructuralDestination,
 }
@@ -32,6 +33,22 @@ pub(super) fn local_storage_class(
     if ty.is_some_and(|ty| matches!(ty, SsaType::StructuralDestination(_))) {
         return LocalStorageClass::StructuralDestination;
     }
+    let dynamic_owner = ty.is_some_and(|ty| match ty {
+        SsaType::TypeParameter(parameter) => function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .any(|requirement| {
+                requirement.parameter == *parameter
+                    && requirement
+                        .operations
+                        .contains(&lkjscript_contracts::MemoryWitnessOperation::IndependentOwner)
+                    && requirement
+                        .operations
+                        .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
+            }),
+        _ => false,
+    });
     let producer = function
         .blocks
         .iter()
@@ -41,6 +58,7 @@ pub(super) fn local_storage_class(
         Some(
             InstructionKind::StructuralPublish { .. }
             | InstructionKind::StructuralCopy { .. }
+            | InstructionKind::MemoryWitnessIndependentOwner { .. }
             | InstructionKind::DestinationFinish { .. }
             | InstructionKind::AggregateConsumePayload { .. },
         ) => LocalStorageClass::StructuralOwner,
@@ -59,6 +77,20 @@ pub(super) fn local_storage_class(
             if ty.is_some_and(|ty| structural_owner_representation(chunk, ty).is_some()) =>
         {
             LocalStorageClass::StructuralOwner
+        }
+        _ if function
+            .blocks
+            .iter()
+            .find(|block| block.id == function.entry)
+            .is_some_and(|block| {
+                block
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.id == value)
+            })
+            && dynamic_owner =>
+        {
+            LocalStorageClass::StructuralOwnerRef
         }
         _ if function
             .blocks

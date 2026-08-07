@@ -24,7 +24,7 @@ pub(in crate::ssa) fn construct_program(
     if !region_products.is_empty() && structural.types.is_empty() {
         structural.plan = lkjscript_ir::MemoryPlanId::new(memory_plan.id.as_bytes());
     }
-    let function_parameter_modes = parameter_modes(&function_ids, memory_plan);
+    let function_parameter_modes = parameter_modes(&function_ids, memory_plan)?;
     let function_witness_parameters = witness_parameters(memory_plan)?;
     let function_effects = function_effects(program, &function_ids);
 

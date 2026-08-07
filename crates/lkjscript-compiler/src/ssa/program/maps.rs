@@ -1,16 +1,15 @@
 fn parameter_modes(
     function_ids: &HashMap<BindingId, FunctionId>,
     memory_plan: &HirMemoryPlan,
-) -> HashMap<FunctionId, Vec<MemoryParameterMode>> {
+) -> Result<HashMap<FunctionId, Vec<MemoryParameterMode>>> {
     function_ids
         .values()
         .copied()
         .map(|id| {
-            let modes = memory_plan
+            let function = memory_plan
                 .function(MemoryFunctionId::new(id.raw()))
-                .map(|function| function.signature.parameters.clone())
-                .unwrap_or_default();
-            (id, modes)
+                .ok_or_else(|| Error::msg("HIR function has no verified memory signature"))?;
+            Ok((id, function.signature.parameters.clone()))
         })
         .collect()
 }
