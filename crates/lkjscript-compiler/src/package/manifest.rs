@@ -33,11 +33,7 @@ pub(super) fn find_root(entry: &Path) -> Result<PathBuf> {
 pub(super) fn load(root: &Path) -> Result<(Manifest, Vec<u8>)> {
     let path = root.join(MANIFEST);
     reject_symlink(root, &path)?;
-    let bytes = fs::read(&path)
-        .map_err(|error| Error::host(format!("read {}: {error}", path.display())))?;
-    if bytes.len() > 1024 * 1024 {
-        return Err(Error::msg("package manifest exceeds 1 MiB"));
-    }
+    let bytes = super::read::unchanged_file(&path, "package manifest")?;
     let manifest: Manifest = serde_json::from_slice(&bytes)
         .map_err(|error| Error::msg(format!("decode {}: {error}", path.display())))?;
     validate(root, &manifest)?;
@@ -147,7 +143,7 @@ pub(super) fn path(label: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn reject_symlink(root: &Path, path: &Path) -> Result<()> {
+pub(super) fn reject_symlink(root: &Path, path: &Path) -> Result<()> {
     let relative = path
         .strip_prefix(root)
         .map_err(|_| Error::msg("package path escapes root"))?;

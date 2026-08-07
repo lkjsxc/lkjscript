@@ -25,7 +25,13 @@
    core structural-image node/range identities, and native source/plan links now use `u64` with
    checked host conversion. Synthetic/unresolved states and native layout domains no longer use
    collision-prone numeric sentinels or arithmetic tags.
-   Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
+   Trusted package loading no longer rejects manifests above 1 MiB, canonical locks above 16 MiB,
+   or dependency graphs by native recursion depth. Checked fallible EOF reads use metadata only as
+   an allocation and file-change hint, while iterative indexed DFS owns deterministic dependency
+   completion and cycle detection without count or depth admission. Generated coverage checks and
+   compiles a package whose manifest and lock exceed 17 MiB, resolves 512 nested packages on a
+   256 KiB native stack, resolves 512 direct dependencies, and reports a terminal cycle
+   deterministically. Trusted bytecode validation no longer has total encoded-byte, table-entry, metadata-byte,
    constant-data-byte, or cleanup-node/range count admission; a boundary-local limited validator
    checks only total artifact bytes and has no finite default. Byte-sized function arity, call
    argument, local, cleanup-local, and executable-place widths are

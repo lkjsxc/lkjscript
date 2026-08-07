@@ -1,7 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
 use std::fs;
-use std::path::PathBuf;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::*;
@@ -212,6 +213,184 @@ fn removed_resource_profile_manifest_field_is_rejected() {
     let error = graph::build(&root).unwrap_err().to_string();
     assert!(error.contains("resource_profile") || error.contains("unknown field"));
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn package_reader_reaches_eof_and_rejects_metadata_growth_and_shrinkage() {
+    let path = Path::new("lkjscript.package.json");
+    let mut exact = Cursor::new(vec![b'x'; 4]);
+    assert_eq!(
+        read::bytes(&mut exact, 4, path, "package manifest").unwrap(),
+        b"xxxx"
+    );
+
+    let mut grown = Cursor::new(vec![b'x'; 4]);
+    let growth = read::bytes(&mut grown, 2, path, "package manifest").unwrap_err();
+    assert_eq!(growth.class(), lkjscript_core::ErrorClass::Host);
+    assert!(growth.to_string().contains("metadata=2; read=4"));
+
+    let mut shortened = Cursor::new(vec![b'x']);
+    let shrinkage = read::bytes(&mut shortened, 2, path, "package manifest").unwrap_err();
+    assert_eq!(shrinkage.class(), lkjscript_core::ErrorClass::Host);
+    assert!(shrinkage.to_string().contains("metadata=2; read=1"));
+
+    let mut stale_host_width_hint = Cursor::new(vec![b'x']);
+    let stale = read::bytes(
+        &mut stale_host_width_hint,
+        u64::MAX,
+        path,
+        "package manifest",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(stale.contains("metadata=18446744073709551615; read=1"));
+}
+
+#[test]
+fn ordinary_package_check_and_compile_accept_large_manifest_and_lock() {
+    const LARGE_NAME_BYTES: usize = 17 * 1024 * 1024;
+
+    let root = fixture("large-files");
+    let manifest_path = root.join(MANIFEST_FILE);
+    let mut manifest: Manifest =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest.name = "a".repeat(LARGE_NAME_BYTES);
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest).unwrap();
+    assert!(manifest_bytes.len() > 1024 * 1024);
+    fs::write(&manifest_path, &manifest_bytes).unwrap();
+
+    let (lock_path, lock_bytes) = create_lock(&root).unwrap();
+    assert!(lock_bytes.len() > 16 * 1024 * 1024);
+    fs::write(&lock_path, &lock_bytes).unwrap();
+    verify(&root).unwrap();
+    crate::compile_path(&root.join("main.lkjscript")).unwrap();
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn dependency_graph_is_stack_safe_at_depth_and_reports_cycle_deterministically() {
+    const DEPTH: usize = 512;
+
+    let root = directory("deep-graph");
+    let mut paths = Vec::new();
+    paths.try_reserve(DEPTH).unwrap();
+    paths.push(root.clone());
+    for _ in 1..DEPTH {
+        let child = paths.last().unwrap().join("d");
+        fs::create_dir(&child).unwrap();
+        paths.push(child);
+    }
+
+    let mut child_hash: Option<String> = None;
+    for (index, path) in paths.iter().enumerate().rev() {
+        let dependencies = child_hash
+            .as_ref()
+            .map(|hash| {
+                vec![Dependency {
+                    name: "next".into(),
+                    path: "d".into(),
+                    content_sha256: hash.clone(),
+                }]
+            })
+            .unwrap_or_default();
+        let manifest = empty_manifest(&format!("p{index}"), dependencies);
+        write_manifest(path, &manifest);
+        child_hash = Some(package_identity(&manifest));
+    }
+
+    let build_root = root.clone();
+    let lock = std::thread::Builder::new()
+        .name("deep-package-graph".into())
+        .stack_size(256 * 1024)
+        .spawn(move || graph::build(&build_root))
+        .unwrap()
+        .join()
+        .unwrap()
+        .unwrap();
+    assert_eq!(lock.packages.len(), DEPTH);
+
+    let leaf = paths.last().unwrap();
+    let cycle_manifest = empty_manifest(
+        "cycle",
+        vec![Dependency {
+            name: "self".into(),
+            path: ".".into(),
+            content_sha256: "0".repeat(64),
+        }],
+    );
+    write_manifest(leaf, &cycle_manifest);
+    let first = graph::build(&root).unwrap_err().to_string();
+    let second = graph::build(&root).unwrap_err().to_string();
+    assert_eq!(first, "local package dependency cycle");
+    assert_eq!(second, first);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn wide_dependency_graph_is_unrestricted_and_deterministic() {
+    const WIDTH: usize = 512;
+
+    let root = directory("wide-graph");
+    let mut dependencies = Vec::new();
+    dependencies.try_reserve(WIDTH).unwrap();
+    for index in 0..WIDTH {
+        let name = format!("d{index:05}");
+        let child = root.join(&name);
+        fs::create_dir(&child).unwrap();
+        let manifest = empty_manifest(&name, Vec::new());
+        write_manifest(&child, &manifest);
+        dependencies.push(Dependency {
+            name: name.clone(),
+            path: name,
+            content_sha256: package_identity(&manifest),
+        });
+    }
+    write_manifest(&root, &empty_manifest("wide", dependencies));
+
+    let first = graph::build(&root).unwrap();
+    let second = graph::build(&root).unwrap();
+    assert_eq!(first.packages.len(), WIDTH + 1);
+    assert_eq!(second, first);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+fn empty_manifest(name: &str, dependencies: Vec<Dependency>) -> Manifest {
+    Manifest {
+        schema: "lkjscript.package".into(),
+        contract: contracts::expected(lkjscript_contracts::PACKAGE_MANIFEST)
+            .unwrap()
+            .to_hex(),
+        name: name.into(),
+        source_root: ".".into(),
+        modules: Vec::new(),
+        public: Vec::new(),
+        dependencies,
+        capabilities: Vec::new(),
+        targets: Vec::new(),
+    }
+}
+
+fn write_manifest(root: &Path, manifest: &Manifest) {
+    fs::write(
+        root.join(MANIFEST_FILE),
+        serde_json::to_vec_pretty(manifest).unwrap(),
+    )
+    .unwrap();
+}
+
+fn package_identity(manifest: &Manifest) -> String {
+    let manifest_bytes = serde_json::to_vec(manifest).unwrap();
+    let manifest_hash = lkjscript_contracts::ContractDigest::from_bytes(
+        lkjscript_contracts::sha256(&manifest_bytes),
+    )
+    .to_hex();
+    let modules = Vec::<LockedModule>::new();
+    let targets = Vec::<LockedTargetMemory>::new();
+    let memory_hash = graph::package_memory_hash(&modules).unwrap();
+    graph::package_hash(&manifest_hash, &memory_hash, &modules, &targets).unwrap()
 }
 
 mod forgery;

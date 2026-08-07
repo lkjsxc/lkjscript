@@ -130,8 +130,16 @@ drops partial trees on the same small stack. Other generated coverage compiles a
 source 1,024 bytes beyond the former 16 MiB boundary and exercises the source authority with 65,537
 in-memory units. Checked accounting crosses 256 MiB; the exact 258 MiB compile-and-execute geometry
 is retained as an opt-in stress test and has not been run as part of normal verification. Compile
-metrics are observational phase timings and source-file counts only. Package manifests and
-prepared-program identities likewise do not carry compiler-profile identity. Trusted compiler
+metrics are observational phase timings and source-file counts only. Trusted local package
+verification reads manifests and canonical locks to EOF in checked, fallibly reserved chunks. File
+metadata is only an initial allocation hint and a growth, shrinkage, and replacement consistency
+check; it is not admission. The former 1 MiB manifest and 16 MiB lock limits are removed. Package
+dependency traversal uses an explicit DFS frame stack plus indexed visiting/completed states, so
+cycle detection and shared dependency reuse do not consume the native stack or repeatedly scan all
+packages. Generated ordinary check-and-compile coverage uses a valid manifest and canonical lock
+larger than 17 MiB, a 512-package chain on a 256 KiB thread stack, and 512 direct dependencies;
+the deep fixture also reports a real terminal cycle identically on repeated builds. Package
+manifests and prepared-program identities likewise do not carry compiler-profile identity. Trusted compiler
 output and prepared-identity rebinding now validate bytecode with an explicit unrestricted mode:
 there is no finite default, total encoded-byte ceiling, physical-table count ceiling, metadata-byte
 ceiling, or per-constant data ceiling. The boundary-local `ValidationPolicy::Limited` variant checks

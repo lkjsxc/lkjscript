@@ -9,6 +9,7 @@ mod manifest;
 mod model;
 mod prepared;
 pub(crate) mod program;
+mod read;
 mod target_memory;
 
 use std::path::{Path, PathBuf};

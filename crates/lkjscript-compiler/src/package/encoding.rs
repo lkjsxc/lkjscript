@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 
 use lkjscript_core::{Error, Result};
@@ -109,11 +108,8 @@ const fn comma(value: bool) -> &'static str {
 
 pub(super) fn read(root: &Path) -> Result<(LockFile, Vec<u8>)> {
     let path = root.join(super::manifest::LOCK);
-    let bytes = fs::read(&path)
-        .map_err(|error| Error::host(format!("read {}: {error}", path.display())))?;
-    if bytes.len() > 16 * 1024 * 1024 {
-        return Err(Error::msg("package lock exceeds 16 MiB"));
-    }
+    super::manifest::reject_symlink(root, &path)?;
+    let bytes = super::read::unchanged_file(&path, "package lock")?;
     let lock: LockFile = serde_json::from_slice(&bytes)
         .map_err(|error| Error::msg(format!("decode {}: {error}", path.display())))?;
     if encode(&lock)? != bytes {

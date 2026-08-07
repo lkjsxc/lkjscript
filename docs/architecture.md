@@ -100,6 +100,17 @@ and closed ABI tags remain checked narrow machine boundaries. The native planner
 eligibility where required; checked preflight declines unsupported shapes and automatic execution
 uses validated VM bytecode.
 
+Trusted package loading uses the same resource separation: manifests and canonical lock files are
+read to EOF with checked byte accounting and fallible chunk growth, without a category-specific or
+aggregate local byte quota. Open-file and path metadata are compared before publication to reject
+growth, shrinkage, or replacement during a read. Package graph construction is deterministic
+iterative postorder DFS. A hash index owns each canonical path's visiting or completed state, an
+explicit frame stack owns pending dependencies, and the final package vector is sorted by content
+identity before canonical lock encoding. There is no dependency count or depth admission rule;
+allocation, host-width, and I/O failures remain typed host failures. Package schema, digest,
+ordering, cycle, path containment, exact module declarations, and symlink checks remain semantic or
+security validation.
+
 The intended cutover is described in [`source-model.md`](source-model.md): text becomes an importer
 and renderer around an immutable semantic snapshot, and compiler analysis consumes that snapshot
 directly.
