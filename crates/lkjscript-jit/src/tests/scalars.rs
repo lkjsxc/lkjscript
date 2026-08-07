@@ -1,5 +1,63 @@
+use super::*;
 use crate::scalar::owned_scalar;
-use crate::*;
+
+#[test]
+fn automatic_stack_representation_decline_is_retry_safe_before_native_entry() {
+    let program = terminal_program(
+        Terminator::Outcome {
+            outcome: StructuredOutcome::DeadlineExceeded,
+            detail: None,
+        },
+        EffectSet::PURE,
+    );
+    let main = program.program().main;
+    let links = lkjscript_ir::BytecodeLinkMetadata {
+        main,
+        functions: vec![lkjscript_ir::FunctionBytecodeLink {
+            function: main,
+            prototype: Some(0),
+            is_main: true,
+            blocks: Vec::new(),
+            instructions: Vec::new(),
+        }],
+    };
+    let mut session = JitSession::new_auto(&program, &links, JitConfig::default());
+    session
+        .compile_group(main)
+        .expect("compile automatic scalar");
+    let object = session.objects.first_mut().expect("automatic code object");
+    let requirement = object
+        .automatic_stack_requirements
+        .iter_mut()
+        .find(|(function, _)| *function == main)
+        .expect("automatic stack requirement");
+    requirement.1 = usize::MAX;
+
+    let error = session
+        .invoke_scalar(main, &[], &ExecutionPolicy::unrestricted())
+        .expect_err("unrepresentable automatic stack requirement must decline");
+    assert_eq!(error.code(), FailureCode::NativeStackBoundary);
+    assert!(session.objects[0].invalidated);
+    assert_eq!(session.native_entries, 0);
+    let record = &session.functions[main.index().expect("main index")];
+    assert_eq!(record.state(), TierState::Disabled);
+    assert_eq!(
+        record.last_failure(),
+        Some(FailureCode::NativeStackBoundary)
+    );
+
+    let after_entry = invocation_error(
+        main,
+        InvocationError::NativeStackBoundary {
+            boundary: lkjscript_executable::NativeStackBoundary::GuardReached,
+            retry_safe: false,
+        },
+    );
+    assert_eq!(
+        after_entry.code(),
+        FailureCode::NativeStackBoundaryAfterEntry
+    );
+}
 
 #[test]
 fn detached_native_scalars_retain_exact_payload_without_snapshot_objects() {

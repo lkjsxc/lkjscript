@@ -98,10 +98,20 @@ generated code and runtime dispatch; an explicit presence word carries optional 
 reserving a numeric value. Executable installation fallibly builds a sorted wide source-ID to
 installed-entry mapping before publishing W^X state. Invocation entry counters are indexed only by
 checked local ordinals, and invocation-local active-frame vectors grow under explicit execution
-policy instead of imposing a native source-count or depth ceiling. Automatic bookkeeping failure
-invalidates the optimization and retains VM execution; diagnostic forced-native entry reports a
-typed backend failure. Machine-code offsets, x86 frame sizes/displacements, registers, opcodes,
-and closed ABI tags remain checked narrow machine boundaries. The native planner retains compact calling-convention aggregate
+policy instead of imposing a native source-count or depth ceiling. Unrestricted native invocation
+has no aggregate or per-frame project-selected byte ceiling: each generated prologue uses checked
+frame arithmetic and the current thread's discovered stack extent and guard. Limited execution
+forwards its explicit remaining frame and VM-value policy to native active-frame and value-home
+accounting; native stack bytes are not a hidden policy category. Automatic recursive call groups
+remain on the heap-framed VM route because retrying a partially executed recursive native group
+could duplicate effects. For an acyclic automatic group, JIT planning computes the checked longest
+generated call-stack requirement and executable invocation checks it before the first frame enters.
+A discovered OS-stack/guard boundary or native stack-representation failure then returns a typed,
+retry-safe optimization decline, invalidates the code object, and resumes the unchanged VM call;
+no native poll, effect, frame publication, fuel debit, or deadline reset has occurred. A boundary
+discovered after a forced native frame has entered is reported explicitly and is never retried.
+Machine-code offsets, x86 frame sizes/displacements, registers, opcodes, and closed ABI tags remain
+checked narrow machine boundaries. The native planner retains compact calling-convention aggregate
 eligibility where required; checked preflight declines unsupported shapes and automatic execution
 uses validated VM bytecode.
 
@@ -136,7 +146,9 @@ The SSA evaluator remains useful as a semantic test oracle but is not the produc
 policy contains only coarse fuel, VM value/frame, heap/allocation, handle, output, wall-deadline,
 hard-deadline, and cleanup-report-retention resources. Unrestricted checks are absent rather than
 represented by integer sentinels. Automatic VM/native transitions preserve the policy and forward
-remaining fuel and wall time. Cleanup retention controls only reported host output and never stops
+remaining fuel, wall time, VM frame capacity, and value capacity. A retry-safe native optimization
+decline consumes none of those resources before VM continuation. Cleanup retention controls only
+reported host output and never stops
 cleanup work. The independent logical-aggregate-construction count is removed.
 List equality uses explicit work stacks in evaluator, VM, baseline-native, and structural-native
 services; allocation failure is resource exhaustion, not a comparison-count trap. Unique byte

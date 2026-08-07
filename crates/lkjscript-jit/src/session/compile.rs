@@ -73,6 +73,16 @@ impl JitSession {
         let runtime_calls = lowered.image.runtime_calls().to_vec();
         let numeric_conversion_sites = numeric_conversion_sites(&lowered.image);
         let frames = lowered.image.frames().to_vec();
+        let automatic_stack_requirements = if self.links.is_some() {
+            automatic_stack_requirements(
+                self.program.program(),
+                &lowered.functions,
+                &lowered.image,
+                root,
+            )?
+        } else {
+            Vec::new()
+        };
         let source_map = lowered.image.source_map().to_vec();
         let trap_map = lowered.image.trap_map().to_vec();
         let outcome_map = lowered.image.outcome_map().to_vec();
@@ -114,6 +124,7 @@ impl JitSession {
             runtime_calls,
             numeric_conversion_sites,
             frames,
+            automatic_stack_requirements,
             source_map,
             trap_map,
             outcome_map,
@@ -167,6 +178,204 @@ impl JitSession {
         }
         Ok(identity)
     }
+}
+
+fn automatic_stack_requirements(
+    program: &lkjscript_ir::Program,
+    functions: &[FunctionId],
+    image: &lkjscript_native::InstallableImage,
+    root: FunctionId,
+) -> Result<Vec<(FunctionId, usize)>, EngineError> {
+    let mut included = vec![false; program.functions.len()];
+    let mut frame_bytes: Vec<Option<usize>> = vec![None; program.functions.len()];
+    for function in functions {
+        let Some(index) = function.index() else {
+            return Err(EngineError::new(
+                FailureCode::NativeStackBoundary,
+                Some(root),
+                "automatic native stack planning cannot index a source function",
+            ));
+        };
+        let Some(entry) = image
+            .entries()
+            .iter()
+            .find(|entry| entry.source_function().get() == function.raw())
+        else {
+            return Err(EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning cannot find the installed entry",
+            ));
+        };
+        let Some(frame) = image
+            .frames()
+            .iter()
+            .find(|frame| frame.function() == entry.function())
+        else {
+            return Err(EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning cannot find frame facts",
+            ));
+        };
+        let bytes = usize::try_from(frame.frame_bytes()).map_err(|_| {
+            EngineError::new(
+                FailureCode::NativeStackBoundary,
+                Some(*function),
+                "native frame size exceeds host stack representation",
+            )
+        })?;
+        let Some(slot) = included.get_mut(index) else {
+            return Err(EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning source index is out of range",
+            ));
+        };
+        *slot = true;
+        frame_bytes[index] = Some(bytes);
+    }
+
+    let mut edges = vec![Vec::new(); program.functions.len()];
+    for function in functions {
+        let index = function.index().ok_or_else(|| {
+            EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning source identity is invalid",
+            )
+        })?;
+        let item = program.functions.get(index).ok_or_else(|| {
+            EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning source function is absent",
+            )
+        })?;
+        for callee in item
+            .blocks
+            .iter()
+            .flat_map(|block| block.instructions.iter())
+            .filter_map(|instruction| match &instruction.kind {
+                lkjscript_ir::InstructionKind::Call {
+                    target: lkjscript_ir::CallTarget::Direct(callee),
+                    ..
+                } => Some(*callee),
+                _ => None,
+            })
+        {
+            let callee_index = callee.index().ok_or_else(|| {
+                EngineError::new(
+                    FailureCode::BackendVerification,
+                    Some(*function),
+                    "native stack planning cannot index a direct callee",
+                )
+            })?;
+            if included.get(callee_index).copied() == Some(true) {
+                edges[index].push(callee_index);
+            }
+        }
+    }
+
+    let mut requirements: Vec<Option<usize>> = vec![None; program.functions.len()];
+    let mut visiting = vec![false; program.functions.len()];
+    for function in functions {
+        let root_index = function.index().ok_or_else(|| {
+            EngineError::new(
+                FailureCode::BackendVerification,
+                Some(*function),
+                "native stack planning source identity is invalid",
+            )
+        })?;
+        if requirements[root_index].is_some() {
+            continue;
+        }
+        let mut work = vec![(root_index, false)];
+        while let Some((index, expanded)) = work.pop() {
+            if requirements[index].is_some() {
+                continue;
+            }
+            if expanded {
+                let mut deepest_callee = 0_usize;
+                for callee in &edges[index] {
+                    let callee_bytes = requirements[*callee].ok_or_else(|| {
+                        EngineError::new(
+                            FailureCode::BackendVerification,
+                            program.functions.get(index).map(|item| item.id),
+                            "native stack planning postorder is incomplete",
+                        )
+                    })?;
+                    let with_call_frame = callee_bytes
+                        .checked_add(2 * std::mem::size_of::<usize>())
+                        .ok_or_else(|| {
+                            EngineError::new(
+                                FailureCode::NativeStackBoundary,
+                                program.functions.get(index).map(|item| item.id),
+                                "native call-stack requirement exceeds host representation",
+                            )
+                        })?;
+                    deepest_callee = deepest_callee.max(with_call_frame);
+                }
+                requirements[index] = Some(
+                    frame_bytes[index]
+                        .ok_or_else(|| {
+                            EngineError::new(
+                                FailureCode::BackendVerification,
+                                program.functions.get(index).map(|item| item.id),
+                                "native stack planning frame size is absent",
+                            )
+                        })?
+                        .checked_add(deepest_callee)
+                        .ok_or_else(|| {
+                            EngineError::new(
+                                FailureCode::NativeStackBoundary,
+                                program.functions.get(index).map(|item| item.id),
+                                "native stack requirement exceeds host representation",
+                            )
+                        })?,
+                );
+                visiting[index] = false;
+                continue;
+            }
+            if visiting[index] {
+                return Err(EngineError::new(
+                    FailureCode::NativeStackBoundary,
+                    program.functions.get(index).map(|item| item.id),
+                    "automatic native entry declines a recursive call graph",
+                ));
+            }
+            visiting[index] = true;
+            work.push((index, true));
+            for callee in edges[index].iter().rev() {
+                if requirements[*callee].is_none() {
+                    work.push((*callee, false));
+                }
+            }
+        }
+    }
+
+    functions
+        .iter()
+        .map(|function| {
+            let index = function.index().ok_or_else(|| {
+                EngineError::new(
+                    FailureCode::BackendVerification,
+                    Some(*function),
+                    "native stack requirement source identity is invalid",
+                )
+            })?;
+            Ok((
+                *function,
+                requirements[index].ok_or_else(|| {
+                    EngineError::new(
+                        FailureCode::BackendVerification,
+                        Some(*function),
+                        "native stack requirement was not computed",
+                    )
+                })?,
+            ))
+        })
+        .collect()
 }
 
 fn numeric_conversion_sites(

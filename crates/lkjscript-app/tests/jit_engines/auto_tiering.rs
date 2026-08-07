@@ -3,6 +3,21 @@ use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{JitConfig, JitSession, TierState};
 use lkjscript_vm::{run_chunk, run_chunk_auto};
 
+fn padded_recursive_source(depth: usize, padding_values: usize) -> String {
+    let mut source = String::from(
+        "def/\nname/\nrecur\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\n0\ndo/\n",
+    );
+    for _ in 0..padding_values {
+        source.push_str("0\n");
+    }
+    source.push_str(
+        "recur/\nsubtract/\nn\n1\n/subtract\n/recur\n/do\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nrecur/\n",
+    );
+    source.push_str(&depth.to_string());
+    source.push_str("\n/recur\n/main\n");
+    source
+}
+
 fn generated_scalar_helpers(count: usize) -> String {
     let mut source = String::new();
     for index in 0..count {
@@ -18,6 +33,38 @@ fn generated_scalar_helpers(count: usize) -> String {
     }
     source.push_str("/do\n/main\n");
     source
+}
+
+#[test]
+fn recursive_auto_stays_failure_atomic_and_matches_vm() {
+    const DEPTH: usize = 600;
+
+    let source = padded_recursive_source(DEPTH, 0);
+    let program = compile(&source, "auto-recursive-stack.lkjscript");
+    let vm = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (automatic, stats) = run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+        session,
+    );
+    assert_eq!(execution(automatic), execution(vm));
+    let recursive = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "recur")
+        .expect("recursive tier record");
+    assert!(!recursive.auto_entry_eligible());
+    assert_eq!(recursive.state(), TierState::VmOnly);
+    assert_eq!(recursive.native_entries(), 0);
+    assert!(recursive.call_count() >= u64::try_from(DEPTH).expect("test depth fits u64"));
 }
 
 #[test]

@@ -66,10 +66,15 @@ pub(crate) fn install_error(function: FunctionId, error: InstallError) -> Engine
 }
 
 pub(crate) fn invocation_error(function: FunctionId, error: InvocationError) -> EngineError {
-    let code = if error == InvocationError::NativeBookkeepingAllocationFailed {
-        FailureCode::NativeBookkeeping
-    } else {
-        FailureCode::InvocationFailure
+    let code = match error {
+        InvocationError::NativeBookkeepingAllocationFailed => FailureCode::NativeBookkeeping,
+        InvocationError::NativeStackBoundary {
+            retry_safe: true, ..
+        } => FailureCode::NativeStackBoundary,
+        InvocationError::NativeStackBoundary {
+            retry_safe: false, ..
+        } => FailureCode::NativeStackBoundaryAfterEntry,
+        _ => FailureCode::InvocationFailure,
     };
     EngineError::new(code, Some(function), error.to_string())
 }

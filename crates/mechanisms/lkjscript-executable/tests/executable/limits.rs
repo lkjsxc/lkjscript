@@ -58,11 +58,16 @@ fn rejects_unknown_high_source_entry_accounting() -> Result<(), Box<dyn std::err
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
-fn grows_active_frame_tracking_beyond_sixty_four() -> Result<(), Box<dyn std::error::Error>> {
+fn unrestricted_native_stack_crosses_former_aggregate_ceiling(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const FUNCTION_COUNT: usize = 70;
+    const LOCALS_PER_FUNCTION: usize = 8_000;
+    const FORMER_AGGREGATE_CEILING: usize = 4 * 1024 * 1024;
+
     let mut plan = MachinePlanBuilder::new();
     let signature = Signature::new(vec![ValueType::I64], ValueType::I64)?;
     let mut functions = Vec::new();
-    for source in 0..100_u64 {
+    for source in 0..u64::try_from(FUNCTION_COUNT)? {
         functions
             .push(plan.declare_function(SourceFunctionId::new(source + 1_000), signature.clone())?);
     }
@@ -70,6 +75,9 @@ fn grows_active_frame_tracking_beyond_sixty_four() -> Result<(), Box<dyn std::er
         let mut builder = plan.function_builder(function)?;
         let entry = builder.create_block()?;
         builder.set_entry(entry)?;
+        for _ in 0..LOCALS_PER_FUNCTION {
+            builder.create_local(ValueType::I64)?;
+        }
         let input = builder.parameter(0)?;
         let result = if index == 0 {
             input
@@ -82,28 +90,138 @@ fn grows_active_frame_tracking_beyond_sixty_four() -> Result<(), Box<dyn std::er
     let limits = BackendLimits::new(
         128,
         1_024,
-        16_384,
-        1_024,
-        4 * 1024 * 1024,
-        4 * 1024 * 1024,
-        100_000,
+        1_000_000,
+        LOCALS_PER_FUNCTION,
+        32 * 1024 * 1024,
+        128 * 1024 * 1024,
+        20_000_000,
     );
     let image = encode(
         plan.verify(limits)?,
         EncodingConfig::new(ImageContracts::current()),
     )?;
-    let installed = ExecutableInstaller::default().install(image)?;
-    let report = installed.invoke_with_config(
-        functions[99],
-        &[NativeValue::I64(7)],
-        &NativeInvocationConfig::unrestricted(),
-    )?;
-    assert_eq!(
-        report.outcome(),
-        InvocationOutcome::Returned(NativeValue::I64(7))
+    let installation_limits = ExecutableLimits::new(
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        1,
     );
-    assert!(report.peak_active_frame_depth() > 64);
-    assert_eq!(report.active_frame_depth(), 0);
+    let installed = ExecutableInstaller::new(installation_limits).install(image)?;
+    let entry = functions[FUNCTION_COUNT - 1];
+    let (value, depth, stack_bytes) = std::thread::Builder::new()
+        .name("native-aggregate-stack".into())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || {
+            let report = installed
+                .invoke_with_config(
+                    entry,
+                    &[NativeValue::I64(7)],
+                    &NativeInvocationConfig::unrestricted(),
+                )
+                .map_err(|error| error.to_string())?;
+            let value = match report.outcome() {
+                InvocationOutcome::Returned(NativeValue::I64(value)) => value,
+                other => return Err(format!("unexpected aggregate-stack outcome: {other:?}")),
+            };
+            Ok::<_, String>((
+                value,
+                report.peak_active_frame_depth(),
+                report.peak_native_stack_bytes(),
+            ))
+        })?
+        .join()
+        .map_err(|_| "aggregate native stack thread panicked")??;
+    assert_eq!(value, 7);
+    assert!(depth > 64);
+    assert!(stack_bytes > FORMER_AGGREGATE_CEILING, "{stack_bytes}");
+    Ok(())
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn unrestricted_large_frame_runs_or_reports_actual_thread_boundary(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const LOCAL_COUNT: usize = 132_000;
+    const FORMER_FRAME_CEILING: usize = 1024 * 1024;
+
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(9_000),
+        Signature::new(Vec::new(), ValueType::Unit)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    for _ in 0..LOCAL_COUNT {
+        builder.create_local(ValueType::I64)?;
+    }
+    let unit = builder.unit(entry)?;
+    builder.return_value(entry, unit)?;
+    plan.define_function(builder.finish())?;
+    let limits = BackendLimits::new(
+        1,
+        1,
+        LOCAL_COUNT + 1,
+        LOCAL_COUNT,
+        16 * 1024 * 1024,
+        64 * 1024 * 1024,
+        5_000_000,
+    );
+    let image = encode(
+        plan.verify(limits)?,
+        EncodingConfig::new(ImageContracts::current()),
+    )?;
+    let installed = std::sync::Arc::new(ExecutableInstaller::default().install(image)?);
+
+    let large_stack = std::sync::Arc::clone(&installed);
+    let peak = std::thread::Builder::new()
+        .name("native-large-frame".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let report = large_stack
+                .invoke_with_config(function, &[], &NativeInvocationConfig::unrestricted())
+                .map_err(|error| error.to_string())?;
+            if report.outcome() != InvocationOutcome::Returned(NativeValue::Unit) {
+                return Err(format!(
+                    "unexpected large-frame outcome: {:?}",
+                    report.outcome()
+                ));
+            }
+            Ok::<_, String>(report.peak_native_stack_bytes())
+        })?
+        .join()
+        .map_err(|_| "large native frame thread panicked")??;
+    assert!(peak > FORMER_FRAME_CEILING, "{peak}");
+
+    let small_stack = std::sync::Arc::clone(&installed);
+    let boundary = std::thread::Builder::new()
+        .name("native-stack-boundary".into())
+        .stack_size(256 * 1024)
+        .spawn(move || {
+            match small_stack.invoke_with_config(
+                function,
+                &[],
+                &NativeInvocationConfig::unrestricted(),
+            ) {
+                Err(error) => error,
+                Ok(report) => panic!(
+                    "actual small thread stack entered the frame: {:?}",
+                    report.outcome()
+                ),
+            }
+        })?
+        .join()
+        .map_err(|_| "small native stack thread panicked")?;
+    assert_eq!(
+        boundary,
+        InvocationError::NativeStackBoundary {
+            boundary: lkjscript_executable::NativeStackBoundary::GuardReached,
+            retry_safe: true,
+        }
+    );
     Ok(())
 }
 

@@ -1,5 +1,94 @@
 use crate::*;
 
+fn automatic_cycle_reachable(program: &lkjscript_ir::Program) -> Vec<bool> {
+    let mut edges = vec![Vec::new(); program.functions.len()];
+    let mut reverse = vec![Vec::new(); program.functions.len()];
+    for (index, function) in program.functions.iter().enumerate() {
+        for callee in function
+            .blocks
+            .iter()
+            .flat_map(|block| block.instructions.iter())
+            .filter_map(|instruction| match &instruction.kind {
+                lkjscript_ir::InstructionKind::Call {
+                    target: lkjscript_ir::CallTarget::Direct(callee),
+                    ..
+                } => callee.index(),
+                _ => None,
+            })
+            .filter(|callee| *callee < program.functions.len())
+        {
+            edges[index].push(callee);
+            reverse[callee].push(index);
+        }
+    }
+
+    let mut visited = vec![false; program.functions.len()];
+    let mut finish_order = Vec::with_capacity(program.functions.len());
+    for start in 0..program.functions.len() {
+        if visited[start] {
+            continue;
+        }
+        visited[start] = true;
+        let mut work = vec![(start, 0_usize)];
+        while let Some((node, next_edge)) = work.last_mut() {
+            if let Some(callee) = edges[*node].get(*next_edge).copied() {
+                *next_edge += 1;
+                if !visited[callee] {
+                    visited[callee] = true;
+                    work.push((callee, 0));
+                }
+            } else {
+                finish_order.push(*node);
+                work.pop();
+            }
+        }
+    }
+
+    let mut component = vec![usize::MAX; program.functions.len()];
+    let mut cyclic_nodes = Vec::new();
+    let mut component_id = 0_usize;
+    for start in finish_order.into_iter().rev() {
+        if component[start] != usize::MAX {
+            continue;
+        }
+        component[start] = component_id;
+        let mut members = Vec::new();
+        let mut work = vec![start];
+        while let Some(node) = work.pop() {
+            members.push(node);
+            for predecessor in &reverse[node] {
+                if component[*predecessor] == usize::MAX {
+                    component[*predecessor] = component_id;
+                    work.push(*predecessor);
+                }
+            }
+        }
+        if members.len() > 1
+            || members
+                .first()
+                .is_some_and(|node| edges[*node].contains(node))
+        {
+            cyclic_nodes.extend(members);
+        }
+        component_id += 1;
+    }
+
+    let mut reaches_cycle = vec![false; program.functions.len()];
+    let mut work = cyclic_nodes;
+    for node in &work {
+        reaches_cycle[*node] = true;
+    }
+    while let Some(node) = work.pop() {
+        for predecessor in &reverse[node] {
+            if !reaches_cycle[*predecessor] {
+                reaches_cycle[*predecessor] = true;
+                work.push(*predecessor);
+            }
+        }
+    }
+    reaches_cycle
+}
+
 fn source_name(name: &str) -> &str {
     let Some(encoded) = name.strip_prefix("__module_") else {
         return name;
@@ -64,11 +153,13 @@ impl JitSession {
             Tier::Baseline => TierState::VmOnly,
             Tier::Optimizing => TierState::OptimizingCandidate,
         };
+        let cycle_reachable = automatic_cycle_reachable(program.program());
         let functions = program
             .program()
             .functions
             .iter()
-            .map(|function| FunctionTierRecord {
+            .enumerate()
+            .map(|(index, function)| FunctionTierRecord {
                 function: function.id,
                 name: source_name(&function.name).to_string(),
                 state: initial_state,
@@ -78,7 +169,8 @@ impl JitSession {
                 code_object: None,
                 epoch: config.epoch,
                 native_entries: 0,
-                auto_entry_eligible: function.signature.memory_witness_parameters.is_empty()
+                auto_entry_eligible: !cycle_reachable[index]
+                    && function.signature.memory_witness_parameters.is_empty()
                     && function.signature.parameters.len() <= 2
                     && function
                         .signature
@@ -123,6 +215,7 @@ impl JitSession {
             returned_structural: None,
             next_resource_scope: 1,
             peak_native_frame_depth: 0,
+            peak_native_stack_bytes: 0,
             vm_to_native_transitions: 0,
             native_to_vm_transitions: 0,
             last_runtime_trap: None,

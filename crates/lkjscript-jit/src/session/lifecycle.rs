@@ -140,6 +140,7 @@ impl JitSession {
             native_unique: self.native_unique,
             native_structural: self.native_structural,
             peak_native_frame_depth: self.peak_native_frame_depth,
+            peak_native_stack_bytes: self.peak_native_stack_bytes,
             vm_to_native_transitions: self.vm_to_native_transitions,
             native_to_vm_transitions: self.native_to_vm_transitions,
             baseline_native_entries,

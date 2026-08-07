@@ -2,7 +2,14 @@
 
 use super::*;
 
-pub(in crate::executable) fn native_stack_bounds() -> Option<(usize, usize)> {
+#[derive(Clone, Copy)]
+pub(in crate::executable) struct NativeStackBounds {
+    low: usize,
+    high: usize,
+    guard_bytes: usize,
+}
+
+pub(in crate::executable) fn native_stack_bounds() -> Option<NativeStackBounds> {
     // pthread_attr_t is opaque here. This word-aligned buffer is larger
     // than the Linux x86-64 glibc and musl objects passed to these APIs.
     let mut attributes = [0_usize; 16];
@@ -16,8 +23,9 @@ pub(in crate::executable) fn native_stack_bounds() -> Option<(usize, usize)> {
     }
     let mut stack_address = std::ptr::null_mut();
     let mut stack_size = 0_usize;
+    let mut guard_bytes = 0_usize;
     // SAFETY: successful pthread_getattr_np initialized the attributes;
-    // both output pointers are valid for writes during this call.
+    // all output pointers are valid for writes during these calls.
     let stack_result = unsafe {
         pthread_attr_getstack(
             attributes.as_ptr().cast::<c_void>(),
@@ -25,32 +33,43 @@ pub(in crate::executable) fn native_stack_bounds() -> Option<(usize, usize)> {
             &mut stack_size,
         )
     };
+    // SAFETY: the initialized attributes remain live until pthread_attr_destroy.
+    let guard_result = unsafe {
+        pthread_attr_getguardsize(attributes.as_ptr().cast::<c_void>(), &mut guard_bytes)
+    };
     // SAFETY: initialized pthread attributes are destroyed exactly once.
     let destroy_result = unsafe { pthread_attr_destroy(attributes.as_mut_ptr().cast::<c_void>()) };
-    if stack_result != 0 || destroy_result != 0 {
+    if stack_result != 0 || guard_result != 0 || destroy_result != 0 {
         return None;
     }
-    let stack_low = stack_address as usize;
-    let stack_high = stack_low.checked_add(stack_size)?;
-    (stack_low < stack_high).then_some((stack_low, stack_high))
+    let low = stack_address as usize;
+    let high = low.checked_add(stack_size)?;
+    (low < high).then_some(NativeStackBounds {
+        low,
+        high,
+        guard_bytes,
+    })
 }
 
 pub(in crate::executable) fn native_stack_reservation_fits(
     rbp: *mut u8,
     frame_bytes: usize,
-    guard_bytes: usize,
-    stack_low: usize,
-    stack_high: usize,
-) -> bool {
+    bounds: NativeStackBounds,
+) -> Result<(), NativeStackBoundary> {
     let frame_base = rbp as usize;
-    let Some(requested_low) = frame_base.checked_sub(frame_bytes) else {
-        return false;
-    };
-    let Some(guarded_low) = stack_low.checked_add(guard_bytes) else {
-        return false;
-    };
-    stack_low < stack_high
-        && stack_low <= frame_base
-        && frame_base < stack_high
-        && guarded_low <= requested_low
+    if !(bounds.low <= frame_base && frame_base < bounds.high) {
+        return Err(NativeStackBoundary::FrameOutsideThreadExtent);
+    }
+    let requested_low = frame_base
+        .checked_sub(frame_bytes)
+        .ok_or(NativeStackBoundary::FrameArithmeticOverflow)?;
+    let guarded_low = bounds
+        .low
+        .checked_add(bounds.guard_bytes)
+        .filter(|guarded| *guarded < bounds.high)
+        .ok_or(NativeStackBoundary::FrameArithmeticOverflow)?;
+    if requested_low < guarded_low {
+        return Err(NativeStackBoundary::GuardReached);
+    }
+    Ok(())
 }

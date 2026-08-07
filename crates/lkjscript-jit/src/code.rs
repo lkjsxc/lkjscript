@@ -19,6 +19,7 @@ pub struct CodeObject {
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
     pub(crate) numeric_conversion_sites: NumericConversionSiteCounts,
     pub(crate) frames: Vec<FrameFacts>,
+    pub(crate) automatic_stack_requirements: Vec<(FunctionId, usize)>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,

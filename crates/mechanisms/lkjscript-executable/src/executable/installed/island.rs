@@ -25,6 +25,12 @@ impl InstalledImage {
             arguments,
             &mut state,
         )?;
+        if let Some(boundary) = state.native_stack_boundary {
+            return Err(InvocationError::NativeStackBoundary {
+                boundary,
+                retry_safe: state.peak_active_depth == 0,
+            });
+        }
         if let Some(source) = state.invalid_entry_accounting {
             return Err(InvocationError::InvalidNativeEntryAccounting(source));
         }
@@ -63,7 +69,6 @@ impl InstalledImage {
                 1 => NativeResourceLimitKind::PollFuel,
                 2 => NativeResourceLimitKind::ActiveFrames,
                 4 => NativeResourceLimitKind::RuntimeService,
-                5 => NativeResourceLimitKind::NativeStackBytes,
                 6 => NativeResourceLimitKind::ActiveValues,
                 _ => return Err(InvocationError::InvalidNativeStatus(state.status)),
             }),

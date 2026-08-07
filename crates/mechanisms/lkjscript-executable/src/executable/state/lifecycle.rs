@@ -18,14 +18,19 @@ impl<'a> NativeCallState<'a> {
             )
             .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         let mut heap_arguments = Vec::new();
+        let maximum_heap_arguments = image
+            .heap_runtime_sites()
+            .iter()
+            .map(|site| site.arguments().len())
+            .max()
+            .unwrap_or(0);
         heap_arguments
-            .try_reserve_exact(16)
+            .try_reserve_exact(maximum_heap_arguments)
             .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         // One generated invocation cannot migrate threads. Cache the current
-        // thread's fixed stack bounds once instead of repeating pthread
-        // attribute queries at every generated function entry.
-        let (native_stack_low, native_stack_high) =
-            platform::native_stack_bounds().unwrap_or((0, 0));
+        // thread's discovered stack extent and guard once instead of repeating
+        // pthread attribute queries at every generated function entry.
+        let native_stack_bounds = platform::native_stack_bounds();
         let (deadline_ms, status) = match config.wall_time {
             Some(duration) => {
                 let now = crate::now_ms_monotonic();
@@ -51,10 +56,9 @@ impl<'a> NativeCallState<'a> {
             active_frames,
             maximum_active_frames: config.max_active_frames,
             maximum_active_values: config.max_active_values,
-            maximum_native_stack_bytes: config.max_native_stack_bytes,
-            maximum_native_frame_bytes: config.max_native_frame_bytes,
-            native_stack_low,
-            native_stack_high,
+            native_stack_requirement: config.native_stack_requirement,
+            native_stack_bounds,
+            native_stack_boundary: None,
             pending_reservation: None,
             reserved_native_stack_bytes: 0,
             peak_native_stack_bytes: 0,
@@ -68,6 +72,11 @@ impl<'a> NativeCallState<'a> {
             bookkeeping_allocation_failed: false,
             metadata_invalid: false,
         })
+    }
+
+    pub(in crate::executable) fn decline_native_stack(&mut self, boundary: NativeStackBoundary) {
+        self.native_stack_boundary = Some(boundary);
+        self.status = 6;
     }
 
     pub(in crate::executable) fn fail_bookkeeping_allocation(&mut self) {

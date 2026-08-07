@@ -102,15 +102,15 @@ beyond 65,535 bytes executes both branch paths. Native ABI or machine-plan ineli
 specialization status: automatic mode uses the VM, and a forced native diagnostic may reject the
 signature or shape.
 
-Source positions, spans, binding/place/loan IDs, and snapshot-local node indexes remain `u32`,
-creating separate addressable representation boundaries. HIR function, expression, entry, use,
-constant, call, obligation, and type-fact IDs and SSA function, block, value, binding, trait,
-implementation, place, and loan IDs likewise retain `u32` representations. HIR destination,
-borrow-scope, drop-path, and drop-glue IDs, memory-witness parameters/bindings/group ordinals, local
-witness dependency targets, and executable structural destination IDs use `u64` with checked host
-indexing. The remaining compact native witness and aggregate fields are specialization eligibility:
-a declined native shape retains valid VM execution. The seal dependency/release thresholds only
-choose the total generic placement fallback and cannot reject validity.
+Source bytes, positions, spans, binding/place/loan IDs, and revision-scoped node indexes use `u64`
+with checked host indexing. HIR function, expression, entry, use, constant, call, obligation,
+type-fact, destination, borrow-scope, drop-path, and drop-glue IDs and SSA function, block, value,
+binding, trait, implementation, place, and loan IDs likewise use `u64`. Memory-witness
+parameters/bindings/group ordinals, local witness dependency targets, and executable structural
+destination IDs retain the same checked host-index boundary. The remaining compact native witness
+and aggregate fields are specialization eligibility: a declined native shape retains valid VM
+execution. The seal dependency/release thresholds only choose the total generic placement fallback
+and cannot reject validity.
 
 Trusted bytecode validation is unrestricted by encoded-byte, table-entry, metadata-byte,
 constant-data-byte, cleanup-node/range, region-product, witness, structural-destination, and

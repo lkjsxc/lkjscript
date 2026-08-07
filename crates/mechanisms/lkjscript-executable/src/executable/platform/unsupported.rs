@@ -1,20 +1,21 @@
 use crate::executable::{
-    InstallError, InvocationError, MappingPermissions, NativeCallState, NativeValue,
-    PermissionProbeError, RawReturn, Signature,
+    InstallError, InvocationError, MappingPermissions, NativeCallState, NativeStackBoundary,
+    NativeValue, PermissionProbeError, RawReturn, Signature,
 };
 
-pub(in crate::executable) fn native_stack_bounds() -> Option<(usize, usize)> {
+#[derive(Clone, Copy)]
+pub(in crate::executable) struct NativeStackBounds;
+
+pub(in crate::executable) fn native_stack_bounds() -> Option<NativeStackBounds> {
     None
 }
 
 pub(in crate::executable) fn native_stack_reservation_fits(
     _rbp: *mut u8,
     _frame_bytes: usize,
-    _guard_bytes: usize,
-    _stack_low: usize,
-    _stack_high: usize,
-) -> bool {
-    false
+    _bounds: NativeStackBounds,
+) -> Result<(), NativeStackBoundary> {
+    Err(NativeStackBoundary::ThreadExtentUnavailable)
 }
 
 #[derive(Debug)]

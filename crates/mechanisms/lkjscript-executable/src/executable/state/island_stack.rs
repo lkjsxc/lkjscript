@@ -41,7 +41,7 @@ impl IslandCallState<'_> {
             return;
         };
         let Ok(frame_bytes) = usize::try_from(frame_bytes) else {
-            self.invalidate_frame();
+            self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
             return;
         };
         if usize::try_from(descriptor_bytes).ok() != Some(frame_bytes)
@@ -52,13 +52,12 @@ impl IslandCallState<'_> {
             return;
         }
         let Some(next_values) = self.active_value_homes.checked_add(value_homes) else {
-            self.status = 4;
-            self.payload = 6;
-            return;
-        };
-        let Some(next_bytes) = self.reserved_native_stack_bytes.checked_add(frame_bytes) else {
-            self.status = 4;
-            self.payload = 5;
+            if self.maximum_active_values.is_some() {
+                self.status = 4;
+                self.payload = 6;
+            } else {
+                self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
+            }
             return;
         };
         if self
@@ -69,18 +68,26 @@ impl IslandCallState<'_> {
             self.payload = 6;
             return;
         }
-        if frame_bytes > self.maximum_native_frame_bytes
-            || next_bytes > self.maximum_native_stack_bytes
-            || !platform::native_stack_reservation_fits(
-                rbp,
-                frame_bytes,
-                NATIVE_STACK_GUARD_BYTES,
-                self.native_stack_low,
-                self.native_stack_high,
-            )
-        {
-            self.status = 4;
-            self.payload = 5;
+        let Some(next_bytes) = self.reserved_native_stack_bytes.checked_add(frame_bytes) else {
+            self.decline_native_stack(NativeStackBoundary::FrameArithmeticOverflow);
+            return;
+        };
+        let Some(bounds) = self.native_stack_bounds else {
+            self.decline_native_stack(NativeStackBoundary::ThreadExtentUnavailable);
+            return;
+        };
+        if self.active_frames.is_empty() {
+            if let Some(required_bytes) = self.native_stack_requirement {
+                if let Err(boundary) =
+                    platform::native_stack_reservation_fits(rbp, required_bytes, bounds)
+                {
+                    self.decline_native_stack(boundary);
+                    return;
+                }
+            }
+        }
+        if let Err(boundary) = platform::native_stack_reservation_fits(rbp, frame_bytes, bounds) {
+            self.decline_native_stack(boundary);
             return;
         }
         self.pending_reservation = Some(IslandFrameReservation {

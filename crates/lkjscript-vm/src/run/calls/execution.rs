@@ -47,8 +47,24 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                             Error::host("limited VM execution lost its fuel counter")
                         })?;
                         policy.wall_time = vm.remaining_wall_time()?;
-                        policy.max_stack_values =
-                            policy.max_stack_values.saturating_sub(vm.stack.len());
+                        policy.max_stack_values = policy
+                            .max_stack_values
+                            .checked_sub(vm.stack.len())
+                            .ok_or_else(|| {
+                                Error::resource(
+                                    lkjscript_core::ResourceLimitKind::StackValues,
+                                    "VM stack already exceeds policy before native transition",
+                                )
+                            })?;
+                        policy.max_frames = policy
+                            .max_frames
+                            .checked_sub(vm.frames.len())
+                            .ok_or_else(|| {
+                                Error::resource(
+                                    lkjscript_core::ResourceLimitKind::FrameDepth,
+                                    "VM frame depth already exceeds policy before native transition",
+                                )
+                            })?;
                     }
                     match vm
                         .jit
@@ -94,12 +110,16 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                             }
                         }
                         Err(error)
-                            if error.code() == lkjscript_jit::FailureCode::NativeBookkeeping =>
+                            if matches!(
+                                error.code(),
+                                lkjscript_jit::FailureCode::NativeBookkeeping
+                                    | lkjscript_jit::FailureCode::NativeStackBoundary
+                            ) =>
                         {
-                            // Automatic native bookkeeping is allocated before a valid
-                            // acyclic JIT group enters generated code. The session has
-                            // invalidated that optimization, so this call
-                            // safely continues through the existing VM path.
+                            // Automatic recursive groups remain in the VM. Acyclic
+                            // native groups preallocate invocation bookkeeping and
+                            // check their complete generated stack requirement before
+                            // the first frame enters, so retry cannot duplicate effects.
                         }
                         Err(error) => {
                             return Err(Error::msg(format!(

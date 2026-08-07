@@ -155,6 +155,7 @@ pub struct JitStats {
     pub unique_runtime_calls: u64,
     pub structural_runtime_calls: u64,
     pub peak_native_frame_depth: usize,
+    pub peak_native_stack_bytes: usize,
     pub vm_to_native_transitions: u64,
     pub native_to_vm_transitions: u64,
     pub baseline_native_entries: u64,

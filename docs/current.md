@@ -17,9 +17,13 @@ compatibility.
   rather than claiming generated execution after fallback. Native entry accounting uses a
   fallibly installed wide source-ID mapping and invocation-local counts keyed by installed entry,
   so a hot eligible function above source ID 63 can enter native code. Active native frames grow
-  dynamically under an explicit `ExecutionPolicy`; bookkeeping allocation failure disables an
-  automatic optimization before VM continuation, while forced native mode reports a typed backend
-  failure.
+  dynamically under an explicit `ExecutionPolicy`. Unrestricted invocation has no project-selected
+  aggregate or per-frame native stack-byte ceiling; generated prologues use checked arithmetic and
+  the current thread's discovered stack extent and guard. Automatic recursive groups stay in the
+  heap-framed VM. Acyclic automatic groups precompute and check their complete native stack
+  requirement before entry, so a typed stack/bookkeeping decline can invalidate the optimization
+  and retry in the VM without duplicating effects. Forced native mode reports an actual external
+  stack boundary explicitly.
 - Host adapters cover standard I/O and selected filesystem, TCP, hashing, terminal, and SQLite
   operations behind typed capability checks.
 - Ordinary runtime memory is collector-free. Unique storage, invocation regions, structural
@@ -258,8 +262,14 @@ may build elsewhere, but no other host or native target is currently claimed as 
   host indexing. Scheduler IDs, machine-code offsets, register numbers, opcode bytes, OS CPU
   numbers, and SQLite fields retain narrow representations at private or external boundaries.
   Native frame-function ordinals, trap and runtime-site identities, and source/native function
-  links remain `u64` through the generated-code runtime ABI. Automatic execution retains the
-  validated generic VM route when native planning declines a shape for a genuine backend reason.
+  links remain `u64` through the generated-code runtime ABI. Native invocation discovers the actual
+  thread stack extent and guard and has no fixed 4 MiB aggregate or 1 MiB per-frame ceiling.
+  Generated executable coverage runs more than 4 MiB of checked aggregate frames, runs one frame
+  beyond 1 MiB on a sufficiently large thread stack, and declines that same frame safely on a
+  256 KiB thread. Automatic recursive groups retain the validated generic VM route; acyclic groups
+  receive a checked pre-entry stack requirement, and synthetic representation-boundary coverage
+  proves the decline occurs before any native entry. Automatic execution also retains the VM route
+  when native planning declines a shape for another genuine backend reason.
   Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
   constant-size, cleanup-node/range, witness, region-product, or structural-operation table
   admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
@@ -270,7 +280,8 @@ may build elsewhere, but no other host or native target is currently claimed as 
   allocations, handles, output bytes, wall deadline/hard-deadline requirement, and cleanup-report
   retention are absent under unrestricted execution rather than encoded as maximum-value
   sentinels. VM and native checks are conditional, and automatic VM-to-native transitions forward
-  remaining fuel and wall time without replacing the selected policy. Cleanup-report retention is
+  remaining fuel, wall time, frame capacity, and value capacity without replacing the selected
+  policy. Native stack bytes have no hidden policy default. Cleanup-report retention is
   host output policy only; cleanup attempts continue after retention is exhausted. The former
   logical-aggregate-construction work count and resource outcome are removed from VM, evaluator,
   native services, and process encoding.

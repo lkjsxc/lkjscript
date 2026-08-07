@@ -129,6 +129,7 @@ pub struct JitSession {
     returned_structural: Option<ReturnedStructuralValue>,
     next_resource_scope: u64,
     peak_native_frame_depth: usize,
+    peak_native_stack_bytes: usize,
     vm_to_native_transitions: u64,
     native_to_vm_transitions: u64,
     last_runtime_trap: Option<String>,

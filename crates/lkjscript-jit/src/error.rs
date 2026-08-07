@@ -15,6 +15,8 @@ pub enum FailureCode {
     InstallLimit,
     InstallFailure,
     NativeBookkeeping,
+    NativeStackBoundary,
+    NativeStackBoundaryAfterEntry,
     InvocationFailure,
 }
 

@@ -11,10 +11,6 @@ mod stack;
 
 pub(super) use island::*;
 
-pub(super) const DEFAULT_MAX_NATIVE_STACK_BYTES: usize = 4 * 1024 * 1024;
-pub(super) const DEFAULT_MAX_NATIVE_FRAME_BYTES: usize = 1024 * 1024;
-pub(super) const NATIVE_STACK_GUARD_BYTES: usize = 16 * 1024;
-
 #[derive(Clone, Copy)]
 pub(super) struct ActiveFrame {
     pub(super) function_ordinal: u64,
@@ -52,10 +48,9 @@ pub(super) struct NativeCallState<'a> {
     pub(super) active_frames: Vec<ActiveFrame>,
     pub(super) maximum_active_frames: Option<usize>,
     pub(super) maximum_active_values: Option<usize>,
-    pub(super) maximum_native_stack_bytes: usize,
-    pub(super) maximum_native_frame_bytes: usize,
-    pub(super) native_stack_low: usize,
-    pub(super) native_stack_high: usize,
+    pub(super) native_stack_requirement: Option<usize>,
+    pub(super) native_stack_bounds: Option<platform::NativeStackBounds>,
+    pub(super) native_stack_boundary: Option<NativeStackBoundary>,
     pub(super) pending_reservation: Option<PendingFrameReservation>,
     pub(super) reserved_native_stack_bytes: usize,
     pub(super) peak_native_stack_bytes: usize,

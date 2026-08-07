@@ -5,8 +5,8 @@ use std::ptr::NonNull;
 
 use crate::executable::{
     machine_arguments, InstallError, InvocationError, IslandCallState, MachineArgument,
-    MappingPermissions, NativeCallState, NativeValue, PermissionProbeError, RawReturn, Signature,
-    ValueType,
+    MappingPermissions, NativeCallState, NativeStackBoundary, NativeValue, PermissionProbeError,
+    RawReturn, Signature, ValueType,
 };
 
 const PROT_READ: i32 = 0x1;
@@ -34,6 +34,7 @@ unsafe extern "C" {
         stack_address: *mut *mut c_void,
         stack_size: *mut usize,
     ) -> i32;
+    fn pthread_attr_getguardsize(attributes: *const c_void, guard_size: *mut usize) -> i32;
     fn pthread_attr_destroy(attributes: *mut c_void) -> i32;
 }
 
@@ -63,4 +64,6 @@ mod stack;
 
 use abi_call::invoke_typed;
 
-pub(in crate::executable) use stack::{native_stack_bounds, native_stack_reservation_fits};
+pub(in crate::executable) use stack::{
+    native_stack_bounds, native_stack_reservation_fits, NativeStackBounds,
+};

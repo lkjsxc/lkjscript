@@ -2,7 +2,50 @@ use std::time::Duration;
 
 use crate::canonical::{compile, execution, f64_loop, Scalar};
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, ResourceLimitKind};
-use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
+use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, JitSession};
+
+#[test]
+fn limited_recursive_frame_exhaustion_is_identical_across_tiers() {
+    let source = "def/\nname/\nrecur\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\n0\nadd/\n1\nrecur/\nsubtract/\nn\n1\n/subtract\n/recur\n/add\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nrecur/\n4\n/recur\n/main\n";
+    let program = compile(source, "limited-recursive-frames.lkjscript");
+    let mut policy = lkjscript_core::LimitedExecutionPolicy::conservative();
+    policy.max_frames = 2;
+    let execution = ExecutionPolicy::limited(policy);
+    let expected = ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth);
+
+    assert_eq!(
+        lkjscript_vm::run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &execution,
+        ),
+        expected
+    );
+    assert_eq!(
+        execute_forced(program.ssa(), &execution, JitConfig::default())
+            .expect("forced native frame policy is a typed outcome")
+            .outcome,
+        expected
+    );
+    assert_eq!(
+        execute_optimizing(program.ssa(), &execution, JitConfig::default())
+            .expect("optimizing native frame policy is a typed outcome")
+            .outcome,
+        expected
+    );
+
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (automatic, stats) = lkjscript_vm::run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &execution,
+        session,
+    );
+    assert_eq!(automatic, expected);
+    assert_eq!(stats.native_entries, 0);
+}
 
 #[test]
 fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {

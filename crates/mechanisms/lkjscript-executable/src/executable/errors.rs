@@ -62,6 +62,10 @@ pub enum InvocationError {
     InvalidNativeTrap(u32),
     InvalidBoolReturn(u64),
     NativeBookkeepingAllocationFailed,
+    NativeStackBoundary {
+        boundary: NativeStackBoundary,
+        retry_safe: bool,
+    },
     InvalidNativeEntryAccounting(u64),
     InvalidActiveFrame,
     LeakedActiveFrames(usize),
@@ -102,6 +106,13 @@ impl fmt::Display for InvocationError {
             Self::NativeBookkeepingAllocationFailed => {
                 formatter.write_str("native invocation bookkeeping allocation failed")
             }
+            Self::NativeStackBoundary {
+                boundary,
+                retry_safe,
+            } => write!(
+                formatter,
+                "native stack boundary: {boundary} (VM retry safe: {retry_safe})"
+            ),
             Self::InvalidNativeEntryAccounting(source) => write!(
                 formatter,
                 "generated code accounted an unknown native source function {source}"
@@ -125,11 +136,31 @@ impl fmt::Display for InvocationError {
 impl std::error::Error for InvocationError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeStackBoundary {
+    ThreadExtentUnavailable,
+    FrameArithmeticOverflow,
+    FrameOutsideThreadExtent,
+    GuardReached,
+}
+
+impl fmt::Display for NativeStackBoundary {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::ThreadExtentUnavailable => "current thread stack extent is unavailable",
+            Self::FrameArithmeticOverflow => "native frame arithmetic exceeds host representation",
+            Self::FrameOutsideThreadExtent => {
+                "generated frame base is outside the discovered thread stack extent"
+            }
+            Self::GuardReached => "generated frame would reach the discovered thread stack guard",
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeResourceLimitKind {
     PollFuel,
     ActiveFrames,
     RuntimeService,
-    NativeStackBytes,
     ActiveValues,
 }
 

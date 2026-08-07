@@ -13,8 +13,7 @@ pub struct NativeInvocationConfig {
     pub(super) wall_time: Option<Duration>,
     pub(super) max_active_frames: Option<usize>,
     pub(super) max_active_values: Option<usize>,
-    pub(super) max_native_stack_bytes: usize,
-    pub(super) max_native_frame_bytes: usize,
+    pub(super) native_stack_requirement: Option<usize>,
     pub(super) max_cleanup_failures: Option<usize>,
 }
 
@@ -26,8 +25,7 @@ impl NativeInvocationConfig {
             wall_time: None,
             max_active_frames: None,
             max_active_values: None,
-            max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
-            max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
+            native_stack_requirement: None,
             max_cleanup_failures: None,
         }
     }
@@ -39,8 +37,7 @@ impl NativeInvocationConfig {
             wall_time,
             max_active_frames: None,
             max_active_values: None,
-            max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
-            max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
+            native_stack_requirement: None,
             max_cleanup_failures: None,
         }
     }
@@ -64,13 +61,8 @@ impl NativeInvocationConfig {
     }
 
     #[must_use]
-    pub const fn with_native_stack_limits(
-        mut self,
-        maximum_aggregate_bytes: usize,
-        maximum_frame_bytes: usize,
-    ) -> Self {
-        self.max_native_stack_bytes = maximum_aggregate_bytes;
-        self.max_native_frame_bytes = maximum_frame_bytes;
+    pub const fn with_native_stack_requirement(mut self, required_bytes: usize) -> Self {
+        self.native_stack_requirement = Some(required_bytes);
         self
     }
 }
