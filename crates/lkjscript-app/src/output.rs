@@ -10,7 +10,21 @@ pub fn diagnostics_enabled() -> bool {
         || env::var_os("LKJSCRIPT_JIT_DUMP_DIR").is_some()
 }
 
-pub fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &JitStats) {
+pub fn print_jit_diagnostics(
+    program: &lkjscript_ir::VerifiedProgram,
+    stats: Option<&JitStats>,
+    path: crate::engine::ExecutionPath,
+    fallback_reason: Option<&str>,
+    native_entered: bool,
+) {
+    eprintln!(
+        "execution.path={} execution.fallback_reason={} execution.native_entered={native_entered}",
+        path.as_str(),
+        fallback_reason.unwrap_or("none"),
+    );
+    let Some(stats) = stats else {
+        return;
+    };
     eprintln!("jit.verified_baseline_ssa={:?}", program.program());
     if stats.optimizing_code_objects > 0 {
         match lkjscript_ir::optimize(program, lkjscript_ir::OptimizationLimits::default()) {
@@ -21,7 +35,7 @@ pub fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &Ji
     eprintln!(
         concat!(
             "jit.native_entries={} jit.baseline_entries={} jit.optimizing_entries={} ",
-            "jit.direct_native_calls={} jit.poll_calls={} jit.vm_fallbacks={} ",
+            "jit.direct_native_calls={} jit.poll_calls={} ",
             "jit.compile_failures={} jit.algebraic_rewrites={} jit.gvn_rewrites={} ",
             "jit.checked_i64_rewrites={}"
         ),
@@ -30,7 +44,6 @@ pub fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &Ji
         stats.optimizing_native_entries,
         stats.direct_native_calls,
         stats.poll_calls,
-        stats.vm_fallbacks,
         stats.compile_failures,
         stats.algebraic_rewrites,
         stats.gvn_rewrites,

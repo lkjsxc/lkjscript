@@ -13,6 +13,71 @@ impl JitSession {
         self.invoke_value_services(function, object_index, native, arguments, config, execution)
     }
 
+    pub(crate) fn invoke_baseline_region_attempt(
+        &mut self,
+        function: FunctionId,
+        object_index: usize,
+        native: lkjscript_native::FunctionId,
+        arguments: &[NativeValue],
+        config: &NativeInvocationConfig,
+        execution: &ExecutionPolicy,
+    ) -> BaselineRegionAttempt {
+        let preparation_started = Instant::now();
+        if let Err(error) = self.initialize_region_arenas(function, execution.max_allocations()) {
+            return BaselineRegionAttempt::PreparationFailure {
+                error,
+                preparation: preparation_started.elapsed(),
+            };
+        }
+        let Some(lists) = self.lists.as_mut() else {
+            return BaselineRegionAttempt::PreparationFailure {
+                error: missing_arena(function, "list"),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let Some(products) = self.region_products.as_mut() else {
+            return BaselineRegionAttempt::PreparationFailure {
+                error: missing_arena(function, "region-product"),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let mut services = JitValueServices::new(
+            lists,
+            products,
+            JitValueLimits {
+                allocations: execution.max_allocations(),
+                runtime_bytes: execution
+                    .max_heap_bytes()
+                    .and_then(|bytes| u64::try_from(bytes).ok()),
+            },
+        );
+        let prepared = self.objects[object_index]
+            .installed
+            .prepare_region_invocation(native, arguments, config, &mut services);
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.last_runtime_trap = services.last_trap.take();
+                self.last_runtime_resource = services.last_resource;
+                return BaselineRegionAttempt::Declined {
+                    error,
+                    preparation: preparation_started.elapsed(),
+                };
+            }
+        };
+        let preparation = preparation_started.elapsed();
+        let native_started = Instant::now();
+        let result = prepared.enter();
+        let native_execution = native_started.elapsed();
+        self.last_runtime_trap = services.last_trap.take();
+        self.last_runtime_resource = services.last_resource;
+        BaselineRegionAttempt::Entered {
+            result: Box::new(result),
+            preparation,
+            native_execution,
+        }
+    }
+
     fn invoke_value_services(
         &mut self,
         function: FunctionId,
@@ -55,7 +120,7 @@ impl JitSession {
         report
     }
 
-    fn initialize_region_arenas(
+    pub(crate) fn initialize_region_arenas(
         &mut self,
         function: FunctionId,
         _max_allocations: Option<u64>,

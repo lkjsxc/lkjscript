@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn reachable_group(
+pub(crate) fn reachable_group(
     program: &lkjscript_ir::Program,
     root: FunctionId,
 ) -> Result<Vec<FunctionId>, LoweringError> {

@@ -100,12 +100,13 @@ memory pressure.
 
 ## Accepted runtime selection
 
-**Accepted architecture; runtime cutover incomplete.** The product will synchronously prepare one
-baseline-native reachable group before effects. It enters that group when preparation succeeds and
-otherwise executes the unchanged program in the VM. Native entry is a commit point: there is no VM
-retry afterward. Baseline native is a specialization inside one product path, not a public engine
-contract. Forced tier selections and optimizing machinery remain temporarily for diagnostics and
-cutover work.
+**Accepted architecture; app cutover implemented, internal deletion pending.** The product
+synchronously prepares one scalar baseline-native reachable group before effects. It enters that
+group when preparation succeeds and otherwise executes the unchanged program in the VM. Native
+entry is a commit point: there is no VM retry afterward. Baseline native is a specialization inside
+one product path, not a public engine contract. The CLI no longer exposes forced tiers, thresholds,
+or auto controls. Forced/auto APIs and optimizing machinery remain temporarily only for existing
+differential tests and deletion work.
 
 The selection hypothesis was that baseline native materially helps closed scalar groups, while the
 VM remains the complete generic route and repeated automatic transitions cost more than they save.
@@ -129,7 +130,28 @@ attempt rather than per-entry auto tiering or optimizer retention.
 
 The artifact does not record machine/compiler metadata, peak memory, generated-code size, release
 binary size, or target coverage, so it is selection evidence rather than the final post-cutover
-baseline. Retain the harness, record those dimensions with environment metadata after the cutover,
-and reverse the choice if equivalent representative measurements show the group preflight cost or
-baseline maintenance cost outweighs its scalar benefit. Completion still requires deleting or
-demoting the losing public paths.
+baseline. Product metrics now identify `execution_path=baseline-native|vm-fallback`, a nullable
+fallback reason, whether native entry began, and preflight/lower/install/prepare/native/VM/total
+durations. Threshold, auto, public engine, and tier fields are absent. Retain the harness, record the
+missing dimensions with environment metadata after internal losing-path deletion, and reverse the
+choice if equivalent representative measurements show the group preflight cost or baseline
+maintenance cost outweighs its scalar benefit.
+
+### Cutover path smoke evidence
+
+**Implemented-path verification, not a performance baseline.** After the cutover, one warm-cache
+locked release process was run per workload on `devbox`, Linux x86-64, 20 logical CPUs,
+63,873,589,248 host bytes, with `rustc 1.96.0 (ac68faa20 2026-05-25)`. One sample has no median or
+tail value and establishes path selection and timing-field integrity only.
+
+| Workload | Path | Native entered | Process wall | Product total | Native | VM |
+|---|---|---:|---:|---:|---:|---:|
+| scalar | baseline-native | yes | 240.831 ms | 0.457 ms | 0.222 ms | 0 ms |
+| hello | VM fallback | no | 239.944 ms | 0.108 ms | 0 ms | 0.103 ms |
+| bench | VM fallback | no | 986.250 ms | 747.499 ms | 0 ms | 747.494 ms |
+| mandel | VM fallback | no | 299.363 ms | 58.134 ms | 0 ms | 58.133 ms |
+
+All four returned successfully. Hello emitted 7 bytes, bench 18 bytes, and mandel 1,176 bytes once;
+the scalar fixture emitted none. The three fallback records reported `unsupported-shape`, while the
+scalar record had a null fallback reason. The final multi-sample post-deletion baseline remains
+pending.

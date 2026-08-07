@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+mod attempt;
 mod lower;
 
 use std::fmt;
@@ -17,9 +18,9 @@ use lkjscript_core::{
     UniqueStoreError, UniqueStoreId, Value,
 };
 use lkjscript_executable::{
-    EnteredInvocationError, ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage,
-    InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
-    NativeRuntimeServices, NativeServiceError, PreEntryError,
+    ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationOutcome,
+    InvocationReport, NativeInvocationConfig, NativeResourceLimitKind, NativeRuntimeServices,
+    NativeServiceError, NoopNativeIslandRuntimeServices,
 };
 use lkjscript_ir::{
     optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,
@@ -50,11 +51,18 @@ mod stats;
 #[allow(clippy::expect_used)]
 mod tests;
 
-use execute::optimization_metadata_bytes_estimate;
+use attempt::{BaselineRegionAttempt, BaselineScalarAttempt};
+use execute::{capability_arguments, optimization_metadata_bytes_estimate};
 use island::*;
 use runtime_values::*;
 use scalar::scalar_to_execution;
 
+pub use attempt::{
+    attempt_baseline, attempt_baseline_with_capabilities,
+    attempt_baseline_with_capabilities_from_start, BaselineAttempt, BaselineAttemptTimings,
+    BaselineDecline, BaselineDeclineReason, BaselineEnteredError, BaselineEnteredFailure,
+    BaselineExecution,
+};
 pub use code::{CodeObject, CodeObjectRecord, NumericConversionSiteCounts};
 pub use config::{JitConfig, Tier, TierState};
 pub use error::{EngineError, FailureCode};
@@ -62,6 +70,7 @@ pub use execute::{
     execute_forced, execute_forced_with_capabilities, execute_optimizing,
     execute_optimizing_with_capabilities,
 };
+pub use lkjscript_executable::{EnteredInvocationError, PreEntryError};
 pub use scalar::{
     native_type, EntryDecision, JitExecution, ScalarInvocation, ScalarInvocationOutcome,
     ScalarSignature,
@@ -135,6 +144,8 @@ pub struct JitSession {
     last_runtime_trap: Option<String>,
     last_runtime_resource: Option<ResourceLimitKind>,
     last_runtime_failure: Option<NativeServiceError>,
+    last_lowering_and_encoding: Duration,
+    last_installation: Duration,
 }
 
 impl fmt::Debug for JitSession {

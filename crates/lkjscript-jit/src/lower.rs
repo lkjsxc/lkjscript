@@ -39,7 +39,7 @@ use layout::*;
 use numeric::*;
 use preflight::*;
 use proof::*;
-use reachability::*;
+pub(crate) use reachability::reachable_group;
 use runtime_calls::*;
 use terminators::*;
 use types::*;

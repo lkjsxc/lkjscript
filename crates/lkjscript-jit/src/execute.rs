@@ -149,7 +149,7 @@ fn is_pre_entry_policy_outcome(outcome: &ExecutionOutcome, stats: &JitStats) -> 
         )
 }
 
-fn capability_arguments(
+pub(crate) fn capability_arguments(
     program: &VerifiedProgram,
     capabilities: &[lkjscript_core::CapabilityKind],
 ) -> Result<Vec<NativeValue>, EngineError> {

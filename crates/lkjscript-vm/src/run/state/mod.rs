@@ -11,6 +11,16 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         inputs: ExecutionInputs,
         config: ExecutionPolicy,
     ) -> Self {
+        Self::new_started(chunk, jit, inputs, config, Instant::now())
+    }
+
+    pub(crate) fn new_started(
+        chunk: &'a ValidatedChunk,
+        jit: J,
+        inputs: ExecutionInputs,
+        config: ExecutionPolicy,
+        started: Instant,
+    ) -> Self {
         let mut globals = Vec::new();
         let global_initialization_error = globals
             .try_reserve_exact(chunk.global_names().len())
@@ -66,7 +76,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             cleanup_failures: CleanupFailures::with_retention(config.cleanup_retention()),
             list_allocations: 0,
             region_product_allocations: 0,
-            started: Instant::now(),
+            started,
             config,
         }
     }

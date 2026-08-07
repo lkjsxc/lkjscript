@@ -6,6 +6,8 @@ mod host_ext;
 mod host_term;
 mod run;
 
+use std::time::Instant;
+
 use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy, ValidatedChunk};
 #[cfg(feature = "jit")]
 use lkjscript_jit::{JitSession, JitStats};
@@ -24,7 +26,17 @@ pub fn run_chunk(
     inputs: &ExecutionInputs,
     config: &ExecutionPolicy,
 ) -> ExecutionOutcome {
-    Vm::new(chunk, NoTier, inputs.clone(), config.clone()).run()
+    run_chunk_from_start(chunk, inputs, config, Instant::now())
+}
+
+#[doc(hidden)]
+pub fn run_chunk_from_start(
+    chunk: &ValidatedChunk,
+    inputs: &ExecutionInputs,
+    config: &ExecutionPolicy,
+    started: Instant,
+) -> ExecutionOutcome {
+    Vm::new_started(chunk, NoTier, inputs.clone(), config.clone(), started).run()
 }
 
 #[cfg(feature = "jit")]

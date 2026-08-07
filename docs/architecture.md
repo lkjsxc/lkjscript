@@ -16,7 +16,7 @@ package manifest, lock, and line-oriented .lkjscript files
     -> typed SSA lowering, verification, and normalization
     -> bytecode lowering and unrestricted trusted validation
     -> in-process prepared descriptor and bound prepared identity
-    -> auto VM/native execution (or an explicit diagnostic engine)
+    -> one baseline-native group attempt, otherwise validated VM execution
 ```
 
 Text and package files are the current authority. The compiler does not accept a
@@ -58,19 +58,23 @@ source fingerprints. This shape does not provide edit-stable semantic identity o
 
 ## Current execution and resource ownership
 
-`lkjscript run` selects `ExecutionPolicy::Unrestricted`. The default `auto` engine always has a
-validated heap-framed VM route and may install native code for eligible call groups. Executable
-installation is a failure-atomic pre-entry phase: image integrity, contracts, relocation, accounting,
-and the RW-to-RX transition complete before an installed mapping is published. Invocation then has
-two typed phases. `prepare_invocation` validates the execution domain, entry and arguments, prepares
-the closed machine ABI arguments, reserves invocation bookkeeping, and checks immediate policy,
-cancellation, deadline, and whole-group native-stack requirements. It returns either an affine
-`PreparedInvocation` or `PreEntryError`; only that error class is safe for automatic VM fallback.
-`PreparedInvocation::enter` consumes the preparation and crosses the unsafe generated ABI boundary
-exactly once. Every later malformed-state or native-stack failure is an
-`EnteredInvocationError`, while traps, exits, deadlines, resource exhaustion, and host failure are
-entered outcomes. There is no post-entry retry classification or boolean heuristic. Forced
-diagnostic engines either enter their requested generated path or report a failure.
+`lkjscript run` selects `ExecutionPolicy::Unrestricted` and exposes no engine selection. The app
+preflights the complete scalar group reachable from `main`, lowers and installs one baseline image,
+and prepares one invocation before source effects. Executable installation is failure-atomic: image
+integrity, contracts, relocation, accounting, and the RW-to-RX transition complete before an
+installed mapping is published. Eligibility, lowering, installation, setup, or typed
+`PreEntryError` decline destroys the complete native attempt before the unchanged validated
+bytecode, original inputs, and original policy are given to a fresh VM invocation.
+
+`prepare_invocation` validates the execution domain, entry and arguments, prepares the closed
+machine ABI arguments, reserves invocation bookkeeping, and checks immediate policy, cancellation,
+deadline, and whole-group native-stack requirements. It returns either an affine
+`PreparedInvocation` or `PreEntryError`. `PreparedInvocation::enter` consumes the preparation and
+crosses the unsafe generated ABI boundary exactly once. Every later malformed-state or native-stack
+failure is an `EnteredInvocationError`, while traps, exits, deadlines, resource exhaustion, and host
+failure are entered outcomes. Both are post-commit results: neither can run or re-run the VM. The
+former forced and auto-tier CLI contracts are deleted. Their implementation APIs remain internal to
+legacy differential tests until the next deletion commit and are not app execution choices.
 
 Untrusted or isolated process callers construct `ExecutionPolicy::Limited` explicitly. Limited
 execution owns coarse fuel, values/frames, heap/allocation, handle, output, deadline, and cleanup
@@ -152,10 +156,10 @@ atomic batch edits, deterministic paginated semantic queries, semantic and text 
 snapshot, and direct compilation tests. It begins in memory; persistence or distributed
 collaboration waits for measured need.
 
-**Accepted target, boundary implemented but runtime cutover incomplete:** synchronously prepare one
-baseline-native reachable group before effects; enter it when preparation succeeds, otherwise run
-the retained VM; never retry after native entry. The typed executable boundary above establishes the
-required decision point. Current automatic tiering, forced baseline/optimizing CLI modes, optimizer,
-and repeated transition policy still exist and must be deleted or demoted during the remaining
-cutover. Afterward consolidate platform/process crates and one coarse untrusted host policy without
-weakening genuine path, process, artifact, executable-memory, FFI, or database boundaries.
+**Accepted runtime implemented in the app; internal deletion remains:** synchronously prepare one
+scalar baseline-native reachable group before effects; enter it when preparation succeeds,
+otherwise run the retained VM; never retry after native entry. The app and CLI now have only this
+path. Repeated automatic tiering, forced baseline/optimizing APIs, and the optimizer remain solely
+for existing tests and must be deleted in the next cutover commit. Afterward consolidate
+platform/process crates and one coarse untrusted host policy without weakening genuine path,
+process, artifact, executable-memory, FFI, or database boundaries.

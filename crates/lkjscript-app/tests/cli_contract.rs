@@ -13,7 +13,7 @@ mod process_cells;
 mod session_broker;
 
 #[test]
-fn help_and_optimizing_metrics_expose_the_current_contract() {
+fn help_cli_and_metrics_expose_one_product_execution_path() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
     let help = Command::new(binary)
         .arg("--help")
@@ -22,60 +22,113 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
     assert!(help.status.success());
     assert!(help.stderr.is_empty());
     let help = String::from_utf8(help.stdout).expect("help is UTF-8");
-    assert!(help.contains("--engine vm|auto|baseline-jit|optimizing-jit"));
-    assert!(help.contains("default: auto at 64 function entries"));
+    assert!(help.contains("run <file.lkjscript> [--] [script-args...]"));
+    assert!(help.contains("one baseline-native attempt, then VM fallback before entry"));
     assert!(help.contains("memory inventory [--json]"));
-    assert!(!help.contains("--resource-profile"));
+    for removed in [
+        "--engine",
+        "--auto-jit-threshold",
+        "--disable-auto-jit",
+        "--resource-profile",
+    ] {
+        assert!(
+            !help.contains(removed),
+            "removed flag remains in help: {removed}"
+        );
+    }
+
+    let description = Command::new(binary)
+        .args(["describe", "--json"])
+        .output()
+        .expect("run JSON describe");
+    assert!(description.status.success());
+    let description = String::from_utf8(description.stdout).expect("describe is UTF-8");
+    assert!(description.contains("\"execution_path\":\"baseline-native-with-vm-fallback\""));
+    assert!(!description.contains("\"engines\":"));
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/optimizing-loop.lkjscript");
     let metrics = std::env::temp_dir().join(format!(
-        "lkjscript-optimizing-metrics-{}-{}.json",
+        "lkjscript-product-metrics-{}-{}.json",
         std::process::id(),
         std::thread::current().name().unwrap_or("cli")
     ));
     let output = Command::new(binary)
-        .args(["run", "--engine", "optimizing-jit"])
+        .arg("run")
         .arg(&fixture)
         .env("LKJSCRIPT_METRICS", "1")
         .env("LKJSCRIPT_METRICS_FILE", &metrics)
         .output()
-        .expect("run optimizing CLI metrics fixture");
+        .expect("run scalar CLI metrics fixture");
     assert!(output.status.success(), "stderr={:?}", output.stderr);
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
     let json = std::fs::read_to_string(&metrics).expect("read metrics output");
     std::fs::remove_file(&metrics).expect("remove metrics output");
     for field in [
-        "\"optimization_work_units\":",
-        "\"instruction_growth\":",
-        "\"cleanup_removed_instructions\":",
-        "\"optimizing_passes\":",
-        "\"optimization_discovery_passes\":",
-        "\"optimization_checker_passes\":",
-        "\"optimization_reconstruction_passes\":",
-        "\"optimization_cleanup_passes\":",
-        "\"optimization_validation_passes\":",
-        "\"optimization_certificate_bytes_estimate\":",
-        "\"optimization_metadata_bytes_estimate\":",
-        "\"certificate_bytes_estimate\":",
+        "\"execution_path\":\"baseline-native\"",
+        "\"fallback_reason\":null",
+        "\"native_entered\":true",
+        "\"preflight\":",
+        "\"lower\":",
+        "\"install\":",
+        "\"prepare\":",
+        "\"native\":",
+        "\"vm\":",
+        "\"total\":",
     ] {
         assert!(json.contains(field), "missing metrics field {field}");
     }
-    assert!(!json.contains("\"optimization_certificate_bytes\":"));
-    assert!(!json.contains("\"optimization_metadata_bytes\":"));
-    assert!(!json.contains("\"compile_resources\":"));
-    assert!(!json.contains("lkjscript.resource-profile"));
+    for removed in [
+        "\"engine\":",
+        "configured_auto_threshold",
+        "auto_enabled",
+        "auto_threshold",
+        "\"tier\":",
+        "\"jit\":",
+    ] {
+        assert!(
+            !json.contains(removed),
+            "removed metrics field remains: {removed}"
+        );
+    }
 
-    let removed = Command::new(binary)
-        .args(["run", "--resource-profile", "default"])
-        .arg(&fixture)
+    let fallback =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/examples/hello/main.lkjscript");
+    let output = Command::new(binary)
+        .arg("run")
+        .arg(&fallback)
+        .env("LKJSCRIPT_METRICS", "1")
+        .env("LKJSCRIPT_METRICS_FILE", &metrics)
         .output()
-        .expect("run removed profile flag");
-    assert!(!removed.status.success());
-    assert!(String::from_utf8(removed.stderr)
-        .expect("removed flag diagnostic is UTF-8")
-        .contains("unknown run option: --resource-profile"));
+        .expect("run fallback CLI metrics fixture");
+    assert!(output.status.success(), "stderr={:?}", output.stderr);
+    assert_eq!(output.stdout, b"3628800");
+    let fallback_json = std::fs::read_to_string(&metrics).expect("read fallback metrics output");
+    std::fs::remove_file(&metrics).expect("remove fallback metrics output");
+    assert!(fallback_json.contains("\"execution_path\":\"vm-fallback\""));
+    assert!(fallback_json.contains("\"fallback_reason\":\"unsupported-shape\""));
+    assert!(fallback_json.contains("\"native_entered\":false"));
+
+    for arguments in [
+        vec!["run", "--engine", "vm"],
+        vec!["run", "--auto-jit-threshold", "1"],
+        vec!["run", "--disable-auto-jit"],
+        vec!["run", "--resource-profile", "default"],
+    ] {
+        let removed = Command::new(binary)
+            .args(&arguments)
+            .arg(&fixture)
+            .output()
+            .expect("run removed option");
+        assert!(
+            !removed.status.success(),
+            "removed option accepted: {arguments:?}"
+        );
+        assert!(String::from_utf8(removed.stderr)
+            .expect("removed option diagnostic is UTF-8")
+            .contains(&format!("unknown run option: {}", arguments[1])));
+    }
 }
 
 #[test]

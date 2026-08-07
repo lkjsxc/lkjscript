@@ -100,37 +100,19 @@ pub(crate) fn metrics() -> ContractDescriptor {
                 "phase timing and observed source-file count",
             ))
             .fact(fact(
-                "engines",
-                "engines",
-                "VM baseline proof and fallback facts",
+                "execution-path",
+                "execution path",
+                "baseline-native or vm-fallback with nullable decline reason",
             ))
             .fact(fact(
-                "native",
-                "native",
-                "entries calls runtime calls frames and cleanup obligations",
+                "entry",
+                "native entry",
+                "native-entered commit-point fact",
             ))
             .fact(fact(
-                "runtime-values",
-                "runtime-values",
-                "list segments region products runtime calls and reserved bytes",
-            ))
-            .fact(fact(
-                "segmented-lists",
-                "segmented-lists",
-                "segments entries physical allocations logical prepends reads and reserved-byte estimates",
-            ))
-            .fact(fact(
-                "unique",
-                "unique",
-                "operations cleanup live owners live loans release backlog and forged failures",
-            ))
-            .fact(fact(
-                "structural",
-                "structural",
-                concat!(
-                    "calls roots views destinations sealed publication acquisition release ",
-                    "copied bytes release work live domains owners and zero teardown",
-                ),
+                "timings",
+                "execution timings",
+                "preflight lower install prepare native VM and total durations",
             )),
     )
 }

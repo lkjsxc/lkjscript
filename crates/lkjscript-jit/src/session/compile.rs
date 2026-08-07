@@ -25,6 +25,8 @@ impl JitSession {
             }
         };
         let lowering_and_encoding = started.elapsed();
+        self.last_lowering_and_encoding = lowering_and_encoding;
+        self.last_installation = Duration::ZERO;
         if self.optimization_time.saturating_add(lowering_and_encoding)
             > self.config.max_object_compile_time
             || self
@@ -87,11 +89,10 @@ impl JitSession {
         let trap_map = lowered.image.trap_map().to_vec();
         let outcome_map = lowered.image.outcome_map().to_vec();
         let install_started = Instant::now();
-        let installed = self
-            .installer
-            .install(lowered.image)
-            .map_err(|error| install_error(root, error))?;
+        let installed = self.installer.install(lowered.image);
         let installation = install_started.elapsed();
+        self.last_installation = installation;
+        let installed = installed.map_err(|error| install_error(root, error))?;
         let accounted_allocation_bytes = installed.accounted_allocation_bytes();
         let total = lowering_and_encoding.saturating_add(installation);
         if self.optimization_time.saturating_add(total) > self.config.max_object_compile_time

@@ -130,6 +130,19 @@ impl JitSession {
         )
     }
 
+    pub(crate) fn new_baseline_attempt(
+        program: &VerifiedProgram,
+        links: &BytecodeLinkMetadata,
+        config: JitConfig,
+    ) -> Self {
+        Self::new(
+            ProgramAuthority::Baseline(program.clone()),
+            Some(links.clone()),
+            config,
+            Duration::ZERO,
+        )
+    }
+
     pub(crate) fn new_optimizing(
         program: VerifiedOptimizedProgram,
         config: JitConfig,
@@ -221,6 +234,8 @@ impl JitSession {
             last_runtime_trap: None,
             last_runtime_resource: None,
             last_runtime_failure: None,
+            last_lowering_and_encoding: Duration::ZERO,
+            last_installation: Duration::ZERO,
         }
     }
 }

@@ -13,13 +13,12 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    and OS/ABI bounds. Keep only genuine external representation boundaries and a small explicit
    coarse policy for untrusted requests. Preserve typed exhaustion, cancellation safety, and atomic
    publication.
-2. **Complete the selected production runtime cutover.** The accepted path synchronously prepares
-   one baseline-native reachable group before effects, runs it when preparation succeeds, otherwise
-   runs the VM, and never falls back after entry. The typed executable preparation/entry boundary is
-   implemented. Replace repeated automatic transitions with the single group decision, then delete
-   or demote forced tier CLI surface and optimizing machinery. Retain representative runtime
-   measurements and add peak-memory, generated-code, release-size, and target evidence as the
-   cutover changes those outcomes.
+2. **Delete the losing internal runtime paths.** The app now synchronously prepares one scalar
+   baseline-native reachable group before effects, runs it when preparation succeeds, otherwise
+   runs the VM, and never falls back after entry. Public forced tiers, threshold, and auto controls
+   are deleted. Remove the repeated-auto, forced-tier, and optimizing APIs retained only by current
+   tests, then rerun representative measurements with peak-memory, generated-code, release-size,
+   and target evidence.
 3. **Address measured scale costs without restoring quotas.** Start with preparation, bytecode
    validation, and peak memory exposed by the retained 16,385-call/borrow-scope harness. Profile
    repeated scans, whole-program clones, duplicate identity/serialization work, and unconditional

@@ -185,6 +185,199 @@ impl JitSession {
             }
             Err(error) => return Err(error),
         };
+        Ok(self.complete_scalar_invocation(function, index, object_index, report, execution))
+    }
+
+    pub(crate) fn invoke_baseline_scalar_attempt(
+        &mut self,
+        function: FunctionId,
+        arguments: &[NativeValue],
+        execution: &ExecutionPolicy,
+    ) -> BaselineScalarAttempt {
+        let preparation_started = Instant::now();
+        let Some(index) = function.index() else {
+            return BaselineScalarAttempt::PreparationFailure {
+                error: EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "function ID cannot index baseline state",
+                ),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let Some(object_id) = self
+            .functions
+            .get(index)
+            .filter(|record| record.state == TierState::BaselineNative)
+            .and_then(|record| record.code_object)
+        else {
+            return BaselineScalarAttempt::PreparationFailure {
+                error: EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "function has no installed baseline object",
+                ),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let Some(object_index) = self
+            .objects
+            .iter()
+            .position(|object| object.identity == object_id && !object.invalidated)
+        else {
+            return BaselineScalarAttempt::PreparationFailure {
+                error: EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "installed baseline object is unavailable",
+                ),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let Some(native) = self.objects[object_index]
+            .entries
+            .iter()
+            .find(|entry| entry.source_function().get() == function.raw())
+            .map(EntryMetadata::function)
+        else {
+            return BaselineScalarAttempt::PreparationFailure {
+                error: EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "baseline object has no source-function entry",
+                ),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        let execution_domain = self.objects[object_index].installed.execution_domain();
+        let Some(native_stack_requirement) = self.objects[object_index]
+            .automatic_stack_requirements
+            .iter()
+            .find_map(|(candidate, bytes)| (*candidate == function).then_some(*bytes))
+        else {
+            return BaselineScalarAttempt::PreparationFailure {
+                error: EngineError::new(
+                    FailureCode::NativeStackBoundary,
+                    Some(function),
+                    "baseline group stack requirement is unavailable",
+                ),
+                preparation: preparation_started.elapsed(),
+            };
+        };
+        self.last_runtime_trap = None;
+        self.last_runtime_resource = None;
+        self.last_runtime_failure = None;
+        self.returned_unique = None;
+        let mut config = match execution.limited_policy() {
+            Some(policy) => {
+                NativeInvocationConfig::limited(policy.instruction_fuel, policy.wall_time)
+                    .with_max_active_frames(policy.max_frames)
+                    .with_max_active_values(policy.max_stack_values)
+                    .with_max_cleanup_failures(policy.cleanup_retention.max_failures())
+            }
+            None => NativeInvocationConfig::unrestricted(),
+        };
+        config = config.with_native_stack_requirement(native_stack_requirement);
+        let attempt = match execution_domain {
+            lkjscript_native::NativeExecutionDomain::CollectorFree => self
+                .invoke_baseline_collector_free_attempt(object_index, native, arguments, &config),
+            lkjscript_native::NativeExecutionDomain::InvocationRegion => self
+                .invoke_baseline_region_attempt(
+                    function,
+                    object_index,
+                    native,
+                    arguments,
+                    &config,
+                    execution,
+                ),
+        };
+        match attempt {
+            BaselineRegionAttempt::Declined { error, preparation } => {
+                BaselineScalarAttempt::Declined { error, preparation }
+            }
+            BaselineRegionAttempt::PreparationFailure { error, preparation } => {
+                BaselineScalarAttempt::PreparationFailure { error, preparation }
+            }
+            BaselineRegionAttempt::Entered {
+                result,
+                preparation,
+                native_execution,
+            } => {
+                if self.time_to_first_native_entry.is_none() {
+                    self.time_to_first_native_entry =
+                        self.metrics_started.map(|started| started.elapsed());
+                }
+                if self.config.collect_metrics {
+                    self.native_invocations = self.native_invocations.saturating_add(1);
+                    self.native_execution = self.native_execution.saturating_add(native_execution);
+                    if self.first_native_call.is_none() {
+                        self.first_native_call = Some(native_execution);
+                    }
+                }
+                match *result {
+                    Ok(report) => BaselineScalarAttempt::Executed {
+                        invocation: self.complete_scalar_invocation(
+                            function,
+                            index,
+                            object_index,
+                            report,
+                            execution,
+                        ),
+                        preparation,
+                        native_execution,
+                    },
+                    Err(error) => BaselineScalarAttempt::EnteredFailure {
+                        error,
+                        preparation,
+                        native_execution,
+                    },
+                }
+            }
+        }
+    }
+
+    fn invoke_baseline_collector_free_attempt(
+        &self,
+        object_index: usize,
+        native: lkjscript_native::FunctionId,
+        arguments: &[NativeValue],
+        config: &NativeInvocationConfig,
+    ) -> BaselineRegionAttempt {
+        let preparation_started = Instant::now();
+        let mut services = NoopNativeIslandRuntimeServices;
+        let prepared = self.objects[object_index].installed.prepare_invocation(
+            native,
+            arguments,
+            config,
+            &mut services,
+        );
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                return BaselineRegionAttempt::Declined {
+                    error,
+                    preparation: preparation_started.elapsed(),
+                };
+            }
+        };
+        let preparation = preparation_started.elapsed();
+        let native_started = Instant::now();
+        let result = prepared.enter();
+        BaselineRegionAttempt::Entered {
+            result: Box::new(result),
+            preparation,
+            native_execution: native_started.elapsed(),
+        }
+    }
+
+    fn complete_scalar_invocation(
+        &mut self,
+        function: FunctionId,
+        index: usize,
+        object_index: usize,
+        report: InvocationReport,
+        execution: &ExecutionPolicy,
+    ) -> ScalarInvocation {
         self.poll_calls = self.poll_calls.saturating_add(report.poll_count());
         self.resource_runtime_calls = self
             .resource_runtime_calls
@@ -262,11 +455,11 @@ impl JitSession {
                 InvocationOutcome::HostFailure => ScalarInvocationOutcome::HostFailure,
             },
         };
-        Ok(ScalarInvocation {
+        ScalarInvocation {
             outcome,
             poll_count: report.poll_count(),
             cleanup_failures,
-        })
+        }
     }
 }
 

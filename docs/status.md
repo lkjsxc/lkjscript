@@ -17,11 +17,13 @@ subsets, numeric conversions, bytes and byte vectors, lists, typed host resource
 explicit capabilities. Executable examples and compiler/runtime tests own the exact accepted
 surface; this document does not copy their tables.
 
-`lkjscript run` defaults to `auto`. Public diagnostic selections `vm`, `baseline-jit`, and
-`optimizing-jit` remain. Automatic execution retains a validated generic VM route and may enter
-native code for eligible groups. Native ineligibility is a specialization result and falls back to
-the VM in automatic mode; forced native modes report unsupported shapes instead of claiming a
-fallback was native execution.
+`lkjscript run` exposes one execution policy. It synchronously attempts the scalar
+baseline-native group reachable from `main`; eligibility, lowering, installation, or typed
+pre-entry decline drops the complete native attempt and executes the unchanged validated program in
+the VM. Once native entry begins, its returned value, trap, exit, resource/deadline/host outcome, or
+entered failure is final and the VM is not run. Structural, I/O, generic, recursive-stack, and other
+unsupported native shapes therefore remain valid through the generic VM path. There is no public
+engine, threshold, auto-tier, or forced-tier option.
 
 The broadly tested host is Linux x86-64. Portable Rust may build elsewhere, but another host or
 native target is not claimed as tested.
@@ -42,11 +44,14 @@ and configured whole-group stack checks. Success returns a non-cloneable `Prepar
 `InvocationReport` or `EnteredInvocationError`. Pre-entry and entered failures are disjoint types;
 after entry, traps and host/resource/deadline results remain outcomes and no error is VM-retry safe.
 
-The accepted final runtime is one synchronous baseline-native reachable-group attempt before
-effects, with VM execution when preparation declines and no fallback after entry. This commit
-implements the executable decision boundary and routes current JIT callers through it. It does not
-yet replace current repeated automatic transitions, remove forced tier CLI selections, or delete
-the optimizer.
+The product runtime now uses that boundary for one synchronous scalar baseline-native
+reachable-group attempt before effects, with VM execution after any typed decline and no fallback
+after entry. Declined installed images and session state are dropped before VM construction; the VM
+receives the original validated bytecode, inputs, and `ExecutionPolicy`. Product metrics report the
+actual `baseline-native` or `vm-fallback` path, a nullable decline reason, the native-entry commit
+fact, and preflight/lower/install/prepare/native/VM/total durations. Forced and repeated-auto JIT
+APIs remain internal only for existing differential tests until their deletion in the next cutover
+commit; optimizing machinery is not a product path.
 
 ## Phase 1 scale and policy result
 
@@ -137,10 +142,10 @@ transport specialization does not claim native support when no specialization ex
 - Semantic Source remains syntax-shaped and its wide dense IDs are not edit-stable semantic IDs.
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
-- Evaluator, VM, automatic baseline-native, baseline-JIT, and proof-oriented optimizing machinery
-  still multiply runtime and maintenance surface. The production path is selected, but repeated
-  automatic transitions, forced tier CLI surface, and optimizing machinery have not yet been cut
-  over or deleted.
+- The app has one baseline-native-with-VM-fallback product path, but evaluator, repeated-auto,
+  forced baseline, and proof-oriented optimizing APIs still multiply internal test and maintenance
+  surface. Their public CLI surface is gone; deleting the retained internal losing paths is the next
+  runtime cutover commit.
 - Daemon, process-cell, scheduler, database, resource-topology, and platform crates remain in the
   workspace even though the local language foundation does not require all of them.
 - Process/daemon policy is broader and more fragmented than the intended small coarse boundary

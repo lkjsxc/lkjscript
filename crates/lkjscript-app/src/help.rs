@@ -2,12 +2,8 @@ pub fn print() {
     println!("lkjscript - typed line-oriented language runtime");
     println!();
     println!("Usage:");
-    println!(
-        "  lkjscript run [--engine vm|auto|baseline-jit|optimizing-jit] [--auto-jit-threshold N]"
-    );
-    println!("                 [--disable-auto-jit]");
-    println!("                 <file.lkjscript> [--] [script-args...]");
-    println!("                 default: auto at 64 function entries; explicit vm is deterministic");
+    println!("  lkjscript run <file.lkjscript> [--] [script-args...]");
+    println!("                 one baseline-native attempt, then VM fallback before entry");
     println!("  lkjscript describe [--json]");
     println!("  lkjscript package <lock|check> [package-path]");
     println!("  lkjscript memory inventory [--json]");

@@ -26,7 +26,7 @@ const LANGUAGE_FORMS: &[&str] = &[
     "typed-errors",
     "typed-holes",
 ];
-const ENGINES: &[&str] = &["vm", "auto", "baseline-jit", "optimizing-jit"];
+const EXECUTION_PATH: &str = "baseline-native-with-vm-fallback";
 const UNSUPPORTED: &[&str] = &[
     "collector-free production runtime",
     "non-Linux host acceptance",
@@ -82,7 +82,7 @@ fn print_human(contracts: &ContractSet) {
     }
     println!("semantic-operations: {}", SEMANTIC_OPERATIONS.join(", "));
     println!("language-forms: {}", LANGUAGE_FORMS.join(", "));
-    println!("engines: {}", ENGINES.join(", "));
+    println!("execution-path: {EXECUTION_PATH}");
     println!("package-capabilities: local-content-addressed");
     println!("unsupported: {}", UNSUPPORTED.join(", "));
 }
@@ -115,7 +115,8 @@ fn json_description(contracts: &ContractSet) -> String {
     output.push(']');
     push_array(&mut output, "semantic_operations", SEMANTIC_OPERATIONS);
     push_array(&mut output, "language_forms", LANGUAGE_FORMS);
-    push_array(&mut output, "engines", ENGINES);
+    output.push(',');
+    push_string(&mut output, "execution_path", EXECUTION_PATH);
     push_array(&mut output, "unsupported", UNSUPPORTED);
     output.push('}');
     output
