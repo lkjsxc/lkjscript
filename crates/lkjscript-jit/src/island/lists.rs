@@ -51,10 +51,17 @@ impl JitIslandServices {
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
         let tail_key = self.list_key(*tail)?;
-        let projected = self
-            .lists
-            .reserved_bytes_estimate()
-            .saturating_add(self.lists.prepend_storage_increase());
+        let retained = match self.lists.reserved_bytes_estimate() {
+            Ok(bytes) => bytes,
+            Err(error) => return self.list_error(error),
+        };
+        let growth = match self.lists.prepend_storage_increase() {
+            Ok(bytes) => bytes,
+            Err(error) => return self.list_error(error),
+        };
+        let projected = retained
+            .checked_add(growth)
+            .ok_or(NativeServiceError::HostFailure)?;
         if self
             .max_runtime_bytes
             .is_some_and(|maximum| projected > maximum)
@@ -69,7 +76,7 @@ impl JitIslandServices {
         if matches!(head, NativeValue::StructuralOwner(_)) {
             self.list_owners
                 .try_reserve(1)
-                .map_err(|_| NativeServiceError::ResourceLimitExceeded)?;
+                .map_err(|_| NativeServiceError::HostFailure)?;
         }
         let (retained, owner) = self.retain_list_value(*head, head_type)?;
         let key =
@@ -174,11 +181,7 @@ impl JitIslandServices {
 
     pub(super) fn map_list_error(error: lkjscript_core::SegmentedListError) -> NativeServiceError {
         match error {
-            lkjscript_core::SegmentedListError::Limit(
-                lkjscript_core::SegmentedListLimit::HostAllocation
-                | lkjscript_core::SegmentedListLimit::Entries
-                | lkjscript_core::SegmentedListLimit::Segments,
-            ) => NativeServiceError::ResourceLimitExceeded,
+            lkjscript_core::SegmentedListError::Limit(_) => NativeServiceError::HostFailure,
             _ => NativeServiceError::Trap,
         }
     }

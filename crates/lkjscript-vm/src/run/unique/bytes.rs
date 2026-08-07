@@ -4,6 +4,7 @@ use super::{
 
 impl UniqueRuntime {
     pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<Value> {
+        self.preflight_allocation(bytes.capacity())?;
         let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
         self.publish_bytes(key.packed_word().get())
     }
@@ -55,6 +56,8 @@ impl UniqueRuntime {
     pub(crate) fn clone_bytes(&mut self, value: Value) -> Result<Value> {
         let word = self.bytes_word(value)?;
         let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        let bytes = self.store.bytes(key).map_err(map_store_error)?.len();
+        self.preflight_allocation(bytes)?;
         let clone = self.store.clone_bytes(key).map_err(map_store_error)?;
         self.publish_bytes(clone.packed_word().get())
     }
@@ -67,6 +70,7 @@ impl UniqueRuntime {
     ) -> Result<Value> {
         let word = self.bytes_word(value)?;
         let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        self.preflight_allocation(len)?;
         let clone = self
             .store
             .clone_bytes_range(key, start, len)
@@ -75,6 +79,7 @@ impl UniqueRuntime {
     }
 
     pub(crate) fn clone_static(&mut self, bytes: &[u8]) -> Result<Value> {
+        self.preflight_allocation(bytes.len())?;
         let key = self
             .store
             .clone_static_bytes(bytes)
@@ -88,6 +93,7 @@ impl UniqueRuntime {
         start: usize,
         len: usize,
     ) -> Result<Value> {
+        self.preflight_allocation(len)?;
         let key = self
             .store
             .clone_static_bytes_range(bytes, start, len)
@@ -129,6 +135,7 @@ impl UniqueRuntime {
     }
 
     pub(crate) fn thaw_static(&mut self, bytes: &[u8]) -> Result<Value> {
+        self.preflight_allocation(bytes.len())?;
         let key = self
             .store
             .thaw_bytes_slice(bytes)

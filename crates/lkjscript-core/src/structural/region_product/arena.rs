@@ -6,20 +6,16 @@ use crate::RuntimeLayoutId;
 
 pub struct RegionProductArena<T> {
     id: RegionProductArenaId,
-    limits: RegionProductLimits,
     records: Vec<RegionProductRecord<T>>,
-    fields: u32,
-    reserved_fields: u32,
+    fields: u64,
 }
 
 impl<T> RegionProductArena<T> {
-    pub fn new(limits: RegionProductLimits) -> Result<Self, RegionProductError> {
+    pub fn new() -> Result<Self, RegionProductError> {
         Ok(Self {
             id: RegionProductArenaId::fresh()?,
-            limits,
             records: Vec::new(),
             fields: 0,
-            reserved_fields: 0,
         })
     }
 
@@ -36,35 +32,22 @@ impl<T> RegionProductArena<T> {
             .records
             .len()
             .checked_add(1)
-            .ok_or(RegionProductError::Records)?;
-        if next_records > self.limits.max_records.get() as usize {
-            return Err(RegionProductError::Records);
-        }
-        let field_count = u32::try_from(fields.len()).map_err(|_| RegionProductError::Fields)?;
+            .ok_or(RegionProductError::ArithmeticOverflow)?;
+        let field_count =
+            u64::try_from(fields.len()).map_err(|_| RegionProductError::ArithmeticOverflow)?;
         let next_fields = self
             .fields
             .checked_add(field_count)
-            .ok_or(RegionProductError::Fields)?;
-        if next_fields > self.limits.max_fields.get() {
-            return Err(RegionProductError::Fields);
-        }
-        let reserved = u32::try_from(fields.capacity()).map_err(|_| RegionProductError::Fields)?;
-        let next_reserved = self
-            .reserved_fields
-            .checked_add(reserved)
-            .ok_or(RegionProductError::Fields)?;
-        if next_reserved > self.limits.max_fields.get() {
-            return Err(RegionProductError::Fields);
-        }
+            .ok_or(RegionProductError::ArithmeticOverflow)?;
         self.records
             .try_reserve(1)
             .map_err(|_| RegionProductError::HostAllocation)?;
-        let record =
-            NonZeroU32::new(u32::try_from(next_records).map_err(|_| RegionProductError::Records)?)
-                .ok_or(RegionProductError::Records)?;
+        let record = NonZeroU32::new(
+            u32::try_from(next_records).map_err(|_| RegionProductError::RepresentationExhausted)?,
+        )
+        .ok_or(RegionProductError::RepresentationExhausted)?;
         self.records.push(RegionProductRecord { identity, fields });
         self.fields = next_fields;
-        self.reserved_fields = next_reserved;
         Ok(RegionProductKey::new(self.id, record))
     }
 
@@ -104,14 +87,33 @@ impl<T> RegionProductArena<T> {
             .ok_or(RegionProductError::FieldOutOfRange)
     }
 
-    pub fn publish_storage_increase(&self, field_capacity: usize) -> u64 {
-        let fields = (field_capacity as u64).saturating_mul(std::mem::size_of::<T>() as u64);
+    pub fn publish_storage_increase(
+        &self,
+        field_capacity: usize,
+    ) -> Result<u64, RegionProductError> {
+        let fields = storage_bytes::<T>(field_capacity)?;
         let record = if self.records.len() == self.records.capacity() {
-            std::mem::size_of::<RegionProductRecord<T>>() as u64
+            storage_bytes::<RegionProductRecord<T>>(1)?
         } else {
             0
         };
-        fields.saturating_add(record)
+        fields
+            .checked_add(record)
+            .ok_or(RegionProductError::ArithmeticOverflow)
+    }
+
+    pub fn reserved_bytes_estimate(&self) -> Result<u64, RegionProductError> {
+        let mut fields = 0_u64;
+        for record in &self.records {
+            fields = fields
+                .checked_add(storage_bytes::<T>(record.fields.capacity())?)
+                .ok_or(RegionProductError::ArithmeticOverflow)?;
+        }
+        fields
+            .checked_add(storage_bytes::<RegionProductRecord<T>>(
+                self.records.capacity(),
+            )?)
+            .ok_or(RegionProductError::ArithmeticOverflow)
     }
 
     pub fn metrics(&self) -> RegionProductMetrics {
@@ -123,7 +125,7 @@ impl<T> RegionProductArena<T> {
             .saturating_mul(std::mem::size_of::<RegionProductRecord<T>>() as u64);
         RegionProductMetrics {
             records: self.records.len() as u64,
-            fields: u64::from(self.fields),
+            fields: self.fields,
             reserved_bytes_estimate: field_bytes.saturating_add(record_bytes),
         }
     }
@@ -136,6 +138,14 @@ impl<T> RegionProductArena<T> {
             .and_then(|index| self.records.get(index))
             .ok_or(RegionProductError::InvalidKey)
     }
+}
+
+fn storage_bytes<T>(count: usize) -> Result<u64, RegionProductError> {
+    u64::try_from(count)
+        .ok()
+        .zip(u64::try_from(std::mem::size_of::<T>()).ok())
+        .and_then(|(count, item)| count.checked_mul(item))
+        .ok_or(RegionProductError::ArithmeticOverflow)
 }
 
 impl<T: Copy> RegionProductArena<T> {

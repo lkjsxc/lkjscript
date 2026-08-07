@@ -112,7 +112,7 @@ enum AdapterSlot {
 pub(super) struct AggregateAdapters {
     slots: Vec<AdapterSlot>,
     free: Vec<u32>,
-    max_slots: Option<u32>,
+    allocations: u64,
 }
 
 include!("adapter/storage.rs");

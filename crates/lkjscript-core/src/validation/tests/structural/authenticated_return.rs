@@ -96,8 +96,7 @@ fn authenticated_return_uses_one_owner_count_for_the_whole_dag() {
     let field_type = copy_field().runtime_type.expect("field type");
     let snapshot = returned_product_snapshot(&chunk, field_type, 1);
     assert_eq!(snapshot.nodes().len(), 2);
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(&chunk, snapshot)
         .expect("rehydrate two-node DAG");

@@ -58,6 +58,7 @@ impl JitSession {
         let execution_domain = self.objects[object_index].installed.execution_domain();
         self.last_runtime_trap = None;
         self.last_runtime_resource = None;
+        self.last_runtime_failure = None;
         self.returned_unique = None;
         let config = match execution.limited_policy() {
             Some(policy) => {
@@ -167,26 +168,39 @@ impl JitSession {
             .native_entry_count
             .saturating_add(invocation_entries);
         let cleanup_failures = native_cleanup_failures(&report, execution);
-        let outcome = match report.outcome() {
-            InvocationOutcome::Returned(value) => ScalarInvocationOutcome::Returned(value),
-            InvocationOutcome::Trapped(trap) => {
-                ScalarInvocationOutcome::Trapped(trap, report.trap_site())
-            }
-            InvocationOutcome::Exited(code) => ScalarInvocationOutcome::Exited(code),
-            InvocationOutcome::DeadlineExceeded => ScalarInvocationOutcome::DeadlineExceeded,
-            InvocationOutcome::ResourceLimitExceeded(kind) => {
-                let kind = match kind {
-                    NativeResourceLimitKind::PollFuel => ResourceLimitKind::InstructionFuel,
-                    NativeResourceLimitKind::ActiveFrames
-                    | NativeResourceLimitKind::NativeStackBytes => ResourceLimitKind::FrameDepth,
-                    NativeResourceLimitKind::ActiveValues => ResourceLimitKind::StackValues,
-                    NativeResourceLimitKind::RuntimeService => self
-                        .last_runtime_resource
+        let outcome = match self.last_runtime_failure.take() {
+            Some(NativeServiceError::ResourceLimitExceeded) => {
+                ScalarInvocationOutcome::ResourceLimitExceeded(
+                    self.last_runtime_resource
                         .unwrap_or(ResourceLimitKind::Allocations),
-                };
-                ScalarInvocationOutcome::ResourceLimitExceeded(kind)
+                )
             }
-            InvocationOutcome::HostFailure => ScalarInvocationOutcome::HostFailure,
+            Some(NativeServiceError::Trap | NativeServiceError::HostFailure) => {
+                ScalarInvocationOutcome::HostFailure
+            }
+            None => match report.outcome() {
+                InvocationOutcome::Returned(value) => ScalarInvocationOutcome::Returned(value),
+                InvocationOutcome::Trapped(trap) => {
+                    ScalarInvocationOutcome::Trapped(trap, report.trap_site())
+                }
+                InvocationOutcome::Exited(code) => ScalarInvocationOutcome::Exited(code),
+                InvocationOutcome::DeadlineExceeded => ScalarInvocationOutcome::DeadlineExceeded,
+                InvocationOutcome::ResourceLimitExceeded(kind) => {
+                    let kind = match kind {
+                        NativeResourceLimitKind::PollFuel => ResourceLimitKind::InstructionFuel,
+                        NativeResourceLimitKind::ActiveFrames
+                        | NativeResourceLimitKind::NativeStackBytes => {
+                            ResourceLimitKind::FrameDepth
+                        }
+                        NativeResourceLimitKind::ActiveValues => ResourceLimitKind::StackValues,
+                        NativeResourceLimitKind::RuntimeService => self
+                            .last_runtime_resource
+                            .unwrap_or(ResourceLimitKind::Allocations),
+                    };
+                    ScalarInvocationOutcome::ResourceLimitExceeded(kind)
+                }
+                InvocationOutcome::HostFailure => ScalarInvocationOutcome::HostFailure,
+            },
         };
         Ok(ScalarInvocation {
             outcome,

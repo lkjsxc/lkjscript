@@ -7,20 +7,16 @@ impl Evaluator<'_> {
         values: &mut [Option<EvalValue>],
     ) -> Result<EvalValue, Flow> {
         match &instruction.kind {
-            InstructionKind::ProductValue { product, fields } => match aggregate_mode(
-                self.program.program(),
-                self.config.structural_limits,
-                &instruction.ty,
-            )
-            .map_err(Flow::Trap)?
-            {
-                AggregateMode::Structural => self.structural_product(*product, fields, values),
-                AggregateMode::Region => self.region_product(*product, fields, values),
-                AggregateMode::Legacy | AggregateMode::ResourceAdapter => {
-                    self.allocate()?;
-                    Ok(EvalValue::Product(*product, values_for(values, fields)?))
+            InstructionKind::ProductValue { product, fields } => {
+                match aggregate_mode(self.program.program(), &instruction.ty).map_err(Flow::Trap)? {
+                    AggregateMode::Structural => self.structural_product(*product, fields, values),
+                    AggregateMode::Region => self.region_product(*product, fields, values),
+                    AggregateMode::Legacy | AggregateMode::ResourceAdapter => {
+                        self.allocate()?;
+                        Ok(EvalValue::Product(*product, values_for(values, fields)?))
+                    }
                 }
-            },
+            }
             InstructionKind::ProductField {
                 product,
                 field,
@@ -182,8 +178,8 @@ impl Evaluator<'_> {
 
 fn region_product_error(error: lkjscript_core::RegionProductError) -> Flow {
     match error {
-        lkjscript_core::RegionProductError::Records
-        | lkjscript_core::RegionProductError::Fields
+        lkjscript_core::RegionProductError::RepresentationExhausted
+        | lkjscript_core::RegionProductError::ArithmeticOverflow
         | lkjscript_core::RegionProductError::HostAllocation => {
             Flow::Resource("region product".into())
         }

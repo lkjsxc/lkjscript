@@ -5,16 +5,14 @@ use super::{
     CleanupSubject, ExecutionOutcome, HostError, ResourceLimitKind, Trap,
 };
 
-const MAX_NESTING: usize = 8;
-
 include!("codec/limits.rs");
 
 pub fn encode_execution_outcome(
     outcome: &ExecutionOutcome,
     limits: impl Into<ExecutionOutcomeCodecLimits>,
 ) -> Result<Vec<u8>> {
-    let mut encoder = Encoder::new(limits.into().validate()?);
-    encode_outcome(&mut encoder, outcome, 0)?;
+    let mut encoder = Encoder::new(limits.into());
+    encode_outcome(&mut encoder, outcome)?;
     Ok(encoder.finish())
 }
 
@@ -22,64 +20,87 @@ pub fn decode_execution_outcome(
     bytes: &[u8],
     limits: impl Into<ExecutionOutcomeCodecLimits>,
 ) -> Result<ExecutionOutcome> {
-    let mut decoder = Decoder::new(bytes, limits.into().validate()?)?;
-    let outcome = decode_outcome(&mut decoder, 0)?;
+    let mut decoder = Decoder::new(bytes, limits.into())?;
+    let outcome = decode_outcome(&mut decoder)?;
     decoder.finish()?;
     Ok(outcome)
 }
 
-fn encode_outcome(out: &mut Encoder, value: &ExecutionOutcome, depth: usize) -> Result<()> {
-    if depth >= MAX_NESTING {
-        return Err(Error::msg("execution outcome nesting exceeds bound"));
+fn encode_outcome(out: &mut Encoder, value: &ExecutionOutcome) -> Result<()> {
+    let mut current = value;
+    let mut cleanups = Vec::new();
+    loop {
+        match current {
+            ExecutionOutcome::CleanupFailed { primary, failures } => {
+                out.u8(6)?;
+                cleanups
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("execution outcome encode stack allocation failed"))?;
+                cleanups.push(failures);
+                current = primary;
+            }
+            ExecutionOutcome::Returned(value) => {
+                out.u8(0)?;
+                value.encode_wire(out)?;
+                break;
+            }
+            ExecutionOutcome::Exited(code) => {
+                out.u8(1)?;
+                out.i32(*code)?;
+                break;
+            }
+            ExecutionOutcome::Trapped(trap) => {
+                out.u8(2)?;
+                out.text(trap.as_str())?;
+                break;
+            }
+            ExecutionOutcome::DeadlineExceeded => {
+                out.u8(3)?;
+                break;
+            }
+            ExecutionOutcome::ResourceLimitExceeded(kind) => {
+                out.u8(4)?;
+                out.u8(resource_tag(*kind))?;
+                break;
+            }
+            ExecutionOutcome::HostFailure(error) => {
+                out.u8(5)?;
+                out.text(error.as_str())?;
+                break;
+            }
+        }
     }
-    match value {
-        ExecutionOutcome::Returned(value) => {
-            out.u8(0)?;
-            value.encode_wire(out)?;
-        }
-        ExecutionOutcome::Exited(code) => {
-            out.u8(1)?;
-            out.i32(*code)?;
-        }
-        ExecutionOutcome::Trapped(trap) => {
-            out.u8(2)?;
-            out.text(trap.as_str())?;
-        }
-        ExecutionOutcome::DeadlineExceeded => out.u8(3)?,
-        ExecutionOutcome::ResourceLimitExceeded(kind) => {
-            out.u8(4)?;
-            out.u8(resource_tag(*kind))?;
-        }
-        ExecutionOutcome::HostFailure(error) => {
-            out.u8(5)?;
-            out.text(error.as_str())?;
-        }
-        ExecutionOutcome::CleanupFailed { primary, failures } => {
-            out.u8(6)?;
-            encode_outcome(out, primary, depth + 1)?;
-            encode_cleanup(out, failures)?;
-        }
+    for failures in cleanups.into_iter().rev() {
+        encode_cleanup(out, failures)?;
     }
     Ok(())
 }
 
-fn decode_outcome(input: &mut Decoder<'_>, depth: usize) -> Result<ExecutionOutcome> {
-    if depth >= MAX_NESTING {
-        return Err(Error::msg("execution outcome nesting exceeds bound"));
-    }
-    Ok(match input.u8()? {
-        0 => ExecutionOutcome::Returned(super::OwnedValue::decode_wire(input)?),
-        1 => ExecutionOutcome::Exited(input.i32()?),
-        2 => ExecutionOutcome::Trapped(Trap::new(input.text()?)),
-        3 => ExecutionOutcome::DeadlineExceeded,
-        4 => ExecutionOutcome::ResourceLimitExceeded(resource_kind(input.u8()?)?),
-        5 => ExecutionOutcome::HostFailure(HostError::new(input.text()?)),
-        6 => ExecutionOutcome::CleanupFailed {
-            primary: Box::new(decode_outcome(input, depth + 1)?),
+fn decode_outcome(input: &mut Decoder<'_>) -> Result<ExecutionOutcome> {
+    let mut cleanup_count = 0_usize;
+    let mut outcome = loop {
+        match input.u8()? {
+            0 => break ExecutionOutcome::Returned(super::OwnedValue::decode_wire(input)?),
+            1 => break ExecutionOutcome::Exited(input.i32()?),
+            2 => break ExecutionOutcome::Trapped(Trap::new(input.text()?)),
+            3 => break ExecutionOutcome::DeadlineExceeded,
+            4 => break ExecutionOutcome::ResourceLimitExceeded(resource_kind(input.u8()?)?),
+            5 => break ExecutionOutcome::HostFailure(HostError::new(input.text()?)),
+            6 => {
+                cleanup_count = cleanup_count
+                    .checked_add(1)
+                    .ok_or_else(|| Error::host("execution outcome nesting count overflow"))?;
+            }
+            _ => return Err(Error::msg("unknown execution outcome tag")),
+        }
+    };
+    for _ in 0..cleanup_count {
+        outcome = ExecutionOutcome::CleanupFailed {
+            primary: Box::new(outcome),
             failures: decode_cleanup(input)?,
-        },
-        _ => return Err(Error::msg("unknown execution outcome tag")),
-    })
+        };
+    }
+    Ok(outcome)
 }
 
 fn encode_cleanup(out: &mut Encoder, failures: &CleanupFailures) -> Result<()> {
@@ -116,7 +137,10 @@ fn decode_cleanup(input: &mut Decoder<'_>) -> Result<CleanupFailures> {
     if matches!(retention, CleanupRetentionPolicy::Limited(limits) if count > limits.max_failures) {
         return Err(Error::msg("cleanup failure count exceeds encoded limit"));
     }
-    let mut retained = Vec::with_capacity(count);
+    let mut retained = Vec::new();
+    retained
+        .try_reserve_exact(count)
+        .map_err(|_| Error::host("cleanup failure decode allocation failed"))?;
     for _ in 0..count {
         retained.push(CleanupFailure::from_wire_parts(
             decode_phase(input.u8()?)?,
@@ -162,10 +186,6 @@ fn resource_kind(tag: u8) -> Result<ResourceLimitKind> {
 include!("codec/cleanup_tags.rs");
 include!("codec/io.rs");
 
-#[cfg(test)]
-mod structural_bounds_tests;
-#[cfg(test)]
-mod structural_decode_bounds_tests;
 #[cfg(test)]
 mod structural_tests;
 #[cfg(test)]

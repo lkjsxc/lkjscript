@@ -76,7 +76,7 @@ impl StructuralRootTable {
         if value.shared_loans != 0 || value.exclusive_loan {
             return Err(StructuralRootTableError::LiveLoan);
         }
-        let retires = generation.get() >= self.limits.max_generation;
+        let retires = generation.get() == u32::MAX;
         let next_live = self
             .stats
             .live_roots
@@ -106,6 +106,11 @@ impl StructuralRootTable {
         };
         if next.is_some() {
             self.free_roots.push(key.slot());
+        }
+        if ownership != StructuralRootOwnership::SealedShared
+            && !self.exclusive_roots.remove(&value.root)
+        {
+            return Err(StructuralRootTableError::InvariantViolation);
         }
         self.stats.live_roots = next_live;
         self.stats.root_slots_retired = next_retired;

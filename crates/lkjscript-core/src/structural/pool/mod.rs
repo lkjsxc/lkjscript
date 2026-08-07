@@ -10,7 +10,7 @@ use model::{PoolSlot, PoolSlotState};
 
 use super::{
     DomainClass, DomainKey, LayoutIdentity, PoolMetrics, RootClass, RootKey, SemanticTypeIdentity,
-    StructuralError, StructuralLimit, StructuralLimits, StructuralRuntime, StructuralRuntimeId,
+    StructuralError, StructuralRuntime, StructuralRuntimeId,
 };
 
 #[derive(Debug)]
@@ -19,7 +19,6 @@ pub struct TypedPool<T> {
     domain: DomainKey,
     layout: LayoutIdentity,
     semantic_type: SemanticTypeIdentity,
-    limits: StructuralLimits,
     slots: Vec<PoolSlot<T>>,
     free: Vec<u32>,
     metrics: Cell<PoolMetrics>,
@@ -30,16 +29,13 @@ impl<T> TypedPool<T> {
         runtime: &mut StructuralRuntime,
         layout: LayoutIdentity,
         semantic_type: SemanticTypeIdentity,
-        limits: StructuralLimits,
     ) -> Result<Self, StructuralError> {
-        let limits = limits.validate()?;
         let domain = runtime.allocate(DomainClass::Pool)?;
         Ok(Self {
             runtime: runtime.identity(),
             domain,
             layout,
             semantic_type,
-            limits,
             slots: Vec::new(),
             free: Vec::new(),
             metrics: Cell::new(PoolMetrics::default()),
@@ -66,9 +62,6 @@ impl<T> TypedPool<T> {
             self.free.pop();
             (slot, entry.generation, true)
         } else {
-            if self.slots.len() >= self.limits.max_pool_slots as usize {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::PoolSlots));
-            }
             self.slots
                 .try_reserve(1)
                 .map_err(|_| StructuralError::AllocationFailed)?;
@@ -112,7 +105,7 @@ impl<T> TypedPool<T> {
     pub fn remove(&mut self, id: PoolId<T>) -> Result<T, StructuralError> {
         let index = self.validate_id(id)?;
         let generation = self.slots[index].generation.get();
-        let retires = generation >= self.limits.max_generation;
+        let retires = generation == u32::MAX;
         if !retires {
             self.free
                 .try_reserve(1)

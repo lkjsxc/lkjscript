@@ -124,12 +124,8 @@ impl JitSession {
         }
         match unique_export {
             Some(Ok(bytes)) => self.returned_unique = Some(bytes),
-            Some(Err(_)) => {
-                return Err(EngineError::new(
-                    FailureCode::InvocationFailure,
-                    Some(function),
-                    "native byte-vector return transfer failed",
-                ));
+            Some(Err(error)) => {
+                self.last_runtime_failure = Some(error);
             }
             None => {}
         }
@@ -137,12 +133,8 @@ impl JitSession {
             Some(Ok(value)) => {
                 self.returned_structural = Some(ReturnedStructuralValue(value));
             }
-            Some(Err(_)) => {
-                return Err(EngineError::new(
-                    FailureCode::InvocationFailure,
-                    Some(function),
-                    "native structural return export failed",
-                ));
+            Some(Err(error)) => {
+                self.last_runtime_failure = Some(error);
             }
             None => {}
         }

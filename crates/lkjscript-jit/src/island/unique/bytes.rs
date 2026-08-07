@@ -5,6 +5,7 @@ impl JitUniqueRuntime {
         &mut self,
         bytes: &[u8],
     ) -> Result<NativeUnique, NativeServiceError> {
+        self.preflight_allocation(bytes.len())?;
         self.reserve_owner()?;
         let key = self
             .store
@@ -21,6 +22,7 @@ impl JitUniqueRuntime {
     ) -> Result<NativeUnique, NativeServiceError> {
         let start = usize::try_from(start).map_err(|_| self.reject())?;
         let len = usize::try_from(len).map_err(|_| self.reject())?;
+        self.preflight_allocation(len)?;
         self.reserve_owner()?;
         let key = self
             .store
@@ -33,6 +35,7 @@ impl JitUniqueRuntime {
         &mut self,
         bytes: &[u8],
     ) -> Result<NativeUnique, NativeServiceError> {
+        self.preflight_allocation(bytes.len())?;
         self.reserve_owner()?;
         let key = self
             .store
@@ -94,6 +97,7 @@ impl JitUniqueRuntime {
         loan: NativeLoan,
     ) -> Result<NativeUnique, NativeServiceError> {
         let loan = self.require_bytes_loan(loan)?;
+        self.preflight_allocation(loan.len)?;
         self.reserve_owner()?;
         let key = self
             .store
@@ -112,6 +116,7 @@ impl JitUniqueRuntime {
         let loan = self.require_bytes_loan(loan)?;
         let start = usize::try_from(start).map_err(|_| self.reject())?;
         let len = usize::try_from(len).map_err(|_| self.reject())?;
+        self.preflight_allocation(len)?;
         self.reserve_owner()?;
         let key = self
             .store

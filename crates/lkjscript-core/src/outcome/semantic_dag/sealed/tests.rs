@@ -5,7 +5,6 @@ use std::num::NonZeroU64;
 use crate::{
     InlineStructuralValue, LayoutIdentity, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticTypeIdentity,
-    StructuralSnapshotLimits,
 };
 
 fn ty(id: u64, kind: SemanticDagKind) -> SemanticDagType {
@@ -64,12 +63,8 @@ fn product_list_product() -> SemanticDagSnapshot {
             SemanticDagPayload::Product(vec![SemanticDagNodeId::new(4), SemanticDagNodeId::new(1)]),
         ),
     ];
-    SemanticDagSnapshot::new(
-        nodes,
-        SemanticDagNodeId::new(5),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .expect("product-list-product semantic DAG")
+    SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(5))
+        .expect("product-list-product semantic DAG")
 }
 
 #[path = "tests/rehydration.rs"]

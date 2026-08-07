@@ -3,7 +3,6 @@ use std::num::NonZeroU64;
 use lkjscript_core::{
     LayoutIdentity, SemanticTypeIdentity, SemanticValue, StructuralKind, StructuralPublishFailure,
     StructuralType, StructuralValueError, StructuralValueKey, StructuralValueRuntime,
-    StructuralValueRuntimeLimits,
 };
 
 pub fn value_type(
@@ -11,8 +10,8 @@ pub fn value_type(
     semantic: u64,
     kind: StructuralKind,
 ) -> Result<StructuralType, StructuralValueError> {
-    let layout = NonZeroU64::new(layout).ok_or(StructuralValueError::InvalidLimits)?;
-    let semantic = NonZeroU64::new(semantic).ok_or(StructuralValueError::InvalidLimits)?;
+    let layout = NonZeroU64::new(layout).ok_or(StructuralValueError::InvariantViolation)?;
+    let semantic = NonZeroU64::new(semantic).ok_or(StructuralValueError::InvariantViolation)?;
     Ok(StructuralType::new(
         LayoutIdentity::new(layout),
         SemanticTypeIdentity::new(semantic),
@@ -21,7 +20,7 @@ pub fn value_type(
 }
 
 pub fn runtime() -> Result<StructuralValueRuntime, StructuralValueError> {
-    StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())
+    StructuralValueRuntime::new()
 }
 
 pub fn publish(

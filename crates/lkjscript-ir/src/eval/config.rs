@@ -13,7 +13,6 @@ pub struct EvalConfig {
     pub max_resources: usize,
     pub resource_policy: EvalResourcePolicy,
     pub cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
-    pub structural_limits: lkjscript_core::StructuralValueRuntimeLimits,
     pub args: Vec<String>,
     pub capabilities: Vec<lkjscript_contracts::CapabilityKind>,
 }
@@ -28,7 +27,6 @@ impl Default for EvalConfig {
             max_resources: 4_096,
             resource_policy: EvalResourcePolicy::default(),
             cleanup_failure_limits: lkjscript_core::CleanupFailureLimits::default(),
-            structural_limits: lkjscript_core::StructuralValueRuntimeLimits::default(),
             args: Vec::new(),
             capabilities: Vec::new(),
         }

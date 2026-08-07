@@ -4,11 +4,13 @@ use lkjscript_core::{UniqueKeyWord, UniqueLayout};
 
 impl EvalUniqueRuntime {
     pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(bytes.capacity())?;
         let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
         self.publish_bytes(key.packed_word())
     }
 
     pub(crate) fn allocate_byte_vector_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(bytes.capacity())?;
         let key = self
             .store
             .allocate_byte_vector(bytes)
@@ -66,6 +68,8 @@ impl EvalUniqueRuntime {
         let word = self.bytes_word(value)?;
         self.require_owner(word, UniqueLayout::Bytes)?;
         let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        let bytes = self.store.bytes(key).map_err(map_store_error)?.len();
+        self.preflight_allocation(bytes)?;
         let clone = self.store.clone_bytes(key).map_err(map_store_error)?;
         self.publish_bytes(clone.packed_word())
     }
@@ -79,6 +83,7 @@ impl EvalUniqueRuntime {
         let word = self.bytes_word(value)?;
         self.require_owner(word, UniqueLayout::Bytes)?;
         let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        self.preflight_allocation(len)?;
         let clone = self
             .store
             .clone_bytes_range(key, start, len)
@@ -87,6 +92,7 @@ impl EvalUniqueRuntime {
     }
 
     pub(crate) fn clone_static(&mut self, bytes: &[u8]) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(bytes.len())?;
         let key = self
             .store
             .clone_static_bytes(bytes)
@@ -100,6 +106,7 @@ impl EvalUniqueRuntime {
         start: usize,
         len: usize,
     ) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(len)?;
         let key = self
             .store
             .clone_static_bytes_range(bytes, start, len)
@@ -142,6 +149,7 @@ impl EvalUniqueRuntime {
     }
 
     pub(crate) fn thaw_static(&mut self, bytes: &[u8]) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(bytes.len())?;
         let key = self
             .store
             .thaw_bytes_slice(bytes)

@@ -13,6 +13,11 @@ impl StructuralRootTable {
         ownership: StructuralRootOwnership,
     ) -> Result<StructuralValueKey, StructuralRootTableError> {
         self.validate_publication(root, ownership)?;
+        if ownership != StructuralRootOwnership::SealedShared {
+            self.exclusive_roots
+                .try_reserve(1)
+                .map_err(|_| StructuralRootTableError::AllocationFailed)?;
+        }
         let next_published = self
             .stats
             .roots_published
@@ -41,6 +46,10 @@ impl StructuralRootTable {
                 exclusive_loan: false,
             },
         };
+        if ownership != StructuralRootOwnership::SealedShared && !self.exclusive_roots.insert(root)
+        {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
         self.stats.roots_published = next_published;
         self.stats.live_roots = next_live;
         self.stats.peak_live_roots = self.stats.peak_live_roots.max(next_live);
@@ -68,10 +77,7 @@ impl StructuralRootTable {
             return Err(StructuralRootTableError::WrongOwnership);
         }
         if ownership != StructuralRootOwnership::SealedShared
-            && self
-                .roots
-                .iter()
-                .any(|slot| matches!(slot, RootSlot::Live { value, .. } if value.root == root))
+            && self.exclusive_roots.contains(&root)
         {
             return Err(StructuralRootTableError::DuplicateOwner);
         }
@@ -87,10 +93,8 @@ impl StructuralRootTable {
             };
             return Ok((slot, generation));
         }
-        let slot = u32::try_from(self.roots.len()).map_err(|_| Self::root_limit())?;
-        if slot >= self.limits.max_roots {
-            return Err(Self::root_limit());
-        }
+        let slot = u32::try_from(self.roots.len())
+            .map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
         self.roots
             .try_reserve(1)
             .map_err(|_| StructuralRootTableError::AllocationFailed)?;

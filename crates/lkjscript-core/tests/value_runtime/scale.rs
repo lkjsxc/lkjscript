@@ -1,24 +1,24 @@
 use lkjscript_core::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StructuralKind, StructuralValueError,
-    StructuralValueLimit, StructuralValueRuntime, StructuralValueRuntimeLimits,
+    StructuralValueRuntime,
 };
 
 use super::support::value_type;
 
 #[test]
-fn default_flat_image_accepts_sixty_five_thousand_nodes() -> Result<(), StructuralValueError> {
+fn flat_image_crosses_former_node_and_field_boundaries() -> Result<(), StructuralValueError> {
     let product_type = value_type(109, 110, StructuralKind::Product)?;
     let integer_type = value_type(111, 112, StructuralKind::I64)?;
-    let mut runtime = StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())?;
+    let mut runtime = StructuralValueRuntime::new()?;
     let owner = runtime
-        .publish_owned(value_with_nodes(65_536, product_type, integer_type))
+        .publish_owned(value_with_nodes(65_537, product_type, integer_type))
         .map_err(|failure| failure.error)?;
     assert_eq!(
         runtime.value_node(owner, product_type)?.image_node_count(),
-        65_536
+        65_537
     );
     let copy = runtime.clone_owned(owner, product_type)?;
-    assert_eq!(runtime.metrics().clone_nodes, 65_536);
+    assert_eq!(runtime.metrics().clone_nodes, 65_537);
     runtime.drop_owned(copy, product_type)?;
     runtime.drop_owned(owner, product_type)?;
     let domains = runtime.domain_metrics();
@@ -28,45 +28,28 @@ fn default_flat_image_accepts_sixty_five_thousand_nodes() -> Result<(), Structur
 }
 
 #[test]
-fn four_thousand_node_boundary_is_not_a_default_ceiling() -> Result<(), StructuralValueError> {
-    let product_type = value_type(113, 114, StructuralKind::Product)?;
-    let integer_type = value_type(115, 116, StructuralKind::I64)?;
-    for nodes in [4_095, 4_096, 4_097, 16_384] {
-        let mut runtime = StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())?;
-        let owner = runtime
-            .publish_owned(value_with_nodes(nodes, product_type, integer_type))
-            .map_err(|failure| failure.error)?;
-        assert_eq!(
-            runtime.value_node(owner, product_type)?.image_node_count(),
-            nodes
-        );
-        runtime.drop_owned(owner, product_type)?;
-        runtime.verify_empty()?;
-    }
-    let limits = StructuralValueRuntimeLimits {
-        max_tree_nodes: 4_096,
-        ..StructuralValueRuntimeLimits::default()
-    };
-    let mut runtime = StructuralValueRuntime::new(limits)?;
-    let failure = match runtime.publish_owned(value_with_nodes(4_097, product_type, integer_type)) {
-        Err(failure) => failure,
-        Ok(owner) => {
-            runtime.drop_owned(owner, product_type)?;
-            return Err(StructuralValueError::InvariantViolation);
-        }
-    };
-    assert_eq!(
-        failure.error,
-        StructuralValueError::LimitExceeded(StructuralValueLimit::TreeNodes)
-    );
-    assert_eq!(runtime.metrics().live_objects, 0);
+fn payload_crosses_former_one_megabyte_boundary() -> Result<(), StructuralValueError> {
+    let bytes_type = value_type(113, 114, StructuralKind::ByteVector)?;
+    let mut runtime = StructuralValueRuntime::new()?;
+    let payload = vec![7; 1_000_001];
+    let owner = runtime
+        .publish_owned(SemanticValue::new(
+            bytes_type,
+            SemanticPayload::ByteVector(payload.clone()),
+        ))
+        .map_err(|failure| failure.error)?;
+    let exported = runtime.export_semantic(owner, bytes_type)?;
+    assert!(matches!(
+        exported.payload,
+        SemanticPayload::ByteVector(bytes) if bytes == payload
+    ));
     runtime.verify_empty()
 }
 
 #[test]
 fn released_domain_capacity_is_live_not_cumulative() -> Result<(), StructuralValueError> {
     let integer_type = value_type(117, 118, StructuralKind::I64)?;
-    let mut runtime = StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())?;
+    let mut runtime = StructuralValueRuntime::new()?;
     for value in 0..8_192_i64 {
         let owner = runtime
             .publish_owned(SemanticValue::new(

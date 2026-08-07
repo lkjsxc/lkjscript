@@ -1,5 +1,5 @@
 use super::{RegionOwner, RegionReleaseReport, RegionStore};
-use crate::structural::{DomainKey, StructuralError, StructuralLimit, StructuralRuntime};
+use crate::structural::{DomainKey, StructuralError, StructuralRuntime};
 
 impl<T: Copy, D: Copy> RegionStore<T, D> {
     pub fn release<E, F>(
@@ -28,8 +28,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
             drop_failures: failures,
         };
         for key in work {
-            let index = self.record_index(key)?;
-            let mut record = self.records.swap_remove(index).1;
+            let mut record = self.take_record(key)?;
             for drop in record.drops.drain_reverse() {
                 if let Err(error) = execute_drop(drop) {
                     report.drop_failures.push(error);
@@ -64,16 +63,14 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         self.require_runtime(runtime)?;
         let index = self.record_index(owner.key)?;
         let epoch = self.records[index].1.epoch.get();
-        if epoch >= self.limits.max_generation {
+        if epoch == u32::MAX {
             return Err(StructuralError::GenerationExhausted);
         }
         if self.records[index].1.loans != 0 {
             return Err(StructuralError::LiveLoan);
         }
-        let release_work = self.records[index].1.release_work as usize;
-        if release_work > self.limits.max_release_work as usize {
-            return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-        }
+        let release_work = usize::try_from(self.records[index].1.release_work)
+            .map_err(|_| StructuralError::ArithmeticOverflow)?;
         let mut children = Vec::new();
         children
             .try_reserve_exact(self.records[index].1.children.as_slice().len())
@@ -134,8 +131,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
     where
         F: FnMut(D) -> Result<(), E>,
     {
-        let index = self.record_index(key)?;
-        let mut record = self.records.swap_remove(index).1;
+        let mut record = self.take_record(key)?;
         for drop in record.drops.drain_reverse() {
             if let Err(error) = execute_drop(drop) {
                 report.drop_failures.push(error);
@@ -149,10 +145,8 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
     }
 
     fn release_order(&self, root: DomainKey) -> Result<Vec<DomainKey>, StructuralError> {
-        let capacity = self.records[self.record_index(root)?].1.release_work as usize;
-        if capacity > self.limits.max_release_work as usize {
-            return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-        }
+        let capacity = usize::try_from(self.records[self.record_index(root)?].1.release_work)
+            .map_err(|_| StructuralError::ArithmeticOverflow)?;
         let mut pending = Vec::new();
         let mut order = Vec::new();
         pending
@@ -163,9 +157,6 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
             .map_err(|_| StructuralError::AllocationFailed)?;
         pending.push(root);
         while let Some(key) = pending.pop() {
-            if order.len() >= self.limits.max_release_work as usize {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-            }
             let index = self.record_index(key)?;
             order.push(key);
             pending.extend(

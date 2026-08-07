@@ -82,23 +82,14 @@ impl UniqueStore {
             .allocations
             .checked_add(1)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        if next.allocations > self.limits.max_allocations() {
-            return Err(UniqueStoreError::AllocationLimit);
-        }
         next.live_objects = next
             .live_objects
             .checked_add(1)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        if next.live_objects > self.limits.max_objects() {
-            return Err(UniqueStoreError::ObjectLimit);
-        }
         next.live_bytes = next
             .live_bytes
             .checked_add(retained)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        if next.live_bytes > self.limits.max_bytes() {
-            return Err(UniqueStoreError::ByteLimit);
-        }
         next.allocated_bytes = next
             .allocated_bytes
             .checked_add(retained)
@@ -114,10 +105,8 @@ impl UniqueStore {
         next_stats: &mut UniqueStoreStats,
     ) -> Result<SlotPlan, UniqueStoreError> {
         let Some(index) = self.free_head else {
-            let index = u32::try_from(self.slots.len()).map_err(|_| UniqueStoreError::SlotLimit)?;
-            if index >= self.limits.max_slots() {
-                return Err(UniqueStoreError::SlotLimit);
-            }
+            let index = u32::try_from(self.slots.len())
+                .map_err(|_| UniqueStoreError::RepresentationExhausted)?;
             return Ok(SlotPlan::New { index });
         };
         let slot = self
@@ -133,9 +122,6 @@ impl UniqueStore {
             .checked_add(1)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
         let generation = NonZeroU32::new(value).ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        if generation > self.limits.max_generation() {
-            return Err(UniqueStoreError::ArithmeticOverflow);
-        }
         next_stats.reused_slots = next_stats
             .reused_slots
             .checked_add(1)

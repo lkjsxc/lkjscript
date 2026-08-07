@@ -69,11 +69,7 @@ pub(crate) fn scalar_to_execution(
                 }
                 NativeValue::StructuralOwner(_) => {
                     let value = session.take_returned_structural(function)?;
-                    OwnedValue::from_structural(
-                        value,
-                        lkjscript_core::StructuralSnapshotLimits::default(),
-                    )
-                    .map_err(|error| {
+                    OwnedValue::from_structural(value).map_err(|error| {
                         EngineError::new(
                             FailureCode::InvocationFailure,
                             Some(function),

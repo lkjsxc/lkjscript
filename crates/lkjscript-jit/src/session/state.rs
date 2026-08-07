@@ -127,6 +127,7 @@ impl JitSession {
             native_to_vm_transitions: 0,
             last_runtime_trap: None,
             last_runtime_resource: None,
+            last_runtime_failure: None,
         }
     }
 }

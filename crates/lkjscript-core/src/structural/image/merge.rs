@@ -1,6 +1,4 @@
-use super::super::value_runtime::{
-    StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntimeLimits,
-};
+use super::super::value_runtime::{StructuralType, StructuralValueError};
 use super::{
     CheckedU64Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
     TreeFacts,
@@ -12,13 +10,7 @@ impl StructuralImage {
         enum_tag: Option<u64>,
         children: &[&StructuralImage],
         facts: TreeFacts,
-        limits: StructuralValueRuntimeLimits,
     ) -> Result<Self, StructuralValueError> {
-        if children.len() > limits.max_fields {
-            return Err(StructuralValueError::LimitExceeded(
-                StructuralValueLimit::Fields,
-            ));
-        }
         let nodes_len =
             usize::try_from(facts.nodes).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
         let fields_len = nodes_len
@@ -88,7 +80,7 @@ impl StructuralImage {
             fields,
             blob,
         };
-        image.validate(limits, facts)?;
+        image.validate(facts)?;
         Ok(image)
     }
 }

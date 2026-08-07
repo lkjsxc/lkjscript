@@ -18,10 +18,10 @@ pub use model::{
     SealedUpgrade, WeakSealedRef,
 };
 
-use super::ledger::BoundedLedger;
+use super::bookkeeping::Ledger;
 use super::{
     DomainClass, DomainKey, LayoutIdentity, SealedRegionMetrics, SemanticTypeIdentity,
-    StructuralError, StructuralLimit, StructuralLimits, StructuralRuntime, StructuralRuntimeId,
+    StructuralError, StructuralRuntime, StructuralRuntimeId,
 };
 use model::SealedRecord;
 
@@ -30,8 +30,8 @@ pub struct SealedRegionStore<T: Copy, D: Copy> {
     runtime: StructuralRuntimeId,
     layout: LayoutIdentity,
     semantic_type: SemanticTypeIdentity,
-    limits: StructuralLimits,
     records: Vec<(DomainKey, SealedRecord<T, D>)>,
+    indices: Vec<Option<usize>>,
     metrics: SealedRegionMetrics,
 }
 
@@ -40,14 +40,13 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         runtime: StructuralRuntimeId,
         layout: LayoutIdentity,
         semantic_type: SemanticTypeIdentity,
-        limits: StructuralLimits,
     ) -> Result<Self, StructuralError> {
         Ok(Self {
             runtime,
             layout,
             semantic_type,
-            limits: limits.validate()?,
             records: Vec::new(),
+            indices: Vec::new(),
             metrics: SealedRegionMetrics::default(),
         })
     }
@@ -62,10 +61,10 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             |(regions, owners, loans, dependencies, backlog), (_, record)| {
                 (
                     regions + 1,
-                    owners + u64::from(record.owners),
-                    loans + u64::from(record.loans),
+                    owners + record.owners,
+                    loans + record.loans,
                     dependencies + record.dependencies.as_slice().len() as u64,
-                    backlog + u64::from(record.release_work),
+                    backlog + record.release_work,
                 )
             },
         )
@@ -80,15 +79,19 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             .try_reserve(1)
             .map_err(|_| StructuralError::AllocationFailed)?;
         let key = runtime.allocate(DomainClass::RegionBuilding)?;
+        if let Err(error) = self.install_index(key) {
+            runtime.rollback_allocation(key);
+            return Err(error);
+        }
         self.records.push((
             key,
             SealedRecord {
                 chunks: Vec::new(),
                 large: Vec::new(),
                 roots: Vec::new(),
-                internal_edges: BoundedLedger::new(self.limits.max_dependencies),
-                dependencies: BoundedLedger::new(self.limits.max_dependencies),
-                drops: BoundedLedger::new(self.limits.max_drop_entries),
+                internal_edges: Ledger::new(),
+                dependencies: Ledger::new(),
+                drops: Ledger::new(),
                 owners: 0,
                 release_work: 1,
                 loans: 0,
@@ -117,9 +120,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             return Err(StructuralError::UnsupportedDependency);
         }
         let record = self.record_mut(builder.key)?;
-        record
-            .dependencies
-            .push_unique(target, StructuralLimit::Dependencies)?;
+        record.dependencies.push_unique(target)?;
         self.metrics.dependency_edges = self.metrics.dependency_edges.saturating_add(1);
         Ok(())
     }
@@ -130,7 +131,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         drop: D,
     ) -> Result<(), StructuralError> {
         let record = self.record_mut(builder.key)?;
-        record.drops.push(drop, StructuralLimit::DropEntries)
+        record.drops.push(drop)
     }
 
     fn require_runtime(&self, runtime: &StructuralRuntime) -> Result<(), StructuralError> {
@@ -143,10 +144,50 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         if key.runtime() != self.runtime {
             return Err(StructuralError::WrongRuntime);
         }
-        self.records
-            .iter()
-            .position(|(candidate, _)| *candidate == key)
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        self.indices
+            .get(slot)
+            .and_then(|index| *index)
+            .filter(|index| {
+                self.records
+                    .get(*index)
+                    .is_some_and(|record| record.0 == key)
+            })
             .ok_or(StructuralError::StaleDomain(key))
+    }
+
+    fn install_index(&mut self, key: DomainKey) -> Result<(), StructuralError> {
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        if slot >= self.indices.len() {
+            let length = slot
+                .checked_add(1)
+                .ok_or(StructuralError::ArithmeticOverflow)?;
+            let additional = length
+                .checked_sub(self.indices.len())
+                .ok_or(StructuralError::ArithmeticOverflow)?;
+            self.indices
+                .try_reserve(additional)
+                .map_err(|_| StructuralError::AllocationFailed)?;
+            self.indices.resize(length, None);
+        }
+        if self.indices[slot].is_some() {
+            return Err(StructuralError::DuplicateDependency);
+        }
+        self.indices[slot] = Some(self.records.len());
+        Ok(())
+    }
+
+    fn take_record(&mut self, key: DomainKey) -> Result<SealedRecord<T, D>, StructuralError> {
+        let index = self.record_index(key)?;
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        self.indices[slot] = None;
+        let (_, record) = self.records.swap_remove(index);
+        if let Some((moved, _)) = self.records.get(index) {
+            let moved_slot =
+                usize::try_from(moved.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            self.indices[moved_slot] = Some(index);
+        }
+        Ok(record)
     }
 
     fn record_mut(&mut self, key: DomainKey) -> Result<&mut SealedRecord<T, D>, StructuralError> {

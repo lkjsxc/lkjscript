@@ -45,48 +45,25 @@ pub(super) fn charge_region_product<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     fields: usize,
 ) -> Result<()> {
-    let allocations = vm
-        .list_allocations
-        .saturating_add(vm.region_product_allocations);
-    if vm
-        .config
-        .max_allocations()
-        .is_some_and(|maximum| allocations >= maximum)
-    {
-        return Err(Error::resource(
-            ResourceLimitKind::Allocations,
-            "VM region-product allocation limit exceeded",
-        ));
-    }
+    vm.preflight_allocation(1)?;
     let region = vm
         .region_products
         .as_ref()
         .ok_or_else(|| Error::msg("region-product arena is unavailable"))?;
-    let projected = vm
-        .list_reserved_bytes_estimate()
-        .saturating_add(region.metrics().reserved_bytes_estimate)
-        .saturating_add(region.publish_storage_increase(fields));
-    if vm
-        .config
-        .max_heap_bytes()
-        .is_some_and(|maximum| u64::try_from(maximum).is_ok_and(|maximum| projected > maximum))
-    {
-        return Err(Error::resource(
-            ResourceLimitKind::HeapBytes,
-            "VM region-product heap-byte limit exceeded",
-        ));
-    }
-    Ok(())
+    vm.preflight_heap_growth(
+        region
+            .publish_storage_increase(fields)
+            .map_err(region_product_error)?,
+    )
 }
 
 pub(super) fn region_product_error(error: lkjscript_core::RegionProductError) -> Error {
     match error {
-        lkjscript_core::RegionProductError::Records
-        | lkjscript_core::RegionProductError::Fields
-        | lkjscript_core::RegionProductError::HostAllocation => Error::resource(
-            ResourceLimitKind::Allocations,
-            format!("region-product allocation failed: {error:?}"),
-        ),
+        lkjscript_core::RegionProductError::HostAllocation
+        | lkjscript_core::RegionProductError::ArithmeticOverflow
+        | lkjscript_core::RegionProductError::RepresentationExhausted => Error::host(format!(
+            "region-product representation or host allocation failed: {error:?}"
+        )),
         _ => Error::msg(format!("region-product operation failed: {error:?}")),
     }
 }

@@ -1,45 +1,13 @@
-use super::{
-    StructuralRootTable, StructuralRootTableError, StructuralRootTableLimit,
-    StructuralRootTableStats,
-};
+use super::{StructuralRootTable, StructuralRootTableError, StructuralRootTableStats};
 use crate::structural::StructuralRuntimeId;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StructuralRootTableLimits {
-    pub max_roots: u32,
-    pub max_loans: u32,
-    pub max_generation: u32,
-}
-
-impl StructuralRootTableLimits {
-    pub fn validate(self) -> Result<Self, StructuralRootTableError> {
-        if self.max_roots == 0 || self.max_loans == 0 || self.max_generation == 0 {
-            return Err(StructuralRootTableError::InvalidLimits);
-        }
-        Ok(self)
-    }
-}
-
-impl Default for StructuralRootTableLimits {
-    fn default() -> Self {
-        Self {
-            max_roots: 65_536,
-            max_loans: 65_536,
-            max_generation: u32::MAX,
-        }
-    }
-}
-
 impl StructuralRootTable {
-    pub fn new(
-        runtime: StructuralRuntimeId,
-        limits: StructuralRootTableLimits,
-    ) -> Result<Self, StructuralRootTableError> {
+    pub fn new(runtime: StructuralRuntimeId) -> Result<Self, StructuralRootTableError> {
         Ok(Self {
             runtime,
-            limits: limits.validate()?,
             roots: Vec::new(),
             free_roots: Vec::new(),
+            exclusive_roots: std::collections::HashSet::new(),
             loans: Vec::new(),
             free_loans: Vec::new(),
             stats: StructuralRootTableStats::default(),
@@ -54,11 +22,40 @@ impl StructuralRootTable {
         self.stats
     }
 
-    pub(super) fn root_limit() -> StructuralRootTableError {
-        StructuralRootTableError::LimitExceeded(StructuralRootTableLimit::Roots)
-    }
-
-    pub(super) fn loan_limit() -> StructuralRootTableError {
-        StructuralRootTableError::LimitExceeded(StructuralRootTableLimit::Loans)
+    pub(in crate::structural) fn retained_bytes_estimate(
+        &self,
+    ) -> Result<u64, StructuralRootTableError> {
+        let roots = u64::try_from(self.roots.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<super::RootSlot>() as u64)
+            })
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        let free_roots = u64::try_from(self.free_roots.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        let exclusive_roots = u64::try_from(self.exclusive_roots.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<crate::structural::RootKey>() as u64)
+            })
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        let loans = u64::try_from(self.loans.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<super::LoanSlot>() as u64)
+            })
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        let free_loans = u64::try_from(self.free_loans.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        roots
+            .checked_add(free_roots)
+            .and_then(|total| total.checked_add(exclusive_roots))
+            .and_then(|total| total.checked_add(loans))
+            .and_then(|total| total.checked_add(free_loans))
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)
     }
 }

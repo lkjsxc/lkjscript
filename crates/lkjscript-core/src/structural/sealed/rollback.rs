@@ -8,7 +8,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         builder: SealedBuilder<T, D>,
     ) {
         assert_eq!(runtime.identity(), self.runtime);
-        let Some(index) = self.records.iter().position(|(key, _)| *key == builder.key) else {
+        let Ok(index) = self.record_index(builder.key) else {
             unreachable!("sealed builder belongs to its originating store");
         };
         let record = &self.records[index].1;
@@ -16,7 +16,9 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         assert_eq!(record.owners, 0);
         assert_eq!(record.loans, 0);
         assert!(record.drops.as_slice().is_empty());
-        self.records.swap_remove(index);
+        if self.take_record(builder.key).is_err() {
+            unreachable!("validated sealed builder remains indexed");
+        }
         runtime.rollback_allocation(builder.key);
     }
 }

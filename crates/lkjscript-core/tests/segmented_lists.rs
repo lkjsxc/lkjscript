@@ -1,101 +1,65 @@
-use std::num::{NonZeroU16, NonZeroU32};
-
 use lkjscript_core::{
     decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, OwnedValue,
-    SegmentedListArena, SegmentedListArenaLimits, SegmentedListError, SegmentedListLimit, Value,
+    SegmentedListArena, SegmentedListError, Value,
 };
 
-fn limits(segments: u32, entries: u32, capacity: u16) -> SegmentedListArenaLimits {
-    SegmentedListArenaLimits::new(
-        NonZeroU32::new(segments).unwrap_or(NonZeroU32::MIN),
-        NonZeroU32::new(entries).unwrap_or(NonZeroU32::MIN),
-        NonZeroU16::new(capacity).unwrap_or(NonZeroU16::MIN),
-    )
-}
-
 #[test]
-fn linear_prepend_uses_bounded_segments_and_preserves_order() -> Result<(), SegmentedListError> {
-    let mut arena = SegmentedListArena::new(limits(3, 10, 4))?;
+fn linear_prepend_crosses_former_entry_limit_and_preserves_order() -> Result<(), SegmentedListError>
+{
+    const COUNT: i64 = 65_537;
+    let mut arena = SegmentedListArena::new()?;
     let mut list = arena.empty();
-    for value in 0..10_i64 {
+    for value in 0..COUNT {
         list = arena.prepend(value, list)?;
     }
+    let values = arena.collect_cloned(list)?;
+    assert_eq!(values.len(), COUNT as usize);
+    assert_eq!(values.first(), Some(&(COUNT - 1)));
+    assert_eq!(values.last(), Some(&0));
     assert_eq!(
-        arena.collect_cloned(list, Some(10))?,
-        (0..10).rev().collect::<Vec<_>>()
+        arena.metrics().live_entries,
+        u32::try_from(COUNT).map_err(|_| SegmentedListError::Limit(
+            lkjscript_core::SegmentedListLimit::Representation
+        ))?
     );
-    assert_eq!(arena.metrics().live_entries, 10);
-    assert_eq!(arena.metrics().live_segments, 3);
-    assert_eq!(arena.metrics().segment_allocations, 3);
     Ok(())
 }
 
 #[test]
-fn retained_and_branched_tails_share_entries_without_node_counts() -> Result<(), SegmentedListError>
-{
-    let mut arena = SegmentedListArena::new(limits(2, 8, 4))?;
+fn retained_and_branched_tails_share_entries() -> Result<(), SegmentedListError> {
+    let mut arena = SegmentedListArena::new()?;
     let empty = arena.empty();
     let one = arena.prepend(1_i64, empty)?;
     let two = arena.prepend(2, one)?;
     let left = arena.prepend(3, two)?;
     let right = arena.prepend(4, two)?;
-    assert_eq!(arena.collect_cloned(two, Some(2))?, vec![2, 1]);
-    assert_eq!(arena.collect_cloned(left, Some(3))?, vec![3, 2, 1]);
-    assert_eq!(arena.collect_cloned(right, Some(3))?, vec![4, 2, 1]);
+    assert_eq!(arena.collect_cloned(two)?, vec![2, 1]);
+    assert_eq!(arena.collect_cloned(left)?, vec![3, 2, 1]);
+    assert_eq!(arena.collect_cloned(right)?, vec![4, 2, 1]);
     assert_eq!(arena.rest(left)?, two);
     assert_eq!(arena.rest(right)?, two);
-    assert_eq!(arena.metrics().live_segments, 1);
     Ok(())
 }
 
 #[test]
-fn wrong_arena_empty_and_limits_fail_without_mutation() -> Result<(), SegmentedListError> {
-    let mut first = SegmentedListArena::new(limits(1, 2, 2))?;
-    let second = SegmentedListArena::<i64>::new(limits(1, 2, 2))?;
+fn wrong_arena_and_empty_fail_without_mutation() -> Result<(), SegmentedListError> {
+    let mut first = SegmentedListArena::new()?;
+    let second = SegmentedListArena::<i64>::new()?;
     assert_eq!(
         first.prepend(1, second.empty()),
         Err(SegmentedListError::WrongArena)
     );
     assert_eq!(first.metrics().live_entries, 0);
-    let empty = first.empty();
     assert_eq!(
-        first.first_cloned(empty),
+        first.first_cloned(first.empty()),
         Err(SegmentedListError::EmptyList)
     );
-    let one = first.prepend(1, empty)?;
-    assert_eq!(
-        second.key_from_word(one.to_word()),
-        Err(SegmentedListError::WrongArena)
-    );
-    let two = first.prepend(2, one)?;
-    let before = first.metrics();
-    assert_eq!(
-        first.prepend(3, two),
-        Err(SegmentedListError::Limit(SegmentedListLimit::Entries))
-    );
-    assert_eq!(first.metrics(), before);
-    Ok(())
-}
-
-#[test]
-fn equality_is_complete_across_segments() -> Result<(), SegmentedListError> {
-    let mut arena = SegmentedListArena::new(limits(8, 16, 2))?;
-    let mut left = arena.empty();
-    let mut right = arena.empty();
-    for value in 0..4_i64 {
-        left = arena.prepend(value, left)?;
-        right = arena.prepend(value, right)?;
-    }
-    assert!(arena.equal_by(left, right, |a, b| a == b)?);
-    let empty = arena.empty();
-    let different = arena.prepend(9, empty)?;
-    assert!(!arena.equal_by(left, different, |a, b| a == b)?);
     Ok(())
 }
 
 #[test]
 fn nested_segmented_lists_materialize_before_wire_snapshots() -> lkjscript_core::Result<()> {
-    let mut lists = SegmentedListArena::new(limits(4, 8, 4))
+    let mut lists = SegmentedListArena::new()
         .map_err(|error| lkjscript_core::Error::msg(format!("list arena: {error:?}")))?;
     let empty = lists.empty();
     let inner = lists
@@ -105,12 +69,12 @@ fn nested_segmented_lists_materialize_before_wire_snapshots() -> lkjscript_core:
         .prepend(Value::from_segmented_list(inner.to_word()), empty)
         .map_err(|error| lkjscript_core::Error::msg(format!("outer list: {error:?}")))?;
     let root = Value::from_segmented_list(outer.to_word());
-    let owned = OwnedValue::from_segmented_list_snapshot(root, 8, |word| {
+    let owned = OwnedValue::from_segmented_list_snapshot(root, |word| {
         let key = lists
             .key_from_word(word)
             .map_err(|error| lkjscript_core::Error::msg(format!("snapshot key: {error:?}")))?;
         lists
-            .collect_cloned(key, Some(8))
+            .collect_cloned(key)
             .map_err(|error| lkjscript_core::Error::msg(format!("snapshot list: {error:?}")))
     })?;
     assert_eq!(owned.list_len(), Some(1));

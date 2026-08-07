@@ -21,6 +21,10 @@ impl JitStructuralRuntime {
             }
         }
         .map_err(|error| self.map_error(error))?;
+        if let Err(error) = self.enforce_policy() {
+            let _ = self.runtime.abort_destination(key);
+            return Err(error);
+        }
         Ok(NativeStructuralDestination::new(
             aggregate.destination(storage, 0),
             key.get(),
@@ -71,6 +75,12 @@ impl JitStructuralRuntime {
             .map_err(|error| self.map_error(error))?;
         if let Some(key) = consumed_owner {
             self.owners.remove(&key);
+        }
+        if let Err(error) = self.enforce_policy() {
+            let _ = self
+                .runtime
+                .abort_destination(destination_key(destination)?);
+            return Err(error);
         }
         let next = field
             .checked_add(1)

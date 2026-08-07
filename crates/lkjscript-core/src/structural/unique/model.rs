@@ -1,7 +1,7 @@
 use std::num::{NonZeroU32, NonZeroU64};
 
 use super::object::Slot;
-use super::{InvalidUniqueKeyWord, UniqueStoreError, UniqueStoreLeak, UniqueStoreLimits};
+use super::{InvalidUniqueKeyWord, UniqueStoreError, UniqueStoreLeak};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UniqueStoreId(NonZeroU64);
@@ -134,17 +134,15 @@ pub struct UniqueStoreStats {
 #[derive(Debug)]
 pub struct UniqueStore {
     pub(super) id: UniqueStoreId,
-    pub(super) limits: UniqueStoreLimits,
     pub(super) slots: Vec<Slot>,
     pub(super) free_head: Option<u32>,
     pub(super) stats: UniqueStoreStats,
 }
 
 impl UniqueStore {
-    pub const fn new(id: UniqueStoreId, limits: UniqueStoreLimits) -> Self {
+    pub const fn new(id: UniqueStoreId) -> Self {
         Self {
             id,
-            limits,
             slots: Vec::new(),
             free_head: None,
             stats: UniqueStoreStats {
@@ -166,10 +164,6 @@ impl UniqueStore {
 
     pub const fn id(&self) -> UniqueStoreId {
         self.id
-    }
-
-    pub const fn limits(&self) -> UniqueStoreLimits {
-        self.limits
     }
 
     pub const fn stats(&self) -> UniqueStoreStats {

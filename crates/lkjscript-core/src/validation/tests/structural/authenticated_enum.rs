@@ -3,8 +3,7 @@ fn authenticated_enum_validates_active_variant_and_round_trips() {
     let (chunk, enum_type, field_type) = returning_enum_chunk();
     let snapshot = enum_snapshot(enum_type, field_type, 0);
     let expected = snapshot.clone();
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(&chunk, snapshot)
         .expect("authenticated enum rehydration");
@@ -102,7 +101,6 @@ fn enum_snapshot(
             ),
         ],
         crate::SemanticDagNodeId::new(1),
-        crate::StructuralSnapshotLimits::DEFAULT,
     )
     .expect("enum snapshot")
 }

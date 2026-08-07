@@ -124,11 +124,7 @@ fn release_case(
 ) -> Result<(u64, u64), StructuralValueError> {
     let product = value_type(layout, semantic, StructuralKind::Product)?;
     let scalar = value_type(layout + 100, semantic + 100, StructuralKind::I64)?;
-    let limits = lkjscript_core::StructuralValueRuntimeLimits {
-        max_fields: 4_096,
-        ..lkjscript_core::StructuralValueRuntimeLimits::default()
-    };
-    let mut runtime = lkjscript_core::StructuralValueRuntime::new(limits)?;
+    let mut runtime = lkjscript_core::StructuralValueRuntime::new()?;
     let children = (1..nodes)
         .map(|index| {
             SemanticValue::new(

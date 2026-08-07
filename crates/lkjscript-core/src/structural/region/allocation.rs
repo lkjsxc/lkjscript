@@ -2,7 +2,12 @@ use std::marker::PhantomData;
 
 use super::model::{ObjectLocation, RootRecord};
 use super::{RegionOwner, RegionRef, RegionStore};
-use crate::structural::{RootClass, RootKey, StructuralError, StructuralLimit};
+use crate::structural::{RootClass, RootKey, StructuralError};
+
+// Private allocation geometry only. Crossing either value starts another
+// checked chunk; it never changes whether a structural program is valid.
+const CHUNK_OBJECTS: usize = 256;
+const LARGE_OBJECT_BYTES: usize = 16 * 1024;
 
 impl<T: Copy, D: Copy> RegionStore<T, D> {
     pub fn allocate(
@@ -12,28 +17,21 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
     ) -> Result<RegionRef<T>, StructuralError> {
         let object_bytes = u64::try_from(std::mem::size_of::<T>())
             .map_err(|_| StructuralError::ArithmeticOverflow)?;
-        let limits = self.limits;
         let (slot, epoch, chunk_created) = {
             let record = self.record_mut(owner.key)?;
-            if record.roots.len() >= limits.max_objects_per_domain as usize {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::Objects));
-            }
             let bytes = record
                 .bytes
                 .checked_add(object_bytes)
                 .ok_or(StructuralError::ArithmeticOverflow)?;
-            if bytes > limits.max_bytes_per_domain {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::Bytes));
-            }
             record
                 .roots
                 .try_reserve(1)
                 .map_err(|_| StructuralError::AllocationFailed)?;
             let chunks_before = record.chunks.len();
-            let location = if object_bytes > u64::from(limits.large_object_bytes) {
-                allocate_large(record, value, limits.max_objects_per_domain)?
+            let location = if std::mem::size_of::<T>() > LARGE_OBJECT_BYTES {
+                allocate_large(record, value)?
             } else {
-                allocate_chunked(record, value, limits)?
+                allocate_chunked(record, value)?
             };
             let chunk_created = record.chunks.len() != chunks_before;
             let slot = u32::try_from(record.roots.len())
@@ -110,10 +108,9 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         self.get(from)?;
         self.get(to)?;
         let record = self.record_mut(owner.key)?;
-        record.internal_edges.push(
-            (from.key.slot(), to.key.slot()),
-            StructuralLimit::Dependencies,
-        )?;
+        record
+            .internal_edges
+            .push((from.key.slot(), to.key.slot()))?;
         self.metrics.internal_edges = self.metrics.internal_edges.saturating_add(1);
         Ok(())
     }
@@ -122,23 +119,19 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
 fn allocate_chunked<T, D>(
     record: &mut super::model::RegionRecord<T, D>,
     value: T,
-    limits: crate::structural::StructuralLimits,
 ) -> Result<ObjectLocation, StructuralError> {
     let needs_chunk = record
         .chunks
         .last()
-        .is_none_or(|chunk| chunk.len() >= limits.chunk_objects as usize);
+        .is_none_or(|chunk| chunk.len() >= CHUNK_OBJECTS);
     if needs_chunk {
-        if record.chunks.len() >= limits.max_chunks_per_domain as usize {
-            return Err(StructuralError::LimitExceeded(StructuralLimit::Chunks));
-        }
         record
             .chunks
             .try_reserve(1)
             .map_err(|_| StructuralError::AllocationFailed)?;
         let mut chunk = Vec::new();
         chunk
-            .try_reserve_exact(limits.chunk_objects as usize)
+            .try_reserve_exact(CHUNK_OBJECTS)
             .map_err(|_| StructuralError::AllocationFailed)?;
         record.chunks.push(chunk);
     }
@@ -155,11 +148,7 @@ fn allocate_chunked<T, D>(
 fn allocate_large<T, D>(
     record: &mut super::model::RegionRecord<T, D>,
     value: T,
-    limit: u32,
 ) -> Result<ObjectLocation, StructuralError> {
-    if record.large.len() >= limit as usize {
-        return Err(StructuralError::LimitExceeded(StructuralLimit::Objects));
-    }
     record
         .large
         .try_reserve(1)

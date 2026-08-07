@@ -45,21 +45,6 @@ impl RegionProductKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RegionProductLimits {
-    pub max_records: NonZeroU32,
-    pub max_fields: NonZeroU32,
-}
-
-impl Default for RegionProductLimits {
-    fn default() -> Self {
-        Self {
-            max_records: NonZeroU32::new(16_384).unwrap_or(NonZeroU32::MIN),
-            max_fields: NonZeroU32::new(262_144).unwrap_or(NonZeroU32::MIN),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RegionProductMetrics {
     pub records: u64,
@@ -70,8 +55,8 @@ pub struct RegionProductMetrics {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RegionProductError {
     IdentityExhausted,
-    Records,
-    Fields,
+    RepresentationExhausted,
+    ArithmeticOverflow,
     HostAllocation,
     InvalidKey,
     WrongType,

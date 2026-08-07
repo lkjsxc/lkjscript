@@ -1,28 +1,28 @@
 struct StructuralDecodeBudget {
-    limits: StructuralSnapshotLimits,
     metrics: StructuralSnapshotMetrics,
 }
 
 impl StructuralDecodeBudget {
-    fn new(limits: StructuralSnapshotLimits) -> Result<Self> {
-        Ok(Self {
-            limits: limits.validate()?,
-            metrics: StructuralSnapshotMetrics::default(),
-        })
+    const fn new() -> Self {
+        Self {
+            metrics: StructuralSnapshotMetrics {
+                nodes: 0,
+                fields: 0,
+                aggregate_bytes: 0,
+                string_bytes: 0,
+                path_bytes: 0,
+                encode_work: 0,
+                decode_work: 0,
+            },
+        }
     }
 
-    fn node(&mut self, depth: u16) -> Result<()> {
-        if depth > self.limits.max_depth {
-            return Err(Error::msg("structural snapshot depth exceeds bound"));
-        }
+    fn node(&mut self) -> Result<()> {
         self.metrics.nodes = self
             .metrics
             .nodes
             .checked_add(1)
-            .ok_or_else(|| Error::msg("structural snapshot node count overflow"))?;
-        if self.metrics.nodes > self.limits.max_nodes {
-            return Err(Error::msg("structural snapshot nodes exceed bound"));
-        }
+            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u32"))?;
         self.work(1)
     }
 
@@ -32,9 +32,6 @@ impl StructuralDecodeBudget {
             .fields
             .checked_add(count)
             .ok_or_else(|| Error::msg("structural snapshot field count overflow"))?;
-        if self.metrics.fields > self.limits.max_fields {
-            return Err(Error::msg("structural snapshot fields exceed bound"));
-        }
         self.work(u64::from(count))
     }
 
@@ -60,12 +57,6 @@ impl StructuralDecodeBudget {
                 .checked_add(length)
                 .ok_or_else(|| Error::msg("structural path byte count overflow"))?;
         }
-        if self.metrics.aggregate_bytes > self.limits.max_aggregate_bytes
-            || self.metrics.string_bytes > self.limits.max_string_bytes
-            || self.metrics.path_bytes > self.limits.max_path_bytes
-        {
-            return Err(Error::msg("structural snapshot bytes exceed bound"));
-        }
         self.work(length)
     }
 
@@ -79,10 +70,7 @@ impl StructuralDecodeBudget {
             .metrics
             .encode_work
             .checked_add(amount)
-            .ok_or_else(|| Error::msg("structural snapshot work overflow"))?;
-        if self.metrics.encode_work > self.limits.max_decode_work {
-            return Err(Error::msg("structural snapshot decode work exceeds bound"));
-        }
+            .ok_or_else(|| Error::msg("structural snapshot decode work overflow"))?;
         Ok(())
     }
 }

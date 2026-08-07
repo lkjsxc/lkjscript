@@ -1,5 +1,6 @@
 use super::{
-    LoanSlot, RootSlot, StructuralRootTable, StructuralRootTableError, StructuralValueKey,
+    LoanSlot, RootSlot, StructuralRootOwnership, StructuralRootTable, StructuralRootTableError,
+    StructuralValueKey,
 };
 
 impl StructuralRootTable {
@@ -21,17 +22,34 @@ impl StructuralRootTable {
         }
         self.validate_free_root_slots()?;
         self.validate_free_loan_slots()?;
+        let exclusive_count = self
+            .roots
+            .iter()
+            .filter(|slot| {
+                matches!(
+                    slot,
+                    RootSlot::Live { value, .. }
+                        if value.ownership != StructuralRootOwnership::SealedShared
+                )
+            })
+            .count();
+        if exclusive_count != self.exclusive_roots.len() {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
         for (slot, root) in self.roots.iter().enumerate() {
             let RootSlot::Live { generation, value } = root else {
                 continue;
             };
-            if value.root.domain().runtime() != self.runtime {
+            if value.root.domain().runtime() != self.runtime
+                || (value.ownership != StructuralRootOwnership::SealedShared
+                    && !self.exclusive_roots.contains(&value.root))
+            {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
             let slot =
                 u32::try_from(slot).map_err(|_| StructuralRootTableError::InvariantViolation)?;
             let key = StructuralValueKey::from_parts(slot, *generation);
-            let (shared, exclusive) = self.loans.iter().fold((0_u32, false), |counts, loan| {
+            let (shared, exclusive) = self.loans.iter().fold((0_u64, false), |counts, loan| {
                 let LoanSlot::Live { value, .. } = loan else {
                     return counts;
                 };
@@ -39,7 +57,7 @@ impl StructuralRootTable {
                     return counts;
                 }
                 (
-                    counts.0 + u32::from(!value.exclusive),
+                    counts.0 + u64::from(!value.exclusive),
                     counts.1 || value.exclusive,
                 )
             });
@@ -64,28 +82,43 @@ impl StructuralRootTable {
     }
 
     fn validate_free_root_slots(&self) -> Result<(), StructuralRootTableError> {
-        for (position, slot) in self.free_roots.iter().enumerate() {
+        let mut seen = validation_flags(self.roots.len())?;
+        for slot in &self.free_roots {
             let index =
                 usize::try_from(*slot).map_err(|_| StructuralRootTableError::InvariantViolation)?;
-            if !matches!(self.roots.get(index), Some(RootSlot::Vacant { .. }))
-                || self.free_roots[..position].contains(slot)
-            {
+            let duplicate = *seen
+                .get(index)
+                .ok_or(StructuralRootTableError::InvariantViolation)?;
+            if !matches!(self.roots.get(index), Some(RootSlot::Vacant { .. })) || duplicate {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
+            seen[index] = true;
         }
         Ok(())
     }
 
     fn validate_free_loan_slots(&self) -> Result<(), StructuralRootTableError> {
-        for (position, slot) in self.free_loans.iter().enumerate() {
+        let mut seen = validation_flags(self.loans.len())?;
+        for slot in &self.free_loans {
             let index =
                 usize::try_from(*slot).map_err(|_| StructuralRootTableError::InvariantViolation)?;
-            if !matches!(self.loans.get(index), Some(LoanSlot::Vacant { .. }))
-                || self.free_loans[..position].contains(slot)
-            {
+            let duplicate = *seen
+                .get(index)
+                .ok_or(StructuralRootTableError::InvariantViolation)?;
+            if !matches!(self.loans.get(index), Some(LoanSlot::Vacant { .. })) || duplicate {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
+            seen[index] = true;
         }
         Ok(())
     }
+}
+
+fn validation_flags(length: usize) -> Result<Vec<bool>, StructuralRootTableError> {
+    let mut flags = Vec::new();
+    flags
+        .try_reserve_exact(length)
+        .map_err(|_| StructuralRootTableError::AllocationFailed)?;
+    flags.resize(length, false);
+    Ok(flags)
 }

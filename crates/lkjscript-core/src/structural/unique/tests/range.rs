@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn ranged_reads_and_mutation_cover_all_dynamic_layouts() {
-    let mut store = store_with(40, 3, 32, 3, 3, 3);
+    let mut store = store(40);
     let vector = store
         .allocate_byte_vector(vec![0, 1, 2, 3, 4])
         .expect("vector");
@@ -29,7 +29,7 @@ fn ranged_reads_and_mutation_cover_all_dynamic_layouts() {
 
 #[test]
 fn range_overflow_and_out_of_bounds_are_structured_and_atomic() {
-    let mut store = store_with(41, 1, 8, 1, 1, 2);
+    let mut store = store(41);
     let key = store
         .allocate_byte_vector(vec![1, 2, 3, 4])
         .expect("vector");

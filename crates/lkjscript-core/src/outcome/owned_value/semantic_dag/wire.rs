@@ -9,9 +9,8 @@ use super::semantic_dag::{
 fn encode_semantic_dag(
     out: &mut Encoder,
     snapshot: &SemanticDagSnapshot,
-    limits: StructuralSnapshotLimits,
 ) -> Result<()> {
-    snapshot.validate_encode(limits)?;
+    snapshot.validate_encode()?;
     out.u32(
         u32::try_from(snapshot.nodes().len())
             .map_err(|_| Error::msg("semantic DAG node count exceeds u32"))?,

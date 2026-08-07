@@ -101,10 +101,10 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
         .limited_policy_mut()
         .expect("limited test policy")
         .max_allocations = 0;
-    assert!(matches!(
+    assert_eq!(
         Vm::new(&string, NullJit, crate::ExecutionInputs::default(), no_heap).run(),
-        ExecutionOutcome::Returned(value) if value.as_str() == Some("x")
-    ));
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+    );
 
     let mut aggregate = Chunk::new();
     aggregate.main.emit(Op::Unit);

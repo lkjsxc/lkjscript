@@ -7,18 +7,15 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
     pub fn validate(&self, runtime: &StructuralRuntime) -> Result<(), StructuralError> {
         self.require_runtime(runtime)?;
         let mut keys = BTreeSet::new();
-        for (key, record) in &self.records {
+        for (index, (key, record)) in self.records.iter().enumerate() {
             runtime.require_live(*key)?;
+            let slot =
+                usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            if self.indices.get(slot).and_then(|entry| *entry) != Some(index) {
+                return Err(StructuralError::StaleDomain(*key));
+            }
             if !keys.insert(*key) {
                 return Err(StructuralError::DuplicateDependency);
-            }
-            if record.roots.len() > self.limits.max_objects_per_domain as usize
-                || record.chunks.len() > self.limits.max_chunks_per_domain as usize
-                || record.children.as_slice().len() > self.limits.max_dependencies as usize
-                || record.drops.as_slice().len() > self.limits.max_drop_entries as usize
-                || record.bytes > self.limits.max_bytes_per_domain
-            {
-                return Err(StructuralError::ArithmeticOverflow);
             }
             for root in &record.roots {
                 if root.generation != record.epoch {

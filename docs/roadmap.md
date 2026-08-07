@@ -89,8 +89,16 @@
    selects `Unrestricted`, isolated process work selects `Limited`, VM/native checks are optional,
    cleanup retention does not stop cleanup, and the logical-aggregate-construction count is gone.
    The same bytecode exhausts under low limited fuel and succeeds unchanged unrestricted. Immediate
-   residual work is to remove or redesign independent fixed structural store/snapshot limits and
-   narrow structural keys; those representation bounds are not execution policy.
+   Ordinary structural store and local-return snapshot ceilings are now removed across region,
+   sealed-region, root, unique, segmented-list, region-product, structural-value, semantic-DAG, and
+   process-outcome paths. Checked structural allocation/retained-byte/export observations feed the
+   coarse `ExecutionPolicy`; low-policy failures are typed and cleanup-atomic, while unrestricted
+   execution crosses the former node, field, payload, dependency, record, root, and loan boundaries.
+   Structural graph/snapshot operations and deep destruction are iterative. Immediate residual work
+   is to widen or segment checked `u32` structural slots, generations, DAG IDs/counts,
+   region-product records, and packed `u16` list positions, and to keep the process frame-byte limit
+   local to its transport boundary. Those representation boundaries are not execution policy or
+   language validity.
 
 ## Next
 

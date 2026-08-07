@@ -1,4 +1,4 @@
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static NEXT_ARENA_ID: AtomicU32 = AtomicU32::new(1);
@@ -52,7 +52,7 @@ impl SegmentedListKey {
         }
     }
 
-    pub(super) const fn new(arena: SegmentedListArenaId, segment: u32, entry: u16) -> Self {
+    pub(super) const fn new(arena: SegmentedListArenaId, segment: u16, entry: u16) -> Self {
         Self {
             arena,
             location: Some(SegmentedListLocation { segment, entry }),
@@ -75,8 +75,10 @@ impl SegmentedListKey {
         if encoded_arena != arena.0.get() {
             return Err(SegmentedListError::WrongArena);
         }
-        let segment = u32::from((word >> 16) as u16);
-        let encoded_entry = word as u16;
+        let segment = u16::try_from((word >> 16) & u64::from(u16::MAX))
+            .map_err(|_| SegmentedListError::InvalidKey)?;
+        let encoded_entry = u16::try_from(word & u64::from(u16::MAX))
+            .map_err(|_| SegmentedListError::InvalidKey)?;
         let entry = encoded_entry
             .checked_sub(1)
             .ok_or(SegmentedListError::InvalidKey)?;
@@ -86,55 +88,8 @@ impl SegmentedListKey {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct SegmentedListLocation {
-    pub segment: u32,
+    pub segment: u16,
     pub entry: u16,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SegmentedListArenaLimits {
-    pub max_segments: NonZeroU32,
-    pub max_entries: NonZeroU32,
-    pub segment_capacity: NonZeroU16,
-}
-
-impl SegmentedListArenaLimits {
-    pub const fn new(
-        max_segments: NonZeroU32,
-        max_entries: NonZeroU32,
-        segment_capacity: NonZeroU16,
-    ) -> Self {
-        Self {
-            max_segments,
-            max_entries,
-            segment_capacity,
-        }
-    }
-
-    pub fn for_allocation_policy(max_allocations: u64) -> Self {
-        let requested = max_allocations.min(u64::from(u32::MAX)).max(1);
-        let maximum_segments = u64::from(u16::MAX) + 1;
-        let capacity = requested
-            .div_ceil(maximum_segments)
-            .clamp(1, u64::from(u16::MAX));
-        let entries = requested.min(maximum_segments * capacity);
-        let segments = entries.div_ceil(capacity);
-        Self {
-            max_segments: NonZeroU32::new(
-                u32::try_from(segments).unwrap_or(u32::from(u16::MAX) + 1),
-            )
-            .unwrap_or(NonZeroU32::MIN),
-            max_entries: NonZeroU32::new(u32::try_from(entries).unwrap_or(u32::MAX))
-                .unwrap_or(NonZeroU32::MIN),
-            segment_capacity: NonZeroU16::new(u16::try_from(capacity).unwrap_or(u16::MAX))
-                .unwrap_or(NonZeroU16::MIN),
-        }
-    }
-}
-
-impl Default for SegmentedListArenaLimits {
-    fn default() -> Self {
-        Self::for_allocation_policy(u64::from(u32::MAX))
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -149,10 +104,8 @@ pub struct SegmentedListMetrics {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SegmentedListLimit {
-    Segments,
-    Entries,
+    Representation,
     HostAllocation,
-    TraversalSteps,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -162,6 +115,5 @@ pub enum SegmentedListError {
     InvalidKey,
     EmptyList,
     IdentityExhausted,
-    InvalidLimits,
     Limit(SegmentedListLimit),
 }

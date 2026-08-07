@@ -1,5 +1,5 @@
 use super::*;
-use crate::{SealedSemanticDagRuntime, StructuralLimits};
+use crate::SealedSemanticDagRuntime;
 
 #[test]
 fn string_path_and_bytes_rehydrate_with_canonical_chunk_export() {
@@ -29,12 +29,8 @@ fn string_path_and_bytes_rehydrate_with_canonical_chunk_export() {
             ]),
         ),
     ];
-    let snapshot = SemanticDagSnapshot::new(
-        nodes,
-        SemanticDagNodeId::new(3),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .expect("byte-bearing snapshot");
+    let snapshot =
+        SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(3)).expect("byte-bearing snapshot");
     let expected = snapshot.clone();
     let root_type = snapshot.root_node().value_type;
     let mut closure = snapshot
@@ -45,7 +41,7 @@ fn string_path_and_bytes_rehydrate_with_canonical_chunk_export() {
     closure.sort_unstable();
     closure.dedup();
 
-    let mut runtime = SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("runtime");
+    let mut runtime = SealedSemanticDagRuntime::new().expect("runtime");
     let owner = runtime
         .rehydrate(snapshot, root_type, &closure)
         .expect("rehydrate");

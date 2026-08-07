@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 
-use super::super::value_runtime::{
-    SemanticPayload, SemanticValue, StructuralValueError, StructuralValueRuntimeLimits,
-};
+use super::super::value_runtime::{SemanticPayload, SemanticValue, StructuralValueError};
 use super::{
     CheckedU64Range, LocalNodeId, StructuralImage, StructuralNodePayload, StructuralNodeRecord,
     TreeFacts,
@@ -12,7 +10,6 @@ impl StructuralImage {
     pub(crate) fn build(
         value: &SemanticValue,
         facts: TreeFacts,
-        limits: StructuralValueRuntimeLimits,
     ) -> Result<Self, StructuralValueError> {
         let node_capacity =
             usize::try_from(facts.nodes).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
@@ -74,7 +71,7 @@ impl StructuralImage {
             fields,
             blob,
         };
-        image.validate(limits, facts)?;
+        image.validate(facts)?;
         Ok(image)
     }
 

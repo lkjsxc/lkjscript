@@ -1,33 +1,19 @@
-use super::super::value_runtime::{
-    InlineStructuralValue, StructuralKind, StructuralValueError, StructuralValueLimit,
-    StructuralValueRuntimeLimits,
-};
+use super::super::value_runtime::{InlineStructuralValue, StructuralKind, StructuralValueError};
 use super::{require_kind, StructuralImage, StructuralNodePayload, TreeFacts};
 
 impl StructuralImage {
-    pub(crate) fn validate(
-        &self,
-        limits: StructuralValueRuntimeLimits,
-        expected: TreeFacts,
-    ) -> Result<(), StructuralValueError> {
+    pub(crate) fn validate(&self, expected: TreeFacts) -> Result<(), StructuralValueError> {
         if self.nodes.is_empty() {
             return Err(StructuralValueError::InvariantViolation);
         }
         let node_count = u64::try_from(self.nodes.len())
             .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-        if node_count > limits.max_tree_nodes {
-            return Err(StructuralValueError::LimitExceeded(
-                StructuralValueLimit::TreeNodes,
-            ));
-        }
         if self.fields.len() != self.nodes.len() - 1 {
             return Err(StructuralValueError::InvariantViolation);
         }
         let mut parents = filled(self.nodes.len(), 0_u16)?;
-        let mut depths = filled(self.nodes.len(), 0_u16)?;
         let mut field_used = filled(self.fields.len(), false)?;
         let mut byte_used = filled(self.blob.len(), false)?;
-        depths[0] = 1_u16;
         let mut facts = TreeFacts {
             nodes: node_count,
             ..TreeFacts::default()
@@ -54,31 +40,15 @@ impl StructuralImage {
                         .ok_or(StructuralValueError::InvariantViolation)?;
                     mark(&mut byte_used, range.start(), range.end())?;
                     validate_bytes(node.value_type.kind, bytes)?;
-                    add_bytes(&mut facts, node.value_type.kind, bytes.len(), limits)?;
+                    add_bytes(&mut facts, node.value_type.kind, bytes.len())?;
                 }
                 StructuralNodePayload::Product(range) => {
                     require_kind(node.value_type.kind, StructuralKind::Product)?;
-                    validate_children(
-                        self,
-                        *range,
-                        parent,
-                        &mut parents,
-                        &mut depths,
-                        &mut field_used,
-                        limits,
-                    )?;
+                    validate_children(self, *range, parent, &mut parents, &mut field_used)?;
                 }
                 StructuralNodePayload::Enum { fields, .. } => {
                     require_kind(node.value_type.kind, StructuralKind::Enum)?;
-                    validate_children(
-                        self,
-                        *fields,
-                        parent,
-                        &mut parents,
-                        &mut depths,
-                        &mut field_used,
-                        limits,
-                    )?;
+                    validate_children(self, *fields, parent, &mut parents, &mut field_used)?;
                 }
             }
         }
@@ -99,30 +69,11 @@ fn validate_children(
     range: super::CheckedU64Range,
     parent: u64,
     parents: &mut [u16],
-    depths: &mut [u16],
     used: &mut [bool],
-    limits: StructuralValueRuntimeLimits,
 ) -> Result<(), StructuralValueError> {
-    if usize::try_from(range.len()).map_or(true, |fields| fields > limits.max_fields) {
-        return Err(StructuralValueError::LimitExceeded(
-            StructuralValueLimit::Fields,
-        ));
-    }
     let children = StructuralImage::range(&image.fields, range)
         .ok_or(StructuralValueError::InvariantViolation)?;
     mark(used, range.start(), range.end())?;
-    let parent_index =
-        usize::try_from(parent).map_err(|_| StructuralValueError::InvariantViolation)?;
-    let depth = depths
-        .get(parent_index)
-        .ok_or(StructuralValueError::InvariantViolation)?
-        .checked_add(1)
-        .ok_or(StructuralValueError::ArithmeticOverflow)?;
-    if depth > limits.max_tree_depth && !children.is_empty() {
-        return Err(StructuralValueError::LimitExceeded(
-            StructuralValueLimit::TreeDepth,
-        ));
-    }
     for child in children {
         let index = child
             .index()
@@ -133,10 +84,9 @@ fn validate_children(
         parents[index] = parents[index]
             .checked_add(1)
             .ok_or(StructuralValueError::ArithmeticOverflow)?;
-        if parents[index] != 1 || (depths[index] != 0 && depths[index] != depth) {
+        if parents[index] != 1 {
             return Err(StructuralValueError::InvariantViolation);
         }
-        depths[index] = depth;
     }
     Ok(())
 }
@@ -164,20 +114,20 @@ fn add_bytes(
     facts: &mut TreeFacts,
     kind: StructuralKind,
     length: usize,
-    limits: StructuralValueRuntimeLimits,
 ) -> Result<(), StructuralValueError> {
     let length = u64::try_from(length).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
     facts.bytes = facts
         .bytes
         .checked_add(length)
         .ok_or(StructuralValueError::ArithmeticOverflow)?;
-    if facts.bytes > limits.max_payload_bytes {
-        return Err(StructuralValueError::LimitExceeded(
-            StructuralValueLimit::PayloadBytes,
-        ));
-    }
-    facts.string_bytes += u64::from(kind == StructuralKind::String) * length;
-    facts.path_bytes += u64::from(kind == StructuralKind::Path) * length;
+    facts.string_bytes = facts
+        .string_bytes
+        .checked_add(u64::from(kind == StructuralKind::String) * length)
+        .ok_or(StructuralValueError::ArithmeticOverflow)?;
+    facts.path_bytes = facts
+        .path_bytes
+        .checked_add(u64::from(kind == StructuralKind::Path) * length)
+        .ok_or(StructuralValueError::ArithmeticOverflow)?;
     Ok(())
 }
 

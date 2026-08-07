@@ -38,23 +38,18 @@ pub struct StructuralEvent {
 
 #[derive(Debug)]
 pub struct StructuralEventLog {
-    limit: usize,
     next_sequence: u64,
     records: VecDeque<StructuralEvent>,
+    omitted: u64,
 }
 
 impl StructuralEventLog {
-    pub(super) fn new(limit: u32) -> Result<Self, StructuralValueError> {
-        let limit = usize::try_from(limit).map_err(|_| StructuralValueError::InvalidLimits)?;
-        let mut records = VecDeque::new();
-        records
-            .try_reserve_exact(limit)
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
-        Ok(Self {
-            limit,
+    pub(super) const fn new() -> Self {
+        Self {
             next_sequence: 1,
-            records,
-        })
+            records: VecDeque::new(),
+            omitted: 0,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -65,14 +60,29 @@ impl StructuralEventLog {
         self.records.is_empty()
     }
 
+    pub const fn omitted(&self) -> u64 {
+        self.omitted
+    }
+
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &StructuralEvent> {
         self.records.iter()
     }
 
+    pub(super) fn retained_bytes_estimate(&self) -> Result<u64, StructuralValueError> {
+        u64::try_from(self.records.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<StructuralEvent>() as u64)
+            })
+            .ok_or(StructuralValueError::ArithmeticOverflow)
+    }
+
+    /// Retains diagnostics opportunistically. Allocation failure must not stop
+    /// ownership cleanup or alter structural semantics.
     pub(super) fn record(&mut self, kind: StructuralEventKind, subject: u32, amount: u64) -> bool {
-        let overwritten = self.records.len() == self.limit;
-        if overwritten {
-            self.records.pop_front();
+        if self.records.try_reserve(1).is_err() {
+            self.omitted = self.omitted.saturating_add(1);
+            return true;
         }
         self.records.push_back(StructuralEvent {
             sequence: self.next_sequence,
@@ -81,7 +91,7 @@ impl StructuralEventLog {
             amount,
         });
         self.next_sequence = self.next_sequence.saturating_add(1);
-        overwritten
+        false
     }
 }
 

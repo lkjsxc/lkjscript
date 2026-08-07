@@ -49,7 +49,10 @@ impl JitValueServices<'_> {
                     .region_products
                     .publish(lkjscript_core::RuntimeLayoutId::new(identity), fields)
                     .map_err(|error| self.region_product_error(error))?;
-                self.region_product_allocations = self.region_product_allocations.saturating_add(1);
+                self.region_product_allocations = self
+                    .region_product_allocations
+                    .checked_add(1)
+                    .ok_or(NativeServiceError::HostFailure)?;
                 Ok(NativeValue::Reference(
                     lkjscript_native::NativeReference::new(reference_type, key.to_word()),
                 ))
@@ -96,7 +99,10 @@ impl JitValueServices<'_> {
                         replacement,
                     )
                     .map_err(|error| self.region_product_error(error))?;
-                self.region_product_allocations = self.region_product_allocations.saturating_add(1);
+                self.region_product_allocations = self
+                    .region_product_allocations
+                    .checked_add(1)
+                    .ok_or(NativeServiceError::HostFailure)?;
                 Ok(NativeValue::Reference(
                     lkjscript_native::NativeReference::new(
                         reference.reference_type(),

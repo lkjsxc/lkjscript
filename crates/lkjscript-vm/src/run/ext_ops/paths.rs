@@ -31,6 +31,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::PathToBytes as u8 => {
             let value = vm.pop()?;
             let bytes = crate::run::structural_ops::copy_path(vm, value)?;
+            vm.preflight_allocation(1)?;
+            vm.preflight_heap_growth(
+                u64::try_from(bytes.len()).map_err(|_| Error::host("path length exceeds u64"))?,
+            )?;
             let bytes = vm.unique.allocate_bytes(bytes)?;
             vm.push(bytes);
             Ok(true)

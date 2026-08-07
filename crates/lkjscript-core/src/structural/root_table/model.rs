@@ -1,7 +1,8 @@
+use std::collections::HashSet;
 use std::num::NonZeroU32;
 
 use super::super::{RootKey, StructuralRuntimeId};
-use super::{StructuralRootTableLimits, StructuralRootTableStats};
+use super::StructuralRootTableStats;
 
 macro_rules! packed_key {
     ($name:ident) => {
@@ -101,7 +102,7 @@ pub(super) enum TerminalState {
 pub(super) struct LiveRoot {
     pub root: RootKey,
     pub ownership: StructuralRootOwnership,
-    pub shared_loans: u32,
+    pub shared_loans: u64,
     pub exclusive_loan: bool,
 }
 
@@ -141,9 +142,9 @@ pub(super) enum LoanSlot {
 #[derive(Debug)]
 pub struct StructuralRootTable {
     pub(super) runtime: StructuralRuntimeId,
-    pub(super) limits: StructuralRootTableLimits,
     pub(super) roots: Vec<RootSlot>,
     pub(super) free_roots: Vec<u32>,
+    pub(super) exclusive_roots: HashSet<RootKey>,
     pub(super) loans: Vec<LoanSlot>,
     pub(super) free_loans: Vec<u32>,
     pub(super) stats: StructuralRootTableStats,

@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use lkjscript_core::{
     Error, ResourceLimitKind, Result, StructuralDestinationId, StructuralDestinationKey,
-    StructuralRepresentationId, StructuralRootTableError, StructuralSliceExt, StructuralType,
-    StructuralValueCategory, StructuralValueError, StructuralValueKey, StructuralValueRuntime,
-    StructuralValueRuntimeLimits, StructuralViewKey, ValidatedChunk, Value,
+    StructuralError, StructuralRepresentationId, StructuralRootTableError, StructuralSliceExt,
+    StructuralType, StructuralValueCategory, StructuralValueError, StructuralValueKey,
+    StructuralValueRuntime, StructuralViewKey, ValidatedChunk, Value,
 };
 
 use super::{unique, RuntimeTier, Vm};
@@ -75,6 +75,20 @@ pub(super) fn handles(op: u8) -> bool {
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     let op =
         lkjscript_core::Op::from_byte(op).ok_or_else(|| Error::msg("unknown structural opcode"))?;
+    if matches!(
+        op,
+        lkjscript_core::Op::StructuralBorrow
+            | lkjscript_core::Op::StructuralBorrowMut
+            | lkjscript_core::Op::StructuralPublish
+            | lkjscript_core::Op::StructuralCopy
+            | lkjscript_core::Op::MemoryWitnessIndependentOwner
+            | lkjscript_core::Op::StructuralDestinationCreate
+            | lkjscript_core::Op::StructuralDestinationFinish
+            | lkjscript_core::Op::StructuralAggregateFieldCopy
+            | lkjscript_core::Op::StructuralAggregateConsumePayload
+    ) {
+        vm.preflight_allocation(1)?;
+    }
     match op {
         lkjscript_core::Op::StoreStructuralLocal
         | lkjscript_core::Op::TakeStructuralLocal
@@ -103,6 +117,59 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         | lkjscript_core::Op::StructuralStringUtf8View => aggregate::dispatch(vm, op),
         _ => Err(Error::msg("structural opcode dispatch mismatch")),
     }
+}
+
+fn preflight_export<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    key: StructuralValueKey,
+    value_type: StructuralType,
+) -> Result<lkjscript_core::StructuralExportAccounting> {
+    let accounting = invocation_mut(vm)?
+        .runtime
+        .export_accounting(key, value_type)
+        .map_err(map_value_error)?;
+    vm.preflight_allocation(accounting.allocations)?;
+    vm.preflight_heap_growth(accounting.retained_bytes)?;
+    let output = usize::try_from(accounting.output_bytes)
+        .map_err(|_| Error::host("structural return output exceeds host usize"))?;
+    vm.preflight_output(output)?;
+    Ok(accounting)
+}
+
+fn preflight_owned_export<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    key: StructuralValueKey,
+    value_type: StructuralType,
+    host_owner: bool,
+) -> Result<lkjscript_core::StructuralExportAccounting> {
+    match preflight_export(vm, key, value_type) {
+        Ok(accounting) => Ok(accounting),
+        Err(error) => {
+            invocation_mut(vm)?
+                .runtime
+                .dispose_owner(key, value_type)
+                .map_err(|cleanup| {
+                    Error::host(format!(
+                        "{error}; failed structural export cleanup: {cleanup}"
+                    ))
+                })?;
+            if host_owner {
+                invocation_mut(vm)?.host_owners.remove(&key.get());
+            } else {
+                invocation_mut(vm)?.owners.remove(&key.get());
+            }
+            Err(error)
+        }
+    }
+}
+
+fn commit_export_output<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    accounting: lkjscript_core::StructuralExportAccounting,
+) -> Result<()> {
+    let output = usize::try_from(accounting.output_bytes)
+        .map_err(|_| Error::host("structural return output exceeds host usize"))?;
+    vm.record_output(output)
 }
 
 fn invocation<'vm, J: RuntimeTier>(vm: &'vm Vm<'_, J>) -> Result<&'vm StructuralInvocation> {
@@ -166,16 +233,9 @@ fn same_representation_type(
 fn map_value_error(error: StructuralValueError) -> Error {
     match error {
         StructuralValueError::AllocationFailed
-        | StructuralValueError::LimitExceeded(
-            lkjscript_core::StructuralValueLimit::PayloadBytes
-            | lkjscript_core::StructuralValueLimit::TreeDepth,
-        )
+        | StructuralValueError::Domain(StructuralError::AllocationFailed)
         | StructuralValueError::RootTable(StructuralRootTableError::AllocationFailed) => {
-            Error::resource(ResourceLimitKind::HeapBytes, error.to_string())
-        }
-        StructuralValueError::LimitExceeded(_)
-        | StructuralValueError::RootTable(StructuralRootTableError::LimitExceeded(_)) => {
-            Error::resource(ResourceLimitKind::Allocations, error.to_string())
+            Error::host(error.to_string())
         }
         _ => Error::msg(error.to_string()),
     }

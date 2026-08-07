@@ -3,14 +3,13 @@
 use std::num::NonZeroU64;
 
 use lkjscript_core::{
-    LayoutIdentity, SealedRegionMetrics, SealedRegionStore, SemanticTypeIdentity, StructuralLimits,
-    StructuralRuntime,
+    LayoutIdentity, SealedRegionMetrics, SealedRegionStore, SemanticTypeIdentity, StructuralRuntime,
 };
 
 #[test]
 fn sealed_sharing_counts_regions_not_nodes() {
     let small = share_and_release(8, 128);
-    let large = share_and_release(2_048, 128);
+    let large = share_and_release(65_537, 128);
     assert_eq!(small.retains, 128);
     assert_eq!(small.releases, 129);
     assert_eq!(small.release_work, 129);
@@ -20,13 +19,11 @@ fn sealed_sharing_counts_regions_not_nodes() {
 }
 
 fn share_and_release(nodes: usize, shares: usize) -> SealedRegionMetrics {
-    let limits = StructuralLimits::default();
-    let mut runtime = StructuralRuntime::new(limits).expect("runtime");
+    let mut runtime = StructuralRuntime::new().expect("runtime");
     let mut store = SealedRegionStore::<u64, ()>::new(
         runtime.identity(),
         LayoutIdentity::new(NonZeroU64::new(71).expect("layout")),
         SemanticTypeIdentity::new(NonZeroU64::new(72).expect("type")),
-        limits,
     )
     .expect("sealed store");
     let builder = store.begin(&mut runtime).expect("builder");

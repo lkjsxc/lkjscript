@@ -13,7 +13,7 @@ impl StructuralValueRuntime {
         &self,
         value: &SemanticValue,
     ) -> Result<TreeFacts, StructuralValueError> {
-        semantic_facts(value, self.limits)
+        semantic_facts(value)
     }
 
     pub(super) fn validate_static(
@@ -106,7 +106,7 @@ impl StructuralValueRuntime {
         } else {
             return Err(StructuralValueError::MixedValue);
         };
-        StructuralImage::single(expected, payload, self.limits)
+        StructuralImage::single(expected, payload)
     }
 
     pub(super) fn require_owned_root(

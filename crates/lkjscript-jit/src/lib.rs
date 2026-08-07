@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use lkjscript_core::{
     CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionPolicy, HostError,
     OwnedValue, ResourceLimitKind, SemanticValue, Trap, UniqueKeyWord, UniqueStore,
-    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value,
+    UniqueStoreError, UniqueStoreId, Value,
 };
 use lkjscript_executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
@@ -133,6 +133,7 @@ pub struct JitSession {
     native_to_vm_transitions: u64,
     last_runtime_trap: Option<String>,
     last_runtime_resource: Option<ResourceLimitKind>,
+    last_runtime_failure: Option<NativeServiceError>,
 }
 
 impl fmt::Debug for JitSession {

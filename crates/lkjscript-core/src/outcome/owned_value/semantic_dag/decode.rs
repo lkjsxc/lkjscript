@@ -1,11 +1,7 @@
-fn decode_semantic_dag(
-    input: &mut Decoder<'_>,
-    limits: StructuralSnapshotLimits,
-) -> Result<SemanticDagSnapshot> {
-    let limits = limits.validate()?;
+fn decode_semantic_dag(input: &mut Decoder<'_>) -> Result<SemanticDagSnapshot> {
     let count = input.u32()?;
-    if count == 0 || count > limits.max_nodes {
-        return Err(Error::msg("semantic DAG node count exceeds bound"));
+    if count == 0 {
+        return Err(Error::msg("semantic DAG must contain a root node"));
     }
     let root = SemanticDagNodeId::new(input.u32()?);
     let count = usize::try_from(count)
@@ -14,7 +10,7 @@ fn decode_semantic_dag(
     nodes
         .try_reserve_exact(count)
         .map_err(|_| Error::msg("semantic DAG node allocation failed"))?;
-    let mut budget = SemanticDagDecodeBudget::new(limits);
+    let mut budget = SemanticDagDecodeBudget::new();
     for index in 0..count {
         budget.node()?;
         let value_type = decode_semantic_dag_type(input)?;
@@ -23,7 +19,7 @@ fn decode_semantic_dag(
         validate_decoded_semantic_dag_node(&node, &nodes, index)?;
         nodes.push(node);
     }
-    SemanticDagSnapshot::from_decoded(nodes, root, limits, budget.finish())
+    SemanticDagSnapshot::from_decoded(nodes, root, budget.finish())
 }
 
 fn decode_semantic_dag_type(input: &mut Decoder<'_>) -> Result<SemanticDagType> {

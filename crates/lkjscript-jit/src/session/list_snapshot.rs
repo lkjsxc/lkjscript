@@ -51,14 +51,13 @@ impl JitSession {
                 Value::from_segmented_list(key.to_word())
             }
         };
-        let limit = lists.limits().max_entries.get() as usize;
-        OwnedValue::from_segmented_list_snapshot(root, limit, |word| {
+        OwnedValue::from_segmented_list_snapshot(root, |word| {
             let key = lists.key_from_word(word).map_err(|error| {
                 lkjscript_core::Error::msg(format!(
                     "invalid nested segmented-list return: {error:?}"
                 ))
             })?;
-            lists.collect_cloned(key, None).map_err(|error| {
+            lists.collect_cloned(key).map_err(|error| {
                 lkjscript_core::Error::msg(format!(
                     "nested segmented-list snapshot failed: {error:?}"
                 ))

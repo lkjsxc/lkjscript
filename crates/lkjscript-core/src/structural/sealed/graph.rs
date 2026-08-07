@@ -1,16 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{SealedBuilder, SealedRegionStore};
-use crate::structural::{DomainClass, DomainKey, StructuralError, StructuralLimit};
+use crate::structural::{DomainClass, StructuralError};
 
 impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
     pub(super) fn validate_graph(
         &mut self,
         builders: &[SealedBuilder<T, D>],
     ) -> Result<(), StructuralError> {
-        if builders.len() > self.limits.max_release_work as usize {
-            return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-        }
         let nodes = builders
             .iter()
             .map(|builder| builder.key)
@@ -22,6 +19,9 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         for &key in &nodes {
             let record = &self.records[self.record_index(key)?].1;
             let mut outgoing = Vec::new();
+            outgoing
+                .try_reserve(record.dependencies.as_slice().len())
+                .map_err(|_| StructuralError::AllocationFailed)?;
             for &target in record.dependencies.as_slice() {
                 match target.class() {
                     DomainClass::RegionBuilding if nodes.contains(&target) => outgoing.push(target),
@@ -39,51 +39,57 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         }
         let mut colors = BTreeMap::new();
         let mut path = Vec::new();
-        for &node in &nodes {
-            if colors.get(&node).copied().unwrap_or(0) == 0 {
-                if let Some(witness) = visit(node, &graph, &mut colors, &mut path)? {
-                    self.metrics.rejected_cycles = self.metrics.rejected_cycles.saturating_add(1);
-                    return Err(StructuralError::DependencyCycle(witness));
+        let mut frames = Vec::new();
+        path.try_reserve(nodes.len())
+            .map_err(|_| StructuralError::AllocationFailed)?;
+        frames
+            .try_reserve(nodes.len())
+            .map_err(|_| StructuralError::AllocationFailed)?;
+        for &start in &nodes {
+            if colors.get(&start).copied().unwrap_or(0) != 0 {
+                continue;
+            }
+            colors.insert(start, 1_u8);
+            path.push(start);
+            frames.push((start, 0_usize));
+            while let Some((node, next)) = frames.last_mut() {
+                let targets = graph.get(node).map(Vec::as_slice).unwrap_or(&[]);
+                if *next == targets.len() {
+                    let finished = *node;
+                    frames.pop();
+                    path.pop();
+                    colors.insert(finished, 2);
+                    continue;
+                }
+                let target = targets[*next];
+                *next = next
+                    .checked_add(1)
+                    .ok_or(StructuralError::ArithmeticOverflow)?;
+                match colors.get(&target).copied().unwrap_or(0) {
+                    0 => {
+                        colors.insert(target, 1);
+                        path.push(target);
+                        frames.push((target, 0));
+                    }
+                    1 => {
+                        let start = path
+                            .iter()
+                            .position(|candidate| *candidate == target)
+                            .ok_or(StructuralError::ArithmeticOverflow)?;
+                        let mut witness = Vec::new();
+                        witness
+                            .try_reserve(path.len() - start + 1)
+                            .map_err(|_| StructuralError::AllocationFailed)?;
+                        witness.extend_from_slice(&path[start..]);
+                        witness.push(target);
+                        self.metrics.rejected_cycles =
+                            self.metrics.rejected_cycles.saturating_add(1);
+                        return Err(StructuralError::DependencyCycle(witness));
+                    }
+                    _ => {}
                 }
             }
         }
         Ok(())
     }
-}
-
-fn visit(
-    node: DomainKey,
-    graph: &BTreeMap<DomainKey, Vec<DomainKey>>,
-    colors: &mut BTreeMap<DomainKey, u8>,
-    path: &mut Vec<DomainKey>,
-) -> Result<Option<Vec<DomainKey>>, StructuralError> {
-    if path.len() >= graph.len() {
-        return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-    }
-    colors.insert(node, 1);
-    path.push(node);
-    if let Some(targets) = graph.get(&node) {
-        for &target in targets {
-            match colors.get(&target).copied().unwrap_or(0) {
-                0 => {
-                    if let Some(witness) = visit(target, graph, colors, path)? {
-                        return Ok(Some(witness));
-                    }
-                }
-                1 => {
-                    let start = path
-                        .iter()
-                        .position(|candidate| *candidate == target)
-                        .unwrap_or(0);
-                    let mut witness = path[start..].to_vec();
-                    witness.push(target);
-                    return Ok(Some(witness));
-                }
-                _ => {}
-            }
-        }
-    }
-    path.pop();
-    colors.insert(node, 2);
-    Ok(None)
 }

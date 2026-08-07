@@ -3,10 +3,9 @@
 use std::num::NonZeroU64;
 
 use lkjscript_core::{
-    decode_execution_outcome, encode_execution_outcome, ExecutionOutcome,
-    ExecutionOutcomeCodecLimits, InlineStructuralValue, LayoutIdentity, OwnedValue,
-    SemanticDagKind, SemanticDagNode, SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot,
-    SemanticDagType, SemanticTypeIdentity, StructuralSnapshotLimits,
+    decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, InlineStructuralValue,
+    LayoutIdentity, OwnedValue, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticTypeIdentity,
 };
 
 fn ty(id: u64, kind: SemanticDagKind) -> SemanticDagType {
@@ -65,20 +64,8 @@ fn product_list_product() -> SemanticDagSnapshot {
             SemanticDagPayload::Product(vec![SemanticDagNodeId::new(4), SemanticDagNodeId::new(1)]),
         ),
     ];
-    SemanticDagSnapshot::new(
-        nodes,
-        SemanticDagNodeId::new(5),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .expect("product-list-product semantic DAG")
-}
-
-fn encoded(snapshot: SemanticDagSnapshot) -> Vec<u8> {
-    encode_execution_outcome(
-        &ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot)),
-        2 * 1024 * 1024,
-    )
-    .expect("semantic DAG outcome encode")
+    SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(5))
+        .expect("product-list-product semantic DAG")
 }
 
 #[test]
@@ -121,7 +108,35 @@ fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
     );
 }
 
-#[path = "semantic_dag_snapshot/bounds.rs"]
-mod bounds;
+#[test]
+fn semantic_dag_codec_crosses_former_node_and_field_limits() {
+    const COUNT: u32 = 65_537;
+    let mut nodes = Vec::with_capacity(usize::try_from(COUNT).expect("test count fits usize"));
+    for value in 0..COUNT - 1 {
+        nodes.push(node(
+            10,
+            SemanticDagKind::I64,
+            SemanticDagPayload::Inline(InlineStructuralValue::I64(i64::from(value))),
+        ));
+    }
+    nodes.push(node(
+        11,
+        SemanticDagKind::Product,
+        SemanticDagPayload::Product((0..COUNT - 1).map(SemanticDagNodeId::new).collect()),
+    ));
+    let snapshot = SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(COUNT - 1))
+        .expect("wide semantic DAG");
+    let outcome = ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot));
+    let bytes = encode_execution_outcome(&outcome, 16 * 1024 * 1024).expect("wide encode");
+    let decoded = decode_execution_outcome(&bytes, 16 * 1024 * 1024).expect("wide decode");
+    let metrics = decoded
+        .returned()
+        .and_then(OwnedValue::as_semantic_dag)
+        .expect("wide returned DAG")
+        .metrics();
+    assert_eq!(metrics.nodes, COUNT);
+    assert_eq!(metrics.fields, COUNT - 1);
+}
+
 #[path = "semantic_dag_snapshot/rejection.rs"]
 mod rejection;

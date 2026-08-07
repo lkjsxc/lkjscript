@@ -1,4 +1,4 @@
-use crate::island::{config_error, EngineErrorDetail};
+use crate::island::config_error;
 use crate::*;
 
 mod access;
@@ -26,31 +26,25 @@ pub(super) struct JitUniqueRuntime {
     store: UniqueStore,
     owners: Vec<u64>,
     loans: Vec<LoanSlot>,
-    max_loans: usize,
+    max_loans: Option<usize>,
+    max_allocations: Option<u64>,
+    max_heap_bytes: Option<u64>,
     stats: NativeUniqueStats,
     last_resource: Option<ResourceLimitKind>,
 }
 
 impl JitUniqueRuntime {
     pub(super) fn new(config: &ExecutionPolicy) -> Result<Self, EngineError> {
-        let limits = match config.limited_policy() {
-            Some(policy) => {
-                let objects = u32::try_from(policy.max_allocations).unwrap_or(u32::MAX);
-                let bytes = u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX);
-                UniqueStoreLimits::new(objects, bytes, objects, policy.max_allocations, u32::MAX)
-                    .map_err(|error| config_error().with_detail(error.to_string()))?
-            }
-            None => UniqueStoreLimits::representation_boundary(),
-        };
         let id = UniqueStoreId::new(1).ok_or_else(config_error)?;
         Ok(Self {
-            store: UniqueStore::new(id, limits),
+            store: UniqueStore::new(id),
             owners: Vec::new(),
             loans: Vec::new(),
-            max_loans: config
-                .max_stack_values()
-                .unwrap_or(u32::MAX as usize)
-                .min(u32::MAX as usize),
+            max_loans: config.max_handles(),
+            max_allocations: config.max_allocations(),
+            max_heap_bytes: config
+                .max_heap_bytes()
+                .and_then(|bytes| u64::try_from(bytes).ok()),
             stats: NativeUniqueStats::default(),
             last_resource: None,
         })
@@ -58,14 +52,17 @@ impl JitUniqueRuntime {
 
     pub(super) fn allocate(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError> {
         let size = usize::try_from(size).map_err(|_| self.reject())?;
+        self.preflight_allocation(size)?;
         if let Err(error) = self.store.check_byte_vector_allocation(size) {
             return Err(self.store_error(error));
         }
-        self.owners.try_reserve(1).map_err(|_| self.heap_limit())?;
+        self.owners
+            .try_reserve(1)
+            .map_err(|_| NativeServiceError::HostFailure)?;
         let mut bytes = Vec::new();
         bytes
             .try_reserve_exact(size)
-            .map_err(|_| self.heap_limit())?;
+            .map_err(|_| NativeServiceError::HostFailure)?;
         bytes.resize(size, 0);
         let key = self
             .store
@@ -99,7 +96,33 @@ impl JitUniqueRuntime {
     }
 
     fn reserve_owner(&mut self) -> Result<(), NativeServiceError> {
-        self.owners.try_reserve(1).map_err(|_| self.heap_limit())
+        self.owners
+            .try_reserve(1)
+            .map_err(|_| NativeServiceError::HostFailure)
+    }
+
+    fn preflight_allocation(&mut self, bytes: usize) -> Result<(), NativeServiceError> {
+        if self
+            .max_allocations
+            .is_some_and(|maximum| self.stats.allocations >= maximum)
+        {
+            self.last_resource = Some(ResourceLimitKind::Allocations);
+            return Err(NativeServiceError::ResourceLimitExceeded);
+        }
+        let bytes = u64::try_from(bytes).map_err(|_| NativeServiceError::HostFailure)?;
+        let projected = self
+            .store
+            .stats()
+            .live_bytes
+            .checked_add(bytes)
+            .ok_or(NativeServiceError::HostFailure)?;
+        if self
+            .max_heap_bytes
+            .is_some_and(|maximum| projected > maximum)
+        {
+            return Err(self.heap_limit());
+        }
+        Ok(())
     }
 
     fn publish_owner(&mut self, word: u64) -> Result<(), NativeServiceError> {
@@ -157,19 +180,15 @@ impl JitUniqueRuntime {
     }
 
     fn loan_limit(&mut self) -> NativeServiceError {
-        self.last_resource = Some(ResourceLimitKind::StackValues);
+        self.last_resource = Some(ResourceLimitKind::Handles);
         NativeServiceError::ResourceLimitExceeded
     }
 
     fn store_error(&mut self, error: UniqueStoreError) -> NativeServiceError {
         match error {
-            UniqueStoreError::AllocationLimit | UniqueStoreError::ObjectLimit => {
-                self.last_resource = Some(ResourceLimitKind::Allocations);
-                NativeServiceError::ResourceLimitExceeded
-            }
-            UniqueStoreError::ByteLimit
-            | UniqueStoreError::SlotLimit
-            | UniqueStoreError::StorageCapacity => self.heap_limit(),
+            UniqueStoreError::RepresentationExhausted
+            | UniqueStoreError::ArithmeticOverflow
+            | UniqueStoreError::StorageCapacity => NativeServiceError::HostFailure,
             _ => self.reject(),
         }
     }

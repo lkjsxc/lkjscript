@@ -2,7 +2,7 @@ use lkjscript_contracts::PreparedProgramIdentity;
 use lkjscript_core::{
     ExecutionOutcome, OwnedValue, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode,
     SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot, SemanticPayload, SemanticValue,
-    StructuralKind, StructuralLimits, StructuralSnapshotLimits, ValidatedChunk,
+    StructuralKind, ValidatedChunk,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,7 +21,7 @@ pub struct RehydrationReport {
     pub final_loans: u64,
     pub final_dependencies: u64,
     pub release_backlog: u64,
-    pub bounded_release_work: bool,
+    pub complete_release_work: bool,
 }
 
 pub fn rehydrate_process_outcome(
@@ -44,8 +44,7 @@ pub fn rehydrate_process_outcome(
     };
     let input_hash = canonical_hash(&snapshot)?;
     let snapshot_metrics = snapshot.metrics();
-    let limits = StructuralLimits::default();
-    let mut runtime = SealedSemanticDagRuntime::new(limits).map_err(|error| error.to_string())?;
+    let mut runtime = SealedSemanticDagRuntime::new().map_err(|error| error.to_string())?;
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)
         .map_err(|failure| failure.error.to_string())?;
@@ -82,15 +81,14 @@ pub fn rehydrate_process_outcome(
         final_loans: metrics.live_loans,
         final_dependencies: metrics.live_dependencies,
         release_backlog: metrics.release_backlog,
-        bounded_release_work: metrics.release_backlog == 0
-            && metrics.sealed.release_work <= u64::from(limits.max_release_work),
+        complete_release_work: metrics.release_backlog == 0,
     };
     if report.final_domains != 0
         || report.final_owners != 0
         || report.final_loans != 0
         || report.final_dependencies != 0
         || report.release_backlog != 0
-        || !report.bounded_release_work
+        || !report.complete_release_work
     {
         return Err("fresh-runtime semantic DAG teardown is not zero".into());
     }
@@ -100,44 +98,145 @@ pub fn rehydrate_process_outcome(
     ))
 }
 
-fn semantic_tree_dag(value: &SemanticValue) -> Result<SemanticDagSnapshot, String> {
-    let mut nodes = Vec::new();
-    let root = append_semantic_tree(value, &mut nodes)?;
-    SemanticDagSnapshot::new(nodes, root, StructuralSnapshotLimits::DEFAULT)
-        .map_err(|error| error.to_string())
+#[derive(Clone, Copy)]
+enum Aggregate {
+    Product,
+    Enum(u64),
 }
 
-fn append_semantic_tree(
-    value: &SemanticValue,
-    nodes: &mut Vec<SemanticDagNode>,
-) -> Result<SemanticDagNodeId, String> {
-    let payload = match &value.payload {
-        SemanticPayload::Inline(value) => SemanticDagPayload::Inline(*value),
-        SemanticPayload::Static(value) => SemanticDagPayload::Static(*value),
-        SemanticPayload::String(value) => SemanticDagPayload::String(value.clone()),
-        SemanticPayload::Path(value) => SemanticDagPayload::Path(value.clone()),
-        SemanticPayload::Bytes(value) => SemanticDagPayload::Bytes(value.clone()),
-        SemanticPayload::ByteVector(_) => {
-            return Err("byte-vector structural return is not a semantic DAG".into())
-        }
-        SemanticPayload::Product(fields) => SemanticDagPayload::Product(
-            fields
-                .iter()
-                .map(|field| append_semantic_tree(field, nodes))
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
-        SemanticPayload::Enum {
-            tag,
-            active_payload,
-        } => SemanticDagPayload::Enum {
-            tag: *tag,
-            fields: active_payload
-                .iter()
-                .map(|field| append_semantic_tree(field, nodes))
-                .collect::<Result<Vec<_>, _>>()?,
-        },
-    };
-    let kind = match value.value_type.kind {
+enum Task<'a> {
+    Visit(&'a SemanticValue),
+    Finish {
+        value_type: lkjscript_core::StructuralType,
+        aggregate: Aggregate,
+        fields: usize,
+    },
+}
+
+fn semantic_tree_dag(value: &SemanticValue) -> Result<SemanticDagSnapshot, String> {
+    let mut nodes = Vec::new();
+    let mut roots = Vec::new();
+    let mut tasks = Vec::new();
+    tasks
+        .try_reserve(1)
+        .map_err(|_| "semantic DAG traversal allocation failed".to_owned())?;
+    tasks.push(Task::Visit(value));
+    while let Some(task) = tasks.pop() {
+        let (value_type, payload) = match task {
+            Task::Visit(value) => match &value.payload {
+                SemanticPayload::Product(fields) => {
+                    schedule_tree_fields(&mut tasks, value.value_type, Aggregate::Product, fields)?;
+                    continue;
+                }
+                SemanticPayload::Enum {
+                    tag,
+                    active_payload,
+                } => {
+                    schedule_tree_fields(
+                        &mut tasks,
+                        value.value_type,
+                        Aggregate::Enum(*tag),
+                        active_payload,
+                    )?;
+                    continue;
+                }
+                SemanticPayload::Inline(inline) => {
+                    (value.value_type, SemanticDagPayload::Inline(*inline))
+                }
+                SemanticPayload::Static(leaf) => {
+                    (value.value_type, SemanticDagPayload::Static(*leaf))
+                }
+                SemanticPayload::String(bytes) => (
+                    value.value_type,
+                    SemanticDagPayload::String(copy_tree_bytes(bytes)?),
+                ),
+                SemanticPayload::Path(bytes) => (
+                    value.value_type,
+                    SemanticDagPayload::Path(copy_tree_bytes(bytes)?),
+                ),
+                SemanticPayload::Bytes(bytes) => (
+                    value.value_type,
+                    SemanticDagPayload::Bytes(copy_tree_bytes(bytes)?),
+                ),
+                SemanticPayload::ByteVector(_) => {
+                    return Err("byte-vector structural return is not a semantic DAG".into())
+                }
+            },
+            Task::Finish {
+                value_type,
+                aggregate,
+                fields,
+            } => {
+                let start = roots
+                    .len()
+                    .checked_sub(fields)
+                    .ok_or_else(|| "semantic DAG traversal state underflow".to_owned())?;
+                let children = roots.split_off(start);
+                let payload = match aggregate {
+                    Aggregate::Product => SemanticDagPayload::Product(children),
+                    Aggregate::Enum(tag) => SemanticDagPayload::Enum {
+                        tag,
+                        fields: children,
+                    },
+                };
+                (value_type, payload)
+            }
+        };
+        let kind = structural_dag_kind(value_type.kind)?;
+        let id = u32::try_from(nodes.len())
+            .map(SemanticDagNodeId::new)
+            .map_err(|_| "semantic DAG node count exceeds u32")?;
+        nodes
+            .try_reserve(1)
+            .map_err(|_| "semantic DAG node allocation failed".to_owned())?;
+        roots
+            .try_reserve(1)
+            .map_err(|_| "semantic DAG traversal allocation failed".to_owned())?;
+        nodes.push(SemanticDagNode::new(
+            lkjscript_core::SemanticDagType::new(value_type.layout, value_type.semantic_type, kind),
+            payload,
+        ));
+        roots.push(id);
+    }
+    let root = roots
+        .pop()
+        .filter(|_| roots.is_empty())
+        .ok_or_else(|| "semantic DAG traversal did not produce one root".to_owned())?;
+    SemanticDagSnapshot::new(nodes, root).map_err(|error| error.to_string())
+}
+
+fn schedule_tree_fields<'a>(
+    tasks: &mut Vec<Task<'a>>,
+    value_type: lkjscript_core::StructuralType,
+    aggregate: Aggregate,
+    fields: &'a [SemanticValue],
+) -> Result<(), String> {
+    let additional = fields
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| "semantic DAG traversal work count overflow".to_owned())?;
+    tasks
+        .try_reserve(additional)
+        .map_err(|_| "semantic DAG traversal allocation failed".to_owned())?;
+    tasks.push(Task::Finish {
+        value_type,
+        aggregate,
+        fields: fields.len(),
+    });
+    tasks.extend(fields.iter().rev().map(Task::Visit));
+    Ok(())
+}
+
+fn copy_tree_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(bytes.len())
+        .map_err(|_| "semantic DAG byte allocation failed".to_owned())?;
+    copy.extend_from_slice(bytes);
+    Ok(copy)
+}
+
+fn structural_dag_kind(kind: StructuralKind) -> Result<SemanticDagKind, String> {
+    Ok(match kind {
         StructuralKind::Unit => SemanticDagKind::Unit,
         StructuralKind::Bool => SemanticDagKind::Bool,
         StructuralKind::I64 => SemanticDagKind::I64,
@@ -151,19 +250,7 @@ fn append_semantic_tree(
         StructuralKind::ByteVector => {
             return Err("byte-vector structural return is not a semantic DAG".into())
         }
-    };
-    let id = u32::try_from(nodes.len())
-        .map(SemanticDagNodeId::new)
-        .map_err(|_| "semantic DAG node count exceeds u32")?;
-    nodes.push(SemanticDagNode::new(
-        lkjscript_core::SemanticDagType::new(
-            value.value_type.layout,
-            value.value_type.semantic_type,
-            kind,
-        ),
-        payload,
-    ));
-    Ok(id)
+    })
 }
 
 fn canonical_hash(snapshot: &SemanticDagSnapshot) -> Result<[u8; 32], String> {

@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn packed_words_round_trip_only_through_exact_store_layouts() {
-    let mut store = store_with(30, 3, 32, 3, 3, 4);
+    let mut store = store(30);
     let vector = store.allocate_byte_vector(vec![1]).expect("vector");
     let bytes = store.allocate_bytes(vec![2]).expect("bytes");
     let path = store
@@ -33,7 +33,7 @@ fn malformed_forged_stale_generation_and_layout_words_are_rejected() {
         Err(InvalidUniqueKeyWord::ZeroGeneration)
     );
 
-    let mut store = store_with(31, 1, 8, 1, 3, 3);
+    let mut store = store(31);
     let first = store.allocate_byte_vector(vec![7]).expect("first");
     let first_word = first.packed_word();
     let forged_index = UniqueKeyWord::new((1_u64 << u32::BITS) | u64::from(u32::MAX))
@@ -74,8 +74,8 @@ fn malformed_forged_stale_generation_and_layout_words_are_rejected() {
 
 #[test]
 fn importing_binds_owner_store_and_typed_cross_store_access_fails() {
-    let mut owner = store_with(32, 1, 8, 1, 1, 2);
-    let mut other = store_with(33, 1, 8, 1, 1, 2);
+    let mut owner = store(32);
+    let mut other = store(33);
     let key = owner.allocate_byte_vector(vec![9]).expect("owner key");
     let imported = owner
         .import_byte_vector_key(key.packed_word())

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::SealedRegionStore;
 use crate::structural::{DomainClass, DomainKey, StructuralError, StructuralRuntime};
@@ -7,8 +7,13 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
     pub fn validate(&self, runtime: &StructuralRuntime) -> Result<(), StructuralError> {
         self.require_runtime(runtime)?;
         let mut keys = BTreeSet::new();
-        for (key, record) in &self.records {
+        for (index, (key, record)) in self.records.iter().enumerate() {
             runtime.require_live(*key)?;
+            let slot =
+                usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            if self.indices.get(slot).and_then(|entry| *entry) != Some(index) {
+                return Err(StructuralError::StaleDomain(*key));
+            }
             if !keys.insert(*key) {
                 return Err(StructuralError::DuplicateDependency);
             }
@@ -16,13 +21,6 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
                 DomainClass::RegionBuilding if record.owners == 0 => {}
                 DomainClass::RegionSealed if record.owners > 0 => {}
                 _ => return Err(StructuralError::IncompleteSeal),
-            }
-            if record.roots.len() > self.limits.max_objects_per_domain as usize
-                || record.dependencies.as_slice().len() > self.limits.max_dependencies as usize
-                || record.drops.as_slice().len() > self.limits.max_drop_entries as usize
-                || record.bytes > self.limits.max_bytes_per_domain
-            {
-                return Err(StructuralError::ArithmeticOverflow);
             }
             for root in &record.roots {
                 if root.generation != key.generation() {
@@ -33,40 +31,71 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
                 self.record_index(target)?;
             }
         }
-        for &(key, _) in &self.records {
-            if key.class() == DomainClass::RegionSealed {
-                self.validate_path(key, &mut Vec::new(), &mut BTreeSet::new())?;
-            }
-        }
-        Ok(())
+        self.validate_sealed_cycles()
     }
 
-    fn validate_path(
-        &self,
-        key: DomainKey,
-        path: &mut Vec<DomainKey>,
-        complete: &mut BTreeSet<DomainKey>,
-    ) -> Result<(), StructuralError> {
-        if complete.contains(&key) {
-            return Ok(());
-        }
-        if let Some(start) = path.iter().position(|candidate| *candidate == key) {
-            let mut witness = path[start..].to_vec();
-            witness.push(key);
-            return Err(StructuralError::DependencyCycle(witness));
-        }
-        if path.len() >= self.limits.max_release_work as usize {
-            return Err(StructuralError::ArithmeticOverflow);
-        }
-        path.push(key);
-        let record = &self.records[self.record_index(key)?].1;
-        for &target in record.dependencies.as_slice() {
-            if target.class() == DomainClass::RegionSealed {
-                self.validate_path(target, path, complete)?;
+    fn validate_sealed_cycles(&self) -> Result<(), StructuralError> {
+        let mut colors = BTreeMap::<DomainKey, u8>::new();
+        let mut path = Vec::new();
+        let mut frames = Vec::new();
+        path.try_reserve(self.records.len())
+            .map_err(|_| StructuralError::AllocationFailed)?;
+        frames
+            .try_reserve(self.records.len())
+            .map_err(|_| StructuralError::AllocationFailed)?;
+        for &(start, _) in &self.records {
+            if start.class() != DomainClass::RegionSealed
+                || colors.get(&start).copied().unwrap_or(0) != 0
+            {
+                continue;
+            }
+            colors.insert(start, 1);
+            path.push(start);
+            frames.push((start, 0_usize));
+            while let Some((node, next)) = frames.last_mut() {
+                let index = self.record_index(*node)?;
+                let dependencies = self.records[index].1.dependencies.as_slice();
+                while *next < dependencies.len()
+                    && dependencies[*next].class() != DomainClass::RegionSealed
+                {
+                    *next = next
+                        .checked_add(1)
+                        .ok_or(StructuralError::ArithmeticOverflow)?;
+                }
+                if *next == dependencies.len() {
+                    let finished = *node;
+                    frames.pop();
+                    path.pop();
+                    colors.insert(finished, 2);
+                    continue;
+                }
+                let target = dependencies[*next];
+                *next = next
+                    .checked_add(1)
+                    .ok_or(StructuralError::ArithmeticOverflow)?;
+                match colors.get(&target).copied().unwrap_or(0) {
+                    0 => {
+                        colors.insert(target, 1);
+                        path.push(target);
+                        frames.push((target, 0));
+                    }
+                    1 => {
+                        let start = path
+                            .iter()
+                            .position(|candidate| *candidate == target)
+                            .ok_or(StructuralError::ArithmeticOverflow)?;
+                        let mut witness = Vec::new();
+                        witness
+                            .try_reserve(path.len() - start + 1)
+                            .map_err(|_| StructuralError::AllocationFailed)?;
+                        witness.extend_from_slice(&path[start..]);
+                        witness.push(target);
+                        return Err(StructuralError::DependencyCycle(witness));
+                    }
+                    _ => {}
+                }
             }
         }
-        path.pop();
-        complete.insert(key);
         Ok(())
     }
 }

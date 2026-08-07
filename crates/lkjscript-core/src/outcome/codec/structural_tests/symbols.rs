@@ -41,7 +41,7 @@ fn structural_symbol_traversal_and_equality_are_canonical() {
     }
 
     let mut first_order = Vec::new();
-    let first = OwnedValue::from_structural(symbols(7, 2), StructuralSnapshotLimits::DEFAULT)
+    let first = OwnedValue::from_structural(symbols(7, 2))
         .and_then(|owned| {
             owned.retain_symbols(|index| {
                 first_order.push(index);
@@ -50,7 +50,7 @@ fn structural_symbol_traversal_and_equality_are_canonical() {
         })
         .expect("first structural symbols");
     let mut second_order = Vec::new();
-    let second = OwnedValue::from_structural(symbols(9, 3), StructuralSnapshotLimits::DEFAULT)
+    let second = OwnedValue::from_structural(symbols(9, 3))
         .and_then(|owned| {
             owned.retain_symbols(|index| {
                 second_order.push(index);
@@ -69,14 +69,11 @@ fn structural_symbol_traversal_and_equality_are_canonical() {
         outcome
     );
 
-    let symbol = OwnedValue::from_structural(
-        value(
-            44,
-            StructuralKind::Static,
-            SemanticPayload::Static(StaticStructuralLeaf::Symbol(12)),
-        ),
-        StructuralSnapshotLimits::DEFAULT,
-    )
+    let symbol = OwnedValue::from_structural(value(
+        44,
+        StructuralKind::Static,
+        SemanticPayload::Static(StaticStructuralLeaf::Symbol(12)),
+    ))
     .and_then(|owned| owned.retain_symbols(|_| Ok("standalone-symbol")))
     .expect("standalone structural symbol");
     assert_eq!(symbol.as_str(), Some("standalone-symbol"));

@@ -3,23 +3,10 @@ use std::fmt;
 use super::super::{StructuralError, StructuralRootTableError};
 use super::SemanticValue;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StructuralValueLimit {
-    Objects,
-    Destinations,
-    Views,
-    TreeNodes,
-    TreeDepth,
-    Fields,
-    PayloadBytes,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StructuralValueError {
     AllocationFailed,
     ArithmeticOverflow,
-    InvalidLimits,
-    LimitExceeded(StructuralValueLimit),
     RootTable(StructuralRootTableError),
     Domain(StructuralError),
     StaleObject,
@@ -63,8 +50,6 @@ impl fmt::Display for StructuralValueError {
         match self {
             Self::AllocationFailed => output.write_str("structural value allocation failed"),
             Self::ArithmeticOverflow => output.write_str("structural value arithmetic overflow"),
-            Self::InvalidLimits => output.write_str("invalid structural value limits"),
-            Self::LimitExceeded(limit) => write!(output, "structural value limit: {limit:?}"),
             Self::RootTable(error) => error.fmt(output),
             Self::Domain(error) => error.fmt(output),
             Self::StaleObject => output.write_str("stale structural object"),

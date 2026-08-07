@@ -1,6 +1,4 @@
-use lkjscript_core::{
-    FailureCleanupAction, OwnedValue, StructuralSnapshotLimits, StructuralValueCategory,
-};
+use lkjscript_core::{FailureCleanupAction, OwnedValue, StructuralValueCategory};
 
 use super::*;
 
@@ -151,12 +149,15 @@ pub(in crate::run) fn export_return<J: RuntimeTier>(
             "returned structural owner representation mismatch",
         ));
     }
+    let accounting = preflight_owned_export(vm, key, expected, false)?;
     let semantic = invocation_mut(vm)?
         .runtime
         .export_semantic(key, expected)
         .map_err(map_value_error)?;
     invocation_mut(vm)?.owners.remove(&key.get());
-    OwnedValue::from_structural(semantic, StructuralSnapshotLimits::DEFAULT)
+    let owned = OwnedValue::from_structural(semantic)?;
+    commit_export_output(vm, accounting)?;
+    Ok(owned)
 }
 
 pub(in crate::run) fn cleanup_failure_roots<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {

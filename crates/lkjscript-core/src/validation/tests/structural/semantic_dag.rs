@@ -75,11 +75,7 @@ fn returned_product_snapshot(
                 .collect(),
         ),
     ));
-    crate::SemanticDagSnapshot::new(
-        nodes,
-        crate::SemanticDagNodeId::new(1),
-        crate::StructuralSnapshotLimits::DEFAULT,
-    )
+    crate::SemanticDagSnapshot::new(nodes, crate::SemanticDagNodeId::new(1))
     .expect("semantic DAG")
 }
 
@@ -89,8 +85,7 @@ fn validated_structural_return_derives_exact_sealed_dag_shape() {
     let field_type = copy_field().runtime_type.expect("copy runtime type");
     let snapshot = returned_product_snapshot(&chunk, field_type, 1);
     let expected = snapshot.clone();
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(&chunk, snapshot)
         .expect("authenticated rehydration");
@@ -111,11 +106,9 @@ fn validated_structural_return_requires_exact_return_metadata() {
             crate::SemanticDagPayload::Inline(crate::InlineStructuralValue::Unit),
         )],
         crate::SemanticDagNodeId::new(0),
-        crate::StructuralSnapshotLimits::DEFAULT,
     )
     .expect("unit snapshot");
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let failure = runtime
         .rehydrate_authenticated_return(&chunk, snapshot)
         .expect_err("missing structural return rejected");
@@ -128,8 +121,7 @@ fn validated_structural_return_rejects_affine_and_resource_metadata() {
     let affine = returning_product_chunk_with_mode(crate::StructuralTypeMode::Affine);
     let field_type = copy_field().runtime_type.expect("copy runtime type");
     let snapshot = returned_product_snapshot(&affine, field_type, 1);
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let failure = runtime
         .rehydrate_authenticated_return(&affine, snapshot)
         .expect_err("affine root rejected");
@@ -160,8 +152,7 @@ fn validated_structural_return_rejects_forged_type_and_shape_before_allocation()
     let chunk = returning_product_chunk();
     let forged = runtime_type(44, crate::StructuralKind::I64);
     let snapshot = returned_product_snapshot(&chunk, forged, 1);
-    let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
-        .expect("sealed runtime");
+    let mut runtime = crate::SealedSemanticDagRuntime::new().expect("sealed runtime");
     let failure = runtime
         .rehydrate_authenticated_return(&chunk, snapshot)
         .expect_err("forged type rejected");
@@ -175,7 +166,6 @@ fn validated_structural_return_rejects_forged_type_and_shape_before_allocation()
             crate::SemanticDagPayload::Product(Vec::new()),
         )],
         crate::SemanticDagNodeId::new(0),
-        crate::StructuralSnapshotLimits::DEFAULT,
     )
     .expect("empty product snapshot");
     let failure = runtime

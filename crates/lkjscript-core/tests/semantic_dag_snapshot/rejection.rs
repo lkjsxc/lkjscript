@@ -14,24 +14,14 @@ fn constructor_rejects_forward_cycles_unreachable_nodes_and_nonfinal_root() {
             SemanticDagPayload::Product(vec![SemanticDagNodeId::new(0)]),
         ),
     ];
-    assert!(SemanticDagSnapshot::new(
-        forward,
-        SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .is_err());
+    assert!(SemanticDagSnapshot::new(forward, SemanticDagNodeId::new(1)).is_err());
 
     let self_cycle = vec![node(
         3,
         SemanticDagKind::Product,
         SemanticDagPayload::Product(vec![SemanticDagNodeId::new(0)]),
     )];
-    assert!(SemanticDagSnapshot::new(
-        self_cycle,
-        SemanticDagNodeId::new(0),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .is_err());
+    assert!(SemanticDagSnapshot::new(self_cycle, SemanticDagNodeId::new(0)).is_err());
 
     let unreachable = vec![
         node(
@@ -45,17 +35,11 @@ fn constructor_rejects_forward_cycles_unreachable_nodes_and_nonfinal_root() {
             SemanticDagPayload::Inline(InlineStructuralValue::I64(2)),
         ),
     ];
-    assert!(SemanticDagSnapshot::new(
-        unreachable,
-        SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .is_err());
+    assert!(SemanticDagSnapshot::new(unreachable, SemanticDagNodeId::new(1)).is_err());
 
     assert!(SemanticDagSnapshot::new(
         product_list_product().nodes().to_vec(),
         SemanticDagNodeId::new(4),
-        StructuralSnapshotLimits::DEFAULT,
     )
     .is_err());
 }
@@ -67,12 +51,7 @@ fn constructor_rejects_kind_and_list_type_layout_disagreement() {
         SemanticDagKind::Bool,
         SemanticDagPayload::Inline(InlineStructuralValue::I64(1)),
     )];
-    assert!(SemanticDagSnapshot::new(
-        wrong_kind,
-        SemanticDagNodeId::new(0),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .is_err());
+    assert!(SemanticDagSnapshot::new(wrong_kind, SemanticDagNodeId::new(0)).is_err());
 
     let wrong_tail = vec![
         SemanticDagNode::new(
@@ -87,10 +66,5 @@ fn constructor_rejects_kind_and_list_type_layout_disagreement() {
             },
         ),
     ];
-    assert!(SemanticDagSnapshot::new(
-        wrong_tail,
-        SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .is_err());
+    assert!(SemanticDagSnapshot::new(wrong_tail, SemanticDagNodeId::new(1)).is_err());
 }

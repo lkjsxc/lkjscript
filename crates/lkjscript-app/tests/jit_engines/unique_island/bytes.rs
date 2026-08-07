@@ -106,14 +106,18 @@ fn bytes_failure_paths_preserve_owners_and_cleanup_without_collectors() {
         ),
         EvalOutcome::ResourceLimitExceeded(_)
     ));
-    assert!(matches!(
-        run_chunk(
-            allocation.bytecode(),
-            &lkjscript_vm::ExecutionInputs::default(),
-            &limits
+    let vm_limited = run_chunk(
+        allocation.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &limits,
+    );
+    assert!(
+        matches!(
+            vm_limited,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
         ),
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
-    ));
+        "unexpected VM allocation outcome: {vm_limited:?}"
+    );
     for (_, execution) in forced_pair(&allocation, &limits) {
         assert!(matches!(
             execution.outcome,

@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use super::*;
 use crate::{
     LayoutIdentity, OwnedValue, ResourceKind, SemanticPayload, SemanticTypeIdentity, SemanticValue,
-    StructuralKind, StructuralSnapshotLimits, StructuralType, Value,
+    StructuralKind, StructuralType, Value,
 };
 
 fn round_trip(outcome: ExecutionOutcome) {
@@ -28,13 +28,10 @@ fn structural_value(kind: StructuralKind, payload: SemanticPayload) -> SemanticV
 #[test]
 fn process_outcome_codec_preserves_closed_outcomes() {
     round_trip(ExecutionOutcome::Returned(
-        OwnedValue::from_structural(
-            structural_value(
-                StructuralKind::String,
-                SemanticPayload::String(b"cell-result".to_vec()),
-            ),
-            StructuralSnapshotLimits::DEFAULT,
-        )
+        OwnedValue::from_structural(structural_value(
+            StructuralKind::String,
+            SemanticPayload::String(b"cell-result".to_vec()),
+        ))
         .expect("owned structural string"),
     ));
     round_trip(ExecutionOutcome::Returned(

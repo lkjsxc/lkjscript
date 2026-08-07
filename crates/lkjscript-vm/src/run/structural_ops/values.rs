@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 
 use lkjscript_core::{
     Constant, LayoutIdentity, OwnedValue, SemanticPayload, SemanticTypeIdentity, SemanticValue,
-    StructuralKind, StructuralNodeView, StructuralSnapshotLimits, StructuralType,
+    StructuralKind, StructuralNodeView, StructuralType,
 };
 
 use super::*;
@@ -130,12 +130,19 @@ pub(in crate::run) fn export_plain_return<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     value: Value,
 ) -> Result<Option<OwnedValue>> {
-    if value.as_static_string().is_some() {
-        return static_string_semantic(vm, value)
-            .and_then(|semantic| {
-                OwnedValue::from_structural(semantic, StructuralSnapshotLimits::DEFAULT)
-            })
-            .map(Some);
+    if let Some(index) = value.as_static_string() {
+        let bytes = match vm.chunk.constant(index) {
+            Some(Constant::Str(text)) => text.len(),
+            _ => return Err(Error::msg("stale static string constant")),
+        };
+        vm.preflight_allocation(1)?;
+        vm.preflight_heap_growth(
+            u64::try_from(bytes).map_err(|_| Error::host("static string length exceeds u64"))?,
+        )?;
+        vm.preflight_output(bytes)?;
+        let owned = OwnedValue::from_structural(static_string_semantic(vm, value)?)?;
+        vm.record_output(bytes)?;
+        return Ok(Some(owned));
     }
     let Some(key) = value.as_structural_root() else {
         return Ok(None);
@@ -148,6 +155,7 @@ pub(in crate::run) fn export_plain_return<J: RuntimeTier>(
         } else {
             return Ok(None);
         };
+    let accounting = preflight_owned_export(vm, key, value_type, host_owner)?;
     let semantic = invocation_mut(vm)?
         .runtime
         .export_semantic(key, value_type)
@@ -157,7 +165,9 @@ pub(in crate::run) fn export_plain_return<J: RuntimeTier>(
     } else {
         invocation_mut(vm)?.owners.remove(&key.get());
     }
-    OwnedValue::from_structural(semantic, StructuralSnapshotLimits::DEFAULT).map(Some)
+    let owned = OwnedValue::from_structural(semantic)?;
+    commit_export_output(vm, accounting)?;
+    Ok(Some(owned))
 }
 
 pub(super) fn is_host_owner(invocation: &StructuralInvocation, value: Value) -> bool {

@@ -1,20 +1,18 @@
 use super::super::SemanticDagType;
 use super::model::{SealedSemanticDagError, SealedSemanticDagMetrics};
 use super::TypedSealedDagStore;
-use crate::structural::{SealedRegionMetrics, StructuralLimits, StructuralRuntime};
+use crate::structural::{SealedRegionMetrics, StructuralRuntime};
 
 #[derive(Debug)]
 pub struct SealedSemanticDagRuntime {
     pub(super) runtime: StructuralRuntime,
     pub(super) stores: Vec<TypedSealedDagStore>,
-    pub(super) limits: StructuralLimits,
 }
 
 impl SealedSemanticDagRuntime {
-    pub fn new(limits: StructuralLimits) -> Result<Self, SealedSemanticDagError> {
-        let runtime = StructuralRuntime::new(limits)?;
+    pub fn new() -> Result<Self, SealedSemanticDagError> {
+        let runtime = StructuralRuntime::new()?;
         Ok(Self {
-            limits: runtime.limits(),
             runtime,
             stores: Vec::new(),
         })

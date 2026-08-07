@@ -1,6 +1,5 @@
 use lkjscript_core::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StructuralKind, StructuralValueError,
-    StructuralValueLimit, StructuralValueRuntime, StructuralValueRuntimeLimits,
 };
 
 use super::support::{runtime, value_type};
@@ -51,39 +50,6 @@ fn product_destination_handles_double_init_incomplete_finish_and_success(
     assert_eq!(runtime.metrics().destinations_completed, 1);
     assert_eq!(runtime.metrics().live_destinations, 0);
     runtime.drop_owned(key, product_type)?;
-    runtime.verify_empty()
-}
-
-#[test]
-fn failed_finish_restores_all_fields_for_later_abort() -> Result<(), StructuralValueError> {
-    let product_type = value_type(77, 78, StructuralKind::Product)?;
-    let i64_type = value_type(79, 80, StructuralKind::I64)?;
-    let limits = StructuralValueRuntimeLimits {
-        max_tree_nodes: 1,
-        ..StructuralValueRuntimeLimits::default()
-    };
-    let mut runtime = StructuralValueRuntime::new(limits)?;
-    let destination = runtime.begin_product(product_type, vec![i64_type])?;
-    runtime
-        .initialize_node(
-            destination,
-            0,
-            SemanticValue::new(
-                i64_type,
-                SemanticPayload::Inline(InlineStructuralValue::I64(1)),
-            ),
-        )
-        .map_err(|failure| failure.error)?;
-    assert_eq!(
-        runtime.finish_destination(destination),
-        Err(StructuralValueError::LimitExceeded(
-            StructuralValueLimit::TreeNodes
-        ))
-    );
-    assert_eq!(runtime.metrics().live_destinations, 1);
-    let report = runtime.abort_destination(destination)?;
-    assert_eq!(report.cleanup_order, vec![0]);
-    assert_eq!(report.nodes_released, 1);
     runtime.verify_empty()
 }
 

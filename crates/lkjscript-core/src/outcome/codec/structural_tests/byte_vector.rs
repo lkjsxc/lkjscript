@@ -10,8 +10,7 @@ fn semantic_byte_vector_keeps_public_owned_snapshot_semantics() {
         StructuralKind::ByteVector,
         SemanticPayload::ByteVector(bytes.clone()),
     );
-    let owned = OwnedValue::from_structural(value, StructuralSnapshotLimits::DEFAULT)
-        .expect("owned byte-vector");
+    let owned = OwnedValue::from_structural(value).expect("owned byte-vector");
     assert_eq!(owned.as_byte_vector(), Some(bytes.as_slice()));
     assert_eq!(owned.as_bytes(), None);
 }

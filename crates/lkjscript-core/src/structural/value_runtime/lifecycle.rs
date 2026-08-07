@@ -10,31 +10,26 @@ use super::super::{
 use super::{
     ObjectSlab, SemanticValue, StructuralEventKind, StructuralEventLog, StructuralImage,
     StructuralObject, StructuralPublishFailure, StructuralType, StructuralValueError,
-    StructuralValueRuntime, StructuralValueRuntimeLimits, TreeFacts,
+    StructuralValueRuntime, TreeFacts,
 };
 
 impl StructuralValueRuntime {
-    pub fn new(limits: StructuralValueRuntimeLimits) -> Result<Self, StructuralValueError> {
-        let limits = limits.validate()?;
-        let runtime = StructuralRuntime::new(limits.domains)?;
-        let roots = StructuralRootTable::new(runtime.identity(), limits.roots)?;
-        let mut cleanup_reports = VecDeque::new();
-        cleanup_reports
-            .try_reserve_exact(limits.max_cleanup_reports as usize)
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
+    pub fn new() -> Result<Self, StructuralValueError> {
+        let runtime = StructuralRuntime::new()?;
+        let roots = StructuralRootTable::new(runtime.identity())?;
         Ok(Self {
             runtime,
             roots,
-            objects: ObjectSlab::new(limits),
+            objects: ObjectSlab::new(),
             destinations: Vec::new(),
             free_destinations: Vec::new(),
             views: Vec::new(),
             free_views: Vec::new(),
             metrics: super::StructuralValueRuntimeMetrics::default(),
-            events: StructuralEventLog::new(limits.max_events)?,
-            cleanup_reports,
+            events: StructuralEventLog::new(),
+            cleanup_reports: VecDeque::new(),
             cleanup_sequence: 1,
-            limits,
+            allocation_events: 0,
         })
     }
 
@@ -50,7 +45,7 @@ impl StructuralValueRuntime {
             Ok(stack) => stack,
             Err(error) => return Err(StructuralPublishFailure { error, value }),
         };
-        let image = match StructuralImage::build(&value, facts, self.limits) {
+        let image = match StructuralImage::build(&value, facts) {
             Ok(image) => image,
             Err(error) => return Err(StructuralPublishFailure { error, value }),
         };
@@ -78,9 +73,13 @@ impl StructuralValueRuntime {
         image: StructuralImage,
         facts: TreeFacts,
     ) -> Result<StructuralValueKey, Box<(StructuralValueError, StructuralImage)>> {
-        if let Err(error) = image.validate(self.limits, facts) {
+        if let Err(error) = image.validate(facts) {
             return Err(Box::new((error, image)));
         }
+        let next_allocation = match self.next_allocation_event() {
+            Ok(next) => next,
+            Err(error) => return Err(Box::new((error, image))),
+        };
         let domain = match self.runtime.allocate(DomainClass::Unique) {
             Ok(domain) => domain,
             Err(error) => return Err(Box::new((error.into(), image))),
@@ -96,6 +95,7 @@ impl StructuralValueRuntime {
         };
         match self.roots.publish(root, StructuralRootOwnership::Owned) {
             Ok(key) => {
+                self.allocation_events = next_allocation;
                 self.note_publication(facts);
                 self.note_slot_reuse(reused);
                 self.record(StructuralEventKind::Allocate, root.slot(), facts.nodes);

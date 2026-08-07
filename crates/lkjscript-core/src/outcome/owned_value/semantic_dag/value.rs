@@ -10,9 +10,8 @@ impl OwnedValue {
     pub fn from_semantic_dag_nodes(
         nodes: Vec<SemanticDagNode>,
         root: SemanticDagNodeId,
-        limits: StructuralSnapshotLimits,
     ) -> Result<Self> {
-        SemanticDagSnapshot::new(nodes, root, limits).map(Self::from_owned_semantic_dag)
+        SemanticDagSnapshot::new(nodes, root).map(Self::from_owned_semantic_dag)
     }
 
     pub fn as_semantic_dag(&self) -> Option<&SemanticDagSnapshot> {

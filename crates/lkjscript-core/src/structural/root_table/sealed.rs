@@ -17,6 +17,9 @@ impl StructuralRootTable {
             return Err(StructuralRootTableError::InvariantViolation);
         };
         self.validate_sealed_replacement(value, sealed_root)?;
+        if !self.exclusive_roots.contains(&value.root) {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
         if value.shared_loans != 0 || value.exclusive_loan {
             return Err(StructuralRootTableError::LiveLoan);
         }
@@ -37,7 +40,7 @@ impl StructuralRootTable {
     ) -> Result<StructuralValueKey, StructuralRootTableError> {
         self.preflight_owned_to_sealed(key, sealed_root)?;
         let index = self.live_root_index(key)?;
-        let RootSlot::Live { generation, .. } = self.roots[index] else {
+        let RootSlot::Live { generation, value } = self.roots[index] else {
             return Err(StructuralRootTableError::InvariantViolation);
         };
         let next = self.next_rekey_generation(generation)?;
@@ -56,6 +59,9 @@ impl StructuralRootTable {
             .root_slots_reused
             .checked_add(1)
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        if !self.exclusive_roots.remove(&value.root) {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
         self.roots[index] = RootSlot::Live {
             generation: next,
             value: LiveRoot {
@@ -135,7 +141,7 @@ impl StructuralRootTable {
         &self,
         generation: NonZeroU32,
     ) -> Result<NonZeroU32, StructuralRootTableError> {
-        if generation.get() >= self.limits.max_generation {
+        if generation.get() == u32::MAX {
             return Err(StructuralRootTableError::GenerationExhausted);
         }
         NonZeroU32::new(generation.get() + 1).ok_or(StructuralRootTableError::GenerationExhausted)

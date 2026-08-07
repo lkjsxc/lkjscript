@@ -76,8 +76,7 @@ fn structural_codec_round_trips_every_semantic_payload_without_keys() {
             .into(),
         ),
     );
-    let owned = OwnedValue::from_structural(nested.clone(), StructuralSnapshotLimits::DEFAULT)
-        .expect("owned structural value");
+    let owned = OwnedValue::from_structural(nested.clone()).expect("owned structural value");
     let metrics = owned
         .structural_snapshot_metrics()
         .expect("structural metrics");
@@ -103,4 +102,35 @@ fn structural_codec_round_trips_every_semantic_payload_without_keys() {
     let bytes = encode_execution_outcome(&outcome, 2 * 1024 * 1024).expect("encode outcome");
     let decoded = decode_execution_outcome(&bytes, 2 * 1024 * 1024).expect("decode outcome");
     assert_eq!(decoded, outcome);
+}
+
+#[test]
+fn structural_codec_round_trips_deep_values_without_native_recursion() {
+    const DEPTH: usize = 12_000;
+    let product_type = structural_type(70, StructuralKind::Product);
+    let integer_type = structural_type(71, StructuralKind::I64);
+    let mut nested = SemanticValue::new(
+        integer_type,
+        SemanticPayload::Inline(InlineStructuralValue::I64(7)),
+    );
+    for _ in 0..DEPTH {
+        nested = SemanticValue::new(product_type, SemanticPayload::Product(vec![nested].into()));
+    }
+    let outcome = ExecutionOutcome::Returned(
+        OwnedValue::from_structural(nested).expect("deep owned structural value"),
+    );
+    let bytes = encode_execution_outcome(&outcome, 4 * 1024 * 1024).expect("deep encode");
+    let decoded = decode_execution_outcome(&bytes, 4 * 1024 * 1024).expect("deep decode");
+    let metrics = decoded
+        .returned()
+        .and_then(OwnedValue::structural_snapshot_metrics)
+        .expect("deep structural metrics");
+    assert_eq!(
+        metrics.nodes,
+        u32::try_from(DEPTH + 1).expect("test depth fits u32")
+    );
+    assert_eq!(
+        metrics.fields,
+        u32::try_from(DEPTH).expect("test depth fits u32")
+    );
 }

@@ -1,4 +1,4 @@
-use lkjscript_core::{OwnedValue, SemanticPayload, SemanticValue, StructuralSnapshotLimits};
+use lkjscript_core::{OwnedValue, SemanticPayload, SemanticValue};
 
 use crate::eval::{map_structural_error, structural_eligible, EvalValue, Evaluator, Flow};
 
@@ -104,7 +104,7 @@ impl Evaluator<'_> {
     }
 
     fn owned_structural(&self, value: SemanticValue) -> Result<EvalValue, Flow> {
-        OwnedValue::from_structural(value, StructuralSnapshotLimits::DEFAULT)
+        OwnedValue::from_structural(value)
             .map(EvalValue::ReturnedOwned)
             .map_err(|error| Flow::Trap(error.to_string()))
     }

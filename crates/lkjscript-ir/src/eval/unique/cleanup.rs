@@ -4,12 +4,9 @@ use lkjscript_core::{UniqueKeyWord, UniqueLayout, UniqueStoreError};
 
 pub(super) fn map_store_error(error: UniqueStoreError) -> Flow {
     match error {
-        UniqueStoreError::AllocationLimit | UniqueStoreError::ObjectLimit => {
-            Flow::Resource("allocations".into())
-        }
-        UniqueStoreError::ByteLimit
-        | UniqueStoreError::SlotLimit
-        | UniqueStoreError::StorageCapacity => Flow::Resource("heap bytes".into()),
+        UniqueStoreError::RepresentationExhausted
+        | UniqueStoreError::ArithmeticOverflow
+        | UniqueStoreError::StorageCapacity => Flow::HostFailure(error.to_string()),
         _ => Flow::Trap(error.to_string()),
     }
 }
@@ -67,12 +64,7 @@ impl EvalUniqueRuntime {
 
     pub(crate) fn cleanup(&mut self) -> Result<(), Flow> {
         self.loans.clear();
-        let owners: Vec<_> = self
-            .owners
-            .iter()
-            .map(|(word, layout)| (*word, *layout))
-            .collect();
-        for (owner, layout) in owners {
+        while let Some((&owner, &layout)) = self.owners.iter().next() {
             let word = UniqueKeyWord::new(owner).map_err(|error| Flow::Trap(error.to_string()))?;
             self.release(word, layout)?;
             self.owners.remove(&owner);

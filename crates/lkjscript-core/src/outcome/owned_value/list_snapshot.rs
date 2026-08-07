@@ -4,25 +4,25 @@ impl OwnedValue {
     #[doc(hidden)]
     pub fn from_segmented_list_snapshot(
         root: Value,
-        max_materialized_entries: usize,
         mut resolve: impl FnMut(u64) -> Result<Vec<Value>>,
     ) -> Result<Self> {
         let mut lists = Vec::new();
         let mut cache = HashMap::new();
-        let root = materialize_segmented_value(
-            root,
-            &mut lists,
-            &mut cache,
-            max_materialized_entries,
-            &mut resolve,
-        )?;
+        let root = materialize_segmented_value(root, &mut lists, &mut cache, &mut resolve)?;
         let mut visited = Vec::new();
-        let mut pending = vec![root];
+        let mut pending = Vec::new();
+        pending
+            .try_reserve(1)
+            .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
+        pending.push(root);
         while let Some(value) = pending.pop() {
             let Some(index) = value.as_owned_list().map(|value| value as usize) else {
                 continue;
             };
             if visited.len() < lists.len() {
+                visited
+                    .try_reserve(lists.len() - visited.len())
+                    .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
                 visited.resize(lists.len(), false);
             }
             if visited.get(index).copied().unwrap_or(false) {
@@ -36,20 +36,24 @@ impl OwnedValue {
                 node.head,
                 &mut lists,
                 &mut cache,
-                max_materialized_entries,
                 &mut resolve,
             )?;
             node.tail = materialize_segmented_value(
                 node.tail,
                 &mut lists,
                 &mut cache,
-                max_materialized_entries,
                 &mut resolve,
             )?;
             if visited.len() < lists.len() {
+                visited
+                    .try_reserve(lists.len() - visited.len())
+                    .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
                 visited.resize(lists.len(), false);
             }
             visited[index] = true;
+            pending
+                .try_reserve(2)
+                .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
             pending.push(node.tail);
             pending.push(node.head);
             lists[index] = node;
@@ -62,7 +66,6 @@ fn materialize_segmented_value(
     value: Value,
     lists: &mut Vec<OwnedListNode>,
     cache: &mut HashMap<u64, Value>,
-    limit: usize,
     resolve: &mut impl FnMut(u64) -> Result<Vec<Value>>,
 ) -> Result<Value> {
     let Some(word) = value.as_segmented_list() else {
@@ -72,13 +75,10 @@ fn materialize_segmented_value(
         return Ok(value);
     }
     let elements = resolve(word)?;
-    let next_len = lists
+    lists
         .len()
         .checked_add(elements.len())
         .ok_or_else(|| Error::msg("segmented snapshot work overflow"))?;
-    if next_len > limit {
-        return Err(Error::msg("segmented snapshot work limit exceeded"));
-    }
     lists
         .try_reserve(elements.len())
         .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;

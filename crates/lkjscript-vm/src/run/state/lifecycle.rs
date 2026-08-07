@@ -20,9 +20,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 });
                 match transferred {
                     Ok(value) => ExecutionOutcome::Returned(value),
-                    Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
-                        "invalid returned VM structural owner: {error}"
-                    ))),
+                    Err(error) => outcome_from_error(error),
                 }
             }
             Ok(Stop::Returned(value))
@@ -67,9 +65,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     Ok(None) => ExecutionOutcome::Trapped(Trap::new(
                         "structural owner escaped without exact return metadata",
                     )),
-                    Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
-                        "invalid returned VM structural leaf: {error}"
-                    ))),
+                    Err(error) => outcome_from_error(error),
                 }
             }
             Ok(Stop::Returned(value)) => match self.snapshot_list_aware_return(value) {
@@ -83,9 +79,13 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         };
 
         let structural_cleanup = structural_ops::teardown(self);
-        let unique_cleanup = self.unique.verify_empty().inspect_err(|_| {
-            let _cleanup = self.unique.cleanup();
-        });
+        let unique_cleanup = if failed && self.unique.verify_empty().is_err() {
+            self.unique.cleanup()
+        } else {
+            self.unique.verify_empty().inspect_err(|_| {
+                let _cleanup = self.unique.cleanup();
+            })
+        };
         let mut cleanup_failures = std::mem::replace(
             &mut self.cleanup_failures,
             CleanupFailures::with_retention(self.config.cleanup_retention()),

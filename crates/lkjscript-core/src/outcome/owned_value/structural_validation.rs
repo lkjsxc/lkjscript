@@ -1,134 +1,99 @@
+enum Task<'a> {
+    Visit(&'a SemanticValue),
+    Exit(*const SemanticValue),
+}
+
 pub(super) fn validate_structural_snapshot(
     value: &SemanticValue,
-    limits: StructuralSnapshotLimits,
-    work: SnapshotWork,
 ) -> Result<StructuralSnapshotMetrics> {
-    let limits = limits.validate()?;
-    let mut validator = StructuralValidator {
-        limits,
-        work,
-        metrics: StructuralSnapshotMetrics::default(),
-        active: Vec::new(),
-    };
-    validator
-        .active
-        .try_reserve_exact(usize::from(limits.max_depth))
+    let mut tasks = Vec::new();
+    let mut active = Vec::new();
+    tasks
+        .try_reserve(1)
         .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
-    validator.node(value, 1)?;
-    validator.metrics.decode_work = validator.metrics.encode_work;
-    Ok(validator.metrics)
-}
-
-struct StructuralValidator {
-    limits: StructuralSnapshotLimits,
-    work: SnapshotWork,
-    metrics: StructuralSnapshotMetrics,
-    active: Vec<*const SemanticValue>,
-}
-
-impl StructuralValidator {
-    fn node(&mut self, value: &SemanticValue, depth: u16) -> Result<()> {
-        if depth > self.limits.max_depth {
-            return Err(Error::msg("structural snapshot depth exceeds bound"));
-        }
+    tasks.push(Task::Visit(value));
+    let mut metrics = StructuralSnapshotMetrics::default();
+    while let Some(task) = tasks.pop() {
+        let value = match task {
+            Task::Exit(address) => {
+                if active.pop() != Some(address) {
+                    return Err(Error::msg("structural snapshot traversal state is invalid"));
+                }
+                continue;
+            }
+            Task::Visit(value) => value,
+        };
         let address = std::ptr::from_ref(value);
-        if self.active.contains(&address) {
+        if active.contains(&address) {
             return Err(Error::msg("cyclic structural snapshot"));
         }
-        self.active.push(address);
-        self.metrics.nodes = self
-            .metrics
+        active
+            .try_reserve(1)
+            .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
+        active.push(address);
+        tasks
+            .try_reserve(1)
+            .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
+        tasks.push(Task::Exit(address));
+        metrics.nodes = metrics
             .nodes
             .checked_add(1)
-            .ok_or_else(|| Error::msg("structural snapshot node count overflow"))?;
-        if self.metrics.nodes > self.limits.max_nodes {
-            return Err(Error::msg("structural snapshot nodes exceed bound"));
-        }
-        self.charge_work(1)?;
+            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u32"))?;
+        charge_work(&mut metrics, 1)?;
         let expected = match &value.payload {
             SemanticPayload::Inline(inline) => inline_kind(*inline),
             SemanticPayload::Static(_) => StructuralKind::Static,
             SemanticPayload::String(bytes) => {
                 std::str::from_utf8(bytes)
                     .map_err(|_| Error::msg("structural snapshot string is not UTF-8"))?;
-                self.charge_bytes(bytes.len(), ByteClass::String)?;
+                charge_bytes(&mut metrics, bytes.len(), ByteClass::String)?;
                 StructuralKind::String
             }
             SemanticPayload::Path(bytes) => {
                 validate_snapshot_path(bytes)?;
-                self.charge_bytes(bytes.len(), ByteClass::Path)?;
+                charge_bytes(&mut metrics, bytes.len(), ByteClass::Path)?;
                 StructuralKind::Path
             }
             SemanticPayload::Bytes(bytes) => {
-                self.charge_bytes(bytes.len(), ByteClass::Other)?;
+                charge_bytes(&mut metrics, bytes.len(), ByteClass::Other)?;
                 StructuralKind::Bytes
             }
             SemanticPayload::ByteVector(bytes) => {
-                self.charge_bytes(bytes.len(), ByteClass::Other)?;
+                charge_bytes(&mut metrics, bytes.len(), ByteClass::Other)?;
                 StructuralKind::ByteVector
             }
             SemanticPayload::Product(fields) => {
-                self.fields(fields, depth)?;
+                schedule_fields(&mut tasks, fields, &mut metrics)?;
                 StructuralKind::Product
             }
             SemanticPayload::Enum { active_payload, .. } => {
-                self.fields(active_payload, depth)?;
+                schedule_fields(&mut tasks, active_payload, &mut metrics)?;
                 StructuralKind::Enum
             }
         };
         require_snapshot_kind(value.value_type, expected)?;
-        self.active.pop();
-        Ok(())
     }
+    metrics.decode_work = metrics.encode_work;
+    Ok(metrics)
+}
 
-    fn fields(&mut self, fields: &[SemanticValue], depth: u16) -> Result<()> {
-        let count = u32::try_from(fields.len())
-            .map_err(|_| Error::msg("structural snapshot field count overflow"))?;
-        self.metrics.fields = self
-            .metrics
-            .fields
-            .checked_add(count)
-            .ok_or_else(|| Error::msg("structural snapshot field count overflow"))?;
-        if self.metrics.fields > self.limits.max_fields {
-            return Err(Error::msg("structural snapshot fields exceed bound"));
-        }
-        self.charge_work(u64::from(count))?;
-        for field in fields {
-            self.node(field, depth + 1)?;
-        }
-        Ok(())
-    }
-
-    fn charge_bytes(&mut self, length: usize, class: ByteClass) -> Result<()> {
-        let length = u64::try_from(length)
-            .map_err(|_| Error::msg("structural snapshot byte count overflow"))?;
-        self.metrics.aggregate_bytes = checked_add(self.metrics.aggregate_bytes, length)?;
-        if matches!(class, ByteClass::String) {
-            self.metrics.string_bytes = checked_add(self.metrics.string_bytes, length)?;
-        }
-        if matches!(class, ByteClass::Path) {
-            self.metrics.path_bytes = checked_add(self.metrics.path_bytes, length)?;
-        }
-        if self.metrics.aggregate_bytes > self.limits.max_aggregate_bytes
-            || self.metrics.string_bytes > self.limits.max_string_bytes
-            || self.metrics.path_bytes > self.limits.max_path_bytes
-        {
-            return Err(Error::msg("structural snapshot bytes exceed bound"));
-        }
-        self.charge_work(length)
-    }
-
-    fn charge_work(&mut self, amount: u64) -> Result<()> {
-        self.metrics.encode_work = checked_add(self.metrics.encode_work, amount)?;
-        let limit = match self.work {
-            SnapshotWork::Encode => self.limits.max_encode_work,
-            SnapshotWork::Decode => self.limits.max_decode_work,
-        };
-        if self.metrics.encode_work > limit {
-            return Err(Error::msg("structural snapshot work exceeds bound"));
-        }
-        Ok(())
-    }
+fn schedule_fields<'a>(
+    tasks: &mut Vec<Task<'a>>,
+    fields: &'a [SemanticValue],
+    metrics: &mut StructuralSnapshotMetrics,
+) -> Result<()> {
+    let count = u32::try_from(fields.len())
+        .map_err(|_| Error::msg("structural snapshot field count exceeds u32"))?;
+    metrics.fields = metrics
+        .fields
+        .checked_add(count)
+        .ok_or_else(|| Error::msg("structural snapshot field count overflow"))?;
+    charge_work(metrics, u64::from(count))?;
+    tasks
+        .try_reserve(fields.len())
+        .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
+    tasks.extend(fields.iter().rev().map(Task::Visit));
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -136,6 +101,28 @@ enum ByteClass {
     String,
     Path,
     Other,
+}
+
+fn charge_bytes(
+    metrics: &mut StructuralSnapshotMetrics,
+    length: usize,
+    class: ByteClass,
+) -> Result<()> {
+    let length =
+        u64::try_from(length).map_err(|_| Error::msg("structural snapshot byte count overflow"))?;
+    metrics.aggregate_bytes = checked_add(metrics.aggregate_bytes, length)?;
+    if matches!(class, ByteClass::String) {
+        metrics.string_bytes = checked_add(metrics.string_bytes, length)?;
+    }
+    if matches!(class, ByteClass::Path) {
+        metrics.path_bytes = checked_add(metrics.path_bytes, length)?;
+    }
+    charge_work(metrics, length)
+}
+
+fn charge_work(metrics: &mut StructuralSnapshotMetrics, amount: u64) -> Result<()> {
+    metrics.encode_work = checked_add(metrics.encode_work, amount)?;
+    Ok(())
 }
 
 fn checked_add(left: u64, right: u64) -> Result<u64> {
@@ -161,11 +148,7 @@ fn inline_kind(value: InlineStructuralValue) -> StructuralKind {
 }
 
 pub(super) fn validate_snapshot_path(bytes: &[u8]) -> Result<()> {
-    if bytes.is_empty()
-        || bytes.len() > MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES
-        || bytes.first() != Some(&b'/')
-        || bytes.contains(&0)
-    {
+    if bytes.is_empty() || bytes.first() != Some(&b'/') || bytes.contains(&0) {
         Err(Error::msg("structural snapshot path is invalid"))
     } else {
         Ok(())

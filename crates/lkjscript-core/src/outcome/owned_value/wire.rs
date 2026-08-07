@@ -5,13 +5,12 @@ impl OwnedValue {
         self.validate_wire_symbols()?;
         if let Some(structural) = &self.structural {
             out.u8(3)?;
-            let limits = out.structural_limits();
-            encode_structural_snapshot(out, structural, limits)?;
+            encode_structural_snapshot(out, structural)?;
             return encode_symbol_table(out, &self.symbols);
         }
         if let Some(snapshot) = &self.semantic_dag {
             out.u8(4)?;
-            encode_semantic_dag(out, snapshot, out.structural_limits())?;
+            encode_semantic_dag(out, snapshot)?;
             return encode_symbol_table(out, &self.symbols);
         }
         if let Some(bytes) = &self.unique_byte_vector {
@@ -24,9 +23,6 @@ impl OwnedValue {
         }
         out.u8(0)?;
         encode_value(out, self.root)?;
-        if self.lists.len() > MAX_WIRE_ITEMS {
-            return Err(Error::msg("owned list table exceeds wire item limit"));
-        }
         out.usize(self.lists.len())?;
         for node in &self.lists {
             encode_value(out, node.head)?;
@@ -39,7 +35,7 @@ impl OwnedValue {
         match input.u8()? {
             0 => {
                 let root = decode_value(input)?;
-                let list_count = count(input.usize()?)?;
+                let list_count = input.usize()?;
                 let mut lists = reserve(list_count)?;
                 for _ in 0..list_count {
                     lists.push(OwnedListNode {
@@ -55,16 +51,14 @@ impl OwnedValue {
             1 => Self::from_unique_byte_vector(input.bytes()?.to_vec()),
             2 => Self::from_unique_bytes(input.bytes()?.to_vec()),
             3 => {
-                let limits = input.structural_limits();
-                let structural = decode_structural_snapshot(input, limits)?;
+                let structural = decode_structural_snapshot(input)?;
                 let mut value = Self::from_owned_structural(structural);
                 value.symbols = decode_symbol_table(input)?;
                 value.validate_wire_symbols()?;
                 Ok(value)
             }
             4 => {
-                let limits = input.structural_limits();
-                let snapshot = decode_semantic_dag(input, limits)?;
+                let snapshot = decode_semantic_dag(input)?;
                 let mut value = Self::from_owned_semantic_dag(snapshot);
                 value.symbols = decode_symbol_table(input)?;
                 value.validate_wire_symbols()?;
@@ -102,7 +96,7 @@ fn encode_symbol_table(out: &mut Encoder, symbols: &[Option<String>]) -> Result<
 }
 
 fn decode_symbol_table(input: &mut Decoder<'_>) -> Result<Vec<Option<String>>> {
-    let symbol_count = count(input.usize()?)?;
+    let symbol_count = input.usize()?;
     let mut symbols = reserve(symbol_count)?;
     for _ in 0..symbol_count {
         symbols.push(match input.u8()? {
@@ -150,14 +144,6 @@ fn decode_value(input: &mut Decoder<'_>) -> Result<Value> {
         11 => Value::from_owned_list(input.u32()?),
         _ => return Err(Error::msg("unknown value tag")),
     })
-}
-
-fn count(value: usize) -> Result<usize> {
-    if value <= MAX_WIRE_ITEMS {
-        Ok(value)
-    } else {
-        Err(Error::msg("owned value item count exceeds bound"))
-    }
 }
 
 fn reserve<T>(length: usize) -> Result<Vec<T>> {

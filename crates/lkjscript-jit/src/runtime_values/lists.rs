@@ -30,20 +30,33 @@ impl JitValueServices<'_> {
                     return self.trap("list-prepend tail layout mismatch");
                 }
                 let tail_key = self.list_key(tail)?;
-                if self.max_list_allocations.is_some_and(|maximum| {
-                    self.list_allocations
-                        .saturating_add(self.region_product_allocations)
-                        >= maximum
-                }) {
+                let allocations = self
+                    .list_allocations
+                    .checked_add(self.region_product_allocations)
+                    .ok_or(NativeServiceError::HostFailure)?;
+                if self
+                    .max_list_allocations
+                    .is_some_and(|maximum| allocations >= maximum)
+                {
                     self.last_resource = Some(ResourceLimitKind::Allocations);
                     return Err(NativeServiceError::ResourceLimitExceeded);
                 }
-                let increase = self.lists.prepend_storage_increase();
-                let projected = self
+                let increase = self
+                    .lists
+                    .prepend_storage_increase()
+                    .map_err(|error| self.list_error(error))?;
+                let list_bytes = self
                     .lists
                     .reserved_bytes_estimate()
-                    .saturating_add(self.region_products.metrics().reserved_bytes_estimate)
-                    .saturating_add(increase);
+                    .map_err(|error| self.list_error(error))?;
+                let region_bytes = self
+                    .region_products
+                    .reserved_bytes_estimate()
+                    .map_err(|_| NativeServiceError::HostFailure)?;
+                let projected = list_bytes
+                    .checked_add(region_bytes)
+                    .and_then(|bytes| bytes.checked_add(increase))
+                    .ok_or(NativeServiceError::HostFailure)?;
                 if self
                     .max_runtime_bytes
                     .is_some_and(|maximum| projected > maximum)
@@ -55,7 +68,10 @@ impl JitValueServices<'_> {
                     .lists
                     .prepend_typed(head, tail_key, reference_layout_key(result_type))
                     .map_err(|error| self.list_error(error))?;
-                self.list_allocations = self.list_allocations.saturating_add(1);
+                self.list_allocations = self
+                    .list_allocations
+                    .checked_add(1)
+                    .ok_or(NativeServiceError::HostFailure)?;
                 Ok(NativeValue::Reference(
                     lkjscript_native::NativeReference::new(result_type, key.to_word()),
                 ))
@@ -115,14 +131,7 @@ impl JitValueServices<'_> {
         error: lkjscript_core::SegmentedListError,
     ) -> NativeServiceError {
         match error {
-            lkjscript_core::SegmentedListError::Limit(
-                lkjscript_core::SegmentedListLimit::HostAllocation
-                | lkjscript_core::SegmentedListLimit::Entries
-                | lkjscript_core::SegmentedListLimit::Segments,
-            ) => {
-                self.last_resource = Some(ResourceLimitKind::Allocations);
-                NativeServiceError::ResourceLimitExceeded
-            }
+            lkjscript_core::SegmentedListError::Limit(_) => NativeServiceError::HostFailure,
             _ => {
                 self.last_trap = Some(format!("segmented-list operation failed: {error:?}"));
                 NativeServiceError::Trap

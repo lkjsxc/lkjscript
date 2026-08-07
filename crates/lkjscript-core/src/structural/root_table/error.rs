@@ -1,18 +1,10 @@
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StructuralRootTableLimit {
-    Roots,
-    Loans,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StructuralRootTableError {
     AllocationFailed,
     ArithmeticOverflow,
-    InvalidLimits,
     InvalidKey,
-    LimitExceeded(StructuralRootTableLimit),
     WrongRuntime,
     StaleRoot,
     MovedRoot,
@@ -37,11 +29,7 @@ impl fmt::Display for StructuralRootTableError {
             Self::ArithmeticOverflow => {
                 output.write_str("structural root table arithmetic overflow")
             }
-            Self::InvalidLimits => output.write_str("invalid structural root table limits"),
             Self::InvalidKey => output.write_str("invalid structural value key"),
-            Self::LimitExceeded(limit) => {
-                write!(output, "structural root table limit exceeded: {limit:?}")
-            }
             Self::WrongRuntime => output.write_str("structural root belongs to another runtime"),
             Self::StaleRoot => output.write_str("stale structural value key"),
             Self::MovedRoot => output.write_str("structural value was moved"),

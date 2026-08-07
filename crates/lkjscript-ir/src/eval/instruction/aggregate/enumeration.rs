@@ -73,13 +73,7 @@ impl Evaluator<'_> {
         fields: &[ValueId],
         values: &mut [Option<EvalValue>],
     ) -> Result<EvalValue, Flow> {
-        match aggregate_mode(
-            self.program.program(),
-            self.config.structural_limits,
-            &instruction.ty,
-        )
-        .map_err(Flow::Trap)?
-        {
+        match aggregate_mode(self.program.program(), &instruction.ty).map_err(Flow::Trap)? {
             AggregateMode::Structural => {
                 self.enum_from_ssa(&instruction.ty, variant, layout, fields, values)
             }
@@ -132,8 +126,7 @@ impl Evaluator<'_> {
         if u64::try_from(index).ok() != Some(field_index) {
             return Err(Flow::Trap("enum field index/identity mismatch".into()));
         }
-        if aggregate_mode(self.program.program(), self.config.structural_limits, ty)
-            .map_err(Flow::Trap)?
+        if aggregate_mode(self.program.program(), ty).map_err(Flow::Trap)?
             == AggregateMode::ResourceAdapter
         {
             return self

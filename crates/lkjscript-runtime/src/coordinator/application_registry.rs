@@ -121,7 +121,7 @@ fn manifest(record: &DurableApplication) -> Result<ApplicationManifest, Coordina
     let max_total_invocations =
         NonZeroU64::new(record.max_total).ok_or(CoordinatorError::InvalidApplicationRegistry)?;
     let mut execution = LimitedExecutionPolicy::conservative();
-    execution.max_heap_bytes = 32 * 1024;
+    execution.max_heap_bytes = 64 * 1024;
     execution.max_output_bytes = 16 * 1024;
     Ok(ApplicationManifest {
         name: record.name.clone(),

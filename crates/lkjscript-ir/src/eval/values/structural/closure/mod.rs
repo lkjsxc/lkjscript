@@ -4,25 +4,19 @@ use super::{AggregateMode, ClosureClass};
 
 pub(crate) struct ClosureReconstructor<'a> {
     program: &'a Program,
-    max_nodes: u64,
-    max_depth: u16,
-    nodes: u64,
     active: Vec<SsaType>,
 }
 
 impl<'a> ClosureReconstructor<'a> {
-    pub(crate) const fn new(program: &'a Program, max_nodes: u64, max_depth: u16) -> Self {
+    pub(crate) const fn new(program: &'a Program) -> Self {
         Self {
             program,
-            max_nodes,
-            max_depth,
-            nodes: 0,
             active: Vec::new(),
         }
     }
 
     pub(crate) fn aggregate_mode(mut self, ty: &SsaType) -> Result<AggregateMode, String> {
-        match self.classify(ty, 0)? {
+        match self.classify(ty)? {
             ClosureClass::Dynamic => Ok(AggregateMode::Structural),
             ClosureClass::Legacy { .. } => Ok(AggregateMode::Legacy),
             ClosureClass::Resource => Ok(AggregateMode::ResourceAdapter),
@@ -30,14 +24,7 @@ impl<'a> ClosureReconstructor<'a> {
         }
     }
 
-    pub(crate) fn classify(&mut self, ty: &SsaType, depth: u16) -> Result<ClosureClass, String> {
-        self.nodes = self
-            .nodes
-            .checked_add(1)
-            .ok_or_else(|| "evaluator structural closure work overflow".to_owned())?;
-        if self.nodes > self.max_nodes || depth > self.max_depth {
-            return Err("evaluator structural closure bound exceeded".into());
-        }
+    pub(crate) fn classify(&mut self, ty: &SsaType) -> Result<ClosureClass, String> {
         match ty {
             SsaType::Unit | SsaType::Bool | SsaType::I64 | SsaType::F64 => Ok(ClosureClass::Inline),
             SsaType::Symbol => Ok(ClosureClass::Static),
@@ -52,13 +39,13 @@ impl<'a> ClosureReconstructor<'a> {
                 Err("private destination cannot enter evaluator structural closure".into())
             }
             SsaType::List(inner) => {
-                let inner = self.classify(inner, depth.saturating_add(1))?;
+                let inner = self.classify(inner)?;
                 Ok(ClosureClass::Legacy {
                     dynamic_reachable: inner.dynamic_reachable(),
                 })
             }
-            SsaType::Product(id) => self.product(*id, depth),
-            SsaType::Enum { id, arguments } => self.enumeration(*id, arguments, depth),
+            SsaType::Product(id) => self.product(*id),
+            SsaType::Enum { id, arguments } => self.enumeration(*id, arguments),
             SsaType::ByteSlice | SsaType::ByteSliceMut => {
                 Err("borrowed byte views cannot enter evaluator aggregates".into())
             }
@@ -71,7 +58,7 @@ impl<'a> ClosureReconstructor<'a> {
         }
     }
 
-    fn product(&mut self, id: ProductId, depth: u16) -> Result<ClosureClass, String> {
+    fn product(&mut self, id: ProductId) -> Result<ClosureClass, String> {
         let concrete = SsaType::Product(id);
         if self.active.contains(&concrete) {
             return Ok(ClosureClass::Dynamic);
@@ -87,17 +74,12 @@ impl<'a> ClosureReconstructor<'a> {
             .iter()
             .map(|field| field.ty.clone())
             .collect::<Vec<_>>();
-        let result = self.fields(&fields, depth.saturating_add(1));
+        let result = self.fields(&fields);
         self.active.pop();
         result
     }
 
-    fn enumeration(
-        &mut self,
-        id: EnumId,
-        arguments: &[SsaType],
-        depth: u16,
-    ) -> Result<ClosureClass, String> {
+    fn enumeration(&mut self, id: EnumId, arguments: &[SsaType]) -> Result<ClosureClass, String> {
         let concrete = SsaType::Enum {
             id,
             arguments: arguments.to_vec(),
@@ -126,17 +108,17 @@ impl<'a> ClosureReconstructor<'a> {
                 )?);
             }
         }
-        let result = self.fields(&fields, depth.saturating_add(1));
+        let result = self.fields(&fields);
         self.active.pop();
         result
     }
 
-    fn fields(&mut self, fields: &[SsaType], depth: u16) -> Result<ClosureClass, String> {
+    fn fields(&mut self, fields: &[SsaType]) -> Result<ClosureClass, String> {
         let mut dynamic = false;
         let mut legacy = false;
         let mut resource = false;
         for field in fields {
-            match self.classify(field, depth)? {
+            match self.classify(field)? {
                 ClosureClass::Dynamic => dynamic = true,
                 ClosureClass::Legacy { dynamic_reachable } => {
                     legacy = true;

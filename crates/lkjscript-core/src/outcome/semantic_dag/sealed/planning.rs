@@ -2,7 +2,6 @@ use super::super::{SemanticDagPayload, SemanticDagSnapshot, SemanticDagType};
 use super::cells::{SealedDagCell, SealedDagNodeCell, SealedDagNodePayload};
 use super::model::SealedSemanticDagError;
 use super::{SealedSemanticDagRuntime, SEALED_DAG_BYTE_CHUNK};
-use crate::StructuralLimit;
 
 pub(super) struct RehydrationPlan {
     pub cells: Vec<SealedDagCell>,
@@ -26,20 +25,6 @@ impl SealedSemanticDagRuntime {
             total = total
                 .checked_add(auxiliary_cells(&node.payload)?)
                 .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
-        }
-        if total > self.limits.max_objects_per_domain {
-            return Err(crate::StructuralError::LimitExceeded(StructuralLimit::Objects).into());
-        }
-        let bytes = u64::from(total)
-            .checked_mul(std::mem::size_of::<SealedDagCell>() as u64)
-            .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
-        if bytes > self.limits.max_bytes_per_domain {
-            return Err(crate::StructuralError::LimitExceeded(StructuralLimit::Bytes).into());
-        }
-        if snapshot.metrics().fields > self.limits.max_dependencies {
-            return Err(
-                crate::StructuralError::LimitExceeded(StructuralLimit::Dependencies).into(),
-            );
         }
         let mut cells = Vec::new();
         cells

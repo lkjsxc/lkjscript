@@ -2,39 +2,38 @@
 
 use std::num::NonZeroU64;
 
-use lkjscript_core::{
-    LayoutIdentity, RegionStore, SemanticTypeIdentity, StructuralLimits, StructuralRuntime,
-};
+use lkjscript_core::{LayoutIdentity, RegionStore, SemanticTypeIdentity, StructuralRuntime};
 
 fn runtime() -> StructuralRuntime {
-    StructuralRuntime::new(StructuralLimits::default()).expect("runtime")
+    StructuralRuntime::new().expect("runtime")
 }
 
-fn region_store(runtime: &StructuralRuntime) -> RegionStore<u64, u8> {
+fn region_store(runtime: &StructuralRuntime) -> RegionStore<u64, u32> {
     RegionStore::new(
         runtime.identity(),
         LayoutIdentity::new(NonZeroU64::new(21).expect("nonzero")),
         SemanticTypeIdentity::new(NonZeroU64::new(31).expect("nonzero")),
-        StructuralLimits::default(),
     )
     .expect("region store")
 }
 
 #[test]
-fn ordinary_region_cycles_release_without_internal_graph_walk() {
+fn ordinary_region_crosses_former_edge_and_drop_limits() {
+    const COUNT: u32 = 5_000;
     let mut runtime = runtime();
     let mut store = region_store(&runtime);
     let owner = store.create(&mut runtime).expect("region");
-    let first = store.allocate(&owner, 10).expect("first");
-    let second = store.allocate(&owner, 20).expect("second");
+    let anchor = store.allocate(&owner, 0).expect("anchor");
+    for value in 1..=COUNT {
+        let object = store.allocate(&owner, u64::from(value)).expect("object");
+        store
+            .add_internal_edge(&owner, anchor, object)
+            .expect("edge");
+        store.register_drop(&owner, value).expect("drop");
+    }
     store
-        .add_internal_edge(&owner, first, second)
-        .expect("first edge");
-    store
-        .add_internal_edge(&owner, second, first)
-        .expect("cycle edge");
-    store.register_drop(&owner, 1).expect("drop one");
-    store.register_drop(&owner, 2).expect("drop two");
+        .add_internal_edge(&owner, anchor, anchor)
+        .expect("ordinary cyclic edge");
     store.validate(&runtime).expect("valid before release");
 
     let mut drops = Vec::new();
@@ -44,13 +43,12 @@ fn ordinary_region_cycles_release_without_internal_graph_walk() {
             Result::<_, ()>::Ok(())
         })
         .expect("release");
-    assert_eq!(drops, vec![2, 1]);
-    assert_eq!(report.domains_released, 1);
-    assert_eq!(report.objects_released, 2);
+    assert_eq!(drops.len(), COUNT as usize);
+    assert_eq!(drops.first(), Some(&COUNT));
+    assert_eq!(drops.last(), Some(&1));
+    assert_eq!(report.objects_released, u64::from(COUNT) + 1);
     assert_eq!(store.metrics().release_work, 1);
-    assert_eq!(store.metrics().chunks_created, 1);
-    assert_eq!(store.metrics().internal_edges, 2);
-    assert!(store.get(first).is_err());
+    assert_eq!(store.metrics().internal_edges, u64::from(COUNT) + 1);
     runtime.validate().expect("runtime valid");
     assert_eq!(runtime.metrics().live_domains, 0);
 }
@@ -83,66 +81,18 @@ fn child_regions_reset_and_stale_roots_are_exact() {
 }
 
 #[test]
-fn aggregate_drop_failures_and_release_work_are_preflighted() {
-    let limits = StructuralLimits {
-        max_release_work: 2,
-        max_drop_entries: 2,
-        ..StructuralLimits::default()
-    };
-    let mut runtime = StructuralRuntime::new(limits).expect("runtime");
-    let mut store = RegionStore::<u64, u8>::new(
-        runtime.identity(),
-        LayoutIdentity::new(NonZeroU64::new(71).expect("layout")),
-        SemanticTypeIdentity::new(NonZeroU64::new(72).expect("type")),
-        limits,
-    )
-    .expect("store");
-    let parent = store.create(&mut runtime).expect("parent");
-    let child = store.create(&mut runtime).expect("child");
-    store.register_drop(&parent, 1).expect("parent one");
-    store.register_drop(&parent, 2).expect("parent two");
-    store.register_drop(&child, 3).expect("child one");
-    store.register_drop(&child, 4).expect("child two");
-    store.attach(&parent, child).expect("attach");
-    let report = store
-        .release(&mut runtime, &parent, Err::<(), _>)
-        .expect("bounded release");
-    assert_eq!(report.domains_released, 2);
-    assert_eq!(report.drop_failures, vec![4, 3, 2, 1]);
-
-    let root = store.create(&mut runtime).expect("root");
-    let branch = store.create(&mut runtime).expect("branch");
-    let leaf = store.create(&mut runtime).expect("leaf");
-    store.attach(&branch, leaf).expect("branch leaf");
-    let (error, branch) = store.attach(&root, branch).expect_err("work bound");
-    assert!(matches!(
-        error,
-        lkjscript_core::StructuralError::LimitExceeded(_)
-    ));
-    store
-        .release(&mut runtime, &root, |_| Result::<_, ()>::Ok(()))
-        .expect("root release");
-    store
-        .release(&mut runtime, &branch, |_| Result::<_, ()>::Ok(()))
-        .expect("branch release");
-}
-
-#[test]
-fn live_loan_and_dependency_cycle_fail_before_mutation() {
+fn live_loan_fails_without_mutation() {
     let mut runtime = runtime();
     let mut store = region_store(&runtime);
-    let first = store.create(&mut runtime).expect("first");
-    let second = store.create(&mut runtime).expect("second");
-    store.begin_loan(&first).expect("loan");
+    let owner = store.create(&mut runtime).expect("owner");
+    store.begin_loan(&owner).expect("loan");
     assert!(store
-        .release(&mut runtime, &first, |_| Result::<_, ()>::Ok(()))
+        .release(&mut runtime, &owner, |_| Result::<_, ()>::Ok(()))
         .is_err());
-    let root = store.allocate(&first, 1).expect("root");
+    let root = store.allocate(&owner, 1).expect("still reusable");
     assert_eq!(*store.get(root).expect("value"), 1);
-    store.end_loan(&first).expect("end loan");
-    store.attach(&first, second).expect("attach");
+    store.end_loan(&owner).expect("end loan");
     store
-        .release(&mut runtime, &first, |_| Result::<_, ()>::Ok(()))
-        .expect("release graph");
-    assert_eq!(runtime.metrics().live_domains, 0);
+        .release(&mut runtime, &owner, |_| Result::<_, ()>::Ok(()))
+        .expect("release");
 }

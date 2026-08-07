@@ -3,20 +3,17 @@
 use std::num::NonZeroU64;
 
 use lkjscript_core::{
-    LayoutIdentity, SealedRegionStore, SemanticTypeIdentity, StructuralLimits,
-    StructuralRootOwnership, StructuralRootState, StructuralRootTable, StructuralRootTableError,
-    StructuralRootTableLimits, StructuralRuntime,
+    LayoutIdentity, SealedRegionStore, SemanticTypeIdentity, StructuralRootOwnership,
+    StructuralRootState, StructuralRootTable, StructuralRootTableError, StructuralRuntime,
 };
 
 #[test]
 fn sealed_root_leases_share_and_release_only_through_domain_owners() {
-    let limits = StructuralLimits::default();
-    let mut runtime = StructuralRuntime::new(limits).expect("runtime");
+    let mut runtime = StructuralRuntime::new().expect("runtime");
     let mut store = SealedRegionStore::<u64, ()>::new(
         runtime.identity(),
         LayoutIdentity::new(NonZeroU64::new(51).expect("layout")),
         SemanticTypeIdentity::new(NonZeroU64::new(52).expect("type")),
-        limits,
     )
     .expect("sealed store");
     let builder = store.begin(&mut runtime).expect("builder");
@@ -25,9 +22,7 @@ fn sealed_root_leases_share_and_release_only_through_domain_owners() {
     let owner = owners.pop().expect("owner");
     let retained = store.retain(&owner).expect("retain");
     let root = store.root(&owner, 0).expect("root").root();
-    let mut table =
-        StructuralRootTable::new(runtime.identity(), StructuralRootTableLimits::default())
-            .expect("root table");
+    let mut table = StructuralRootTable::new(runtime.identity()).expect("root table");
     let first = table
         .publish(root, StructuralRootOwnership::SealedShared)
         .expect("first lease");

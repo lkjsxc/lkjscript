@@ -37,9 +37,13 @@ impl StructuralValueRuntime {
         zero_copy: bool,
         copied_bytes: u64,
     ) -> Result<StructuralSealResult, Box<(StructuralValueError, StructuralImage)>> {
-        if let Err(error) = image.validate(self.limits, facts) {
+        if let Err(error) = image.validate(facts) {
             return Err(Box::new((error, image)));
         }
+        let next_allocation = match self.next_allocation_event() {
+            Ok(next) => next,
+            Err(error) => return Err(Box::new((error, image))),
+        };
         let domain = match self.runtime.allocate(DomainClass::RegionSealed) {
             Ok(domain) => domain,
             Err(error) => return Err(Box::new((error.into(), image))),
@@ -62,6 +66,7 @@ impl StructuralValueRuntime {
             .publish(root, StructuralRootOwnership::SealedShared)
         {
             Ok(owner) => {
+                self.allocation_events = next_allocation;
                 self.note_publication(facts);
                 self.note_slot_reuse(reused);
                 self.note_sealed_publication(zero_copy, copied_bytes);
@@ -113,9 +118,7 @@ impl StructuralValueRuntime {
     ) -> Result<StructuralValueKey, StructuralValueError> {
         let root = self.resolve_root(key, expected)?;
         self.require_sealed_root(root, expected)?;
-        let owners = self
-            .objects
-            .preflight_sealed_acquire(root, self.limits.domains.max_region_owners)?;
+        let owners = self.objects.preflight_sealed_acquire(root)?;
         let acquired = self
             .roots
             .publish(root, StructuralRootOwnership::SealedShared)?;
@@ -147,7 +150,7 @@ impl StructuralValueRuntime {
         &mut self,
         key: StructuralValueKey,
         expected: StructuralType,
-    ) -> Result<u32, StructuralValueError> {
+    ) -> Result<u64, StructuralValueError> {
         let root = self.resolve_root(key, expected)?;
         self.require_sealed_root(root, expected)?;
         self.objects.sealed_owner_count(root)

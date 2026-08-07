@@ -20,11 +20,13 @@ impl Evaluator<'_> {
         if self.allocations >= self.config.max_allocations {
             return Err(Flow::Resource("allocations".into()));
         }
-        let object_bytes = evaluator_runtime_value_bytes().saturating_add(dynamic_bytes);
+        let object_bytes = evaluator_runtime_value_bytes()
+            .checked_add(dynamic_bytes)
+            .ok_or_else(|| Flow::HostFailure("evaluator heap accounting overflow".into()))?;
         let next_heap_bytes = self
             .heap_bytes
             .checked_add(object_bytes)
-            .ok_or_else(|| Flow::Resource("heap bytes".into()))?;
+            .ok_or_else(|| Flow::HostFailure("evaluator heap accounting overflow".into()))?;
         if next_heap_bytes > self.config.max_heap_bytes {
             return Err(Flow::Resource("heap bytes".into()));
         }
@@ -36,7 +38,7 @@ impl Evaluator<'_> {
     pub(crate) fn allocate_path(&mut self, bytes: &[u8]) -> std::result::Result<EvalValue, Flow> {
         let mut copy = Vec::new();
         copy.try_reserve_exact(bytes.len())
-            .map_err(|_| Flow::Resource("heap bytes".into()))?;
+            .map_err(|_| Flow::HostFailure("evaluator path allocation failed".into()))?;
         copy.extend_from_slice(bytes);
         if structural_eligible(self.program.program(), &crate::SsaType::Path) {
             self.structural_path(copy)

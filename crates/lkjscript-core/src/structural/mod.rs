@@ -1,8 +1,7 @@
+mod bookkeeping;
 mod error;
 mod identity;
 mod image;
-mod ledger;
-mod limits;
 mod metrics;
 mod pool;
 mod region;
@@ -14,7 +13,7 @@ mod segmented_list;
 mod unique;
 mod value_runtime;
 
-pub use error::{StructuralError, StructuralLimit};
+pub use error::StructuralError;
 pub use identity::{
     product_layout_identity, product_semantic_identity, DomainClass, DomainKey, LayoutIdentity,
     RootClass, RootKey, SemanticTypeIdentity, StructuralRuntimeId,
@@ -24,18 +23,16 @@ pub use image::{
     StructuralImageConversionFailure, StructuralNode, StructuralNodePayload, StructuralNodeRecord,
     StructuralNodeView,
 };
-pub use limits::StructuralLimits;
 pub use metrics::{PoolMetrics, RegionMetrics, SealedRegionMetrics, StructuralRuntimeMetrics};
 pub use pool::{PoolId, PoolPartition, TypedPool};
 pub use region::{RegionOwner, RegionRef, RegionReleaseReport, RegionStore};
 pub use region_product::{
     RegionProductArena, RegionProductArenaId, RegionProductError, RegionProductKey,
-    RegionProductLimits, RegionProductMetrics,
+    RegionProductMetrics,
 };
 pub use root_table::{
     StructuralBorrow, StructuralBorrowKey, StructuralRootOwnership, StructuralRootState,
-    StructuralRootTable, StructuralRootTableError, StructuralRootTableLimit,
-    StructuralRootTableLimits, StructuralRootTableStats, StructuralValueKey,
+    StructuralRootTable, StructuralRootTableError, StructuralRootTableStats, StructuralValueKey,
 };
 pub use runtime::StructuralRuntime;
 pub use sealed::{
@@ -43,21 +40,19 @@ pub use sealed::{
     SealedReleaseReport, SealedUpgrade, WeakSealedRef,
 };
 pub use segmented_list::{
-    SegmentedListArena, SegmentedListArenaId, SegmentedListArenaLimits, SegmentedListError,
-    SegmentedListKey, SegmentedListLimit, SegmentedListMetrics,
+    SegmentedListArena, SegmentedListArenaId, SegmentedListError, SegmentedListKey,
+    SegmentedListLimit, SegmentedListMetrics,
 };
 pub use unique::{
-    ByteVectorKey, BytesKey, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, PathKey, StaticBytes,
-    UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
-    UniqueStoreLimits, UniqueStoreStats,
+    ByteVectorKey, BytesKey, InvalidUniqueKeyWord, PathKey, StaticBytes, UniqueKeyWord,
+    UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreStats,
 };
 pub use value_runtime::{
     DestinationCleanupReport, InlineStructuralValue, SemanticPayload, SemanticValue,
     StaticArtifactPayload, StaticStructuralArtifact, StaticStructuralLeaf,
     StructuralDestinationKey, StructuralDisposeReport, StructuralEvent, StructuralEventKind,
-    StructuralEventLog, StructuralFieldPath, StructuralInitializationFailure, StructuralKind,
-    StructuralOwnerKind, StructuralProjection, StructuralPublishFailure, StructuralSealResult,
-    StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
-    StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey,
-    DEFAULT_STRUCTURAL_TREE_NODES,
+    StructuralEventLog, StructuralExportAccounting, StructuralFieldPath,
+    StructuralInitializationFailure, StructuralKind, StructuralOwnerKind, StructuralProjection,
+    StructuralPublishFailure, StructuralRuntimeAccounting, StructuralSealResult, StructuralType,
+    StructuralValueError, StructuralValueRuntime, StructuralValueRuntimeMetrics, StructuralViewKey,
 };

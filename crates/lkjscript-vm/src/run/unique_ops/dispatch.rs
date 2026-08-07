@@ -10,6 +10,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         Op::ByteVectorNew => {
             let size = vm.pop()?;
             let size = vm.as_i64(size)?;
+            let bytes = u64::try_from(size)
+                .map_err(|_| Error::msg("new-byte-vector size out of range"))?;
+            vm.preflight_allocation(1)?;
+            vm.preflight_heap_growth(bytes)?;
             let owner = vm.unique.allocate(size)?;
             vm.push(owner);
         }

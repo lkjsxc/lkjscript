@@ -1,6 +1,5 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use lkjscript_core::UniqueStoreLimits;
 use lkjscript_resource::{DataOwnerId, PartitionedUniqueStore, TaskExecutor, TaskId, WorkerId};
 
 pub(super) const TASKS: usize = 256;
@@ -51,15 +50,12 @@ pub(super) struct WorkloadExecutor {
 
 impl WorkloadExecutor {
     pub(super) fn new(workload: Workload) -> std::io::Result<Self> {
-        let limits =
-            UniqueStoreLimits::new(TASKS as u32, 1024 * 1024, TASKS as u32, 4096, u32::MAX)
-                .map_err(|error| std::io::Error::other(format!("unique limits: {error:?}")))?;
         Ok(Self {
             workload,
             data: (0..TASKS * CHUNK).map(|value| value as u64).collect(),
             adjacent: (0..TASKS).map(|_| AtomicU64::new(0)).collect(),
             padded: (0..TASKS).map(|_| Padded(AtomicU64::new(0))).collect(),
-            homes: PartitionedUniqueStore::new(100, limits, 4, TASKS, TASKS)
+            homes: PartitionedUniqueStore::new(100, 4, TASKS, TASKS)
                 .map_err(std::io::Error::other)?,
         })
     }

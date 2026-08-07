@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 
-use super::super::ledger::BoundedLedger;
+use super::super::bookkeeping::Ledger;
 use super::super::{DomainKey, RootKey};
 
 #[derive(Debug)]
@@ -46,12 +46,12 @@ pub(super) struct RegionRecord<T, D> {
     pub(super) chunks: Vec<Vec<T>>,
     pub(super) large: Vec<Vec<T>>,
     pub(super) roots: Vec<RootRecord>,
-    pub(super) internal_edges: BoundedLedger<(u32, u32)>,
-    pub(super) children: BoundedLedger<DomainKey>,
-    pub(super) drops: BoundedLedger<D>,
+    pub(super) internal_edges: Ledger<(u32, u32)>,
+    pub(super) children: Ledger<DomainKey>,
+    pub(super) drops: Ledger<D>,
     pub(super) parent: Option<DomainKey>,
-    pub(super) release_work: u32,
-    pub(super) loans: u32,
+    pub(super) release_work: u64,
+    pub(super) loans: u64,
     pub(super) bytes: u64,
 }
 

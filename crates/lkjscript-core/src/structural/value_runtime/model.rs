@@ -99,12 +99,9 @@ impl SemanticValue {
     /// Complete stack-safe equality for the owned, acyclic semantic value tree.
     pub fn try_equal(&self, other: &Self) -> crate::Result<bool> {
         let mut pending = Vec::new();
-        pending.try_reserve(1).map_err(|_| {
-            crate::Error::resource(
-                crate::ResourceLimitKind::HeapBytes,
-                "semantic equality work allocation failed",
-            )
-        })?;
+        pending
+            .try_reserve(1)
+            .map_err(|_| crate::Error::host("semantic equality work allocation failed"))?;
         pending.push((self, other));
         while let Some((left, right)) = pending.pop() {
             if left.value_type != right.value_type {
@@ -139,12 +136,9 @@ impl SemanticValue {
             if left.len() != right.len() {
                 return Ok(false);
             }
-            pending.try_reserve(left.len()).map_err(|_| {
-                crate::Error::resource(
-                    crate::ResourceLimitKind::HeapBytes,
-                    "semantic equality work allocation failed",
-                )
-            })?;
+            pending
+                .try_reserve(left.len())
+                .map_err(|_| crate::Error::host("semantic equality work allocation failed"))?;
             pending.extend(left.iter().zip(right).rev());
         }
         Ok(true)

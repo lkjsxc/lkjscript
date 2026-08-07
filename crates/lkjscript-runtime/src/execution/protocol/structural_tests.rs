@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use super::*;
 use lkjscript_core::{
     InlineStructuralValue, LayoutIdentity, OwnedValue, SemanticPayload, SemanticTypeIdentity,
-    SemanticValue, StaticStructuralLeaf, StructuralKind, StructuralSnapshotLimits, StructuralType,
+    SemanticValue, StaticStructuralLeaf, StructuralKind, StructuralType,
 };
 
 fn semantic(id: u64, kind: StructuralKind, payload: SemanticPayload) -> SemanticValue {
@@ -102,8 +102,7 @@ fn assert_process_round_trip(value: SemanticValue) {
         provenance: super::tests::provenance(),
         cell: 77,
         outcome: ExecutionOutcome::Returned(
-            OwnedValue::from_structural(value, StructuralSnapshotLimits::DEFAULT)
-                .expect("owned structural outcome"),
+            OwnedValue::from_structural(value).expect("owned structural outcome"),
         ),
         output: b"framed daemon output".to_vec(),
         flushes: 2,
@@ -129,21 +128,19 @@ fn process_protocol_round_trips_structural_daemon_fixtures() {
 }
 
 #[test]
-fn process_protocol_rejects_structural_field_bound_before_publication() {
+fn process_protocol_rejects_truncated_structural_fields_before_publication() {
     let product = semantic(
         500,
         StructuralKind::Product,
         SemanticPayload::Product(Vec::new().into()),
     );
     let outcome = ExecutionOutcome::Returned(
-        OwnedValue::from_structural(product, StructuralSnapshotLimits::DEFAULT)
-            .expect("empty structural product"),
+        OwnedValue::from_structural(product).expect("empty structural product"),
     );
     let mut encoded =
         lkjscript_core::encode_execution_outcome(&outcome, PROCESS_OUTCOME_CODEC_LIMITS)
             .expect("outcome encode");
-    encoded[20..24]
-        .copy_from_slice(&(lkjscript_core::MAX_STRUCTURAL_SNAPSHOT_FIELDS + 1).to_le_bytes());
+    encoded[20..24].copy_from_slice(&2_u32.to_le_bytes());
 
     let mut body = Writer::new();
     body.u8(5).expect("outcome tag");

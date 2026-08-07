@@ -47,7 +47,7 @@ fn real_worker_rehydrates_nested_semantic_dag_in_fresh_parent_runtime() {
     assert_eq!(report.final_loans, 0);
     assert_eq!(report.final_dependencies, 0);
     assert_eq!(report.release_backlog, 0);
-    assert!(report.bounded_release_work);
+    assert!(report.complete_release_work);
     system.stop(incarnation).expect("stop structural worker");
 }
 

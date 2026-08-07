@@ -41,7 +41,10 @@ fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
         .publish(identity, fields)
         .map_err(region_product_error)?;
-    vm.region_product_allocations = vm.region_product_allocations.saturating_add(1);
+    vm.region_product_allocations = vm
+        .region_product_allocations
+        .checked_add(1)
+        .ok_or_else(|| Error::host("VM region-product allocation accounting overflow"))?;
     vm.push(Value::from_region_product(key));
     Ok(())
 }
@@ -125,7 +128,10 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             replacement,
         )
         .map_err(region_product_error)?;
-    vm.region_product_allocations = vm.region_product_allocations.saturating_add(1);
+    vm.region_product_allocations = vm
+        .region_product_allocations
+        .checked_add(1)
+        .ok_or_else(|| Error::host("VM region-product allocation accounting overflow"))?;
     vm.push(Value::from_region_product(updated));
     Ok(())
 }

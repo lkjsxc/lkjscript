@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn resize_growth_and_shrink_update_exact_retained_metrics() {
-    let mut store = store_with(50, 1, 32, 1, 1, 3);
+    let mut store = store(50);
     let key = store
         .allocate_byte_vector(bytes_with_capacity(2, &[1, 2]))
         .expect("vector");
@@ -35,26 +35,8 @@ fn resize_growth_and_shrink_update_exact_retained_metrics() {
 }
 
 #[test]
-fn resize_limit_and_capacity_failures_preserve_payload_and_metrics() {
-    let mut limited = store_with(51, 1, 4, 1, 1, 2);
-    let key = limited
-        .allocate_byte_vector(bytes_with_capacity(2, &[1, 2]))
-        .expect("vector");
-    let pointer = limited.byte_vector(key).expect("pointer before").as_ptr();
-    let before = limited.stats();
-    assert_eq!(
-        limited.resize_byte_vector(key, 5, 0),
-        Err(UniqueStoreError::ByteLimit)
-    );
-    assert_eq!(limited.byte_vector(key), Ok(&[1, 2][..]));
-    assert_eq!(
-        limited.byte_vector(key).expect("pointer after").as_ptr(),
-        pointer
-    );
-    assert_eq!(limited.stats(), before);
-    limited.free_byte_vector(key).expect("free limited");
-
-    let mut capacity = store_with(52, 1, u64::MAX, 1, 1, 2);
+fn resize_host_capacity_failure_preserves_payload_and_metrics() {
+    let mut capacity = store(52);
     let key = capacity.allocate_byte_vector(vec![3]).expect("vector");
     let pointer = capacity.byte_vector(key).expect("pointer before").as_ptr();
     let before = capacity.stats();
@@ -74,7 +56,7 @@ fn resize_limit_and_capacity_failures_preserve_payload_and_metrics() {
 
 #[test]
 fn little_endian_u32_access_is_exact_and_failure_atomic() {
-    let mut store = store_with(54, 1, 16, 1, 1, 2);
+    let mut store = store(54);
     let key = store.allocate_byte_vector(vec![9; 8]).expect("vector");
     let metrics = store.stats();
 
@@ -106,7 +88,7 @@ fn little_endian_u32_access_is_exact_and_failure_atomic() {
 
 #[test]
 fn fill_and_overlapping_copy_are_memmove_like_and_atomic() {
-    let mut store = store_with(53, 1, 16, 1, 1, 2);
+    let mut store = store(53);
     let key = store
         .allocate_byte_vector(vec![0, 1, 2, 3, 4, 5])
         .expect("vector");

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use lkjscript_core::{UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId, UniqueStoreLimits};
+use lkjscript_core::{UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId};
 
 use super::{EvalConfig, EvalValue, Flow};
 
@@ -24,32 +24,32 @@ pub(crate) struct EvalUniqueRuntime {
     owners: BTreeMap<u64, UniqueLayout>,
     loans: BTreeMap<u64, Loan>,
     next_loan: u64,
+    max_allocations: u64,
+    max_heap_bytes: usize,
 }
 
 impl EvalUniqueRuntime {
     pub(super) fn new(config: &EvalConfig) -> Option<Self> {
-        let objects = u32::try_from(config.max_allocations).unwrap_or(u32::MAX);
-        let bytes = u64::try_from(config.max_heap_bytes).unwrap_or(u64::MAX);
         let id = UniqueStoreId::new(1)?;
-        let limits =
-            UniqueStoreLimits::new(objects, bytes, objects, config.max_allocations, u32::MAX)
-                .ok()?;
         Some(Self {
-            store: UniqueStore::new(id, limits),
+            store: UniqueStore::new(id),
             owners: BTreeMap::new(),
             loans: BTreeMap::new(),
             next_loan: 1,
+            max_allocations: config.max_allocations,
+            max_heap_bytes: config.max_heap_bytes,
         })
     }
 
     pub(super) fn allocate(&mut self, size: usize) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(size)?;
         self.store
             .check_byte_vector_allocation(size)
             .map_err(map_store_error)?;
         let mut bytes = Vec::new();
         bytes
             .try_reserve_exact(size)
-            .map_err(|_| Flow::Resource("heap bytes".into()))?;
+            .map_err(|_| Flow::HostFailure("evaluator byte-vector allocation failed".into()))?;
         bytes.resize(size, 0);
         let key = self
             .store
@@ -64,6 +64,24 @@ impl EvalUniqueRuntime {
             return Err(Flow::Trap("duplicate evaluator byte-vector owner".into()));
         }
         Ok(EvalValue::ByteVector(word))
+    }
+
+    fn preflight_allocation(&self, bytes: usize) -> Result<(), Flow> {
+        let stats = self.store.stats();
+        if stats.allocations >= self.max_allocations {
+            return Err(Flow::Resource("allocations".into()));
+        }
+        let bytes = u64::try_from(bytes)
+            .map_err(|_| Flow::HostFailure("evaluator unique byte count exceeds u64".into()))?;
+        let projected = stats
+            .live_bytes
+            .checked_add(bytes)
+            .ok_or_else(|| Flow::HostFailure("evaluator unique heap accounting overflow".into()))?;
+        let maximum = u64::try_from(self.max_heap_bytes).unwrap_or(u64::MAX);
+        if projected > maximum {
+            return Err(Flow::Resource("heap bytes".into()));
+        }
+        Ok(())
     }
 
     pub(super) fn borrow(&mut self, owner: &EvalValue, mutable: bool) -> Result<EvalValue, Flow> {

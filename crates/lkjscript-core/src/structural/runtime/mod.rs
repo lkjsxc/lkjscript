@@ -5,8 +5,7 @@ use std::num::{NonZeroU32, NonZeroU64};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::{
-    DomainClass, DomainKey, StructuralError, StructuralLimit, StructuralLimits,
-    StructuralRuntimeId, StructuralRuntimeMetrics,
+    DomainClass, DomainKey, StructuralError, StructuralRuntimeId, StructuralRuntimeMetrics,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,14 +26,13 @@ static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug)]
 pub struct StructuralRuntime {
     identity: StructuralRuntimeId,
-    limits: StructuralLimits,
     slots: Vec<DomainSlot>,
     free: Vec<u32>,
     metrics: StructuralRuntimeMetrics,
 }
 
 impl StructuralRuntime {
-    pub fn new(limits: StructuralLimits) -> Result<Self, StructuralError> {
+    pub fn new() -> Result<Self, StructuralError> {
         let raw = NEXT_RUNTIME_ID
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
                 next.checked_add(1)
@@ -45,7 +43,6 @@ impl StructuralRuntime {
         );
         Ok(Self {
             identity,
-            limits: limits.validate()?,
             slots: Vec::new(),
             free: Vec::new(),
             metrics: StructuralRuntimeMetrics::default(),
@@ -56,12 +53,22 @@ impl StructuralRuntime {
         self.identity
     }
 
-    pub const fn limits(&self) -> StructuralLimits {
-        self.limits
-    }
-
     pub const fn metrics(&self) -> StructuralRuntimeMetrics {
         self.metrics
+    }
+
+    pub(in crate::structural) fn retained_bytes_estimate(&self) -> Result<u64, StructuralError> {
+        let slots = u64::try_from(self.slots.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<DomainSlot>() as u64))
+            .ok_or(StructuralError::ArithmeticOverflow)?;
+        let free = u64::try_from(self.free.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .ok_or(StructuralError::ArithmeticOverflow)?;
+        slots
+            .checked_add(free)
+            .ok_or(StructuralError::ArithmeticOverflow)
     }
 
     pub(super) fn allocate(&mut self, class: DomainClass) -> Result<DomainKey, StructuralError> {
@@ -81,9 +88,6 @@ impl StructuralRuntime {
             self.free.pop();
             (slot, record.generation, true)
         } else {
-            if self.slots.len() >= self.limits.max_domains as usize {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::Domains));
-            }
             self.slots
                 .try_reserve(1)
                 .map_err(|_| StructuralError::AllocationFailed)?;

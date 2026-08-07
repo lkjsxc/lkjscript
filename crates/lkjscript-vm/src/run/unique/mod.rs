@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
 use lkjscript_core::{
-    Error, ExecutionPolicy, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId,
-    UniqueStoreLimits, Value,
+    Error, ExecutionPolicy, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId, Value,
 };
 
 mod access;
@@ -33,51 +32,42 @@ pub(crate) struct UniqueRuntime {
     owners: BTreeMap<u64, UniqueLayout>,
     loans: BTreeMap<u64, Loan>,
     next_loan: u64,
+    max_allocations: Option<u64>,
+    max_heap_bytes: Option<u64>,
 }
 
 impl UniqueRuntime {
     pub(crate) fn new(config: &ExecutionPolicy) -> Self {
-        let limits = match config.limited_policy() {
-            Some(policy) => {
-                let objects = u32::try_from(policy.max_allocations).unwrap_or(u32::MAX);
-                let bytes = u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX);
-                let Ok(limits) = UniqueStoreLimits::new(
-                    objects,
-                    bytes,
-                    objects,
-                    policy.max_allocations,
-                    u32::MAX,
-                ) else {
-                    unreachable!("VM unique-store limits are constructed consistently")
-                };
-                limits
-            }
-            None => UniqueStoreLimits::representation_boundary(),
-        };
         let Some(id) = UniqueStoreId::new(1) else {
             unreachable!("nonzero VM unique-store identity")
         };
         Self {
-            store: UniqueStore::new(id, limits),
+            store: UniqueStore::new(id),
             owners: BTreeMap::new(),
             loans: BTreeMap::new(),
             next_loan: 1_u64 << 63,
+            max_allocations: config.max_allocations(),
+            max_heap_bytes: config
+                .max_heap_bytes()
+                .and_then(|bytes| u64::try_from(bytes).ok()),
         }
+    }
+
+    pub(crate) fn accounting(&self) -> lkjscript_core::UniqueStoreStats {
+        self.store.stats()
     }
 
     pub(crate) fn allocate(&mut self, size: i64) -> Result<Value> {
         let size =
             usize::try_from(size).map_err(|_| Error::msg("new-byte-vector size out of range"))?;
+        self.preflight_allocation(size)?;
         self.store
             .check_byte_vector_allocation(size)
             .map_err(map_store_error)?;
         let mut bytes = Vec::new();
-        bytes.try_reserve_exact(size).map_err(|_| {
-            Error::resource(
-                lkjscript_core::ResourceLimitKind::HeapBytes,
-                "byte-vector backing capacity unavailable",
-            )
-        })?;
+        bytes
+            .try_reserve_exact(size)
+            .map_err(|_| Error::host("byte-vector backing capacity unavailable"))?;
         bytes.resize(size, 0);
         let key = self
             .store
@@ -88,6 +78,35 @@ impl UniqueRuntime {
             return Err(Error::msg("VM duplicate byte-vector owner"));
         }
         Ok(Value::from_byte_vector_key(word))
+    }
+
+    fn preflight_allocation(&self, bytes: usize) -> Result<()> {
+        let stats = self.store.stats();
+        if self
+            .max_allocations
+            .is_some_and(|maximum| stats.allocations >= maximum)
+        {
+            return Err(Error::resource(
+                lkjscript_core::ResourceLimitKind::Allocations,
+                "VM unique allocation limit exceeded",
+            ));
+        }
+        let bytes =
+            u64::try_from(bytes).map_err(|_| Error::host("VM unique byte count exceeds u64"))?;
+        let projected = stats
+            .live_bytes
+            .checked_add(bytes)
+            .ok_or_else(|| Error::host("VM unique heap accounting overflow"))?;
+        if self
+            .max_heap_bytes
+            .is_some_and(|maximum| projected > maximum)
+        {
+            return Err(Error::resource(
+                lkjscript_core::ResourceLimitKind::HeapBytes,
+                "VM unique heap limit exceeded",
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_owner(&mut self, value: Value) -> Result<u64> {

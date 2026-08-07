@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn freeze_and_unique_dynamic_thaw_transfer_backing_without_copy() {
-    let mut store = store_with(20, 1, 16, 1, 1, 3);
+    let mut store = store(20);
     let source = bytes_with_capacity(8, &[1, 2, 3]);
     let source_pointer = source.as_ptr();
     let vector = store

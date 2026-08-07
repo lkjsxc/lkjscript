@@ -4,7 +4,7 @@ use super::super::image::{discard_semantic, prepare_discard};
 use super::{
     SemanticValue, StructuralDestinationKey, StructuralEventKind, StructuralImage,
     StructuralInitializationFailure, StructuralKind, StructuralType, StructuralValueError,
-    StructuralValueLimit, StructuralValueRuntime, TreeFacts,
+    StructuralValueRuntime, TreeFacts,
 };
 
 #[derive(Debug)]
@@ -64,11 +64,7 @@ impl StructuralValueRuntime {
         shape: DestinationShape,
         field_types: Vec<StructuralType>,
     ) -> Result<StructuralDestinationKey, StructuralValueError> {
-        if field_types.len() > self.limits.max_fields {
-            return Err(StructuralValueError::LimitExceeded(
-                StructuralValueLimit::Fields,
-            ));
-        }
+        let next_allocation = self.next_allocation_event()?;
         let mut values = Vec::new();
         values.try_reserve_exact(field_types.len())?;
         values.resize_with(field_types.len(), || None);
@@ -86,6 +82,7 @@ impl StructuralValueRuntime {
             order,
             total: TreeFacts::default(),
         })?;
+        self.allocation_events = next_allocation;
         self.metrics.destinations_created = self.metrics.destinations_created.saturating_add(1);
         self.metrics.live_destinations = self.metrics.live_destinations.saturating_add(1);
         self.record(StructuralEventKind::DestinationCreate, key.slot(), 0);
@@ -112,7 +109,7 @@ impl StructuralValueRuntime {
             Ok(stack) => stack,
             Err(error) => return Err(StructuralInitializationFailure { error, value }),
         };
-        let image = match StructuralImage::build(&value, facts, self.limits) {
+        let image = match StructuralImage::build(&value, facts) {
             Ok(image) => image,
             Err(error) => return Err(StructuralInitializationFailure { error, value }),
         };
@@ -137,20 +134,10 @@ impl StructuralValueRuntime {
     ) -> Result<(), StructuralValueError> {
         self.preflight_field_type(key, field, actual)?;
         let record = self.destination(key)?;
-        let total = record
+        record
             .total
             .checked_add(facts)
             .ok_or(StructuralValueError::ArithmeticOverflow)?;
-        if total.nodes > self.limits.max_tree_nodes {
-            return Err(StructuralValueError::LimitExceeded(
-                StructuralValueLimit::TreeNodes,
-            ));
-        }
-        if total.bytes > self.limits.max_payload_bytes {
-            return Err(StructuralValueError::LimitExceeded(
-                StructuralValueLimit::PayloadBytes,
-            ));
-        }
         Ok(())
     }
 

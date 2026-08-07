@@ -9,11 +9,8 @@ fn standalone_structural_string_and_path_have_key_free_owned_views() {
         StructuralKind::String,
         SemanticPayload::String("deterministic".as_bytes().to_vec()),
     );
-    let string =
-        OwnedValue::from_structural(string_value.clone(), StructuralSnapshotLimits::DEFAULT)
-            .expect("owned string");
-    let same_string = OwnedValue::from_structural(string_value, StructuralSnapshotLimits::DEFAULT)
-        .expect("same owned string");
+    let string = OwnedValue::from_structural(string_value.clone()).expect("owned string");
+    let same_string = OwnedValue::from_structural(string_value).expect("same owned string");
     assert_eq!(string.as_str(), Some("deterministic"));
     assert_eq!(string.as_path_bytes(), None);
     assert_eq!(format!("{string:?}"), "\"deterministic\"");
@@ -32,10 +29,8 @@ fn standalone_structural_string_and_path_have_key_free_owned_views() {
         StructuralKind::Path,
         SemanticPayload::Path(b"/tmp/deterministic".to_vec()),
     );
-    let path = OwnedValue::from_structural(path_value.clone(), StructuralSnapshotLimits::DEFAULT)
-        .expect("owned path");
-    let same_path = OwnedValue::from_structural(path_value, StructuralSnapshotLimits::DEFAULT)
-        .expect("same owned path");
+    let path = OwnedValue::from_structural(path_value.clone()).expect("owned path");
+    let same_path = OwnedValue::from_structural(path_value).expect("same owned path");
     assert_eq!(path.as_str(), None);
     assert_eq!(path.as_path_bytes(), Some(b"/tmp/deterministic".as_slice()));
     assert_eq!(format!("{path:?}"), "#<owned-path:18>");

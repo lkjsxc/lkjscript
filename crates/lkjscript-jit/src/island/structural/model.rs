@@ -6,22 +6,14 @@ pub(in crate::island) struct JitStructuralRuntime {
     pub(super) last_resource: Option<ResourceLimitKind>,
     pub(super) owners: std::collections::BTreeMap<u64, NativeOwnerRecord>,
     pub(super) last_trap: Option<String>,
+    max_allocations: Option<u64>,
+    max_heap_bytes: Option<u64>,
+    max_output_bytes: Option<u64>,
 }
 
 impl JitStructuralRuntime {
     pub(in crate::island) fn new(config: &ExecutionPolicy) -> Result<Self, EngineError> {
-        let mut limits = StructuralValueRuntimeLimits::default();
-        if let Some(policy) = config.limited_policy() {
-            let handles = u32::try_from(policy.max_handles).unwrap_or(u32::MAX).max(1);
-            limits.max_objects = limits.max_objects.min(handles);
-            limits.max_destinations = limits.max_destinations.min(handles);
-            limits.max_views = limits.max_views.min(handles);
-            limits.max_payload_bytes = limits
-                .max_payload_bytes
-                .min(u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX))
-                .max(1);
-        }
-        let runtime = StructuralValueRuntime::new(limits).map_err(|error| {
+        let runtime = StructuralValueRuntime::new().map_err(|error| {
             EngineError::new(
                 FailureCode::InvocationFailure,
                 None,
@@ -34,6 +26,13 @@ impl JitStructuralRuntime {
             last_resource: None,
             owners: std::collections::BTreeMap::new(),
             last_trap: None,
+            max_allocations: config.max_allocations(),
+            max_heap_bytes: config
+                .max_heap_bytes()
+                .and_then(|bytes| u64::try_from(bytes).ok()),
+            max_output_bytes: config
+                .max_output_bytes()
+                .and_then(|bytes| u64::try_from(bytes).ok()),
         })
     }
 
@@ -44,6 +43,7 @@ impl JitStructuralRuntime {
         self.note_call();
         let expected = core_type(owner.structural_type())?;
         let key = owner_key(owner)?;
+        self.preflight_export(key, expected)?;
         let value = self
             .runtime
             .export_semantic(key, expected)
@@ -130,30 +130,85 @@ impl JitStructuralRuntime {
         self.calls = self.calls.saturating_add(1);
     }
 
+    pub(super) fn enforce_policy(&mut self) -> Result<(), NativeServiceError> {
+        let accounting = match self.runtime.accounting() {
+            Ok(accounting) => accounting,
+            Err(error) => return Err(self.map_error(error)),
+        };
+        if self
+            .max_allocations
+            .is_some_and(|maximum| accounting.allocation_events > maximum)
+        {
+            return Err(self.policy_error(ResourceLimitKind::Allocations));
+        }
+        if self
+            .max_heap_bytes
+            .is_some_and(|maximum| accounting.retained_bytes > maximum)
+        {
+            return Err(self.policy_error(ResourceLimitKind::HeapBytes));
+        }
+        Ok(())
+    }
+
+    fn preflight_export(
+        &mut self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<(), NativeServiceError> {
+        let runtime = match self.runtime.accounting() {
+            Ok(accounting) => accounting,
+            Err(error) => return Err(self.map_error(error)),
+        };
+        let export = match self.runtime.export_accounting(key, expected) {
+            Ok(accounting) => accounting,
+            Err(error) => return Err(self.map_error(error)),
+        };
+        let allocations = runtime
+            .allocation_events
+            .checked_add(export.allocations)
+            .ok_or(NativeServiceError::HostFailure)?;
+        let bytes = runtime
+            .retained_bytes
+            .checked_add(export.retained_bytes)
+            .ok_or(NativeServiceError::HostFailure)?;
+        if self
+            .max_allocations
+            .is_some_and(|maximum| allocations > maximum)
+        {
+            return Err(self.policy_error(ResourceLimitKind::Allocations));
+        }
+        if self.max_heap_bytes.is_some_and(|maximum| bytes > maximum) {
+            return Err(self.policy_error(ResourceLimitKind::HeapBytes));
+        }
+        if self
+            .max_output_bytes
+            .is_some_and(|maximum| export.output_bytes > maximum)
+        {
+            return Err(self.policy_error(ResourceLimitKind::OutputBytes));
+        }
+        Ok(())
+    }
+
+    fn policy_error(&mut self, kind: ResourceLimitKind) -> NativeServiceError {
+        self.last_resource = Some(kind);
+        NativeServiceError::ResourceLimitExceeded
+    }
+
     pub(super) fn map_error(&mut self, error: StructuralValueError) -> NativeServiceError {
         use StructuralValueError as Error;
         match error {
             Error::AllocationFailed
-            | Error::LimitExceeded(_)
-            | Error::Domain(
-                StructuralError::AllocationFailed | StructuralError::LimitExceeded(_),
-            )
-            | Error::RootTable(
-                StructuralRootTableError::AllocationFailed
-                | StructuralRootTableError::LimitExceeded(_),
-            ) => {
-                self.last_resource = Some(ResourceLimitKind::Handles);
-                NativeServiceError::ResourceLimitExceeded
+            | Error::Domain(StructuralError::AllocationFailed)
+            | Error::RootTable(StructuralRootTableError::AllocationFailed) => {
+                NativeServiceError::HostFailure
             }
             Error::ArithmeticOverflow
-            | Error::InvalidLimits
             | Error::InvariantViolation
             | Error::Domain(
                 StructuralError::ArithmeticOverflow | StructuralError::RuntimeIdentityExhausted,
             )
             | Error::RootTable(
                 StructuralRootTableError::ArithmeticOverflow
-                | StructuralRootTableError::InvalidLimits
                 | StructuralRootTableError::InvariantViolation,
             ) => NativeServiceError::HostFailure,
             Error::Domain(_)

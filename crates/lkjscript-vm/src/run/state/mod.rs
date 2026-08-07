@@ -20,36 +20,21 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             globals.resize(chunk.global_names().len(), Value::INVALID);
         }
         let (structural, structural_initialization_error) =
-            match structural_ops::StructuralInvocation::new(config.max_allocations()) {
+            match structural_ops::StructuralInvocation::new() {
                 Ok(runtime) => (Some(runtime), None),
                 Err(error) => (None, Some(error)),
             };
-        let (lists, list_initialization_error) =
-            match lkjscript_core::SegmentedListArena::new(config.max_allocations().map_or_else(
-                lkjscript_core::SegmentedListArenaLimits::default,
-                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
-            )) {
-                Ok(lists) => (Some(lists), None),
-                Err(error) => (
-                    None,
-                    Some(Error::msg(format!(
-                        "segmented-list arena initialization failed: {error:?}"
-                    ))),
-                ),
-            };
-        let region_limit = config
-            .max_allocations()
-            .and_then(|maximum| u32::try_from(maximum).ok())
-            .unwrap_or(u32::MAX)
-            .max(1);
-        let region_limits = lkjscript_core::RegionProductLimits {
-            max_records: std::num::NonZeroU32::new(region_limit)
-                .unwrap_or(std::num::NonZeroU32::MIN),
-            max_fields: std::num::NonZeroU32::new(region_limit.saturating_mul(16))
-                .unwrap_or(std::num::NonZeroU32::MIN),
+        let (lists, list_initialization_error) = match lkjscript_core::SegmentedListArena::new() {
+            Ok(lists) => (Some(lists), None),
+            Err(error) => (
+                None,
+                Some(Error::msg(format!(
+                    "segmented-list arena initialization failed: {error:?}"
+                ))),
+            ),
         };
         let (region_products, region_product_initialization_error) =
-            match lkjscript_core::RegionProductArena::new(region_limits) {
+            match lkjscript_core::RegionProductArena::new() {
                 Ok(arena) => (Some(arena), None),
                 Err(error) => (
                     None,

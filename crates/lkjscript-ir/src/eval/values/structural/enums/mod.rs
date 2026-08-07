@@ -81,8 +81,7 @@ impl Evaluator<'_> {
         variant: VariantId,
         mut payload: Vec<EvalValue>,
     ) -> Result<EvalValue, Flow> {
-        let mode = super::aggregate_mode(self.program.program(), self.config.structural_limits, ty)
-            .map_err(Flow::Trap)?;
+        let mode = super::aggregate_mode(self.program.program(), ty).map_err(Flow::Trap)?;
         let (selected, fields, layout) =
             super::enum_variant(self.program.program(), ty, variant).map_err(Flow::Trap)?;
         if payload.len() != fields.len() {

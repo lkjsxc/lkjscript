@@ -1,4 +1,5 @@
 mod access;
+mod accounting;
 mod borrow;
 mod cloning;
 mod destination;
@@ -7,7 +8,6 @@ mod destination_storage;
 mod error;
 mod events;
 mod lifecycle;
-mod limits;
 mod model;
 mod object_slab;
 mod release;
@@ -27,14 +27,11 @@ mod sealed_release;
 
 use std::collections::VecDeque;
 
-pub use error::{
-    StructuralInitializationFailure, StructuralPublishFailure, StructuralValueError,
-    StructuralValueLimit,
-};
+pub use accounting::{StructuralExportAccounting, StructuralRuntimeAccounting};
+pub use error::{StructuralInitializationFailure, StructuralPublishFailure, StructuralValueError};
 pub use events::{
     StructuralEvent, StructuralEventKind, StructuralEventLog, StructuralValueRuntimeMetrics,
 };
-pub use limits::{StructuralValueRuntimeLimits, DEFAULT_STRUCTURAL_TREE_NODES};
 pub use model::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StaticArtifactPayload,
     StaticStructuralArtifact, StaticStructuralLeaf, StructuralDestinationKey, StructuralFieldPath,
@@ -62,20 +59,16 @@ pub struct StructuralValueRuntime {
     free_destinations: Vec<u32>,
     views: Vec<ViewSlot>,
     free_views: Vec<u32>,
-    limits: StructuralValueRuntimeLimits,
     metrics: StructuralValueRuntimeMetrics,
     events: StructuralEventLog,
     cleanup_reports: VecDeque<DestinationCleanupReport>,
     cleanup_sequence: u64,
+    allocation_events: u64,
 }
 
 impl StructuralValueRuntime {
     pub const fn identity(&self) -> super::StructuralRuntimeId {
         self.runtime.identity()
-    }
-
-    pub const fn limits(&self) -> StructuralValueRuntimeLimits {
-        self.limits
     }
 
     pub const fn metrics(&self) -> StructuralValueRuntimeMetrics {
@@ -94,6 +87,12 @@ impl StructuralValueRuntime {
         if self.events.record(kind, subject, amount) {
             self.metrics.events_overwritten = self.metrics.events_overwritten.saturating_add(1);
         }
+    }
+
+    pub(super) fn next_allocation_event(&self) -> Result<u64, StructuralValueError> {
+        self.allocation_events
+            .checked_add(1)
+            .ok_or(StructuralValueError::ArithmeticOverflow)
     }
 
     pub(super) fn resolve_root(

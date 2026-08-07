@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use super::{SealedOwner, SealedRegionStore, SealedReleaseReport};
-use crate::structural::{DomainKey, StructuralError, StructuralLimit, StructuralRuntime};
+use crate::structural::{DomainKey, StructuralError, StructuralRuntime};
 
 impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
     pub fn release<E, F>(
@@ -41,10 +41,9 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             self.records[index].1.owners -= 1;
         }
         for key in finals {
-            let index = self
-                .record_index(key)
+            let mut record = self
+                .take_record(key)
                 .map_err(|error| (error, owner_key(owner_domain)))?;
-            let mut record = self.records.swap_remove(index).1;
             for drop in record.drops.drain_reverse() {
                 if let Err(error) = execute_drop(drop) {
                     report.drop_failures.push(error);
@@ -73,19 +72,13 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         key: DomainKey,
     ) -> Result<(Vec<DomainKey>, Vec<DomainKey>), StructuralError> {
         let root = &self.records[self.record_index(key)?].1;
-        let capacity = root.release_work as usize;
-        if capacity > self.limits.max_release_work as usize {
-            return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-        }
+        let capacity =
+            usize::try_from(root.release_work).map_err(|_| StructuralError::ArithmeticOverflow)?;
         let mut counts = Vec::new();
         counts
             .try_reserve_exact(self.records.len())
             .map_err(|_| StructuralError::AllocationFailed)?;
-        counts.extend(
-            self.records
-                .iter()
-                .map(|(key, record)| (*key, record.owners)),
-        );
+        counts.extend(self.records.iter().map(|(_, record)| record.owners));
         let mut pending = Vec::new();
         let mut decrements = Vec::new();
         let mut finals = Vec::new();
@@ -100,19 +93,15 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             .map_err(|_| StructuralError::AllocationFailed)?;
         pending.push(key);
         while let Some(current) = pending.pop() {
-            if decrements.len() >= self.limits.max_release_work as usize {
-                return Err(StructuralError::LimitExceeded(StructuralLimit::ReleaseWork));
-            }
+            let index = self.record_index(current)?;
             let count = counts
-                .iter_mut()
-                .find(|(candidate, _)| *candidate == current)
+                .get_mut(index)
                 .ok_or(StructuralError::StaleDomain(current))?;
-            count.1 = count
-                .1
+            *count = count
                 .checked_sub(1)
                 .ok_or(StructuralError::StaleDomain(current))?;
             decrements.push(current);
-            if count.1 == 0 {
+            if *count == 0 {
                 let record = &self.records[self.record_index(current)?].1;
                 if record.loans != 0 {
                     return Err(StructuralError::LiveLoan);

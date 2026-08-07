@@ -27,11 +27,7 @@ pub use semantic_dag::{
     SemanticDagKind, SemanticDagNode, SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot,
     SemanticDagType,
 };
-pub use structural::{
-    StructuralSnapshotLimits, StructuralSnapshotMetrics, MAX_STRUCTURAL_SNAPSHOT_BYTES,
-    MAX_STRUCTURAL_SNAPSHOT_DEPTH, MAX_STRUCTURAL_SNAPSHOT_FIELDS, MAX_STRUCTURAL_SNAPSHOT_NODES,
-    MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES, MAX_STRUCTURAL_SNAPSHOT_WORK,
-};
+pub use structural::StructuralSnapshotMetrics;
 
 #[cfg(test)]
 mod tests;

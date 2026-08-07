@@ -4,6 +4,7 @@ use lkjscript_core::UniqueLayout;
 
 impl EvalUniqueRuntime {
     pub(crate) fn allocate_path(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
+        self.preflight_allocation(bytes.len())?;
         let key = self
             .store
             .allocate_path(bytes.into_boxed_slice())
@@ -26,6 +27,8 @@ impl EvalUniqueRuntime {
         };
         self.require_owner(*word, UniqueLayout::Path)?;
         let key = self.store.import_path_key(*word).map_err(map_store_error)?;
+        let bytes = self.store.path(key).map_err(map_store_error)?.len();
+        self.preflight_allocation(bytes)?;
         let clone = self.store.clone_path(key).map_err(map_store_error)?;
         self.publish_path(clone.packed_word())
     }

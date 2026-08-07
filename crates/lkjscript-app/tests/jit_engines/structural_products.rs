@@ -1,9 +1,9 @@
 use crate::canonical::compile;
 use lkjscript_core::{
     decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, ExecutionPolicy,
-    OwnedValue, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
-    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticPayload, StructuralKind,
-    StructuralLimits, StructuralSnapshotLimits, StructuralType,
+    OwnedValue, ResourceLimitKind, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode,
+    SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticPayload,
+    StructuralKind, StructuralType,
 };
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -51,6 +51,30 @@ fn copy_product_returns_are_flat_key_free_and_codec_stable() {
         &ExecutionPolicy::unrestricted(),
     );
     assert!(matches!(expected, ExecutionOutcome::Returned(_)));
+    let low = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+        max_allocations: 0,
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
+    assert_eq!(
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &low
+        ),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+    );
+    for result in [
+        execute_forced(program.ssa(), &low, JitConfig::default())
+            .expect("baseline reports structural allocation policy"),
+        execute_optimizing(program.ssa(), &low, JitConfig::default())
+            .expect("optimizing reports structural allocation policy"),
+    ] {
+        assert_eq!(
+            result.outcome,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+        );
+        assert_eq!(result.stats.native_structural.teardown_failures, 0);
+    }
     let ExecutionOutcome::Returned(value) = &expected else {
         return;
     };
@@ -116,6 +140,31 @@ fn compiler_witness_authenticates_sealed_product_rehydration() {
         lkjscript_contracts::MemoryWitnessCopy::Structural
     );
 
+    let low_output = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+        max_output_bytes: 0,
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
+    assert_eq!(
+        run_chunk(
+            chunk,
+            &lkjscript_vm::ExecutionInputs::default(),
+            &low_output
+        ),
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::OutputBytes)
+    );
+    for result in [
+        execute_forced(program.ssa(), &low_output, JitConfig::default())
+            .expect("baseline reports structural export policy"),
+        execute_optimizing(program.ssa(), &low_output, JitConfig::default())
+            .expect("optimizing reports structural export policy"),
+    ] {
+        assert_eq!(
+            result.outcome,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::OutputBytes)
+        );
+        assert_eq!(result.stats.native_structural.teardown_failures, 0);
+    }
+
     let string = chunk
         .structural_types()
         .iter()
@@ -131,12 +180,8 @@ fn compiler_witness_authenticates_sealed_product_rehydration() {
             SemanticDagPayload::Product(vec![SemanticDagNodeId::new(0)]),
         ),
     ];
-    let snapshot = SemanticDagSnapshot::new(
-        nodes,
-        SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .expect("product semantic DAG");
+    let snapshot =
+        SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(1)).expect("product semantic DAG");
     let expected = snapshot.clone();
     let wire = encode_execution_outcome(
         &ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot)),
@@ -149,8 +194,7 @@ fn compiler_witness_authenticates_sealed_product_rehydration() {
         .and_then(OwnedValue::as_semantic_dag)
         .cloned()
         .expect("decoded key-free semantic DAG");
-    let mut runtime =
-        SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("fresh sealed runtime");
+    let mut runtime = SealedSemanticDagRuntime::new().expect("fresh sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)
         .expect("authenticated compiler return rehydrates");

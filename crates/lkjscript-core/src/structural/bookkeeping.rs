@@ -1,23 +1,18 @@
-use super::{StructuralError, StructuralLimit};
+use super::StructuralError;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct BoundedLedger<T> {
-    limit: u32,
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(super) struct Ledger<T> {
     entries: Vec<T>,
 }
 
-impl<T> BoundedLedger<T> {
-    pub(super) const fn new(limit: u32) -> Self {
+impl<T> Ledger<T> {
+    pub(super) const fn new() -> Self {
         Self {
-            limit,
             entries: Vec::new(),
         }
     }
 
-    pub(super) fn push(&mut self, value: T, kind: StructuralLimit) -> Result<(), StructuralError> {
-        if self.entries.len() >= self.limit as usize {
-            return Err(StructuralError::LimitExceeded(kind));
-        }
+    pub(super) fn push(&mut self, value: T) -> Result<(), StructuralError> {
         self.entries
             .try_reserve(1)
             .map_err(|_| StructuralError::AllocationFailed)?;
@@ -42,15 +37,11 @@ impl<T> BoundedLedger<T> {
     }
 }
 
-impl<T: Eq> BoundedLedger<T> {
-    pub(super) fn push_unique(
-        &mut self,
-        value: T,
-        kind: StructuralLimit,
-    ) -> Result<(), StructuralError> {
+impl<T: Eq> Ledger<T> {
+    pub(super) fn push_unique(&mut self, value: T) -> Result<(), StructuralError> {
         if self.entries.contains(&value) {
             return Err(StructuralError::DuplicateDependency);
         }
-        self.push(value, kind)
+        self.push(value)
     }
 }

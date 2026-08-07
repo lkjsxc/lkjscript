@@ -1,4 +1,4 @@
-use lkjscript_core::{StructuralValueRuntime, StructuralValueRuntimeLimits};
+use lkjscript_core::StructuralValueRuntime;
 
 use crate::{Constant, InstructionKind, Program, SsaType};
 
@@ -12,13 +12,10 @@ pub(crate) struct EvaluatorStructuralSession {
 }
 
 impl EvaluatorStructuralSession {
-    pub(crate) fn new(
-        program: &Program,
-        limits: StructuralValueRuntimeLimits,
-    ) -> Result<Self, String> {
-        preflight(program, limits)?;
+    pub(crate) fn new(program: &Program) -> Result<Self, String> {
+        preflight(program)?;
         Ok(Self {
-            runtime: StructuralValueRuntime::new(limits).map_err(|error| error.to_string())?,
+            runtime: StructuralValueRuntime::new().map_err(|error| error.to_string())?,
             static_strings: collect_static_strings(program)?,
             static_symbols: collect_static_symbols(program)?,
         })
@@ -66,11 +63,7 @@ impl EvaluatorStructuralSession {
     }
 }
 
-pub(crate) fn aggregate_mode(
-    program: &Program,
-    limits: StructuralValueRuntimeLimits,
-    ty: &SsaType,
-) -> Result<AggregateMode, String> {
+pub(crate) fn aggregate_mode(program: &Program, ty: &SsaType) -> Result<AggregateMode, String> {
     if let SsaType::Product(product) = ty {
         if program
             .region_products
@@ -80,8 +73,7 @@ pub(crate) fn aggregate_mode(
             return Ok(AggregateMode::Region);
         }
     }
-    let mode = ClosureReconstructor::new(program, limits.max_tree_nodes, limits.max_tree_depth)
-        .aggregate_mode(ty);
+    let mode = ClosureReconstructor::new(program).aggregate_mode(ty);
     if !structural_eligible(program, ty) {
         return Ok(match mode {
             Ok(AggregateMode::ResourceAdapter) => AggregateMode::ResourceAdapter,
@@ -106,7 +98,7 @@ pub(crate) fn structural_eligible(program: &Program, ty: &SsaType) -> bool {
     })
 }
 
-fn preflight(program: &Program, limits: StructuralValueRuntimeLimits) -> Result<(), String> {
+fn preflight(program: &Program) -> Result<(), String> {
     for instruction in program
         .functions
         .iter()
@@ -119,7 +111,7 @@ fn preflight(program: &Program, limits: StructuralValueRuntimeLimits) -> Result<
                 | InstructionKind::WithProductField { .. }
                 | InstructionKind::EnumValue { .. }
         ) {
-            aggregate_mode(program, limits, &instruction.ty)?;
+            aggregate_mode(program, &instruction.ty)?;
         }
     }
     Ok(())

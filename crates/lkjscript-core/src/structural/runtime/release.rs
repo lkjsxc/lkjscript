@@ -29,7 +29,7 @@ impl StructuralRuntime {
             if keys[..index].contains(&key) {
                 return Err(StructuralError::DuplicateDependency);
             }
-            if key.generation().get() < self.limits.max_generation {
+            if key.generation().get() < u32::MAX {
                 reusable = reusable
                     .checked_add(1)
                     .ok_or(StructuralError::ArithmeticOverflow)?;
@@ -44,7 +44,7 @@ impl StructuralRuntime {
         self.require_live(key)?;
         let index = key.slot() as usize;
         let generation = self.slots[index].generation.get();
-        if generation >= self.limits.max_generation {
+        if generation == u32::MAX {
             self.slots[index].state = SlotState::Retired;
             self.metrics.slots_retired = self.metrics.slots_retired.saturating_add(1);
         } else {

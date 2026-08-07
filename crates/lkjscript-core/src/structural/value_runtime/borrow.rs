@@ -3,8 +3,7 @@ use std::num::NonZeroU32;
 use super::super::{RootKey, StructuralBorrow, StructuralValueKey};
 use super::{
     LocalNodeId, StructuralEventKind, StructuralNode, StructuralObject, StructuralProjection,
-    StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
-    StructuralViewKey,
+    StructuralType, StructuralValueError, StructuralValueRuntime, StructuralViewKey,
 };
 
 #[derive(Debug)]
@@ -33,9 +32,6 @@ impl StructuralValueRuntime {
         projection: StructuralProjection,
         exclusive: bool,
     ) -> Result<StructuralViewKey, StructuralValueError> {
-        if projection.path().as_slice().len() > usize::from(self.limits.max_tree_depth) {
-            return Err(StructuralValueError::InvalidFieldPath);
-        }
         let root = self.resolve_root(key, root_type)?;
         let object = self.objects.get(root)?;
         let image = match object {
@@ -46,6 +42,7 @@ impl StructuralValueRuntime {
         let selected = image.selected_node(projection.path())?;
         self.require_type(selected.value_type(), projection.expected())?;
         self.validate_projection(selected, &projection)?;
+        let next_allocation = self.next_allocation_event()?;
         let loan = if exclusive {
             self.roots.borrow_exclusive(key)?
         } else {
@@ -65,6 +62,7 @@ impl StructuralValueRuntime {
                 return Err(error);
             }
         };
+        self.allocation_events = next_allocation;
         self.metrics.borrows = self.metrics.borrows.saturating_add(1);
         self.metrics.views_created = self.metrics.views_created.saturating_add(1);
         self.metrics.live_views = self.metrics.live_views.saturating_add(1);
@@ -143,12 +141,9 @@ impl StructuralValueRuntime {
             (slot, generation)
         } else {
             let slot = match u32::try_from(self.views.len()) {
-                Ok(slot) if slot < self.limits.max_views => slot,
-                _ => {
-                    return Err(Box::new((
-                        StructuralValueError::LimitExceeded(StructuralValueLimit::Views),
-                        record,
-                    )));
+                Ok(slot) => slot,
+                Err(_) => {
+                    return Err(Box::new((StructuralValueError::ArithmeticOverflow, record)));
                 }
             };
             if self.views.try_reserve(1).is_err() {
@@ -163,7 +158,7 @@ impl StructuralValueRuntime {
 
     fn retire_view(&mut self, key: StructuralViewKey) -> Result<(), StructuralValueError> {
         self.view(key)?;
-        let next = if key.generation() >= self.limits.max_generation {
+        let next = if key.generation() == u32::MAX {
             ViewSlot::Retired
         } else {
             self.free_views.push(key.slot());

@@ -144,9 +144,15 @@ storage preflights `ExecutionPolicy`/`EvalConfig` heap and allocation policy, re
 rechecks actual retained capacity at publication. Bulk file/socket byte views are processed with
 private syscall chunks. Read/write preserve their partial-count contract, socket string send loops
 for its full-transfer contract, and output, wall-deadline, and cancellation policy is checked at
-chunk boundaries. Existing unique/list/region-product/structural-value and snapshot stores still
-have independent encoded-key widths and structural limits; widening or segmenting those stores is
-the immediate residual runtime-policy blocker, not part of this policy representation cutover.
+chunk boundaries. Structural region, sealed-region, root, unique, segmented-list, region-product,
+value-image, semantic-DAG, and returned-snapshot stores grow without independent ordinary count or
+local-return ceilings. Checked allocation-event, retained-byte, and export observations feed the
+same coarse `ExecutionPolicy` in VM and native execution; policy failure occurs before outcome
+publication and cleanup retains no owner. Structural validation, snapshot conversion/codecs, graph
+walks, and destruction use explicit work stacks. The stores retain checked compact representation
+boundaries: `u32` slots/generations and DAG IDs/counts, plus packed `u16` list segment/entry fields.
+Those widths require later widening or segmentation but do not define a configurable language
+validity profile. Process framing remains a separate explicit transport-byte boundary.
 
 No optimization result is allowed to reinterpret source semantics. Forced native modes must enter
 a synchronous generated entry or fail explicitly.

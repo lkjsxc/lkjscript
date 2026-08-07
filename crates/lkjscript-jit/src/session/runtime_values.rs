@@ -55,27 +55,15 @@ impl JitSession {
     fn initialize_region_arenas(
         &mut self,
         function: FunctionId,
-        max_allocations: Option<u64>,
+        _max_allocations: Option<u64>,
     ) -> Result<(), EngineError> {
         self.lists = Some(
-            lkjscript_core::SegmentedListArena::new(max_allocations.map_or_else(
-                lkjscript_core::SegmentedListArenaLimits::default,
-                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
-            ))
-            .map_err(|error| arena_error(function, "segmented-list", error))?,
+            lkjscript_core::SegmentedListArena::new()
+                .map_err(|error| arena_error(function, "segmented-list", error))?,
         );
-        let records = max_allocations
-            .and_then(|maximum| u32::try_from(maximum).ok())
-            .unwrap_or(u32::MAX)
-            .max(1);
         self.region_products = Some(
-            lkjscript_core::RegionProductArena::new(lkjscript_core::RegionProductLimits {
-                max_records: std::num::NonZeroU32::new(records)
-                    .unwrap_or(std::num::NonZeroU32::MIN),
-                max_fields: std::num::NonZeroU32::new(records.saturating_mul(16))
-                    .unwrap_or(std::num::NonZeroU32::MIN),
-            })
-            .map_err(|error| arena_error(function, "region-product", error))?,
+            lkjscript_core::RegionProductArena::new()
+                .map_err(|error| arena_error(function, "region-product", error))?,
         );
         Ok(())
     }

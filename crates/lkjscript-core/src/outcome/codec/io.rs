@@ -11,10 +11,6 @@ impl Encoder {
         }
     }
 
-    pub(crate) const fn structural_limits(&self) -> StructuralSnapshotLimits {
-        self.limits.structural
-    }
-
     fn reserve(&mut self, additional: usize) -> Result<()> {
         let total = self
             .bytes
@@ -74,7 +70,6 @@ impl Encoder {
 pub(crate) struct Decoder<'a> {
     bytes: &'a [u8],
     cursor: usize,
-    limits: ExecutionOutcomeCodecLimits,
 }
 
 impl<'a> Decoder<'a> {
@@ -82,15 +77,7 @@ impl<'a> Decoder<'a> {
         if bytes.len() > limits.max_wire_bytes {
             return Err(Error::msg("wire value exceeds byte bound"));
         }
-        Ok(Self {
-            bytes,
-            cursor: 0,
-            limits,
-        })
-    }
-
-    pub(crate) const fn structural_limits(&self) -> StructuralSnapshotLimits {
-        self.limits.structural
+        Ok(Self { bytes, cursor: 0 })
     }
 
     fn take(&mut self, length: usize) -> Result<&'a [u8]> {

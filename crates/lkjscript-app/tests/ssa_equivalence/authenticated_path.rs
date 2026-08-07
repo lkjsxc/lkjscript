@@ -2,8 +2,7 @@ use crate::oracle::main_source;
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{
     SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
-    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLimits,
-    StructuralSnapshotLimits,
+    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind,
 };
 
 #[test]
@@ -40,12 +39,10 @@ fn compiler_authenticates_path_rehydration() {
             SemanticDagPayload::Path(b"/tmp/authenticated".to_vec()),
         )],
         SemanticDagNodeId::new(0),
-        StructuralSnapshotLimits::DEFAULT,
     )
     .expect("path snapshot");
     let expected = snapshot.clone();
-    let mut runtime =
-        SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("sealed runtime");
+    let mut runtime = SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)
         .expect("authenticated path import");

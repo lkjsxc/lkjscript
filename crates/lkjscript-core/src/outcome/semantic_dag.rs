@@ -3,7 +3,7 @@ use crate::{
     StaticStructuralLeaf,
 };
 
-use super::{StructuralSnapshotLimits, StructuralSnapshotMetrics};
+use super::StructuralSnapshotMetrics;
 
 mod sealed;
 pub use sealed::{
@@ -100,7 +100,7 @@ impl SemanticDagNode {
     }
 }
 
-/// A validated, bounded, reverse-topological, key-free semantic DAG.
+/// A validated, reverse-topological, key-free semantic DAG.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticDagSnapshot {
     nodes: Vec<SemanticDagNode>,
@@ -111,12 +111,8 @@ pub struct SemanticDagSnapshot {
 impl SemanticDagSnapshot {
     /// Validates privately owned candidate storage and publishes it only on
     /// complete success. Candidate vectors and payloads drop normally on error.
-    pub fn new(
-        nodes: Vec<SemanticDagNode>,
-        root: SemanticDagNodeId,
-        limits: StructuralSnapshotLimits,
-    ) -> Result<Self> {
-        let metrics = validate_semantic_dag(&nodes, root, limits, DagWork::Encode)?;
+    pub fn new(nodes: Vec<SemanticDagNode>, root: SemanticDagNodeId) -> Result<Self> {
+        let metrics = validate_semantic_dag(&nodes, root)?;
         Ok(Self {
             nodes,
             root,
@@ -154,11 +150,8 @@ impl SemanticDagSnapshot {
         }
     }
 
-    pub(super) fn validate_encode(
-        &self,
-        limits: StructuralSnapshotLimits,
-    ) -> Result<StructuralSnapshotMetrics> {
-        let metrics = validate_semantic_dag(&self.nodes, self.root, limits, DagWork::Encode)?;
+    pub(super) fn validate_encode(&self) -> Result<StructuralSnapshotMetrics> {
+        let metrics = validate_semantic_dag(&self.nodes, self.root)?;
         if metrics == self.metrics {
             Ok(metrics)
         } else {
@@ -169,10 +162,9 @@ impl SemanticDagSnapshot {
     pub(super) fn from_decoded(
         nodes: Vec<SemanticDagNode>,
         root: SemanticDagNodeId,
-        limits: StructuralSnapshotLimits,
         measured: StructuralSnapshotMetrics,
     ) -> Result<Self> {
-        let metrics = validate_semantic_dag(&nodes, root, limits, DagWork::Decode)?;
+        let metrics = validate_semantic_dag(&nodes, root)?;
         if metrics != measured {
             return Err(Error::msg("semantic DAG decode accounting disagrees"));
         }
@@ -182,12 +174,6 @@ impl SemanticDagSnapshot {
             metrics,
         })
     }
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum DagWork {
-    Encode,
-    Decode,
 }
 
 include!("semantic_dag/validation_support.rs");

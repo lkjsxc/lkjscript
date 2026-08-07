@@ -34,14 +34,12 @@ fn decode_semantic_dag_kind(tag: u8) -> Result<SemanticDagKind> {
 }
 
 struct SemanticDagDecodeBudget {
-    limits: StructuralSnapshotLimits,
     metrics: StructuralSnapshotMetrics,
 }
 
 impl SemanticDagDecodeBudget {
-    const fn new(limits: StructuralSnapshotLimits) -> Self {
+    const fn new() -> Self {
         Self {
-            limits,
             metrics: StructuralSnapshotMetrics {
                 nodes: 0,
                 fields: 0,
@@ -60,9 +58,6 @@ impl SemanticDagDecodeBudget {
             .nodes
             .checked_add(1)
             .ok_or_else(|| Error::msg("semantic DAG node count overflow"))?;
-        if self.metrics.nodes > self.limits.max_nodes {
-            return Err(Error::msg("semantic DAG nodes exceed bound"));
-        }
         self.work(1)
     }
 
@@ -72,9 +67,6 @@ impl SemanticDagDecodeBudget {
             .fields
             .checked_add(count)
             .ok_or_else(|| Error::msg("semantic DAG edge count overflow"))?;
-        if self.metrics.fields > self.limits.max_fields {
-            return Err(Error::msg("semantic DAG edges exceed bound"));
-        }
         self.work(u64::from(count))
     }
 
@@ -100,12 +92,6 @@ impl SemanticDagDecodeBudget {
                 .checked_add(length)
                 .ok_or_else(|| Error::msg("semantic DAG path byte count overflow"))?;
         }
-        if self.metrics.aggregate_bytes > self.limits.max_aggregate_bytes
-            || self.metrics.string_bytes > self.limits.max_string_bytes
-            || self.metrics.path_bytes > self.limits.max_path_bytes
-        {
-            return Err(Error::msg("semantic DAG bytes exceed bound"));
-        }
         self.work(length)
     }
 
@@ -115,11 +101,7 @@ impl SemanticDagDecodeBudget {
             .encode_work
             .checked_add(amount)
             .ok_or_else(|| Error::msg("semantic DAG decode work overflow"))?;
-        if self.metrics.encode_work > self.limits.max_decode_work {
-            Err(Error::msg("semantic DAG decode work exceeds bound"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     fn finish(mut self) -> StructuralSnapshotMetrics {

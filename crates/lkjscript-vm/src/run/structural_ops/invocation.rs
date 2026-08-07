@@ -44,9 +44,8 @@ pub(crate) struct StructuralInvocation {
 }
 
 impl StructuralInvocation {
-    pub(super) fn new(max_adapters: Option<u64>) -> Result<Self> {
-        let runtime = StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())
-            .map_err(map_value_error)?;
+    pub(super) fn new() -> Result<Self> {
+        let runtime = StructuralValueRuntime::new().map_err(map_value_error)?;
         Ok(Self {
             runtime,
             owners: BTreeMap::new(),
@@ -54,7 +53,7 @@ impl StructuralInvocation {
             host_owners: BTreeMap::new(),
             views: BTreeMap::new(),
             destinations: BTreeMap::new(),
-            adapters: adapter::AggregateAdapters::new(max_adapters),
+            adapters: adapter::AggregateAdapters::new(),
         })
     }
 
@@ -175,6 +174,21 @@ impl StructuralInvocation {
             return Err(Error::msg("duplicate structural destination registry key"));
         }
         Ok(Value::from_structural_destination(key))
+    }
+
+    pub(in crate::run) fn accounting(&self) -> Result<(u64, u64)> {
+        let structural = self.runtime.accounting().map_err(map_value_error)?;
+        let (adapter_allocations, adapter_bytes) = self.adapters.accounting()?;
+        Ok((
+            structural
+                .allocation_events
+                .checked_add(adapter_allocations)
+                .ok_or_else(|| Error::host("structural allocation accounting overflow"))?,
+            structural
+                .retained_bytes
+                .checked_add(adapter_bytes)
+                .ok_or_else(|| Error::host("structural heap accounting overflow"))?,
+        ))
     }
 
     fn is_empty(&self) -> bool {

@@ -191,6 +191,10 @@ mod tests {
             Ok(output)
         });
         let stream = vm.resources.sys_accept(listener)?;
+        vm.preflight_allocation(1)?;
+        vm.preflight_heap_growth(
+            u64::try_from(len).map_err(|_| Error::host("socket read length exceeds u64"))?,
+        )?;
         let owner = vm.unique.allocate(len_i64)?;
         let view = vm.unique.borrow(owner, true)?;
         let mut received = 0_usize;

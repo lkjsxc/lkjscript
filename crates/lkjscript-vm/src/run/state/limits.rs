@@ -37,28 +37,18 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     "VM frame depth limit exceeded",
                 ));
             }
-            if self
-                .list_allocations
-                .saturating_add(self.region_product_allocations)
-                > policy.max_allocations
-            {
+            let (allocations, runtime_bytes) = self.invocation_accounting()?;
+            if allocations > policy.max_allocations {
                 return Err(Error::resource(
                     ResourceLimitKind::Allocations,
-                    "VM aggregate allocation limit exceeded",
+                    "VM invocation allocation limit exceeded",
                 ));
             }
-            let list_bytes =
-                usize::try_from(self.list_reserved_bytes_estimate()).unwrap_or(usize::MAX);
-            let region_bytes = self
-                .region_products
-                .as_ref()
-                .map_or(0, |arena| arena.metrics().reserved_bytes_estimate);
-            let runtime_bytes =
-                list_bytes.saturating_add(usize::try_from(region_bytes).unwrap_or(usize::MAX));
-            if runtime_bytes > policy.max_heap_bytes {
+            let max_heap_bytes = u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX);
+            if runtime_bytes > max_heap_bytes {
                 return Err(Error::resource(
                     ResourceLimitKind::HeapBytes,
-                    "VM deterministic runtime byte limit exceeded",
+                    "VM invocation retained-byte limit exceeded",
                 ));
             }
             if self.resources.allocated_handle_slots() > policy.max_handles {
@@ -75,6 +65,91 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             ));
         }
         self.check_interruption()
+    }
+
+    pub(crate) fn invocation_accounting(&self) -> Result<(u64, u64)> {
+        let unique = self.unique.accounting();
+        let (structural_allocations, structural_bytes) = self
+            .structural
+            .as_ref()
+            .map(|invocation| invocation.accounting())
+            .transpose()?
+            .unwrap_or((0, 0));
+        let region_bytes = self.region_products.as_ref().map_or(Ok(0), |arena| {
+            arena.reserved_bytes_estimate().map_err(|error| {
+                Error::host(format!("region-product accounting failed: {error:?}"))
+            })
+        })?;
+        let allocations = unique
+            .allocations
+            .checked_add(self.list_allocations)
+            .and_then(|value| value.checked_add(self.region_product_allocations))
+            .and_then(|value| value.checked_add(structural_allocations))
+            .ok_or_else(|| Error::host("VM invocation allocation accounting overflow"))?;
+        let bytes = unique
+            .live_bytes
+            .checked_add(self.list_reserved_bytes_estimate()?)
+            .and_then(|value| value.checked_add(region_bytes))
+            .and_then(|value| value.checked_add(structural_bytes))
+            .ok_or_else(|| Error::host("VM invocation heap accounting overflow"))?;
+        Ok((allocations, bytes))
+    }
+
+    pub(crate) fn preflight_allocation(&self, additional: u64) -> Result<()> {
+        let Some(maximum) = self.config.max_allocations() else {
+            return Ok(());
+        };
+        let current = self.invocation_accounting()?.0;
+        let projected = current
+            .checked_add(additional)
+            .ok_or_else(|| Error::host("VM invocation allocation accounting overflow"))?;
+        if projected > maximum {
+            Err(Error::resource(
+                ResourceLimitKind::Allocations,
+                "VM invocation allocation limit exceeded",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(crate) fn preflight_heap_growth(&self, additional: u64) -> Result<()> {
+        let Some(maximum) = self.config.max_heap_bytes() else {
+            return Ok(());
+        };
+        let projected = self
+            .invocation_accounting()?
+            .1
+            .checked_add(additional)
+            .ok_or_else(|| Error::host("VM invocation heap accounting overflow"))?;
+        if projected > u64::try_from(maximum).unwrap_or(u64::MAX) {
+            Err(Error::resource(
+                ResourceLimitKind::HeapBytes,
+                "VM invocation retained-byte limit exceeded",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(crate) fn preflight_output(&self, additional: usize) -> Result<()> {
+        let Some(maximum) = self.config.max_output_bytes() else {
+            return Ok(());
+        };
+        let projected = self.output_bytes.checked_add(additional).ok_or_else(|| {
+            Error::resource(
+                ResourceLimitKind::OutputBytes,
+                "VM output byte counter overflow",
+            )
+        })?;
+        if projected > maximum {
+            Err(Error::resource(
+                ResourceLimitKind::OutputBytes,
+                "VM output byte limit exceeded",
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     pub(crate) fn interruption(&self) -> Result<Interruption> {

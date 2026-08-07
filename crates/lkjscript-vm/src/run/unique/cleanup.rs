@@ -1,18 +1,11 @@
 use super::{Error, Result, UniqueKeyWord, UniqueLayout, UniqueRuntime, Value};
-use lkjscript_core::{OwnedValue, ResourceLimitKind, UniqueStoreError};
+use lkjscript_core::{OwnedValue, UniqueStoreError};
 
 pub(super) fn map_store_error(error: UniqueStoreError) -> Error {
     match error {
-        UniqueStoreError::AllocationLimit | UniqueStoreError::ObjectLimit => Error::resource(
-            ResourceLimitKind::Allocations,
-            "unique byte-vector allocation limit exceeded",
-        ),
-        UniqueStoreError::ByteLimit
-        | UniqueStoreError::SlotLimit
-        | UniqueStoreError::StorageCapacity => Error::resource(
-            ResourceLimitKind::HeapBytes,
-            "unique byte-vector heap limit exceeded",
-        ),
+        UniqueStoreError::RepresentationExhausted
+        | UniqueStoreError::ArithmeticOverflow
+        | UniqueStoreError::StorageCapacity => Error::host(error.to_string()),
         _ => Error::msg(error.to_string()),
     }
 }
@@ -63,12 +56,7 @@ impl UniqueRuntime {
 
     pub(crate) fn cleanup(&mut self) -> Result<()> {
         self.loans.clear();
-        let owners: Vec<_> = self
-            .owners
-            .iter()
-            .map(|(word, layout)| (*word, *layout))
-            .collect();
-        for (owner, layout) in owners {
+        while let Some((&owner, &layout)) = self.owners.iter().next() {
             let word = UniqueKeyWord::new(owner).map_err(|error| Error::msg(error.to_string()))?;
             self.free(word, layout)?;
             self.owners.remove(&owner);

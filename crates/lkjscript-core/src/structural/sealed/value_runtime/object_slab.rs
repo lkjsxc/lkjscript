@@ -61,7 +61,7 @@ impl ObjectSlab {
     pub(in crate::structural::value_runtime) fn sealed_owner_count(
         &self,
         root: RootKey,
-    ) -> Result<u32, StructuralValueError> {
+    ) -> Result<u64, StructuralValueError> {
         let StructuralObject::Sealed { owners, .. } = self.get(root)? else {
             return Err(StructuralValueError::WrongOwnership);
         };
@@ -71,18 +71,16 @@ impl ObjectSlab {
     pub(in crate::structural::value_runtime) fn preflight_sealed_acquire(
         &self,
         root: RootKey,
-        limit: u32,
-    ) -> Result<u32, StructuralValueError> {
+    ) -> Result<u64, StructuralValueError> {
         self.sealed_owner_count(root)?
             .checked_add(1)
-            .filter(|owners| *owners <= limit)
             .ok_or(StructuralValueError::OwnerOverflow)
     }
 
     pub(in crate::structural::value_runtime) fn set_sealed_owner_count(
         &mut self,
         root: RootKey,
-        owners: u32,
+        owners: u64,
     ) -> Result<(), StructuralValueError> {
         if owners == 0 {
             return Err(StructuralValueError::InvariantViolation);
@@ -112,7 +110,7 @@ impl ObjectSlab {
         root: RootKey,
     ) -> Result<(), StructuralValueError> {
         self.get(root)?;
-        if root.generation().get() < self.max_generation {
+        if root.generation().get() < u32::MAX {
             self.free.try_reserve(1)?;
         }
         Ok(())
@@ -124,7 +122,7 @@ impl ObjectSlab {
     ) -> Result<StructuralObject, StructuralValueError> {
         self.preflight_take(root)?;
         let index = root.slot() as usize;
-        let replacement = if root.generation().get() >= self.max_generation {
+        let replacement = if root.generation().get() == u32::MAX {
             ObjectSlot::Retired
         } else {
             let generation = NonZeroU32::new(root.generation().get() + 1)

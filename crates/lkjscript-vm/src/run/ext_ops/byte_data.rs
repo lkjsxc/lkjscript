@@ -5,6 +5,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         Some(Op::ConvertStringToBytes) => {
             let value = vm.pop()?;
             let text = crate::run::structural_ops::copy_string(vm, value)?;
+            vm.preflight_allocation(1)?;
+            vm.preflight_heap_growth(
+                u64::try_from(text.len()).map_err(|_| Error::host("text length exceeds u64"))?,
+            )?;
             let value = vm.unique.allocate_bytes(text.into_bytes())?;
             vm.push(value);
             Ok(true)
@@ -49,6 +53,8 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         Some(Op::SysSha256) => {
             let view = vm.pop()?;
+            vm.preflight_allocation(1)?;
+            vm.preflight_heap_growth(32)?;
             let digest = crate::host_bytes::sha256(&mut vm.unique, view)?;
             vm.push(digest);
             Ok(true)

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use lkjscript_core::{ByteVectorKey, UniqueStore, UniqueStoreId, UniqueStoreLimits};
+use lkjscript_core::{ByteVectorKey, UniqueStore, UniqueStoreId};
 
 use crate::{
     DataOwnerId, NoLiveLoanProof, OwnerHomeTable, RemoteRelease, ResourceError, ResourceResult,
@@ -31,7 +31,6 @@ pub struct PartitionedUniqueStore {
 impl PartitionedUniqueStore {
     pub fn new(
         store_id: u64,
-        limits: UniqueStoreLimits,
         partitions: usize,
         owner_limit: usize,
         release_limit: usize,
@@ -50,7 +49,7 @@ impl PartitionedUniqueStore {
                 let id = UniqueStoreId::new(raw).ok_or_else(|| {
                     ResourceError::new("unique-store-id", "store ID must be nonzero")
                 })?;
-                Ok(Mutex::new(UniqueStore::new(id, limits)))
+                Ok(Mutex::new(UniqueStore::new(id)))
             })
             .collect::<ResourceResult<Vec<_>>>()?;
         Ok(Self {

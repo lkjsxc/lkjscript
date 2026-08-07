@@ -32,9 +32,7 @@ pub fn evaluate_observed(
             Default::default(),
         );
     };
-    let lists = match lkjscript_core::SegmentedListArena::new(
-        lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(config.max_allocations),
-    ) {
+    let lists = match lkjscript_core::SegmentedListArena::new() {
         Ok(lists) => lists,
         Err(error) => {
             return (
@@ -43,29 +41,19 @@ pub fn evaluate_observed(
             );
         }
     };
-    let region_limit = u32::try_from(config.max_allocations)
-        .unwrap_or(u32::MAX)
-        .max(1);
-    let region_products =
-        match lkjscript_core::RegionProductArena::new(lkjscript_core::RegionProductLimits {
-            max_records: std::num::NonZeroU32::new(region_limit)
-                .unwrap_or(std::num::NonZeroU32::MIN),
-            max_fields: std::num::NonZeroU32::new(region_limit.saturating_mul(16))
-                .unwrap_or(std::num::NonZeroU32::MIN),
-        }) {
-            Ok(arena) => arena,
-            Err(error) => {
-                return (
-                    EvalOutcome::HostFailure(format!("region-product arena: {error:?}")),
-                    Default::default(),
-                );
-            }
-        };
-    let structural =
-        match EvaluatorStructuralSession::new(program.program(), config.structural_limits) {
-            Ok(structural) => structural,
-            Err(message) => return (EvalOutcome::HostFailure(message), Default::default()),
-        };
+    let region_products = match lkjscript_core::RegionProductArena::new() {
+        Ok(arena) => arena,
+        Err(error) => {
+            return (
+                EvalOutcome::HostFailure(format!("region-product arena: {error:?}")),
+                Default::default(),
+            );
+        }
+    };
+    let structural = match EvaluatorStructuralSession::new(program.program()) {
+        Ok(structural) => structural,
+        Err(message) => return (EvalOutcome::HostFailure(message), Default::default()),
+    };
     let resources = match resources::EvalResources::new(
         config.max_resources,
         config.resource_policy,

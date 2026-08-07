@@ -1,14 +1,11 @@
 mod common;
 
 use common::*;
-use lkjscript_core::UniqueStoreLimits;
 use lkjscript_resource::*;
 
 #[test]
 fn partitioned_unique_store_moves_homes_and_drains_remote_release() -> ResourceResult<()> {
-    let limits = UniqueStoreLimits::new(4, 1024, 4, 8, u32::MAX)
-        .map_err(|error| ResourceError::new("test-limits", format!("{error:?}")))?;
-    let store = PartitionedUniqueStore::new(9, limits, 2, 4, 4)?;
+    let store = PartitionedUniqueStore::new(9, 2, 4, 4)?;
     let first = WorkerId::new(0, 1);
     let second = WorkerId::new(1, 1);
     let value = store.allocate_byte_vector(owner(7), first, vec![1, 2, 3])?;
@@ -33,9 +30,7 @@ fn partitioned_unique_store_moves_homes_and_drains_remote_release() -> ResourceR
 
 #[test]
 fn independent_partitions_mutate_and_release_concurrently() -> ResourceResult<()> {
-    let limits = UniqueStoreLimits::new(16, 4096, 16, 8, u32::MAX)
-        .map_err(|error| ResourceError::new("test-limits", format!("{error:?}")))?;
-    let store = PartitionedUniqueStore::new(20, limits, 4, 16, 16)?;
+    let store = PartitionedUniqueStore::new(20, 4, 16, 16)?;
     let values = (0..8_u32)
         .map(|slot| {
             let home = WorkerId::new(slot % 4, 1);

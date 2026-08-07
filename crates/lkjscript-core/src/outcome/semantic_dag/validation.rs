@@ -1,54 +1,34 @@
 fn validate_semantic_dag(
     nodes: &[SemanticDagNode],
     root: SemanticDagNodeId,
-    limits: StructuralSnapshotLimits,
-    work: DagWork,
 ) -> Result<StructuralSnapshotMetrics> {
-    let limits = limits.validate()?;
     if nodes.is_empty() {
         return Err(Error::msg("semantic DAG must contain a root node"));
     }
     let node_count = u32::try_from(nodes.len())
         .map_err(|_| Error::msg("semantic DAG node count exceeds u32"))?;
-    if node_count > limits.max_nodes {
-        return Err(Error::msg("semantic DAG nodes exceed bound"));
-    }
     let final_id = node_count - 1;
     if root.get() != final_id {
         return Err(Error::msg("semantic DAG root must be the final node"));
     }
 
-    let mut depths = dag_vec(nodes.len(), 0_u16, "depth")?;
     let mut metrics = StructuralSnapshotMetrics::default();
     for (index, node) in nodes.iter().enumerate() {
         metrics.nodes = metrics
             .nodes
             .checked_add(1)
             .ok_or_else(|| Error::msg("semantic DAG node count overflow"))?;
-        dag_charge_work(&mut metrics, 1, limits, work)?;
+        dag_charge_work(&mut metrics, 1)?;
         validate_dag_kind(node)?;
-        let mut depth = 1_u16;
         for child in dag_children(&node.payload) {
-            let child_index = dag_child_index(child, index)?;
-            depth = depth.max(
-                depths[child_index]
-                    .checked_add(1)
-                    .ok_or_else(|| Error::msg("semantic DAG depth overflow"))?,
-            );
+            dag_child_index(child, index)?;
             metrics.fields = metrics
                 .fields
                 .checked_add(1)
                 .ok_or_else(|| Error::msg("semantic DAG edge count overflow"))?;
-            if metrics.fields > limits.max_fields {
-                return Err(Error::msg("semantic DAG edges exceed bound"));
-            }
-            dag_charge_work(&mut metrics, 1, limits, work)?;
+            dag_charge_work(&mut metrics, 1)?;
         }
-        if depth > limits.max_depth {
-            return Err(Error::msg("semantic DAG depth exceeds bound"));
-        }
-        depths[index] = depth;
-        validate_dag_payload(node, nodes, index, &mut metrics, limits, work)?;
+        validate_dag_payload(node, nodes, index, &mut metrics)?;
     }
 
     validate_dag_reachability(nodes, root)?;
@@ -83,20 +63,18 @@ fn validate_dag_payload(
     nodes: &[SemanticDagNode],
     index: usize,
     metrics: &mut StructuralSnapshotMetrics,
-    limits: StructuralSnapshotLimits,
-    work: DagWork,
 ) -> Result<()> {
     match &node.payload {
         SemanticDagPayload::String(bytes) => {
             std::str::from_utf8(bytes).map_err(|_| Error::msg("semantic DAG string is not UTF-8"))?;
-            dag_charge_bytes(metrics, bytes.len(), DagByteClass::String, limits, work)
+            dag_charge_bytes(metrics, bytes.len(), DagByteClass::String)
         }
         SemanticDagPayload::Path(bytes) => {
             validate_dag_path(bytes)?;
-            dag_charge_bytes(metrics, bytes.len(), DagByteClass::Path, limits, work)
+            dag_charge_bytes(metrics, bytes.len(), DagByteClass::Path)
         }
         SemanticDagPayload::Bytes(bytes) => {
-            dag_charge_bytes(metrics, bytes.len(), DagByteClass::Other, limits, work)
+            dag_charge_bytes(metrics, bytes.len(), DagByteClass::Other)
         }
         SemanticDagPayload::List { tail, .. } => {
             let tail_index = dag_child_index(*tail, index)?;

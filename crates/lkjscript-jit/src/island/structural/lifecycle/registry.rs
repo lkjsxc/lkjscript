@@ -52,7 +52,7 @@ impl JitStructuralRuntime {
             }
             return Err(registration);
         }
-        Ok(())
+        self.enforce_policy()
     }
 
     pub(in crate::island::structural) fn replace_owner(

@@ -7,6 +7,39 @@ use super::{discard_semantic, LocalNodeId, StructuralImage, StructuralNodePayloa
 // records and its explicit work stacks preserve those invariants.
 #[allow(clippy::expect_used)]
 impl StructuralImage {
+    pub(crate) fn export_allocation_count(&self) -> Result<u64, StructuralValueError> {
+        self.nodes.iter().try_fold(4_u64, |count, node| {
+            let allocates = matches!(
+                node.payload,
+                StructuralNodePayload::Bytes(_)
+                    | StructuralNodePayload::Product(_)
+                    | StructuralNodePayload::Enum { .. }
+            );
+            count
+                .checked_add(u64::from(allocates))
+                .ok_or(StructuralValueError::ArithmeticOverflow)
+        })
+    }
+
+    pub(crate) fn retained_bytes_estimate(&self) -> Result<u64, StructuralValueError> {
+        let nodes = u64::try_from(self.nodes.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<super::StructuralNodeRecord>() as u64)
+            })
+            .ok_or(StructuralValueError::ArithmeticOverflow)?;
+        let fields = u64::try_from(self.fields.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<LocalNodeId>() as u64))
+            .ok_or(StructuralValueError::ArithmeticOverflow)?;
+        let blob = u64::try_from(self.blob.capacity())
+            .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        nodes
+            .checked_add(fields)
+            .and_then(|total| total.checked_add(blob))
+            .ok_or(StructuralValueError::ArithmeticOverflow)
+    }
+
     pub fn to_semantic(&self) -> Result<SemanticValue, StructuralValueError> {
         self.to_semantic_at(LocalNodeId::ROOT)
     }

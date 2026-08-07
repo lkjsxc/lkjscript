@@ -163,9 +163,11 @@ pub(crate) fn structural_root(
 
 pub(crate) fn map_structural_error(error: StructuralValueError) -> Flow {
     match error {
-        StructuralValueError::AllocationFailed | StructuralValueError::LimitExceeded(_) => {
-            Flow::Resource(format!("structural value: {error}"))
-        }
+        StructuralValueError::AllocationFailed
+        | StructuralValueError::Domain(lkjscript_core::StructuralError::AllocationFailed)
+        | StructuralValueError::RootTable(
+            lkjscript_core::StructuralRootTableError::AllocationFailed,
+        ) => Flow::HostFailure(format!("structural value: {error}")),
         _ => Flow::Trap(error.to_string()),
     }
 }

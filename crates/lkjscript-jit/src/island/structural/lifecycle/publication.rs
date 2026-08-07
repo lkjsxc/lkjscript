@@ -12,8 +12,7 @@ impl JitStructuralRuntime {
         let expected = core_type(value_type)?;
         let mut owned = Vec::new();
         if owned.try_reserve_exact(bytes.len()).is_err() {
-            self.last_resource = Some(ResourceLimitKind::HeapBytes);
-            return Err(NativeServiceError::ResourceLimitExceeded);
+            return Err(NativeServiceError::HostFailure);
         }
         owned.extend_from_slice(bytes);
         self.publish_semantic(

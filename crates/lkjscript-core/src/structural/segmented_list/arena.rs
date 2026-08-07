@@ -1,6 +1,8 @@
 use super::model::SegmentedListLocation;
 use super::*;
 
+pub(super) const SEGMENT_CAPACITY: usize = 1_024;
+
 #[derive(Debug)]
 pub(super) struct SegmentedListEntry<T> {
     pub(super) element: T,
@@ -16,19 +18,14 @@ pub(super) struct SegmentedListSegment<T> {
 #[derive(Debug)]
 pub struct SegmentedListArena<T> {
     pub(super) id: SegmentedListArenaId,
-    pub(super) limits: SegmentedListArenaLimits,
     pub(super) segments: Vec<SegmentedListSegment<T>>,
     pub(super) metrics: SegmentedListMetrics,
 }
 
 impl<T> SegmentedListArena<T> {
-    pub fn new(limits: SegmentedListArenaLimits) -> Result<Self, SegmentedListError> {
-        if limits.max_segments.get() > u32::from(u16::MAX) + 1 {
-            return Err(SegmentedListError::InvalidLimits);
-        }
+    pub fn new() -> Result<Self, SegmentedListError> {
         Ok(Self {
             id: SegmentedListArenaId::fresh()?,
-            limits,
             segments: Vec::new(),
             metrics: SegmentedListMetrics::default(),
         })
@@ -38,36 +35,39 @@ impl<T> SegmentedListArena<T> {
         self.id
     }
 
-    pub const fn limits(&self) -> SegmentedListArenaLimits {
-        self.limits
-    }
-
     pub const fn metrics(&self) -> SegmentedListMetrics {
         self.metrics
     }
 
-    pub fn reserved_bytes_estimate(&self) -> u64 {
-        u64::from(self.metrics.live_segments).saturating_mul(self.segment_storage_bytes())
+    pub fn reserved_bytes_estimate(&self) -> Result<u64, SegmentedListError> {
+        let segment_bytes = storage_bytes::<SegmentedListSegment<T>>(self.segments.capacity())?;
+        self.segments
+            .iter()
+            .try_fold(segment_bytes, |total, segment| {
+                total
+                    .checked_add(storage_bytes::<SegmentedListEntry<T>>(
+                        segment.entries.capacity(),
+                    )?)
+                    .ok_or(SegmentedListError::Limit(
+                        SegmentedListLimit::Representation,
+                    ))
+            })
     }
 
-    pub fn prepend_storage_increase(&self) -> u64 {
-        let capacity = usize::from(self.limits.segment_capacity.get());
+    pub fn prepend_storage_increase(&self) -> Result<u64, SegmentedListError> {
         if self
             .segments
             .last()
-            .is_none_or(|segment| segment.entries.len() == capacity)
+            .is_none_or(|segment| segment.entries.len() == SEGMENT_CAPACITY)
         {
-            self.segment_storage_bytes()
+            storage_bytes::<SegmentedListSegment<T>>(1)?
+                .checked_add(storage_bytes::<SegmentedListEntry<T>>(SEGMENT_CAPACITY)?)
+                .ok_or(SegmentedListError::Limit(
+                    SegmentedListLimit::Representation,
+                ))
         } else {
-            0
+            Ok(0)
         }
-    }
-
-    fn segment_storage_bytes(&self) -> u64 {
-        let segment_bytes = std::mem::size_of::<SegmentedListSegment<T>>() as u64;
-        let entry_bytes = std::mem::size_of::<SegmentedListEntry<T>>() as u64;
-        let capacity = u64::from(self.limits.segment_capacity.get());
-        segment_bytes.saturating_add(entry_bytes.saturating_mul(capacity))
     }
 
     pub const fn empty(&self) -> SegmentedListKey {
@@ -141,8 +141,18 @@ impl<T> SegmentedListArena<T> {
         location: SegmentedListLocation,
     ) -> Result<&SegmentedListEntry<T>, SegmentedListError> {
         self.segments
-            .get(location.segment as usize)
+            .get(usize::from(location.segment))
             .and_then(|segment| segment.entries.get(usize::from(location.entry)))
             .ok_or(SegmentedListError::InvalidKey)
     }
+}
+
+fn storage_bytes<T>(count: usize) -> Result<u64, SegmentedListError> {
+    u64::try_from(count)
+        .ok()
+        .zip(u64::try_from(std::mem::size_of::<T>()).ok())
+        .and_then(|(count, item)| count.checked_mul(item))
+        .ok_or(SegmentedListError::Limit(
+            SegmentedListLimit::Representation,
+        ))
 }

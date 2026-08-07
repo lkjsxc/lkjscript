@@ -14,11 +14,6 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         F: FnMut(D) -> Result<(), E>,
     {
         self.require_runtime(runtime)?;
-        if builders.len() > self.limits.max_release_work as usize {
-            return Err(StructuralError::LimitExceeded(
-                crate::structural::StructuralLimit::ReleaseWork,
-            ));
-        }
         let mut keys = Vec::new();
         keys.try_reserve_exact(builders.len())
             .map_err(|_| StructuralError::AllocationFailed)?;
@@ -32,8 +27,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         runtime.preflight_release(&keys)?;
         let mut failures = self.failure_buffer(&keys)?;
         for key in keys {
-            let index = self.record_index(key)?;
-            let mut record = self.records.swap_remove(index).1;
+            let mut record = self.take_record(key)?;
             for drop in record.drops.drain_reverse() {
                 if let Err(error) = execute_drop(drop) {
                     failures.push(error);
@@ -55,16 +49,26 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         if let Err(error) = self.validate_graph(&builders) {
             return Err(SealFailure { error, builders });
         }
-        let weights = match self.release_weights(&builders) {
+        let mut weights = match self.release_weights(&builders) {
             Ok(weights) => weights,
             Err(error) => return Err(SealFailure { error, builders }),
         };
         let mut incoming = Vec::new();
-        if incoming.try_reserve_exact(builders.len()).is_err() {
+        let mut incoming_lookup = Vec::new();
+        if incoming.try_reserve_exact(builders.len()).is_err()
+            || incoming_lookup.try_reserve_exact(builders.len()).is_err()
+        {
             return Err(allocation_failure(builders));
         }
-        incoming.extend(builders.iter().map(|builder| (builder.key, 0_u32)));
-        let mut existing = Vec::<(DomainKey, u32)>::new();
+        incoming.extend(builders.iter().map(|builder| (builder.key, 0_u64)));
+        incoming_lookup.extend(
+            incoming
+                .iter()
+                .enumerate()
+                .map(|(index, (key, _))| (*key, index)),
+        );
+        incoming_lookup.sort_unstable_by_key(|(key, _)| *key);
+        let mut existing_edges = Vec::new();
         for builder in &builders {
             let index = match self.record_index(builder.key) {
                 Ok(index) => index,
@@ -78,31 +82,53 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
                 });
             }
             for &target in record.dependencies.as_slice() {
-                let entries = if target.class() == DomainClass::RegionBuilding {
-                    &mut incoming
-                } else {
-                    &mut existing
-                };
-                if let Some((_, count)) = entries.iter_mut().find(|(key, _)| *key == target) {
+                if target.class() == DomainClass::RegionBuilding {
+                    let Ok(position) =
+                        incoming_lookup.binary_search_by_key(&target, |(key, _)| *key)
+                    else {
+                        return Err(SealFailure {
+                            error: StructuralError::UnsupportedDependency,
+                            builders,
+                        });
+                    };
+                    let count = &mut incoming[incoming_lookup[position].1].1;
                     let Some(next) = count.checked_add(1) else {
                         return Err(owner_failure(builders));
                     };
                     *count = next;
-                } else if entries.try_reserve(1).is_err() {
+                } else if existing_edges.try_reserve(1).is_err() {
                     return Err(allocation_failure(builders));
                 } else {
-                    entries.push((target, 1));
+                    existing_edges.push(target);
                 }
+            }
+        }
+        existing_edges.sort_unstable();
+        let mut existing = Vec::<(DomainKey, u64)>::new();
+        if existing.try_reserve(existing_edges.len()).is_err() {
+            return Err(allocation_failure(builders));
+        }
+        for key in existing_edges {
+            if let Some((_, count)) = existing.last_mut().filter(|(item, _)| *item == key) {
+                let Some(next) = count.checked_add(1) else {
+                    return Err(owner_failure(builders));
+                };
+                *count = next;
+            } else {
+                existing.push((key, 1));
             }
         }
         if let Err(error) = self.preflight_owner_counts(&incoming, &existing) {
             return Err(SealFailure { error, builders });
         }
+        weights.sort_unstable_by_key(|(key, _)| *key);
         let mut mapping = Vec::new();
+        let mut mapping_lookup = Vec::new();
         let mut old_keys = Vec::new();
         let mut owners = Vec::new();
         let mut existing_indices = Vec::new();
         if mapping.try_reserve_exact(builders.len()).is_err()
+            || mapping_lookup.try_reserve_exact(builders.len()).is_err()
             || old_keys.try_reserve_exact(builders.len()).is_err()
             || owners.try_reserve_exact(builders.len()).is_err()
             || existing_indices.try_reserve_exact(existing.len()).is_err()
@@ -115,17 +141,19 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
                 Err(error) => return Err(SealFailure { error, builders }),
             };
             let weight = weights
-                .iter()
-                .find(|(key, _)| *key == old)
-                .map_or(1, |(_, weight)| *weight);
+                .binary_search_by_key(&old, |(key, _)| *key)
+                .ok()
+                .map_or(1, |position| weights[position].1);
             let new = self.sealed_key(old);
             mapping.push((old, new, index, count + 1, weight));
+            mapping_lookup.push((old, new));
             old_keys.push(old);
             owners.push(SealedOwner {
                 key: new,
                 marker: PhantomData,
             });
         }
+        mapping_lookup.sort_unstable_by_key(|(old, _)| *old);
         for &(key, count) in &existing {
             match self.record_index(key) {
                 Ok(index) => existing_indices.push((index, count)),
@@ -150,8 +178,10 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         }
         for (_, record) in &mut self.records {
             for dependency in record.dependencies.entries_mut() {
-                if let Some((_, new, ..)) = mapping.iter().find(|(old, ..)| *old == *dependency) {
-                    *dependency = *new;
+                if let Ok(position) =
+                    mapping_lookup.binary_search_by_key(dependency, |(old, _)| *old)
+                {
+                    *dependency = mapping_lookup[position].1;
                 }
             }
         }

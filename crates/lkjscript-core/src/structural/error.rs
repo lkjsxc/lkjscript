@@ -2,24 +2,10 @@ use std::fmt;
 
 use super::{DomainClass, DomainKey, RootKey};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StructuralLimit {
-    Domains,
-    Objects,
-    Bytes,
-    Chunks,
-    Dependencies,
-    DropEntries,
-    ReleaseWork,
-    RegionOwners,
-    PoolSlots,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StructuralError {
     ArithmeticOverflow,
     AllocationFailed,
-    LimitExceeded(StructuralLimit),
     WrongRuntime,
     WrongDomainClass {
         expected: DomainClass,
@@ -48,7 +34,6 @@ impl fmt::Display for StructuralError {
         match self {
             Self::ArithmeticOverflow => formatter.write_str("structural arithmetic overflow"),
             Self::AllocationFailed => formatter.write_str("structural allocation failed"),
-            Self::LimitExceeded(limit) => write!(formatter, "structural limit exceeded: {limit:?}"),
             Self::WrongRuntime => formatter.write_str("wrong structural runtime"),
             Self::WrongDomainClass { expected, actual } => {
                 write!(

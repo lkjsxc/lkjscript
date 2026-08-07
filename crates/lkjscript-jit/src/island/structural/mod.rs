@@ -4,7 +4,7 @@ use lkjscript_core::{
     SemanticValue, StructuralDestinationKey, StructuralError, StructuralFieldPath, StructuralKind,
     StructuralNode, StructuralNodeView, StructuralProjection, StructuralRootTableError,
     StructuralType, StructuralValueError, StructuralValueKey, StructuralValueRuntime,
-    StructuralValueRuntimeLimits, StructuralViewKey, Value,
+    StructuralViewKey, Value,
 };
 use lkjscript_executable::NativeServiceError;
 use lkjscript_native::{

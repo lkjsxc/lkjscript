@@ -2,7 +2,7 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::{
     SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
-    StructuralLimits, StructuralSliceExt, StructuralSnapshotLimits, StructuralType,
+    StructuralSliceExt, StructuralType,
 };
 
 #[test]
@@ -60,7 +60,6 @@ fn compiler_authenticates_general_enum_rehydration() {
             ),
         ],
         SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
     )
     .expect("general enum snapshot");
     let expected = snapshot.clone();
@@ -72,12 +71,8 @@ fn compiler_authenticates_general_enum_rehydration() {
             fields: vec![SemanticDagNodeId::new(0)],
         };
     }
-    let malformed = SemanticDagSnapshot::new(
-        malformed_nodes,
-        expected.root(),
-        StructuralSnapshotLimits::DEFAULT,
-    )
-    .expect("bounded malformed semantic DAG");
+    let malformed = SemanticDagSnapshot::new(malformed_nodes, expected.root())
+        .expect("bounded malformed semantic DAG");
     assert!(lkjscript_runtime::rehydrate_process_outcome(
         lkjscript_core::ExecutionOutcome::Returned(lkjscript_core::OwnedValue::from_semantic_dag(
             malformed
@@ -104,13 +99,12 @@ fn compiler_authenticates_general_enum_rehydration() {
     assert_eq!(report.final_loans, 0);
     assert_eq!(report.final_dependencies, 0);
     assert_eq!(report.release_backlog, 0);
-    assert!(report.bounded_release_work);
+    assert!(report.complete_release_work);
     let lkjscript_core::ExecutionOutcome::Returned(value) = rehydrated else {
         panic!("rehydrated structural return required")
     };
     assert_eq!(value.as_semantic_dag(), Some(&expected));
-    let mut runtime =
-        SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("sealed runtime");
+    let mut runtime = SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)
         .expect("authenticated enum import");

@@ -67,11 +67,7 @@ impl JitIslandServices {
             unique: JitUniqueRuntime::new(config)?,
             structural: JitStructuralRuntime::new(config)?,
             witnesses,
-            lists: lkjscript_core::SegmentedListArena::new(config.max_allocations().map_or_else(
-                lkjscript_core::SegmentedListArenaLimits::default,
-                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
-            ))
-            .map_err(|error| {
+            lists: lkjscript_core::SegmentedListArena::new().map_err(|error| {
                 EngineError::new(
                     FailureCode::InvocationFailure,
                     None,

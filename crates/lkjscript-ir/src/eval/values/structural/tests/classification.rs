@@ -183,9 +183,5 @@ fn ordinary_unplanned_string_execution_remains_legacy() -> crate::Result<()> {
 }
 
 fn mode(program: &Program, ty: SsaType) -> std::result::Result<AggregateMode, String> {
-    aggregate_mode(
-        program,
-        lkjscript_core::StructuralValueRuntimeLimits::default(),
-        &ty,
-    )
+    aggregate_mode(program, &ty)
 }

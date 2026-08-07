@@ -116,9 +116,6 @@ impl UniqueStore {
             .checked_sub(old_retained)
             .and_then(|bytes| bytes.checked_add(new_retained))
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        if next.live_bytes > self.limits.max_bytes() {
-            return Err(UniqueStoreError::ByteLimit);
-        }
         next.allocated_bytes = next
             .allocated_bytes
             .checked_add(growth)

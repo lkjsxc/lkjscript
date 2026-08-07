@@ -79,7 +79,7 @@ impl StructuralRootTable {
         if !loan.exclusive && value.shared_loans == 0 {
             return Err(StructuralRootTableError::InvariantViolation);
         }
-        let retires = generation.get() >= self.limits.max_generation;
+        let retires = generation.get() == u32::MAX;
         let next_live = self
             .stats
             .live_loans
@@ -137,10 +137,8 @@ impl StructuralRootTable {
             self.loans[index] = LoanSlot::Live { generation, value };
             return Ok(StructuralBorrowKey::from_parts(slot, generation));
         }
-        let slot = u32::try_from(self.loans.len()).map_err(|_| Self::loan_limit())?;
-        if slot >= self.limits.max_loans {
-            return Err(Self::loan_limit());
-        }
+        let slot = u32::try_from(self.loans.len())
+            .map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
         self.loans
             .try_reserve(1)
             .map_err(|_| StructuralRootTableError::AllocationFailed)?;
@@ -155,7 +153,7 @@ impl StructuralRootTable {
     }
 
     fn next_loan_generation(&self, generation: NonZeroU32) -> Option<NonZeroU32> {
-        if generation.get() >= self.limits.max_generation {
+        if generation.get() == u32::MAX {
             return None;
         }
         NonZeroU32::new(generation.get() + 1)

@@ -1,10 +1,7 @@
 use std::num::NonZeroU32;
 
 use super::super::{DomainKey, RootClass, RootKey};
-use super::{
-    StaticStructuralArtifact, StructuralImage, StructuralValueError, StructuralValueRuntimeLimits,
-    TreeFacts,
-};
+use super::{StaticStructuralArtifact, StructuralImage, StructuralValueError, TreeFacts};
 
 #[derive(Debug)]
 pub(super) enum StructuralObject {
@@ -15,7 +12,7 @@ pub(super) enum StructuralObject {
     Sealed {
         image: StructuralImage,
         facts: TreeFacts,
-        owners: u32,
+        owners: u64,
     },
     Static(StaticStructuralArtifact),
 }
@@ -44,18 +41,14 @@ pub(super) enum ObjectSlot {
 pub(super) struct ObjectSlab {
     pub(super) slots: Vec<ObjectSlot>,
     pub(super) free: Vec<u32>,
-    max_objects: u32,
-    pub(super) max_generation: u32,
     pub live: u32,
 }
 
 impl ObjectSlab {
-    pub(super) const fn new(limits: StructuralValueRuntimeLimits) -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             slots: Vec::new(),
             free: Vec::new(),
-            max_objects: limits.max_objects,
-            max_generation: limits.max_generation,
             live: 0,
         }
     }
@@ -76,12 +69,9 @@ impl ObjectSlab {
             (slot, generation, true)
         } else {
             let slot = match u32::try_from(self.slots.len()) {
-                Ok(slot) if slot < self.max_objects => slot,
-                _ => {
-                    return Err(Box::new((
-                        StructuralValueError::LimitExceeded(super::StructuralValueLimit::Objects),
-                        object,
-                    )));
+                Ok(slot) => slot,
+                Err(_) => {
+                    return Err(Box::new((StructuralValueError::ArithmeticOverflow, object)));
                 }
             };
             if let Err(error) = self.slots.try_reserve(1) {

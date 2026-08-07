@@ -275,10 +275,22 @@ may build elsewhere, but no other host or native target is currently claimed as 
   host output policy only; cleanup attempts continue after retention is exhausted. The former
   logical-aggregate-construction work count and resource outcome are removed from VM, evaluator,
   native services, and process encoding.
-  Structural list, region-product, unique, structural-value, semantic-DAG snapshot, and returned
-  structural snapshot stores still retain independent encoded-key widths and fixed structural
-  limits. These are immediate residual representation blockers, not execution policy or language
-  validity, and this commit does not redesign their stores, snapshots, or keys.
+  Structural list, region-product, unique, ordinary/sealed region, root-table, structural-value,
+  semantic-DAG snapshot, and returned structural snapshot stores no longer carry project-selected
+  object, byte, node, field, depth, dependency, drop, owner, release-work, segment, record, root,
+  loan, or local-return snapshot ceilings. They grow fallibly with checked arithmetic. Structural
+  image/snapshot conversion, validation, encoding, decoding, equality, rehydration, and destruction
+  use explicit work stacks. VM, baseline-native, and optimizing-native structural allocation,
+  retained-byte, and return-export observations are charged to the selected coarse
+  `ExecutionPolicy`; a low policy returns a typed resource outcome and cleans unpublished owners,
+  while the same program succeeds under sufficient or unrestricted policy. Runtime diagnostics are
+  retained opportunistically so allocation failure cannot prevent ownership cleanup.
+  Structural runtime slots and generations, semantic-DAG node IDs and encoded counts, region-product
+  records, and unique-store slots remain checked `u32` representations. Segmented lists retain a
+  packed `u16` segment/entry layout with a checked representation failure. These are representation
+  boundaries to widen or segment, not ordinary semantic limits. Process outcome encoding now takes
+  only an explicit total-byte policy; process framing still retains its separate `MAX_FRAME_BYTES`
+  transport boundary.
   Structural list equality in the VM, evaluator, and native runtime is iterative and complete for
   the acyclic segmented-list representation; there is no independent comparison-step quota.
   Dynamic byte vectors and static-byte clones have no per-buffer size rule: checked, fallible

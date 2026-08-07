@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn allocate_read_mutate_free_and_exact_stats() {
-    let mut store = store_with(1, 2, 16, 2, 4, 4);
+    let mut store = store(1);
     let key = store
         .allocate_byte_vector(bytes_with_capacity(4, &[1, 2]))
         .expect("byte-vector allocation");
@@ -31,7 +31,7 @@ fn allocate_read_mutate_free_and_exact_stats() {
 
 #[test]
 fn double_free_and_stale_access_fail_without_deallocation() {
-    let mut store = store_with(2, 1, 8, 1, 2, 4);
+    let mut store = store(2);
     let key = store
         .allocate_byte_vector(vec![7])
         .expect("byte-vector allocation");
@@ -44,8 +44,8 @@ fn double_free_and_stale_access_fail_without_deallocation() {
 
 #[test]
 fn store_mismatch_is_rejected_before_slot_or_failure_access() {
-    let mut owner = store_with(3, 1, 8, 1, 1, 2);
-    let mut other = store_with(4, 1, 8, 1, 1, 2);
+    let mut owner = store(3);
+    let mut other = store(4);
     let key = owner
         .allocate_byte_vector(vec![3])
         .expect("owner allocation");
@@ -57,7 +57,7 @@ fn store_mismatch_is_rejected_before_slot_or_failure_access() {
 
 #[test]
 fn paths_are_immutable_typed_payloads_and_static_bytes_use_no_slot() {
-    let mut store = store_with(5, 1, 16, 1, 1, 2);
+    let mut store = store(5);
     let static_bytes = StaticBytes::new(b"static");
     assert_eq!(static_bytes.as_slice(), b"static");
     assert_eq!(static_bytes.len(), 6);
@@ -73,7 +73,7 @@ fn paths_are_immutable_typed_payloads_and_static_bytes_use_no_slot() {
 
 #[test]
 fn leak_assertion_reports_exact_live_obligation() {
-    let mut store = store_with(6, 1, 8, 1, 1, 2);
+    let mut store = store(6);
     let key = store
         .allocate_bytes(bytes_with_capacity(3, &[1]))
         .expect("dynamic bytes allocation");
@@ -90,7 +90,7 @@ fn leak_assertion_reports_exact_live_obligation() {
 
 #[test]
 fn deterministic_operation_sequence_preserves_payloads_and_balance() {
-    let mut store = store_with(7, 16, 256, 16, 1_000, 1_000);
+    let mut store = store(7);
     let mut live = Vec::new();
     let mut state = 0x9e37_79b9_u32;
     for _ in 0..512 {

@@ -2,9 +2,7 @@
 
 use std::num::NonZeroU64;
 
-use lkjscript_core::{
-    LayoutIdentity, RegionStore, SemanticTypeIdentity, StructuralLimits, StructuralRuntime,
-};
+use lkjscript_core::{LayoutIdentity, RegionStore, SemanticTypeIdentity, StructuralRuntime};
 use lkjscript_resource::{
     DataOwnerId, GenerationTable, OwnerHomeTable, StructuralOwnerHomeTable, TaskId, WorkerId,
 };
@@ -40,12 +38,11 @@ fn owner_epoch_exhaustion_changes_no_home_or_loan_state() {
 
 #[test]
 fn structural_domains_use_exact_owner_homes_and_bounded_release() {
-    let mut runtime = StructuralRuntime::new(StructuralLimits::default()).expect("runtime");
+    let mut runtime = StructuralRuntime::new().expect("runtime");
     let mut store = RegionStore::<u8, u8>::new(
         runtime.identity(),
         LayoutIdentity::new(NonZeroU64::new(92).expect("layout")),
         SemanticTypeIdentity::new(NonZeroU64::new(93).expect("type")),
-        StructuralLimits::default(),
     )
     .expect("store");
     let region = store.create(&mut runtime).expect("region");

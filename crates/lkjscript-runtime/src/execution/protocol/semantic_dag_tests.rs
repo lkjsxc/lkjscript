@@ -6,7 +6,7 @@ use super::*;
 use lkjscript_core::{
     InlineStructuralValue, LayoutIdentity, OwnedValue, SemanticDagKind, SemanticDagNode,
     SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot, SemanticDagType,
-    SemanticTypeIdentity, StructuralSnapshotLimits,
+    SemanticTypeIdentity,
 };
 
 #[test]
@@ -52,7 +52,6 @@ fn process_protocol_round_trips_product_list_product_semantic_dag() {
             ),
         ],
         SemanticDagNodeId::new(4),
-        StructuralSnapshotLimits::DEFAULT,
     )
     .expect("product-list-product DAG");
     let response = ProcessResponse::Outcome {

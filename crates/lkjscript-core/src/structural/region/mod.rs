@@ -9,10 +9,10 @@ use std::num::NonZeroU32;
 
 pub use model::{RegionOwner, RegionRef, RegionReleaseReport};
 
-use super::ledger::BoundedLedger;
+use super::bookkeeping::Ledger;
 use super::{
     DomainClass, DomainKey, LayoutIdentity, RegionMetrics, SemanticTypeIdentity, StructuralError,
-    StructuralLimit, StructuralLimits, StructuralRuntime, StructuralRuntimeId,
+    StructuralRuntime, StructuralRuntimeId,
 };
 use model::RegionRecord;
 
@@ -21,8 +21,8 @@ pub struct RegionStore<T: Copy, D: Copy> {
     runtime: StructuralRuntimeId,
     layout: LayoutIdentity,
     semantic_type: SemanticTypeIdentity,
-    limits: StructuralLimits,
     records: Vec<(DomainKey, RegionRecord<T, D>)>,
+    indices: Vec<Option<usize>>,
     metrics: RegionMetrics,
 }
 
@@ -31,14 +31,13 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         runtime: StructuralRuntimeId,
         layout: LayoutIdentity,
         semantic_type: SemanticTypeIdentity,
-        limits: StructuralLimits,
     ) -> Result<Self, StructuralError> {
         Ok(Self {
             runtime,
             layout,
             semantic_type,
-            limits: limits.validate()?,
             records: Vec::new(),
+            indices: Vec::new(),
             metrics: RegionMetrics::default(),
         })
     }
@@ -56,6 +55,10 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
             .try_reserve(1)
             .map_err(|_| StructuralError::AllocationFailed)?;
         let key = runtime.allocate(DomainClass::RegionOwned)?;
+        if let Err(error) = self.install_index(key) {
+            runtime.rollback_allocation(key);
+            return Err(error);
+        }
         self.records.push((
             key,
             RegionRecord {
@@ -63,9 +66,9 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
                 chunks: Vec::new(),
                 large: Vec::new(),
                 roots: Vec::new(),
-                internal_edges: BoundedLedger::new(self.limits.max_dependencies),
-                children: BoundedLedger::new(self.limits.max_dependencies),
-                drops: BoundedLedger::new(self.limits.max_drop_entries),
+                internal_edges: Ledger::new(),
+                children: Ledger::new(),
+                drops: Ledger::new(),
                 parent: None,
                 release_work: 1,
                 loans: 0,
@@ -107,19 +110,10 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
             .release_work
             .checked_add(self.records[child_index].1.release_work)
         {
-            Some(work) if work <= self.limits.max_release_work => work,
-            _ => {
-                return Err((
-                    StructuralError::LimitExceeded(StructuralLimit::ReleaseWork),
-                    child,
-                ));
-            }
+            Some(work) => work,
+            None => return Err((StructuralError::ArithmeticOverflow, child)),
         };
-        if let Err(error) = self.records[parent_index]
-            .1
-            .children
-            .push_unique(child.key, StructuralLimit::Dependencies)
-        {
+        if let Err(error) = self.records[parent_index].1.children.push_unique(child.key) {
             return Err((error, child));
         }
         self.records[child_index].1.parent = Some(parent.key);
@@ -134,7 +128,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         drop: D,
     ) -> Result<(), StructuralError> {
         let record = self.record_mut(owner.key)?;
-        record.drops.push(drop, StructuralLimit::DropEntries)?;
+        record.drops.push(drop)?;
         self.metrics.drop_entries = self.metrics.drop_entries.saturating_add(1);
         Ok(())
     }
@@ -167,10 +161,48 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         if key.runtime() != self.runtime {
             return Err(StructuralError::WrongRuntime);
         }
-        self.records
-            .iter()
-            .position(|(candidate, _)| *candidate == key)
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        self.indices
+            .get(slot)
+            .and_then(|index| *index)
+            .filter(|index| {
+                self.records
+                    .get(*index)
+                    .is_some_and(|record| record.0 == key)
+            })
             .ok_or(StructuralError::StaleDomain(key))
+    }
+
+    fn install_index(&mut self, key: DomainKey) -> Result<(), StructuralError> {
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        if slot >= self.indices.len() {
+            let additional = slot
+                .checked_add(1)
+                .and_then(|length| length.checked_sub(self.indices.len()))
+                .ok_or(StructuralError::ArithmeticOverflow)?;
+            self.indices
+                .try_reserve(additional)
+                .map_err(|_| StructuralError::AllocationFailed)?;
+            self.indices.resize(slot + 1, None);
+        }
+        if self.indices[slot].is_some() {
+            return Err(StructuralError::DuplicateDependency);
+        }
+        self.indices[slot] = Some(self.records.len());
+        Ok(())
+    }
+
+    fn take_record(&mut self, key: DomainKey) -> Result<RegionRecord<T, D>, StructuralError> {
+        let index = self.record_index(key)?;
+        let slot = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        self.indices[slot] = None;
+        let (_, record) = self.records.swap_remove(index);
+        if let Some((moved, _)) = self.records.get(index) {
+            let moved_slot =
+                usize::try_from(moved.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            self.indices[moved_slot] = Some(index);
+        }
+        Ok(record)
     }
 
     fn record_mut(&mut self, key: DomainKey) -> Result<&mut RegionRecord<T, D>, StructuralError> {

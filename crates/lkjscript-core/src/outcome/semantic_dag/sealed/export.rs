@@ -4,7 +4,6 @@ use super::super::{
 use super::cells::{SealedDagCell, SealedDagNodeCell, SealedDagNodePayload};
 use super::model::{SealedSemanticDagBorrow, SealedSemanticDagError};
 use super::{SealedSemanticDagRuntime, TypedSealedDagStore, SEALED_DAG_BYTE_CHUNK};
-use crate::StructuralSnapshotLimits;
 
 impl SealedSemanticDagRuntime {
     pub fn export_snapshot(
@@ -35,12 +34,8 @@ impl SealedSemanticDagRuntime {
         {
             return Err(SealedSemanticDagError::CorruptRegion);
         }
-        SemanticDagSnapshot::new(
-            nodes,
-            SemanticDagNodeId::new(borrow.root),
-            StructuralSnapshotLimits::DEFAULT,
-        )
-        .map_err(|_| SealedSemanticDagError::CorruptRegion)
+        SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(borrow.root))
+            .map_err(|_| SealedSemanticDagError::CorruptRegion)
     }
 }
 

@@ -6,8 +6,7 @@ use super::super::StructuralValueKey;
 use super::destination::{DestinationRecord, DestinationShape, DestinationSlot};
 use super::{
     DestinationCleanupReport, StructuralDestinationKey, StructuralEventKind, StructuralImage,
-    StructuralObject, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
-    TreeFacts,
+    StructuralObject, StructuralValueError, StructuralValueRuntime, TreeFacts,
 };
 
 impl StructuralValueRuntime {
@@ -68,7 +67,6 @@ impl StructuralValueRuntime {
             },
             &children,
             facts,
-            self.limits,
         )?;
         Ok((image, facts))
     }
@@ -116,10 +114,11 @@ impl StructuralValueRuntime {
             key.slot(),
             report.nodes_released,
         );
-        if self.cleanup_reports.len() == self.limits.max_cleanup_reports as usize {
-            self.cleanup_reports.pop_front();
+        // Diagnostic retention must never prevent cleanup. If retaining this
+        // report cannot grow, cleanup has still completed and the report is omitted.
+        if self.cleanup_reports.try_reserve(1).is_ok() {
+            self.cleanup_reports.push_back(report.clone());
         }
-        self.cleanup_reports.push_back(report.clone());
         Ok(report)
     }
 
@@ -136,11 +135,6 @@ impl StructuralValueRuntime {
         } else {
             let slot = u32::try_from(self.destinations.len())
                 .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
-            if slot >= self.limits.max_destinations {
-                return Err(StructuralValueError::LimitExceeded(
-                    StructuralValueLimit::Destinations,
-                ));
-            }
             self.destinations.try_reserve(1)?;
             self.destinations
                 .push(DestinationSlot::Vacant(NonZeroU32::MIN));
@@ -169,7 +163,7 @@ impl StructuralValueRuntime {
         key: StructuralDestinationKey,
     ) -> Result<DestinationRecord, StructuralValueError> {
         self.destination(key)?;
-        let next = if key.generation() >= self.limits.max_generation {
+        let next = if key.generation() == u32::MAX {
             DestinationSlot::Retired
         } else {
             self.free_destinations.push(key.slot());

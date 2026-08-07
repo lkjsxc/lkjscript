@@ -77,13 +77,9 @@ fn explicit_clone_is_deep_and_semantic_export_contains_no_runtime_key(
 }
 
 #[test]
-fn bounded_event_log_and_leak_checks_report_exact_lifecycle() -> Result<(), StructuralValueError> {
+fn event_log_and_leak_checks_report_exact_lifecycle() -> Result<(), StructuralValueError> {
     let string_type = value_type(45, 46, StructuralKind::String)?;
-    let limits = lkjscript_core::StructuralValueRuntimeLimits {
-        max_events: 2,
-        ..lkjscript_core::StructuralValueRuntimeLimits::default()
-    };
-    let mut runtime = lkjscript_core::StructuralValueRuntime::new(limits)?;
+    let mut runtime = lkjscript_core::StructuralValueRuntime::new()?;
     let key = publish(
         &mut runtime,
         SemanticValue::new(string_type, SemanticPayload::String(b"event".to_vec())),
@@ -98,11 +94,11 @@ fn bounded_event_log_and_leak_checks_report_exact_lifecycle() -> Result<(), Stru
     runtime.drop_owned(moved, string_type)?;
 
     let events: Vec<_> = runtime.events().iter().copied().collect();
-    assert_eq!(events.len(), 2);
-    assert_eq!(events[0].kind, StructuralEventKind::Drop);
-    assert_eq!(events[0].sequence, 4);
-    assert_eq!(events[1].kind, StructuralEventKind::Release);
-    assert_eq!(events[1].sequence, 5);
-    assert_eq!(runtime.metrics().events_overwritten, 3);
+    assert_eq!(events.len(), 5);
+    assert_eq!(events[3].kind, StructuralEventKind::Drop);
+    assert_eq!(events[3].sequence, 4);
+    assert_eq!(events[4].kind, StructuralEventKind::Release);
+    assert_eq!(events[4].sequence, 5);
+    assert_eq!(runtime.metrics().events_overwritten, 0);
     runtime.verify_empty()
 }

@@ -125,10 +125,9 @@ impl JitSession {
                 Default::default,
                 lkjscript_core::SegmentedListArena::metrics,
             ),
-            segmented_list_reserved_bytes_estimate: self.lists.as_ref().map_or(
-                0,
-                lkjscript_core::SegmentedListArena::reserved_bytes_estimate,
-            ),
+            segmented_list_reserved_bytes_estimate: self.lists.as_ref().map_or(0, |arena| {
+                arena.reserved_bytes_estimate().unwrap_or(u64::MAX)
+            }),
             region_products: self.region_products.as_ref().map_or_else(
                 Default::default,
                 lkjscript_core::RegionProductArena::metrics,

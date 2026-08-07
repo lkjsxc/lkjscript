@@ -1,6 +1,6 @@
 use lkjscript_core::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StructuralKind, StructuralNodeView,
-    StructuralValueError, StructuralValueRuntime, StructuralValueRuntimeLimits,
+    StructuralValueError, StructuralValueRuntime,
 };
 
 use super::support::value_type;
@@ -12,17 +12,7 @@ fn deep_image_conversion_clone_export_and_release_are_iterative() -> Result<(), 
 {
     let product_type = value_type(101, 102, StructuralKind::Product)?;
     let integer_type = value_type(103, 104, StructuralKind::I64)?;
-    let node_limit = u64::from(DEPTH) + 1;
-    let limits = StructuralValueRuntimeLimits {
-        domains: lkjscript_core::StructuralLimits {
-            max_release_work: u32::from(DEPTH) + 1,
-            ..lkjscript_core::StructuralLimits::default()
-        },
-        max_tree_depth: DEPTH + 1,
-        max_tree_nodes: node_limit,
-        ..StructuralValueRuntimeLimits::default()
-    };
-    let mut runtime = StructuralValueRuntime::new(limits)?;
+    let mut runtime = StructuralValueRuntime::new()?;
 
     let semantic = deep_value(product_type, integer_type);
     let owner = runtime

@@ -2,8 +2,7 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::{
     SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralKind, StructuralLayoutKind,
-    StructuralLimits, StructuralSliceExt, StructuralSnapshotLimits, StructuralType,
-    StructuralTypeKind,
+    StructuralSliceExt, StructuralType, StructuralTypeKind,
 };
 
 #[test]
@@ -109,12 +108,10 @@ fn exercise(source: &str, name: &str, active: &str, child_kind: StructuralKind, 
             ),
         ],
         SemanticDagNodeId::new(1),
-        StructuralSnapshotLimits::DEFAULT,
     )
     .expect("option/result snapshot");
     let expected = snapshot.clone();
-    let mut runtime =
-        SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("sealed runtime");
+    let mut runtime = SealedSemanticDagRuntime::new().expect("sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)
         .expect("authenticated option/result import");

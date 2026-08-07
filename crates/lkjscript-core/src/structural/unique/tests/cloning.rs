@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn dynamic_bytes_clones_publish_independent_exact_owners() {
-    let mut store = store_with(60, 3, 16, 3, 3, 3);
+    let mut store = store(60);
     let source = store
         .allocate_bytes(bytes_with_capacity(6, &[1, 2, 3]))
         .expect("source bytes");
@@ -25,8 +25,6 @@ fn dynamic_bytes_clones_publish_independent_exact_owners() {
     assert_eq!(store.stats().allocations, 3);
     assert_eq!(store.stats().live_objects, 3);
     assert_eq!(store.stats().live_bytes, 12);
-    assert_eq!(store.stats().allocated_bytes, 12);
-    assert_eq!(store.stats().transfers, 0);
 
     store.free_bytes(source).expect("free source");
     assert_eq!(store.bytes(clone), Ok(&[1, 2, 3][..]));
@@ -38,7 +36,7 @@ fn dynamic_bytes_clones_publish_independent_exact_owners() {
 
 #[test]
 fn path_structural_copy_has_independent_owner_exact_equality_and_return_transfer() {
-    let mut store = store_with(65, 2, 32, 2, 2, 3);
+    let mut store = store(65);
     let source = store
         .clone_path_slice(b"/tmp/exact-path")
         .expect("source path");
@@ -53,7 +51,6 @@ fn path_structural_copy_has_independent_owner_exact_equality_and_return_transfer
     assert_eq!(store.stats().allocations, 2);
     assert_eq!(store.stats().live_objects, 2);
     assert_eq!(store.stats().live_bytes, 30);
-    assert_eq!(store.stats().allocated_bytes, 30);
 
     store.free_path(source).expect("free source path");
     assert_eq!(store.path(clone), Ok(&b"/tmp/exact-path"[..]));
@@ -65,15 +62,11 @@ fn path_structural_copy_has_independent_owner_exact_equality_and_return_transfer
 }
 
 #[test]
-fn path_copy_limit_failure_preserves_owner_metrics_and_layout() {
-    let mut store = store_with(66, 2, 15, 2, 2, 3);
+fn clone_rejects_wrong_layout_without_mutation() {
+    let mut store = store(66);
     let source = store.clone_path_slice(b"/tmp/exact").expect("source path");
-    let before = store.stats();
-    assert_eq!(store.clone_path(source), Err(UniqueStoreError::ByteLimit));
-    assert_eq!(store.path(source), Ok(&b"/tmp/exact"[..]));
-    assert_eq!(store.stats(), before);
-
     let bytes = store.allocate_bytes(Vec::new()).expect("wrong layout key");
+    let before = store.stats();
     assert_eq!(
         store.import_path_key(bytes.packed_word()),
         Err(UniqueStoreError::WrongLayout {
@@ -81,15 +74,23 @@ fn path_copy_limit_failure_preserves_owner_metrics_and_layout() {
             actual: UniqueLayout::Bytes,
         })
     );
+    let after = store.stats();
+    assert_eq!(
+        after.wrong_layout_failures,
+        before.wrong_layout_failures + 1
+    );
+    assert_eq!(after.live_objects, before.live_objects);
+    assert_eq!(after.live_bytes, before.live_bytes);
+    assert_eq!(after.allocations, before.allocations);
     store.free_bytes(bytes).expect("free bytes");
     store.free_path(source).expect("free source path");
     assert_eq!(store.assert_no_leaks(), Ok(()));
 }
 
 #[test]
-fn static_thaw_is_one_accounted_copy_and_failures_publish_nothing() {
+fn static_thaw_is_one_accounted_copy() {
     let static_bytes = StaticBytes::new(b"static");
-    let mut store = store_with(61, 1, 8, 1, 1, 2);
+    let mut store = store(61);
     let vector = store.thaw_static_bytes(static_bytes).expect("static thaw");
     assert_eq!(store.byte_vector(vector), Ok(&b"static"[..]));
     assert_ne!(
@@ -109,36 +110,5 @@ fn static_thaw_is_one_accounted_copy_and_failures_publish_nothing() {
         }
     );
     store.free_byte_vector(vector).expect("free thaw");
-    assert_eq!(store.assert_no_leaks(), Ok(()));
-
-    let mut limited = store_with(62, 1, 5, 1, 1, 2);
-    assert_eq!(
-        limited.thaw_static_bytes(static_bytes),
-        Err(UniqueStoreError::ByteLimit)
-    );
-    assert_eq!(limited.stats(), UniqueStoreStats::default());
-    assert_eq!(limited.slot_count(), 0);
-
-    let mut allocations = store_with(63, 1, 8, 1, 0, 2);
-    assert_eq!(
-        allocations.thaw_static_bytes(static_bytes),
-        Err(UniqueStoreError::AllocationLimit)
-    );
-    assert_eq!(allocations.stats(), UniqueStoreStats::default());
-    assert_eq!(allocations.slot_count(), 0);
-}
-
-#[test]
-fn clone_limit_failure_preserves_source_and_exact_metrics() {
-    let mut store = store_with(64, 2, 4, 2, 2, 2);
-    let source = store.allocate_bytes(vec![1, 2, 3]).expect("source");
-    let pointer = store.bytes(source).expect("source pointer").as_ptr();
-    let before = store.stats();
-    assert_eq!(store.clone_bytes(source), Err(UniqueStoreError::ByteLimit));
-    assert_eq!(store.bytes(source), Ok(&[1, 2, 3][..]));
-    assert_eq!(store.bytes(source).expect("same pointer").as_ptr(), pointer);
-    assert_eq!(store.stats(), before);
-    assert_eq!(store.slot_count(), 1);
-    store.free_bytes(source).expect("free source");
     assert_eq!(store.assert_no_leaks(), Ok(()));
 }

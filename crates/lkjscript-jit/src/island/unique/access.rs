@@ -156,17 +156,22 @@ impl JitUniqueRuntime {
             .iter()
             .position(|slot| slot.loan.is_none() && slot.generation < u32::MAX)
         {
-            let index_word = u32::try_from(index).map_err(|_| self.loan_limit())?;
+            let index_word = u32::try_from(index).map_err(|_| NativeServiceError::HostFailure)?;
             let slot = &mut self.loans[index];
             slot.generation = slot.generation.saturating_add(1);
             slot.loan = Some(loan);
             return Ok((index_word, slot.generation));
         }
-        if self.loans.len() >= self.max_loans {
+        if self
+            .max_loans
+            .is_some_and(|maximum| self.loans.len() >= maximum)
+        {
             return Err(self.loan_limit());
         }
-        self.loans.try_reserve(1).map_err(|_| self.heap_limit())?;
-        let index = u32::try_from(self.loans.len()).map_err(|_| self.loan_limit())?;
+        self.loans
+            .try_reserve(1)
+            .map_err(|_| NativeServiceError::HostFailure)?;
+        let index = u32::try_from(self.loans.len()).map_err(|_| NativeServiceError::HostFailure)?;
         self.loans.push(LoanSlot {
             generation: 1,
             loan: Some(loan),

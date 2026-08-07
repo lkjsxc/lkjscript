@@ -1,7 +1,6 @@
 use crate::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StructuralKind,
-    StructuralSnapshotLimits, StructuralSnapshotMetrics, StructuralType,
-    MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES,
+    StructuralSnapshotMetrics, StructuralType,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10,20 +9,11 @@ pub(super) struct OwnedStructuralValue {
     pub(super) metrics: StructuralSnapshotMetrics,
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum SnapshotWork {
-    Encode,
-    Decode,
-}
-
 impl OwnedValue {
     /// Consumes one runtime-exported semantic tree and removes all runtime-local
     /// ownership identity at the execution boundary.
-    pub fn from_structural(
-        value: SemanticValue,
-        limits: StructuralSnapshotLimits,
-    ) -> Result<Self> {
-        let metrics = validate_structural_snapshot(&value, limits, SnapshotWork::Encode)?;
+    pub fn from_structural(value: SemanticValue) -> Result<Self> {
+        let metrics = validate_structural_snapshot(&value)?;
         Ok(Self::from_owned_structural(OwnedStructuralValue { value, metrics }))
     }
 

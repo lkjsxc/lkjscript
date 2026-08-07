@@ -3,10 +3,19 @@ use super::super::*;
 impl<J: RuntimeTier> Vm<'_, J> {
     pub(crate) fn list_prepend(&mut self, head: Value, tail: Value) -> Result<Value> {
         let tail = self.list_key(tail)?;
+        self.preflight_allocation(1)?;
+        let growth = self
+            .list_arena()?
+            .prepend_storage_increase()
+            .map_err(segmented_list_error)?;
+        self.preflight_heap_growth(growth)?;
         let head = structural_ops::copy_into_list(self, head)?;
         let arena = self.list_arena_mut()?;
         let key = arena.prepend(head, tail).map_err(segmented_list_error)?;
-        self.list_allocations = self.list_allocations.saturating_add(1);
+        self.list_allocations = self
+            .list_allocations
+            .checked_add(1)
+            .ok_or_else(|| Error::host("VM list allocation accounting overflow"))?;
         Ok(list_value(key))
     }
 
@@ -50,14 +59,10 @@ impl<J: RuntimeTier> Vm<'_, J> {
         &self,
         value: Value,
     ) -> Result<lkjscript_core::OwnedValue> {
-        let limit = usize::try_from(self.list_arena()?.metrics().live_entries)
-            .map_err(|_| Error::host("list snapshot entry count exceeds host usize"))?;
-        lkjscript_core::OwnedValue::from_segmented_list_snapshot(value, limit, |word| {
+        lkjscript_core::OwnedValue::from_segmented_list_snapshot(value, |word| {
             let arena = self.list_arena()?;
             let key = arena.key_from_word(word).map_err(segmented_list_error)?;
-            arena
-                .collect_cloned(key, None)
-                .map_err(segmented_list_error)
+            arena.collect_cloned(key).map_err(segmented_list_error)
         })
         .and_then(|owned| {
             owned.retain_symbols(|index| match self.chunk.constant(index) {
@@ -67,11 +72,12 @@ impl<J: RuntimeTier> Vm<'_, J> {
         })
     }
 
-    pub(crate) fn list_reserved_bytes_estimate(&self) -> u64 {
-        self.lists.as_ref().map_or(
-            0,
-            lkjscript_core::SegmentedListArena::reserved_bytes_estimate,
-        )
+    pub(crate) fn list_reserved_bytes_estimate(&self) -> Result<u64> {
+        self.lists.as_ref().map_or(Ok(0), |arena| {
+            arena
+                .reserved_bytes_estimate()
+                .map_err(segmented_list_error)
+        })
     }
 
     fn list_key(&self, value: Value) -> Result<lkjscript_core::SegmentedListKey> {
@@ -114,10 +120,9 @@ fn list_value(key: lkjscript_core::SegmentedListKey) -> Value {
 
 fn segmented_list_error(error: lkjscript_core::SegmentedListError) -> Error {
     match error {
-        lkjscript_core::SegmentedListError::Limit(limit) => Error::resource(
-            ResourceLimitKind::Allocations,
-            format!("segmented-list limit exceeded: {limit:?}"),
-        ),
+        lkjscript_core::SegmentedListError::Limit(_) => Error::host(format!(
+            "segmented-list representation or host allocation failed: {error:?}"
+        )),
         _ => Error::msg(format!("segmented-list operation failed: {error:?}")),
     }
 }

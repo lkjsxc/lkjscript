@@ -28,8 +28,6 @@ fn dag_charge_bytes(
     metrics: &mut StructuralSnapshotMetrics,
     length: usize,
     class: DagByteClass,
-    limits: StructuralSnapshotLimits,
-    work: DagWork,
 ) -> Result<()> {
     let length = u64::try_from(length).map_err(|_| Error::msg("semantic DAG byte count overflow"))?;
     metrics.aggregate_bytes = metrics
@@ -48,42 +46,19 @@ fn dag_charge_bytes(
             .checked_add(length)
             .ok_or_else(|| Error::msg("semantic DAG path byte count overflow"))?;
     }
-    if metrics.aggregate_bytes > limits.max_aggregate_bytes
-        || metrics.string_bytes > limits.max_string_bytes
-        || metrics.path_bytes > limits.max_path_bytes
-    {
-        return Err(Error::msg("semantic DAG bytes exceed bound"));
-    }
-    dag_charge_work(metrics, length, limits, work)
+    dag_charge_work(metrics, length)
 }
 
-fn dag_charge_work(
-    metrics: &mut StructuralSnapshotMetrics,
-    amount: u64,
-    limits: StructuralSnapshotLimits,
-    work: DagWork,
-) -> Result<()> {
+fn dag_charge_work(metrics: &mut StructuralSnapshotMetrics, amount: u64) -> Result<()> {
     metrics.encode_work = metrics
         .encode_work
         .checked_add(amount)
         .ok_or_else(|| Error::msg("semantic DAG work overflow"))?;
-    let bound = match work {
-        DagWork::Encode => limits.max_encode_work,
-        DagWork::Decode => limits.max_decode_work,
-    };
-    if metrics.encode_work > bound {
-        Err(Error::msg("semantic DAG work exceeds bound"))
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 pub(super) fn validate_dag_path(bytes: &[u8]) -> Result<()> {
-    if bytes.is_empty()
-        || bytes.len() > super::MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES
-        || bytes.first() != Some(&b'/')
-        || bytes.contains(&0)
-    {
+    if bytes.is_empty() || bytes.first() != Some(&b'/') || bytes.contains(&0) {
         Err(Error::msg("semantic DAG path is invalid"))
     } else {
         Ok(())

@@ -1,6 +1,5 @@
 use super::super::value_runtime::{
     StructuralFieldPath, StructuralKind, StructuralType, StructuralValueError,
-    StructuralValueRuntimeLimits,
 };
 use super::{
     LocalNodeId, StructuralImage, StructuralNode, StructuralNodePayload, StructuralNodeRecord,
@@ -11,7 +10,6 @@ impl StructuralImage {
     pub(crate) fn single(
         value_type: StructuralType,
         payload: StructuralNodePayload,
-        limits: StructuralValueRuntimeLimits,
     ) -> Result<(Self, TreeFacts), StructuralValueError> {
         let facts = TreeFacts {
             nodes: 1,
@@ -28,7 +26,7 @@ impl StructuralImage {
             fields: Vec::new(),
             blob: Vec::new(),
         };
-        image.validate(limits, facts)?;
+        image.validate(facts)?;
         Ok((image, facts))
     }
 

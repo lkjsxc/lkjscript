@@ -1,10 +1,27 @@
 impl AggregateAdapters {
-    pub(super) fn new(max_slots: Option<u64>) -> Self {
+    pub(super) fn new() -> Self {
         Self {
             slots: Vec::new(),
             free: Vec::new(),
-            max_slots: max_slots.and_then(|maximum| u32::try_from(maximum).ok()),
+            allocations: 0,
         }
+    }
+
+    pub(super) fn accounting(&self) -> Result<(u64, u64)> {
+        let slots = u64::try_from(self.slots.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<AdapterSlot>() as u64))
+            .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?;
+        let free = u64::try_from(self.free.capacity())
+            .ok()
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?;
+        Ok((
+            self.allocations,
+            slots
+                .checked_add(free)
+                .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?,
+        ))
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -14,6 +31,10 @@ impl AggregateAdapters {
     }
 
     fn allocate(&mut self, record: AdapterRecord) -> Result<Value> {
+        let next_allocations = self
+            .allocations
+            .checked_add(1)
+            .ok_or_else(|| Error::host("aggregate adapter allocation accounting overflow"))?;
         self.free.try_reserve(1).map_err(|_| {
             Error::resource(
                 ResourceLimitKind::HeapBytes,
@@ -32,12 +53,6 @@ impl AggregateAdapters {
                     "aggregate adapter slot identity exhausted",
                 )
             })?;
-            if self.max_slots.is_some_and(|maximum| slot >= maximum) {
-                return Err(Error::resource(
-                    ResourceLimitKind::Allocations,
-                    "aggregate adapter slot limit exceeded",
-                ));
-            }
             self.slots.try_reserve(1).map_err(|_| {
                 Error::resource(
                     ResourceLimitKind::HeapBytes,
@@ -48,6 +63,7 @@ impl AggregateAdapters {
             (slot, NonZeroU32::MIN)
         };
         self.slots[slot as usize] = AdapterSlot::Live { generation, record };
+        self.allocations = next_allocations;
         Ok(Value::from_aggregate_adapter(adapter_word(
             slot, generation,
         )))

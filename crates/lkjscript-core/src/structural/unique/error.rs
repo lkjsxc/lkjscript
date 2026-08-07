@@ -3,23 +3,6 @@ use std::fmt;
 use super::UniqueLayout;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InvalidUniqueStoreLimits {
-    ObjectsExceedSlots,
-    ZeroGeneration,
-}
-
-impl fmt::Display for InvalidUniqueStoreLimits {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ObjectsExceedSlots => formatter.write_str("unique-store objects exceed slots"),
-            Self::ZeroGeneration => formatter.write_str("unique-store generation limit is zero"),
-        }
-    }
-}
-
-impl std::error::Error for InvalidUniqueStoreLimits {}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvalidUniqueKeyWord {
     ZeroGeneration,
 }
@@ -38,10 +21,7 @@ impl std::error::Error for InvalidUniqueKeyWord {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UniqueStoreError {
-    AllocationLimit,
-    ObjectLimit,
-    ByteLimit,
-    SlotLimit,
+    RepresentationExhausted,
     ArithmeticOverflow,
     StorageCapacity,
     StoreMismatch,
@@ -64,10 +44,9 @@ pub enum UniqueStoreError {
 impl fmt::Display for UniqueStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AllocationLimit => formatter.write_str("unique-store allocation limit exceeded"),
-            Self::ObjectLimit => formatter.write_str("unique-store live object limit exceeded"),
-            Self::ByteLimit => formatter.write_str("unique-store live byte limit exceeded"),
-            Self::SlotLimit => formatter.write_str("unique-store slot limit exceeded"),
+            Self::RepresentationExhausted => {
+                formatter.write_str("unique-store u32 slot representation exhausted")
+            }
             Self::ArithmeticOverflow => formatter.write_str("unique-store arithmetic overflow"),
             Self::StorageCapacity => {
                 formatter.write_str("unique-store backing capacity unavailable")

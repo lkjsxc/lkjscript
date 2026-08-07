@@ -11,12 +11,10 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         &mut self,
         owner: &SealedOwner<T, D>,
     ) -> Result<SealedOwner<T, D>, StructuralError> {
-        let limit = self.limits.max_region_owners;
         let record = self.record_mut(owner.key)?;
         let owners = record
             .owners
             .checked_add(1)
-            .filter(|count| *count <= limit)
             .ok_or(StructuralError::OwnerOverflow)?;
         record.owners = owners;
         self.metrics.retains = self.metrics.retains.saturating_add(1);
@@ -53,7 +51,6 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         let owners = record
             .owners
             .checked_add(1)
-            .filter(|count| *count <= self.limits.max_region_owners)
             .ok_or(StructuralError::OwnerOverflow)?;
         record.owners = owners;
         self.metrics.weak_upgrades = self.metrics.weak_upgrades.saturating_add(1);

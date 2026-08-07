@@ -1,17 +1,9 @@
 #![allow(clippy::expect_used)]
 
-use std::num::NonZeroU32;
-
-use lkjscript_core::{
-    RegionProductArena, RegionProductError, RegionProductKey, RegionProductLimits, RuntimeLayoutId,
-};
+use lkjscript_core::{RegionProductArena, RegionProductError, RegionProductKey, RuntimeLayoutId};
 
 fn arena() -> RegionProductArena<u64> {
-    RegionProductArena::new(RegionProductLimits {
-        max_records: NonZeroU32::new(3).expect("record limit"),
-        max_fields: NonZeroU32::new(8).expect("field limit"),
-    })
-    .expect("region product arena")
+    RegionProductArena::new().expect("region product arena")
 }
 
 #[test]
@@ -23,8 +15,6 @@ fn region_products_are_typed_immutable_and_bulk_owned() {
     let updated = arena.update(key, identity, 1, 99).expect("update");
     assert_eq!(arena.fields(key, identity), Ok([10, 20].as_slice()));
     assert_eq!(arena.fields(updated, identity), Ok([10, 99].as_slice()));
-    assert_eq!(arena.metrics().records, 2);
-    assert_eq!(arena.metrics().fields, 4);
     assert_eq!(
         RegionProductKey::from_word(arena.id(), key.to_word()),
         Some(key)
@@ -36,7 +26,29 @@ fn region_products_are_typed_immutable_and_bulk_owned() {
 }
 
 #[test]
-fn region_product_keys_are_process_unique_and_arena_scoped() {
+fn region_products_cross_former_record_and_field_limits() {
+    const RECORDS: u64 = 17_000;
+    const FIELDS_PER_RECORD: usize = 16;
+    let mut arena = arena();
+    let identity = RuntimeLayoutId::new([4; 32]);
+    let mut last = None;
+    for value in 0..RECORDS {
+        last = Some(
+            arena
+                .publish(identity, vec![value; FIELDS_PER_RECORD])
+                .expect("publish beyond former limits"),
+        );
+    }
+    assert_eq!(arena.metrics().records, RECORDS);
+    assert_eq!(arena.metrics().fields, RECORDS * FIELDS_PER_RECORD as u64);
+    assert_eq!(
+        arena.field(last.expect("last record"), identity, FIELDS_PER_RECORD - 1),
+        Ok(&(RECORDS - 1))
+    );
+}
+
+#[test]
+fn invalid_update_fails_without_publishing_a_record() {
     let mut first = arena();
     let second = arena();
     let identity = RuntimeLayoutId::new([3; 32]);
@@ -45,30 +57,10 @@ fn region_product_keys_are_process_unique_and_arena_scoped() {
         RegionProductKey::from_word(second.id(), key.to_word()),
         None
     );
+    let before = first.metrics();
     assert_eq!(
-        second.fields(key, identity),
-        Err(RegionProductError::InvalidKey)
+        first.update(key, identity, 3, 9),
+        Err(RegionProductError::FieldOutOfRange)
     );
-}
-
-#[test]
-fn region_product_limits_fail_without_publishing_a_record() {
-    let mut arena = arena();
-    let identity = RuntimeLayoutId::new([1; 32]);
-    arena.publish(identity, vec![1, 2, 3]).expect("first");
-    arena.publish(identity, vec![4, 5, 6]).expect("second");
-    assert_eq!(
-        arena.publish(identity, vec![7, 8, 9]),
-        Err(RegionProductError::Fields)
-    );
-    assert_eq!(arena.metrics().records, 2);
-    assert_eq!(arena.metrics().fields, 6);
-
-    let mut oversized = Vec::with_capacity(9);
-    oversized.push(1);
-    assert_eq!(
-        arena.publish(identity, oversized),
-        Err(RegionProductError::Fields)
-    );
-    assert_eq!(arena.metrics().records, 2);
+    assert_eq!(first.metrics(), before);
 }

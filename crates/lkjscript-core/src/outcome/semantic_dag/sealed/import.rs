@@ -76,11 +76,6 @@ impl SealedSemanticDagRuntime {
         &mut self,
         value_type: SemanticDagType,
     ) -> Result<TypedSealedDagStore, SealedSemanticDagError> {
-        if self.stores.len() >= self.limits.max_domains as usize {
-            return Err(
-                crate::StructuralError::LimitExceeded(crate::StructuralLimit::Domains).into(),
-            );
-        }
         self.stores
             .try_reserve(1)
             .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
@@ -88,7 +83,6 @@ impl SealedSemanticDagRuntime {
             self.runtime.identity(),
             value_type.layout,
             value_type.semantic_type,
-            self.limits,
         )?;
         Ok(TypedSealedDagStore { value_type, store })
     }

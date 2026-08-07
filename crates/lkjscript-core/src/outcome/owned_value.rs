@@ -2,8 +2,6 @@ use std::fmt;
 
 use crate::{Error, Result, SemanticDagSnapshot, Value};
 
-const MAX_WIRE_ITEMS: usize = 262_144;
-
 /// A returned value plus key-free structural and list boundary storage.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct OwnedListNode {

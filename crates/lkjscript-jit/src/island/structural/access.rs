@@ -17,8 +17,7 @@ impl JitStructuralRuntime {
         let expected = core_type(view_type.projected())?;
         let mut fields = Vec::new();
         if fields.try_reserve_exact(projection.path().len()).is_err() {
-            self.last_resource = Some(ResourceLimitKind::HeapBytes);
-            return Err(NativeServiceError::ResourceLimitExceeded);
+            return Err(NativeServiceError::HostFailure);
         }
         fields.extend(projection.path().iter().copied().map(usize::from));
         let path = StructuralFieldPath::new(fields);
@@ -40,6 +39,10 @@ impl JitStructuralRuntime {
                 view_type.exclusive(),
             )
             .map_err(|error| self.map_error(error))?;
+        if let Err(error) = self.enforce_policy() {
+            let _ = self.runtime.end_view(key);
+            return Err(error);
+        }
         Ok(NativeStructuralView::new(view_type, key.get()))
     }
 
