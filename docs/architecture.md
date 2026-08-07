@@ -149,10 +149,16 @@ value-image, semantic-DAG, and returned-snapshot stores grow without independent
 local-return ceilings. Checked allocation-event, retained-byte, and export observations feed the
 same coarse `ExecutionPolicy` in VM and native execution; policy failure occurs before outcome
 publication and cleanup retains no owner. Structural validation, snapshot conversion/codecs, graph
-walks, and destruction use explicit work stacks. The stores retain checked compact representation
-boundaries: `u32` slots/generations and DAG IDs/counts, plus packed `u16` list segment/entry fields.
-Those widths require later widening or segmentation but do not define a configurable language
-validity profile. Process framing remains a separate explicit transport-byte boundary.
+walks, and destruction use explicit work stacks. Structural runtime slots/generations, semantic-DAG
+IDs/counts, region-product records, segmented-list coordinates, native aggregate fields/projection
+paths, and witness locators are wide. Narrow host indexing is checked before access. Public runtime
+values retain a closed one-word ABI: owner, borrow, view, destination, adapter, resource, unique, and
+list handles are opaque nonzero `u64` tokens resolved through runtime-owned maps to wide identities.
+Tokens are never decoded arithmetically, and a consumed token remains stale after slot reuse.
+Outcome and process fields use canonical little-endian `u64` lengths and IDs. Outcome decoding has
+only explicit total-wire-byte policy; process framing remains a separate explicit transport-byte
+boundary. Construction reserves and validates before publishing token mappings, so policy,
+allocation, and malformed-input failure leave prior state intact.
 
 No optimization result is allowed to reinterpret source semantics. Forced native modes must enter
 a synchronous generated entry or fail explicitly.

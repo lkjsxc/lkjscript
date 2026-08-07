@@ -6,12 +6,15 @@ impl StructuralValueRuntime {
         &self,
         key: StructuralDestinationKey,
     ) -> Result<&DestinationRecord, StructuralValueError> {
-        match self.destinations.get(key.slot() as usize) {
-            Some(DestinationSlot::Live { generation, record })
-                if generation.get() == key.generation() =>
-            {
-                Ok(record)
-            }
+        let token = self.destination_token(key)?;
+        let index =
+            usize::try_from(token.slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        match self.destinations.get(index) {
+            Some(DestinationSlot::Live {
+                generation,
+                key: current,
+                record,
+            }) if *current == key && *generation == token.generation => Ok(record),
             _ => Err(StructuralValueError::StaleDestination),
         }
     }
@@ -20,12 +23,15 @@ impl StructuralValueRuntime {
         &mut self,
         key: StructuralDestinationKey,
     ) -> Result<&mut DestinationRecord, StructuralValueError> {
-        match self.destinations.get_mut(key.slot() as usize) {
-            Some(DestinationSlot::Live { generation, record })
-                if generation.get() == key.generation() =>
-            {
-                Ok(record)
-            }
+        let token = self.destination_token(key)?;
+        let index =
+            usize::try_from(token.slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        match self.destinations.get_mut(index) {
+            Some(DestinationSlot::Live {
+                generation,
+                key: current,
+                record,
+            }) if *current == key && *generation == token.generation => Ok(record),
             _ => Err(StructuralValueError::StaleDestination),
         }
     }

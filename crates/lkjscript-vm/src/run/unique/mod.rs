@@ -45,7 +45,7 @@ impl UniqueRuntime {
             store: UniqueStore::new(id),
             owners: BTreeMap::new(),
             loans: BTreeMap::new(),
-            next_loan: 1_u64 << 63,
+            next_loan: 1,
             max_allocations: config.max_allocations(),
             max_heap_bytes: config
                 .max_heap_bytes()
@@ -73,7 +73,7 @@ impl UniqueRuntime {
             .store
             .allocate_byte_vector(bytes)
             .map_err(map_store_error)?;
-        let word = key.packed_word().get();
+        let word = key.opaque_word().get();
         if self.owners.insert(word, UniqueLayout::ByteVector).is_some() {
             return Err(Error::msg("VM duplicate byte-vector owner"));
         }

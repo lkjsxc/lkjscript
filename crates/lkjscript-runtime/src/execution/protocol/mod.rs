@@ -67,7 +67,7 @@ pub struct ProcessProgramProvenance {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessResponse {
     Ready {
-        process: u32,
+        process: u64,
         provenance: ProcessProgramProvenance,
     },
     ReadyFailure {

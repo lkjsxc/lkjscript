@@ -42,7 +42,7 @@ impl StructuralValueRuntime {
         add(&mut retained, self.runtime.retained_bytes_estimate()?)?;
         add(&mut retained, self.roots.retained_bytes_estimate()?)?;
         add_capacity::<ObjectSlot>(&mut retained, self.objects.slots.capacity())?;
-        add_capacity::<u32>(&mut retained, self.objects.free.capacity())?;
+        add_capacity::<u64>(&mut retained, self.objects.free.capacity())?;
         for slot in &self.objects.slots {
             let ObjectSlot::Live { object, .. } = slot else {
                 continue;
@@ -55,7 +55,7 @@ impl StructuralValueRuntime {
             }
         }
         add_capacity::<DestinationSlot>(&mut retained, self.destinations.capacity())?;
-        add_capacity::<u32>(&mut retained, self.free_destinations.capacity())?;
+        add_capacity::<u64>(&mut retained, self.free_destinations.capacity())?;
         for slot in &self.destinations {
             let DestinationSlot::Live { record, .. } = slot else {
                 continue;
@@ -72,7 +72,11 @@ impl StructuralValueRuntime {
             }
         }
         add_capacity::<super::ViewSlot>(&mut retained, self.views.capacity())?;
-        add_capacity::<u32>(&mut retained, self.free_views.capacity())?;
+        add_capacity::<u64>(&mut retained, self.free_views.capacity())?;
+        add_capacity::<(u64, super::PrivateTokenRecord)>(
+            &mut retained,
+            self.private_tokens.capacity(),
+        )?;
         add(&mut retained, self.events.retained_bytes_estimate()?)?;
         add_capacity::<super::DestinationCleanupReport>(
             &mut retained,

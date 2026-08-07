@@ -60,7 +60,7 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                 .fact(fact(
                     "process-frame",
                     "process frame",
-                    "bounded exact little-endian length",
+                    "bounded exact canonical u64 little-endian length",
                 ))
                 .fact(fact(
                     "identity",
@@ -77,6 +77,7 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                     "outcome",
                     concat!(
                         "lossless closed ExecutionOutcome with bounded key-free semantic DAG; ",
+                        "canonical u64 lengths node IDs field indexes and process identities; ",
                         "exact prepared/type/layout/group/member provenance; backward local \
                          edges; final reachable root; ",
                         "fresh-parent-runtime authenticated import canonical export and zero teardown",

@@ -252,15 +252,14 @@ may build elsewhere, but no other host or native target is currently claimed as 
 - Source, HIR, memory-plan, and SSA dense identities are `u64` and use checked host indexing.
   Revision-scoped `NodeId` is deliberately still a bootstrap opaque dense identity: widening its
   wire/index representation prevents aliasing and saturation, but does not provide the edit-stable
-  logical semantic identity required in Phase 5. Core structural-image node IDs and ranges are
-  wide, but pre-existing semantic-DAG snapshot IDs, structural runtime slot/generation keys,
-  scheduler IDs, machine-code offsets, register numbers, opcode bytes, OS CPU numbers, and
-  SQLite/protocol fields retain narrow representations. Native frame-function ordinals, trap and
-  runtime-site identities, and source/native function links remain `u64` through the generated-code
-  runtime ABI. The machine and OS fields are checked external/ABI boundaries; semantic-DAG and structural-runtime identities
-  remain representation gaps to widen or segment. Compact native calling-convention aggregate,
-  witness, and cleanup fields remain checked specialization eligibility boundaries; automatic
-  execution retains the validated generic VM route when native planning declines a shape.
+  logical semantic identity required in Phase 5. Core structural-image and semantic-DAG node IDs,
+  fields, ranges, counts, structural runtime slots/generations, region-product records, native
+  aggregate indexes, projection paths, and witness locators are canonical `u64` values with checked
+  host indexing. Scheduler IDs, machine-code offsets, register numbers, opcode bytes, OS CPU
+  numbers, and SQLite fields retain narrow representations at private or external boundaries.
+  Native frame-function ordinals, trap and runtime-site identities, and source/native function
+  links remain `u64` through the generated-code runtime ABI. Automatic execution retains the
+  validated generic VM route when native planning declines a shape for a genuine backend reason.
   Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
   constant-size, cleanup-node/range, witness, region-product, or structural-operation table
   admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
@@ -285,12 +284,16 @@ may build elsewhere, but no other host or native target is currently claimed as 
   `ExecutionPolicy`; a low policy returns a typed resource outcome and cleans unpublished owners,
   while the same program succeeds under sufficient or unrestricted policy. Runtime diagnostics are
   retained opportunistically so allocation failure cannot prevent ownership cleanup.
-  Structural runtime slots and generations, semantic-DAG node IDs and encoded counts, region-product
-  records, and unique-store slots remain checked `u32` representations. Segmented lists retain a
-  packed `u16` segment/entry layout with a checked representation failure. These are representation
-  boundaries to widen or segment, not ordinary semantic limits. Process outcome encoding now takes
-  only an explicit total-byte policy; process framing still retains its separate `MAX_FRAME_BYTES`
-  transport boundary.
+  Structural runtime slots and generations, unique-store slots/generations, region-product arena
+  and record identities, and semantic-DAG node/edge/count fields are wide. One-word runtime ABI
+  handles are opaque nonzero `u64` tokens resolved through wide identity maps; stale tokens remain
+  invalid after slot reuse. Segmented-list keys are also opaque tokens over wide segment/entry
+  coordinates rather than packed positions. Outcome and process codecs use canonical `u64` lengths
+  and IDs and reject host-width overflow before indexing. Outcome decoding retains only explicit
+  total-wire-byte policy; process framing retains its separate `MAX_FRAME_BYTES` transport boundary.
+  Generated tests cross the former 65,535 list/field/node boundaries, inject identities above
+  `u32::MAX`, reject malformed high DAG references, and carry a full VM structural return through
+  encode/decode and fresh-runtime authenticated rehydration.
   Structural list equality in the VM, evaluator, and native runtime is iterative and complete for
   the acyclic segmented-list representation; there is no independent comparison-step quota.
   Dynamic byte vectors and static-byte clones have no per-buffer size rule: checked, fallible

@@ -110,13 +110,15 @@ fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
 
 #[test]
 fn semantic_dag_codec_crosses_former_node_and_field_limits() {
-    const COUNT: u32 = 65_537;
+    const COUNT: u64 = 65_537;
     let mut nodes = Vec::with_capacity(usize::try_from(COUNT).expect("test count fits usize"));
     for value in 0..COUNT - 1 {
         nodes.push(node(
             10,
             SemanticDagKind::I64,
-            SemanticDagPayload::Inline(InlineStructuralValue::I64(i64::from(value))),
+            SemanticDagPayload::Inline(InlineStructuralValue::I64(
+                i64::try_from(value).expect("test value fits i64"),
+            )),
         ));
     }
     nodes.push(node(
@@ -136,6 +138,36 @@ fn semantic_dag_codec_crosses_former_node_and_field_limits() {
         .metrics();
     assert_eq!(metrics.nodes, COUNT);
     assert_eq!(metrics.fields, COUNT - 1);
+}
+
+#[test]
+fn high_malformed_dag_references_fail_before_host_indexing() {
+    let high = u64::from(u32::MAX) + 19;
+    let nodes = vec![node(
+        12,
+        SemanticDagKind::Product,
+        SemanticDagPayload::Product(vec![SemanticDagNodeId::new(high)]),
+    )];
+    assert!(SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(0)).is_err());
+
+    let valid = ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(
+        SemanticDagSnapshot::new(
+            vec![node(
+                13,
+                SemanticDagKind::I64,
+                SemanticDagPayload::Inline(InlineStructuralValue::I64(1)),
+            )],
+            SemanticDagNodeId::new(0),
+        )
+        .expect("valid DAG"),
+    ));
+    let mut wire = encode_execution_outcome(&valid, 4096).expect("encode DAG");
+    let root = wire
+        .len()
+        .checked_sub(8)
+        .expect("wire contains canonical u64 root ID");
+    wire[root..].copy_from_slice(&high.to_le_bytes());
+    assert!(decode_execution_outcome(&wire, 4096).is_err());
 }
 
 #[path = "semantic_dag_snapshot/rejection.rs"]

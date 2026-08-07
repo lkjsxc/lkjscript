@@ -5,7 +5,7 @@ mod release;
 mod validation;
 
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 pub use model::{RegionOwner, RegionRef, RegionReleaseReport};
 
@@ -62,7 +62,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         self.records.push((
             key,
             RegionRecord {
-                epoch: NonZeroU32::MIN,
+                epoch: NonZeroU64::MIN,
                 chunks: Vec::new(),
                 large: Vec::new(),
                 roots: Vec::new(),

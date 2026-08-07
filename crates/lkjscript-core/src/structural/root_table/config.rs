@@ -10,6 +10,8 @@ impl StructuralRootTable {
             exclusive_roots: std::collections::HashSet::new(),
             loans: Vec::new(),
             free_loans: Vec::new(),
+            tokens: std::collections::HashMap::new(),
+            next_token: std::num::NonZeroU64::new(1),
             stats: StructuralRootTableStats::default(),
         })
     }
@@ -33,7 +35,7 @@ impl StructuralRootTable {
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
         let free_roots = u64::try_from(self.free_roots.capacity())
             .ok()
-            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u64>() as u64))
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
         let exclusive_roots = u64::try_from(self.exclusive_roots.capacity())
             .ok()
@@ -49,13 +51,21 @@ impl StructuralRootTable {
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
         let free_loans = u64::try_from(self.free_loans.capacity())
             .ok()
-            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u64>() as u64))
+            .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
+        let tokens = u64::try_from(self.tokens.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity
+                    .checked_mul(std::mem::size_of::<(u64, super::StructuralTokenRecord)>() as u64)
+            })
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
         roots
             .checked_add(free_roots)
             .and_then(|total| total.checked_add(exclusive_roots))
             .and_then(|total| total.checked_add(loans))
             .and_then(|total| total.checked_add(free_loans))
+            .and_then(|total| total.checked_add(tokens))
             .ok_or(StructuralRootTableError::ArithmeticOverflow)
     }
 }

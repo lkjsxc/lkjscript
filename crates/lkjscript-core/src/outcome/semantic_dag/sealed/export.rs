@@ -14,9 +14,11 @@ impl SealedSemanticDagRuntime {
             return Err(SealedSemanticDagError::CorruptRegion);
         }
         let typed = self.store(borrow.store, borrow.value_type)?;
+        let node_count =
+            usize::try_from(borrow.nodes).map_err(|_| SealedSemanticDagError::CorruptRegion)?;
         let mut nodes = Vec::new();
         nodes
-            .try_reserve_exact(borrow.nodes as usize)
+            .try_reserve_exact(node_count)
             .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
         let mut next_auxiliary = borrow.nodes;
         for slot in 0..borrow.nodes {
@@ -27,9 +29,11 @@ impl SealedSemanticDagRuntime {
             let payload = export_payload(typed, borrow, node)?;
             nodes.push(SemanticDagNode::new(node.value_type, payload));
         }
+        let root =
+            usize::try_from(borrow.root).map_err(|_| SealedSemanticDagError::CorruptRegion)?;
         if next_auxiliary != borrow.cells
             || nodes
-                .get(borrow.root as usize)
+                .get(root)
                 .is_none_or(|node| node.value_type != borrow.value_type)
         {
             return Err(SealedSemanticDagError::CorruptRegion);
@@ -67,15 +71,16 @@ fn export_payload(
 fn export_children(
     typed: &TypedSealedDagStore,
     borrow: &SealedSemanticDagBorrow,
-    first: u32,
-    length: u32,
+    first: u64,
+    length: u64,
 ) -> Result<Vec<SemanticDagNodeId>, SealedSemanticDagError> {
-    require_range(borrow, first, length)?;
+    let end = require_range(borrow, first, length)?;
+    let length = usize::try_from(length).map_err(|_| SealedSemanticDagError::CorruptRegion)?;
     let mut children = Vec::new();
     children
-        .try_reserve_exact(length as usize)
+        .try_reserve_exact(length)
         .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
-    for slot in first..first + length {
+    for slot in first..end {
         let SealedDagCell::Child(child) = cell(typed, borrow, slot)? else {
             return Err(SealedSemanticDagError::CorruptRegion);
         };
@@ -88,20 +93,21 @@ fn export_bytes(
     typed: &TypedSealedDagStore,
     borrow: &SealedSemanticDagBorrow,
     kind: SemanticDagKind,
-    first: u32,
-    chunks: u32,
-    length: u32,
+    first: u64,
+    chunks: u64,
+    length: u64,
 ) -> Result<SemanticDagPayload, SealedSemanticDagError> {
-    require_range(borrow, first, chunks)?;
-    let expected = (length as usize).div_ceil(SEALED_DAG_BYTE_CHUNK);
+    let end = require_range(borrow, first, chunks)?;
+    let length = usize::try_from(length).map_err(|_| SealedSemanticDagError::CorruptRegion)?;
+    let expected = length.div_ceil(SEALED_DAG_BYTE_CHUNK);
     if usize::try_from(chunks).ok() != Some(expected) {
         return Err(SealedSemanticDagError::CorruptRegion);
     }
     let mut bytes = Vec::new();
     bytes
-        .try_reserve_exact(length as usize)
+        .try_reserve_exact(length)
         .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
-    for (index, slot) in (first..first + chunks).enumerate() {
+    for (index, slot) in (first..end).enumerate() {
         let SealedDagCell::Bytes {
             length: stored_length,
             bytes: data,
@@ -112,7 +118,10 @@ fn export_bytes(
         let consumed = index
             .checked_mul(SEALED_DAG_BYTE_CHUNK)
             .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
-        let expected_length = (length as usize - consumed).min(SEALED_DAG_BYTE_CHUNK);
+        let expected_length = length
+            .checked_sub(consumed)
+            .ok_or(SealedSemanticDagError::CorruptRegion)?
+            .min(SEALED_DAG_BYTE_CHUNK);
         if usize::from(stored_length) != expected_length
             || data[expected_length..].iter().any(|byte| *byte != 0)
         {
@@ -120,7 +129,7 @@ fn export_bytes(
         }
         bytes.extend_from_slice(&data[..expected_length]);
     }
-    if bytes.len() != length as usize {
+    if bytes.len() != length {
         return Err(SealedSemanticDagError::CorruptRegion);
     }
     match kind {
@@ -133,8 +142,8 @@ fn export_bytes(
 
 fn canonical_auxiliary(
     payload: SealedDagNodePayload,
-    expected_first: u32,
-) -> Result<u32, SealedSemanticDagError> {
+    expected_first: u64,
+) -> Result<u64, SealedSemanticDagError> {
     let range = match payload {
         SealedDagNodePayload::Bytes { first, chunks, .. } => Some((first, chunks)),
         SealedDagNodePayload::Product { first, fields }
@@ -155,7 +164,7 @@ fn canonical_auxiliary(
 fn cell(
     typed: &TypedSealedDagStore,
     borrow: &SealedSemanticDagBorrow,
-    slot: u32,
+    slot: u64,
 ) -> Result<SealedDagCell, SealedSemanticDagError> {
     if slot >= borrow.cells {
         return Err(SealedSemanticDagError::CorruptRegion);
@@ -165,16 +174,15 @@ fn cell(
 
 fn require_range(
     borrow: &SealedSemanticDagBorrow,
-    first: u32,
-    length: u32,
-) -> Result<(), SealedSemanticDagError> {
-    if first < borrow.nodes
-        || first
-            .checked_add(length)
-            .is_none_or(|end| end > borrow.cells)
-    {
+    first: u64,
+    length: u64,
+) -> Result<u64, SealedSemanticDagError> {
+    let end = first
+        .checked_add(length)
+        .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
+    if first < borrow.nodes || end > borrow.cells {
         Err(SealedSemanticDagError::CorruptRegion)
     } else {
-        Ok(())
+        Ok(end)
     }
 }

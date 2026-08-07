@@ -59,8 +59,8 @@ impl Evaluator<'_> {
             StructuralNodeView::Bytes(bytes) => bytes.len(),
             _ => return Err(Flow::Trap("expected structural string payload".into())),
         };
-        let end = u32::try_from(length)
-            .map_err(|_| Flow::Resource("structural string view range".into()))?;
+        let end = u64::try_from(length)
+            .map_err(|_| Flow::HostFailure("structural string view range exceeds u64".into()))?;
         let view = self
             .structural
             .runtime

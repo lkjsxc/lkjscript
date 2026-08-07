@@ -260,7 +260,7 @@ fn decode_structural_field_storage(
     input: &mut Decoder<'_>,
     budget: &mut StructuralDecodeBudget,
 ) -> Result<(usize, Vec<SemanticValue>)> {
-    let count = input.u32()?;
+    let count = input.u64()?;
     budget.fields(count)?;
     let fields = reserve_structural_fields(count)?;
     let remaining = usize::try_from(count)

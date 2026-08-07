@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::image::{discard_semantic, prepare_discard};
 use super::{
@@ -26,9 +26,10 @@ pub(super) struct DestinationRecord {
 
 #[derive(Debug)]
 pub(super) enum DestinationSlot {
-    Vacant(NonZeroU32),
+    Vacant(NonZeroU64),
     Live {
-        generation: NonZeroU32,
+        generation: NonZeroU64,
+        key: StructuralDestinationKey,
         record: DestinationRecord,
     },
     Retired,
@@ -85,10 +86,11 @@ impl StructuralValueRuntime {
         self.allocation_events = next_allocation;
         self.metrics.destinations_created = self.metrics.destinations_created.saturating_add(1);
         self.metrics.live_destinations = self.metrics.live_destinations.saturating_add(1);
-        self.record(StructuralEventKind::DestinationCreate, key.slot(), 0);
+        self.record(StructuralEventKind::DestinationCreate, key.get(), 0);
         Ok(key)
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn initialize_node(
         &mut self,
         key: StructuralDestinationKey,
@@ -151,6 +153,12 @@ impl StructuralValueRuntime {
         if let Err(error) = self.preflight_field(key, field, image.root().value_type(), facts) {
             return Err(Box::new((error, image)));
         }
+        let field_subject = match u64::try_from(field) {
+            Ok(field) => field,
+            Err(_) => {
+                return Err(Box::new((StructuralValueError::ArithmeticOverflow, image)));
+            }
+        };
         let record = match self.destination_mut(key) {
             Ok(record) => record,
             Err(error) => return Err(Box::new((error, image))),
@@ -168,7 +176,7 @@ impl StructuralValueRuntime {
             .metrics
             .destination_fields_initialized
             .saturating_add(1);
-        self.record(StructuralEventKind::Initialize, key.slot(), field as u64);
+        self.record(StructuralEventKind::Initialize, key.get(), field_subject);
         Ok(())
     }
 }

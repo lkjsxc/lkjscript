@@ -130,7 +130,7 @@ pub(crate) struct InstanceRuntime {
     pub(crate) id: ApplicationIncarnationId,
     pub(crate) inputs: ExecutionInputs,
     pub(crate) process: Option<Arc<Mutex<crate::execution::process::ProcessCell>>>,
-    pub(crate) process_id: Option<u32>,
+    pub(crate) process_id: Option<u64>,
     pub(crate) cancelled: bool,
     pub(crate) logs: VecDeque<String>,
     pub(crate) metrics: InvocationMetrics,
@@ -157,7 +157,7 @@ impl InstanceRuntime {
         id: ApplicationIncarnationId,
         inputs: ExecutionInputs,
         process: Option<Arc<Mutex<crate::execution::process::ProcessCell>>>,
-        process_id: Option<u32>,
+        process_id: Option<u64>,
     ) -> Self {
         Self {
             id,

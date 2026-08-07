@@ -16,8 +16,7 @@ fn unique_image_seals_in_place_and_invalidates_unique_key() -> Result<(), Struct
     )?;
     let sealed = runtime.seal_owned(unique, value_type)?;
     assert!(sealed.zero_copy_adopted);
-    assert_eq!(sealed.owner.slot(), unique.slot());
-    assert_ne!(sealed.owner.generation(), unique.generation());
+    assert_ne!(sealed.owner.get(), unique.get());
     assert_eq!(
         runtime.value(unique, value_type),
         Err(StructuralValueError::RootTable(

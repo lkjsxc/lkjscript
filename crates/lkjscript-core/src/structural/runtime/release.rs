@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::{SlotState, StructuralRuntime};
 use crate::structural::{DomainKey, StructuralError};
@@ -6,8 +6,10 @@ use crate::structural::{DomainKey, StructuralError};
 impl StructuralRuntime {
     pub(in crate::structural) fn rollback_allocation(&mut self, key: DomainKey) {
         assert!(self.require_live(key).is_ok());
-        let index = key.slot() as usize;
-        if key.generation() == NonZeroU32::MIN {
+        let Ok(index) = usize::try_from(key.slot()) else {
+            unreachable!("live structural slot fits host index")
+        };
+        if key.generation() == NonZeroU64::MIN {
             assert_eq!(index.checked_add(1), Some(self.slots.len()));
             self.slots.pop();
         } else {
@@ -29,7 +31,7 @@ impl StructuralRuntime {
             if keys[..index].contains(&key) {
                 return Err(StructuralError::DuplicateDependency);
             }
-            if key.generation().get() < u32::MAX {
+            if key.generation().get() < u64::MAX {
                 reusable = reusable
                     .checked_add(1)
                     .ok_or(StructuralError::ArithmeticOverflow)?;
@@ -42,15 +44,15 @@ impl StructuralRuntime {
 
     pub(in crate::structural) fn release(&mut self, key: DomainKey) -> Result<(), StructuralError> {
         self.require_live(key)?;
-        let index = key.slot() as usize;
+        let index = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
         let generation = self.slots[index].generation.get();
-        if generation == u32::MAX {
+        if generation == u64::MAX {
             self.slots[index].state = SlotState::Retired;
             self.metrics.slots_retired = self.metrics.slots_retired.saturating_add(1);
         } else {
             let next = generation
                 .checked_add(1)
-                .and_then(NonZeroU32::new)
+                .and_then(NonZeroU64::new)
                 .ok_or(StructuralError::GenerationExhausted)?;
             self.slots[index].generation = next;
             self.slots[index].state = SlotState::Vacant;

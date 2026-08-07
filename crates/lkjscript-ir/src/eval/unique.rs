@@ -55,7 +55,7 @@ impl EvalUniqueRuntime {
             .store
             .allocate_byte_vector(bytes)
             .map_err(map_store_error)?;
-        let word = key.packed_word();
+        let word = key.opaque_word();
         if self
             .owners
             .insert(word.get(), UniqueLayout::ByteVector)

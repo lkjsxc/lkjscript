@@ -1,4 +1,4 @@
-use std::num::{NonZeroU32, NonZeroU64};
+use std::num::NonZeroU64;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StructuralRuntimeId(NonZeroU64);
@@ -29,8 +29,8 @@ pub enum DomainClass {
 pub struct DomainKey {
     runtime: StructuralRuntimeId,
     class: DomainClass,
-    slot: u32,
-    generation: NonZeroU32,
+    slot: u64,
+    generation: NonZeroU64,
 }
 
 impl DomainKey {
@@ -42,19 +42,19 @@ impl DomainKey {
         self.class
     }
 
-    pub const fn slot(self) -> u32 {
+    pub const fn slot(self) -> u64 {
         self.slot
     }
 
-    pub const fn generation(self) -> NonZeroU32 {
+    pub const fn generation(self) -> NonZeroU64 {
         self.generation
     }
 
     pub(super) const fn from_parts(
         runtime: StructuralRuntimeId,
         class: DomainClass,
-        slot: u32,
-        generation: NonZeroU32,
+        slot: u64,
+        generation: NonZeroU64,
     ) -> Self {
         Self {
             runtime,
@@ -103,8 +103,8 @@ pub enum RootClass {
 pub struct RootKey {
     domain: DomainKey,
     class: RootClass,
-    slot: u32,
-    generation: NonZeroU32,
+    slot: u64,
+    generation: NonZeroU64,
     layout: LayoutIdentity,
     semantic_type: SemanticTypeIdentity,
 }
@@ -118,11 +118,11 @@ impl RootKey {
         self.class
     }
 
-    pub const fn slot(self) -> u32 {
+    pub const fn slot(self) -> u64 {
         self.slot
     }
 
-    pub const fn generation(self) -> NonZeroU32 {
+    pub const fn generation(self) -> NonZeroU64 {
         self.generation
     }
 
@@ -137,8 +137,8 @@ impl RootKey {
     pub(super) const fn from_parts(
         domain: DomainKey,
         class: RootClass,
-        slot: u32,
-        generation: NonZeroU32,
+        slot: u64,
+        generation: NonZeroU64,
         layout: LayoutIdentity,
         semantic_type: SemanticTypeIdentity,
     ) -> Self {
@@ -178,5 +178,35 @@ const fn product_nonzero(value: u64) -> NonZeroU64 {
     match NonZeroU64::new(value) {
         Some(value) => value,
         None => NonZeroU64::MIN,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn domain_and_root_slots_and_generations_preserve_high_values() {
+        let high = u64::from(u32::MAX) + 17;
+        let runtime = StructuralRuntimeId::new(NonZeroU64::MIN);
+        let domain = DomainKey::from_parts(
+            runtime,
+            DomainClass::Unique,
+            high,
+            NonZeroU64::new(high + 1).expect("high generation"),
+        );
+        let root = RootKey::from_parts(
+            domain,
+            RootClass::UniquePublic,
+            high + 2,
+            NonZeroU64::new(high + 3).expect("high root generation"),
+            LayoutIdentity::new(NonZeroU64::MIN),
+            SemanticTypeIdentity::new(NonZeroU64::MIN),
+        );
+        assert_eq!(domain.slot(), high);
+        assert_eq!(domain.generation().get(), high + 1);
+        assert_eq!(root.slot(), high + 2);
+        assert_eq!(root.generation().get(), high + 3);
     }
 }

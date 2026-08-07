@@ -112,7 +112,7 @@ impl ResourceTable {
     }
 
     fn standard_input(&self, handle: Value, operation: &str) -> Result<bool> {
-        let parts = decode_parts(handle, operation)?;
+        let parts = decode_parts(self, handle, operation)?;
         match self.table.resolve_token_parts(
             parts,
             ResourceKind::InputStream,

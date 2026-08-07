@@ -30,7 +30,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
             allocate_chunked(record, value)?
         };
         let slot =
-            u32::try_from(record.roots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            u64::try_from(record.roots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
         let generation = Self::epoch(builder.key);
         record.roots.push(RootRecord {
             generation,
@@ -62,7 +62,11 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         }
         let record = self.record_mut(builder.key)?;
         let root_count = record.roots.len();
-        if from.key.slot() as usize >= root_count || to.key.slot() as usize >= root_count {
+        let from_slot =
+            usize::try_from(from.key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        let to_slot =
+            usize::try_from(to.key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        if from_slot >= root_count || to_slot >= root_count {
             return Err(StructuralError::StaleRoot(from.key));
         }
         record.internal_edges.push((from.key.slot(), to.key.slot()))
@@ -71,11 +75,12 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
     pub fn root(
         &self,
         owner: &SealedOwner<T, D>,
-        slot: u32,
+        slot: u64,
     ) -> Result<SealedRef<T>, StructuralError> {
         let index = self.record_index(owner.key)?;
         let record = &self.records[index].1;
-        if slot as usize >= record.roots.len()
+        if usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?
+            >= record.roots.len()
             || owner.key.class() != crate::structural::DomainClass::RegionSealed
         {
             return Err(StructuralError::StaleDomain(owner.key));
@@ -108,7 +113,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         let record = &self.records[index].1;
         let root = record
             .roots
-            .get(key.slot() as usize)
+            .get(usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?)
             .ok_or(StructuralError::StaleRoot(key))?;
         if root.generation != key.generation() || record.owners == 0 {
             return Err(StructuralError::StaleRoot(key));
@@ -116,12 +121,16 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         match root.location {
             ObjectLocation::Chunk { chunk, offset } => record
                 .chunks
-                .get(chunk as usize)
-                .and_then(|values| values.get(offset as usize))
+                .get(usize::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?)
+                .and_then(|values| {
+                    usize::try_from(offset)
+                        .ok()
+                        .and_then(|offset| values.get(offset))
+                })
                 .ok_or(StructuralError::StaleRoot(key)),
             ObjectLocation::Large { index } => record
                 .large
-                .get(index as usize)
+                .get(usize::try_from(index).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .and_then(|values| values.first())
                 .ok_or(StructuralError::StaleRoot(key)),
         }
@@ -151,8 +160,8 @@ fn allocate_chunked<T, D>(
     let offset = record.chunks[chunk].len();
     record.chunks[chunk].push(value);
     Ok(ObjectLocation::Chunk {
-        chunk: u32::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?,
-        offset: u32::try_from(offset).map_err(|_| StructuralError::ArithmeticOverflow)?,
+        chunk: u64::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?,
+        offset: u64::try_from(offset).map_err(|_| StructuralError::ArithmeticOverflow)?,
     })
 }
 
@@ -170,7 +179,7 @@ fn allocate_large<T, D>(
         .map_err(|_| StructuralError::AllocationFailed)?;
     storage.push(value);
     let index =
-        u32::try_from(record.large.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        u64::try_from(record.large.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
     record.large.push(storage);
     Ok(ObjectLocation::Large { index })
 }

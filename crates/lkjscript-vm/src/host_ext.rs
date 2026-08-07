@@ -1,6 +1,7 @@
 //! Strings, generation-safe resources, filesystem, SQLite, and socket host operations.
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,15 +12,6 @@ use lkjscript_core::{
     ResourceTableError, ResourceTableLimits, ResourceTokenParts, Result, ScopeId, Value,
 };
 use lkjscript_sys::OwnedFd;
-
-const TOKEN_SLOT_BITS: u32 = 12;
-const TOKEN_SLOT_COUNT: usize = 1 << TOKEN_SLOT_BITS;
-const TOKEN_SLOT_MASK: u32 = (1 << TOKEN_SLOT_BITS) - 1;
-const TOKEN_GENERATION_MAX: u32 = (1 << (u32::BITS - TOKEN_SLOT_BITS)) - 1;
-const TOKEN_MAX_GENERATION: NonZeroU64 = match NonZeroU64::new(TOKEN_GENERATION_MAX as u64) {
-    Some(value) => value,
-    None => NonZeroU64::MIN,
-};
 
 const FILESYSTEM_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::FileSystem);
 const NETWORK_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::Network);
@@ -104,6 +96,9 @@ pub struct ResourceTeardown {
 pub struct ResourceTable {
     table: CoreResourceTable<OwnedResource>,
     stdin_key: ResourceKey,
+    tokens: HashMap<u64, ResourceTokenParts>,
+    token_by_identity: HashMap<ResourceTokenParts, u64>,
+    next_token: Option<NonZeroU64>,
     metrics: Cell<ResourceMetrics>,
     limit_exceeded: bool,
     scope_exhausted: bool,

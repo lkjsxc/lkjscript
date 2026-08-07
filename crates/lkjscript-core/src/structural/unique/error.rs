@@ -4,15 +4,13 @@ use super::UniqueLayout;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvalidUniqueKeyWord {
-    ZeroGeneration,
+    ZeroToken,
 }
 
 impl fmt::Display for InvalidUniqueKeyWord {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ZeroGeneration => {
-                formatter.write_str("unique key word generation must be nonzero")
-            }
+            Self::ZeroToken => formatter.write_str("unique key token must be nonzero"),
         }
     }
 }
@@ -45,7 +43,7 @@ impl fmt::Display for UniqueStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RepresentationExhausted => {
-                formatter.write_str("unique-store u32 slot representation exhausted")
+                formatter.write_str("unique-store opaque-token representation exhausted")
             }
             Self::ArithmeticOverflow => formatter.write_str("unique-store arithmetic overflow"),
             Self::StorageCapacity => {
@@ -77,7 +75,7 @@ impl std::error::Error for UniqueStoreError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniqueStoreLeak {
-    pub live_objects: u32,
+    pub live_objects: u64,
     pub live_bytes: u64,
 }
 

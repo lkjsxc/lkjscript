@@ -31,7 +31,8 @@ impl OwnedValue {
         }
         let mut value = self.root;
         let mut length = 0_usize;
-        while let Some(index) = value.as_owned_list().map(|index| index as usize) {
+        while let Some(index) = value.as_owned_list() {
+            let index = usize::try_from(index).ok()?;
             let node = self.lists.get(index)?;
             length = length.checked_add(1)?;
             value = node.tail;
@@ -45,7 +46,8 @@ impl OwnedValue {
         }
         let mut value = self.root;
         let mut index = 0_usize;
-        while let Some(node_index) = value.as_owned_list().map(|value| value as usize) {
+        while let Some(node_index) = value.as_owned_list() {
+            let node_index = usize::try_from(node_index).ok()?;
             let node = self.lists.get(node_index)?;
             if index == requested {
                 return node.head.as_i64();
@@ -181,7 +183,7 @@ impl OwnedValue {
         self.unique_bytes.as_deref()
     }
 
-    pub fn as_resource(&self) -> Option<u32> {
+    pub fn as_resource(&self) -> Option<u64> {
         self.structural
             .is_none()
             .then(|| self.root.as_resource())

@@ -14,14 +14,14 @@ pub use sealed::{
 
 /// One table-local semantic DAG node identity. It is not a runtime key.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct SemanticDagNodeId(u32);
+pub struct SemanticDagNodeId(u64);
 
 impl SemanticDagNodeId {
-    pub const fn new(index: u32) -> Self {
+    pub const fn new(index: u64) -> Self {
         Self(index)
     }
 
-    pub const fn get(self) -> u32 {
+    pub const fn get(self) -> u64 {
         self.0
     }
 }
@@ -133,7 +133,10 @@ impl SemanticDagSnapshot {
     }
 
     pub fn root_node(&self) -> &SemanticDagNode {
-        &self.nodes[self.root.0 as usize]
+        let Ok(index) = usize::try_from(self.root.0) else {
+            unreachable!("validated semantic DAG root fits the host index")
+        };
+        &self.nodes[index]
     }
 
     pub const fn metrics(&self) -> StructuralSnapshotMetrics {

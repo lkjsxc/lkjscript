@@ -1,7 +1,7 @@
 mod release;
 mod transition;
 
-use std::num::{NonZeroU32, NonZeroU64};
+use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::{
@@ -17,7 +17,7 @@ enum SlotState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DomainSlot {
-    generation: NonZeroU32,
+    generation: NonZeroU64,
     state: SlotState,
 }
 
@@ -27,7 +27,7 @@ static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 pub struct StructuralRuntime {
     identity: StructuralRuntimeId,
     slots: Vec<DomainSlot>,
-    free: Vec<u32>,
+    free: Vec<u64>,
     metrics: StructuralRuntimeMetrics,
 }
 
@@ -64,7 +64,7 @@ impl StructuralRuntime {
             .ok_or(StructuralError::ArithmeticOverflow)?;
         let free = u64::try_from(self.free.capacity())
             .ok()
-            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u64>() as u64))
             .ok_or(StructuralError::ArithmeticOverflow)?;
         slots
             .checked_add(free)
@@ -75,7 +75,7 @@ impl StructuralRuntime {
         let (slot, generation, reused) = if let Some(&slot) = self.free.last() {
             let record = self
                 .slots
-                .get(slot as usize)
+                .get(usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .ok_or(StructuralError::ArithmeticOverflow)?;
             if record.state != SlotState::Vacant {
                 return Err(StructuralError::StaleDomain(DomainKey::from_parts(
@@ -92,14 +92,15 @@ impl StructuralRuntime {
                 .try_reserve(1)
                 .map_err(|_| StructuralError::AllocationFailed)?;
             let slot =
-                u32::try_from(self.slots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+                u64::try_from(self.slots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
             self.slots.push(DomainSlot {
-                generation: NonZeroU32::MIN,
+                generation: NonZeroU64::MIN,
                 state: SlotState::Vacant,
             });
-            (slot, NonZeroU32::MIN, false)
+            (slot, NonZeroU64::MIN, false)
         };
-        self.slots[slot as usize].state = SlotState::Live(class);
+        let index = usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        self.slots[index].state = SlotState::Live(class);
         self.metrics.domains_created = self.metrics.domains_created.saturating_add(1);
         self.metrics.live_domains = self.metrics.live_domains.saturating_add(1);
         self.metrics.peak_live_domains = self
@@ -119,7 +120,8 @@ impl StructuralRuntime {
 
     pub fn validate(&self) -> Result<(), StructuralError> {
         for &slot in &self.free {
-            if self.slots.get(slot as usize).map(|entry| entry.state) != Some(SlotState::Vacant) {
+            let index = usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            if self.slots.get(index).map(|entry| entry.state) != Some(SlotState::Vacant) {
                 return Err(StructuralError::SlotVacant);
             }
         }

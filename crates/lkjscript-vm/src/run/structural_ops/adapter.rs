@@ -1,4 +1,5 @@
-use std::num::NonZeroU32;
+use std::collections::HashMap;
+use std::num::NonZeroU64;
 
 use lkjscript_core::{
     EnumId, ErrorClass, InlineStructuralValue, ResourceKind, RuntimeLayoutId, SemanticPayload,
@@ -101,17 +102,26 @@ struct AdapterRecord {
 
 #[derive(Debug)]
 enum AdapterSlot {
-    Vacant(NonZeroU32),
+    Vacant(NonZeroU64),
     Live {
-        generation: NonZeroU32,
+        generation: NonZeroU64,
+        token: NonZeroU64,
         record: AdapterRecord,
     },
     Retired,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AdapterIdentity {
+    slot: u64,
+    generation: NonZeroU64,
+}
+
 pub(super) struct AggregateAdapters {
     slots: Vec<AdapterSlot>,
-    free: Vec<u32>,
+    free: Vec<u64>,
+    tokens: HashMap<u64, AdapterIdentity>,
+    next_token: Option<NonZeroU64>,
     allocations: u64,
 }
 
@@ -123,3 +133,27 @@ include!("adapter/errors.rs");
 include!("adapter/semantic.rs");
 include!("adapter/fields.rs");
 include!("adapter/operations.rs");
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod opaque_token_tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_adapter_tokens_cross_u32_and_reject_consumed_tokens() {
+        let mut adapters = AggregateAdapters::new();
+        let high = u64::from(u32::MAX) + 29;
+        adapters.next_token = NonZeroU64::new(high);
+        let record = AdapterRecord {
+            enum_id: EnumId::new(lkjscript_core::RESULT_ID),
+            layout: RuntimeLayoutId::new(lkjscript_core::RESULT_LAYOUT),
+            variant: VariantId::new(lkjscript_core::RESULT_OK_ID),
+            physical_tag: 0,
+            payload: AdapterPayload::Structural(Value::UNIT),
+        };
+        let value = adapters.allocate(record).expect("high adapter token");
+        assert_eq!(value.as_aggregate_adapter(), Some(high));
+        assert_eq!(adapters.take(value), Ok(record));
+        assert!(adapters.get(value).is_err());
+    }
+}

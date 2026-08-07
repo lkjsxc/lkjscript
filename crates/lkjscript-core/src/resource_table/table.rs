@@ -81,8 +81,11 @@ impl<P> ResourceTable<P> {
                 SlotState::Closed => {
                     let generation = self.slots[index].generation;
                     let next = generation.get().checked_add(1).and_then(NonZeroU64::new);
-                    if let Some(next) = next.filter(|value| *value <= self.limits.max_generation())
-                    {
+                    if let Some(next) = next.filter(|value| {
+                        self.limits
+                            .max_generation()
+                            .is_none_or(|maximum| *value <= maximum)
+                    }) {
                         self.slots[index].generation = next;
                         self.slots[index].state = SlotState::Vacant;
                         return Ok(index);
@@ -96,7 +99,11 @@ impl<P> ResourceTable<P> {
                 | SlotState::Retired => {}
             }
         }
-        if self.slots.len() < self.limits.max_slots() {
+        if self
+            .limits
+            .max_slots()
+            .is_none_or(|maximum| self.slots.len() < maximum)
+        {
             let index = self.slots.len();
             self.slots.push(Slot::new(NonZeroU64::MIN));
             return Ok(index);
@@ -107,7 +114,10 @@ impl<P> ResourceTable<P> {
         } else {
             Err(ResourceTableError::LimitExceeded {
                 limit: ResourceTableLimit::Slots,
-                configured: self.limits.max_slots(),
+                configured: self
+                    .limits
+                    .max_slots()
+                    .ok_or(ResourceTableError::AcquisitionSequenceExhausted)?,
                 observed: self.slots.len().saturating_add(1),
             })
         }

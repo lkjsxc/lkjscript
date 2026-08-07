@@ -11,7 +11,7 @@ mod validation;
 mod weight;
 
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 pub use model::{
     SealFailure, SealedBorrow, SealedBuilder, SealedOwner, SealedRef, SealedReleaseReport,
@@ -199,7 +199,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         key.with_class(DomainClass::RegionSealed)
     }
 
-    fn epoch(key: DomainKey) -> NonZeroU32 {
+    fn epoch(key: DomainKey) -> NonZeroU64 {
         key.generation()
     }
 }

@@ -122,7 +122,7 @@ pub struct StructuralDestinationType {
     aggregate: u64,
     value_type: StructuralTypeIdentity,
     storage: StructuralStorageRoute,
-    initialized: u16,
+    initialized: u64,
 }
 
 impl StructuralDestinationType {
@@ -131,7 +131,7 @@ impl StructuralDestinationType {
         aggregate: u64,
         value_type: StructuralTypeIdentity,
         storage: StructuralStorageRoute,
-        initialized: u16,
+        initialized: u64,
     ) -> Self {
         Self {
             aggregate,
@@ -157,7 +157,7 @@ impl StructuralDestinationType {
     }
 
     #[must_use]
-    pub const fn initialized(self) -> u16 {
+    pub const fn initialized(self) -> u64 {
         self.initialized
     }
 

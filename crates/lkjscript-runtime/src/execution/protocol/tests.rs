@@ -142,7 +142,7 @@ fn process_protocol_rejects_every_zero_provenance_digest() {
 #[test]
 fn process_protocol_rejects_bounds_unknown_tags_and_trailing_bytes() {
     let mut oversized = Vec::new();
-    oversized.extend_from_slice(&u32::MAX.to_le_bytes());
+    oversized.extend_from_slice(&u64::MAX.to_le_bytes());
     assert!(read_request(&mut oversized.as_slice()).is_err());
 
     let mut unknown = Vec::new();

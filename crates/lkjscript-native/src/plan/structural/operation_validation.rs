@@ -25,7 +25,7 @@ pub(super) fn numeric_conversion_canonical(
                 && error.fields().is_empty()
                 && error.value_type() == failure.fields()[0]
         })
-        && [0_u16, 1, 2, 3].into_iter().all(|tag| {
+        && [0_u64, 1, 2, 3].into_iter().all(|tag| {
             errors.iter().any(|error| {
                 matches!(error.kind(), StructuralAggregateKind::Enum(actual) if actual == tag)
             })

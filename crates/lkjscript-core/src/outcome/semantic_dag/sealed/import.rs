@@ -22,7 +22,7 @@ impl SealedSemanticDagRuntime {
             .iter()
             .position(|typed| typed.value_type == expected_root);
         let (store_index, owner) = if let Some(index) = existing {
-            let store_index = match u32::try_from(index) {
+            let store_index = match u64::try_from(index) {
                 Ok(index) => index,
                 Err(_) => {
                     return Err(failure(
@@ -42,7 +42,7 @@ impl SealedSemanticDagRuntime {
             };
             (store_index, owner)
         } else {
-            let store_index = match u32::try_from(self.stores.len()) {
+            let store_index = match u64::try_from(self.stores.len()) {
                 Ok(index) => index,
                 Err(_) => {
                     return Err(failure(
@@ -137,14 +137,14 @@ fn add_edge(
     builder: &SealedBuilder<SealedDagCell, ()>,
     references: &[SealedRef<SealedDagCell>],
     parent: usize,
-    child: u32,
+    child: u64,
 ) -> Result<(), SealedSemanticDagError> {
     let from = references
         .get(parent)
         .copied()
         .ok_or(SealedSemanticDagError::CorruptRegion)?;
     let to = references
-        .get(child as usize)
+        .get(usize::try_from(child).map_err(|_| SealedSemanticDagError::CorruptRegion)?)
         .copied()
         .ok_or(SealedSemanticDagError::CorruptRegion)?;
     store.add_internal_edge(builder, from, to)?;

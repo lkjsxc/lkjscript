@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::RootKey;
 
@@ -42,7 +42,7 @@ pub enum PoolSlotState {
 
 #[derive(Debug)]
 pub(super) struct PoolSlot<T> {
-    pub(super) generation: NonZeroU32,
+    pub(super) generation: NonZeroU64,
     pub(super) state: PoolSlotState,
     pub(super) value: Option<T>,
 }
@@ -50,13 +50,13 @@ pub(super) struct PoolSlot<T> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PoolPartition<T> {
     pub(super) domain: super::super::DomainKey,
-    pub(super) start: u32,
-    pub(super) end: u32,
+    pub(super) start: u64,
+    pub(super) end: u64,
     pub(super) marker: PhantomData<fn() -> T>,
 }
 
 impl<T> PoolPartition<T> {
-    pub const fn range(&self) -> (u32, u32) {
+    pub const fn range(&self) -> (u64, u64) {
         (self.start, self.end)
     }
 

@@ -123,13 +123,16 @@ fn operation_signature(operation: &StructuralOperation) -> Result<Signature, Pla
             Signature::new(
                 vec![
                     ValueType::StructuralDestination(aggregate.destination(*storage, *field)),
-                    structural_value_type(aggregate.fields()[usize::from(*field)]),
+                    structural_value_type(
+                        aggregate.fields()[usize::try_from(*field)
+                            .map_err(|_| PlanError::InvalidStructuralCall)?],
+                    ),
                 ],
                 ValueType::StructuralDestination(aggregate.destination(*storage, next)),
             )?
         }
         StructuralOperation::DestinationFinish { aggregate, storage } => {
-            let initialized = u16::try_from(aggregate.fields().len())
+            let initialized = u64::try_from(aggregate.fields().len())
                 .map_err(|_| PlanError::InvalidStructuralCall)?;
             Signature::new(
                 vec![ValueType::StructuralDestination(

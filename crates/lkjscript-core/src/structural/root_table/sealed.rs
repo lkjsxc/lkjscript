@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::{DomainClass, RootClass, RootKey};
 use super::{
@@ -13,7 +13,10 @@ impl StructuralRootTable {
         sealed_root: RootKey,
     ) -> Result<(), StructuralRootTableError> {
         let index = self.live_root_index(key)?;
-        let RootSlot::Live { generation, value } = self.roots[index] else {
+        let RootSlot::Live {
+            generation, value, ..
+        } = self.roots[index]
+        else {
             return Err(StructuralRootTableError::InvariantViolation);
         };
         self.validate_sealed_replacement(value, sealed_root)?;
@@ -39,11 +42,16 @@ impl StructuralRootTable {
         sealed_root: RootKey,
     ) -> Result<StructuralValueKey, StructuralRootTableError> {
         self.preflight_owned_to_sealed(key, sealed_root)?;
+        let token = self.value_token(key)?;
         let index = self.live_root_index(key)?;
-        let RootSlot::Live { generation, value } = self.roots[index] else {
+        let RootSlot::Live {
+            generation, value, ..
+        } = self.roots[index]
+        else {
             return Err(StructuralRootTableError::InvariantViolation);
         };
         let next = self.next_rekey_generation(generation)?;
+        let replacement = self.allocate_value_token(token.slot, next)?;
         let next_published = self
             .stats
             .roots_published
@@ -64,6 +72,7 @@ impl StructuralRootTable {
         }
         self.roots[index] = RootSlot::Live {
             generation: next,
+            key: replacement,
             value: LiveRoot {
                 root: sealed_root,
                 ownership: StructuralRootOwnership::SealedShared,
@@ -74,15 +83,19 @@ impl StructuralRootTable {
         self.stats.roots_published = next_published;
         self.stats.roots_moved = next_moved;
         self.stats.root_slots_reused = next_reused;
-        Ok(StructuralValueKey::from_parts(key.slot(), next))
+        Ok(replacement)
     }
 
     pub(in crate::structural) fn move_sealed(
         &mut self,
         key: StructuralValueKey,
     ) -> Result<StructuralValueKey, StructuralRootTableError> {
+        let token = self.value_token(key)?;
         let index = self.live_root_index(key)?;
-        let RootSlot::Live { generation, value } = self.roots[index] else {
+        let RootSlot::Live {
+            generation, value, ..
+        } = self.roots[index]
+        else {
             return Err(StructuralRootTableError::InvariantViolation);
         };
         if value.ownership != StructuralRootOwnership::SealedShared {
@@ -92,6 +105,7 @@ impl StructuralRootTable {
             return Err(StructuralRootTableError::LiveLoan);
         }
         let next = self.next_rekey_generation(generation)?;
+        let replacement = self.allocate_value_token(token.slot, next)?;
         let next_moved = self
             .stats
             .roots_moved
@@ -104,11 +118,12 @@ impl StructuralRootTable {
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
         self.roots[index] = RootSlot::Live {
             generation: next,
+            key: replacement,
             value,
         };
         self.stats.roots_moved = next_moved;
         self.stats.root_slots_reused = next_reused;
-        Ok(StructuralValueKey::from_parts(key.slot(), next))
+        Ok(replacement)
     }
 
     fn validate_sealed_replacement(
@@ -139,11 +154,12 @@ impl StructuralRootTable {
 
     fn next_rekey_generation(
         &self,
-        generation: NonZeroU32,
-    ) -> Result<NonZeroU32, StructuralRootTableError> {
-        if generation.get() == u32::MAX {
-            return Err(StructuralRootTableError::GenerationExhausted);
-        }
-        NonZeroU32::new(generation.get() + 1).ok_or(StructuralRootTableError::GenerationExhausted)
+        generation: NonZeroU64,
+    ) -> Result<NonZeroU64, StructuralRootTableError> {
+        generation
+            .get()
+            .checked_add(1)
+            .and_then(NonZeroU64::new)
+            .ok_or(StructuralRootTableError::GenerationExhausted)
     }
 }

@@ -6,18 +6,18 @@ pub(super) enum SealedDagNodePayload {
     Inline(InlineStructuralValue),
     Static(StaticStructuralLeaf),
     Bytes {
-        first: u32,
-        chunks: u32,
-        length: u32,
+        first: u64,
+        chunks: u64,
+        length: u64,
     },
     Product {
-        first: u32,
-        fields: u32,
+        first: u64,
+        fields: u64,
     },
     Enum {
         tag: u64,
-        first: u32,
-        fields: u32,
+        first: u64,
+        fields: u64,
     },
     EmptyList,
     List {

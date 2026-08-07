@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::{UniqueLayout, UniqueStoreError};
 
@@ -42,18 +42,18 @@ impl Payload {
 #[derive(Debug)]
 pub(super) enum SlotState {
     Occupied(Payload),
-    Vacant { next: Option<u32> },
+    Vacant { next: Option<u64> },
     Retired,
 }
 
 #[derive(Debug)]
 pub(super) struct Slot {
-    pub(super) generation: NonZeroU32,
+    pub(super) generation: NonZeroU64,
     pub(super) state: SlotState,
 }
 
 impl Slot {
-    pub(super) const fn occupied(generation: NonZeroU32, payload: Payload) -> Self {
+    pub(super) const fn occupied(generation: NonZeroU64, payload: Payload) -> Self {
         Self {
             generation,
             state: SlotState::Occupied(payload),

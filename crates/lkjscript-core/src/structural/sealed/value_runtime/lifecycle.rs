@@ -23,7 +23,7 @@ impl StructuralValueRuntime {
             DomainClass::RegionSealed,
         )?;
         self.note_sealed_publication(true, 0);
-        self.record(StructuralEventKind::Seal, owner.slot(), 0);
+        self.record(StructuralEventKind::Seal, owner.get(), 0);
         Ok(StructuralSealResult {
             owner,
             zero_copy_adopted: true,
@@ -71,7 +71,7 @@ impl StructuralValueRuntime {
                 self.note_slot_reuse(reused);
                 self.note_sealed_publication(zero_copy, copied_bytes);
                 self.record(StructuralEventKind::Allocate, root.slot(), facts.nodes);
-                self.record(StructuralEventKind::Seal, owner.slot(), copied_bytes);
+                self.record(StructuralEventKind::Seal, owner.get(), copied_bytes);
                 Ok(StructuralSealResult {
                     owner,
                     zero_copy_adopted: zero_copy,
@@ -125,7 +125,7 @@ impl StructuralValueRuntime {
         self.objects.set_sealed_owner_count(root, owners)?;
         self.metrics.sealed_acquisitions = self.metrics.sealed_acquisitions.saturating_add(1);
         self.metrics.live_sealed_owners = self.metrics.live_sealed_owners.saturating_add(1);
-        self.record(StructuralEventKind::SealedAcquire, acquired.slot(), 1);
+        self.record(StructuralEventKind::SealedAcquire, acquired.get(), 1);
         Ok(acquired)
     }
 
@@ -138,11 +138,7 @@ impl StructuralValueRuntime {
         self.require_sealed_root(root, expected)?;
         let moved = self.roots.move_sealed(key)?;
         self.metrics.moves = self.metrics.moves.saturating_add(1);
-        self.record(
-            StructuralEventKind::Move,
-            key.slot(),
-            u64::from(moved.slot()),
-        );
+        self.record(StructuralEventKind::Move, key.get(), moved.get());
         Ok(moved)
     }
 

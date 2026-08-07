@@ -72,7 +72,7 @@ impl StructuralValueRuntime {
         self.metrics.live_sealed_owners = self.metrics.live_sealed_owners.saturating_sub(1);
         self.metrics.release_work = self.metrics.release_work.saturating_add(1);
         self.metrics.sealed_release_work = self.metrics.sealed_release_work.saturating_add(1);
-        self.record(StructuralEventKind::SealedRelease, key.slot(), 1);
+        self.record(StructuralEventKind::SealedRelease, key.get(), 1);
         Ok(StructuralDisposeReport {
             ownership: StructuralOwnerKind::Sealed,
             final_release,

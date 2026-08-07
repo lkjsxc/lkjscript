@@ -22,17 +22,17 @@ impl StructuralDecodeBudget {
             .metrics
             .nodes
             .checked_add(1)
-            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u32"))?;
+            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u64"))?;
         self.work(1)
     }
 
-    fn fields(&mut self, count: u32) -> Result<()> {
+    fn fields(&mut self, count: u64) -> Result<()> {
         self.metrics.fields = self
             .metrics
             .fields
             .checked_add(count)
             .ok_or_else(|| Error::msg("structural snapshot field count overflow"))?;
-        self.work(u64::from(count))
+        self.work(count)
     }
 
     fn bytes(&mut self, length: usize, class: DecodeByteClass) -> Result<()> {

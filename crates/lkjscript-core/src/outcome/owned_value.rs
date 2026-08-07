@@ -93,7 +93,8 @@ impl OwnedValue {
         let crate::SemanticDagPayload::Enum { fields, .. } = &dag.root_node().payload else {
             return None;
         };
-        let node = dag.nodes().get(fields.get(field)?.get() as usize)?;
+        let index = usize::try_from(fields.get(field)?.get()).ok()?;
+        let node = dag.nodes().get(index)?;
         match node.payload {
             crate::SemanticDagPayload::Inline(InlineStructuralValue::I64(value)) => Some(value),
             _ => None,

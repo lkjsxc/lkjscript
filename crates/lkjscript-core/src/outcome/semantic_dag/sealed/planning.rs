@@ -5,9 +5,9 @@ use super::{SealedSemanticDagRuntime, SEALED_DAG_BYTE_CHUNK};
 
 pub(super) struct RehydrationPlan {
     pub cells: Vec<SealedDagCell>,
-    pub cell_count: u32,
-    pub nodes: u32,
-    pub root: u32,
+    pub cell_count: u64,
+    pub nodes: u64,
+    pub root: u64,
 }
 
 impl SealedSemanticDagRuntime {
@@ -18,7 +18,7 @@ impl SealedSemanticDagRuntime {
         type_closure: &[SemanticDagType],
     ) -> Result<RehydrationPlan, SealedSemanticDagError> {
         validate_type_closure(snapshot, expected, type_closure)?;
-        let node_count = u32::try_from(snapshot.nodes().len())
+        let node_count = u64::try_from(snapshot.nodes().len())
             .map_err(|_| SealedSemanticDagError::ArithmeticOverflow)?;
         let mut total = node_count;
         for node in snapshot.nodes() {
@@ -26,9 +26,11 @@ impl SealedSemanticDagRuntime {
                 .checked_add(auxiliary_cells(&node.payload)?)
                 .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
         }
+        let total_host =
+            usize::try_from(total).map_err(|_| SealedSemanticDagError::ArithmeticOverflow)?;
         let mut cells = Vec::new();
         cells
-            .try_reserve_exact(total as usize)
+            .try_reserve_exact(total_host)
             .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
         let mut next = node_count;
         for node in snapshot.nodes() {
@@ -42,9 +44,9 @@ impl SealedSemanticDagRuntime {
                 .ok_or(SealedSemanticDagError::ArithmeticOverflow)?;
         }
         for node in snapshot.nodes() {
-            append_auxiliary(&mut cells, &node.payload);
+            append_auxiliary(&mut cells, &node.payload)?;
         }
-        if cells.len() != total as usize || next != total {
+        if cells.len() != total_host || next != total {
             return Err(SealedSemanticDagError::CorruptRegion);
         }
         Ok(RehydrationPlan {
@@ -75,7 +77,7 @@ fn validate_type_closure(
     Ok(())
 }
 
-fn auxiliary_cells(payload: &SemanticDagPayload) -> Result<u32, SealedSemanticDagError> {
+fn auxiliary_cells(payload: &SemanticDagPayload) -> Result<u64, SealedSemanticDagError> {
     let count = match payload {
         SemanticDagPayload::String(bytes)
         | SemanticDagPayload::Path(bytes)
@@ -85,10 +87,13 @@ fn auxiliary_cells(payload: &SemanticDagPayload) -> Result<u32, SealedSemanticDa
         }
         _ => 0,
     };
-    u32::try_from(count).map_err(|_| SealedSemanticDagError::ArithmeticOverflow)
+    u64::try_from(count).map_err(|_| SealedSemanticDagError::ArithmeticOverflow)
 }
 
-fn append_auxiliary(cells: &mut Vec<SealedDagCell>, payload: &SemanticDagPayload) {
+fn append_auxiliary(
+    cells: &mut Vec<SealedDagCell>,
+    payload: &SemanticDagPayload,
+) -> Result<(), SealedSemanticDagError> {
     match payload {
         SemanticDagPayload::String(bytes)
         | SemanticDagPayload::Path(bytes)
@@ -97,7 +102,8 @@ fn append_auxiliary(cells: &mut Vec<SealedDagCell>, payload: &SemanticDagPayload
                 let mut stored = [0_u8; SEALED_DAG_BYTE_CHUNK];
                 stored[..chunk.len()].copy_from_slice(chunk);
                 cells.push(SealedDagCell::Bytes {
-                    length: chunk.len() as u8,
+                    length: u8::try_from(chunk.len())
+                        .map_err(|_| SealedSemanticDagError::ArithmeticOverflow)?,
                     bytes: stored,
                 });
             }
@@ -107,12 +113,13 @@ fn append_auxiliary(cells: &mut Vec<SealedDagCell>, payload: &SemanticDagPayload
         }
         _ => {}
     }
+    Ok(())
 }
 
 fn planned_payload(
     payload: &SemanticDagPayload,
-    first: u32,
-) -> Result<(SealedDagNodePayload, u32), SealedSemanticDagError> {
+    first: u64,
+) -> Result<(SealedDagNodePayload, u64), SealedSemanticDagError> {
     let used = auxiliary_cells(payload)?;
     let planned = match payload {
         SemanticDagPayload::Inline(value) => SealedDagNodePayload::Inline(*value),
@@ -122,7 +129,7 @@ fn planned_payload(
         | SemanticDagPayload::Bytes(bytes) => SealedDagNodePayload::Bytes {
             first,
             chunks: used,
-            length: u32::try_from(bytes.len())
+            length: u64::try_from(bytes.len())
                 .map_err(|_| SealedSemanticDagError::ArithmeticOverflow)?,
         },
         SemanticDagPayload::Product(_) => SealedDagNodePayload::Product {

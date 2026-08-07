@@ -15,8 +15,7 @@ fn move_invalidates_the_old_key_and_drop_releases_exactly_once() -> Result<(), S
         SemanticValue::new(string_type, SemanticPayload::String(b"move".to_vec())),
     )?;
     let moved = runtime.move_owned(key, string_type)?;
-    assert_eq!(moved.slot(), key.slot());
-    assert_ne!(moved.generation(), key.generation());
+    assert_ne!(moved.get(), key.get());
     assert_eq!(
         runtime.value(key, string_type),
         Err(StructuralValueError::RootTable(

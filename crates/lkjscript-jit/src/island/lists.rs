@@ -44,9 +44,13 @@ impl JitIslandServices {
         if tail.reference_type() != result_type {
             return self.list_trap("structural list prepend type mismatch");
         }
+        let next_allocations = self
+            .list_allocations
+            .checked_add(1)
+            .ok_or(NativeServiceError::HostFailure)?;
         if self
             .max_list_allocations
-            .is_some_and(|maximum| self.list_allocations >= maximum)
+            .is_some_and(|maximum| next_allocations > maximum)
         {
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
@@ -95,7 +99,7 @@ impl JitIslandServices {
         if owner {
             self.list_owners.push(retained);
         }
-        self.list_allocations = self.list_allocations.saturating_add(1);
+        self.list_allocations = next_allocations;
         Ok(NativeValue::Reference(
             lkjscript_native::NativeReference::new(result_type, key.to_word()),
         ))

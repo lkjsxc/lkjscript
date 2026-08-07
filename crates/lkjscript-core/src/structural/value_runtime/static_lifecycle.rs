@@ -29,7 +29,7 @@ impl StructuralValueRuntime {
             Ok(key) => {
                 self.metrics.live_objects = self.metrics.live_objects.saturating_add(1);
                 self.note_slot_reuse(reused);
-                self.record(StructuralEventKind::StaticRegister, key.slot(), 0);
+                self.record(StructuralEventKind::StaticRegister, key.get(), 0);
                 Ok(key)
             }
             Err(error) => {
@@ -58,7 +58,7 @@ impl StructuralValueRuntime {
         };
         self.runtime.release(root.domain())?;
         self.metrics.live_objects = self.metrics.live_objects.saturating_sub(1);
-        self.record(StructuralEventKind::StaticUnregister, key.slot(), 0);
+        self.record(StructuralEventKind::StaticUnregister, key.get(), 0);
         Ok(())
     }
 

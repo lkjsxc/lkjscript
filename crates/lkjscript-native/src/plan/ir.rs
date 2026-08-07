@@ -6,7 +6,7 @@ pub(crate) enum Operation {
     F64Const(u64),
     BoolConst(bool),
     Unit,
-    MemoryWitnessLocator(u16),
+    MemoryWitnessLocator(u64),
     StaticBytesConst(StaticBytesIdentity),
     StaticStringConst(StaticBytesIdentity, StructuralTypeIdentity),
     I64Add(ValueId, ValueId),

@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::{image::SemanticChildren, LayoutIdentity, SemanticTypeIdentity};
 
@@ -163,31 +163,23 @@ pub struct StaticStructuralArtifact {
 macro_rules! private_key {
     ($name:ident) => {
         #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name(u64);
+        #[repr(transparent)]
+        pub struct $name(NonZeroU64);
 
         impl $name {
             pub const fn from_word(word: u64) -> Option<Self> {
-                if word >> 32 == 0 {
-                    None
-                } else {
-                    Some(Self(word))
+                match NonZeroU64::new(word) {
+                    Some(word) => Some(Self(word)),
+                    None => None,
                 }
             }
 
             pub const fn get(self) -> u64 {
-                self.0
+                self.0.get()
             }
 
-            pub(super) const fn slot(self) -> u32 {
-                self.0 as u32
-            }
-
-            pub(super) const fn generation(self) -> u32 {
-                (self.0 >> 32) as u32
-            }
-
-            pub(super) const fn new(slot: u32, generation: NonZeroU32) -> Self {
-                Self(((generation.get() as u64) << 32) | slot as u64)
+            pub(super) const fn from_token(token: NonZeroU64) -> Self {
+                Self(token)
             }
         }
     };
@@ -222,8 +214,8 @@ pub enum StructuralProjection {
     Utf8 {
         path: StructuralFieldPath,
         expected: StructuralType,
-        start: u32,
-        end: u32,
+        start: u64,
+        end: u64,
     },
 }
 

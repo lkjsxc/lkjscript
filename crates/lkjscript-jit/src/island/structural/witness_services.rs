@@ -4,7 +4,7 @@ use crate::island::JitIslandServices;
 impl JitIslandServices {
     pub(super) fn acquire_witness_owner(
         &mut self,
-        witness: u16,
+        witness: u64,
         key: u64,
     ) -> Result<u64, NativeServiceError> {
         let entry = self
@@ -24,7 +24,7 @@ impl JitIslandServices {
 
     pub(super) fn compare_witness_values(
         &mut self,
-        witness: u16,
+        witness: u64,
         left: u64,
         right: u64,
     ) -> Result<bool, NativeServiceError> {
@@ -45,7 +45,7 @@ impl JitIslandServices {
 
     pub(super) fn dispose_witness_owner(
         &mut self,
-        witness: u16,
+        witness: u64,
         key: u64,
     ) -> Result<(), NativeServiceError> {
         let entry = self

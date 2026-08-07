@@ -59,8 +59,7 @@ impl JitUniqueRuntime {
             start: 0,
             len,
         };
-        let (index, generation) = self.install_loan(loan)?;
-        let token = u64::from(generation) << 32 | u64::from(index);
+        let token = self.install_loan(loan)?;
         match kind {
             LoanType::ByteSlice => {
                 self.stats.shared_borrows = self.stats.shared_borrows.saturating_add(1);
@@ -140,42 +139,80 @@ impl JitUniqueRuntime {
 
     pub(crate) fn end_borrow(&mut self, value: NativeLoan) -> Result<(), NativeServiceError> {
         self.loan(value)?;
-        let index = usize::try_from(value.opaque_word() & u64::from(u32::MAX))
-            .map_err(|_| NativeServiceError::Trap)?;
+        let identity = self
+            .loan_tokens
+            .get(&value.opaque_word())
+            .copied()
+            .ok_or_else(|| self.reject())?;
+        let index = usize::try_from(identity.slot).map_err(|_| self.reject())?;
         let Some(slot) = self.loans.get_mut(index) else {
             return Err(NativeServiceError::Trap);
         };
         slot.loan = None;
+        slot.token = None;
+        self.loan_tokens.remove(&value.opaque_word());
         self.stats.loan_ends = self.stats.loan_ends.saturating_add(1);
         Ok(())
     }
 
-    pub(super) fn install_loan(&mut self, loan: Loan) -> Result<(u32, u32), NativeServiceError> {
-        if let Some(index) = self
-            .loans
-            .iter()
-            .position(|slot| slot.loan.is_none() && slot.generation < u32::MAX)
-        {
-            let index_word = u32::try_from(index).map_err(|_| NativeServiceError::HostFailure)?;
-            let slot = &mut self.loans[index];
-            slot.generation = slot.generation.saturating_add(1);
-            slot.loan = Some(loan);
-            return Ok((index_word, slot.generation));
-        }
-        if self
-            .max_loans
-            .is_some_and(|maximum| self.loans.len() >= maximum)
-        {
+    pub(super) fn install_loan(&mut self, loan: Loan) -> Result<u64, NativeServiceError> {
+        let active = self.loans.iter().filter(|slot| slot.loan.is_some()).count();
+        if self.max_loans.is_some_and(|maximum| active >= maximum) {
             return Err(self.loan_limit());
         }
-        self.loans
+        self.loan_tokens
             .try_reserve(1)
             .map_err(|_| NativeServiceError::HostFailure)?;
-        let index = u32::try_from(self.loans.len()).map_err(|_| NativeServiceError::HostFailure)?;
-        self.loans.push(LoanSlot {
-            generation: 1,
-            loan: Some(loan),
-        });
-        Ok((index, 1))
+        let token = self
+            .next_loan_token
+            .ok_or(NativeServiceError::HostFailure)?;
+        self.next_loan_token = token
+            .get()
+            .checked_add(1)
+            .and_then(std::num::NonZeroU64::new);
+        let reusable = self
+            .loans
+            .iter()
+            .position(|slot| slot.loan.is_none() && slot.generation.get() < u64::MAX);
+        let (slot_index, generation) = if let Some(index) = reusable {
+            let slot_index = u64::try_from(index).map_err(|_| NativeServiceError::HostFailure)?;
+            let generation = self.loans[index]
+                .generation
+                .get()
+                .checked_add(1)
+                .and_then(std::num::NonZeroU64::new)
+                .ok_or(NativeServiceError::HostFailure)?;
+            (slot_index, generation)
+        } else {
+            self.loans
+                .try_reserve(1)
+                .map_err(|_| NativeServiceError::HostFailure)?;
+            let slot_index =
+                u64::try_from(self.loans.len()).map_err(|_| NativeServiceError::HostFailure)?;
+            (slot_index, std::num::NonZeroU64::MIN)
+        };
+        let identity = LoanIdentity {
+            slot: slot_index,
+            generation,
+        };
+        if self.loan_tokens.contains_key(&token.get()) {
+            return Err(NativeServiceError::HostFailure);
+        }
+        let index = usize::try_from(slot_index).map_err(|_| NativeServiceError::HostFailure)?;
+        if reusable.is_some() {
+            self.loans[index] = LoanSlot {
+                generation,
+                token: Some(token),
+                loan: Some(loan),
+            };
+        } else {
+            self.loans.push(LoanSlot {
+                generation,
+                token: Some(token),
+                loan: Some(loan),
+            });
+        }
+        self.loan_tokens.insert(token.get(), identity);
+        Ok(token.get())
     }
 }

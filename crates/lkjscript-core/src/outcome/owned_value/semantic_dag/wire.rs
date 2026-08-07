@@ -11,11 +11,11 @@ fn encode_semantic_dag(
     snapshot: &SemanticDagSnapshot,
 ) -> Result<()> {
     snapshot.validate_encode()?;
-    out.u32(
-        u32::try_from(snapshot.nodes().len())
-            .map_err(|_| Error::msg("semantic DAG node count exceeds u32"))?,
+    out.u64(
+        u64::try_from(snapshot.nodes().len())
+            .map_err(|_| Error::msg("semantic DAG node count exceeds u64"))?,
     )?;
-    out.u32(snapshot.root().get())?;
+    out.u64(snapshot.root().get())?;
     for node in snapshot.nodes() {
         encode_semantic_dag_type(out, node.value_type)?;
         encode_semantic_dag_payload(out, &node.payload)?;
@@ -46,8 +46,8 @@ fn encode_semantic_dag_payload(out: &mut Encoder, value: &SemanticDagPayload) ->
         }
         SemanticDagPayload::EmptyList => Ok(()),
         SemanticDagPayload::List { head, tail } => {
-            out.u32(head.get())?;
-            out.u32(tail.get())
+            out.u64(head.get())?;
+            out.u64(tail.get())
         }
     }
 }
@@ -56,12 +56,12 @@ fn encode_semantic_dag_fields(
     out: &mut Encoder,
     fields: &[SemanticDagNodeId],
 ) -> Result<()> {
-    out.u32(
-        u32::try_from(fields.len())
-            .map_err(|_| Error::msg("semantic DAG edge count exceeds u32"))?,
+    out.u64(
+        u64::try_from(fields.len())
+            .map_err(|_| Error::msg("semantic DAG edge count exceeds u64"))?,
     )?;
     for field in fields {
-        out.u32(field.get())?;
+        out.u64(field.get())?;
     }
     Ok(())
 }

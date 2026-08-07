@@ -4,6 +4,9 @@ use crate::metrics_json::string;
 
 pub fn render(stats: &JitStats) -> String {
     let island = crate::metrics_jit_island::render(stats);
+    let list_reserved_bytes = stats
+        .segmented_list_reserved_bytes_estimate
+        .map_or_else(|| "null".to_owned(), |bytes| bytes.to_string());
     let lists = format!(
         concat!(
             "{{\"live_segments\":{},\"live_entries\":{},",
@@ -16,7 +19,7 @@ pub fn render(stats: &JitStats) -> String {
         stats.segmented_lists.prepends,
         stats.segmented_lists.first_reads,
         stats.segmented_lists.rest_reads,
-        stats.segmented_list_reserved_bytes_estimate,
+        list_reserved_bytes,
     );
     let functions = stats
         .functions

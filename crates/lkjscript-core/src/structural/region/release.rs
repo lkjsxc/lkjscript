@@ -63,7 +63,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         self.require_runtime(runtime)?;
         let index = self.record_index(owner.key)?;
         let epoch = self.records[index].1.epoch.get();
-        if epoch == u32::MAX {
+        if epoch == u64::MAX {
             return Err(StructuralError::GenerationExhausted);
         }
         if self.records[index].1.loans != 0 {
@@ -116,7 +116,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         record.release_work = 1;
         record.bytes = 0;
         record.epoch =
-            std::num::NonZeroU32::new(epoch + 1).ok_or(StructuralError::GenerationExhausted)?;
+            std::num::NonZeroU64::new(epoch + 1).ok_or(StructuralError::GenerationExhausted)?;
         self.metrics.regions_reset = self.metrics.regions_reset.saturating_add(1);
         Ok(report)
     }

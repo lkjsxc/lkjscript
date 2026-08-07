@@ -34,7 +34,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
                 allocate_chunked(record, value)?
             };
             let chunk_created = record.chunks.len() != chunks_before;
-            let slot = u32::try_from(record.roots.len())
+            let slot = u64::try_from(record.roots.len())
                 .map_err(|_| StructuralError::ArithmeticOverflow)?;
             let epoch = record.epoch;
             record.roots.push(RootRecord {
@@ -77,7 +77,7 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         let record = &self.records[index].1;
         let root = record
             .roots
-            .get(key.slot() as usize)
+            .get(usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?)
             .ok_or(StructuralError::StaleRoot(key))?;
         if root.generation != key.generation() || record.epoch != key.generation() {
             return Err(StructuralError::StaleRoot(key));
@@ -85,12 +85,16 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
         match root.location {
             ObjectLocation::Chunk { chunk, offset } => record
                 .chunks
-                .get(chunk as usize)
-                .and_then(|values| values.get(offset as usize))
+                .get(usize::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?)
+                .and_then(|values| {
+                    usize::try_from(offset)
+                        .ok()
+                        .and_then(|offset| values.get(offset))
+                })
                 .ok_or(StructuralError::StaleRoot(key)),
             ObjectLocation::Large { index } => record
                 .large
-                .get(index as usize)
+                .get(usize::try_from(index).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .and_then(|values| values.first())
                 .ok_or(StructuralError::StaleRoot(key)),
         }
@@ -140,8 +144,8 @@ fn allocate_chunked<T, D>(
     let offset = values.len();
     values.push(value);
     Ok(ObjectLocation::Chunk {
-        chunk: u32::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?,
-        offset: u32::try_from(offset).map_err(|_| StructuralError::ArithmeticOverflow)?,
+        chunk: u64::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?,
+        offset: u64::try_from(offset).map_err(|_| StructuralError::ArithmeticOverflow)?,
     })
 }
 
@@ -159,7 +163,7 @@ fn allocate_large<T, D>(
         .map_err(|_| StructuralError::AllocationFailed)?;
     storage.push(value);
     let index =
-        u32::try_from(record.large.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        u64::try_from(record.large.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
     record.large.push(storage);
     Ok(ObjectLocation::Large { index })
 }

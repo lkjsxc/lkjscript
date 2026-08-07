@@ -89,7 +89,8 @@ fn validated_shape(
         .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
     pending.push((snapshot.root(), root));
     while let Some((id, value_type)) = pending.pop() {
-        let index = id.get() as usize;
+        let index = usize::try_from(id.get())
+            .map_err(|_| SealedSemanticDagError::ValidatedShapeMismatch)?;
         let slot = expected
             .get_mut(index)
             .ok_or(SealedSemanticDagError::ValidatedShapeMismatch)?;

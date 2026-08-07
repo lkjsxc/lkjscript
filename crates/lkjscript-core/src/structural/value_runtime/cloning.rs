@@ -34,7 +34,7 @@ impl StructuralValueRuntime {
                     .metrics
                     .path_bytes_cloned
                     .saturating_add(facts.path_bytes);
-                self.record(StructuralEventKind::Clone, key.slot(), facts.nodes);
+                self.record(StructuralEventKind::Clone, key.get(), facts.nodes);
                 Ok(copy)
             }
             Err(failure) => {

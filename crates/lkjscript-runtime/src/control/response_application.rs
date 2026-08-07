@@ -45,7 +45,7 @@ fn decode_application(input: &mut ResponseInput<'_>) -> Result<ControlledApplica
     let process = match input.u8()? {
         0 => None,
         1 => {
-            let process = input.u32()?;
+            let process = input.u64()?;
             if process == 0 {
                 return Err(ControlError::InvalidIdentity);
             }

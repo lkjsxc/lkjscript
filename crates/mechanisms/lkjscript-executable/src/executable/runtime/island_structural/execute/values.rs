@@ -1,7 +1,7 @@
 use super::*;
 
-pub(super) fn witness_locator(word: u64) -> Result<u16, NativeServiceError> {
-    u16::try_from(word).map_err(|_| NativeServiceError::Trap)
+pub(super) const fn witness_locator(word: u64) -> Result<u64, NativeServiceError> {
+    Ok(word)
 }
 
 pub(super) fn native_value(

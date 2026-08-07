@@ -3,7 +3,7 @@ use super::*;
 
 impl ResourceTable {
     pub(crate) fn is_borrowed_handle(&self, value: Value) -> bool {
-        encode_key(&self.stdin_key).is_ok_and(|borrowed| borrowed == value)
+        value == Self::stdin_handle()
     }
 
     pub(super) fn acquire_owned(
@@ -72,7 +72,7 @@ impl ResourceTable {
         kind: ResourceKind,
         provider: ProviderId,
     ) -> Result<Value> {
-        match encode_key(&key) {
+        match encode_key(self, &key) {
             Ok(value) => {
                 self.update_metrics(|metrics| {
                     metrics.resources_opened = metrics.resources_opened.saturating_add(1);
@@ -102,7 +102,7 @@ impl ResourceTable {
         ownership: ResourceOwnership,
         operation: &str,
     ) -> Result<ResourceKey> {
-        let parts = decode_parts(handle, operation)?;
+        let parts = decode_parts(self, handle, operation)?;
         self.table
             .resolve_token_parts(parts, kind, provider, self.table.scope(), ownership)
             .map_err(|error| self.access_error(operation, error))
@@ -118,7 +118,7 @@ impl ResourceTable {
         handle: Value,
         operation: &str,
     ) -> Result<(ResourceKey, ResourceKind, ProviderId)> {
-        let parts = decode_parts(handle, operation)?;
+        let parts = decode_parts(self, handle, operation)?;
         for kind in ResourceKind::ALL {
             let provider = provider_for_kind(kind);
             match self.table.resolve_token_parts(

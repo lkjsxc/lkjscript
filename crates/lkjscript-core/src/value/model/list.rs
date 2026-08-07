@@ -12,13 +12,13 @@ impl Value {
         }
     }
 
-    pub(crate) const fn from_owned_list(index: u32) -> Self {
-        Self::new(ValueKind::OwnedList, index as u64)
+    pub(crate) const fn from_owned_list(index: u64) -> Self {
+        Self::new(ValueKind::OwnedList, index)
     }
 
-    pub(crate) const fn as_owned_list(self) -> Option<u32> {
+    pub(crate) const fn as_owned_list(self) -> Option<u64> {
         match self.kind {
-            ValueKind::OwnedList => Some(self.payload as u32),
+            ValueKind::OwnedList => Some(self.payload),
             _ => None,
         }
     }

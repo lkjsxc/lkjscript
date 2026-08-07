@@ -29,7 +29,10 @@ impl<T: Copy, D: Copy> RegionStore<T, D> {
                 }
             }
             for &(from, to) in record.internal_edges.as_slice() {
-                if from as usize >= record.roots.len() || to as usize >= record.roots.len() {
+                let from =
+                    usize::try_from(from).map_err(|_| StructuralError::ArithmeticOverflow)?;
+                let to = usize::try_from(to).map_err(|_| StructuralError::ArithmeticOverflow)?;
+                if from >= record.roots.len() || to >= record.roots.len() {
                     return Err(StructuralError::SlotVacant);
                 }
             }

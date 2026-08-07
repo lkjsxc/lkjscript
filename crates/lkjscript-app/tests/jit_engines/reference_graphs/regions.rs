@@ -31,8 +31,12 @@ fn nested_region_product_and_list_graph_is_collector_free_in_all_engines() {
         optimized.stats.runtime_heap_successes,
         native.stats.runtime_heap_successes
     );
-    assert_eq!(native.stats.region_products.records, 4);
-    assert_eq!(native.stats.region_products.fields, 6);
+    let region_products = native
+        .stats
+        .region_products
+        .expect("complete checked region-product metrics");
+    assert_eq!(region_products.records, 4);
+    assert_eq!(region_products.fields, 6);
     assert!(native.stats.segmented_lists.live_entries >= 2);
     assert!(native.stats.segmented_lists.segment_allocations > 0);
     assert!(

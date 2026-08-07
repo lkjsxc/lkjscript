@@ -3,7 +3,7 @@ use super::*;
 
 impl ResourceTable {
     pub(crate) fn raw_fd(&self, handle: Value, operation: &str) -> Result<RawFd> {
-        let parts = decode_parts(handle, operation)?;
+        let parts = decode_parts(self, handle, operation)?;
         match self.table.resolve_token_parts(
             parts,
             ResourceKind::InputStream,

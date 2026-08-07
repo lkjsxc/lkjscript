@@ -149,7 +149,7 @@ pub enum ProcessCellState {
     NotApplicable,
     Stopped,
     Starting,
-    Running { process: u32 },
+    Running { process: u64 },
     Exited,
 }
 

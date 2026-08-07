@@ -23,7 +23,7 @@ impl FunctionEncoder<'_> {
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
             Operation::MemoryWitnessLocator(locator) => {
-                self.load_rax_immediate(u64::from(*locator))?;
+                self.load_rax_immediate(*locator)?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
             Operation::StaticBytesConst(identity) | Operation::StaticStringConst(identity, _) => {

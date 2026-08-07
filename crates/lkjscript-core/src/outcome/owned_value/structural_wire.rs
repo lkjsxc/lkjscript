@@ -62,7 +62,7 @@ fn copy_wire_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
     Ok(copy)
 }
 
-fn reserve_structural_fields(length: u32) -> Result<Vec<SemanticValue>> {
+fn reserve_structural_fields(length: u64) -> Result<Vec<SemanticValue>> {
     let length = usize::try_from(length)
         .map_err(|_| Error::msg("structural field count exceeds platform"))?;
     let mut fields = Vec::new();

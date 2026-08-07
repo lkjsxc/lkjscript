@@ -5,7 +5,7 @@ fn encode_response(output: &mut Writer, value: &ProcessResponse) -> io::Result<(
             provenance,
         } => {
             output.u8(3)?;
-            output.u32(*process)?;
+            output.u64(*process)?;
             encode_provenance(output, provenance)?;
         }
         ProcessResponse::ReadyFailure { diagnostic } => {
@@ -43,7 +43,7 @@ fn encode_response(output: &mut Writer, value: &ProcessResponse) -> io::Result<(
 fn decode_response(input: &mut Reader<'_>) -> io::Result<ProcessResponse> {
     Ok(match input.u8()? {
         3 => {
-            let process = input.u32()?;
+            let process = input.u64()?;
             if process == 0 {
                 return Err(invalid("worker process identity must be nonzero"));
             }

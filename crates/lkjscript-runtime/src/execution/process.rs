@@ -17,7 +17,7 @@ pub(crate) struct ProcessCell {
     child: Child,
     input: ChildStdin,
     output: Option<ChildStdout>,
-    process: u32,
+    process: u64,
     provenance: ProcessProgramProvenance,
     parent_chunk: std::sync::Arc<ValidatedChunk>,
     prepared: PreparedProgramIdentity,
@@ -66,7 +66,9 @@ impl ProcessCell {
             ProcessResponse::Ready {
                 process,
                 provenance,
-            } if process == child.id() && provenance == expected_process_provenance(bootstrap) => {
+            } if process == u64::from(child.id())
+                && provenance == expected_process_provenance(bootstrap) =>
+            {
                 (process, provenance)
             }
             ProcessResponse::Ready { .. } => {
@@ -94,7 +96,7 @@ impl ProcessCell {
         })
     }
 
-    pub(crate) const fn process(&self) -> u32 {
+    pub(crate) const fn process(&self) -> u64 {
         self.process
     }
 

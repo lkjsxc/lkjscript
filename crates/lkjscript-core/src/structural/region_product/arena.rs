@@ -1,12 +1,13 @@
-use std::num::NonZeroU32;
+use std::collections::HashMap;
 
-use super::model::RegionProductRecord;
+use super::model::{next_region_product_token, RegionProductRecord};
 use super::*;
 use crate::RuntimeLayoutId;
 
 pub struct RegionProductArena<T> {
     id: RegionProductArenaId,
     records: Vec<RegionProductRecord<T>>,
+    tokens: HashMap<u64, u64>,
     fields: u64,
 }
 
@@ -15,6 +16,7 @@ impl<T> RegionProductArena<T> {
         Ok(Self {
             id: RegionProductArenaId::fresh()?,
             records: Vec::new(),
+            tokens: HashMap::new(),
             fields: 0,
         })
     }
@@ -28,11 +30,8 @@ impl<T> RegionProductArena<T> {
         identity: crate::RuntimeLayoutId,
         fields: Vec<T>,
     ) -> Result<RegionProductKey, RegionProductError> {
-        let next_records = self
-            .records
-            .len()
-            .checked_add(1)
-            .ok_or(RegionProductError::ArithmeticOverflow)?;
+        let record = u64::try_from(self.records.len())
+            .map_err(|_| RegionProductError::ArithmeticOverflow)?;
         let field_count =
             u64::try_from(fields.len()).map_err(|_| RegionProductError::ArithmeticOverflow)?;
         let next_fields = self
@@ -42,13 +41,17 @@ impl<T> RegionProductArena<T> {
         self.records
             .try_reserve(1)
             .map_err(|_| RegionProductError::HostAllocation)?;
-        let record = NonZeroU32::new(
-            u32::try_from(next_records).map_err(|_| RegionProductError::RepresentationExhausted)?,
-        )
-        .ok_or(RegionProductError::RepresentationExhausted)?;
+        self.tokens
+            .try_reserve(1)
+            .map_err(|_| RegionProductError::HostAllocation)?;
+        let token = next_region_product_token()?;
         self.records.push(RegionProductRecord { identity, fields });
+        if self.tokens.insert(token.get(), record).is_some() {
+            self.records.pop();
+            return Err(RegionProductError::ArithmeticOverflow);
+        }
         self.fields = next_fields;
-        Ok(RegionProductKey::new(self.id, record))
+        Ok(RegionProductKey::new(self.id, token))
     }
 
     pub fn fields(
@@ -97,8 +100,14 @@ impl<T> RegionProductArena<T> {
         } else {
             0
         };
+        let token = if self.tokens.len() == self.tokens.capacity() {
+            storage_bytes::<(u64, u64)>(1)?
+        } else {
+            0
+        };
         fields
             .checked_add(record)
+            .and_then(|bytes| bytes.checked_add(token))
             .ok_or(RegionProductError::ArithmeticOverflow)
     }
 
@@ -113,29 +122,35 @@ impl<T> RegionProductArena<T> {
             .checked_add(storage_bytes::<RegionProductRecord<T>>(
                 self.records.capacity(),
             )?)
+            .and_then(|bytes| {
+                storage_bytes::<(u64, u64)>(self.tokens.capacity())
+                    .ok()
+                    .and_then(|tokens| bytes.checked_add(tokens))
+            })
             .ok_or(RegionProductError::ArithmeticOverflow)
     }
 
-    pub fn metrics(&self) -> RegionProductMetrics {
-        let field_capacity = self.records.iter().fold(0_u64, |total, record| {
-            total.saturating_add(record.fields.capacity() as u64)
-        });
-        let field_bytes = field_capacity.saturating_mul(std::mem::size_of::<T>() as u64);
-        let record_bytes = (self.records.capacity() as u64)
-            .saturating_mul(std::mem::size_of::<RegionProductRecord<T>>() as u64);
-        RegionProductMetrics {
-            records: self.records.len() as u64,
+    pub fn metrics(&self) -> Result<RegionProductMetrics, RegionProductError> {
+        Ok(RegionProductMetrics {
+            records: u64::try_from(self.records.len())
+                .map_err(|_| RegionProductError::ArithmeticOverflow)?,
             fields: self.fields,
-            reserved_bytes_estimate: field_bytes.saturating_add(record_bytes),
-        }
+            retained_bytes: self.reserved_bytes_estimate()?,
+        })
     }
 
     fn record(&self, key: RegionProductKey) -> Result<&RegionProductRecord<T>, RegionProductError> {
         if key.arena != self.id {
             return Err(RegionProductError::InvalidKey);
         }
-        key.index()
-            .and_then(|index| self.records.get(index))
+        let record = self
+            .tokens
+            .get(&key.token.get())
+            .copied()
+            .ok_or(RegionProductError::InvalidKey)?;
+        let index = usize::try_from(record).map_err(|_| RegionProductError::InvalidKey)?;
+        self.records
+            .get(index)
             .ok_or(RegionProductError::InvalidKey)
     }
 }

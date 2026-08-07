@@ -21,7 +21,9 @@ impl StructuralRuntime {
             }
         }
         for &key in keys {
-            self.slots[key.slot() as usize].state = SlotState::Live(next);
+            let index =
+                usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+            self.slots[index].state = SlotState::Live(next);
         }
         Ok(())
     }
@@ -33,7 +35,8 @@ impl StructuralRuntime {
         if key.runtime() != self.identity {
             return Err(StructuralError::WrongRuntime);
         }
-        let Some(slot) = self.slots.get(key.slot() as usize) else {
+        let index = usize::try_from(key.slot()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        let Some(slot) = self.slots.get(index) else {
             return Err(StructuralError::StaleDomain(key));
         };
         if slot.generation != key.generation() {

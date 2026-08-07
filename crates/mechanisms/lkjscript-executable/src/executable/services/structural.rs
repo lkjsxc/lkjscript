@@ -72,21 +72,21 @@ pub trait NativeStructuralRuntimeServices {
     }
     fn independent_structural_owner(
         &mut self,
-        _witness: u16,
+        _witness: u64,
         _key: u64,
     ) -> Result<u64, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
     fn dispose_structural_owner(
         &mut self,
-        _witness: u16,
+        _witness: u64,
         _key: u64,
     ) -> Result<(), NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
     fn compare_structural_values(
         &mut self,
-        _witness: u16,
+        _witness: u64,
         _left: u64,
         _right: u64,
     ) -> Result<bool, NativeServiceError> {
@@ -136,7 +136,7 @@ pub trait NativeStructuralRuntimeServices {
         _value: NativeValue,
         _aggregate: &StructuralAggregateDescriptor,
         _storage: StructuralStorageRoute,
-        _field: u16,
+        _field: u64,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }

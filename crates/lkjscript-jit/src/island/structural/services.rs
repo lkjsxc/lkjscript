@@ -113,7 +113,7 @@ impl NativeStructuralRuntimeServices for JitIslandServices {
         value: NativeValue,
         aggregate: &StructuralAggregateDescriptor,
         storage: StructuralStorageRoute,
-        field: u16,
+        field: u64,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         self.structural
             .initialize_destination(destination, value, aggregate, storage, field)

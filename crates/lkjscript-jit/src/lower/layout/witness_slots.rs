@@ -8,7 +8,7 @@ pub(super) fn native_witness_slots(
             lkjscript_ir::MemoryWitnessId,
             lkjscript_native::StructuralStorageRoute,
         ),
-        u16,
+        u64,
     >,
     LoweringError,
 > {
@@ -30,8 +30,8 @@ pub(super) fn native_witness_slots(
             }
             _ => continue,
         };
-        let slot = u16::try_from(slots.len())
-            .map_err(|_| invalid_structural("native witness slot exceeds u16"))?;
+        let slot = u64::try_from(slots.len())
+            .map_err(|_| invalid_structural("native witness slot exceeds u64"))?;
         if slots
             .insert((representation.witness, storage), slot)
             .is_some()

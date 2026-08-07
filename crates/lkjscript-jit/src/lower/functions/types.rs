@@ -100,9 +100,7 @@ fn structural_instruction_type(
             (
                 value,
                 lkjscript_native::StructuralProjectionKind::Field,
-                vec![u16::try_from(field).map_err(|_| {
-                    invalid_structural("structural projection field exceeds native eligibility")
-                })?],
+                vec![field],
                 false,
             )
         }

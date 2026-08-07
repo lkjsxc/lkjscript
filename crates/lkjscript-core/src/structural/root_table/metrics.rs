@@ -10,8 +10,8 @@ pub struct StructuralRootTableStats {
     pub loans_ended: u64,
     pub loan_slots_reused: u64,
     pub loan_slots_retired: u64,
-    pub live_roots: u32,
-    pub peak_live_roots: u32,
-    pub live_loans: u32,
-    pub peak_live_loans: u32,
+    pub live_roots: u64,
+    pub peak_live_roots: u64,
+    pub live_loans: u64,
+    pub peak_live_loans: u64,
 }

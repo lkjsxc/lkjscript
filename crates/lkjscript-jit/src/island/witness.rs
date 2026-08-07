@@ -2,9 +2,9 @@ use crate::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct NativeWitnessEntry {
-    slot: u16,
+    slot: u64,
     group: lkjscript_ir::MemoryWitnessGroupId,
-    member: u16,
+    member: u64,
     representation: lkjscript_ir::StructuralRepresentationId,
     value_type: lkjscript_native::StructuralTypeIdentity,
     storage: lkjscript_ir::StructuralStorage,
@@ -35,8 +35,8 @@ impl NativeWitnessCatalog {
                     )
             })
         {
-            let slot = u16::try_from(entries.len())
-                .map_err(|_| witness_error("native witness slot exceeds u16"))?;
+            let slot = u64::try_from(entries.len())
+                .map_err(|_| witness_error("native witness slot exceeds u64"))?;
             let witness = program
                 .memory
                 .witness(representation.witness)
@@ -49,8 +49,7 @@ impl NativeWitnessCatalog {
                 ));
             }
             let value_type = native_witness_type(program, witness)?;
-            let member = u16::try_from(witness.ordinal)
-                .map_err(|_| witness_error("native witness member exceeds u16"))?;
+            let member = witness.ordinal;
             entries.push(NativeWitnessEntry {
                 slot,
                 group: witness.group,
@@ -66,12 +65,12 @@ impl NativeWitnessCatalog {
 
     pub(crate) fn resolve(
         &self,
-        slot: u16,
+        slot: u64,
         operation: lkjscript_core::MemoryWitnessOperation,
     ) -> Result<&NativeWitnessEntry, NativeServiceError> {
         let entry = self
             .entries
-            .get(usize::from(slot))
+            .get(usize::try_from(slot).map_err(|_| NativeServiceError::Trap)?)
             .filter(|entry| entry.slot == slot)
             .ok_or(NativeServiceError::Trap)?;
         if entry.operations.binary_search(&operation).is_err()

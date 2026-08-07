@@ -9,7 +9,7 @@ use lkjscript_core::{
 pub struct RehydrationReport {
     pub input_canonical_dag_hash: [u8; 32],
     pub output_canonical_dag_hash: [u8; 32],
-    pub nodes: u32,
+    pub nodes: u64,
     pub bytes: u64,
     pub allocations: u64,
     pub releases: u64,
@@ -183,9 +183,9 @@ fn semantic_tree_dag(value: &SemanticValue) -> Result<SemanticDagSnapshot, Strin
             }
         };
         let kind = structural_dag_kind(value_type.kind)?;
-        let id = u32::try_from(nodes.len())
+        let id = u64::try_from(nodes.len())
             .map(SemanticDagNodeId::new)
-            .map_err(|_| "semantic DAG node count exceeds u32")?;
+            .map_err(|_| "semantic DAG node count exceeds u64")?;
         nodes
             .try_reserve(1)
             .map_err(|_| "semantic DAG node allocation failed".to_owned())?;

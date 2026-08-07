@@ -31,10 +31,6 @@ impl Encoder {
         Ok(())
     }
 
-    pub(crate) fn u32(&mut self, value: u32) -> Result<()> {
-        self.fixed(&value.to_le_bytes())
-    }
-
     pub(crate) fn u64(&mut self, value: u64) -> Result<()> {
         self.fixed(&value.to_le_bytes())
     }
@@ -54,7 +50,7 @@ impl Encoder {
     }
 
     pub(crate) fn bytes(&mut self, bytes: &[u8]) -> Result<()> {
-        self.u32(u32::try_from(bytes.len()).map_err(|_| Error::msg("wire field exceeds u32"))?)?;
+        self.u64(u64::try_from(bytes.len()).map_err(|_| Error::msg("wire field exceeds u64"))?)?;
         self.fixed(bytes)
     }
 
@@ -97,10 +93,6 @@ impl<'a> Decoder<'a> {
         Ok(self.take(1)?[0])
     }
 
-    pub(crate) fn u32(&mut self) -> Result<u32> {
-        Ok(u32::from_le_bytes(self.take(4)?.try_into().map_err(|_| Error::msg("u32"))?))
-    }
-
     pub(crate) fn u64(&mut self) -> Result<u64> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().map_err(|_| Error::msg("u64"))?))
     }
@@ -114,7 +106,8 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn bytes(&mut self) -> Result<&'a [u8]> {
-        let length = usize::try_from(self.u32()?).map_err(|_| Error::msg("wire field length"))?;
+        let length = usize::try_from(self.u64()?)
+            .map_err(|_| Error::msg("wire field length exceeds platform"))?;
         self.take(length)
     }
 

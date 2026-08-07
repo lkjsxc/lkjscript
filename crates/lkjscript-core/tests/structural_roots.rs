@@ -49,7 +49,7 @@ fn release(
 }
 
 #[test]
-fn compact_roots_move_borrow_reuse_and_round_trip_through_value() {
+fn opaque_roots_move_borrow_reuse_and_round_trip_through_value() {
     let mut runtime = new_runtime();
     let mut store = new_store(&runtime);
     let (owner, root) = allocate_root(&mut runtime, &mut store, 7);
@@ -87,8 +87,9 @@ fn compact_roots_move_borrow_reuse_and_round_trip_through_value() {
     let replacement = table
         .publish(root, StructuralRootOwnership::Owned)
         .expect("republish");
-    assert_eq!(replacement.slot(), key.slot());
+    assert_ne!(replacement.get(), key.get());
     assert_ne!(replacement, key);
+    assert_eq!(table.state(key), Err(StructuralRootTableError::StaleRoot));
     assert_eq!(table.drop_owned(replacement), Ok(root));
     table.assert_no_live_roots().expect("empty table");
     release(&mut runtime, &mut store, &owner);

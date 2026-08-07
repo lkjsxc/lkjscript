@@ -16,9 +16,7 @@ impl JitStructuralRuntime {
             .collect::<Result<Vec<_>, _>>()?;
         let key = match aggregate.kind() {
             StructuralAggregateKind::Product => self.runtime.begin_product(value_type, fields),
-            StructuralAggregateKind::Enum(tag) => {
-                self.runtime.begin_enum(value_type, u64::from(tag), fields)
-            }
+            StructuralAggregateKind::Enum(tag) => self.runtime.begin_enum(value_type, tag, fields),
         }
         .map_err(|error| self.map_error(error))?;
         if let Err(error) = self.enforce_policy() {
@@ -37,13 +35,17 @@ impl JitStructuralRuntime {
         value: NativeValue,
         aggregate: &StructuralAggregateDescriptor,
         storage: StructuralStorageRoute,
-        field: u16,
+        field: u64,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         self.note_call();
         if destination.destination_type() != aggregate.destination(storage, field) {
             return Err(NativeServiceError::Trap);
         }
-        let expected = aggregate.fields()[usize::from(field)];
+        let field_index = usize::try_from(field).map_err(|_| NativeServiceError::Trap)?;
+        let expected = *aggregate
+            .fields()
+            .get(field_index)
+            .ok_or(NativeServiceError::Trap)?;
         let mut consumed_owner = None;
         let value = match value {
             NativeValue::StructuralOwner(owner) if owner.structural_type() == expected => {
@@ -71,7 +73,7 @@ impl JitStructuralRuntime {
             _ => return Err(NativeServiceError::Trap),
         };
         self.runtime
-            .initialize_value(destination_key(destination)?, usize::from(field), value)
+            .initialize_value(destination_key(destination)?, field_index, value)
             .map_err(|error| self.map_error(error))?;
         if let Some(key) = consumed_owner {
             self.owners.remove(&key);
@@ -99,7 +101,7 @@ impl JitStructuralRuntime {
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         self.note_call();
         let initialized =
-            u16::try_from(aggregate.fields().len()).map_err(|_| NativeServiceError::HostFailure)?;
+            u64::try_from(aggregate.fields().len()).map_err(|_| NativeServiceError::HostFailure)?;
         if destination.destination_type() != aggregate.destination(storage, initialized) {
             return Err(NativeServiceError::Trap);
         }

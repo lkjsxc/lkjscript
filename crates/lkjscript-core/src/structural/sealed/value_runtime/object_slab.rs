@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::object_slab::{ObjectSlab, ObjectSlot, StructuralObject};
 use crate::structural::{DomainClass, RootClass, RootKey, StructuralValueError};
@@ -36,7 +36,8 @@ impl ObjectSlab {
         if expected != sealed {
             return Err(StructuralValueError::InvariantViolation);
         }
-        let index = unique.slot() as usize;
+        let index =
+            usize::try_from(unique.slot()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
         let live = std::mem::replace(&mut self.slots[index], ObjectSlot::Retired);
         let ObjectSlot::Live {
             generation,
@@ -110,7 +111,7 @@ impl ObjectSlab {
         root: RootKey,
     ) -> Result<(), StructuralValueError> {
         self.get(root)?;
-        if root.generation().get() < u32::MAX {
+        if root.generation().get() < u64::MAX {
             self.free.try_reserve(1)?;
         }
         Ok(())
@@ -121,11 +122,12 @@ impl ObjectSlab {
         root: RootKey,
     ) -> Result<StructuralObject, StructuralValueError> {
         self.preflight_take(root)?;
-        let index = root.slot() as usize;
-        let replacement = if root.generation().get() == u32::MAX {
+        let index =
+            usize::try_from(root.slot()).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let replacement = if root.generation().get() == u64::MAX {
             ObjectSlot::Retired
         } else {
-            let generation = NonZeroU32::new(root.generation().get() + 1)
+            let generation = NonZeroU64::new(root.generation().get() + 1)
                 .ok_or(StructuralValueError::InvariantViolation)?;
             self.free.push(root.slot());
             ObjectSlot::Vacant(generation)

@@ -1,19 +1,20 @@
-use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-static NEXT_ARENA_ID: AtomicU32 = AtomicU32::new(1);
+static NEXT_ARENA_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_LIST_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct SegmentedListArenaId(NonZeroU32);
+pub struct SegmentedListArenaId(NonZeroU64);
 
 impl SegmentedListArenaId {
     pub(super) fn fresh() -> Result<Self, SegmentedListError> {
         let id = NEXT_ARENA_ID
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                value.checked_add(1).filter(|next| *next != 0)
+                value.checked_add(1)
             })
             .map_err(|_| SegmentedListError::IdentityExhausted)?;
-        NonZeroU32::new(id)
+        NonZeroU64::new(id)
             .map(Self)
             .ok_or(SegmentedListError::IdentityExhausted)
     }
@@ -22,12 +23,12 @@ impl SegmentedListArenaId {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SegmentedListKey {
     arena: SegmentedListArenaId,
-    location: Option<SegmentedListLocation>,
+    token: Option<NonZeroU64>,
 }
 
 impl SegmentedListKey {
     pub const fn is_empty(self) -> bool {
-        self.location.is_none()
+        self.token.is_none()
     }
 
     pub const fn arena(self) -> SegmentedListArenaId {
@@ -35,32 +36,25 @@ impl SegmentedListKey {
     }
 
     pub const fn to_word(self) -> u64 {
-        match self.location {
+        match self.token {
+            Some(token) => token.get(),
             None => 0,
-            Some(location) => {
-                ((self.arena.0.get() as u64) << 32)
-                    | ((location.segment as u64) << 16)
-                    | (location.entry as u64 + 1)
-            }
         }
     }
 
     pub(super) const fn empty(arena: SegmentedListArenaId) -> Self {
+        Self { arena, token: None }
+    }
+
+    pub(super) const fn new(arena: SegmentedListArenaId, token: NonZeroU64) -> Self {
         Self {
             arena,
-            location: None,
+            token: Some(token),
         }
     }
 
-    pub(super) const fn new(arena: SegmentedListArenaId, segment: u16, entry: u16) -> Self {
-        Self {
-            arena,
-            location: Some(SegmentedListLocation { segment, entry }),
-        }
-    }
-
-    pub(super) const fn location(self) -> Option<SegmentedListLocation> {
-        self.location
+    pub(super) const fn token(self) -> Option<NonZeroU64> {
+        self.token
     }
 
     pub(super) fn from_word(
@@ -70,32 +64,33 @@ impl SegmentedListKey {
         if word == 0 {
             return Ok(Self::empty(arena));
         }
-        let encoded_arena =
-            u32::try_from(word >> 32).map_err(|_| SegmentedListError::InvalidKey)?;
-        if encoded_arena != arena.0.get() {
-            return Err(SegmentedListError::WrongArena);
-        }
-        let segment = u16::try_from((word >> 16) & u64::from(u16::MAX))
-            .map_err(|_| SegmentedListError::InvalidKey)?;
-        let encoded_entry = u16::try_from(word & u64::from(u16::MAX))
-            .map_err(|_| SegmentedListError::InvalidKey)?;
-        let entry = encoded_entry
-            .checked_sub(1)
-            .ok_or(SegmentedListError::InvalidKey)?;
-        Ok(Self::new(arena, segment, entry))
+        NonZeroU64::new(word)
+            .map(|token| Self::new(arena, token))
+            .ok_or(SegmentedListError::InvalidKey)
     }
+}
+
+pub(super) fn next_list_token() -> Result<NonZeroU64, SegmentedListError> {
+    let token = NEXT_LIST_TOKEN
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            value.checked_add(1)
+        })
+        .map_err(|_| SegmentedListError::Limit(SegmentedListLimit::Representation))?;
+    NonZeroU64::new(token).ok_or(SegmentedListError::Limit(
+        SegmentedListLimit::Representation,
+    ))
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct SegmentedListLocation {
-    pub segment: u16,
-    pub entry: u16,
+    pub segment: u64,
+    pub entry: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SegmentedListMetrics {
-    pub live_segments: u32,
-    pub live_entries: u32,
+    pub live_segments: u64,
+    pub live_entries: u64,
     pub segment_allocations: u64,
     pub prepends: u64,
     pub first_reads: u64,

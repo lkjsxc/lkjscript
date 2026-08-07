@@ -18,7 +18,7 @@ impl UniqueStore {
             SlotState::Occupied(payload) => payload.retained_bytes()?,
             _ => return Err(UniqueStoreError::ArithmeticOverflow),
         };
-        let retire = raw.generation.get() == u32::MAX;
+        let retire = raw.generation.get() == u64::MAX;
         let next_stats = self.preflight_release(retained, retire)?;
         let replacement = if retire {
             SlotState::Retired
@@ -41,6 +41,7 @@ impl UniqueStore {
             self.free_head = Some(raw.index);
         }
         self.stats = next_stats;
+        self.tokens.remove(&raw.word);
         Ok(bytes)
     }
 
@@ -55,7 +56,7 @@ impl UniqueStore {
             SlotState::Occupied(payload) => payload.retained_bytes()?,
             _ => return Err(UniqueStoreError::ArithmeticOverflow),
         };
-        let retire = raw.generation.get() == u32::MAX;
+        let retire = raw.generation.get() == u64::MAX;
         let next_stats = self.preflight_release(retained, retire)?;
         let replacement = if retire {
             SlotState::Retired
@@ -78,6 +79,7 @@ impl UniqueStore {
             self.free_head = Some(raw.index);
         }
         self.stats = next_stats;
+        self.tokens.remove(&raw.word);
         Ok(bytes)
     }
 
@@ -94,7 +96,7 @@ impl UniqueStore {
             SlotState::Occupied(payload) => payload.retained_bytes()?,
             _ => return Err(UniqueStoreError::ArithmeticOverflow),
         };
-        let retire = raw.generation.get() == u32::MAX;
+        let retire = raw.generation.get() == u64::MAX;
         let next_stats = self.preflight_release(retained, retire)?;
         let replacement = if retire {
             SlotState::Retired
@@ -117,6 +119,7 @@ impl UniqueStore {
             self.free_head = Some(raw.index);
         }
         self.stats = next_stats;
+        self.tokens.remove(&raw.word);
         Ok(bytes)
     }
 
@@ -130,7 +133,7 @@ impl UniqueStore {
             SlotState::Occupied(payload) => payload.retained_bytes()?,
             _ => return Err(UniqueStoreError::ArithmeticOverflow),
         };
-        let retire = key.generation.get() == u32::MAX;
+        let retire = key.generation.get() == u64::MAX;
         let next_stats = self.preflight_release(retained, retire)?;
         let replacement = if retire {
             SlotState::Retired
@@ -151,6 +154,7 @@ impl UniqueStore {
             self.free_head = Some(key.index);
         }
         self.stats = next_stats;
+        self.tokens.remove(&key.word);
         drop(payload);
         Ok(())
     }

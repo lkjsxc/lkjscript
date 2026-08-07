@@ -67,7 +67,7 @@ impl WorkloadExecutor {
             owner.remote_releases,
             unique.allocated_bytes,
             unique.peak_live_bytes,
-            u64::from(unique.live_objects),
+            unique.live_objects,
         ])
     }
 }

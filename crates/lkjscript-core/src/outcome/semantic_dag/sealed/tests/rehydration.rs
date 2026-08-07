@@ -36,7 +36,7 @@ fn validated_dag_rehydrates_and_round_trips_through_one_coarse_region() {
     assert_eq!(first.cells_released, 0);
     let final_report = runtime.release(owner).expect("release final owner");
     assert_eq!(final_report.regions_released, 1);
-    assert!(final_report.cells_released > expected.metrics().nodes as u64);
+    assert!(final_report.cells_released > expected.metrics().nodes);
     assert_eq!(final_report.dependency_releases, 0);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
     assert_eq!(runtime.metrics().sealed.retains, 1);
@@ -119,14 +119,16 @@ fn rehydrate_and_release(snapshot: SemanticDagSnapshot) -> (u64, u64) {
     (report.cells_released, runtime.metrics().sealed.release_work)
 }
 
-fn wide_product(count: u32) -> SemanticDagSnapshot {
+fn wide_product(count: u64) -> SemanticDagSnapshot {
     assert!(count >= 2);
     let mut nodes = Vec::new();
     for value in 0..count - 1 {
         nodes.push(node(
             1,
             SemanticDagKind::I64,
-            SemanticDagPayload::Inline(InlineStructuralValue::I64(i64::from(value))),
+            SemanticDagPayload::Inline(InlineStructuralValue::I64(
+                i64::try_from(value).expect("test node fits i64"),
+            )),
         ));
     }
     nodes.push(node(

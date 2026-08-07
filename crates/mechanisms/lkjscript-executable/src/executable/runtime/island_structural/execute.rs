@@ -140,7 +140,7 @@ pub(super) fn execute(
                 .map(NativeValue::StructuralDestination)
         }
         StructuralOperation::DestinationFinish { aggregate, storage } => {
-            let initialized = u16::try_from(aggregate.fields().len())
+            let initialized = u64::try_from(aggregate.fields().len())
                 .map_err(|_| NativeServiceError::HostFailure)?;
             services
                 .finish_structural_destination(

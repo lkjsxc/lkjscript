@@ -106,12 +106,8 @@ fn string_utf8_view<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let StructuralNodeView::Bytes(bytes) = node.payload() else {
         return Err(Error::msg("structural UTF-8 view expects string payload"));
     };
-    let end = u32::try_from(bytes.len()).map_err(|_| {
-        Error::resource(
-            ResourceLimitKind::HeapBytes,
-            "structural UTF-8 view range exceeds u32",
-        )
-    })?;
+    let end = u64::try_from(bytes.len())
+        .map_err(|_| Error::host("structural UTF-8 view range exceeds u64"))?;
     let view = invocation_mut(vm)?
         .runtime
         .borrow_projected(

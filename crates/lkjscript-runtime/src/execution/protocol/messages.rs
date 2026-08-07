@@ -100,7 +100,7 @@ fn encode_arguments(output: &mut Writer, arguments: &[String]) -> io::Result<()>
     if aggregate.is_none_or(|value| value > MAX_AGGREGATE_ARGUMENT_BYTES) {
         return Err(invalid("process argument bytes exceed bound"));
     }
-    output.u32(u32::try_from(arguments.len()).map_err(|_| invalid("argument count"))?)?;
+    output.u64(u64::try_from(arguments.len()).map_err(|_| invalid("argument count"))?)?;
     for argument in arguments {
         output.text(argument, MAX_ARGUMENT_BYTES)?;
     }
@@ -108,7 +108,8 @@ fn encode_arguments(output: &mut Writer, arguments: &[String]) -> io::Result<()>
 }
 
 fn decode_arguments(input: &mut Reader<'_>) -> io::Result<Vec<String>> {
-    let count = usize::try_from(input.u32()?).map_err(|_| invalid("argument count"))?;
+    let count = usize::try_from(input.u64()?)
+        .map_err(|_| invalid("argument count exceeds platform"))?;
     if count > MAX_ARGUMENTS {
         return Err(invalid("process argument count exceeds bound"));
     }

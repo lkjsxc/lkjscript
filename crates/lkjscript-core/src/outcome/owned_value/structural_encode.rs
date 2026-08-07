@@ -61,9 +61,9 @@ fn schedule_structural_fields<'a>(
     pending: &mut Vec<&'a SemanticValue>,
     fields: &'a [SemanticValue],
 ) -> Result<()> {
-    out.u32(
-        u32::try_from(fields.len())
-            .map_err(|_| Error::msg("structural snapshot field count exceeds u32"))?,
+    out.u64(
+        u64::try_from(fields.len())
+            .map_err(|_| Error::msg("structural snapshot field count exceeds u64"))?,
     )?;
     pending
         .try_reserve(fields.len())

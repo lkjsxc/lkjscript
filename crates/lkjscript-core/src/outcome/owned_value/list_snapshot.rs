@@ -16,9 +16,11 @@ impl OwnedValue {
             .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
         pending.push(root);
         while let Some(value) = pending.pop() {
-            let Some(index) = value.as_owned_list().map(|value| value as usize) else {
+            let Some(index) = value.as_owned_list() else {
                 continue;
             };
+            let index = usize::try_from(index)
+                .map_err(|_| Error::msg("owned-list snapshot index exceeds platform"))?;
             if visited.len() < lists.len() {
                 visited
                     .try_reserve(lists.len() - visited.len())
@@ -84,8 +86,8 @@ fn materialize_segmented_value(
         .map_err(|_| Error::msg("owned-list snapshot allocation failed"))?;
     let mut list = Value::EMPTY_LIST;
     for element in elements.into_iter().rev() {
-        let index = u32::try_from(lists.len())
-            .map_err(|_| Error::msg("owned-list snapshot exceeds u32 nodes"))?;
+        let index = u64::try_from(lists.len())
+            .map_err(|_| Error::msg("owned-list snapshot exceeds u64 nodes"))?;
         lists.push(OwnedListNode {
             head: element,
             tail: list,

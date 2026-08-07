@@ -6,7 +6,7 @@ impl UniqueRuntime {
     pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<Value> {
         self.preflight_allocation(bytes.capacity())?;
         let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word().get())
+        self.publish_bytes(key.opaque_word().get())
     }
 
     pub(crate) fn copy_bytes(&mut self, value: Value) -> Result<Vec<u8>> {
@@ -59,7 +59,7 @@ impl UniqueRuntime {
         let bytes = self.store.bytes(key).map_err(map_store_error)?.len();
         self.preflight_allocation(bytes)?;
         let clone = self.store.clone_bytes(key).map_err(map_store_error)?;
-        self.publish_bytes(clone.packed_word().get())
+        self.publish_bytes(clone.opaque_word().get())
     }
 
     pub(crate) fn copy_bytes_range(
@@ -75,7 +75,7 @@ impl UniqueRuntime {
             .store
             .clone_bytes_range(key, start, len)
             .map_err(map_store_error)?;
-        self.publish_bytes(clone.packed_word().get())
+        self.publish_bytes(clone.opaque_word().get())
     }
 
     pub(crate) fn clone_static(&mut self, bytes: &[u8]) -> Result<Value> {
@@ -84,7 +84,7 @@ impl UniqueRuntime {
             .store
             .clone_static_bytes(bytes)
             .map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word().get())
+        self.publish_bytes(key.opaque_word().get())
     }
 
     pub(crate) fn copy_static_range(
@@ -98,7 +98,7 @@ impl UniqueRuntime {
             .store
             .clone_static_bytes_range(bytes, start, len)
             .map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word().get())
+        self.publish_bytes(key.opaque_word().get())
     }
 
     pub(crate) fn freeze(&mut self, value: Value) -> Result<Value> {
@@ -140,7 +140,7 @@ impl UniqueRuntime {
             .store
             .thaw_bytes_slice(bytes)
             .map_err(map_store_error)?;
-        let owner = key.packed_word().get();
+        let owner = key.opaque_word().get();
         if self
             .owners
             .insert(owner, UniqueLayout::ByteVector)

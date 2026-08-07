@@ -2,7 +2,7 @@
 fn lower_field_projection(
     function: &Function,
     instruction: &Instruction,
-    field: u16,
+    field: u64,
     value: ValueId,
     root: lkjscript_native::StructuralTypeIdentity,
     allow_view_result: bool,

@@ -62,7 +62,7 @@ fn numeric_error_descriptor(
         .find(|descriptor| {
             matches!(
                 descriptor.kind(),
-                StructuralAggregateKind::Enum(tag) if u64::from(tag) == error.physical_tag()
+                StructuralAggregateKind::Enum(tag) if tag == error.physical_tag()
             )
         })
         .ok_or(NativeServiceError::HostFailure)

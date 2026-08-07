@@ -5,8 +5,8 @@ fn validate_semantic_dag(
     if nodes.is_empty() {
         return Err(Error::msg("semantic DAG must contain a root node"));
     }
-    let node_count = u32::try_from(nodes.len())
-        .map_err(|_| Error::msg("semantic DAG node count exceeds u32"))?;
+    let node_count = u64::try_from(nodes.len())
+        .map_err(|_| Error::msg("semantic DAG node count exceeds u64"))?;
     let final_id = node_count - 1;
     if root.get() != final_id {
         return Err(Error::msg("semantic DAG root must be the final node"));

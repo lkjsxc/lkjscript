@@ -1,12 +1,12 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::model::RawUniqueKey;
 use super::object::{Payload, Slot, SlotState};
 use super::{ByteVectorKey, BytesKey, PathKey, UniqueStore, UniqueStoreError, UniqueStoreStats};
 
 enum SlotPlan {
-    New { index: u32 },
-    Reuse { index: u32, generation: NonZeroU32 },
+    New { index: u64 },
+    Reuse { index: u64, generation: NonZeroU64 },
 }
 
 impl UniqueStore {
@@ -41,14 +41,23 @@ impl UniqueStore {
                 .try_reserve(1)
                 .map_err(|_| UniqueStoreError::StorageCapacity)?;
         }
+        self.tokens
+            .try_reserve(1)
+            .map_err(|_| UniqueStoreError::StorageCapacity)?;
+        let word = self.next_token()?;
+        if self.tokens.contains_key(&word) {
+            return Err(UniqueStoreError::ArithmeticOverflow);
+        }
         let (index, generation) = match slot_plan {
             SlotPlan::New { index } => {
-                let generation = NonZeroU32::MIN;
+                let generation = NonZeroU64::MIN;
                 self.slots.push(Slot::occupied(generation, payload));
                 (index, generation)
             }
             SlotPlan::Reuse { index, generation } => {
-                let Some(slot) = self.slots.get_mut(index as usize) else {
+                let host_index =
+                    usize::try_from(index).map_err(|_| UniqueStoreError::ArithmeticOverflow)?;
+                let Some(slot) = self.slots.get_mut(host_index) else {
                     return Err(UniqueStoreError::ArithmeticOverflow);
                 };
                 let next = match &slot.state {
@@ -61,12 +70,15 @@ impl UniqueStore {
                 (index, generation)
             }
         };
-        self.stats = next_stats;
-        Ok(RawUniqueKey {
+        let key = RawUniqueKey {
             store: self.id,
             index,
             generation,
-        })
+            word,
+        };
+        self.tokens.insert(word, key);
+        self.stats = next_stats;
+        Ok(key)
     }
 
     pub(super) fn check_allocation(&self, retained: u64) -> Result<(), UniqueStoreError> {
@@ -105,13 +117,13 @@ impl UniqueStore {
         next_stats: &mut UniqueStoreStats,
     ) -> Result<SlotPlan, UniqueStoreError> {
         let Some(index) = self.free_head else {
-            let index = u32::try_from(self.slots.len())
-                .map_err(|_| UniqueStoreError::RepresentationExhausted)?;
+            let index = u64::try_from(self.slots.len())
+                .map_err(|_| UniqueStoreError::ArithmeticOverflow)?;
             return Ok(SlotPlan::New { index });
         };
         let slot = self
             .slots
-            .get(index as usize)
+            .get(usize::try_from(index).map_err(|_| UniqueStoreError::ArithmeticOverflow)?)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
         if !matches!(&slot.state, SlotState::Vacant { .. }) {
             return Err(UniqueStoreError::ArithmeticOverflow);
@@ -121,7 +133,7 @@ impl UniqueStore {
             .get()
             .checked_add(1)
             .ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        let generation = NonZeroU32::new(value).ok_or(UniqueStoreError::ArithmeticOverflow)?;
+        let generation = NonZeroU64::new(value).ok_or(UniqueStoreError::ArithmeticOverflow)?;
         next_stats.reused_slots = next_stats
             .reused_slots
             .checked_add(1)

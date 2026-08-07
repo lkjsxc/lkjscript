@@ -38,17 +38,17 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "unique-values",
                     "unique-values",
-                    "exact static/bytes unique/bytes loan/bytes and byte-vector/view words",
+                    "exact opaque nonzero u64 unique owner and loan tokens",
                 ))
                 .fact(fact(
                     "unique-service",
                     "unique-service",
-                    "bounded invocation-owned UniqueStore and generation-bearing loan table",
+                    "policy-accounted invocation-owned UniqueStore with wide identity maps",
                 ))
                 .fact(fact(
                     "structural-values",
                     "structural-values",
-                    "exact static-string owner view destination type layout projection words",
+                    "opaque u64 owner view destination tokens and canonical u64 structural indexes",
                 ))
                 .fact(fact(
                     "structural-service",
@@ -62,7 +62,7 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "memory-witness-abi",
                     "memory witness ABI",
                     concat!(
-                        "ordered hidden validated group/member locators with synchronous ",
+                        "ordered canonical u64 hidden validated group/member locators with synchronous ",
                         "native independent-owner and dispose",
                     ),
                 ))

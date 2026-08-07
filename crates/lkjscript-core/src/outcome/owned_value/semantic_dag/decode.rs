@@ -1,11 +1,16 @@
 fn decode_semantic_dag(input: &mut Decoder<'_>) -> Result<SemanticDagSnapshot> {
-    let count = input.u32()?;
+    let count = input.u64()?;
     if count == 0 {
         return Err(Error::msg("semantic DAG must contain a root node"));
     }
-    let root = SemanticDagNodeId::new(input.u32()?);
+    let root = SemanticDagNodeId::new(input.u64()?);
     let count = usize::try_from(count)
         .map_err(|_| Error::msg("semantic DAG node count exceeds platform"))?;
+    let root_index = usize::try_from(root.get())
+        .map_err(|_| Error::msg("semantic DAG root ID exceeds platform"))?;
+    if root_index >= count {
+        return Err(Error::msg("semantic DAG root ID out of range"));
+    }
     let mut nodes = Vec::new();
     nodes
         .try_reserve_exact(count)
@@ -81,8 +86,8 @@ fn decode_semantic_dag_payload(
         SemanticDagKind::List => {
             budget.fields(2)?;
             SemanticDagPayload::List {
-                head: SemanticDagNodeId::new(input.u32()?),
-                tail: SemanticDagNodeId::new(input.u32()?),
+                head: SemanticDagNodeId::new(input.u64()?),
+                tail: SemanticDagNodeId::new(input.u64()?),
             }
         }
     })
@@ -92,7 +97,7 @@ fn decode_semantic_dag_fields(
     input: &mut Decoder<'_>,
     budget: &mut SemanticDagDecodeBudget,
 ) -> Result<Vec<SemanticDagNodeId>> {
-    let count = input.u32()?;
+    let count = input.u64()?;
     budget.fields(count)?;
     let count = usize::try_from(count)
         .map_err(|_| Error::msg("semantic DAG edge count exceeds platform"))?;
@@ -101,7 +106,7 @@ fn decode_semantic_dag_fields(
         .try_reserve_exact(count)
         .map_err(|_| Error::msg("semantic DAG edge allocation failed"))?;
     for _ in 0..count {
-        fields.push(SemanticDagNodeId::new(input.u32()?));
+        fields.push(SemanticDagNodeId::new(input.u64()?));
     }
     Ok(fields)
 }
@@ -136,7 +141,10 @@ fn validate_decoded_semantic_dag_node(
         dag_child_index(child, index)?;
     }
     if let SemanticDagPayload::List { tail, .. } = node.payload {
-        let tail = &previous[tail.get() as usize];
+        let tail_index = dag_child_index(tail, index)?;
+        let tail = previous
+            .get(tail_index)
+            .ok_or_else(|| Error::msg("semantic DAG list tail ID out of range"))?;
         if !matches!(tail.value_type.kind, SemanticDagKind::EmptyList | SemanticDagKind::List)
             || tail.value_type.layout != node.value_type.layout
             || tail.value_type.semantic_type != node.value_type.semantic_type

@@ -46,7 +46,15 @@ impl SealedSemanticDagRuntime {
         &mut self,
         borrow: SealedSemanticDagBorrow,
     ) -> Result<(), SealedSemanticDagBorrowFailure> {
-        let index = borrow.store as usize;
+        let index = match usize::try_from(borrow.store) {
+            Ok(index) => index,
+            Err(_) => {
+                return Err(borrow_failure(
+                    SealedSemanticDagError::CorruptRegion,
+                    borrow,
+                ));
+            }
+        };
         if self
             .stores
             .get(index)
@@ -81,11 +89,20 @@ impl SealedSemanticDagRuntime {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn release(
         &mut self,
         owner: SealedSemanticDagOwner,
     ) -> Result<SealedSemanticDagReleaseReport, SealedSemanticDagReleaseFailure> {
-        let index = owner.store as usize;
+        let index = match usize::try_from(owner.store) {
+            Ok(index) => index,
+            Err(_) => {
+                return Err(release_failure(
+                    SealedSemanticDagError::CorruptRegion,
+                    owner,
+                ));
+            }
+        };
         if self
             .stores
             .get(index)

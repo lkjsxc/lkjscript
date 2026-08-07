@@ -1,9 +1,10 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::{RootKey, StructuralBorrow, StructuralValueKey};
 use super::{
-    LocalNodeId, StructuralEventKind, StructuralNode, StructuralObject, StructuralProjection,
-    StructuralType, StructuralValueError, StructuralValueRuntime, StructuralViewKey,
+    LocalNodeId, PrivateTokenKind, StructuralEventKind, StructuralNode, StructuralObject,
+    StructuralProjection, StructuralType, StructuralValueError, StructuralValueRuntime,
+    StructuralViewKey,
 };
 
 #[derive(Debug)]
@@ -16,9 +17,10 @@ pub(super) struct ViewRecord {
 
 #[derive(Debug)]
 pub(super) enum ViewSlot {
-    Vacant(NonZeroU32),
+    Vacant(NonZeroU64),
     Live {
-        generation: NonZeroU32,
+        generation: NonZeroU64,
+        key: StructuralViewKey,
         record: ViewRecord,
     },
     Retired,
@@ -71,11 +73,11 @@ impl StructuralValueRuntime {
             self.view(view)?.projection,
             StructuralProjection::Utf8 { .. }
         ) {
-            self.record(StructuralEventKind::StringView, view.slot(), 0);
+            self.record(StructuralEventKind::StringView, view.get(), 0);
         }
         self.record(
             StructuralEventKind::Borrow,
-            view.slot(),
+            view.get(),
             u64::from(exclusive),
         );
         Ok(view)
@@ -114,15 +116,20 @@ impl StructuralValueRuntime {
         self.retire_view(key)?;
         self.metrics.views_ended = self.metrics.views_ended.saturating_add(1);
         self.metrics.live_views = self.metrics.live_views.saturating_sub(1);
-        self.record(StructuralEventKind::EndView, key.slot(), 0);
+        self.record(StructuralEventKind::EndView, key.get(), 0);
         Ok(())
     }
 
     pub(super) fn view(&self, key: StructuralViewKey) -> Result<&ViewRecord, StructuralValueError> {
-        match self.views.get(key.slot() as usize) {
-            Some(ViewSlot::Live { generation, record }) if generation.get() == key.generation() => {
-                Ok(record)
-            }
+        let token = self.view_token(key)?;
+        let index =
+            usize::try_from(token.slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        match self.views.get(index) {
+            Some(ViewSlot::Live {
+                generation,
+                key: current,
+                record,
+            }) if *current == key && *generation == token.generation => Ok(record),
             _ => Err(StructuralValueError::StaleView),
         }
     }
@@ -131,43 +138,74 @@ impl StructuralValueRuntime {
         &mut self,
         record: ViewRecord,
     ) -> Result<StructuralViewKey, Box<(StructuralValueError, ViewRecord)>> {
-        if self.free_views.try_reserve(1).is_err() {
-            return Err(Box::new((StructuralValueError::AllocationFailed, record)));
-        }
-        let (slot, generation) = if let Some(slot) = self.free_views.pop() {
-            let ViewSlot::Vacant(generation) = self.views[slot as usize] else {
+        let (slot, generation, reused) = if let Some(&slot) = self.free_views.last() {
+            let index = match usize::try_from(slot) {
+                Ok(index) => index,
+                Err(_) => return Err(Box::new((StructuralValueError::ArithmeticOverflow, record))),
+            };
+            let Some(ViewSlot::Vacant(generation)) = self.views.get(index) else {
                 return Err(Box::new((StructuralValueError::InvariantViolation, record)));
             };
-            (slot, generation)
+            (slot, *generation, true)
         } else {
-            let slot = match u32::try_from(self.views.len()) {
-                Ok(slot) => slot,
-                Err(_) => {
-                    return Err(Box::new((StructuralValueError::ArithmeticOverflow, record)));
-                }
-            };
             if self.views.try_reserve(1).is_err() {
                 return Err(Box::new((StructuralValueError::AllocationFailed, record)));
             }
-            self.views.push(ViewSlot::Vacant(NonZeroU32::MIN));
-            (slot, NonZeroU32::MIN)
+            let slot = match u64::try_from(self.views.len()) {
+                Ok(slot) => slot,
+                Err(_) => return Err(Box::new((StructuralValueError::ArithmeticOverflow, record))),
+            };
+            (slot, NonZeroU64::MIN, false)
         };
-        self.views[slot as usize] = ViewSlot::Live { generation, record };
-        Ok(StructuralViewKey::new(slot, generation))
+        let token = match self.allocate_private_token(PrivateTokenKind::View, slot, generation) {
+            Ok(token) => token,
+            Err(error) => return Err(Box::new((error, record))),
+        };
+        let key = StructuralViewKey::from_token(token);
+        let index = match usize::try_from(slot) {
+            Ok(index) => index,
+            Err(_) => return Err(Box::new((StructuralValueError::ArithmeticOverflow, record))),
+        };
+        if reused {
+            if self.free_views.pop() != Some(slot) {
+                return Err(Box::new((StructuralValueError::InvariantViolation, record)));
+            }
+            self.views[index] = ViewSlot::Live {
+                generation,
+                key,
+                record,
+            };
+        } else {
+            self.views.push(ViewSlot::Live {
+                generation,
+                key,
+                record,
+            });
+        }
+        Ok(key)
     }
 
     fn retire_view(&mut self, key: StructuralViewKey) -> Result<(), StructuralValueError> {
         self.view(key)?;
-        let next = if key.generation() == u32::MAX {
+        let token = self.view_token(key)?;
+        let index =
+            usize::try_from(token.slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let generation = token.generation;
+        let next = if generation.get() == u64::MAX {
             ViewSlot::Retired
         } else {
-            self.free_views.push(key.slot());
+            self.free_views.try_reserve(1)?;
+            self.free_views.push(token.slot);
             ViewSlot::Vacant(
-                NonZeroU32::new(key.generation() + 1)
-                    .ok_or(StructuralValueError::InvariantViolation)?,
+                generation
+                    .get()
+                    .checked_add(1)
+                    .and_then(NonZeroU64::new)
+                    .ok_or(StructuralValueError::ArithmeticOverflow)?,
             )
         };
-        self.views[key.slot() as usize] = next;
+        self.views[index] = next;
+        self.private_tokens.remove(&key.get());
         Ok(())
     }
 }

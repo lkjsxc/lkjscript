@@ -1,7 +1,7 @@
 use lkjscript_core::{StructuralBorrowKey, StructuralValueKey, Value};
 
 #[test]
-fn compact_structural_keys_preserve_the_closed_value_size() {
+fn opaque_structural_tokens_preserve_the_closed_one_word_abi() {
     assert_eq!(std::mem::size_of::<StructuralValueKey>(), 8);
     assert_eq!(std::mem::size_of::<StructuralBorrowKey>(), 8);
     assert_eq!(std::mem::size_of::<Value>(), 16);

@@ -83,10 +83,10 @@ impl SealedSemanticDagFailure {
 
 #[derive(Debug)]
 pub struct SealedSemanticDagOwner {
-    pub(super) store: u32,
-    pub(super) root: u32,
-    pub(super) nodes: u32,
-    pub(super) cells: u32,
+    pub(super) store: u64,
+    pub(super) root: u64,
+    pub(super) nodes: u64,
+    pub(super) cells: u64,
     pub(super) value_type: SemanticDagType,
     pub(super) owner: SealedOwner<SealedDagCell, ()>,
 }
@@ -96,17 +96,17 @@ impl SealedSemanticDagOwner {
         self.value_type
     }
 
-    pub const fn node_count(&self) -> u32 {
+    pub const fn node_count(&self) -> u64 {
         self.nodes
     }
 }
 
 #[derive(Debug)]
 pub struct SealedSemanticDagBorrow {
-    pub(super) store: u32,
-    pub(super) root: u32,
-    pub(super) nodes: u32,
-    pub(super) cells: u32,
+    pub(super) store: u64,
+    pub(super) root: u64,
+    pub(super) nodes: u64,
+    pub(super) cells: u64,
     pub(super) value_type: SemanticDagType,
     pub(super) borrow: SealedBorrow<SealedDagCell>,
 }

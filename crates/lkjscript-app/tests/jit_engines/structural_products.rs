@@ -183,17 +183,30 @@ fn compiler_witness_authenticates_sealed_product_rehydration() {
     let snapshot =
         SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(1)).expect("product semantic DAG");
     let expected = snapshot.clone();
-    let wire = encode_execution_outcome(
-        &ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot)),
-        64 * 1024,
-    )
-    .expect("encode key-free process outcome");
+    let vm_outcome = run_chunk(
+        chunk,
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(vm_outcome
+        .returned()
+        .and_then(OwnedValue::as_structural)
+        .is_some());
+    let wire = encode_execution_outcome(&vm_outcome, 64 * 1024)
+        .expect("encode full VM structural process outcome");
     let decoded = decode_execution_outcome(&wire, 64 * 1024).expect("decode process outcome");
-    let snapshot = decoded
+    let (rehydrated, report) =
+        lkjscript_runtime::rehydrate_process_outcome(decoded, chunk, program.prepared_identity())
+            .expect("fresh runtime rehydrates full VM outcome");
+    let report = report.expect("structural rehydration report");
+    assert_eq!(report.final_domains, 0);
+    assert!(report.complete_release_work);
+    let snapshot = rehydrated
         .returned()
         .and_then(OwnedValue::as_semantic_dag)
         .cloned()
-        .expect("decoded key-free semantic DAG");
+        .expect("rehydrated semantic DAG");
+    assert_eq!(snapshot, expected);
     let mut runtime = SealedSemanticDagRuntime::new().expect("fresh sealed runtime");
     let owner = runtime
         .rehydrate_authenticated_return(chunk, snapshot)

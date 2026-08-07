@@ -12,7 +12,9 @@ impl OwnedValue {
                 self.retain_symbol(symbol, resolve(symbol)?)?;
                 continue;
             }
-            if let Some(index) = value.as_owned_list().map(|index| index as usize) {
+            if let Some(index) = value.as_owned_list() {
+                let index = usize::try_from(index)
+                    .map_err(|_| Error::msg("owned list index exceeds platform"))?;
                 let node = self
                     .lists
                     .get(index)

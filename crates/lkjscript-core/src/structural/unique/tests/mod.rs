@@ -5,7 +5,7 @@ use super::*;
 mod access;
 mod cloning;
 mod mutation;
-mod packed;
+mod opaque;
 mod range;
 mod transfer;
 

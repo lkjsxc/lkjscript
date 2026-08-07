@@ -19,15 +19,17 @@ impl JitStructuralRuntime {
         if fields.try_reserve_exact(projection.path().len()).is_err() {
             return Err(NativeServiceError::HostFailure);
         }
-        fields.extend(projection.path().iter().copied().map(usize::from));
+        for &field in projection.path() {
+            fields.push(usize::try_from(field).map_err(|_| NativeServiceError::Trap)?);
+        }
         let path = StructuralFieldPath::new(fields);
         let projection = match projection.kind() {
             StructuralProjectionKind::Field => StructuralProjection::Field { path, expected },
             StructuralProjectionKind::Utf8 => StructuralProjection::Utf8 {
                 path,
                 expected,
-                start: u32::try_from(start).map_err(|_| NativeServiceError::Trap)?,
-                end: u32::try_from(end).map_err(|_| NativeServiceError::Trap)?,
+                start: u64::try_from(start).map_err(|_| NativeServiceError::Trap)?,
+                end: u64::try_from(end).map_err(|_| NativeServiceError::Trap)?,
             },
         };
         let key = self

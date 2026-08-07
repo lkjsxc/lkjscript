@@ -41,11 +41,17 @@ impl<P> ResourceTable<P> {
                 })
             }
         };
-        if children >= self.limits.max_children_per_parent() {
+        if let Some(configured) = self
+            .limits
+            .max_children_per_parent()
+            .filter(|configured| children >= *configured)
+        {
             return Err(ResourceTableError::LimitExceeded {
                 limit: ResourceTableLimit::ChildrenPerParent,
-                configured: self.limits.max_children_per_parent(),
-                observed: children.saturating_add(1),
+                configured,
+                observed: children
+                    .checked_add(1)
+                    .ok_or(ResourceTableError::AcquisitionSequenceExhausted)?,
             });
         }
         let parent_ref = ParentRef {
@@ -139,16 +145,21 @@ impl<P> ResourceTable<P> {
 
     fn check_limit(
         current: usize,
-        configured: usize,
+        configured: Option<usize>,
         limit: ResourceTableLimit,
     ) -> Result<(), ResourceTableError> {
+        let Some(configured) = configured else {
+            return Ok(());
+        };
         if current < configured {
             Ok(())
         } else {
             Err(ResourceTableError::LimitExceeded {
                 limit,
                 configured,
-                observed: current.saturating_add(1),
+                observed: current
+                    .checked_add(1)
+                    .ok_or(ResourceTableError::AcquisitionSequenceExhausted)?,
             })
         }
     }

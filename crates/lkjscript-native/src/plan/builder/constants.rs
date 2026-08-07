@@ -20,7 +20,7 @@ impl FunctionBuilder {
     pub fn memory_witness_locator(
         &mut self,
         block: BlockId,
-        locator: u16,
+        locator: u64,
     ) -> Result<ValueId, PlanError> {
         self.append(
             block,

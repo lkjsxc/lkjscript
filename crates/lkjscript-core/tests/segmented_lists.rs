@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use lkjscript_core::{
     decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, OwnedValue,
     SegmentedListArena, SegmentedListError, Value,
@@ -13,12 +15,15 @@ fn linear_prepend_crosses_former_entry_limit_and_preserves_order() -> Result<(),
         list = arena.prepend(value, list)?;
     }
     let values = arena.collect_cloned(list)?;
-    assert_eq!(values.len(), COUNT as usize);
+    assert_eq!(
+        values.len(),
+        usize::try_from(COUNT).expect("test count fits usize")
+    );
     assert_eq!(values.first(), Some(&(COUNT - 1)));
     assert_eq!(values.last(), Some(&0));
     assert_eq!(
         arena.metrics().live_entries,
-        u32::try_from(COUNT).map_err(|_| SegmentedListError::Limit(
+        u64::try_from(COUNT).map_err(|_| SegmentedListError::Limit(
             lkjscript_core::SegmentedListLimit::Representation
         ))?
     );

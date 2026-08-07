@@ -18,7 +18,7 @@ pub enum StructuralProjectionKind {
 pub struct StructuralProjectionDescriptor {
     view_type: StructuralViewType,
     kind: StructuralProjectionKind,
-    path: Vec<u16>,
+    path: Vec<u64>,
 }
 
 impl StructuralProjectionDescriptor {
@@ -26,7 +26,7 @@ impl StructuralProjectionDescriptor {
     pub fn new(
         view_type: StructuralViewType,
         kind: StructuralProjectionKind,
-        path: Vec<u16>,
+        path: Vec<u64>,
     ) -> Self {
         Self {
             view_type,
@@ -46,19 +46,19 @@ impl StructuralProjectionDescriptor {
     }
 
     #[must_use]
-    pub fn path(&self) -> &[u16] {
+    pub fn path(&self) -> &[u64] {
         &self.path
     }
 
     pub(crate) fn canonical(&self) -> bool {
-        self.view_type.is_valid() && self.path.len() <= usize::from(u16::MAX)
+        self.view_type.is_valid()
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum StructuralAggregateKind {
     Product,
-    Enum(u16),
+    Enum(u64),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -109,7 +109,7 @@ impl StructuralAggregateDescriptor {
     pub fn destination(
         &self,
         storage: StructuralStorageRoute,
-        initialized: u16,
+        initialized: u64,
     ) -> StructuralDestinationType {
         StructuralDestinationType::new(self.identity, self.value_type, storage, initialized)
     }
@@ -123,7 +123,6 @@ impl StructuralAggregateDescriptor {
         self.identity != 0
             && self.value_type.is_valid()
             && right_kind
-            && self.fields.len() <= usize::from(u16::MAX)
             && self.fields.iter().all(|field| field.is_valid())
     }
 }

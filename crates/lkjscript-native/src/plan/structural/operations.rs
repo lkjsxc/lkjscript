@@ -33,7 +33,7 @@ pub enum StructuralOperation {
     WitnessIndependentOwner,
     WitnessCompare,
     WitnessDispose,
-    WitnessDisposeStatic(u16),
+    WitnessDisposeStatic(u64),
     CopyView(StructuralViewType),
     Move(StructuralTypeIdentity),
     Borrow {
@@ -51,7 +51,7 @@ pub enum StructuralOperation {
     DestinationInitialize {
         aggregate: StructuralAggregateDescriptor,
         storage: StructuralStorageRoute,
-        field: u16,
+        field: u64,
     },
     DestinationFinish {
         aggregate: StructuralAggregateDescriptor,
@@ -60,7 +60,7 @@ pub enum StructuralOperation {
     DestinationAbort {
         aggregate: StructuralAggregateDescriptor,
         storage: StructuralStorageRoute,
-        initialized: u16,
+        initialized: u64,
     },
     ObserveTag(StructuralViewType),
     ObserveOwnedTag(StructuralTypeIdentity),
@@ -160,12 +160,19 @@ impl StructuralOperation {
                 aggregate,
                 storage: _,
                 field,
-            } => aggregate.canonical() && usize::from(*field) < aggregate.fields().len(),
+            } => {
+                aggregate.canonical()
+                    && usize::try_from(*field).is_ok_and(|field| field < aggregate.fields().len())
+            }
             Self::DestinationAbort {
                 aggregate,
                 storage: _,
                 initialized,
-            } => aggregate.canonical() && usize::from(*initialized) <= aggregate.fields().len(),
+            } => {
+                aggregate.canonical()
+                    && usize::try_from(*initialized)
+                        .is_ok_and(|initialized| initialized <= aggregate.fields().len())
+            }
             Self::PayloadBytesEqual { left, right } => {
                 left.is_valid()
                     && right.is_valid()

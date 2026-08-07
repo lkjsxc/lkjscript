@@ -40,7 +40,7 @@ impl Writer {
     }
 
     fn bytes(&mut self, value: &[u8]) -> io::Result<()> {
-        self.u32(u32::try_from(value.len()).map_err(|_| invalid("field exceeds protocol"))?)?;
+        self.u64(u64::try_from(value.len()).map_err(|_| invalid("field exceeds protocol"))?)?;
         self.extend(value)
     }
 
@@ -98,7 +98,8 @@ impl<'a> Reader<'a> {
     }
 
     fn bytes(&mut self, maximum: usize) -> io::Result<&'a [u8]> {
-        let length = usize::try_from(self.u32()?).map_err(|_| invalid("field length"))?;
+        let length = usize::try_from(self.u64()?)
+            .map_err(|_| invalid("field length exceeds platform"))?;
         if length > maximum {
             return Err(invalid("process field exceeds bound"));
         }
@@ -120,16 +121,16 @@ impl<'a> Reader<'a> {
 }
 
 fn write_frame(output: &mut impl Write, body: Vec<u8>) -> io::Result<()> {
-    let length = u32::try_from(body.len()).map_err(|_| invalid("process frame exceeds u32"))?;
+    let length = u64::try_from(body.len()).map_err(|_| invalid("process frame exceeds u64"))?;
     output.write_all(&length.to_le_bytes())?;
     output.write_all(&body)?;
     output.flush()
 }
 
 fn read_frame(input: &mut impl Read) -> io::Result<Vec<u8>> {
-    let mut length = [0_u8; 4];
+    let mut length = [0_u8; 8];
     input.read_exact(&mut length)?;
-    let length = usize::try_from(u32::from_le_bytes(length))
+    let length = usize::try_from(u64::from_le_bytes(length))
         .map_err(|_| invalid("process frame length exceeds platform"))?;
     if length > MAX_FRAME_BYTES {
         return Err(invalid("process frame exceeds bound"));

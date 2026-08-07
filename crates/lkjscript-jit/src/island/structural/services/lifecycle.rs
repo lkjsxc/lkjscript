@@ -24,7 +24,7 @@ macro_rules! lifecycle_services {
 
         fn independent_structural_owner(
             &mut self,
-            witness: u16,
+            witness: u64,
             key: u64,
         ) -> Result<u64, NativeServiceError> {
             self.acquire_witness_owner(witness, key)
@@ -32,7 +32,7 @@ macro_rules! lifecycle_services {
 
         fn dispose_structural_owner(
             &mut self,
-            witness: u16,
+            witness: u64,
             key: u64,
         ) -> Result<(), NativeServiceError> {
             self.dispose_witness_owner(witness, key)
@@ -40,7 +40,7 @@ macro_rules! lifecycle_services {
 
         fn compare_structural_values(
             &mut self,
-            witness: u16,
+            witness: u64,
             left: u64,
             right: u64,
         ) -> Result<bool, NativeServiceError> {

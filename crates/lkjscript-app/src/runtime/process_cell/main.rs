@@ -54,7 +54,7 @@ fn run() -> Result<(), String> {
     write_response(
         &mut output,
         &ProcessResponse::Ready {
-            process: std::process::id(),
+            process: u64::from(std::process::id()),
             provenance: provenance.clone(),
         },
     )

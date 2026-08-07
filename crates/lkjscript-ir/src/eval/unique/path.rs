@@ -9,7 +9,7 @@ impl EvalUniqueRuntime {
             .store
             .allocate_path(bytes.into_boxed_slice())
             .map_err(map_store_error)?;
-        self.publish_path(key.packed_word())
+        self.publish_path(key.opaque_word())
     }
 
     pub(crate) fn copy_path(&mut self, value: &EvalValue) -> Result<Vec<u8>, Flow> {
@@ -30,7 +30,7 @@ impl EvalUniqueRuntime {
         let bytes = self.store.path(key).map_err(map_store_error)?.len();
         self.preflight_allocation(bytes)?;
         let clone = self.store.clone_path(key).map_err(map_store_error)?;
-        self.publish_path(clone.packed_word())
+        self.publish_path(clone.opaque_word())
     }
 
     fn publish_path(&mut self, word: lkjscript_core::UniqueKeyWord) -> Result<EvalValue, Flow> {

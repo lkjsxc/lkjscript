@@ -1,5 +1,3 @@
-use std::num::NonZeroU64;
-
 use crate::*;
 use lkjscript_core::{ProviderId, ResourceKey, ResourceTable, ResourceTableLimits, ScopeId};
 use lkjscript_executable::NativeServiceError;
@@ -45,17 +43,14 @@ impl JitIslandServices {
         config: &ExecutionPolicy,
         witnesses: NativeWitnessCatalog,
     ) -> Result<Self, EngineError> {
-        let max_handles = config
-            .max_handles()
-            .unwrap_or(u32::MAX as usize)
-            .min(u32::MAX as usize);
-        let limits = ResourceTableLimits::new(
-            max_handles.max(1),
+        let max_handles = config.max_handles();
+        let limits = ResourceTableLimits::optional(
+            max_handles.map(|maximum| maximum.max(1)),
             max_handles,
-            0,
+            Some(0),
             max_handles,
-            0,
-            NonZeroU64::new(u64::from(u32::MAX)).ok_or_else(config_error)?,
+            Some(0),
+            None,
         )
         .map_err(|error| config_error().with_detail(error.to_string()))?;
         Ok(Self {
@@ -141,7 +136,7 @@ impl JitIslandServices {
     }
 
     fn native_stdin(&mut self) -> Result<NativeResource, NativeServiceError> {
-        let key = if let Some(key) = &self.stdin {
+        let _key = if let Some(key) = &self.stdin {
             self.stats.borrowed_reuses += 1;
             key.clone()
         } else {
@@ -155,16 +150,7 @@ impl JitIslandServices {
             self.stdin = Some(key.clone());
             key
         };
-        let parts = key.token_parts();
-        let slot =
-            u64::try_from(parts.slot()).map_err(|_| NativeServiceError::ResourceLimitExceeded)?;
-        let word = parts
-            .generation()
-            .get()
-            .checked_shl(32)
-            .and_then(|generation| generation.checked_add(slot))
-            .ok_or(NativeServiceError::ResourceLimitExceeded)?;
-        Ok(NativeResource::new(ResourceKind::InputStream, word))
+        Ok(NativeResource::new(ResourceKind::InputStream, 1))
     }
 }
 

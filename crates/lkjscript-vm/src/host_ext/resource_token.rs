@@ -9,32 +9,50 @@ pub(super) fn reservation_exhausted(error: &ResourceTableError) -> bool {
     )
 }
 
-pub(super) fn encode_key(key: &ResourceKey) -> Result<Value> {
-    let parts = key.token_parts();
-    let slot = u32::try_from(parts.slot())
-        .ok()
-        .filter(|slot| *slot <= TOKEN_SLOT_MASK)
-        .ok_or_else(|| Error::msg("resource handle slot exhausted"))?;
-    let generation = u32::try_from(parts.generation().get())
-        .ok()
-        .filter(|generation| (1..=TOKEN_GENERATION_MAX).contains(generation))
-        .ok_or_else(|| Error::msg("resource handle generation exhausted"))?;
-    Ok(Value::from_resource((generation << TOKEN_SLOT_BITS) | slot))
+pub(super) fn encode_key(table: &mut ResourceTable, key: &ResourceKey) -> Result<Value> {
+    table
+        .tokens
+        .try_reserve(1)
+        .map_err(|_| Error::msg("resource handle token allocation failed"))?;
+    table
+        .token_by_identity
+        .try_reserve(1)
+        .map_err(|_| Error::msg("resource handle identity allocation failed"))?;
+    let token = table
+        .next_token
+        .ok_or_else(|| Error::msg("resource handle token identity exhausted"))?;
+    table.next_token = token.get().checked_add(1).and_then(NonZeroU64::new);
+    let identity = key.token_parts();
+    if table.token_by_identity.contains_key(&identity) {
+        return Err(Error::msg("resource handle identity collision"));
+    }
+    if table.tokens.contains_key(&token.get()) {
+        return Err(Error::msg("resource handle token collision"));
+    }
+    table.tokens.insert(token.get(), identity);
+    table.token_by_identity.insert(identity, token.get());
+    Ok(Value::from_resource(token.get()))
 }
 
-pub(super) fn stdin_value() -> Value {
-    Value::from_resource(1 << TOKEN_SLOT_BITS)
-}
-
-pub(super) fn decode_parts(handle: Value, operation: &str) -> Result<ResourceTokenParts> {
+pub(super) fn decode_parts(
+    table: &ResourceTable,
+    handle: Value,
+    operation: &str,
+) -> Result<ResourceTokenParts> {
     let token = handle
         .as_resource()
         .ok_or_else(|| Error::msg(format!("{operation}: expected typed resource")))?;
-    let slot = usize::try_from(token & TOKEN_SLOT_MASK)
-        .map_err(|_| Error::msg(format!("{operation}: invalid resource slot")))?;
-    let generation = NonZeroU64::new(u64::from(token >> TOKEN_SLOT_BITS))
-        .ok_or_else(|| Error::msg(format!("{operation}: invalid resource generation")))?;
-    Ok(ResourceTokenParts::new(slot, generation))
+    match table.tokens.get(&token).copied() {
+        Some(identity) => Ok(identity),
+        None => {
+            table.update_metrics(|metrics| {
+                metrics.stale_key_failures = metrics.stale_key_failures.saturating_add(1);
+            });
+            Err(Error::msg(format!(
+                "{operation}: stale or forged resource handle"
+            )))
+        }
+    }
 }
 
 pub(super) fn provider_for_kind(kind: ResourceKind) -> ProviderId {

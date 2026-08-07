@@ -39,8 +39,9 @@ fn region_products_cross_former_record_and_field_limits() {
                 .expect("publish beyond former limits"),
         );
     }
-    assert_eq!(arena.metrics().records, RECORDS);
-    assert_eq!(arena.metrics().fields, RECORDS * FIELDS_PER_RECORD as u64);
+    let metrics = arena.metrics().expect("checked region-product metrics");
+    assert_eq!(metrics.records, RECORDS);
+    assert_eq!(metrics.fields, RECORDS * FIELDS_PER_RECORD as u64);
     assert_eq!(
         arena.field(last.expect("last record"), identity, FIELDS_PER_RECORD - 1),
         Ok(&(RECORDS - 1))
@@ -53,9 +54,11 @@ fn invalid_update_fails_without_publishing_a_record() {
     let second = arena();
     let identity = RuntimeLayoutId::new([3; 32]);
     let key = first.publish(identity, vec![1]).expect("first key");
+    let cross_arena = RegionProductKey::from_word(second.id(), key.to_word())
+        .expect("opaque word is scoped by the receiving arena");
     assert_eq!(
-        RegionProductKey::from_word(second.id(), key.to_word()),
-        None
+        second.fields(cross_arena, identity),
+        Err(RegionProductError::InvalidKey)
     );
     let before = first.metrics();
     assert_eq!(

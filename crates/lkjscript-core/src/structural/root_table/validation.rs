@@ -1,23 +1,24 @@
 use super::{
     LoanSlot, RootSlot, StructuralRootOwnership, StructuralRootTable, StructuralRootTableError,
-    StructuralValueKey,
 };
 
 impl StructuralRootTable {
     pub fn validate(&self) -> Result<(), StructuralRootTableError> {
-        let live_roots = self
-            .roots
-            .iter()
-            .filter(|slot| matches!(slot, RootSlot::Live { .. }))
-            .count();
-        let live_loans = self
-            .loans
-            .iter()
-            .filter(|slot| matches!(slot, LoanSlot::Live { .. }))
-            .count();
-        if u32::try_from(live_roots).ok() != Some(self.stats.live_roots)
-            || u32::try_from(live_loans).ok() != Some(self.stats.live_loans)
-        {
+        let live_roots = u64::try_from(
+            self.roots
+                .iter()
+                .filter(|slot| matches!(slot, RootSlot::Live { .. }))
+                .count(),
+        )
+        .map_err(|_| StructuralRootTableError::InvariantViolation)?;
+        let live_loans = u64::try_from(
+            self.loans
+                .iter()
+                .filter(|slot| matches!(slot, LoanSlot::Live { .. }))
+                .count(),
+        )
+        .map_err(|_| StructuralRootTableError::InvariantViolation)?;
+        if live_roots != self.stats.live_roots || live_loans != self.stats.live_loans {
             return Err(StructuralRootTableError::InvariantViolation);
         }
         self.validate_free_root_slots()?;
@@ -37,23 +38,30 @@ impl StructuralRootTable {
             return Err(StructuralRootTableError::InvariantViolation);
         }
         for (slot, root) in self.roots.iter().enumerate() {
-            let RootSlot::Live { generation, value } = root else {
+            let RootSlot::Live {
+                generation,
+                key,
+                value,
+            } = root
+            else {
                 continue;
             };
-            if value.root.domain().runtime() != self.runtime
+            let slot =
+                u64::try_from(slot).map_err(|_| StructuralRootTableError::InvariantViolation)?;
+            let token = self.value_token(*key)?;
+            if token.slot != slot
+                || token.generation != *generation
+                || value.root.domain().runtime() != self.runtime
                 || (value.ownership != StructuralRootOwnership::SealedShared
                     && !self.exclusive_roots.contains(&value.root))
             {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
-            let slot =
-                u32::try_from(slot).map_err(|_| StructuralRootTableError::InvariantViolation)?;
-            let key = StructuralValueKey::from_parts(slot, *generation);
             let (shared, exclusive) = self.loans.iter().fold((0_u64, false), |counts, loan| {
                 let LoanSlot::Live { value, .. } = loan else {
                     return counts;
                 };
-                if value.root != key {
+                if value.root != *key {
                     return counts;
                 }
                 (
@@ -65,6 +73,21 @@ impl StructuralRootTable {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
             if exclusive && shared != 0 {
+                return Err(StructuralRootTableError::InvariantViolation);
+            }
+        }
+        for (slot, loan) in self.loans.iter().enumerate() {
+            let LoanSlot::Live {
+                generation, key, ..
+            } = loan
+            else {
+                continue;
+            };
+            let token = self.borrow_token(*key)?;
+            if token.slot
+                != u64::try_from(slot).map_err(|_| StructuralRootTableError::InvariantViolation)?
+                || token.generation != *generation
+            {
                 return Err(StructuralRootTableError::InvariantViolation);
             }
         }

@@ -1,7 +1,11 @@
-use std::num::{NonZeroU32, NonZeroU64};
+use std::collections::HashMap;
+use std::num::{NonZeroU64, TryFromIntError};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::object::Slot;
 use super::{InvalidUniqueKeyWord, UniqueStoreError, UniqueStoreLeak};
+
+static NEXT_UNIQUE_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UniqueStoreId(NonZeroU64);
@@ -26,47 +30,34 @@ pub enum UniqueLayout {
     Path,
 }
 
-/// A runtime-local key projection containing only slot index and generation.
+/// One opaque, runtime-local, nonzero ABI token.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
-pub struct UniqueKeyWord(u64);
+pub struct UniqueKeyWord(NonZeroU64);
 
 impl UniqueKeyWord {
-    const INDEX_BITS: u32 = u32::BITS;
-
     pub const fn new(word: u64) -> Result<Self, InvalidUniqueKeyWord> {
-        let generation = (word >> Self::INDEX_BITS) as u32;
-        if generation == 0 {
-            return Err(InvalidUniqueKeyWord::ZeroGeneration);
+        match NonZeroU64::new(word) {
+            Some(word) => Ok(Self(word)),
+            None => Err(InvalidUniqueKeyWord::ZeroToken),
         }
-        Ok(Self(word))
     }
 
     pub const fn get(self) -> u64 {
-        self.0
+        self.0.get()
     }
 
-    pub(super) const fn from_raw(raw: RawUniqueKey) -> Self {
-        let generation = (raw.generation.get() as u64) << Self::INDEX_BITS;
-        Self(generation | raw.index as u64)
-    }
-
-    pub(super) fn bind(self, store: UniqueStoreId) -> Result<RawUniqueKey, UniqueStoreError> {
-        let generation = (self.0 >> Self::INDEX_BITS) as u32;
-        let generation = NonZeroU32::new(generation).ok_or(UniqueStoreError::ArithmeticOverflow)?;
-        Ok(RawUniqueKey {
-            store,
-            index: self.0 as u32,
-            generation,
-        })
+    pub(super) const fn from_nonzero(word: NonZeroU64) -> Self {
+        Self(word)
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct RawUniqueKey {
     pub(super) store: UniqueStoreId,
-    pub(super) index: u32,
-    pub(super) generation: NonZeroU32,
+    pub(super) index: u64,
+    pub(super) generation: NonZeroU64,
+    pub(super) word: UniqueKeyWord,
 }
 
 macro_rules! typed_key {
@@ -79,8 +70,8 @@ macro_rules! typed_key {
                 Self(raw)
             }
 
-            pub const fn packed_word(self) -> UniqueKeyWord {
-                UniqueKeyWord::from_raw(self.0)
+            pub const fn opaque_word(self) -> UniqueKeyWord {
+                self.0.word
             }
 
             pub(super) const fn raw(self) -> RawUniqueKey {
@@ -120,12 +111,12 @@ pub struct UniqueStoreStats {
     pub allocations: u64,
     pub frees: u64,
     pub transfers: u64,
-    pub live_objects: u32,
-    pub peak_live_objects: u32,
+    pub live_objects: u64,
+    pub peak_live_objects: u64,
     pub live_bytes: u64,
     pub peak_live_bytes: u64,
     pub reused_slots: u64,
-    pub retired_slots: u32,
+    pub retired_slots: u64,
     pub stale_failures: u64,
     pub wrong_layout_failures: u64,
     pub allocated_bytes: u64,
@@ -135,30 +126,19 @@ pub struct UniqueStoreStats {
 pub struct UniqueStore {
     pub(super) id: UniqueStoreId,
     pub(super) slots: Vec<Slot>,
-    pub(super) free_head: Option<u32>,
+    pub(super) free_head: Option<u64>,
+    pub(super) tokens: HashMap<UniqueKeyWord, RawUniqueKey>,
     pub(super) stats: UniqueStoreStats,
 }
 
 impl UniqueStore {
-    pub const fn new(id: UniqueStoreId) -> Self {
+    pub fn new(id: UniqueStoreId) -> Self {
         Self {
             id,
             slots: Vec::new(),
             free_head: None,
-            stats: UniqueStoreStats {
-                allocations: 0,
-                frees: 0,
-                transfers: 0,
-                live_objects: 0,
-                peak_live_objects: 0,
-                live_bytes: 0,
-                peak_live_bytes: 0,
-                reused_slots: 0,
-                retired_slots: 0,
-                stale_failures: 0,
-                wrong_layout_failures: 0,
-                allocated_bytes: 0,
-            },
+            tokens: HashMap::new(),
+            stats: UniqueStoreStats::default(),
         }
     }
 
@@ -183,5 +163,31 @@ impl UniqueStore {
                 live_bytes: self.stats.live_bytes,
             })
         }
+    }
+
+    pub(super) fn next_token(&mut self) -> Result<UniqueKeyWord, UniqueStoreError> {
+        self.tokens
+            .try_reserve(1)
+            .map_err(|_| UniqueStoreError::StorageCapacity)?;
+        let raw = NEXT_UNIQUE_TOKEN
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+                next.checked_add(1)
+            })
+            .map_err(|_| UniqueStoreError::RepresentationExhausted)?;
+        let token = NonZeroU64::new(raw).ok_or(UniqueStoreError::RepresentationExhausted)?;
+        Ok(UniqueKeyWord::from_nonzero(token))
+    }
+
+    pub(super) fn bind(&mut self, word: UniqueKeyWord) -> Result<RawUniqueKey, UniqueStoreError> {
+        self.tokens.get(&word).copied().ok_or_else(|| {
+            self.stats.stale_failures = self.stats.stale_failures.saturating_add(1);
+            UniqueStoreError::StaleKey
+        })
+    }
+}
+
+impl From<TryFromIntError> for UniqueStoreError {
+    fn from(_: TryFromIntError) -> Self {
+        Self::ArithmeticOverflow
     }
 }

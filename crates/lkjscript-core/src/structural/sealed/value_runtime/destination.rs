@@ -18,7 +18,7 @@ impl StructuralValueRuntime {
         self.retire_destination(key)?;
         self.metrics.destinations_completed = self.metrics.destinations_completed.saturating_add(1);
         self.metrics.live_destinations = self.metrics.live_destinations.saturating_sub(1);
-        self.record(StructuralEventKind::DestinationComplete, key.slot(), 0);
+        self.record(StructuralEventKind::DestinationComplete, key.get(), 0);
         Ok(sealed)
     }
 }

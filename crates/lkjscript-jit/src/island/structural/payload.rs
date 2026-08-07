@@ -35,7 +35,7 @@ impl JitStructuralRuntime {
         };
         match node.payload() {
             StructuralNodeView::Enum { tag, fields }
-                if tag == u64::from(expected_tag)
+                if tag == expected_tag
                     && fields.len() == 1
                     && node
                         .child(0)

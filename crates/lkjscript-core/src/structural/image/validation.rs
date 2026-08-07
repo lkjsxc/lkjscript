@@ -11,7 +11,7 @@ impl StructuralImage {
         if self.fields.len() != self.nodes.len() - 1 {
             return Err(StructuralValueError::InvariantViolation);
         }
-        let mut parents = filled(self.nodes.len(), 0_u16)?;
+        let mut parent_seen = filled(self.nodes.len(), false)?;
         let mut field_used = filled(self.fields.len(), false)?;
         let mut byte_used = filled(self.blob.len(), false)?;
         let mut facts = TreeFacts {
@@ -44,16 +44,16 @@ impl StructuralImage {
                 }
                 StructuralNodePayload::Product(range) => {
                     require_kind(node.value_type.kind, StructuralKind::Product)?;
-                    validate_children(self, *range, parent, &mut parents, &mut field_used)?;
+                    validate_children(self, *range, parent, &mut parent_seen, &mut field_used)?;
                 }
                 StructuralNodePayload::Enum { fields, .. } => {
                     require_kind(node.value_type.kind, StructuralKind::Enum)?;
-                    validate_children(self, *fields, parent, &mut parents, &mut field_used)?;
+                    validate_children(self, *fields, parent, &mut parent_seen, &mut field_used)?;
                 }
             }
         }
-        if parents[0] != 0
-            || parents[1..].iter().any(|count| *count != 1)
+        if parent_seen[0]
+            || parent_seen[1..].iter().any(|seen| !seen)
             || field_used.iter().any(|used| !used)
             || byte_used.iter().any(|used| !used)
             || facts != expected
@@ -68,7 +68,7 @@ fn validate_children(
     image: &StructuralImage,
     range: super::CheckedU64Range,
     parent: u64,
-    parents: &mut [u16],
+    parent_seen: &mut [bool],
     used: &mut [bool],
 ) -> Result<(), StructuralValueError> {
     let children = StructuralImage::range(&image.fields, range)
@@ -81,10 +81,7 @@ fn validate_children(
         if child.get() <= parent || index >= image.nodes.len() {
             return Err(StructuralValueError::InvariantViolation);
         }
-        parents[index] = parents[index]
-            .checked_add(1)
-            .ok_or(StructuralValueError::ArithmeticOverflow)?;
-        if parents[index] != 1 {
+        if std::mem::replace(&mut parent_seen[index], true) {
             return Err(StructuralValueError::InvariantViolation);
         }
     }

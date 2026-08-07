@@ -1,4 +1,4 @@
-use super::resource_token::{encode_key, stdin_value};
+use super::resource_token::encode_key;
 use super::*;
 
 impl Default for ResourceTable {
@@ -13,34 +13,39 @@ impl ResourceTable {
             Some(scope) => (scope, false),
             None => (exhausted_scope(), true),
         };
-        let max_owned = max_handles
-            .unwrap_or(TOKEN_SLOT_COUNT - 1)
-            .min(TOKEN_SLOT_COUNT - 1);
-        let limits = ResourceTableLimits::new(
-            max_owned + 1,
-            max_owned + 1,
-            max_owned,
-            1,
-            max_owned,
-            TOKEN_MAX_GENERATION,
+        let max_slots = max_handles.and_then(|maximum| maximum.checked_add(1));
+        let limits = ResourceTableLimits::optional(
+            max_slots,
+            max_slots,
+            max_handles,
+            Some(1),
+            max_handles,
+            None,
         )
         .unwrap_or_else(|_| std::process::abort());
-        let mut table = CoreResourceTable::new(scope, limits);
-        let stdin_key = table
+        let mut core = CoreResourceTable::new(scope, limits);
+        let stdin_key = core
             .reserve_borrowed(ResourceKind::InputStream, STDIO_PROVIDER)
             .unwrap_or_else(|_| std::process::abort())
             .commit(OwnedResource::StandardInput);
-        if encode_key(&stdin_key).is_err() {
-            std::process::abort();
-        }
-        Self {
-            table,
+        let mut resources = Self {
+            table: core,
             stdin_key,
+            tokens: HashMap::new(),
+            token_by_identity: HashMap::new(),
+            next_token: NonZeroU64::new(1),
             metrics: Cell::new(ResourceMetrics::default()),
             limit_exceeded: false,
             scope_exhausted,
             cleanup_retention,
+        };
+        let stdin_key = resources.stdin_key.clone();
+        let stdin =
+            encode_key(&mut resources, &stdin_key).unwrap_or_else(|_| std::process::abort());
+        if stdin != Self::stdin_handle() {
+            std::process::abort();
         }
+        resources
     }
 
     pub fn allocated_handle_slots(&self) -> usize {
@@ -52,7 +57,7 @@ impl ResourceTable {
     }
 
     pub fn stdin_handle() -> Value {
-        stdin_value()
+        Value::from_resource(1)
     }
 
     #[cfg(test)]
@@ -63,6 +68,11 @@ impl ResourceTable {
     #[cfg(test)]
     pub const fn scope_id(&self) -> ScopeId {
         self.table.scope()
+    }
+
+    #[cfg(test)]
+    pub fn decode_handle_for_test(&self, handle: Value) -> Result<ResourceTokenParts> {
+        super::resource_token::decode_parts(self, handle, "test")
     }
 
     #[cfg(test)]

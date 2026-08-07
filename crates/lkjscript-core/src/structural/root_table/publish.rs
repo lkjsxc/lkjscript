@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::{DomainClass, RootKey};
 use super::{
@@ -28,17 +28,28 @@ impl StructuralRootTable {
             .live_roots
             .checked_add(1)
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
-        let will_reuse = !self.free_roots.is_empty();
+        let (slot, generation, reused) = self.prepare_root_slot()?;
         let next_reused = self
             .stats
             .root_slots_reused
-            .checked_add(u64::from(will_reuse))
+            .checked_add(u64::from(reused))
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
-        let (slot, generation) = self.allocate_root_slot()?;
+        let key = self.allocate_value_token(slot, generation)?;
         let index =
             usize::try_from(slot).map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
+        if reused {
+            if self.free_roots.pop() != Some(slot) {
+                return Err(StructuralRootTableError::InvariantViolation);
+            }
+        } else {
+            self.roots.push(RootSlot::Vacant {
+                generation,
+                previous: None,
+            });
+        }
         self.roots[index] = RootSlot::Live {
             generation,
+            key,
             value: LiveRoot {
                 root,
                 ownership,
@@ -54,7 +65,7 @@ impl StructuralRootTable {
         self.stats.live_roots = next_live;
         self.stats.peak_live_roots = self.stats.peak_live_roots.max(next_live);
         self.stats.root_slots_reused = next_reused;
-        Ok(StructuralValueKey::from_parts(slot, generation))
+        Ok(key)
     }
 
     fn validate_publication(
@@ -84,25 +95,24 @@ impl StructuralRootTable {
         Ok(())
     }
 
-    fn allocate_root_slot(&mut self) -> Result<(u32, NonZeroU32), StructuralRootTableError> {
-        if let Some(slot) = self.free_roots.pop() {
+    fn prepare_root_slot(&mut self) -> Result<(u64, NonZeroU64, bool), StructuralRootTableError> {
+        if let Some(&slot) = self.free_roots.last() {
             let index =
                 usize::try_from(slot).map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
-            let RootSlot::Vacant { generation, .. } = self.roots[index] else {
+            let RootSlot::Vacant { generation, .. } = self
+                .roots
+                .get(index)
+                .ok_or(StructuralRootTableError::InvariantViolation)?
+            else {
                 return Err(StructuralRootTableError::InvariantViolation);
             };
-            return Ok((slot, generation));
+            return Ok((slot, *generation, true));
         }
-        let slot = u32::try_from(self.roots.len())
+        let slot = u64::try_from(self.roots.len())
             .map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
         self.roots
             .try_reserve(1)
             .map_err(|_| StructuralRootTableError::AllocationFailed)?;
-        let generation = NonZeroU32::new(1).ok_or(StructuralRootTableError::InvariantViolation)?;
-        self.roots.push(RootSlot::Vacant {
-            generation,
-            previous: None,
-        });
-        Ok((slot, generation))
+        Ok((slot, NonZeroU64::MIN, false))
     }
 }

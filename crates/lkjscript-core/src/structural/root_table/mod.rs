@@ -16,4 +16,4 @@ pub use model::{
     StructuralRootTable, StructuralValueKey,
 };
 
-use model::{LiveLoan, LiveRoot, LoanSlot, RootSlot, TerminalState};
+use model::{LiveLoan, LiveRoot, LoanSlot, RootSlot, StructuralTokenRecord, TerminalState};

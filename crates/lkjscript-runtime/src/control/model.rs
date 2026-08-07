@@ -132,7 +132,7 @@ pub struct ControlledApplication {
     pub desired_running: bool,
     pub state: ControlledApplicationState,
     pub incarnation: Option<u64>,
-    pub process: Option<u32>,
+    pub process: Option<u64>,
     pub database_attached: bool,
 }
 

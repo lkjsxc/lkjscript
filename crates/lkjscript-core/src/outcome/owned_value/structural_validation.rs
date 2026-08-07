@@ -38,7 +38,7 @@ pub(super) fn validate_structural_snapshot(
         metrics.nodes = metrics
             .nodes
             .checked_add(1)
-            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u32"))?;
+            .ok_or_else(|| Error::msg("structural snapshot node count exceeds u64"))?;
         charge_work(&mut metrics, 1)?;
         let expected = match &value.payload {
             SemanticPayload::Inline(inline) => inline_kind(*inline),
@@ -82,13 +82,13 @@ fn schedule_fields<'a>(
     fields: &'a [SemanticValue],
     metrics: &mut StructuralSnapshotMetrics,
 ) -> Result<()> {
-    let count = u32::try_from(fields.len())
-        .map_err(|_| Error::msg("structural snapshot field count exceeds u32"))?;
+    let count = u64::try_from(fields.len())
+        .map_err(|_| Error::msg("structural snapshot field count exceeds u64"))?;
     metrics.fields = metrics
         .fields
         .checked_add(count)
         .ok_or_else(|| Error::msg("structural snapshot field count overflow"))?;
-    charge_work(metrics, u64::from(count))?;
+    charge_work(metrics, count)?;
     tasks
         .try_reserve(fields.len())
         .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;

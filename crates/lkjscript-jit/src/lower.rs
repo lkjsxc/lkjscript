@@ -130,7 +130,7 @@ struct LayoutInterner {
             lkjscript_ir::MemoryWitnessId,
             lkjscript_native::StructuralStorageRoute,
         ),
-        u16,
+        u64,
     >,
     next: u64,
 }

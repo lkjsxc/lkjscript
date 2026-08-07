@@ -25,6 +25,8 @@ impl StructuralValueRuntime {
             free_destinations: Vec::new(),
             views: Vec::new(),
             free_views: Vec::new(),
+            private_tokens: std::collections::HashMap::new(),
+            next_private_token: std::num::NonZeroU64::new(1),
             metrics: super::StructuralValueRuntimeMetrics::default(),
             events: StructuralEventLog::new(),
             cleanup_reports: VecDeque::new(),
@@ -33,6 +35,7 @@ impl StructuralValueRuntime {
         })
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn publish_owned(
         &mut self,
         value: SemanticValue,
@@ -61,6 +64,7 @@ impl StructuralValueRuntime {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn publish_value(
         &mut self,
         value: SemanticValue,
@@ -99,7 +103,7 @@ impl StructuralValueRuntime {
                 self.note_publication(facts);
                 self.note_slot_reuse(reused);
                 self.record(StructuralEventKind::Allocate, root.slot(), facts.nodes);
-                self.record(StructuralEventKind::Publish, key.slot(), 0);
+                self.record(StructuralEventKind::Publish, key.get(), 0);
                 Ok(key)
             }
             Err(error) => {
@@ -123,11 +127,7 @@ impl StructuralValueRuntime {
         match self.roots.publish(root, StructuralRootOwnership::Owned) {
             Ok(next) => {
                 self.metrics.moves = self.metrics.moves.saturating_add(1);
-                self.record(
-                    StructuralEventKind::Move,
-                    key.slot(),
-                    u64::from(next.slot()),
-                );
+                self.record(StructuralEventKind::Move, key.get(), next.get());
                 Ok(next)
             }
             Err(error) => {
@@ -150,7 +150,7 @@ impl StructuralValueRuntime {
     ) -> Result<(), StructuralValueError> {
         let (image, facts) = self.drop_owned_image(key, expected)?;
         self.metrics.drops = self.metrics.drops.saturating_add(1);
-        self.record(StructuralEventKind::Drop, key.slot(), facts.nodes);
+        self.record(StructuralEventKind::Drop, key.get(), facts.nodes);
         self.release_image(image, facts);
         Ok(())
     }
@@ -168,7 +168,7 @@ impl StructuralValueRuntime {
         let value = image.to_semantic()?;
         let (image, _) = self.take_owned_image(key, expected)?;
         drop(image);
-        self.record(StructuralEventKind::Export, key.slot(), 0);
+        self.record(StructuralEventKind::Export, key.get(), 0);
         Ok(value)
     }
 }

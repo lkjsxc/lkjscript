@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::RootKey;
 use super::{
@@ -66,17 +66,31 @@ impl StructuralRootTable {
         ownership: StructuralRootOwnership,
         terminal: TerminalState,
     ) -> Result<RootKey, StructuralRootTableError> {
+        let token = self.value_token(key)?;
         let index = self.live_root_index(key)?;
-        let RootSlot::Live { generation, value } = self.roots[index] else {
+        let RootSlot::Live {
+            generation,
+            key: current,
+            value,
+        } = self.roots[index]
+        else {
             return Err(StructuralRootTableError::InvariantViolation);
         };
+        if current != key || generation != token.generation {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
         if value.ownership != ownership {
             return Err(StructuralRootTableError::WrongOwnership);
         }
         if value.shared_loans != 0 || value.exclusive_loan {
             return Err(StructuralRootTableError::LiveLoan);
         }
-        let retires = generation.get() == u32::MAX;
+        if ownership != StructuralRootOwnership::SealedShared
+            && !self.exclusive_roots.contains(&value.root)
+        {
+            return Err(StructuralRootTableError::InvariantViolation);
+        }
+        let retires = generation.get() == u64::MAX;
         let next_live = self
             .stats
             .live_roots
@@ -87,11 +101,7 @@ impl StructuralRootTable {
             .root_slots_retired
             .checked_add(u64::from(retires))
             .ok_or(StructuralRootTableError::ArithmeticOverflow)?;
-        let next = if retires {
-            None
-        } else {
-            NonZeroU32::new(generation.get() + 1)
-        };
+        let next = generation.get().checked_add(1).and_then(NonZeroU64::new);
         if next.is_some() {
             self.free_roots
                 .try_reserve(1)
@@ -100,17 +110,15 @@ impl StructuralRootTable {
         self.roots[index] = match next {
             Some(next) => RootSlot::Vacant {
                 generation: next,
-                previous: Some((generation, terminal)),
+                previous: Some((key, generation, terminal)),
             },
-            None => RootSlot::Retired { generation },
+            None => RootSlot::Retired { generation, key },
         };
         if next.is_some() {
-            self.free_roots.push(key.slot());
+            self.free_roots.push(token.slot);
         }
-        if ownership != StructuralRootOwnership::SealedShared
-            && !self.exclusive_roots.remove(&value.root)
-        {
-            return Err(StructuralRootTableError::InvariantViolation);
+        if ownership != StructuralRootOwnership::SealedShared {
+            self.exclusive_roots.remove(&value.root);
         }
         self.stats.live_roots = next_live;
         self.stats.root_slots_retired = next_retired;

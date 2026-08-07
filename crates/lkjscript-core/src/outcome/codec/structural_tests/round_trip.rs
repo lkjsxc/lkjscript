@@ -127,10 +127,10 @@ fn structural_codec_round_trips_deep_values_without_native_recursion() {
         .expect("deep structural metrics");
     assert_eq!(
         metrics.nodes,
-        u32::try_from(DEPTH + 1).expect("test depth fits u32")
+        u64::try_from(DEPTH + 1).expect("test depth fits u64")
     );
     assert_eq!(
         metrics.fields,
-        u32::try_from(DEPTH).expect("test depth fits u32")
+        u64::try_from(DEPTH).expect("test depth fits u64")
     );
 }

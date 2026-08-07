@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::bookkeeping::Ledger;
 use super::super::{DomainKey, RootKey, StructuralError};
@@ -54,13 +54,13 @@ pub struct SealedBorrow<T> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ObjectLocation {
-    Chunk { chunk: u32, offset: u32 },
-    Large { index: u32 },
+    Chunk { chunk: u64, offset: u64 },
+    Large { index: u64 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct RootRecord {
-    pub(super) generation: NonZeroU32,
+    pub(super) generation: NonZeroU64,
     pub(super) location: ObjectLocation,
 }
 
@@ -69,7 +69,7 @@ pub(super) struct SealedRecord<T, D> {
     pub(super) chunks: Vec<Vec<T>>,
     pub(super) large: Vec<Vec<T>>,
     pub(super) roots: Vec<RootRecord>,
-    pub(super) internal_edges: Ledger<(u32, u32)>,
+    pub(super) internal_edges: Ledger<(u64, u64)>,
     pub(super) dependencies: Ledger<DomainKey>,
     pub(super) drops: Ledger<D>,
     pub(super) owners: u64,

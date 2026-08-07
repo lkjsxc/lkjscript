@@ -36,7 +36,10 @@ impl OwnedValue {
 fn validate_list_tails(lists: &[OwnedListNode]) -> Result<()> {
     for (index, node) in lists.iter().enumerate() {
         if !node.tail.is_empty_list()
-            && node.tail.as_owned_list().is_none_or(|tail| tail as usize >= index)
+            && match node.tail.as_owned_list() {
+                Some(tail) => usize::try_from(tail).map_or(true, |tail| tail >= index),
+                None => true,
+            }
         {
             return Err(Error::msg("owned list tail is not an earlier list node"));
         }
@@ -50,7 +53,9 @@ fn validate_reachable_value(
     visited: &mut [bool],
     pending: &mut Vec<Value>,
 ) -> Result<()> {
-    if let Some(index) = value.as_owned_list().map(|index| index as usize) {
+    if let Some(index) = value.as_owned_list() {
+        let index = usize::try_from(index)
+            .map_err(|_| Error::msg("owned value list index exceeds platform"))?;
         let node = lists
             .get(index)
             .ok_or_else(|| Error::msg("owned value list index out of range"))?;
@@ -78,7 +83,9 @@ fn validate_reachable_value(
 fn validate_no_list_cycles(root: Value, lists: &[OwnedListNode]) -> Result<()> {
     let mut colors = vec![0_u8; lists.len()];
     let mut work = Vec::new();
-    if let Some(index) = root.as_owned_list().map(|value| value as usize) {
+    if let Some(index) = root.as_owned_list() {
+        let index = usize::try_from(index)
+            .map_err(|_| Error::msg("owned list root index exceeds platform"))?;
         work.push((index, false));
     }
     while let Some((index, exit)) = work.pop() {
@@ -97,7 +104,9 @@ fn validate_no_list_cycles(root: Value, lists: &[OwnedListNode]) -> Result<()> {
             .get(index)
             .ok_or_else(|| Error::msg("owned list cycle index out of range"))?;
         for child in [node.tail, node.head] {
-            if let Some(child) = child.as_owned_list().map(|value| value as usize) {
+            if let Some(child) = child.as_owned_list() {
+                let child = usize::try_from(child)
+                    .map_err(|_| Error::msg("owned list child index exceeds platform"))?;
                 work.push((child, false));
             }
         }

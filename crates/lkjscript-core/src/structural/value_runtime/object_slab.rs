@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use super::super::{DomainKey, RootClass, RootKey};
 use super::{StaticStructuralArtifact, StructuralImage, StructuralValueError, TreeFacts};
@@ -28,9 +28,9 @@ impl StructuralObject {
 
 #[derive(Debug)]
 pub(super) enum ObjectSlot {
-    Vacant(NonZeroU32),
+    Vacant(NonZeroU64),
     Live {
-        generation: NonZeroU32,
+        generation: NonZeroU64,
         domain: DomainKey,
         object: StructuralObject,
     },
@@ -40,8 +40,8 @@ pub(super) enum ObjectSlot {
 #[derive(Debug)]
 pub(super) struct ObjectSlab {
     pub(super) slots: Vec<ObjectSlot>,
-    pub(super) free: Vec<u32>,
-    pub live: u32,
+    pub(super) free: Vec<u64>,
+    pub live: u64,
 }
 
 impl ObjectSlab {
@@ -63,12 +63,18 @@ impl ObjectSlab {
             return Err(Box::new((error.into(), object)));
         }
         let (slot, generation, reused) = if let Some(slot) = self.free.pop() {
-            let ObjectSlot::Vacant(generation) = self.slots[slot as usize] else {
+            let index = match usize::try_from(slot) {
+                Ok(index) => index,
+                Err(_) => {
+                    return Err(Box::new((StructuralValueError::ArithmeticOverflow, object)));
+                }
+            };
+            let ObjectSlot::Vacant(generation) = self.slots[index] else {
                 return Err(Box::new((StructuralValueError::InvariantViolation, object)));
             };
             (slot, generation, true)
         } else {
-            let slot = match u32::try_from(self.slots.len()) {
+            let slot = match u64::try_from(self.slots.len()) {
                 Ok(slot) => slot,
                 Err(_) => {
                     return Err(Box::new((StructuralValueError::ArithmeticOverflow, object)));
@@ -77,11 +83,17 @@ impl ObjectSlab {
             if let Err(error) = self.slots.try_reserve(1) {
                 return Err(Box::new((error.into(), object)));
             }
-            self.slots.push(ObjectSlot::Vacant(NonZeroU32::MIN));
-            (slot, NonZeroU32::MIN, false)
+            self.slots.push(ObjectSlot::Vacant(NonZeroU64::MIN));
+            (slot, NonZeroU64::MIN, false)
         };
         let value_type = object.value_type();
-        self.slots[slot as usize] = ObjectSlot::Live {
+        let index = match usize::try_from(slot) {
+            Ok(index) => index,
+            Err(_) => {
+                return Err(Box::new((StructuralValueError::ArithmeticOverflow, object)));
+            }
+        };
+        self.slots[index] = ObjectSlot::Live {
             generation,
             domain,
             object,
@@ -107,7 +119,10 @@ impl ObjectSlab {
             object,
         } = self
             .slots
-            .get(root.slot() as usize)
+            .get(
+                usize::try_from(root.slot())
+                    .map_err(|_| StructuralValueError::ArithmeticOverflow)?,
+            )
             .ok_or(StructuralValueError::StaleObject)?
         else {
             return Err(StructuralValueError::StaleObject);
@@ -128,7 +143,10 @@ impl ObjectSlab {
             object,
         } = self
             .slots
-            .get_mut(root.slot() as usize)
+            .get_mut(
+                usize::try_from(root.slot())
+                    .map_err(|_| StructuralValueError::ArithmeticOverflow)?,
+            )
             .ok_or(StructuralValueError::StaleObject)?
         else {
             return Err(StructuralValueError::StaleObject);
@@ -141,7 +159,9 @@ impl ObjectSlab {
 
     pub(super) fn rollback_insert(&mut self, root: RootKey, reused: bool) -> StructuralObject {
         assert!(self.get(root).is_ok());
-        let index = root.slot() as usize;
+        let Ok(index) = usize::try_from(root.slot()) else {
+            unreachable!("live object slot fits host index")
+        };
         assert!(self.live > 0);
         if !reused {
             assert_eq!(index.checked_add(1), Some(self.slots.len()));

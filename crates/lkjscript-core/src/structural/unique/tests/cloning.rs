@@ -68,7 +68,7 @@ fn clone_rejects_wrong_layout_without_mutation() {
     let bytes = store.allocate_bytes(Vec::new()).expect("wrong layout key");
     let before = store.stats();
     assert_eq!(
-        store.import_path_key(bytes.packed_word()),
+        store.import_path_key(bytes.opaque_word()),
         Err(UniqueStoreError::WrongLayout {
             expected: UniqueLayout::Path,
             actual: UniqueLayout::Bytes,

@@ -4,7 +4,7 @@ use super::super::StructuralValueKey;
 use super::{
     DestinationCleanupReport, SemanticValue, StaticStructuralArtifact, StructuralDestinationKey,
     StructuralImage, StructuralNode, StructuralObject, StructuralProjection, StructuralType,
-    StructuralValueError, StructuralValueRuntime, StructuralViewKey, ViewSlot,
+    StructuralValueError, StructuralValueRuntime, StructuralViewKey,
 };
 
 impl StructuralValueRuntime {
@@ -95,7 +95,9 @@ impl StructuralValueRuntime {
         };
         let bytes = image.bytes(record.node, super::StructuralKind::String)?;
         let text = std::str::from_utf8(bytes).map_err(|_| StructuralValueError::InvalidUtf8)?;
-        text.get(start as usize..end as usize)
+        let start = usize::try_from(start).map_err(|_| StructuralValueError::InvalidRange)?;
+        let end = usize::try_from(end).map_err(|_| StructuralValueError::InvalidRange)?;
+        text.get(start..end)
             .ok_or(StructuralValueError::InvalidRange)
     }
 
@@ -103,12 +105,7 @@ impl StructuralValueRuntime {
         &mut self,
         key: StructuralViewKey,
     ) -> Result<&mut [u8], StructuralValueError> {
-        let record = match self.views.get(key.slot() as usize) {
-            Some(ViewSlot::Live { generation, record }) if generation.get() == key.generation() => {
-                record
-            }
-            _ => return Err(StructuralValueError::StaleView),
-        };
+        let record = self.view(key)?;
         if !record.loan.is_exclusive() {
             return Err(StructuralValueError::RootTable(
                 super::super::StructuralRootTableError::BorrowConflict,

@@ -4,7 +4,7 @@ pub(in crate::lower::instructions) fn call_result_witness_slot(
     function: &Function,
     value: ValueId,
     layouts: &LayoutInterner,
-) -> Result<u16, LoweringError> {
+) -> Result<u64, LoweringError> {
     let instruction = function
         .blocks
         .iter()

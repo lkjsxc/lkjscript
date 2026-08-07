@@ -88,8 +88,8 @@ impl Value {
         }
     }
 
-    pub const fn from_resource(index: u32) -> Self {
-        Self::new(ValueKind::Resource, index as u64)
+    pub const fn from_resource(token: u64) -> Self {
+        Self::new(ValueKind::Resource, token)
     }
 
     #[doc(hidden)]
@@ -154,9 +154,9 @@ impl Value {
         self.as_f64_bits().map(f64::from_bits)
     }
 
-    pub const fn as_resource(self) -> Option<u32> {
+    pub const fn as_resource(self) -> Option<u64> {
         match self.kind {
-            ValueKind::Resource => Some(self.payload as u32),
+            ValueKind::Resource => Some(self.payload),
             _ => None,
         }
     }

@@ -38,6 +38,29 @@ fn stale_forged_and_wrong_kind_words_fail_closed_without_leaks() {
 }
 
 #[test]
+fn opaque_loan_tokens_cross_u32_and_remain_stale_after_slot_reuse() {
+    let mut runtime =
+        JitUniqueRuntime::new(&ExecutionPolicy::unrestricted()).expect("unique runtime");
+    let owner = runtime.allocate(1).expect("owner");
+    let high = u64::from(u32::MAX) + 31;
+    runtime.next_loan_token = std::num::NonZeroU64::new(high);
+    let first = runtime
+        .borrow(owner, LoanType::ByteSlice)
+        .expect("high shared loan");
+    assert_eq!(first.opaque_word(), high);
+    runtime.end_borrow(first).expect("end first");
+    let second = runtime
+        .borrow(owner, LoanType::ByteSlice)
+        .expect("reused loan slot");
+    assert_ne!(first.opaque_word(), second.opaque_word());
+    assert_eq!(runtime.length(first), Err(NativeServiceError::Trap));
+    runtime.end_borrow(second).expect("end second");
+    runtime.drop_owner(owner).expect("drop owner");
+    let stats = runtime.finish();
+    assert_eq!((stats.live_owners, stats.live_loans), (0, 0));
+}
+
+#[test]
 fn bytes_layout_transfers_and_forged_words_fail_closed() {
     let mut runtime =
         JitUniqueRuntime::new(&ExecutionPolicy::unrestricted()).expect("unique runtime");

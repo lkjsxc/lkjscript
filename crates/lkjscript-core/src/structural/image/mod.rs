@@ -27,6 +27,7 @@ pub struct StructuralImageConversionFailure {
 }
 
 impl StructuralImage {
+    #[allow(clippy::result_large_err)]
     pub fn from_owned(value: SemanticValue) -> Result<Self, StructuralImageConversionFailure> {
         let facts = match semantic_facts(&value) {
             Ok(facts) => facts,

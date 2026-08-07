@@ -58,12 +58,25 @@ fn failed_acquisition_publishes_no_key_or_open_obligation() {
 }
 
 #[test]
+fn opaque_resource_tokens_cross_u32_without_packing_slot_or_generation(
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let file = TempFile::new()?;
+    let mut table = ResourceTable::default();
+    let high = u64::from(u32::MAX) + 23;
+    table.next_token = std::num::NonZeroU64::new(high);
+    let handle = table.sys_open_read(file.0.as_os_str().as_bytes())?;
+    assert_eq!(handle.as_resource(), Some(high));
+    table.close(handle)?;
+    Ok(())
+}
+
+#[test]
 fn guest_token_resolution_checks_provider_and_scope(
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let file = TempFile::new()?;
     let mut table = ResourceTable::default();
     let handle = table.sys_open_read(file.0.as_os_str().as_bytes())?;
-    let parts = crate::host_ext::resource_token::decode_parts(handle, "test")?;
+    let parts = table.decode_handle_for_test(handle)?;
     let scope = table.scope_id();
 
     assert!(matches!(

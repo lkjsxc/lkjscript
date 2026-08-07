@@ -28,12 +28,12 @@ impl Error for ResourceTableConfigError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResourceTableLimits {
-    max_slots: usize,
-    max_reserved: usize,
-    max_owned: usize,
-    max_borrowed: usize,
-    max_children_per_parent: usize,
-    max_generation: NonZeroU64,
+    max_slots: Option<usize>,
+    max_reserved: Option<usize>,
+    max_owned: Option<usize>,
+    max_borrowed: Option<usize>,
+    max_children_per_parent: Option<usize>,
+    max_generation: Option<NonZeroU64>,
 }
 
 impl ResourceTableLimits {
@@ -45,19 +45,37 @@ impl ResourceTableLimits {
         max_children_per_parent: usize,
         max_generation: NonZeroU64,
     ) -> Result<Self, ResourceTableConfigError> {
-        if max_slots == 0 {
+        Self::optional(
+            Some(max_slots),
+            Some(max_reserved),
+            Some(max_owned),
+            Some(max_borrowed),
+            Some(max_children_per_parent),
+            Some(max_generation),
+        )
+    }
+
+    pub const fn optional(
+        max_slots: Option<usize>,
+        max_reserved: Option<usize>,
+        max_owned: Option<usize>,
+        max_borrowed: Option<usize>,
+        max_children_per_parent: Option<usize>,
+        max_generation: Option<NonZeroU64>,
+    ) -> Result<Self, ResourceTableConfigError> {
+        if matches!(max_slots, Some(0)) {
             return Err(ResourceTableConfigError::ZeroSlots);
         }
-        if max_reserved > max_slots {
+        if exceeds(max_reserved, max_slots) {
             return Err(ResourceTableConfigError::ReservationsExceedSlots);
         }
-        if max_owned > max_slots {
+        if exceeds(max_owned, max_slots) {
             return Err(ResourceTableConfigError::OwnedExceedSlots);
         }
-        if max_borrowed > max_slots {
+        if exceeds(max_borrowed, max_slots) {
             return Err(ResourceTableConfigError::BorrowedExceedSlots);
         }
-        if max_children_per_parent > max_slots {
+        if exceeds(max_children_per_parent, max_slots) {
             return Err(ResourceTableConfigError::ChildrenExceedSlots);
         }
         Ok(Self {
@@ -70,27 +88,31 @@ impl ResourceTableLimits {
         })
     }
 
-    pub const fn max_slots(self) -> usize {
+    pub const fn max_slots(self) -> Option<usize> {
         self.max_slots
     }
 
-    pub const fn max_reserved(self) -> usize {
+    pub const fn max_reserved(self) -> Option<usize> {
         self.max_reserved
     }
 
-    pub const fn max_owned(self) -> usize {
+    pub const fn max_owned(self) -> Option<usize> {
         self.max_owned
     }
 
-    pub const fn max_borrowed(self) -> usize {
+    pub const fn max_borrowed(self) -> Option<usize> {
         self.max_borrowed
     }
 
-    pub const fn max_children_per_parent(self) -> usize {
+    pub const fn max_children_per_parent(self) -> Option<usize> {
         self.max_children_per_parent
     }
 
-    pub const fn max_generation(self) -> NonZeroU64 {
+    pub const fn max_generation(self) -> Option<NonZeroU64> {
         self.max_generation
     }
+}
+
+const fn exceeds(limit: Option<usize>, slots: Option<usize>) -> bool {
+    matches!((limit, slots), (Some(limit), Some(slots)) if limit > slots)
 }

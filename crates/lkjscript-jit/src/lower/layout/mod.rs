@@ -10,7 +10,7 @@ pub(in crate::lower) use identity::*;
 use witness_slots::native_witness_slots;
 
 impl LayoutInterner {
-    pub(super) const FIRST_NESTED_IDENTITY: u64 = 32 + u16::MAX as u64 + 1;
+    pub(super) const FIRST_NESTED_IDENTITY: u64 = 1;
 
     pub(super) fn build(
         program: &lkjscript_ir::Program,
@@ -114,7 +114,7 @@ impl LayoutInterner {
         &self,
         witness: lkjscript_ir::MemoryWitnessId,
         storage: lkjscript_native::StructuralStorageRoute,
-    ) -> Option<u16> {
+    ) -> Option<u64> {
         self.witness_slots.get(&(witness, storage)).copied()
     }
 

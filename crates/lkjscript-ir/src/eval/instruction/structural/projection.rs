@@ -117,8 +117,8 @@ impl Evaluator<'_> {
         let input = value(values, source)?;
         let owner = self.explicit_structural_owner(input, root_type)?;
         let length = match self.explicit_structural_node(input, root_type)?.payload() {
-            StructuralNodeView::Bytes(bytes) => u32::try_from(bytes.len())
-                .map_err(|_| Flow::Resource("structural UTF-8 range".into()))?,
+            StructuralNodeView::Bytes(bytes) => u64::try_from(bytes.len())
+                .map_err(|_| Flow::HostFailure("structural UTF-8 range exceeds u64".into()))?,
             _ => return Err(Flow::Trap("UTF-8 view expects string payload".into())),
         };
         let key = self

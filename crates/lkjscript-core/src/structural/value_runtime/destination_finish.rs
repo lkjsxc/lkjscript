@@ -1,12 +1,12 @@
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 use crate::Value;
 
 use super::super::StructuralValueKey;
 use super::destination::{DestinationRecord, DestinationShape, DestinationSlot};
 use super::{
-    DestinationCleanupReport, StructuralDestinationKey, StructuralEventKind, StructuralImage,
-    StructuralObject, StructuralValueError, StructuralValueRuntime, TreeFacts,
+    DestinationCleanupReport, PrivateTokenKind, StructuralDestinationKey, StructuralEventKind,
+    StructuralImage, StructuralObject, StructuralValueError, StructuralValueRuntime, TreeFacts,
 };
 
 impl StructuralValueRuntime {
@@ -21,7 +21,7 @@ impl StructuralValueRuntime {
                 self.metrics.destinations_completed =
                     self.metrics.destinations_completed.saturating_add(1);
                 self.metrics.live_destinations = self.metrics.live_destinations.saturating_sub(1);
-                self.record(StructuralEventKind::DestinationComplete, key.slot(), 0);
+                self.record(StructuralEventKind::DestinationComplete, key.get(), 0);
                 Ok(root)
             }
             Err(failure) => Err(failure.0),
@@ -104,14 +104,16 @@ impl StructuralValueRuntime {
             .metrics
             .destination_cleanup_work
             .saturating_add(report.nodes_released);
+        let initialized_fields = u64::try_from(report.initialized_fields)
+            .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
         self.record(
             StructuralEventKind::DestinationAbort,
-            key.slot(),
-            report.initialized_fields as u64,
+            key.get(),
+            initialized_fields,
         );
         self.record(
             StructuralEventKind::DestinationCleanup,
-            key.slot(),
+            key.get(),
             report.nodes_released,
         );
         // Diagnostic retention must never prevent cleanup. If retaining this
@@ -126,22 +128,43 @@ impl StructuralValueRuntime {
         &mut self,
         record: DestinationRecord,
     ) -> Result<StructuralDestinationKey, StructuralValueError> {
-        self.free_destinations.try_reserve(1)?;
-        let (slot, generation) = if let Some(slot) = self.free_destinations.pop() {
-            let DestinationSlot::Vacant(generation) = self.destinations[slot as usize] else {
+        let (slot, generation, reused) = if let Some(&slot) = self.free_destinations.last() {
+            let index =
+                usize::try_from(slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+            let DestinationSlot::Vacant(generation) = self
+                .destinations
+                .get(index)
+                .ok_or(StructuralValueError::InvariantViolation)?
+            else {
                 return Err(StructuralValueError::InvariantViolation);
             };
-            (slot, generation)
+            (slot, *generation, true)
         } else {
-            let slot = u32::try_from(self.destinations.len())
-                .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
             self.destinations.try_reserve(1)?;
-            self.destinations
-                .push(DestinationSlot::Vacant(NonZeroU32::MIN));
-            (slot, NonZeroU32::MIN)
+            let slot = u64::try_from(self.destinations.len())
+                .map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+            (slot, NonZeroU64::MIN, false)
         };
-        self.destinations[slot as usize] = DestinationSlot::Live { generation, record };
-        Ok(StructuralDestinationKey::new(slot, generation))
+        let token = self.allocate_private_token(PrivateTokenKind::Destination, slot, generation)?;
+        let key = StructuralDestinationKey::from_token(token);
+        let index = usize::try_from(slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        if reused {
+            if self.free_destinations.pop() != Some(slot) {
+                return Err(StructuralValueError::InvariantViolation);
+            }
+            self.destinations[index] = DestinationSlot::Live {
+                generation,
+                key,
+                record,
+            };
+        } else {
+            self.destinations.push(DestinationSlot::Live {
+                generation,
+                key,
+                record,
+            });
+        }
+        Ok(key)
     }
 
     pub(super) fn preflight_root_field(
@@ -163,20 +186,29 @@ impl StructuralValueRuntime {
         key: StructuralDestinationKey,
     ) -> Result<DestinationRecord, StructuralValueError> {
         self.destination(key)?;
-        let next = if key.generation() == u32::MAX {
+        let token = self.destination_token(key)?;
+        let index =
+            usize::try_from(token.slot).map_err(|_| StructuralValueError::ArithmeticOverflow)?;
+        let next = if token.generation.get() == u64::MAX {
             DestinationSlot::Retired
         } else {
-            self.free_destinations.push(key.slot());
+            self.free_destinations.try_reserve(1)?;
+            self.free_destinations.push(token.slot);
             DestinationSlot::Vacant(
-                NonZeroU32::new(key.generation() + 1)
-                    .ok_or(StructuralValueError::InvariantViolation)?,
+                token
+                    .generation
+                    .get()
+                    .checked_add(1)
+                    .and_then(NonZeroU64::new)
+                    .ok_or(StructuralValueError::ArithmeticOverflow)?,
             )
         };
         let DestinationSlot::Live { record, .. } =
-            std::mem::replace(&mut self.destinations[key.slot() as usize], next)
+            std::mem::replace(&mut self.destinations[index], next)
         else {
             return Err(StructuralValueError::InvariantViolation);
         };
+        self.private_tokens.remove(&key.get());
         Ok(record)
     }
 }

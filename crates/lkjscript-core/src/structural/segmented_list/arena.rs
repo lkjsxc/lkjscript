@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use super::model::SegmentedListLocation;
 use super::*;
 
-pub(super) const SEGMENT_CAPACITY: usize = 1_024;
+/// Private allocation geometry only. Keys carry wide segment and offset
+/// identities, so crossing this value merely starts another segment.
+pub(super) const SEGMENT_CAPACITY: usize = 1_048_576;
 
 #[derive(Debug)]
 pub(super) struct SegmentedListEntry<T> {
@@ -19,6 +23,7 @@ pub(super) struct SegmentedListSegment<T> {
 pub struct SegmentedListArena<T> {
     pub(super) id: SegmentedListArenaId,
     pub(super) segments: Vec<SegmentedListSegment<T>>,
+    pub(super) locations: HashMap<u64, SegmentedListLocation>,
     pub(super) metrics: SegmentedListMetrics,
 }
 
@@ -27,6 +32,7 @@ impl<T> SegmentedListArena<T> {
         Ok(Self {
             id: SegmentedListArenaId::fresh()?,
             segments: Vec::new(),
+            locations: HashMap::new(),
             metrics: SegmentedListMetrics::default(),
         })
     }
@@ -41,9 +47,15 @@ impl<T> SegmentedListArena<T> {
 
     pub fn reserved_bytes_estimate(&self) -> Result<u64, SegmentedListError> {
         let segment_bytes = storage_bytes::<SegmentedListSegment<T>>(self.segments.capacity())?;
-        self.segments
-            .iter()
-            .try_fold(segment_bytes, |total, segment| {
+        let location_bytes =
+            storage_bytes::<(u64, SegmentedListLocation)>(self.locations.capacity())?;
+        self.segments.iter().try_fold(
+            segment_bytes
+                .checked_add(location_bytes)
+                .ok_or(SegmentedListError::Limit(
+                    SegmentedListLimit::Representation,
+                ))?,
+            |total, segment| {
                 total
                     .checked_add(storage_bytes::<SegmentedListEntry<T>>(
                         segment.entries.capacity(),
@@ -51,22 +63,24 @@ impl<T> SegmentedListArena<T> {
                     .ok_or(SegmentedListError::Limit(
                         SegmentedListLimit::Representation,
                     ))
-            })
+            },
+        )
     }
 
     pub fn prepend_storage_increase(&self) -> Result<u64, SegmentedListError> {
+        let entry = storage_bytes::<SegmentedListEntry<T>>(1)?;
         if self
             .segments
             .last()
             .is_none_or(|segment| segment.entries.len() == SEGMENT_CAPACITY)
         {
             storage_bytes::<SegmentedListSegment<T>>(1)?
-                .checked_add(storage_bytes::<SegmentedListEntry<T>>(SEGMENT_CAPACITY)?)
+                .checked_add(entry)
                 .ok_or(SegmentedListError::Limit(
                     SegmentedListLimit::Representation,
                 ))
         } else {
-            Ok(0)
+            Ok(entry)
         }
     }
 
@@ -97,7 +111,7 @@ impl<T> SegmentedListArena<T> {
         key: SegmentedListKey,
     ) -> Result<Option<(&T, SegmentedListKey)>, SegmentedListError> {
         self.validate_key(key)?;
-        let Some(location) = key.location() else {
+        let Some(location) = self.location(key)? else {
             return Ok(None);
         };
         let entry = self.entry(location)?;
@@ -110,7 +124,7 @@ impl<T> SegmentedListArena<T> {
         list_type: u64,
     ) -> Result<(), SegmentedListError> {
         self.validate_key(key)?;
-        if let Some(location) = key.location() {
+        if let Some(location) = self.location(key)? {
             if self.entry(location)?.list_type != list_type {
                 return Err(SegmentedListError::WrongType);
             }
@@ -122,10 +136,24 @@ impl<T> SegmentedListArena<T> {
         if key.arena() != self.id {
             return Err(SegmentedListError::WrongArena);
         }
-        if let Some(location) = key.location() {
+        if let Some(location) = self.location(key)? {
             self.entry(location)?;
         }
         Ok(())
+    }
+
+    pub(super) fn location(
+        &self,
+        key: SegmentedListKey,
+    ) -> Result<Option<SegmentedListLocation>, SegmentedListError> {
+        let Some(token) = key.token() else {
+            return Ok(None);
+        };
+        self.locations
+            .get(&token.get())
+            .copied()
+            .map(Some)
+            .ok_or(SegmentedListError::InvalidKey)
     }
 
     fn nonempty_location(
@@ -133,16 +161,19 @@ impl<T> SegmentedListArena<T> {
         key: SegmentedListKey,
     ) -> Result<SegmentedListLocation, SegmentedListError> {
         self.validate_key(key)?;
-        key.location().ok_or(SegmentedListError::EmptyList)
+        self.location(key)?.ok_or(SegmentedListError::EmptyList)
     }
 
     pub(super) fn entry(
         &self,
         location: SegmentedListLocation,
     ) -> Result<&SegmentedListEntry<T>, SegmentedListError> {
+        let segment =
+            usize::try_from(location.segment).map_err(|_| SegmentedListError::InvalidKey)?;
+        let entry = usize::try_from(location.entry).map_err(|_| SegmentedListError::InvalidKey)?;
         self.segments
-            .get(usize::from(location.segment))
-            .and_then(|segment| segment.entries.get(usize::from(location.entry)))
+            .get(segment)
+            .and_then(|segment| segment.entries.get(entry))
             .ok_or(SegmentedListError::InvalidKey)
     }
 }

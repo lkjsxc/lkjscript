@@ -6,7 +6,7 @@ impl EvalUniqueRuntime {
     pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
         self.preflight_allocation(bytes.capacity())?;
         let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word())
+        self.publish_bytes(key.opaque_word())
     }
 
     pub(crate) fn allocate_byte_vector_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
@@ -15,7 +15,7 @@ impl EvalUniqueRuntime {
             .store
             .allocate_byte_vector(bytes)
             .map_err(map_store_error)?;
-        let word = key.packed_word();
+        let word = key.opaque_word();
         if self
             .owners
             .insert(word.get(), UniqueLayout::ByteVector)
@@ -71,7 +71,7 @@ impl EvalUniqueRuntime {
         let bytes = self.store.bytes(key).map_err(map_store_error)?.len();
         self.preflight_allocation(bytes)?;
         let clone = self.store.clone_bytes(key).map_err(map_store_error)?;
-        self.publish_bytes(clone.packed_word())
+        self.publish_bytes(clone.opaque_word())
     }
 
     pub(crate) fn copy_bytes_range(
@@ -88,7 +88,7 @@ impl EvalUniqueRuntime {
             .store
             .clone_bytes_range(key, start, len)
             .map_err(map_store_error)?;
-        self.publish_bytes(clone.packed_word())
+        self.publish_bytes(clone.opaque_word())
     }
 
     pub(crate) fn clone_static(&mut self, bytes: &[u8]) -> Result<EvalValue, Flow> {
@@ -97,7 +97,7 @@ impl EvalUniqueRuntime {
             .store
             .clone_static_bytes(bytes)
             .map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word())
+        self.publish_bytes(key.opaque_word())
     }
 
     pub(crate) fn copy_static_range(
@@ -111,7 +111,7 @@ impl EvalUniqueRuntime {
             .store
             .clone_static_bytes_range(bytes, start, len)
             .map_err(map_store_error)?;
-        self.publish_bytes(key.packed_word())
+        self.publish_bytes(key.opaque_word())
     }
 
     pub(crate) fn freeze(&mut self, value: &EvalValue) -> Result<EvalValue, Flow> {
@@ -154,7 +154,7 @@ impl EvalUniqueRuntime {
             .store
             .thaw_bytes_slice(bytes)
             .map_err(map_store_error)?;
-        let word = key.packed_word();
+        let word = key.opaque_word();
         if self
             .owners
             .insert(word.get(), UniqueLayout::ByteVector)

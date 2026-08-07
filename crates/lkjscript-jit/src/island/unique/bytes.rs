@@ -5,13 +5,13 @@ impl JitUniqueRuntime {
         &mut self,
         bytes: &[u8],
     ) -> Result<NativeUnique, NativeServiceError> {
-        self.preflight_allocation(bytes.len())?;
+        let next_allocations = self.preflight_allocation(bytes.len())?;
         self.reserve_owner()?;
         let key = self
             .store
             .clone_static_bytes(bytes)
             .map_err(|error| self.store_error(error))?;
-        self.publish_bytes_key(key.packed_word())
+        self.publish_bytes_key(key.opaque_word(), next_allocations)
     }
 
     pub(crate) fn copy_static_bytes_slice(
@@ -22,28 +22,28 @@ impl JitUniqueRuntime {
     ) -> Result<NativeUnique, NativeServiceError> {
         let start = usize::try_from(start).map_err(|_| self.reject())?;
         let len = usize::try_from(len).map_err(|_| self.reject())?;
-        self.preflight_allocation(len)?;
+        let next_allocations = self.preflight_allocation(len)?;
         self.reserve_owner()?;
         let key = self
             .store
             .clone_static_bytes_range(bytes, start, len)
             .map_err(|error| self.store_error(error))?;
-        self.publish_bytes_key(key.packed_word())
+        self.publish_bytes_key(key.opaque_word(), next_allocations)
     }
 
     pub(crate) fn thaw_static_bytes(
         &mut self,
         bytes: &[u8],
     ) -> Result<NativeUnique, NativeServiceError> {
-        self.preflight_allocation(bytes.len())?;
+        let next_allocations = self.preflight_allocation(bytes.len())?;
         self.reserve_owner()?;
         let key = self
             .store
             .thaw_bytes_slice(bytes)
             .map_err(|error| self.store_error(error))?;
-        let word = key.packed_word();
+        let word = key.opaque_word();
         self.publish_owner(word.get())?;
-        self.stats.allocations = self.stats.allocations.saturating_add(1);
+        self.stats.allocations = next_allocations;
         Ok(NativeUnique::byte_vector(word.get()))
     }
 
@@ -97,14 +97,14 @@ impl JitUniqueRuntime {
         loan: NativeLoan,
     ) -> Result<NativeUnique, NativeServiceError> {
         let loan = self.require_bytes_loan(loan)?;
-        self.preflight_allocation(loan.len)?;
+        let next_allocations = self.preflight_allocation(loan.len)?;
         self.reserve_owner()?;
         let key = self
             .store
             .import_bytes_key(loan.owner)
             .and_then(|key| self.store.clone_bytes(key))
             .map_err(|error| self.store_error(error))?;
-        self.publish_bytes_key(key.packed_word())
+        self.publish_bytes_key(key.opaque_word(), next_allocations)
     }
 
     pub(crate) fn copy_bytes_slice(
@@ -116,14 +116,14 @@ impl JitUniqueRuntime {
         let loan = self.require_bytes_loan(loan)?;
         let start = usize::try_from(start).map_err(|_| self.reject())?;
         let len = usize::try_from(len).map_err(|_| self.reject())?;
-        self.preflight_allocation(len)?;
+        let next_allocations = self.preflight_allocation(len)?;
         self.reserve_owner()?;
         let key = self
             .store
             .import_bytes_key(loan.owner)
             .and_then(|key| self.store.clone_bytes_range(key, start, len))
             .map_err(|error| self.store_error(error))?;
-        self.publish_bytes_key(key.packed_word())
+        self.publish_bytes_key(key.opaque_word(), next_allocations)
     }
 
     pub(crate) fn freeze(
@@ -169,9 +169,10 @@ impl JitUniqueRuntime {
     fn publish_bytes_key(
         &mut self,
         word: UniqueKeyWord,
+        next_allocations: u64,
     ) -> Result<NativeUnique, NativeServiceError> {
         self.publish_owner(word.get())?;
-        self.stats.allocations = self.stats.allocations.saturating_add(1);
+        self.stats.allocations = next_allocations;
         Ok(NativeUnique::bytes(word.get()))
     }
 }

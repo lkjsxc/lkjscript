@@ -18,14 +18,23 @@ struct Loan {
 
 #[derive(Clone, Copy, Debug)]
 struct LoanSlot {
-    generation: u32,
+    generation: std::num::NonZeroU64,
+    token: Option<std::num::NonZeroU64>,
     loan: Option<Loan>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LoanIdentity {
+    slot: u64,
+    generation: std::num::NonZeroU64,
 }
 
 pub(super) struct JitUniqueRuntime {
     store: UniqueStore,
     owners: Vec<u64>,
     loans: Vec<LoanSlot>,
+    loan_tokens: std::collections::HashMap<u64, LoanIdentity>,
+    next_loan_token: Option<std::num::NonZeroU64>,
     max_loans: Option<usize>,
     max_allocations: Option<u64>,
     max_heap_bytes: Option<u64>,
@@ -40,6 +49,8 @@ impl JitUniqueRuntime {
             store: UniqueStore::new(id),
             owners: Vec::new(),
             loans: Vec::new(),
+            loan_tokens: std::collections::HashMap::new(),
+            next_loan_token: std::num::NonZeroU64::new(1),
             max_loans: config.max_handles(),
             max_allocations: config.max_allocations(),
             max_heap_bytes: config
@@ -52,7 +63,7 @@ impl JitUniqueRuntime {
 
     pub(super) fn allocate(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError> {
         let size = usize::try_from(size).map_err(|_| self.reject())?;
-        self.preflight_allocation(size)?;
+        let next_allocations = self.preflight_allocation(size)?;
         if let Err(error) = self.store.check_byte_vector_allocation(size) {
             return Err(self.store_error(error));
         }
@@ -68,9 +79,9 @@ impl JitUniqueRuntime {
             .store
             .allocate_byte_vector(bytes)
             .map_err(|error| self.store_error(error))?;
-        let word = key.packed_word().get();
+        let word = key.opaque_word().get();
         self.publish_owner(word)?;
-        self.stats.allocations = self.stats.allocations.saturating_add(1);
+        self.stats.allocations = next_allocations;
         Ok(NativeUnique::byte_vector(word))
     }
 
@@ -101,10 +112,15 @@ impl JitUniqueRuntime {
             .map_err(|_| NativeServiceError::HostFailure)
     }
 
-    fn preflight_allocation(&mut self, bytes: usize) -> Result<(), NativeServiceError> {
+    fn preflight_allocation(&mut self, bytes: usize) -> Result<u64, NativeServiceError> {
+        let next_allocations = self
+            .stats
+            .allocations
+            .checked_add(1)
+            .ok_or(NativeServiceError::HostFailure)?;
         if self
             .max_allocations
-            .is_some_and(|maximum| self.stats.allocations >= maximum)
+            .is_some_and(|maximum| next_allocations > maximum)
         {
             self.last_resource = Some(ResourceLimitKind::Allocations);
             return Err(NativeServiceError::ResourceLimitExceeded);
@@ -122,7 +138,7 @@ impl JitUniqueRuntime {
         {
             return Err(self.heap_limit());
         }
-        Ok(())
+        Ok(next_allocations)
     }
 
     fn publish_owner(&mut self, word: u64) -> Result<(), NativeServiceError> {
@@ -142,12 +158,19 @@ impl JitUniqueRuntime {
 
     fn loan(&mut self, value: NativeLoan) -> Result<Loan, NativeServiceError> {
         let word = value.opaque_word();
-        let generation = u32::try_from(word >> 32).map_err(|_| self.reject())?;
-        let index = usize::try_from(word & u64::from(u32::MAX)).map_err(|_| self.reject())?;
+        let identity = self
+            .loan_tokens
+            .get(&word)
+            .copied()
+            .ok_or_else(|| self.reject())?;
+        let index = usize::try_from(identity.slot).map_err(|_| self.reject())?;
         let loan = self
             .loans
             .get(index)
-            .filter(|slot| generation != 0 && slot.generation == generation)
+            .filter(|slot| {
+                slot.token.is_some_and(|token| token.get() == word)
+                    && slot.generation == identity.generation
+            })
             .and_then(|slot| slot.loan)
             .filter(|loan| loan.kind == value.loan_type())
             .ok_or_else(|| self.reject())?;

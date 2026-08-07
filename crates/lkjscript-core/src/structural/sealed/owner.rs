@@ -43,7 +43,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         };
         let record = &mut self.records[index].1;
         if record.owners == 0
-            || weak.key.slot() as usize >= record.roots.len()
+            || usize::try_from(weak.key.slot()).map_or(true, |slot| slot >= record.roots.len())
             || weak.key.generation() != weak.key.domain().generation()
         {
             return Ok(None);
@@ -89,7 +89,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         })
     }
 
-    pub fn borrowed_at(&self, borrow: &SealedBorrow<T>, slot: u32) -> Result<&T, StructuralError> {
+    pub fn borrowed_at(&self, borrow: &SealedBorrow<T>, slot: u64) -> Result<&T, StructuralError> {
         self.borrowed(borrow)?;
         let index = self.record_index(borrow.key.domain())?;
         let record = &self.records[index].1;
@@ -98,7 +98,7 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         }
         let root = record
             .roots
-            .get(slot as usize)
+            .get(usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?)
             .ok_or(StructuralError::StaleRoot(borrow.key))?;
         if root.generation != borrow.key.generation() {
             return Err(StructuralError::StaleRoot(borrow.key));
@@ -106,17 +106,22 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         match root.location {
             ObjectLocation::Chunk { chunk, offset } => record
                 .chunks
-                .get(chunk as usize)
-                .and_then(|values| values.get(offset as usize))
+                .get(usize::try_from(chunk).map_err(|_| StructuralError::ArithmeticOverflow)?)
+                .and_then(|values| {
+                    usize::try_from(offset)
+                        .ok()
+                        .and_then(|offset| values.get(offset))
+                })
                 .ok_or(StructuralError::StaleRoot(borrow.key)),
             ObjectLocation::Large { index } => record
                 .large
-                .get(index as usize)
+                .get(usize::try_from(index).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .and_then(|values| values.first())
                 .ok_or(StructuralError::StaleRoot(borrow.key)),
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn end_borrow(
         &mut self,
         borrow: SealedBorrow<T>,

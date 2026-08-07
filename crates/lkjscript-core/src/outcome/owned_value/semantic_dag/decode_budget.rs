@@ -61,13 +61,13 @@ impl SemanticDagDecodeBudget {
         self.work(1)
     }
 
-    fn fields(&mut self, count: u32) -> Result<()> {
+    fn fields(&mut self, count: u64) -> Result<()> {
         self.metrics.fields = self
             .metrics
             .fields
             .checked_add(count)
             .ok_or_else(|| Error::msg("semantic DAG edge count overflow"))?;
-        self.work(u64::from(count))
+        self.work(count)
     }
 
     fn bytes(&mut self, length: usize, class: DagWireByteClass) -> Result<()> {

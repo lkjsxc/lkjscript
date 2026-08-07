@@ -11,19 +11,19 @@ impl UniqueStore {
         &mut self,
         word: UniqueKeyWord,
     ) -> Result<ByteVectorKey, UniqueStoreError> {
-        let raw = word.bind(self.id)?;
+        let raw = self.bind(word)?;
         self.locate(raw, UniqueLayout::ByteVector)?;
         Ok(ByteVectorKey::from_raw(raw))
     }
 
     pub fn import_bytes_key(&mut self, word: UniqueKeyWord) -> Result<BytesKey, UniqueStoreError> {
-        let raw = word.bind(self.id)?;
+        let raw = self.bind(word)?;
         self.locate(raw, UniqueLayout::Bytes)?;
         Ok(BytesKey::from_raw(raw))
     }
 
     pub fn import_path_key(&mut self, word: UniqueKeyWord) -> Result<PathKey, UniqueStoreError> {
-        let raw = word.bind(self.id)?;
+        let raw = self.bind(word)?;
         self.locate(raw, UniqueLayout::Path)?;
         Ok(PathKey::from_raw(raw))
     }
@@ -129,7 +129,7 @@ impl UniqueStore {
         if key.store != self.id {
             return Err(UniqueStoreError::StoreMismatch);
         }
-        let index = key.index as usize;
+        let index = usize::try_from(key.index).map_err(|_| UniqueStoreError::ArithmeticOverflow)?;
         let Some(slot) = self.slots.get(index) else {
             return self.reject_stale();
         };

@@ -43,6 +43,7 @@ impl ResourceTable {
         operation: &str,
     ) -> Result<Value> {
         let scope = self.table.scope();
+        let identity = key.token_parts();
         let closed = self
             .table
             .close_owned_with(key, kind, provider, scope, |_, payload| {
@@ -50,6 +51,9 @@ impl ResourceTable {
             });
         match closed {
             Ok(outcome) => {
+                if let Some(token) = self.token_by_identity.remove(&identity) {
+                    self.tokens.remove(&token);
+                }
                 self.record_closed(1);
                 outcome
             }
@@ -89,6 +93,8 @@ impl ResourceTable {
                 format!("borrowed standard input removal failed: {error}"),
             );
         }
+        self.tokens.clear();
+        self.token_by_identity.clear();
         self.update_metrics(|metrics| {
             metrics.ordinary_obligations = ordinary_obligations;
             metrics.emergency_obligations = emergency_obligations;

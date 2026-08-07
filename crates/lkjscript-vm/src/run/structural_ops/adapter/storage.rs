@@ -3,6 +3,8 @@ impl AggregateAdapters {
         Self {
             slots: Vec::new(),
             free: Vec::new(),
+            tokens: HashMap::new(),
+            next_token: NonZeroU64::new(1),
             allocations: 0,
         }
     }
@@ -14,12 +16,19 @@ impl AggregateAdapters {
             .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?;
         let free = u64::try_from(self.free.capacity())
             .ok()
-            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u32>() as u64))
+            .and_then(|capacity| capacity.checked_mul(std::mem::size_of::<u64>() as u64))
+            .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?;
+        let tokens = u64::try_from(self.tokens.capacity())
+            .ok()
+            .and_then(|capacity| {
+                capacity.checked_mul(std::mem::size_of::<(u64, AdapterIdentity)>() as u64)
+            })
             .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?;
         Ok((
             self.allocations,
             slots
                 .checked_add(free)
+                .and_then(|bytes| bytes.checked_add(tokens))
                 .ok_or_else(|| Error::host("aggregate adapter byte accounting overflow"))?,
         ))
     }
@@ -35,90 +44,131 @@ impl AggregateAdapters {
             .allocations
             .checked_add(1)
             .ok_or_else(|| Error::host("aggregate adapter allocation accounting overflow"))?;
-        self.free.try_reserve(1).map_err(|_| {
-            Error::resource(
-                ResourceLimitKind::HeapBytes,
-                "aggregate adapter free-list capacity unavailable",
-            )
-        })?;
-        let (slot, generation) = if let Some(slot) = self.free.pop() {
-            let AdapterSlot::Vacant(generation) = self.slots[slot as usize] else {
+        let (slot, generation, reused) = if let Some(&slot) = self.free.last() {
+            let index = usize::try_from(slot)
+                .map_err(|_| Error::host("aggregate adapter slot exceeds platform"))?;
+            let Some(AdapterSlot::Vacant(generation)) = self.slots.get(index) else {
                 return Err(Error::msg("aggregate adapter free-list is corrupt"));
             };
-            (slot, generation)
+            (slot, *generation, true)
         } else {
-            let slot = u32::try_from(self.slots.len()).map_err(|_| {
-                Error::resource(
-                    ResourceLimitKind::Allocations,
-                    "aggregate adapter slot identity exhausted",
-                )
-            })?;
             self.slots.try_reserve(1).map_err(|_| {
                 Error::resource(
                     ResourceLimitKind::HeapBytes,
                     "aggregate adapter slot capacity unavailable",
                 )
             })?;
-            self.slots.push(AdapterSlot::Vacant(NonZeroU32::MIN));
-            (slot, NonZeroU32::MIN)
+            let slot = u64::try_from(self.slots.len())
+                .map_err(|_| Error::host("aggregate adapter slot identity exceeds u64"))?;
+            (slot, NonZeroU64::MIN, false)
         };
-        self.slots[slot as usize] = AdapterSlot::Live { generation, record };
+        self.tokens.try_reserve(1).map_err(|_| {
+            Error::resource(
+                ResourceLimitKind::HeapBytes,
+                "aggregate adapter token capacity unavailable",
+            )
+        })?;
+        let token = self
+            .next_token
+            .ok_or_else(|| Error::host("aggregate adapter token identity exhausted"))?;
+        self.next_token = token.get().checked_add(1).and_then(NonZeroU64::new);
+        let identity = AdapterIdentity { slot, generation };
+        if self.tokens.contains_key(&token.get()) {
+            return Err(Error::host("aggregate adapter token collision"));
+        }
+        let index = usize::try_from(slot)
+            .map_err(|_| Error::host("aggregate adapter slot exceeds platform"))?;
+        if reused {
+            let _ = self.free.pop();
+            self.slots[index] = AdapterSlot::Live {
+                generation,
+                token,
+                record,
+            };
+        } else {
+            self.slots.push(AdapterSlot::Live {
+                generation,
+                token,
+                record,
+            });
+        }
+        self.tokens.insert(token.get(), identity);
         self.allocations = next_allocations;
-        Ok(Value::from_aggregate_adapter(adapter_word(
-            slot, generation,
-        )))
+        Ok(Value::from_aggregate_adapter(token.get()))
     }
 
     fn get(&self, value: Value) -> Result<AdapterRecord> {
-        let (slot, generation) = adapter_parts(value)?;
-        match self.slots.get(slot as usize) {
+        let (token, identity) = self.adapter_identity(value)?;
+        let index = usize::try_from(identity.slot)
+            .map_err(|_| Error::host("aggregate adapter slot exceeds platform"))?;
+        match self.slots.get(index) {
             Some(AdapterSlot::Live {
-                generation: actual,
+                generation,
+                token: current,
                 record,
-            }) if *actual == generation => Ok(*record),
+            }) if *current == token && *generation == identity.generation => Ok(*record),
             _ => Err(Error::msg("stale, forged, or consumed aggregate adapter")),
         }
     }
 
     fn take(&mut self, value: Value) -> Result<AdapterRecord> {
-        let (slot, generation) = adapter_parts(value)?;
+        let (token, identity) = self.adapter_identity(value)?;
         let record = self.get(value)?;
-        let replacement = if generation.get() == u32::MAX {
+        let index = usize::try_from(identity.slot)
+            .map_err(|_| Error::host("aggregate adapter slot exceeds platform"))?;
+        let replacement = if identity.generation.get() == u64::MAX {
             AdapterSlot::Retired
         } else {
-            self.free.push(slot);
+            self.free.try_reserve(1).map_err(|_| {
+                Error::resource(
+                    ResourceLimitKind::HeapBytes,
+                    "aggregate adapter free-list capacity unavailable",
+                )
+            })?;
             AdapterSlot::Vacant(
-                NonZeroU32::new(generation.get() + 1)
-                    .ok_or_else(|| Error::msg("aggregate adapter generation overflow"))?,
+                identity
+                    .generation
+                    .get()
+                    .checked_add(1)
+                    .and_then(NonZeroU64::new)
+                    .ok_or_else(|| Error::host("aggregate adapter generation overflow"))?,
             )
         };
-        self.slots[slot as usize] = replacement;
+        let AdapterSlot::Live { token: current, .. } = self.slots[index] else {
+            return Err(Error::msg("stale, forged, or consumed aggregate adapter"));
+        };
+        if current != token {
+            return Err(Error::msg("stale, forged, or consumed aggregate adapter"));
+        }
+        self.slots[index] = replacement;
+        if !matches!(&self.slots[index], AdapterSlot::Retired) {
+            self.free.push(identity.slot);
+        }
+        self.tokens.remove(&token.get());
         Ok(record)
     }
 
     fn live_values(&self) -> Vec<Value> {
         self.slots
             .iter()
-            .enumerate()
-            .filter_map(|(slot, value)| match value {
-                AdapterSlot::Live { generation, .. } => u32::try_from(slot)
-                    .ok()
-                    .map(|slot| Value::from_aggregate_adapter(adapter_word(slot, *generation))),
+            .filter_map(|value| match value {
+                AdapterSlot::Live { token, .. } => Some(Value::from_aggregate_adapter(token.get())),
                 AdapterSlot::Vacant(_) | AdapterSlot::Retired => None,
             })
             .collect()
     }
-}
 
-const fn adapter_word(slot: u32, generation: NonZeroU32) -> u64 {
-    ((generation.get() as u64) << 32) | slot as u64
-}
-
-fn adapter_parts(value: Value) -> Result<(u32, NonZeroU32)> {
-    let word = value
-        .as_aggregate_adapter()
-        .ok_or_else(|| Error::msg("expected exact aggregate adapter"))?;
-    let generation = NonZeroU32::new((word >> 32) as u32)
-        .ok_or_else(|| Error::msg("aggregate adapter generation is invalid"))?;
-    Ok((word as u32, generation))
+    fn adapter_identity(&self, value: Value) -> Result<(NonZeroU64, AdapterIdentity)> {
+        let word = value
+            .as_aggregate_adapter()
+            .ok_or_else(|| Error::msg("expected exact aggregate adapter"))?;
+        let token = NonZeroU64::new(word)
+            .ok_or_else(|| Error::msg("aggregate adapter token is zero"))?;
+        let identity = self
+            .tokens
+            .get(&word)
+            .copied()
+            .ok_or_else(|| Error::msg("stale, forged, or consumed aggregate adapter"))?;
+        Ok((token, identity))
+    }
 }

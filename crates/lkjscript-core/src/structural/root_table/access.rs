@@ -28,14 +28,19 @@ impl StructuralRootTable {
         &self,
         key: StructuralValueKey,
     ) -> Result<StructuralRootState, StructuralRootTableError> {
-        let index = usize::try_from(key.slot())
+        let token = self.value_token(key)?;
+        let index = usize::try_from(token.slot)
             .map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
         let slot = self
             .roots
             .get(index)
             .ok_or(StructuralRootTableError::StaleRoot)?;
         match *slot {
-            RootSlot::Live { generation, value } if generation.get() == key.generation() => {
+            RootSlot::Live {
+                generation,
+                key: current,
+                value,
+            } if current == key && generation == token.generation => {
                 if value.exclusive_loan {
                     return Ok(StructuralRootState::BorrowedExclusive);
                 }
@@ -49,14 +54,21 @@ impl StructuralRootTable {
                 })
             }
             RootSlot::Vacant {
-                previous: Some((generation, TerminalState::Moved)),
+                previous: Some((previous, generation, TerminalState::Moved)),
                 ..
-            } if generation.get() == key.generation() => Ok(StructuralRootState::Moved),
+            } if previous == key && generation == token.generation => {
+                Ok(StructuralRootState::Moved)
+            }
             RootSlot::Vacant {
-                previous: Some((generation, TerminalState::Dropped)),
+                previous: Some((previous, generation, TerminalState::Dropped)),
                 ..
-            } if generation.get() == key.generation() => Ok(StructuralRootState::Dropped),
-            RootSlot::Retired { generation } if generation.get() == key.generation() => {
+            } if previous == key && generation == token.generation => {
+                Ok(StructuralRootState::Dropped)
+            }
+            RootSlot::Retired {
+                generation,
+                key: retired,
+            } if retired == key && generation == token.generation => {
                 Ok(StructuralRootState::Retired)
             }
             _ => Err(StructuralRootTableError::StaleRoot),
@@ -67,23 +79,31 @@ impl StructuralRootTable {
         &self,
         key: StructuralValueKey,
     ) -> Result<usize, StructuralRootTableError> {
-        let index = usize::try_from(key.slot())
+        let token = self.value_token(key)?;
+        let index = usize::try_from(token.slot)
             .map_err(|_| StructuralRootTableError::ArithmeticOverflow)?;
         match self.roots.get(index) {
-            Some(RootSlot::Live { generation, .. }) if generation.get() == key.generation() => {
-                Ok(index)
+            Some(RootSlot::Live {
+                generation,
+                key: current,
+                ..
+            }) if *current == key && *generation == token.generation => Ok(index),
+            Some(RootSlot::Vacant {
+                previous: Some((previous, generation, TerminalState::Moved)),
+                ..
+            }) if *previous == key && *generation == token.generation => {
+                Err(StructuralRootTableError::MovedRoot)
             }
             Some(RootSlot::Vacant {
-                previous: Some((generation, TerminalState::Moved)),
+                previous: Some((previous, generation, TerminalState::Dropped)),
                 ..
-            }) if generation.get() == key.generation() => Err(StructuralRootTableError::MovedRoot),
-            Some(RootSlot::Vacant {
-                previous: Some((generation, TerminalState::Dropped)),
-                ..
-            }) if generation.get() == key.generation() => {
+            }) if *previous == key && *generation == token.generation => {
                 Err(StructuralRootTableError::DroppedRoot)
             }
-            Some(RootSlot::Retired { generation }) if generation.get() == key.generation() => {
+            Some(RootSlot::Retired {
+                generation,
+                key: retired,
+            }) if *retired == key && *generation == token.generation => {
                 Err(StructuralRootTableError::RetiredRoot)
             }
             _ => Err(StructuralRootTableError::StaleRoot),

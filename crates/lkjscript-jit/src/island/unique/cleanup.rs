@@ -55,9 +55,11 @@ impl JitUniqueRuntime {
     pub(crate) fn finish(&mut self) -> NativeUniqueStats {
         for slot in &mut self.loans {
             if slot.loan.take().is_some() {
+                slot.token = None;
                 self.stats.cleanup_attempts = self.stats.cleanup_attempts.saturating_add(1);
             }
         }
+        self.loan_tokens.clear();
         while let Some(owner) = self.owners.pop() {
             self.stats.cleanup_attempts = self.stats.cleanup_attempts.saturating_add(1);
             let result = UniqueKeyWord::new(owner)
@@ -79,7 +81,7 @@ impl JitUniqueRuntime {
             }
         }
         let store_stats = self.store.stats();
-        self.stats.live_owners = u64::from(store_stats.live_objects);
+        self.stats.live_owners = store_stats.live_objects;
         self.stats.live_loans = self.loans.iter().filter(|slot| slot.loan.is_some()).count() as u64;
         self.stats.release_backlog = self.stats.live_owners;
         if self.store.assert_no_leaks().is_err()

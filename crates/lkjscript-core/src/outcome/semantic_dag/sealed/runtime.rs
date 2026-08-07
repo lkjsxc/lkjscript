@@ -52,22 +52,22 @@ impl SealedSemanticDagRuntime {
 
     pub(super) fn store(
         &self,
-        index: u32,
+        index: u64,
         value_type: SemanticDagType,
     ) -> Result<&TypedSealedDagStore, SealedSemanticDagError> {
         self.stores
-            .get(index as usize)
+            .get(usize::try_from(index).map_err(|_| SealedSemanticDagError::CorruptRegion)?)
             .filter(|typed| typed.value_type == value_type)
             .ok_or(SealedSemanticDagError::CorruptRegion)
     }
 
     pub(super) fn store_mut(
         &mut self,
-        index: u32,
+        index: u64,
         value_type: SemanticDagType,
     ) -> Result<&mut TypedSealedDagStore, SealedSemanticDagError> {
         self.stores
-            .get_mut(index as usize)
+            .get_mut(usize::try_from(index).map_err(|_| SealedSemanticDagError::CorruptRegion)?)
             .filter(|typed| typed.value_type == value_type)
             .ok_or(SealedSemanticDagError::CorruptRegion)
     }

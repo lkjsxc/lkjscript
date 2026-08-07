@@ -15,7 +15,7 @@ impl<T> SegmentedListArena<T> {
         self.validate_key(left)?;
         self.validate_key(right)?;
         loop {
-            match (left.location(), right.location()) {
+            match (self.location(left)?, self.location(right)?) {
                 (None, None) => return Ok(true),
                 (None, Some(_)) | (Some(_), None) => return Ok(false),
                 (Some(left_location), Some(right_location)) => {
@@ -34,8 +34,10 @@ impl<T> SegmentedListArena<T> {
 
 impl<T: Clone> SegmentedListArena<T> {
     pub fn append_cloned_elements(&self, output: &mut Vec<T>) -> Result<(), SegmentedListError> {
+        let entries = usize::try_from(self.metrics().live_entries)
+            .map_err(|_| SegmentedListError::Limit(SegmentedListLimit::Representation))?;
         output
-            .try_reserve(self.metrics().live_entries as usize)
+            .try_reserve(entries)
             .map_err(|_| SegmentedListError::Limit(SegmentedListLimit::HostAllocation))?;
         for segment in &self.segments {
             output.extend(segment.entries.iter().map(|entry| entry.element.clone()));
@@ -50,7 +52,7 @@ impl<T: Clone> SegmentedListArena<T> {
     pub fn collect_cloned(&self, mut key: SegmentedListKey) -> Result<Vec<T>, SegmentedListError> {
         self.validate_key(key)?;
         let mut output = Vec::new();
-        while let Some(location) = key.location() {
+        while let Some(location) = self.location(key)? {
             output
                 .try_reserve(1)
                 .map_err(|_| SegmentedListError::Limit(SegmentedListLimit::HostAllocation))?;

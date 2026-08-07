@@ -126,7 +126,7 @@ fn encode_value(out: &mut Encoder, value: Value) -> Result<()> {
         out.u64(value)
     } else if let Some(value) = value.as_owned_list() {
         out.u8(11)?;
-        out.u32(value)
+        out.u64(value)
     } else {
         Err(Error::msg("owned value category is not process transportable"))
     }
@@ -141,7 +141,7 @@ fn decode_value(input: &mut Decoder<'_>) -> Result<Value> {
         4 => Value::from_f64_bits(input.u64()?),
         5 => Value::EMPTY_LIST,
         9 => Value::from_symbol(input.u64()?),
-        11 => Value::from_owned_list(input.u32()?),
+        11 => Value::from_owned_list(input.u64()?),
         _ => return Err(Error::msg("unknown value tag")),
     })
 }

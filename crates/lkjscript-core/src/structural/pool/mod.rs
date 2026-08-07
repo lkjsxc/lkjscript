@@ -3,7 +3,7 @@ mod model;
 
 use std::cell::Cell;
 use std::marker::PhantomData;
-use std::num::NonZeroU32;
+use std::num::NonZeroU64;
 
 pub use model::{PoolId, PoolPartition};
 use model::{PoolSlot, PoolSlotState};
@@ -20,7 +20,7 @@ pub struct TypedPool<T> {
     layout: LayoutIdentity,
     semantic_type: SemanticTypeIdentity,
     slots: Vec<PoolSlot<T>>,
-    free: Vec<u32>,
+    free: Vec<u64>,
     metrics: Cell<PoolMetrics>,
 }
 
@@ -54,7 +54,7 @@ impl<T> TypedPool<T> {
         let (slot, generation, reused) = if let Some(&slot) = self.free.last() {
             let entry = self
                 .slots
-                .get(slot as usize)
+                .get(usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .ok_or(StructuralError::SlotVacant)?;
             if entry.state != PoolSlotState::Vacant {
                 return Err(StructuralError::SlotVacant);
@@ -66,15 +66,16 @@ impl<T> TypedPool<T> {
                 .try_reserve(1)
                 .map_err(|_| StructuralError::AllocationFailed)?;
             let slot =
-                u32::try_from(self.slots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
+                u64::try_from(self.slots.len()).map_err(|_| StructuralError::ArithmeticOverflow)?;
             self.slots.push(PoolSlot {
-                generation: NonZeroU32::MIN,
+                generation: NonZeroU64::MIN,
                 state: PoolSlotState::Vacant,
                 value: None,
             });
-            (slot, NonZeroU32::MIN, false)
+            (slot, NonZeroU64::MIN, false)
         };
-        let entry = &mut self.slots[slot as usize];
+        let index = usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        let entry = &mut self.slots[index];
         entry.state = PoolSlotState::Initializing;
         entry.value = Some(value);
         entry.state = PoolSlotState::Live;
@@ -105,7 +106,7 @@ impl<T> TypedPool<T> {
     pub fn remove(&mut self, id: PoolId<T>) -> Result<T, StructuralError> {
         let index = self.validate_id(id)?;
         let generation = self.slots[index].generation.get();
-        let retires = generation == u32::MAX;
+        let retires = generation == u64::MAX;
         if !retires {
             self.free
                 .try_reserve(1)
@@ -118,7 +119,7 @@ impl<T> TypedPool<T> {
             entry.state = PoolSlotState::Retired;
         } else {
             entry.generation =
-                NonZeroU32::new(generation + 1).ok_or(StructuralError::GenerationExhausted)?;
+                NonZeroU64::new(generation + 1).ok_or(StructuralError::GenerationExhausted)?;
             entry.state = PoolSlotState::Vacant;
             self.free.push(id.key.slot());
         }
@@ -135,8 +136,9 @@ impl<T> TypedPool<T> {
         Ok(value)
     }
 
-    pub fn partition(&self, start: u32, end: u32) -> Result<PoolPartition<T>, StructuralError> {
-        if start > end || end as usize > self.slots.len() {
+    pub fn partition(&self, start: u64, end: u64) -> Result<PoolPartition<T>, StructuralError> {
+        let end_index = usize::try_from(end).map_err(|_| StructuralError::ArithmeticOverflow)?;
+        if start > end || end_index > self.slots.len() {
             return Err(StructuralError::WrongPartition);
         }
         Ok(PoolPartition {
@@ -151,11 +153,14 @@ impl<T> TypedPool<T> {
         self.slots.iter().enumerate().filter_map(|(slot, entry)| {
             let value = entry.value.as_ref()?;
             (entry.state == PoolSlotState::Live).then(|| {
+                let Ok(slot) = u64::try_from(slot) else {
+                    unreachable!("host pool slot fits u64")
+                };
                 let id = PoolId {
                     key: RootKey::from_parts(
                         self.domain,
                         RootClass::PoolElement,
-                        slot as u32,
+                        slot,
                         entry.generation,
                         self.layout,
                         self.semantic_type,

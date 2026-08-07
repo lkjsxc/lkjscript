@@ -33,7 +33,7 @@ impl<T> TypedPool<T> {
         for &slot in &self.free {
             let entry = self
                 .slots
-                .get(slot as usize)
+                .get(usize::try_from(slot).map_err(|_| StructuralError::ArithmeticOverflow)?)
                 .ok_or(StructuralError::SlotVacant)?;
             if entry.state != PoolSlotState::Vacant || entry.value.is_some() {
                 return Err(StructuralError::SlotVacant);
@@ -64,13 +64,14 @@ impl<T> TypedPool<T> {
         if key.semantic_type() != self.semantic_type {
             return Err(StructuralError::WrongSemanticType);
         }
-        let Some(entry) = self.slots.get(key.slot() as usize) else {
+        let index = usize::try_from(key.slot()).map_err(|_| self.stale(key))?;
+        let Some(entry) = self.slots.get(index) else {
             return Err(self.stale(key));
         };
         if entry.generation != key.generation() || entry.state != PoolSlotState::Live {
             return Err(self.stale(key));
         }
-        Ok(key.slot() as usize)
+        usize::try_from(key.slot()).map_err(|_| self.stale(key))
     }
 
     fn stale(&self, key: crate::structural::RootKey) -> StructuralError {
