@@ -7,17 +7,31 @@ not a claim that the target exists. Current checkout status remains owned by
 
 ## Current bootstrap
 
-**Currently implemented.** Text files remain persistent import/editing authority, but product
-compilation now imports them exactly once into a syntax-independent immutable `WorkspaceSnapshot`.
-The snapshot owns complete typed HIR, captured preparation provenance, optional source attachments,
-opaque namespace/slot/generation entity and node IDs, revision identity, semantic indexes, type
-facts, and diagnostic headers. Every text/path compile API delegates to `compile_snapshot`; direct
-snapshot compilation performs consistency validation and executable lowering without source,
-parser, formatter, or text-roundtrip dependency. Current snapshots represent only complete programs
-and identity stability is proven only within an immutable snapshot. Transactions over this
-representation are not implemented.
+**Currently implemented.** Text files remain persistent import authority, but product compilation
+imports them exactly once into a syntax-independent immutable `WorkspaceSnapshot`. An in-process
+`Workspace` now owns the current `Arc<WorkspaceSnapshot>`, revision publication, and generation-aware
+entity/node allocation. A snapshot is either complete or has a private typed-hole overlay over
+non-executable backing HIR. It owns captured or deterministic post-edit development provenance,
+optional source attachments, opaque namespace/slot/generation entity and node IDs, semantic indexes,
+type facts, diagnostics, and hole contexts.
 
-The older Semantic Source service remains temporarily internal for commits 2/3 of the same cutover.
+Transactions atomically batch function/binding rename, flat typed expression replacement, and typed
+hole introduce/refine/fill. They reject foreign namespaces, stale generations and revisions,
+invalid or cyclic drafts, invisible references, type/arity/effect/ownership failures, and the
+currently unsupported storage/generic/match creation cases before publication. Stable IDs are
+reconciled through private entity/node addresses: edited roots and unchanged descendants retain
+identity, removed descendants are tombstoned, and newly created descendants receive allocator IDs.
+A successful transaction publishes one revision and returns deterministic semantic diff,
+diagnostics, and coarse invalidation domains; a failed transaction consumes no ID or revision.
+
+Revision-labelled in-process queries cover paginated entity listing/search, definitions/references,
+callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
+Continuations are bound to the namespace, revision, and query. `compile_snapshot` directly lowers a
+complete snapshot and returns a typed incomplete error containing stable hole IDs otherwise. Parser
+counter tests prove rename, replacement, hole fill, and direct compilation do not parse, render, or
+round-trip text.
+
+The older Semantic Source service remains temporarily internal for commit 3 of the same cutover.
 It exposes revision-labelled source nodes, selected entity/node/hole queries, diagnostics, preview or
 publish transactions, and a local JSON/stdio session. It can rename declarations, replace
 expressions, and insert, fill, refine, or delete typed holes with base-revision and file
@@ -28,6 +42,10 @@ across an edit. Transactions ultimately rewrite text; a later compile imports th
 into a new compiler snapshot. Unresolved references, ambiguities, general conflicts, and recovery
 nodes are not first-class workspace states. Query coverage and result pagination are not the target
 interface.
+
+It is not the authority for the in-process vertical above. General unresolved references, ambiguities,
+conflicts, recovery nodes, declaration creation/deletion/movement, local-storage construction,
+generic-call construction, match construction, and deterministic text rendering remain target-only.
 
 Everything below is the target contract.
 

@@ -10,8 +10,9 @@ responsibility, data flow, ownership, and trust boundaries; it is not a second d
 package manifest, lock, and line-oriented .lkjscript files
     -> private checked text/path importer and exact import resolution
     -> source tree and type/effect/ownership analysis
-    -> immutable complete WorkspaceSnapshot owning typed HIR and captured provenance
-    -> compile_snapshot consistency and completeness validation
+    -> immutable WorkspaceSnapshot owning typed HIR and complete/typed-hole state
+    -> optional in-process Workspace transaction and one-revision Arc publication
+    -> compile_snapshot typed completeness and consistency validation
     -> HIR memory planning
     -> typed SSA lowering, verification, and simple normalization
     -> bytecode lowering and unrestricted trusted validation
@@ -21,17 +22,20 @@ package manifest, lock, and line-oriented .lkjscript files
 
 Text and package files remain persistent import authority, but they are not a post-HIR compiler
 input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA, bytecode, and
-preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns
-`Arc`-shared typed HIR, immutable locked/development provenance captured during import, optional
-presentation/source attachments, and deterministic semantic indexes. Package preparation after
-import uses captured lock facts and performs no file-system provenance reconstruction.
+preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns `Arc`-shared typed HIR, complete or typed-hole-overlay
+state, immutable import provenance or deterministic post-edit development provenance, optional
+presentation/source attachments, and deterministic semantic indexes. Package preparation after an
+unedited import uses captured lock facts and performs no file-system provenance reconstruction. A
+semantic edit removes source attachments and derives development identity from the prior semantic
+digest and published diff, so an edited program never falsely retains locked-source provenance.
 
 Opaque public workspace identities are separate from HIR dense IDs. Entity and node IDs carry a
-workspace namespace, logical slot, and generation; a revision carries the same namespace. Import
-assigns them deterministically inside a fresh namespace, and cross-workspace use fails before
-lookup. Iterative index construction records stable entity/node maps, containment, references,
-calls, dependencies, actual/expected type headers, and diagnostic headers. Compilation revalidates
-HIR dense references/signatures/origins and compares rebuilt indexes before lowering. Native
+workspace namespace, logical slot, and generation; a revision carries the same namespace. Import assigns them deterministically inside a fresh namespace, and cross-workspace use fails before
+lookup. `Workspace` owns generation-aware allocators; private `EntityAddress` and `NodeAddress` maps
+reconcile preserved roots and unchanged descendants while removed nodes are tombstoned. Iterative
+index construction records containment, references, calls, dependencies, actual/expected type
+headers, and diagnostics. Compilation revalidates complete HIR references, signatures, origins, and
+index shape before lowering. Native
 execution consumes verified SSA directly; the VM consumes validated bytecode. The deleted optimizer
 pipeline, proof metadata, automatic transition, and redundant SSA memory inventory are not
 constructed.
@@ -46,21 +50,32 @@ route available.
 ## Current semantic editing flow
 
 ```text
-JSON or stdio Semantic Source request
-    -> strict schema and coarse request policy
-    -> syntax-shaped source snapshot
-    -> entity/node/hole query, or staged text transaction
-    -> source and HIR validation
-    -> atomic source-file publication or typed failure
-    -> later text compilation through the ordinary compiler flow
+Arc<WorkspaceSnapshot> plus base revision
+    -> typed batch of rename, flat expression, and typed-hole edits
+    -> namespace/generation/revision and complete draft preflight
+    -> direct staged HIR mutation
+    -> effect, ownership, match-plan, HIR, and index validation
+    -> stable-ID reconciliation and semantic diff
+    -> one new Arc<WorkspaceSnapshot>, or no publication
 ```
 
-This service is bootstrap infrastructure, not the new compiler snapshot authority. Node identity in
-this old service is a revision plus dense `u64` index. Transactions have base revisions and typed
-preconditions, but successful edits publish text files; a later compile imports those files into a
-new `WorkspaceSnapshot`. Old-service records include paths, spans, canonical subtrees, and source
-fingerprints. It remains internal only for commits 2/3 of the same direct cutover. Semantic
-transactions over the new snapshot and edit-stable identity across revisions are not implemented.
+The flat `ExpressionDraft` representation is child-before-parent and non-recursive. The implemented
+constructors are i64/f64/bool/unit literals, visible parameter loads, non-generic function calls,
+and `if`. Local storage, generic calls, and match creation fail explicitly as unsupported. Typed
+holes retain expected type, goal, owning context, visible entities, and a private replaced address.
+Incomplete snapshots retain ordinary query indexes and deterministic diagnostics but expose no
+executable placeholder; `compile_snapshot` returns stable hole IDs.
+
+Queries are revision-labelled and deterministically paginated for entities/search, references,
+calls, diagnostics, and legal constructors. Definition, node type, and hole context are direct
+identity queries. A continuation is bound to its namespace, revision, and query. Semantic diffs
+report rename, replacement, created/deleted descendants, hole transitions, and reference/call
+rewiring; invalidation currently reports coarse truthful domains rather than incremental cache work.
+
+The JSON/stdio Semantic Source service remains separate bootstrap infrastructure for commit 3. Its
+node identity is a revision plus dense `u64` index, and its successful transactions still publish
+text files for later import. Old-service records include paths, spans, canonical subtrees, and source
+fingerprints. It is not used by the in-process workspace editing vertical.
 
 ## Current execution and local host flow
 
@@ -155,22 +170,15 @@ capability checking; they are not a replacement service sandbox.
 
 ## Target delta
 
-**Transitional current fact:** the immutable revision-labelled snapshot and direct executable
-lowering boundary are implemented for complete imported programs. Directness tests prove snapshot
-compilation does not invoke the parser, and attachment-free typed snapshots execute through the VM.
+**Transitional current fact:** complete text imports and in-process semantic edits share one
+revision-labelled snapshot authority. Stable identity, one typed-hole incomplete state, atomic batch
+edits, deterministic paginated queries, semantic diffs, and direct executable lowering are
+implemented for the selected vertical. Directness tests prove editing and compilation do not invoke
+the parser; attachment-free and edited complete snapshots execute through the VM.
 
-**Target, not implemented:** move editing and queries onto that same authority:
-
-```text
-text or structured import
-    -> typed semantic workspace transaction
-    -> immutable revision-labelled semantic snapshot
-    -> direct typed-core and executable lowering without rendering/reparsing
-    -> the selected baseline-native-with-VM-fallback product path
-```
-
-The remaining target requires identity preservation across edits, first-class incomplete semantic
-states, typed atomic batch edits, deterministic paginated semantic queries, semantic and text
-projections from one snapshot, and deletion of the temporary syntax-shaped Semantic Source path in
-commits 2/3 of this cutover. Persistence, collaboration, daemon, database service, scheduler, and
+**Target, not implemented:** commit 3 removes the syntax-shaped Semantic Source editing path and
+adds the deterministic projection needed for ordinary review/import workflows. Later workspace
+expansion adds declaration and node movement/creation/deletion, local storage, generics, matches,
+unresolved references, ambiguities, conflicts, recovery nodes, and finer analysis contexts without
+adding another semantic AST. Persistence, collaboration, daemon, database service, scheduler, and
 broader platform work wait for measured need after the local semantic model works.

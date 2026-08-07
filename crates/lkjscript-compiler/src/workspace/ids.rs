@@ -29,6 +29,10 @@ impl WorkspaceNamespace {
         Ok(Self(lkjscript_core::sha256(&seed)))
     }
 
+    pub(super) const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+
     #[cfg(test)]
     pub(super) fn deterministic(seed: u64) -> Self {
         let mut bytes = [0_u8; 32];
@@ -61,6 +65,21 @@ impl RevisionId {
 
     pub(super) const fn namespace(self) -> WorkspaceNamespace {
         self.namespace
+    }
+
+    pub(super) fn next(self) -> Result<Self> {
+        let sequence = self
+            .sequence
+            .checked_add(1)
+            .ok_or_else(|| Error::host("workspace revision sequence exhausted"))?;
+        Ok(Self {
+            namespace: self.namespace,
+            sequence,
+        })
+    }
+
+    pub(super) const fn sequence(self) -> u64 {
+        self.sequence
     }
 }
 

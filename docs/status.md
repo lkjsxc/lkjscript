@@ -6,15 +6,16 @@ manifests remain the executable authority.
 
 ## User path
 
-The active product is local package compile/run plus the Semantic Source stdio interface. Package
-files and the provisional line-oriented `.lkjscript` notation remain persistent import authority
-until semantic transactions replace the editing path. Text and path entry points now import exactly
-once into an immutable `WorkspaceSnapshot`. The snapshot owns clone-safe resolved typed HIR,
-immutable compilation provenance, optional source attachments, opaque namespace-scoped stable
-entity/node identities, semantic indexes, type facts, and diagnostic headers. Every product compile
-API delegates to public `compile_snapshot`, the sole post-import boundary, before HIR memory
-planning, SSA lowering and verification, bytecode validation, prepared-identity binding, and
-execution.
+The active product is local package compile/run plus an in-process semantic workspace API and the
+temporary Semantic Source stdio interface. Package files and the provisional line-oriented
+`.lkjscript` notation remain persistent import authority. Text and path entry points import exactly
+once into an immutable `WorkspaceSnapshot`; in-process `Workspace` transactions then edit that
+semantic snapshot directly without text publication. Snapshots own clone-safe resolved typed HIR,
+complete or typed-hole-overlay state, deterministic post-edit development provenance, optional
+source attachments, opaque namespace-scoped stable entity/node identities, semantic indexes, type
+facts, diagnostics, and hole contexts. Every product compile API delegates to public
+`compile_snapshot`, the sole post-import boundary, before HIR memory planning, SSA lowering and
+verification, bytecode validation, prepared-identity binding, and execution.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -124,36 +125,53 @@ Their memory witness facts are named semantic-snapshot facts rather than process
 
 ## Semantic workspace compiler cutover and bootstrap service
 
-The compiler's public `workspace` module now owns one syntax-independent in-memory
-`WorkspaceSnapshot` representation. Public `WorkspaceNamespace`, `RevisionId`, `EntityId`, and
-`NodeId` values are opaque; entity/node IDs contain a namespace, logical slot, and generation rather
-than exposing HIR vector positions. Import builds containment, reference, call, and dependency
-indexes iteratively and records actual/expected type facts in deterministic order. Snapshot
-consistency validation checks dense HIR references, signatures, origins, declaration/index facts,
-and rebuilt semantic indexes before compilation. Snapshot clones share typed HIR through `Arc`, and
-presentation attachments can be removed without changing semantic identities or compilation.
+The compiler's public `workspace` module owns one syntax-independent in-memory
+`WorkspaceSnapshot` representation and an in-process `Workspace` owner for its current `Arc` and
+identity allocators. Public `WorkspaceNamespace`, `RevisionId`, `EntityId`, `NodeId`, and `HoleId`
+values are opaque. Entity/node IDs contain a namespace, logical slot, and tombstone generation rather
+than exposing HIR vector positions. Private entity/node address maps reconcile unchanged identities
+across rename, replacement, branch movement/reordering, attachment removal, and unrelated edits;
+removed descendants become stale and allocator reuse changes generation.
 
-The source/path importer privately owns source loading, parsing, analysis, package verification, and
-capture of locked or development preparation provenance. `compile_path`, its metrics/source
-variants, `compile_source`, and `validate_source` all import a snapshot; only `compile_snapshot`
-continues past typed HIR. A parser-invocation seam proves direct snapshot compilation does not parse,
-render, or round-trip text, and an attachment-free programmatically rebuilt typed snapshot compiles
-and executes in the VM.
+`Transaction` batches `RenameEntity`, `ReplaceExpression`, `IntroduceHole`, `RefineHole`, and
+`FillHole` against one base revision. Expression proposals are dense flat child-before-parent graphs
+for scalar literals, visible parameter loads, non-generic function calls, and conditionals. The
+staging path validates namespace/generation/revision, draft shape, lexical visibility, arity, type,
+effect, ownership, and HIR consistency, then publishes one revision. Failure leaves the prior `Arc`,
+revision, IDs, and provenance unchanged. Success returns deterministic rename/replacement,
+created/deleted-descendant, hole, reference, and call diff entries plus diagnostics and coarse
+invalidation domains. Semantic edits remove source attachments and derive development provenance
+from the prior semantic digest and diff rather than retaining locked-source claims.
+
+A typed-hole snapshot remains queryable but its private backing HIR cannot be compiled. Hole
+introduction prunes and tombstones replaced descendants from public indexes; refinement changes the
+goal; fill lowers a checked flat draft directly to HIR, preserves the hole/root `NodeId`, and returns
+to complete state after the last hole. `compile_snapshot` returns `CompileSnapshotError::Incomplete`
+with stable hole IDs and never installs an executable placeholder.
+
+Revision-labelled queries implement paginated entity listing/search, definition and references,
+callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
+Continuations are stable over one result ordering and reject another namespace, revision, or query.
+The source/path importer still privately owns loading, parsing, initial analysis, package validation,
+and initial provenance capture. Parser-counter tests prove rename, replacement, hole fill, and direct
+compile perform no parse, render, or text round trip; complete edited snapshots execute in the VM.
+An opt-in 20,000-level small-stack edit/drop stress test covers the flat draft, HIR clone, index,
+diff, and destruction path.
 
 The existing Semantic Source JSON/stdio service remains temporarily as internal bootstrap machinery
-for commits 2/3 of the same cutover. It still provides source-derived revision-labelled queries and
-staged text transactions, and its old schema still mirrors syntax, spans, canonical subtrees, and
-source files. Its transactions publish text, after which a later compile performs a fresh import.
-It does not yet edit the new workspace snapshot or provide edit-stable identity across revisions.
-General incomplete states, semantic transactions, broad queries, and pagination are not implemented.
+for commit 3. It still provides source-derived queries and staged text transactions whose schema
+mirrors syntax, spans, canonical subtrees, and source files. It is not connected to the new
+in-process API and is not a second authority for that vertical.
 
 ## Known gaps
 
-- Text remains persistent editing/import authority because semantic transactions and rendering from
-  the new snapshot are not implemented yet; it is no longer a post-HIR compiler input.
-- Semantic Source remains syntax-shaped and separate from the new compiler snapshot. Its wide dense
+- Text remains persistent import authority and deterministic workspace text rendering is not
+  implemented. In-process semantic transactions cover only rename, scalar/load/non-generic-call/if
+  replacement, and one typed-hole state; declaration creation/deletion/movement, local storage,
+  generic/match creation, unresolved names, ambiguities, conflicts, and recovery states remain.
+- Semantic Source remains syntax-shaped and separate from the in-process workspace API. Its dense
   IDs are not edit-stable semantic IDs, and deleting that temporary service path is scheduled for
-  commits 2/3 of the same cutover.
+  commit 3 of the same cutover.
 - Recursive semantic-operation, transaction, runtime structural-value, and specialization paths do
   not all have deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public

@@ -9,7 +9,7 @@ use super::common::{compile_snapshot, compile_snapshot_with_metrics};
 
 pub fn compile_path(path: &Path) -> Result<ExecutableProgram> {
     let snapshot = crate::workspace::import_path(path)?;
-    compile_snapshot(&snapshot)
+    compile_snapshot(&snapshot).map_err(crate::CompileSnapshotError::into_core)
 }
 
 pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, CompileMetrics)> {
@@ -51,6 +51,6 @@ pub fn compile_path_with_sources(path: &Path) -> Result<(ExecutableProgram, Vec<
             .iter()
             .map(|source| source.path().to_path_buf()),
     );
-    let program = compile_snapshot(&snapshot)?;
+    let program = compile_snapshot(&snapshot).map_err(crate::CompileSnapshotError::into_core)?;
     Ok((program, sources))
 }

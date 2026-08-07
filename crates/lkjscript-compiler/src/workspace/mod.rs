@@ -3,10 +3,15 @@
 //! Text is accepted only by the importer in this module. Once import has
 //! produced a snapshot, compiler phases consume the owned typed HIR directly.
 
+mod draft;
+mod error;
+mod identity;
 mod ids;
 mod importer;
 mod index;
 mod model;
+mod query;
+mod transaction;
 mod validate;
 
 use std::fmt;
@@ -14,13 +19,22 @@ use std::sync::Arc;
 
 use lkjscript_core::{Error, Result};
 
+pub use draft::{DraftNode, DraftNodeId, ExpressionDraft};
+pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
 pub use ids::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
 pub use importer::{import_path, import_path_with_metrics, import_source};
-use model::SnapshotIndexes;
 pub use model::{
     CallEdge, ContainmentEdge, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, EntityHeader,
-    EntityKind, ImportMetrics, NodeHeader, NodeKind, PresentationAttachments, ProgramState,
-    ReferenceEdge, SemanticChild, SemanticOwner, SourceAttachment,
+    EntityKind, HoleId, HoleState, ImportMetrics, NodeHeader, NodeKind, PresentationAttachments,
+    ProgramState, ReferenceEdge, SemanticChild, SemanticOwner, SourceAttachment,
+};
+use model::{HoleOverlay, SnapshotIndexes};
+pub use query::{
+    Continuation, EntityPage, LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
+};
+pub use transaction::{
+    Edit, InvalidatedDomain, SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome,
+    Workspace,
 };
 
 #[derive(Clone)]
@@ -33,6 +47,22 @@ enum CapturedCompilationProvenance {
 }
 
 impl CapturedCompilationProvenance {
+    fn semantic_base_identity(&self) -> [u8; 32] {
+        match self {
+            Self::Development {
+                source_identity, ..
+            } => *source_identity,
+            Self::Locked(captured) => captured.semantic_base_identity(),
+        }
+    }
+
+    fn edited(identity: [u8; 32]) -> Self {
+        Self::Development {
+            source_identity: identity,
+            path: Arc::from("workspace://semantic-development"),
+        }
+    }
+
     fn finish(
         &self,
         plan: &crate::HirMemoryPlan,
@@ -58,8 +88,10 @@ pub struct WorkspaceSnapshot {
     state: ProgramState,
     hir: Arc<crate::hir::Program>,
     provenance: Arc<CapturedCompilationProvenance>,
+    semantic_digest: [u8; 32],
     attachments: Option<Arc<PresentationAttachments>>,
     indexes: Arc<SnapshotIndexes>,
+    holes: Arc<[HoleOverlay]>,
 }
 
 impl WorkspaceSnapshot {
@@ -86,8 +118,10 @@ impl WorkspaceSnapshot {
             state: self.state,
             hir: Arc::clone(&self.hir),
             provenance: Arc::clone(&self.provenance),
+            semantic_digest: self.semantic_digest,
             attachments: None,
             indexes: Arc::clone(&self.indexes),
+            holes: Arc::clone(&self.holes),
         }
     }
 
@@ -119,6 +153,10 @@ impl WorkspaceSnapshot {
         &self.indexes.diagnostics
     }
 
+    pub fn holes(&self) -> impl ExactSizeIterator<Item = &HoleState> {
+        self.holes.iter().map(|overlay| &overlay.state)
+    }
+
     pub fn entity(&self, id: EntityId) -> Result<&EntityHeader> {
         self.indexes.entity(self.namespace, id)
     }
@@ -143,14 +181,17 @@ impl WorkspaceSnapshot {
     ) -> Result<Self> {
         validate::program(&hir)?;
         let indexes = index::build(&hir, namespace)?;
+        let semantic_digest = provenance.semantic_base_identity();
         Ok(Self {
             namespace,
             revision: RevisionId::initial(namespace),
             state: ProgramState::Complete,
             hir: Arc::new(hir),
             provenance: Arc::new(provenance),
+            semantic_digest,
             attachments: attachments.map(Arc::new),
             indexes: Arc::new(indexes),
+            holes: Arc::from([]),
         })
     }
 
@@ -160,12 +201,14 @@ impl WorkspaceSnapshot {
                 "workspace revision and namespace are inconsistent",
             ));
         }
-        if self.state != ProgramState::Complete {
+        if self.state != ProgramState::Complete || !self.holes.is_empty() {
             return Err(Error::msg("workspace snapshot is not executable"));
         }
         validate::program(&self.hir)?;
-        let rebuilt = index::build(&self.hir, self.namespace)?;
-        if rebuilt != *self.indexes {
+        if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
+            || self.indexes.entities.len() != self.indexes.entity_addresses.len()
+        {
             return Err(Error::msg("workspace snapshot semantic indexes are stale"));
         }
         Ok(())
@@ -195,9 +238,11 @@ impl WorkspaceSnapshot {
             revision: RevisionId::initial(namespace),
             state: ProgramState::Complete,
             hir: Arc::new(hir),
+            semantic_digest: provenance.semantic_base_identity(),
             provenance,
             attachments: None,
             indexes: Arc::new(indexes),
+            holes: Arc::from([]),
         })
     }
 
@@ -209,8 +254,10 @@ impl WorkspaceSnapshot {
             state: self.state,
             hir: Arc::new(hir),
             provenance: Arc::clone(&self.provenance),
+            semantic_digest: self.semantic_digest,
             attachments: self.attachments.clone(),
             indexes: Arc::clone(&self.indexes),
+            holes: Arc::clone(&self.holes),
         }
     }
 }

@@ -4,7 +4,7 @@ use lkjscript_core::{validate_chunk, Result, ValidationPolicy};
 
 use crate::codegen::compile_program;
 use crate::ssa::lower_program_with_metrics;
-use crate::{ExecutableProgram, WorkspaceSnapshot};
+use crate::{CompileSnapshotError, ExecutableProgram, IncompleteSnapshotError, WorkspaceSnapshot};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) struct SnapshotCompileMetrics {
@@ -21,8 +21,25 @@ pub(super) struct SnapshotCompileMetrics {
 ///
 /// This module deliberately has no source, parser, formatter, or analyzer
 /// dependency. It consumes the snapshot's complete typed HIR directly.
-pub fn compile_snapshot(snapshot: &WorkspaceSnapshot) -> Result<ExecutableProgram> {
-    compile_snapshot_with_metrics(snapshot).map(|(program, _)| program)
+pub fn compile_snapshot(
+    snapshot: &WorkspaceSnapshot,
+) -> std::result::Result<ExecutableProgram, CompileSnapshotError> {
+    if snapshot.state() == crate::workspace::ProgramState::Incomplete {
+        let mut holes = Vec::new();
+        holes.try_reserve(snapshot.holes().len()).map_err(|_| {
+            CompileSnapshotError::Compiler(lkjscript_core::Error::host(
+                "incomplete snapshot hole-list allocation failed",
+            ))
+        })?;
+        holes.extend(snapshot.holes().map(|hole| hole.id));
+        return Err(CompileSnapshotError::Incomplete(IncompleteSnapshotError {
+            revision: snapshot.revision(),
+            holes,
+        }));
+    }
+    compile_snapshot_with_metrics(snapshot)
+        .map(|(program, _)| program)
+        .map_err(CompileSnapshotError::from)
 }
 
 pub(super) fn compile_snapshot_with_metrics(

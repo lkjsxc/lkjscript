@@ -37,7 +37,8 @@ pub use pipeline::{
     compile_path, compile_path_with_metrics, compile_path_with_sources, compile_snapshot,
     compile_source, validate_source,
 };
-pub use workspace::WorkspaceSnapshot;
+pub use types::Type;
+pub use workspace::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceSnapshot};
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 

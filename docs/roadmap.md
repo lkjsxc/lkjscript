@@ -15,22 +15,22 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
    repeated startup, execution, peak-memory, and generated-code measurements across equivalent
    scalar, branch, call, structural, collection, ownership, failure, and host workloads. Reverse a
    runtime choice only on equivalent evidence.
-3. **Finish the semantic-workspace cutover on the implemented compiler snapshot.** Complete text
-   programs now import into one immutable typed `WorkspaceSnapshot`, and all compilation proceeds
-   directly from it without a parser or rendering round trip. Next add identity-preserving revisions,
-   one incomplete-expression state, stale-revision rejection, atomic rename/replace/fill
-   transactions, type/reference/hole queries, deterministic rendering, and semantic diffs over this
-   same representation. Delete the temporary syntax-shaped Semantic Source path in commits 2/3 of
-   this cutover rather than creating a second semantic model.
+3. **Finish semantic-workspace cutover commit 3.** Complete text imports and the implemented
+   in-process rename/flat-expression/typed-hole vertical now share one `WorkspaceSnapshot` authority
+   with edit-stable IDs, atomic revisions, paginated queries, semantic diffs, and direct compilation.
+   Next add the deterministic review projection required by the local workflow and delete the
+   temporary syntax-shaped Semantic Source service. Do not retain its text transaction model or add
+   a second semantic AST.
 4. **Complete stack-safety evidence for the selected local architecture.** Convert or otherwise
    prove the remaining recursive Semantic Source, transaction, runtime structural-value,
    serialization, and specialization paths under deep generated tests.
 
 ## Next
 
-1. **Cut editing and projection over to workspace authority.** Text already enters compilation only
-   through the importer. Remove syntax-shaped editing authority and the bootstrap text transaction
-   path once replacement operations land; do not retain parallel source and semantic services.
+1. **Expand the one workspace model after the direct cutover.** Add declaration and node
+   create/delete/move, local-storage construction, generic calls, matches, and additional incomplete
+   states only on the existing identity/transaction/query model. Keep text as an importer and
+   projection, not parallel editing authority.
 2. **Add measured incremental recomputation.** Compare a small dependency-aware cache with a mature
    query framework on edit latency, invalidation precision, retained memory, cycle handling,
    cancellation, and debugging cost before choosing an implementation.

@@ -92,6 +92,10 @@ pub(crate) fn capture(root: &Path, entry: &Path) -> Result<CapturedPackageProven
 }
 
 impl CapturedPackageProvenance {
+    pub(crate) const fn semantic_base_identity(&self) -> [u8; 32] {
+        self.facts.package_content
+    }
+
     pub(crate) fn finish(&self, plan: &crate::HirMemoryPlan) -> Result<PreparedPackageFacts> {
         let generated = super::target_memory::target_record(
             &Target {

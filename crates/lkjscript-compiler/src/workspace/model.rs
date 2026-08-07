@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,9 +11,10 @@ use super::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
 #[non_exhaustive]
 pub enum ProgramState {
     Complete,
+    Incomplete,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum EntityKind {
     Main,
@@ -31,7 +33,7 @@ pub enum EntityKind {
     Implementation,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum NodeKind {
     Literal,
@@ -57,15 +59,16 @@ pub enum NodeKind {
     Enum,
     MatchUnreachable,
     Symbol,
+    Hole,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum SemanticOwner {
     Entity(EntityId),
     Node(NodeId),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum SemanticChild {
     Entity(EntityId),
     Node(NodeId),
@@ -127,6 +130,49 @@ pub struct DiagnosticHeader {
     pub severity: DiagnosticSeverity,
     pub subject: Option<SemanticChild>,
     pub message: Arc<str>,
+}
+
+/// Stable identity of an incomplete expression goal.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct HoleId(pub(crate) NodeId);
+
+impl HoleId {
+    pub const fn node(self) -> NodeId {
+        self.0
+    }
+}
+
+/// Public, typed context for one editable hole. Its backing HIR address remains private.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HoleState {
+    pub id: HoleId,
+    pub expected_type: crate::Type,
+    pub goal: Arc<str>,
+    pub owner: EntityId,
+    pub context: NodeId,
+    pub visible_entities: Arc<[EntityId]>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(super) struct EntityAddress(pub u64);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(super) struct NodeAddress {
+    pub root: EntityAddress,
+    pub preorder: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(super) struct NodeKey {
+    pub owner: SemanticOwner,
+    pub ordinal: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct HoleOverlay {
+    pub state: HoleState,
+    pub address: NodeAddress,
+    pub key: NodeKey,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -192,17 +238,48 @@ pub(super) struct SnapshotIndexes {
     pub references: Vec<ReferenceEdge>,
     pub calls: Vec<CallEdge>,
     pub dependencies: Vec<DependencyEdge>,
+    pub declaration_dependencies: Vec<DependencyEdge>,
     pub diagnostics: Vec<DiagnosticHeader>,
+    pub entity_addresses: Vec<EntityAddress>,
+    pub node_addresses: Vec<NodeAddress>,
+    pub node_keys: Vec<NodeKey>,
+    pub node_fingerprints: Vec<[u8; 32]>,
+    pub node_expected_types: Vec<Option<crate::Type>>,
+    pub entity_lookup: HashMap<EntityId, usize>,
+    pub node_lookup: HashMap<NodeId, usize>,
+    pub address_entities: HashMap<EntityAddress, EntityId>,
+    pub address_nodes: HashMap<NodeAddress, NodeId>,
 }
 
 impl SnapshotIndexes {
-    fn id_index(id: u64, len: usize, kind: &str) -> Result<usize> {
-        let index = usize::try_from(id)
-            .map_err(|_| Error::msg(format!("{kind} identity is not host-addressable")))?;
-        if index >= len {
-            return Err(Error::msg(format!("{kind} identity is stale")));
+    pub(super) fn rebuild_maps(&mut self) -> Result<()> {
+        self.entity_lookup.clear();
+        self.node_lookup.clear();
+        self.address_entities.clear();
+        self.address_nodes.clear();
+        self.entity_lookup
+            .try_reserve(self.entities.len())
+            .map_err(|_| Error::host("workspace entity lookup allocation failed"))?;
+        self.node_lookup
+            .try_reserve(self.nodes.len())
+            .map_err(|_| Error::host("workspace node lookup allocation failed"))?;
+        self.address_entities
+            .try_reserve(self.entities.len())
+            .map_err(|_| Error::host("workspace entity address allocation failed"))?;
+        self.address_nodes
+            .try_reserve(self.nodes.len())
+            .map_err(|_| Error::host("workspace node address allocation failed"))?;
+        for (index, (header, address)) in
+            self.entities.iter().zip(&self.entity_addresses).enumerate()
+        {
+            self.entity_lookup.insert(header.id, index);
+            self.address_entities.insert(*address, header.id);
         }
-        Ok(index)
+        for (index, (header, address)) in self.nodes.iter().zip(&self.node_addresses).enumerate() {
+            self.node_lookup.insert(header.id, index);
+            self.address_nodes.insert(*address, header.id);
+        }
+        Ok(())
     }
 
     pub(super) fn entity(
@@ -211,22 +288,24 @@ impl SnapshotIndexes {
         id: EntityId,
     ) -> Result<&EntityHeader> {
         require_entity_namespace(namespace, id)?;
-        let index = Self::id_index(id.slot(), self.entities.len(), "workspace entity")?;
-        let header = &self.entities[index];
-        if header.id != id {
-            return Err(Error::msg("workspace entity generation is stale"));
-        }
-        Ok(header)
+        let Some(index) = self.entity_lookup.get(&id).copied() else {
+            return Err(Error::msg("workspace entity identity is stale"));
+        };
+        self.entities
+            .get(index)
+            .filter(|header| header.id == id)
+            .ok_or_else(|| Error::msg("workspace entity generation is stale"))
     }
 
     pub(super) fn node(&self, namespace: WorkspaceNamespace, id: NodeId) -> Result<&NodeHeader> {
         require_node_namespace(namespace, id)?;
-        let index = Self::id_index(id.slot(), self.nodes.len(), "workspace node")?;
-        let header = &self.nodes[index];
-        if header.id != id {
-            return Err(Error::msg("workspace node generation is stale"));
-        }
-        Ok(header)
+        let Some(index) = self.node_lookup.get(&id).copied() else {
+            return Err(Error::msg("workspace node identity is stale"));
+        };
+        self.nodes
+            .get(index)
+            .filter(|header| header.id == id)
+            .ok_or_else(|| Error::msg("workspace node generation is stale"))
     }
 }
 

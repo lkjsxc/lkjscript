@@ -5,6 +5,7 @@ use lkjscript_core::{Error, Result};
 
 use crate::hir::{BindingId, BindingKind, Expr, ExprKind, GenericInstantiation, Program, Type};
 
+use super::model::{EntityAddress, NodeAddress, NodeKey};
 use super::{
     CallEdge, ContainmentEdge, DependencyEdge, EntityHeader, EntityId, EntityKind, NodeHeader,
     NodeId, NodeKind, ReferenceEdge, SemanticChild, SemanticOwner, SnapshotIndexes,
@@ -36,6 +37,19 @@ struct PendingExpression<'a> {
 pub(super) fn build(program: &Program, namespace: WorkspaceNamespace) -> Result<SnapshotIndexes> {
     let (mut indexes, maps) = build_entities(program, namespace)?;
     add_entity_dependencies(program, &maps, &mut indexes)?;
+    indexes
+        .dependencies
+        .sort_by_key(|edge| (edge.dependent, edge.dependency));
+    indexes.dependencies.dedup();
+    let declaration_count = indexes.dependencies.len();
+    reserve(
+        &mut indexes.declaration_dependencies,
+        declaration_count,
+        "workspace declaration dependency index",
+    )?;
+    indexes
+        .declaration_dependencies
+        .extend(indexes.dependencies.iter().copied());
 
     set_parameter_owners(&mut indexes, &maps, maps.main, &program.main.params)?;
     walk_root(
@@ -74,6 +88,7 @@ pub(super) fn build(program: &Program, namespace: WorkspaceNamespace) -> Result<
         .dependencies
         .sort_by_key(|edge| (edge.dependent, edge.dependency));
     indexes.dependencies.dedup();
+    finish_private_indexes(&mut indexes)?;
     Ok(indexes)
 }
 
@@ -88,7 +103,17 @@ fn build_entities(
         references: Vec::new(),
         calls: Vec::new(),
         dependencies: Vec::new(),
+        declaration_dependencies: Vec::new(),
         diagnostics: Vec::new(),
+        entity_addresses: Vec::new(),
+        node_addresses: Vec::new(),
+        node_keys: Vec::new(),
+        node_fingerprints: Vec::new(),
+        node_expected_types: Vec::new(),
+        entity_lookup: HashMap::new(),
+        node_lookup: HashMap::new(),
+        address_entities: HashMap::new(),
+        address_nodes: HashMap::new(),
     };
     let main = push_entity(&mut indexes, namespace, EntityKind::Main, "main", None)?;
 
@@ -802,6 +827,20 @@ fn push_node(
         actual_type: Arc::from(expression.ty.to_string()),
         expected_type: expected.map(|ty| Arc::from(ty.to_string())),
     });
+    reserve(
+        &mut indexes.node_fingerprints,
+        1,
+        "workspace node fingerprint index",
+    )?;
+    indexes
+        .node_fingerprints
+        .push(expression_fingerprint(expression)?);
+    reserve(
+        &mut indexes.node_expected_types,
+        1,
+        "workspace typed expectation index",
+    )?;
+    indexes.node_expected_types.push(expected.cloned());
     Ok(id)
 }
 
@@ -950,6 +989,209 @@ fn node_kind(kind: &ExprKind) -> NodeKind {
         ExprKind::MatchUnreachable { .. } => NodeKind::MatchUnreachable,
         ExprKind::QuoteSymbol(_) => NodeKind::Symbol,
     }
+}
+
+fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
+    reserve(
+        &mut indexes.entity_addresses,
+        indexes.entities.len(),
+        "workspace entity addresses",
+    )?;
+    for slot in 0..indexes.entities.len() {
+        indexes.entity_addresses.push(EntityAddress(
+            u64::try_from(slot).map_err(|_| Error::host("workspace entity address exceeds u64"))?,
+        ));
+    }
+
+    reserve(
+        &mut indexes.node_addresses,
+        indexes.nodes.len(),
+        "workspace node addresses",
+    )?;
+    reserve(
+        &mut indexes.node_keys,
+        indexes.nodes.len(),
+        "workspace node keys",
+    )?;
+    let mut root_counts: HashMap<EntityId, u64> = HashMap::new();
+    let mut child_counts: HashMap<SemanticOwner, u64> = HashMap::new();
+    let mut node_roots: HashMap<NodeId, EntityId> = HashMap::new();
+    root_counts
+        .try_reserve(indexes.entities.len())
+        .map_err(|_| Error::host("workspace root address allocation failed"))?;
+    child_counts
+        .try_reserve(indexes.nodes.len())
+        .map_err(|_| Error::host("workspace child key allocation failed"))?;
+    node_roots
+        .try_reserve(indexes.nodes.len())
+        .map_err(|_| Error::host("workspace node root allocation failed"))?;
+    for header in &indexes.nodes {
+        let ordinal = child_counts.entry(header.owner).or_insert(0);
+        indexes.node_keys.push(NodeKey {
+            owner: header.owner,
+            ordinal: *ordinal,
+        });
+        *ordinal = ordinal
+            .checked_add(1)
+            .ok_or_else(|| Error::host("workspace child ordinal exceeds u64"))?;
+
+        let root = match header.owner {
+            SemanticOwner::Entity(entity) => entity,
+            SemanticOwner::Node(parent) => node_roots
+                .get(&parent)
+                .copied()
+                .ok_or_else(|| Error::msg("workspace node owner is stale"))?,
+        };
+        node_roots.insert(header.id, root);
+        let preorder = root_counts.entry(root).or_insert(0);
+        indexes.node_addresses.push(NodeAddress {
+            root: EntityAddress(root.slot()),
+            preorder: *preorder,
+        });
+        *preorder = preorder
+            .checked_add(1)
+            .ok_or_else(|| Error::host("workspace root preorder exceeds u64"))?;
+    }
+    indexes.rebuild_maps()
+}
+
+fn expression_fingerprint(expression: &Expr) -> Result<[u8; 32]> {
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve(96)
+        .map_err(|_| Error::host("workspace expression fingerprint allocation failed"))?;
+    bytes.extend_from_slice(expression.ty.to_string().as_bytes());
+    bytes.extend_from_slice(&expression.effects.bits().to_be_bytes());
+    let tag = match &expression.kind {
+        ExprKind::LitI64(value) => {
+            bytes.extend_from_slice(&value.to_be_bytes());
+            0
+        }
+        ExprKind::LitF64(value) => {
+            bytes.extend_from_slice(&value.to_bits().to_be_bytes());
+            1
+        }
+        ExprKind::LitBool(value) => {
+            bytes.push(u8::from(*value));
+            2
+        }
+        ExprKind::LitUnit => 3,
+        ExprKind::EmptyList => 4,
+        ExprKind::LitStr(value) => {
+            bytes.extend_from_slice(value.as_bytes());
+            5
+        }
+        ExprKind::LitBytes(value) => {
+            bytes.extend_from_slice(value);
+            6
+        }
+        ExprKind::Load(value) => {
+            bytes.extend_from_slice(&value.binding.raw().to_be_bytes());
+            7
+        }
+        ExprKind::Move { binding, .. } => {
+            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
+            8
+        }
+        ExprKind::Borrow { binding, .. } => {
+            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
+            9
+        }
+        ExprKind::BorrowBytes { binding, .. } => {
+            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
+            10
+        }
+        ExprKind::Call { callee, .. } => {
+            bytes.extend_from_slice(&callee.binding.raw().to_be_bytes());
+            11
+        }
+        ExprKind::Operation { binding, .. } => {
+            bytes.extend_from_slice(&binding.raw().to_be_bytes());
+            12
+        }
+        ExprKind::F64FromI64Exact(_) => 13,
+        ExprKind::F64FromI64Rounded(_) => 14,
+        ExprKind::I64FromF64Exact(_) => 15,
+        ExprKind::I64FromF64Trunc(_) => 16,
+        ExprKind::Do(_) => 17,
+        ExprKind::If { .. } => 18,
+        ExprKind::While { .. } => 19,
+        ExprKind::Loop { .. } => 20,
+        ExprKind::Return { .. } => 21,
+        ExprKind::Break { .. } => 22,
+        ExprKind::Continue { .. } => 23,
+        ExprKind::Trap { .. } => 24,
+        ExprKind::Exit { .. } => 25,
+        ExprKind::Let { .. } => 26,
+        ExprKind::MutableLocal { binding, .. } => {
+            bytes.extend_from_slice(&binding.raw().to_be_bytes());
+            27
+        }
+        ExprKind::SetLocal { target, .. } => {
+            bytes.extend_from_slice(&target.raw().to_be_bytes());
+            28
+        }
+        ExprKind::ProductValue { product, .. } => {
+            bytes.extend_from_slice(&product.raw().to_be_bytes());
+            29
+        }
+        ExprKind::ProductField { product, field, .. } => {
+            bytes.extend_from_slice(&product.raw().to_be_bytes());
+            bytes.extend_from_slice(&field.to_be_bytes());
+            30
+        }
+        ExprKind::WithProductField { product, field, .. } => {
+            bytes.extend_from_slice(&product.raw().to_be_bytes());
+            bytes.extend_from_slice(&field.to_be_bytes());
+            31
+        }
+        ExprKind::EnumValue {
+            enum_id, variant, ..
+        } => {
+            bytes.extend_from_slice(&enum_id.bytes());
+            bytes.extend_from_slice(&variant.bytes());
+            32
+        }
+        ExprKind::EnumIsVariant {
+            enum_id, variant, ..
+        } => {
+            bytes.extend_from_slice(&enum_id.bytes());
+            bytes.extend_from_slice(&variant.bytes());
+            33
+        }
+        ExprKind::EnumField {
+            enum_id,
+            variant,
+            field,
+            ..
+        } => {
+            bytes.extend_from_slice(&enum_id.bytes());
+            bytes.extend_from_slice(&variant.bytes());
+            bytes.extend_from_slice(&field.bytes());
+            34
+        }
+        ExprKind::EnumUnwrap {
+            enum_id,
+            variant,
+            field,
+            ..
+        } => {
+            bytes.extend_from_slice(&enum_id.bytes());
+            bytes.extend_from_slice(&variant.bytes());
+            bytes.extend_from_slice(&field.bytes());
+            35
+        }
+        ExprKind::MatchUnreachable { plan } => {
+            bytes.extend_from_slice(&plan.raw().to_be_bytes());
+            36
+        }
+        ExprKind::QuoteSymbol(value) => {
+            bytes.extend_from_slice(value.as_bytes());
+            37
+        }
+    };
+    bytes.push(tag);
+    Ok(lkjscript_core::sha256(&bytes))
 }
 
 fn index_of(raw: u64, kind: &str) -> Result<usize> {

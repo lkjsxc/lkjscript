@@ -301,6 +301,141 @@ fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
     }
 }
 
+impl Expr {
+    pub(crate) fn try_at_preorder(&self, target: u64) -> lkjscript_core::Result<Option<&Self>> {
+        let mut pending = Vec::new();
+        pending
+            .try_reserve(1)
+            .map_err(|_| lkjscript_core::Error::host("HIR lookup work allocation failed"))?;
+        pending.push(self);
+        let mut ordinal = 0_u64;
+        while let Some(expression) = pending.pop() {
+            if ordinal == target {
+                return Ok(Some(expression));
+            }
+            let Some(next) = ordinal.checked_add(1) else {
+                return Ok(None);
+            };
+            ordinal = next;
+            let children = expression_children(expression);
+            pending
+                .try_reserve(children.len())
+                .map_err(|_| lkjscript_core::Error::host("HIR lookup work allocation failed"))?;
+            pending.extend(children.into_iter().rev());
+        }
+        Ok(None)
+    }
+
+    pub(crate) fn try_clone(&self) -> lkjscript_core::Result<Self> {
+        enum Work<'a> {
+            Visit(&'a Expr),
+            Finish(&'a Expr, usize),
+        }
+
+        let mut work = Vec::new();
+        work.try_reserve(1)
+            .map_err(|_| lkjscript_core::Error::host("HIR clone work allocation failed"))?;
+        work.push(Work::Visit(self));
+        let mut completed = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(expression) => {
+                    let children = expression_children(expression);
+                    let additional = children.len().checked_add(1).ok_or_else(|| {
+                        lkjscript_core::Error::host("HIR clone child count overflow")
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        lkjscript_core::Error::host("HIR clone work allocation failed")
+                    })?;
+                    work.push(Work::Finish(expression, children.len()));
+                    work.extend(children.into_iter().rev().map(Work::Visit));
+                }
+                Work::Finish(expression, child_count) => {
+                    let split = completed.len().checked_sub(child_count).ok_or_else(|| {
+                        lkjscript_core::Error::msg("HIR clone completion order is invalid")
+                    })?;
+                    let children = completed.split_off(split);
+                    completed.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host("HIR clone result allocation failed")
+                    })?;
+                    completed.push(Self {
+                        ty: expression.ty.clone(),
+                        effects: expression.effects,
+                        origin: expression.origin,
+                        kind: clone_kind(&expression.kind, children),
+                    });
+                }
+            }
+        }
+        completed
+            .pop()
+            .ok_or_else(|| lkjscript_core::Error::msg("HIR clone omitted its root"))
+    }
+
+    pub(crate) fn try_replaced_preorder(
+        &self,
+        target: u64,
+        replacement: &Self,
+    ) -> lkjscript_core::Result<Option<Self>> {
+        enum Work<'a> {
+            Visit(&'a Expr),
+            Finish(&'a Expr, usize),
+        }
+
+        let mut ordinal = 0_u64;
+        let mut found = false;
+        let mut work = Vec::new();
+        work.try_reserve(1)
+            .map_err(|_| lkjscript_core::Error::host("HIR replacement work allocation failed"))?;
+        work.push(Work::Visit(self));
+        let mut completed = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(expression) => {
+                    let current = ordinal;
+                    let Some(next) = ordinal.checked_add(1) else {
+                        return Ok(None);
+                    };
+                    ordinal = next;
+                    if current == target {
+                        completed.try_reserve(1).map_err(|_| {
+                            lkjscript_core::Error::host("HIR replacement result allocation failed")
+                        })?;
+                        completed.push(replacement.try_clone()?);
+                        found = true;
+                        continue;
+                    }
+                    let children = expression_children(expression);
+                    let additional = children.len().checked_add(1).ok_or_else(|| {
+                        lkjscript_core::Error::host("HIR replacement child count overflow")
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        lkjscript_core::Error::host("HIR replacement work allocation failed")
+                    })?;
+                    work.push(Work::Finish(expression, children.len()));
+                    work.extend(children.into_iter().rev().map(Work::Visit));
+                }
+                Work::Finish(expression, child_count) => {
+                    let Some(split) = completed.len().checked_sub(child_count) else {
+                        return Ok(None);
+                    };
+                    let children = completed.split_off(split);
+                    completed.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host("HIR replacement result allocation failed")
+                    })?;
+                    completed.push(Self {
+                        ty: expression.ty.clone(),
+                        effects: expression.effects,
+                        origin: expression.origin,
+                        kind: clone_kind(&expression.kind, children),
+                    });
+                }
+            }
+        }
+        Ok(found.then(|| completed.pop()).flatten())
+    }
+}
+
 impl Drop for Expr {
     fn drop(&mut self) {
         let mut pending = Vec::new();
