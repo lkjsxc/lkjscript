@@ -6,7 +6,7 @@ mod host_ext;
 mod host_term;
 mod run;
 
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome, ValidatedChunk};
+use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy, ValidatedChunk};
 #[cfg(feature = "jit")]
 use lkjscript_jit::{JitSession, JitStats};
 
@@ -22,7 +22,7 @@ pub struct ExecutionInputs {
 pub fn run_chunk(
     chunk: &ValidatedChunk,
     inputs: &ExecutionInputs,
-    config: &ExecutionConfig,
+    config: &ExecutionPolicy,
 ) -> ExecutionOutcome {
     Vm::new(chunk, NoTier, inputs.clone(), config.clone()).run()
 }
@@ -31,7 +31,7 @@ pub fn run_chunk(
 pub fn run_chunk_auto(
     chunk: &ValidatedChunk,
     inputs: &ExecutionInputs,
-    config: &ExecutionConfig,
+    config: &ExecutionPolicy,
     session: JitSession,
 ) -> (ExecutionOutcome, JitStats) {
     Vm::new(chunk, session, inputs.clone(), config.clone()).run_auto()
@@ -56,7 +56,7 @@ mod tests {
         match run_chunk(
             &chunk,
             &crate::ExecutionInputs::default(),
-            &lkjscript_core::ExecutionConfig::default(),
+            &lkjscript_core::ExecutionPolicy::unrestricted(),
         ) {
             ExecutionOutcome::Trapped(trap) => assert_eq!(trap.as_str(), "explicit SSA trap"),
             other => panic!("unexpected trap outcome: {other:?}"),

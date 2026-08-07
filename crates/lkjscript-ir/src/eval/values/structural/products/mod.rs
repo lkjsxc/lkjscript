@@ -19,7 +19,6 @@ impl Evaluator<'_> {
         if fields.len() != field_types.len() {
             return Err(Flow::Trap("product field arity mismatch".into()));
         }
-        self.charge_aggregate()?;
         self.allocate()?;
         let structural_fields = field_types
             .iter()
@@ -136,7 +135,6 @@ impl Evaluator<'_> {
                 "with-product-field awaits affine aggregate transfer metadata".into(),
             ));
         }
-        self.charge_aggregate()?;
         self.allocate()?;
         let structural_fields = fields
             .iter()

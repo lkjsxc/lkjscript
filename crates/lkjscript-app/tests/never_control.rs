@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -22,7 +22,7 @@ fn assert_i64_all(source: &str, expected: i64) {
     let ExecutionOutcome::Returned(vm) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("reference VM did not return")
     };
@@ -30,13 +30,13 @@ fn assert_i64_all(source: &str, expected: i64) {
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced baseline control"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced proof control"),
@@ -101,13 +101,13 @@ fn value_trap_is_exact_in_all_engines() {
     );
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced baseline trap");
     let optimized = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced proof trap");
@@ -120,7 +120,7 @@ fn value_trap_is_exact_in_all_engines() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         baseline.outcome,
         optimized.outcome,
@@ -151,20 +151,20 @@ fn exit_is_structured_in_all_engines() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Exited(23),
     );
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced baseline exit"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced proof exit"),

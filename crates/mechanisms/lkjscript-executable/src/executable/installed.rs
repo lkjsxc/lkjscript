@@ -31,7 +31,7 @@ impl InstalledImage {
         entry: FunctionId,
         arguments: &[NativeValue],
     ) -> Result<InvocationOutcome, InvocationError> {
-        self.invoke_with_config(entry, arguments, &NativeInvocationConfig::default())
+        self.invoke_with_config(entry, arguments, &NativeInvocationConfig::unrestricted())
             .map(|report| report.outcome)
     }
 

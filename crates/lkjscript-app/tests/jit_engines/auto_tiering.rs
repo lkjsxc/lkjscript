@@ -1,5 +1,5 @@
 use crate::canonical::{compile, execution, f64_loop};
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{JitConfig, JitSession, TierState};
 use lkjscript_vm::{run_chunk, run_chunk_auto};
 
@@ -32,7 +32,7 @@ fn auto_executes_hot_high_function_id_natively() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(99)));
@@ -61,7 +61,7 @@ fn auto_group_structural_string_helper_remains_vm_entry_ineligible() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0)));
@@ -86,7 +86,7 @@ fn residual_witness_function_is_direct_call_only_in_auto_mode() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
@@ -114,7 +114,7 @@ fn scalar_function_beyond_entry_abi_arity_remains_vm_only() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(10)));
@@ -141,7 +141,7 @@ fn auto_path_helper_remains_vm_only() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(
@@ -168,7 +168,7 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert_eq!(
@@ -176,7 +176,7 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ))
     );
     let step = stats
@@ -197,7 +197,7 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_str() == Some("")));

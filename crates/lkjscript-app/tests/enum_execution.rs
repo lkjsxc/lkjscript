@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, OwnedValue, ResourceLimitKind};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, OwnedValue};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -56,7 +56,7 @@ fn source_construction_is_differential_on_evaluator_and_vm() {
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM must return enum")
     };
@@ -94,38 +94,12 @@ fn fields_evaluate_once_in_declaration_order() {
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM must return enum")
     };
     assert_eq!(value.enum_field_i64(0), Some(1));
     assert_eq!(value.enum_field_i64(1), Some(2));
-}
-
-#[test]
-fn logical_construction_exhausts_before_allocation_on_both_engines() {
-    let program =
-        compile_source(&source(), "enum-limit.lkjscript").expect("compile enum construction");
-    let evaluator = EvalConfig {
-        max_logical_aggregate_constructions: 0,
-        ..EvalConfig::default()
-    };
-    assert_eq!(
-        evaluate(program.ssa(), &evaluator),
-        EvalOutcome::ResourceLimitExceeded("logical_aggregate_constructions".into())
-    );
-    let execution = ExecutionConfig {
-        max_logical_aggregate_constructions: 0,
-        ..ExecutionConfig::default()
-    };
-    assert!(matches!(
-        run_chunk(
-            program.bytecode(),
-            &lkjscript_vm::ExecutionInputs::default(),
-            &execution
-        ),
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::LogicalAggregateConstructions)
-    ));
 }
 
 #[test]
@@ -138,13 +112,13 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline executes enum"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof tier executes enum"),
@@ -160,30 +134,5 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);
         assert_eq!(execution.stats.vm_fallbacks, 0);
-    }
-}
-
-#[test]
-fn forced_native_enum_reserves_logical_construction_before_allocation() {
-    let program =
-        compile_source(&source(), "enum-jit-limit.lkjscript").expect("compile enum construction");
-    let execution = ExecutionConfig {
-        max_logical_aggregate_constructions: 0,
-        ..ExecutionConfig::default()
-    };
-    for outcome in [
-        execute_forced(program.ssa(), &execution, JitConfig::default())
-            .expect("baseline reports resource outcome")
-            .outcome,
-        execute_optimizing(program.ssa(), &execution, JitConfig::default())
-            .expect("proof reports resource outcome")
-            .outcome,
-    ] {
-        assert!(matches!(
-            outcome,
-            ExecutionOutcome::ResourceLimitExceeded(
-                ResourceLimitKind::LogicalAggregateConstructions
-            )
-        ));
     }
 }

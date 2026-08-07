@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::{compile_source, ExecutableProgram};
-use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Op, OwnedValue};
+use lkjscript_core::{Error, ExecutionOutcome, ExecutionPolicy, Op, OwnedValue};
 use lkjscript_vm::run_chunk;
 
 fn compile(source: &str) -> lkjscript_core::Result<ExecutableProgram> {
@@ -22,7 +22,7 @@ fn evaluate(source: &str) -> lkjscript_core::Result<OwnedValue> {
     returned(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ))
 }
 
@@ -65,7 +65,7 @@ fn local_var_set_and_shadowing_execute_through_ssa() {
         returned(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ))
         .expect("run local mutation")
         .as_i64(),
@@ -167,7 +167,7 @@ fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
                 capabilities: vec![lkjscript_core::CapabilityKind::Arguments],
                 host: lkjscript_host::HostEnvironment::default(),
             },
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ))
         .expect("argument present")
         .as_i64(),

@@ -47,7 +47,6 @@ impl Evaluator<'_> {
             self.representation_facts(representation, crate::StructuralValueCategory::Destination)?;
         let value_type = self.structural_type(&facts.ty)?;
         let (tag, field_types) = destination_fields(&facts, active_variant)?;
-        self.charge_aggregate()?;
         let fields = field_types
             .iter()
             .map(|field| self.structural_type(field))

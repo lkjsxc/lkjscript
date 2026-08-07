@@ -4,7 +4,8 @@ use super::*;
 
 #[test]
 fn stale_forged_and_wrong_kind_words_fail_closed_without_leaks() {
-    let mut runtime = JitUniqueRuntime::new(&ExecutionConfig::default()).expect("unique runtime");
+    let mut runtime =
+        JitUniqueRuntime::new(&ExecutionPolicy::unrestricted()).expect("unique runtime");
     let owner = runtime.allocate(2).expect("owner");
     let shared = runtime
         .borrow(owner, LoanType::ByteSlice)
@@ -38,7 +39,8 @@ fn stale_forged_and_wrong_kind_words_fail_closed_without_leaks() {
 
 #[test]
 fn bytes_layout_transfers_and_forged_words_fail_closed() {
-    let mut runtime = JitUniqueRuntime::new(&ExecutionConfig::default()).expect("unique runtime");
+    let mut runtime =
+        JitUniqueRuntime::new(&ExecutionPolicy::unrestricted()).expect("unique runtime");
     let vector = runtime.allocate(3).expect("vector owner");
     let bytes = runtime.freeze(vector).expect("freeze backing");
     assert_eq!(runtime.move_owner(vector), Err(NativeServiceError::Trap));
@@ -66,10 +68,10 @@ fn bytes_layout_transfers_and_forged_words_fail_closed() {
 #[test]
 fn native_byte_vector_uses_explicit_heap_policy_beyond_former_buffer_limit() {
     let size = 1_000_001_usize;
-    let low = ExecutionConfig {
+    let low = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: size - 1,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut limited = JitUniqueRuntime::new(&low).expect("limited unique runtime");
     assert_eq!(
         limited.allocate(i64::try_from(size).expect("test size fits i64")),
@@ -84,10 +86,10 @@ fn native_byte_vector_uses_explicit_heap_policy_beyond_former_buffer_limit() {
     assert_eq!(limited.last_resource(), Some(ResourceLimitKind::HeapBytes));
     assert_eq!(limited.finish().live_owners, 0);
 
-    let high = ExecutionConfig {
+    let high = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: size * 2,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut runtime = JitUniqueRuntime::new(&high).expect("high-policy unique runtime");
     let owner = runtime
         .allocate(i64::try_from(size).expect("test size fits i64"))
@@ -118,10 +120,10 @@ fn native_byte_vector_uses_explicit_heap_policy_beyond_former_buffer_limit() {
 
 #[test]
 fn configured_allocation_limit_is_structured_and_atomic() {
-    let config = ExecutionConfig {
+    let config = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut runtime = JitUniqueRuntime::new(&config).expect("limited unique runtime");
     assert_eq!(
         runtime.allocate(1),

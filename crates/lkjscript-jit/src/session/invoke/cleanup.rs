@@ -2,9 +2,9 @@ use super::*;
 
 pub(super) fn native_cleanup_failures(
     report: &InvocationReport,
-    execution: &ExecutionConfig,
+    execution: &ExecutionPolicy,
 ) -> CleanupFailures {
-    let mut failures = CleanupFailures::new(execution.cleanup_failure_limits);
+    let mut failures = CleanupFailures::with_retention(execution.cleanup_retention());
     for failure in report.cleanup_failures() {
         failures.push(
             CleanupPhase::Ordinary,

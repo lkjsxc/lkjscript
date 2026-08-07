@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_ir::{evaluate, EvalConfig, InstructionKind};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -31,11 +31,11 @@ fn run_workload() {
     let vm = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("baseline nested generic history");
@@ -44,7 +44,7 @@ fn run_workload() {
     assert!(baseline.stats.segmented_lists.prepends > 0);
     let proof = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("proof nested generic history");
@@ -122,12 +122,12 @@ fn multiple_transport_instances_are_canonical_deduplicated_and_native() {
         expected
     );
     let config = JitConfig::default();
-    let baseline = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+    let baseline = execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("multiple generic instances enter baseline native code");
     assert_eq!(execution(baseline.outcome), expected);
     assert!(baseline.stats.direct_native_calls >= 3);
     assert_eq!(baseline.stats.vm_fallbacks, 0);
-    let proof = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+    let proof = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("multiple generic instances enter proof native code");
     assert_eq!(execution(proof.outcome), expected);
     assert!(proof.stats.direct_native_calls >= 3);

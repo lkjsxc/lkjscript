@@ -1,6 +1,6 @@
 use super::super::JitStructuralRuntime;
 use super::support::*;
-use lkjscript_core::{ExecutionConfig, SemanticPayload};
+use lkjscript_core::{ExecutionPolicy, SemanticPayload};
 use lkjscript_executable::{InvocationOutcome, NativeServiceError};
 use lkjscript_native::*;
 
@@ -59,7 +59,7 @@ fn conditional_abort_and_unique_backing_transfer_leave_exact_empty_state(
 fn stale_owner_and_destination_words_are_stably_trapped() -> Result<(), Box<dyn std::error::Error>>
 {
     let value_type = ty(34, StructuralKind::String);
-    let mut runtime = JitStructuralRuntime::new(&ExecutionConfig::default())?;
+    let mut runtime = JitStructuralRuntime::new(&ExecutionPolicy::unrestricted())?;
     let owner = runtime
         .publish_static(
             b"stale",

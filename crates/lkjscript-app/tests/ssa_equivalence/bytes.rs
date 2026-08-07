@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_vm::run_chunk;
 
@@ -20,7 +20,7 @@ fn immutable_bytes_static_and_dynamic_match_evaluator_and_vm() {
         run_chunk(
             static_program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_i64() == Some(255)
     ));
@@ -32,7 +32,7 @@ fn immutable_bytes_static_and_dynamic_match_evaluator_and_vm() {
         EvalOutcome::Returned(EvalValue::I64(258))
     );
     assert!(matches!(
-        run_chunk(local.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionConfig::default()),
+        run_chunk(local.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionPolicy::unrestricted()),
         ExecutionOutcome::Returned(value) if value.as_i64() == Some(258)
     ));
 
@@ -46,7 +46,7 @@ fn immutable_bytes_static_and_dynamic_match_evaluator_and_vm() {
         run_chunk(
             dynamic_program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_bytes() == Some(&[0, 0, 0][..])
     ));
@@ -69,7 +69,7 @@ fn bytes_literal_crosses_former_constant_limit_through_compiler_and_vm() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         ExecutionOutcome::Returned(value) if value.as_i64() == i64::try_from(BYTE_COUNT).ok()
     ));
@@ -90,7 +90,7 @@ fn bytes_slice_copy_thaw_and_allocation_failure_match() {
         EvalOutcome::Returned(EvalValue::ReturnedBytes(vec![255, 16]))
     );
     assert!(matches!(
-        run_chunk(program.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionConfig::default()),
+        run_chunk(program.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionPolicy::unrestricted()),
         ExecutionOutcome::Returned(value) if value.as_bytes() == Some(&[255, 16][..])
     ));
 
@@ -100,7 +100,7 @@ fn bytes_slice_copy_thaw_and_allocation_failure_match() {
         .replace("\n1\n2\n/copy-bytes-slice", "\n/thaw-bytes");
     let program = compile_source(&thaw, "bytes-thaw.lkjscript").expect("compile static bytes thaw");
     assert!(matches!(
-        run_chunk(program.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionConfig::default()),
+        run_chunk(program.bytecode(), &lkjscript_vm::ExecutionInputs::default(), &ExecutionPolicy::unrestricted()),
         ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(&[0, 255, 16][..])
     ));
 
@@ -120,10 +120,10 @@ fn bytes_slice_copy_thaw_and_allocation_failure_match() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig {
+            &ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_allocations: 0,
-                ..ExecutionConfig::default()
-            }
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            })
         ),
         ExecutionOutcome::ResourceLimitExceeded(_)
     ));
@@ -145,7 +145,7 @@ fn bytes_literal_and_range_failures_are_pre_effect_and_deterministic() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Trapped(_)
     ));

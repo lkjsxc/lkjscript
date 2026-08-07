@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use lkjscript_core::{ExecutionConfig, ValidatedChunk};
+use lkjscript_core::{ExecutionPolicy, ValidatedChunk};
 use lkjscript_vm::ExecutionInputs;
 
 use crate::state::State;
@@ -15,7 +15,7 @@ pub(crate) struct Admission {
     pub(crate) chunk: Option<Arc<ValidatedChunk>>,
     pub(crate) process: Option<Arc<Mutex<crate::execution::process::ProcessCell>>>,
     pub(crate) inputs: ExecutionInputs,
-    pub(crate) config: ExecutionConfig,
+    pub(crate) config: ExecutionPolicy,
 }
 
 impl RuntimeSystem {

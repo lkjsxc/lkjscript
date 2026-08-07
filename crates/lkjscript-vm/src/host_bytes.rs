@@ -31,13 +31,15 @@ pub(crate) fn write_from<J: RuntimeTier>(
     let interruption = vm.interruption()?;
     let remaining_output = vm.remaining_output_capacity()?;
     let source = vm.unique.shared_bytes(view)?;
-    if !source.is_empty() && remaining_output == 0 {
+    if !source.is_empty() && remaining_output == Some(0) {
         return Err(Error::resource(
             ResourceLimitKind::OutputBytes,
             "write-from output policy exhausted",
         ));
     }
-    let chunk_len = source.len().min(IO_CHUNK_BYTES).min(remaining_output);
+    let chunk_len = remaining_output.map_or(source.len().min(IO_CHUNK_BYTES), |remaining| {
+        source.len().min(IO_CHUNK_BYTES).min(remaining)
+    });
     interruption.check()?;
     let count = vm.resources.write_from(resource, &source[..chunk_len])?;
     vm.record_output(count)?;
@@ -151,11 +153,12 @@ mod tests {
         let path = path("bulk-io");
         let _ = std::fs::remove_file(&path);
         let chunk = chunk();
-        let config = lkjscript_core::ExecutionConfig {
-            max_heap_bytes: len * 4,
-            max_output_bytes: len * 2,
-            ..lkjscript_core::ExecutionConfig::default()
-        };
+        let config =
+            lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+                max_heap_bytes: len * 4,
+                max_output_bytes: len * 2,
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            });
         let mut vm = Vm::new(&chunk, NoTier, crate::ExecutionInputs::default(), config);
 
         let writer = vm.resources.sys_open_write(path.as_os_str().as_bytes())?;
@@ -194,11 +197,12 @@ mod tests {
         let path = path("bulk-policy");
         let _ = std::fs::remove_file(&path);
         let chunk = chunk();
-        let config = lkjscript_core::ExecutionConfig {
-            max_heap_bytes: len * 2,
-            max_output_bytes: len - 1,
-            ..lkjscript_core::ExecutionConfig::default()
-        };
+        let config =
+            lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+                max_heap_bytes: len * 2,
+                max_output_bytes: len - 1,
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            });
         let mut vm = Vm::new(&chunk, NoTier, crate::ExecutionInputs::default(), config);
         let writer = vm.resources.sys_open_write(path.as_os_str().as_bytes())?;
         let owner = vm.unique.allocate(len_i64)?;
@@ -232,10 +236,10 @@ mod tests {
             &chunk,
             NoTier,
             inputs,
-            lkjscript_core::ExecutionConfig {
+            lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_heap_bytes: len * 2,
-                ..lkjscript_core::ExecutionConfig::default()
-            },
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            }),
         );
         let writer = cancelled
             .resources

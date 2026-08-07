@@ -17,7 +17,6 @@ impl Evaluator<'_> {
                 AggregateMode::Structural => self.structural_product(*product, fields, values),
                 AggregateMode::Region => self.region_product(*product, fields, values),
                 AggregateMode::Legacy | AggregateMode::ResourceAdapter => {
-                    self.charge_aggregate()?;
                     self.allocate()?;
                     Ok(EvalValue::Product(*product, values_for(values, fields)?))
                 }
@@ -96,7 +95,6 @@ impl Evaluator<'_> {
                 return Err(Flow::Trap("product replacement field out of bounds".into()));
             };
             *slot = replacement;
-            self.charge_aggregate()?;
             self.allocate_dynamic(
                 copied
                     .len()
@@ -127,7 +125,6 @@ impl Evaluator<'_> {
             return Err(Flow::Trap("product replacement field out of bounds".into()));
         };
         *slot = clone_plain_eval_value(replacement)?;
-        self.charge_aggregate()?;
         self.allocate()?;
         Ok(EvalValue::Product(product, copied))
     }
@@ -140,7 +137,6 @@ impl Evaluator<'_> {
     ) -> Result<EvalValue, Flow> {
         let identity = self.region_product_identity(product)?;
         let fields = values_for(values, fields)?;
-        self.charge_aggregate()?;
         self.allocate_dynamic(
             fields
                 .len()

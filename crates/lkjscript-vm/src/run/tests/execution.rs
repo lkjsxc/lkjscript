@@ -7,18 +7,30 @@ fn fuel_and_returned_values_use_structured_outcomes() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(returned, ExecutionOutcome::Returned(value) if value.is_unit()));
 
-    let mut config = ExecutionConfig::default();
-    config.instruction_fuel = 1;
+    let mut config =
+        ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy::conservative());
+    config
+        .limited_policy_mut()
+        .expect("limited test policy")
+        .instruction_fuel = 1;
     let exhausted = Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), config).run();
     assert_eq!(
         exhausted,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)
     );
+    let unchanged = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionPolicy::unrestricted(),
+    )
+    .run();
+    assert!(matches!(unchanged, ExecutionOutcome::Returned(value) if value.is_unit()));
 }
 #[test]
 fn exit_does_not_terminate_or_contaminate_later_vms() {
@@ -32,7 +44,7 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
             &exit,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default()
+            ExecutionPolicy::unrestricted()
         )
         .run(),
         ExecutionOutcome::Exited(0)
@@ -44,7 +56,7 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
             &returned,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default()
+            ExecutionPolicy::unrestricted()
         )
         .run(),
         ExecutionOutcome::Returned(value) if value.is_unit()
@@ -65,7 +77,7 @@ fn trap_does_not_contaminate_a_later_vm() {
             &trap,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default()
+            ExecutionPolicy::unrestricted()
         )
         .run(),
         ExecutionOutcome::Trapped(_)
@@ -77,7 +89,7 @@ fn trap_does_not_contaminate_a_later_vm() {
             &returned,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default()
+            ExecutionPolicy::unrestricted()
         )
         .run(),
         ExecutionOutcome::Returned(value) if value.is_unit()
@@ -96,7 +108,7 @@ fn returned_heap_values_own_their_storage() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(
@@ -132,7 +144,7 @@ fn high_unique_local_and_place_execute_without_byte_narrowing() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.is_unit()));
@@ -160,19 +172,19 @@ fn byte_vector_program_crosses_former_limit_only_under_sufficient_heap_policy() 
     chunk.main.emit(Op::Return);
     let chunk = validate(chunk);
 
-    let low = ExecutionConfig {
+    let low = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: usize::try_from(size - 1).expect("test size fits usize"),
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert_eq!(
         Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), low).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
     );
 
-    let high = ExecutionConfig {
+    let high = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: usize::try_from(size * 2).expect("test size fits usize"),
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert!(matches!(
         Vm::new(
             &chunk,
@@ -227,7 +239,7 @@ fn wide_constant_index_validates_and_executes_without_aliasing() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(
@@ -262,7 +274,7 @@ fn wide_global_index_stores_loads_and_executes() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(
@@ -304,7 +316,7 @@ fn wide_prototype_reference_constructs_and_calls_the_high_closure() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(

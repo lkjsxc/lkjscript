@@ -1,4 +1,4 @@
-use lkjscript_core::{ExecutionConfig, Op, Value};
+use lkjscript_core::{ExecutionPolicy, Op, Value};
 
 use crate::run::NoTier as NullJit;
 
@@ -13,7 +13,7 @@ macro_rules! test_vm {
             &chunk,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default(),
+            ExecutionPolicy::unrestricted(),
         );
     };
 }

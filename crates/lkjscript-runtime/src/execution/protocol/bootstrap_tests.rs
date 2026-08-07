@@ -17,7 +17,7 @@ fn bootstrap() -> ProcessBootstrap {
         expected_root_witness_group: [9; 32],
         expected_root_witness_member: [10; 32],
         capabilities: vec![CapabilityKind::Arguments, CapabilityKind::Stdio],
-        execution: ExecutionConfig::default(),
+        execution: ExecutionPolicy::limited(LimitedExecutionPolicy::conservative()),
     }
 }
 
@@ -53,7 +53,13 @@ fn every_bootstrap_field_changes_the_exact_frame() {
             12 => {
                 value.capabilities.pop();
             }
-            _ => value.execution.instruction_fuel += 1,
+            _ => {
+                value
+                    .execution
+                    .limited_policy_mut()
+                    .expect("limited process policy")
+                    .instruction_fuel += 1;
+            }
         }
         mutations.push(value);
     }

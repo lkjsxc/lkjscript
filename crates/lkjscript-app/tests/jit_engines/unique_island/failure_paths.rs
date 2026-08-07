@@ -16,11 +16,11 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Trapped(_)
     ));
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
         assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
@@ -44,13 +44,13 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
     let vm_failure = run_chunk(
         arithmetic_failure.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(
         matches!(vm_failure, ExecutionOutcome::Trapped(_))
             && vm_failure.cleanup_failures().is_none()
     );
-    for (proof, execution) in forced_pair(&arithmetic_failure, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&arithmetic_failure, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
         assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
@@ -78,22 +78,22 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
     let vm_failure = run_chunk(
         callee_failure.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(
         matches!(vm_failure, ExecutionOutcome::Trapped(_))
             && vm_failure.cleanup_failures().is_none()
     );
-    for (proof, execution) in forced_pair(&callee_failure, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&callee_failure, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
         assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
         assert_eq!(execution.stats.native_unique.cleanup_releases, 0);
     }
-    let preentry_limits = ExecutionConfig {
+    let preentry_limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_frames: 1,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     for (proof, execution) in forced_pair(&callee_failure, &preentry_limits) {
         assert!(matches!(
             execution.outcome,
@@ -113,10 +113,10 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
         ),
         "native-unique-poll-failure.lkjscript",
     );
-    let poll_limits = ExecutionConfig {
+    let poll_limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         instruction_fuel: 1,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     for (proof, execution) in forced_pair(&poll_failure, &poll_limits) {
         assert!(matches!(
             execution.outcome,
@@ -133,10 +133,10 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
         ),
         "native-unique-allocation-limit.lkjscript",
     );
-    let limits = ExecutionConfig {
+    let limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     for (_, execution) in forced_pair(&allocation, &limits) {
         assert!(matches!(
             execution.outcome,
@@ -158,12 +158,12 @@ fn unique_runtime_failure_paths_cleanup_and_preflight_remains_closed() {
     for result in [
         execute_forced(
             legacy.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
         execute_optimizing(
             legacy.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
     ] {

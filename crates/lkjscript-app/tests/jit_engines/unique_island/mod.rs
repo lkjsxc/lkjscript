@@ -1,5 +1,5 @@
 use crate::canonical::compile;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, ResourceLimitKind};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, JitStats};
 use lkjscript_native::RuntimeCallSlot;
@@ -49,12 +49,12 @@ fn exact_byte_vector_mutation_move_drop_and_return_execute_in_both_forced_tiers(
     let vm = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(
         matches!(vm, ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(&[0, 91][..]))
     );
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(
             execution.outcome,
             ExecutionOutcome::Returned(value)

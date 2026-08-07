@@ -45,11 +45,11 @@ fn immutable_bytes_literals_copy_and_thaw_match_all_engines() {
         run_chunk(
             read.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_i64() == Some(258)
     ));
-    for (proof, execution) in forced_pair(&read, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&read, &ExecutionPolicy::unrestricted()) {
         assert!(
             matches!(execution.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(258))
         );
@@ -75,11 +75,11 @@ fn dynamic_clone_thaw_return_and_direct_call_preserve_exact_ownership() {
         run_chunk(
             direct.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_i64() == Some(2)
     ));
-    for (proof, execution) in forced_pair(&direct, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&direct, &ExecutionPolicy::unrestricted()) {
         assert!(
             matches!(execution.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(2))
         );
@@ -92,10 +92,10 @@ fn dynamic_clone_thaw_return_and_direct_call_preserve_exact_ownership() {
 #[test]
 fn bytes_failure_paths_preserve_owners_and_cleanup_without_collectors() {
     let allocation = compile(STATIC_COPY, "native-bytes-allocation-limit.lkjscript");
-    let limits = ExecutionConfig {
+    let limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert!(matches!(
         evaluate(
             allocation.ssa(),
@@ -136,11 +136,11 @@ fn bytes_failure_paths_preserve_owners_and_cleanup_without_collectors() {
         run_chunk(
             trap.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Trapped(_)
     ));
-    for (proof, execution) in forced_pair(&trap, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&trap, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
         assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
@@ -161,12 +161,12 @@ fn bytes_failure_paths_preserve_owners_and_cleanup_without_collectors() {
     for result in [
         execute_forced(
             mixed.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
         execute_optimizing(
             mixed.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
     ] {

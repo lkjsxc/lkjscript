@@ -100,14 +100,18 @@ impl Statement {
         }
     }
 
-    pub fn column_text(&self, index: i64, max_bytes: usize) -> Result<Option<String>, SqliteError> {
+    pub fn column_text(
+        &self,
+        index: i64,
+        max_bytes: impl Into<Option<usize>>,
+    ) -> Result<Option<String>, SqliteError> {
         if self.column_type(index)? == ColumnType::Null {
             return Ok(None);
         }
         if self.column_type(index)? != ColumnType::Text {
             return Err(SqliteError::new("column text type", -1));
         }
-        let bytes = column_text_bytes(self.raw, index, max_bytes)?;
+        let bytes = column_text_bytes(self.raw, index, max_bytes.into())?;
         let text =
             String::from_utf8(bytes).map_err(|_| SqliteError::new("column text UTF-8", -1))?;
         Ok(Some(text))
@@ -116,7 +120,7 @@ impl Statement {
     pub fn column_bytes(
         &self,
         index: i64,
-        max_bytes: usize,
+        max_bytes: impl Into<Option<usize>>,
     ) -> Result<Option<Vec<u8>>, SqliteError> {
         if self.column_type(index)? == ColumnType::Null {
             return Ok(None);
@@ -124,7 +128,7 @@ impl Statement {
         if self.column_type(index)? != ColumnType::Blob {
             return Err(SqliteError::new("column bytes type", -1));
         }
-        Ok(Some(column_bytes(self.raw, index, max_bytes)?))
+        Ok(Some(column_bytes(self.raw, index, max_bytes.into())?))
     }
 
     fn check(&self, operation: &'static str, code: c_int) -> Result<(), SqliteError> {

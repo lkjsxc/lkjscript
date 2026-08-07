@@ -44,7 +44,10 @@ impl JitIslandServices {
         if tail.reference_type() != result_type {
             return self.list_trap("structural list prepend type mismatch");
         }
-        if self.list_allocations >= self.max_list_allocations {
+        if self
+            .max_list_allocations
+            .is_some_and(|maximum| self.list_allocations >= maximum)
+        {
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
         let tail_key = self.list_key(*tail)?;
@@ -52,7 +55,10 @@ impl JitIslandServices {
             .lists
             .reserved_bytes_estimate()
             .saturating_add(self.lists.prepend_storage_increase());
-        if projected > self.max_runtime_bytes {
+        if self
+            .max_runtime_bytes
+            .is_some_and(|maximum| projected > maximum)
+        {
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
         let head_type = descriptor

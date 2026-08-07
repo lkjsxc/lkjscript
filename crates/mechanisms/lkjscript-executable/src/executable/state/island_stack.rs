@@ -10,7 +10,10 @@ impl IslandCallState<'_> {
         if self.status != 0 {
             return;
         }
-        if self.active_frames.len() >= self.maximum_active_frames {
+        if self
+            .maximum_active_frames
+            .is_some_and(|maximum| self.active_frames.len() >= maximum)
+        {
             self.status = 4;
             self.payload = 2;
             return;
@@ -58,7 +61,10 @@ impl IslandCallState<'_> {
             self.payload = 5;
             return;
         };
-        if next_values > self.maximum_active_values {
+        if self
+            .maximum_active_values
+            .is_some_and(|maximum| next_values > maximum)
+        {
             self.status = 4;
             self.payload = 6;
             return;

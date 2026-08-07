@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome};
 use lkjscript_vm::run_chunk;
 
@@ -29,10 +29,10 @@ fn byte_vector_borrows_moves_and_mutation_match_evaluator_and_vm() {
         evaluate(program.ssa(), &eval_limits),
         EvalOutcome::ResourceLimitExceeded(_)
     ));
-    let vm_limits = ExecutionConfig {
+    let vm_limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert!(matches!(
         run_chunk(
             program.bytecode(),

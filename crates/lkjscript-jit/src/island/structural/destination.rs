@@ -6,7 +6,6 @@ impl JitStructuralRuntime {
         aggregate: &StructuralAggregateDescriptor,
         storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
-        self.reserve_construction()?;
         self.note_call();
         let value_type = core_type(aggregate.value_type())?;
         let fields = aggregate

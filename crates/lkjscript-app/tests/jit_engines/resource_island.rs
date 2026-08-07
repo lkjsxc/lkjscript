@@ -1,5 +1,5 @@
 use crate::canonical::compile;
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{
     execute_forced_with_capabilities, execute_optimizing_with_capabilities, JitConfig, JitStats,
 };
@@ -23,21 +23,21 @@ fn borrowed_standard_input_runs_in_forced_noncollecting_resource_island() {
             capabilities: capabilities.to_vec(),
             host: lkjscript_host::HostEnvironment::portable(),
         },
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(matches!(vm, ExecutionOutcome::Returned(value) if value.is_unit()));
 
     let baseline = execute_forced_with_capabilities(
         program.ssa(),
         &capabilities,
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced baseline borrowed standard input");
     let proof = execute_optimizing_with_capabilities(
         program.ssa(),
         &capabilities,
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced proof borrowed standard input");
@@ -71,13 +71,13 @@ fn resource_island_rejects_unsupported_and_legacy_reachable_operations() {
             execute_forced_with_capabilities(
                 program.ssa(),
                 &[CapabilityKind::Stdio],
-                &ExecutionConfig::default(),
+                &ExecutionPolicy::unrestricted(),
                 JitConfig::default(),
             ),
             execute_optimizing_with_capabilities(
                 program.ssa(),
                 &[CapabilityKind::Stdio],
-                &ExecutionConfig::default(),
+                &ExecutionPolicy::unrestricted(),
                 JitConfig::default(),
             ),
         ] {

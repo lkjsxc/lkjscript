@@ -22,20 +22,20 @@ fn static_string_lists_execute_without_native_fallback() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     assert_eq!(expected, Scalar::Bool(true));
     assert_eq!(vm, expected);
     for result in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline static string list"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof static string list"),
@@ -60,20 +60,20 @@ fn option_owners_execute_in_all_four_tiers() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     assert_eq!(expected, Scalar::Bool(true));
     assert_eq!(vm, expected);
     for result in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline option list"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof option list"),
@@ -104,20 +104,20 @@ fn structural_string_elements_are_owned_by_the_list_region() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     assert_eq!(expected, Scalar::Bool(true));
     assert_eq!(vm, expected);
     for result in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline dynamic string list"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof dynamic string list"),
@@ -151,20 +151,20 @@ fn list_first_clones_a_dynamic_structural_owner() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         lkjscript_core::ExecutionOutcome::Returned(_)
     ));
     for result in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline dynamic string list-first"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof dynamic string list-first"),

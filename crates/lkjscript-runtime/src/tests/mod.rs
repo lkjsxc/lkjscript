@@ -41,7 +41,7 @@ fn manifest(kind: ApplicationKind, concurrent: usize, total: u64) -> Application
         quota: ResourceQuota {
             max_concurrent_invocations: NonZeroUsize::new(concurrent).unwrap_or(NonZeroUsize::MIN),
             max_total_invocations: NonZeroU64::new(total).unwrap_or(NonZeroU64::MIN),
-            execution: lkjscript_core::ExecutionConfig::default(),
+            execution: lkjscript_core::ExecutionPolicy::unrestricted(),
         },
         restart: RestartPolicy::Never,
     }

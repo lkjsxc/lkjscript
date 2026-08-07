@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, OwnedValue};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, OwnedValue};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_vm::run_chunk;
 
@@ -70,7 +70,7 @@ pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
     let executed = vm_outcome(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     assert_eq!(evaluated, executed, "SSA/VM mismatch for {name}");
     assert_eq!(

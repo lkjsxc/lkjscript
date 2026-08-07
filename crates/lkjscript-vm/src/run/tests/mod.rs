@@ -1,7 +1,7 @@
 use super::*;
 
 use lkjscript_core::{
-    validate_chunk, Chunk, Constant, ExecutionConfig, ExecutionOutcome, Op, ResourceLimitKind,
+    validate_chunk, Chunk, Constant, ExecutionOutcome, ExecutionPolicy, Op, ResourceLimitKind,
     ValidationPolicy,
 };
 

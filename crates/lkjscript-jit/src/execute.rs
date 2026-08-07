@@ -10,7 +10,7 @@ pub(crate) fn optimization_metadata_bytes_estimate(stats: Option<&OptimizationSt
 
 pub fn execute_forced(
     program: &VerifiedProgram,
-    execution: &ExecutionConfig,
+    execution: &ExecutionPolicy,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     execute_forced_with_capabilities(program, &[], execution, config)
@@ -19,7 +19,7 @@ pub fn execute_forced(
 pub fn execute_forced_with_capabilities(
     program: &VerifiedProgram,
     capabilities: &[lkjscript_core::CapabilityKind],
-    execution: &ExecutionConfig,
+    execution: &ExecutionPolicy,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     let (specialized, _specialization) =
@@ -48,7 +48,7 @@ pub fn execute_forced_with_capabilities(
 /// code for the required reachable group, and enter optimized main.
 pub fn execute_optimizing(
     program: &VerifiedProgram,
-    execution: &ExecutionConfig,
+    execution: &ExecutionPolicy,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     execute_optimizing_with_capabilities(program, &[], execution, config)
@@ -57,7 +57,7 @@ pub fn execute_optimizing(
 pub fn execute_optimizing_with_capabilities(
     program: &VerifiedProgram,
     capabilities: &[lkjscript_core::CapabilityKind],
-    execution: &ExecutionConfig,
+    execution: &ExecutionPolicy,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     let started = Instant::now();

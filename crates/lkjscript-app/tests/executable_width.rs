@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Op, ResourceLimitKind};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy, Op, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, FailureCode, JitConfig, JitSession};
 use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
@@ -404,7 +404,7 @@ fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
         returned_i64(run_chunk(
             program.bytecode(),
             &ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         777
     );
@@ -420,7 +420,7 @@ fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert_eq!(returned_i64(outcome), 777);
@@ -457,7 +457,7 @@ fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm
         returned_i64(run_chunk(
             program.bytecode(),
             &ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         i64::try_from(WIDE_COUNT - 1).expect("wide field value fits i64")
     );
@@ -480,7 +480,7 @@ fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm
     let ExecutionOutcome::Returned(value) = run_chunk(
         high_program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM must return the high-tag enum")
     };
@@ -497,7 +497,7 @@ fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm
     let (outcome, stats) = run_chunk_auto(
         high_program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     let ExecutionOutcome::Returned(value) = outcome else {
@@ -523,7 +523,7 @@ fn generated_source_crosses_constant_memory_plan_and_bytecode_widths() {
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(
         returned_i64(outcome),
@@ -571,7 +571,7 @@ fn three_hundred_parameters_arguments_and_live_lexical_locals_execute_in_vm() {
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(returned_i64(outcome), expected);
 }
@@ -596,7 +596,7 @@ fn one_thousand_parameters_arguments_and_live_locals_execute_in_vm() {
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(
         returned_i64(outcome),
@@ -631,7 +631,7 @@ fn owned_parameter_above_byte_width_executes_and_cleans_up() {
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(returned_i64(outcome), 7);
 }
@@ -711,7 +711,7 @@ fn assert_many_owned_arguments(count: usize) {
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(returned_i64(outcome), 7);
 
@@ -726,7 +726,7 @@ fn assert_many_owned_arguments(count: usize) {
     let (auto_outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert_eq!(returned_i64(auto_outcome), 7);
@@ -756,10 +756,10 @@ fn assert_many_owned_arguments(count: usize) {
         })
         .count();
     let fuel = u64::try_from(boundaries_before_call).expect("test boundary count fits u64");
-    let limited = ExecutionConfig {
+    let limited = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         instruction_fuel: fuel,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert_eq!(
         run_chunk(program.bytecode(), &ExecutionInputs::default(), &limited,),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel),
@@ -807,7 +807,7 @@ fn generated_wide_jump_executes_both_source_branch_paths() {
         returned_i64(run_chunk(
             program.bytecode(),
             &ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         i64::try_from(BODY_UPDATES).expect("test update count fits i64") + 22,
     );
@@ -824,7 +824,7 @@ fn automatic_engine_keeps_high_signature_on_the_generic_vm_path() {
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         session,
     );
     assert_eq!(
@@ -841,7 +841,7 @@ fn automatic_engine_keeps_high_signature_on_the_generic_vm_path() {
 
     let error = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect_err("forced native mode reports the unsupported high signature");

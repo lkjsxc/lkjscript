@@ -30,11 +30,11 @@ impl JitValueServices<'_> {
                     return self.trap("list-prepend tail layout mismatch");
                 }
                 let tail_key = self.list_key(tail)?;
-                if self
-                    .list_allocations
-                    .saturating_add(self.region_product_allocations)
-                    >= self.max_list_allocations
-                {
+                if self.max_list_allocations.is_some_and(|maximum| {
+                    self.list_allocations
+                        .saturating_add(self.region_product_allocations)
+                        >= maximum
+                }) {
                     self.last_resource = Some(ResourceLimitKind::Allocations);
                     return Err(NativeServiceError::ResourceLimitExceeded);
                 }
@@ -44,7 +44,10 @@ impl JitValueServices<'_> {
                     .reserved_bytes_estimate()
                     .saturating_add(self.region_products.metrics().reserved_bytes_estimate)
                     .saturating_add(increase);
-                if projected > self.max_runtime_bytes {
+                if self
+                    .max_runtime_bytes
+                    .is_some_and(|maximum| projected > maximum)
+                {
                     self.last_resource = Some(ResourceLimitKind::HeapBytes);
                     return Err(NativeServiceError::ResourceLimitExceeded);
                 }

@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -27,15 +27,15 @@ fn nested_copy_product_projection_and_update_are_collector_free() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
     let config = JitConfig::default();
     for result in [
-        execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("baseline copy product"),
-        execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+        execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("proof copy product"),
     ] {
         assert_eq!(execution(result.outcome), expected);
@@ -59,17 +59,17 @@ fn structural_string_length_uses_generated_calls_without_collector_metadata() {
     let vm = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let native = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("generated structural string execution");
     let optimized = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("optimizing structural string execution");
@@ -108,17 +108,17 @@ fn recursive_structural_string_calls_teardown_every_owner() {
     let vm = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let native = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("recursive generated structural execution");
     let optimized = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("recursive optimized structural execution");

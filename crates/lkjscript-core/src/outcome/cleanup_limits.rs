@@ -4,6 +4,12 @@ pub const MAX_CLEANUP_FAILURES: usize = 4_096;
 pub const MAX_CLEANUP_FAILURE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanupRetentionPolicy {
+    Unrestricted,
+    Limited(CleanupFailureLimits),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CleanupFailureLimits {
     pub(super) max_failures: usize,
     pub(super) max_message_bytes: usize,

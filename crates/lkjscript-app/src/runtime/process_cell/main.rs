@@ -115,7 +115,11 @@ fn prepare(bootstrap: &ProcessBootstrap) -> Result<lkjscript_compiler::Executabl
     if bootstrap.contract != runtime_control_digest().map_err(|error| error.to_string())? {
         return Err("worker runtime-control contract mismatch".into());
     }
-    if bootstrap.execution.max_output_bytes > MAX_APPLICATION_OUTPUT_BYTES {
+    let execution = bootstrap
+        .execution
+        .limited_policy()
+        .ok_or_else(|| "worker requires an explicit limited execution policy".to_string())?;
+    if execution.max_output_bytes > MAX_APPLICATION_OUTPUT_BYTES {
         return Err("worker output limit exceeds process-cell bound".into());
     }
     let entry = Path::new(&bootstrap.entry);

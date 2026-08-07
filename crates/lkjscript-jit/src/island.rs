@@ -30,22 +30,25 @@ pub(crate) struct JitIslandServices {
     lists: lkjscript_core::SegmentedListArena<lkjscript_core::Value>,
     list_owners: Vec<lkjscript_core::Value>,
     list_allocations: u64,
-    max_list_allocations: u64,
-    max_runtime_bytes: u64,
+    max_list_allocations: Option<u64>,
+    max_runtime_bytes: Option<u64>,
 }
 
 impl JitIslandServices {
     #[cfg(test)]
-    pub(crate) fn new(scope: ScopeId, config: &ExecutionConfig) -> Result<Self, EngineError> {
+    pub(crate) fn new(scope: ScopeId, config: &ExecutionPolicy) -> Result<Self, EngineError> {
         Self::with_witnesses(scope, config, NativeWitnessCatalog::default())
     }
 
     pub(crate) fn with_witnesses(
         scope: ScopeId,
-        config: &ExecutionConfig,
+        config: &ExecutionPolicy,
         witnesses: NativeWitnessCatalog,
     ) -> Result<Self, EngineError> {
-        let max_handles = config.max_handles.min(u32::MAX as usize);
+        let max_handles = config
+            .max_handles()
+            .unwrap_or(u32::MAX as usize)
+            .min(u32::MAX as usize);
         let limits = ResourceTableLimits::new(
             max_handles.max(1),
             max_handles,
@@ -64,11 +67,10 @@ impl JitIslandServices {
             unique: JitUniqueRuntime::new(config)?,
             structural: JitStructuralRuntime::new(config)?,
             witnesses,
-            lists: lkjscript_core::SegmentedListArena::new(
-                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(
-                    config.max_allocations,
-                ),
-            )
+            lists: lkjscript_core::SegmentedListArena::new(config.max_allocations().map_or_else(
+                lkjscript_core::SegmentedListArenaLimits::default,
+                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
+            ))
             .map_err(|error| {
                 EngineError::new(
                     FailureCode::InvocationFailure,
@@ -78,8 +80,10 @@ impl JitIslandServices {
             })?,
             list_owners: Vec::new(),
             list_allocations: 0,
-            max_list_allocations: config.max_allocations,
-            max_runtime_bytes: u64::try_from(config.max_heap_bytes).unwrap_or(u64::MAX),
+            max_list_allocations: config.max_allocations(),
+            max_runtime_bytes: config
+                .max_heap_bytes()
+                .and_then(|bytes| u64::try_from(bytes).ok()),
         })
     }
 

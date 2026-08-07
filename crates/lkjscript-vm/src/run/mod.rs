@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use lkjscript_core::{
     CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumFieldRef, EnumId, EnumVariantRef,
-    Error, ErrorClass, ExecutionConfig, ExecutionOutcome, FailureCleanupAction, HostError, Op,
+    Error, ErrorClass, ExecutionOutcome, ExecutionPolicy, FailureCleanupAction, HostError, Op,
     ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
 };
 #[cfg(feature = "jit")]
@@ -63,7 +63,7 @@ pub trait RuntimeTier {
         &mut self,
         function: FunctionId,
         arguments: &[NativeValue],
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> std::result::Result<ScalarInvocation, EngineError>;
     #[cfg(feature = "jit")]
     fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u64>) -> String;
@@ -88,7 +88,7 @@ impl RuntimeTier for NoTier {
         &mut self,
         function: FunctionId,
         _arguments: &[NativeValue],
-        _execution: &ExecutionConfig,
+        _execution: &ExecutionPolicy,
     ) -> std::result::Result<ScalarInvocation, EngineError> {
         Err(EngineError::new_unavailable(function))
     }
@@ -113,7 +113,7 @@ impl RuntimeTier for JitSession {
         &mut self,
         function: FunctionId,
         arguments: &[NativeValue],
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> std::result::Result<ScalarInvocation, EngineError> {
         JitSession::invoke_scalar(self, function, arguments, execution)
     }
@@ -140,12 +140,11 @@ pub struct Vm<'a, J: RuntimeTier> {
     global_initialization_error: Option<Error>,
     list_initialization_error: Option<Error>,
     region_product_initialization_error: Option<Error>,
-    config: ExecutionConfig,
-    fuel_remaining: u64,
+    config: ExecutionPolicy,
+    fuel_remaining: Option<u64>,
     output_bytes: usize,
     allocation_error: Option<Error>,
     cleanup_failures: CleanupFailures,
-    logical_aggregate_constructions: u64,
     list_allocations: u64,
     region_product_allocations: u64,
     started: Instant,

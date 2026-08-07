@@ -15,10 +15,10 @@ pub(super) fn assert_i64_all_engines(
     let vm = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(matches!(vm, ExecutionOutcome::Returned(value) if value.as_i64() == Some(expected)));
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(
             matches!(execution.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(expected))
         );
@@ -32,7 +32,7 @@ pub(super) fn assert_i64_all_engines(
 
 pub(super) fn forced_pair(
     program: &lkjscript_compiler::ExecutableProgram,
-    limits: &ExecutionConfig,
+    limits: &ExecutionPolicy,
 ) -> [(bool, lkjscript_jit::JitExecution); 2] {
     [
         (
@@ -58,11 +58,11 @@ pub(super) fn assert_returned_bytes_all_engines(source: &str, expected: &[u8], a
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_bytes() == Some(expected)
     ));
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(
             execution.outcome,
             ExecutionOutcome::Returned(value) if value.as_bytes() == Some(expected)
@@ -83,11 +83,11 @@ pub(super) fn assert_returned_vector_all_engines(source: &str, expected: &[u8], 
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(expected)
     ));
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(
             execution.outcome,
             ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(expected)

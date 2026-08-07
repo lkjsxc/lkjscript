@@ -35,7 +35,10 @@ pub(super) fn dispatch_structural(
         state.status = 0;
         let result = execute(state, &descriptor, first, second, third);
         if let Err(error) = result {
-            if state.cleanup_failures.len() < state.maximum_cleanup_failures {
+            if state
+                .maximum_cleanup_failures
+                .is_none_or(|maximum| state.cleanup_failures.len() < maximum)
+            {
                 state.cleanup_failures.push(NativeCleanupFailure::new(
                     RuntimeCallSlot::StructuralDispatch,
                     error,

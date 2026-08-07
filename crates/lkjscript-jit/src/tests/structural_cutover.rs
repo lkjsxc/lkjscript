@@ -3,16 +3,23 @@ use super::*;
 #[test]
 fn forced_source_string_entry_fails_closed_in_both_tiers_until_producer_exists() {
     let program = source_string_entry_program();
-    let baseline = execute_forced(&program, &ExecutionConfig::default(), JitConfig::default())
-        .expect_err("baseline source string entry must fail before native entry");
+    let baseline = execute_forced(
+        &program,
+        &ExecutionPolicy::unrestricted(),
+        JitConfig::default(),
+    )
+    .expect_err("baseline source string entry must fail before native entry");
     assert_eq!(baseline.code(), FailureCode::UnsupportedType);
     assert!(baseline
         .to_string()
         .contains("no compiler-produced native structural owner"));
 
-    let optimizing =
-        crate::execute_optimizing(&program, &ExecutionConfig::default(), JitConfig::default())
-            .expect_err("optimizing source string entry must fail before native entry");
+    let optimizing = crate::execute_optimizing(
+        &program,
+        &ExecutionPolicy::unrestricted(),
+        JitConfig::default(),
+    )
+    .expect_err("optimizing source string entry must fail before native entry");
     assert_eq!(optimizing.code(), FailureCode::UnsupportedType);
     assert!(optimizing
         .to_string()

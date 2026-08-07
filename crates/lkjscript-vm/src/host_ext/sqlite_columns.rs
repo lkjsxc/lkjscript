@@ -38,7 +38,7 @@ impl ResourceTable {
         &self,
         handle: Value,
         index: i64,
-        max: usize,
+        max: Option<usize>,
     ) -> Result<Option<String>> {
         self.sqlite_statement(handle, "sqlite-column-string")?
             .column_text(index, max)
@@ -49,7 +49,7 @@ impl ResourceTable {
         &self,
         handle: Value,
         index: i64,
-        max: usize,
+        max: Option<usize>,
     ) -> Result<Option<Vec<u8>>> {
         self.sqlite_statement(handle, "sqlite-column-bytes")?
             .column_bytes(index, max)

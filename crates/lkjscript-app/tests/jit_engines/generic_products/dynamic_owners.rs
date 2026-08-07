@@ -43,7 +43,7 @@ fn multiple_dynamic_owner_parameters_lower_and_execute_in_source_order() {
     let outcome = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert_eq!(
         execution(outcome.clone()),

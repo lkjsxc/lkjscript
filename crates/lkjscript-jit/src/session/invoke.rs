@@ -7,7 +7,7 @@ impl JitSession {
         &mut self,
         function: FunctionId,
         arguments: &[NativeValue],
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> Result<ScalarInvocation, EngineError> {
         let index = function.index().ok_or_else(|| {
             EngineError::new(
@@ -59,10 +59,15 @@ impl JitSession {
         self.last_runtime_trap = None;
         self.last_runtime_resource = None;
         self.returned_unique = None;
-        let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
-            .with_max_active_frames(execution.max_frames)
-            .with_max_active_values(execution.max_stack_values)
-            .with_max_cleanup_failures(execution.cleanup_failure_limits.max_failures());
+        let config = match execution.limited_policy() {
+            Some(policy) => {
+                NativeInvocationConfig::limited(policy.instruction_fuel, policy.wall_time)
+                    .with_max_active_frames(policy.max_frames)
+                    .with_max_active_values(policy.max_stack_values)
+                    .with_max_cleanup_failures(policy.cleanup_retention.max_failures())
+            }
+            None => NativeInvocationConfig::unrestricted(),
+        };
         if self.time_to_first_native_entry.is_none() {
             self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
         }

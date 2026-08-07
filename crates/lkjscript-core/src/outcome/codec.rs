@@ -1,8 +1,8 @@
 use crate::{Error, Result};
 
 use super::{
-    CleanupFailure, CleanupFailureLimits, CleanupFailures, CleanupPhase, CleanupSubject,
-    ExecutionOutcome, HostError, ResourceLimitKind, Trap,
+    CleanupFailure, CleanupFailureLimits, CleanupFailures, CleanupPhase, CleanupRetentionPolicy,
+    CleanupSubject, ExecutionOutcome, HostError, ResourceLimitKind, Trap,
 };
 
 const MAX_NESTING: usize = 8;
@@ -83,8 +83,14 @@ fn decode_outcome(input: &mut Decoder<'_>, depth: usize) -> Result<ExecutionOutc
 }
 
 fn encode_cleanup(out: &mut Encoder, failures: &CleanupFailures) -> Result<()> {
-    out.usize(failures.limits().max_failures)?;
-    out.usize(failures.limits().max_message_bytes)?;
+    match failures.retention() {
+        CleanupRetentionPolicy::Unrestricted => out.u8(0)?,
+        CleanupRetentionPolicy::Limited(limits) => {
+            out.u8(1)?;
+            out.usize(limits.max_failures)?;
+            out.usize(limits.max_message_bytes)?;
+        }
+    }
     out.usize(failures.retained().len())?;
     for failure in failures.retained() {
         out.u8(phase_tag(failure.phase()))?;
@@ -98,10 +104,16 @@ fn encode_cleanup(out: &mut Encoder, failures: &CleanupFailures) -> Result<()> {
 }
 
 fn decode_cleanup(input: &mut Decoder<'_>) -> Result<CleanupFailures> {
-    let limits = CleanupFailureLimits::new(input.usize()?, input.usize()?)
-        .ok_or_else(|| Error::msg("cleanup failure limits exceed bounds"))?;
+    let retention = match input.u8()? {
+        0 => CleanupRetentionPolicy::Unrestricted,
+        1 => CleanupRetentionPolicy::Limited(
+            CleanupFailureLimits::new(input.usize()?, input.usize()?)
+                .ok_or_else(|| Error::msg("cleanup failure limits exceed bounds"))?,
+        ),
+        _ => return Err(Error::msg("unknown cleanup retention tag")),
+    };
     let count = input.usize()?;
-    if count > limits.max_failures {
+    if matches!(retention, CleanupRetentionPolicy::Limited(limits) if count > limits.max_failures) {
         return Err(Error::msg("cleanup failure count exceeds encoded limit"));
     }
     let mut retained = Vec::with_capacity(count);
@@ -114,7 +126,7 @@ fn decode_cleanup(input: &mut Decoder<'_>) -> Result<CleanupFailures> {
         ));
     }
     CleanupFailures::from_wire_parts(
-        limits,
+        retention,
         retained,
         input.usize()?,
         input.usize()?,
@@ -129,7 +141,6 @@ fn resource_tag(kind: ResourceLimitKind) -> u8 {
         ResourceLimitKind::FrameDepth => 2,
         ResourceLimitKind::HeapBytes => 3,
         ResourceLimitKind::Allocations => 4,
-        ResourceLimitKind::LogicalAggregateConstructions => 5,
         ResourceLimitKind::Handles => 6,
         ResourceLimitKind::OutputBytes => 7,
     }
@@ -142,7 +153,6 @@ fn resource_kind(tag: u8) -> Result<ResourceLimitKind> {
         2 => ResourceLimitKind::FrameDepth,
         3 => ResourceLimitKind::HeapBytes,
         4 => ResourceLimitKind::Allocations,
-        5 => ResourceLimitKind::LogicalAggregateConstructions,
         6 => ResourceLimitKind::Handles,
         7 => ResourceLimitKind::OutputBytes,
         _ => return Err(Error::msg("unknown resource limit tag")),

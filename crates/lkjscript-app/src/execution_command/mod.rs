@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use lkjscript_compiler::{compile_path, compile_path_with_metrics, CompileMetrics};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_jit::JitConfig;
 
 use crate::engine;
@@ -47,7 +47,7 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
         capabilities: required.to_vec(),
         host: lkjscript_host::HostEnvironment::portable(),
     };
-    let execution_config = ExecutionConfig::default();
+    let execution_config = trusted_local_execution_policy();
     let jit_config = JitConfig {
         auto_threshold: options.auto_threshold,
         auto_enabled: options.auto_enabled,
@@ -84,4 +84,21 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
         })?;
     }
     output::outcome_exit_code(execution.outcome)
+}
+
+fn trusted_local_execution_policy() -> ExecutionPolicy {
+    ExecutionPolicy::unrestricted()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_local_run_selects_unrestricted_execution() {
+        assert_eq!(
+            trusted_local_execution_policy(),
+            ExecutionPolicy::Unrestricted
+        );
+    }
 }

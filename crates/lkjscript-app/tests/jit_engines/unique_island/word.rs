@@ -38,11 +38,11 @@ fn little_endian_u32_bounds_and_value_fail_before_mutation() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionPolicy::unrestricted()
         ),
         ExecutionOutcome::Trapped(_)
     ));
-    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+    for (proof, execution) in forced_pair(&program, &ExecutionPolicy::unrestricted()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
         assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);

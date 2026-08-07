@@ -41,6 +41,9 @@ fn manifest_and_installed_execution_cell_class_must_match_before_effects(
     isolated.cell = ExecutionCellClass::IsolatedProcess {
         entry: lkjscript_host::ApplicationPath::parse("main.lkjscript")?,
     };
+    isolated.quota.execution = lkjscript_core::ExecutionPolicy::limited(
+        lkjscript_core::LimitedExecutionPolicy::conservative(),
+    );
     assert!(matches!(
         system.install(
             isolated,

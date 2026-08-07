@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use lkjscript_compiler::{
     compile_path, compile_path_with_metrics, compile_source, validate_source,
 };
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
@@ -72,7 +72,7 @@ fn wide_source_directory_compiles_and_executes_through_the_generic_path(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -97,7 +97,7 @@ fn trusted_source_above_16_mib_compiles_to_validated_bytecode_and_executes(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -131,7 +131,7 @@ fn trusted_import_closure_above_256_mib_compiles_and_executes(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -384,7 +384,7 @@ fn deeply_nested_source_compiles_validates_executes_and_drops_on_a_small_stack(
                 let outcome = run_chunk(
                     program.bytecode(),
                     &ExecutionInputs::default(),
-                    &ExecutionConfig::default(),
+                    &ExecutionPolicy::unrestricted(),
                 );
                 let value = match outcome {
                     ExecutionOutcome::Returned(value) => value,
@@ -429,7 +429,7 @@ fn deeply_nested_type_crosses_analysis_memory_ssa_bytecode_and_vm_on_a_small_sta
                 match run_chunk(
                     program.bytecode(),
                     &ExecutionInputs::default(),
-                    &ExecutionConfig::default(),
+                    &ExecutionPolicy::unrestricted(),
                 ) {
                     ExecutionOutcome::Returned(_) => {}
                     other => {
@@ -475,7 +475,7 @@ fn wide_and_cyclic_types_cross_the_public_compiler_and_runtime_path(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(
         matches!(outcome, ExecutionOutcome::Returned(_)),
@@ -550,7 +550,7 @@ fn deep_match_usefulness_diagnostics_and_lowering_are_stack_safe(
                 let outcome = run_chunk(
                     program.bytecode(),
                     &ExecutionInputs::default(),
-                    &ExecutionConfig::default(),
+                    &ExecutionPolicy::unrestricted(),
                 );
                 let value = match outcome {
                     ExecutionOutcome::Returned(value) => value,
@@ -625,7 +625,7 @@ fn broad_match_crosses_the_former_witness_reservation_and_preserves_semantics(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -677,7 +677,7 @@ fn flat_source_beyond_former_quotas_compiles_validates_and_executes(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -786,7 +786,7 @@ fn seventeen_witness_arguments_cross_hir_ssa_validated_bytecode_and_vm(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -808,7 +808,7 @@ fn four_thousand_ninety_seven_functions_compile_validate_and_execute_in_vm(
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,
@@ -836,7 +836,7 @@ fn sixteen_thousand_three_hundred_eighty_five_calls_and_borrow_scopes_execute_in
     let outcome = run_chunk(
         program.bytecode(),
         &ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value,

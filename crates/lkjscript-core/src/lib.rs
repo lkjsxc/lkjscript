@@ -30,7 +30,7 @@ pub use bytecode::{
     VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
-pub use limits::ExecutionConfig;
+pub use limits::{ExecutionPolicy, LimitedExecutionPolicy};
 pub use lkjscript_contracts::{sha256, MemoryWitnessOperation, Sha256};
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
@@ -40,8 +40,8 @@ pub use opcode::{
 };
 pub use outcome::{
     decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
-    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionOutcomeCodecLimits,
-    HostError, OwnedValue, ResourceLimitKind, SealedSemanticDagBorrow,
+    CleanupFailures, CleanupPhase, CleanupRetentionPolicy, CleanupSubject, ExecutionOutcome,
+    ExecutionOutcomeCodecLimits, HostError, OwnedValue, ResourceLimitKind, SealedSemanticDagBorrow,
     SealedSemanticDagBorrowFailure, SealedSemanticDagError, SealedSemanticDagFailure,
     SealedSemanticDagMetrics, SealedSemanticDagOwner, SealedSemanticDagReleaseFailure,
     SealedSemanticDagReleaseReport, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode,

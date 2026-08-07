@@ -85,8 +85,12 @@
    policy at untrusted request boundaries. Runtime list equality no longer has an independent
    million-step trap, byte storage no longer has a per-buffer 1 MiB rejection, and file/socket bulk
    views no longer have a 64 KiB validity rule. Explicit heap/allocation/output/deadline/cancellation
-   policy now governs those paths. The same program must exhaust under low policy and succeed
-   unchanged under higher or unrestricted policy.
+   policy now governs those paths. `ExecutionPolicy` has no finite default: ordinary local run
+   selects `Unrestricted`, isolated process work selects `Limited`, VM/native checks are optional,
+   cleanup retention does not stop cleanup, and the logical-aggregate-construction count is gone.
+   The same bytecode exhausts under low limited fuel and succeeds unchanged unrestricted. Immediate
+   residual work is to remove or redesign independent fixed structural store/snapshot limits and
+   narrow structural keys; those representation bounds are not execution policy.
 
 ## Next
 

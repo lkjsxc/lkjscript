@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, evaluator_outcome, main_source, vm_outcome, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, Op};
+use lkjscript_core::{ExecutionPolicy, Op};
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_vm::run_chunk;
 
@@ -68,7 +68,7 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
         vm_outcome(run_chunk(
             tail_program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ))
     );
     let tail_instructions = tail_program

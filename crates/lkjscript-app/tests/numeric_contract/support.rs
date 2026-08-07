@@ -17,20 +17,20 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         expected,
     );
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced baseline conversion"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("forced proof conversion"),
@@ -67,10 +67,10 @@ pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
         ..EvalConfig::default()
     };
     assert_eval(evaluate_ssa(program.ssa(), &eval_config), expected);
-    let execution = ExecutionConfig {
+    let execution = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     assert_owned(
         run_chunk(
             program.bytecode(),

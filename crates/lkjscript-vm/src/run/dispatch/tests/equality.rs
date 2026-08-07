@@ -19,7 +19,7 @@ macro_rules! symbol_vm {
             &symbol_chunk,
             NullJit,
             crate::ExecutionInputs::default(),
-            ExecutionConfig::default(),
+            ExecutionPolicy::unrestricted(),
         );
     };
 }

@@ -11,7 +11,9 @@ impl NativeCallState<'_> {
         };
         if reservation.function_ordinal != function_ordinal
             || reservation.rbp != rbp
-            || self.active_frames.len() >= self.maximum_active_frames
+            || self
+                .maximum_active_frames
+                .is_some_and(|maximum| self.active_frames.len() >= maximum)
         {
             self.invalidate_active_frame();
             return;

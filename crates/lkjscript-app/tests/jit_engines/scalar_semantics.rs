@@ -1,5 +1,5 @@
 use crate::canonical::{compile, execution, forced, Scalar};
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
@@ -10,7 +10,7 @@ fn i64_multiblock_loop_and_direct_call_match_vm() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     let native = forced(source, "i64-cfg.lkjscript");
     assert_eq!(vm, Scalar::I64(2450));
@@ -36,14 +36,14 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
             execution(run_chunk(
                 program.bytecode(),
                 &lkjscript_vm::ExecutionInputs::default(),
-                &ExecutionConfig::default()
+                &ExecutionPolicy::unrestricted()
             )),
             Scalar::Trapped
         );
         assert_eq!(execution(forced(&source, name).outcome), Scalar::Trapped);
         let optimized = execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("optimizing trap remains structured");
@@ -74,13 +74,13 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         let program = compile(&source, name);
         let baseline = execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("duplicate checked baseline trap");
         let optimized = execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("duplicate checked optimizing trap");
@@ -108,7 +108,7 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         execution(
             execute_optimizing(
                 exit_program.ssa(),
-                &ExecutionConfig::default(),
+                &ExecutionPolicy::unrestricted(),
                 JitConfig::default(),
             )
             .expect("optimizing exit remains structured")
@@ -148,7 +148,7 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
         let vm = execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ));
         let forced = forced(&source, name);
         if name == "mixed.lkjscript" {

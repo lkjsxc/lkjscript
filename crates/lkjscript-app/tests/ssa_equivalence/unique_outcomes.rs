@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome};
 use lkjscript_vm::run_chunk;
 
@@ -16,7 +16,7 @@ fn byte_vector_trap_early_return_and_owner_return_cleanup_match() {
     let vm_trap = run_chunk(
         trapped.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(
         matches!(vm_trap, ExecutionOutcome::Trapped(_)),
@@ -40,7 +40,7 @@ fn byte_vector_trap_early_return_and_owner_return_cleanup_match() {
         run_chunk(
             owner.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(&[0, 0][..])
     ));

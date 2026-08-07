@@ -65,7 +65,7 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM must borrow the string call argument")
     };
@@ -73,13 +73,13 @@ fn immutable_direct_call_has_no_prebackend_copy_and_all_tiers_agree() {
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline executes the string call"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof executes the string call"),
@@ -105,7 +105,7 @@ fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM must build and release the structural tree")
     };
@@ -113,13 +113,13 @@ fn thirty_two_thousand_node_value_builds_and_releases_on_all_tiers() {
     for execution in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline builds structural scale tree"),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof builds structural scale tree"),

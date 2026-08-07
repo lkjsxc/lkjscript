@@ -12,8 +12,6 @@ impl<'a> JitValueServices<'a> {
         Self {
             lists,
             region_products,
-            logical_aggregate_constructions: 0,
-            max_logical_aggregate_constructions: limits.logical_aggregates,
             list_allocations: 0,
             region_product_allocations: 0,
             max_list_allocations: limits.allocations,

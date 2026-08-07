@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::{ExecutionConfig};
+use lkjscript_core::{ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, InstructionKind};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -58,12 +58,12 @@ fn copy_product_hidden_witness_executes_in_all_four_tiers() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     assert_eq!(vm, expected);
 
     let config = JitConfig::default();
-    let baseline = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+    let baseline = execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("bounded transport specialization enters baseline native code");
     assert_eq!(execution(baseline.outcome), expected);
     assert!(baseline.stats.native_entries > 0);
@@ -75,7 +75,7 @@ fn copy_product_hidden_witness_executes_in_all_four_tiers() {
         .iter()
         .all(|function| function.native_entries() > 0));
 
-    let proof = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+    let proof = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("bounded transport specialization enters proof native code");
     assert_eq!(execution(proof.outcome), expected);
     assert!(proof.stats.optimizing_native_entries > 0);
@@ -99,13 +99,13 @@ fn native_transport_specialization_fails_closed_for_residual_body() {
         .starts_with("native transport specialization"));
     assert!(execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .is_err());
     assert!(execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .is_err());
@@ -133,13 +133,13 @@ fn cross_package_transport_witness_executes_in_all_four_tiers() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("cross-package generic baseline specialization");
@@ -148,7 +148,7 @@ fn cross_package_transport_witness_executes_in_all_four_tiers() {
     assert_eq!(baseline.stats.vm_fallbacks, 0);
     let proof = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("cross-package generic proof specialization");

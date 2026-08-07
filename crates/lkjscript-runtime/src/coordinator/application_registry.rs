@@ -2,7 +2,7 @@ use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use lkjscript_core::{CapabilityKind, ExecutionConfig};
+use lkjscript_core::{CapabilityKind, ExecutionPolicy, LimitedExecutionPolicy};
 use lkjscript_host::{ApplicationPath, BufferedStdio, DurableStorage, HostEnvironment};
 
 use crate::{
@@ -120,6 +120,9 @@ fn manifest(record: &DurableApplication) -> Result<ApplicationManifest, Coordina
         .ok_or(CoordinatorError::InvalidApplicationRegistry)?;
     let max_total_invocations =
         NonZeroU64::new(record.max_total).ok_or(CoordinatorError::InvalidApplicationRegistry)?;
+    let mut execution = LimitedExecutionPolicy::conservative();
+    execution.max_heap_bytes = 32 * 1024;
+    execution.max_output_bytes = 16 * 1024;
     Ok(ApplicationManifest {
         name: record.name.clone(),
         kind: ApplicationKind::Service,
@@ -131,11 +134,7 @@ fn manifest(record: &DurableApplication) -> Result<ApplicationManifest, Coordina
         quota: ResourceQuota {
             max_concurrent_invocations,
             max_total_invocations,
-            execution: ExecutionConfig {
-                max_heap_bytes: 32 * 1024,
-                max_output_bytes: 16 * 1024,
-                ..ExecutionConfig::default()
-            },
+            execution: ExecutionPolicy::limited(execution),
         },
         restart: RestartPolicy::Never,
     })

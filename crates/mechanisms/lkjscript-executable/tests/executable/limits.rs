@@ -30,7 +30,8 @@ fn accounts_sparse_high_source_ids_without_dense_indexing() -> Result<(), Box<dy
     let source = 10_000_u64;
     let (image, function) = accounting_image(source, source)?;
     let installed = ExecutableInstaller::default().install(image)?;
-    let report = installed.invoke_with_config(function, &[], &NativeInvocationConfig::default())?;
+    let report =
+        installed.invoke_with_config(function, &[], &NativeInvocationConfig::unrestricted())?;
     assert_eq!(
         report.outcome(),
         InvocationOutcome::Returned(lkjscript_native::NativeValue::Unit)
@@ -95,7 +96,7 @@ fn grows_active_frame_tracking_beyond_sixty_four() -> Result<(), Box<dyn std::er
     let report = installed.invoke_with_config(
         functions[99],
         &[NativeValue::I64(7)],
-        &NativeInvocationConfig::default(),
+        &NativeInvocationConfig::unrestricted(),
     )?;
     assert_eq!(
         report.outcome(),

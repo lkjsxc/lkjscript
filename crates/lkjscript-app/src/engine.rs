@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use lkjscript_compiler::ExecutableProgram;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{
     execute_forced_with_capabilities, execute_optimizing_with_capabilities, JitConfig, JitSession,
     JitStats,
@@ -20,7 +20,7 @@ pub fn execute(
     options: &RunOptions,
     program: &ExecutableProgram,
     inputs: &ExecutionInputs,
-    config: &ExecutionConfig,
+    config: &ExecutionPolicy,
     jit_config: JitConfig,
     measure: bool,
 ) -> Result<Execution, String> {

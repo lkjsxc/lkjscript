@@ -1,5 +1,5 @@
 use super::*;
-use lkjscript_core::{validate_chunk, Chunk, ExecutionConfig, FunctionProto, ValidationPolicy};
+use lkjscript_core::{validate_chunk, Chunk, ExecutionPolicy, FunctionProto, ValidationPolicy};
 
 use crate::run::NoTier as NullJit;
 
@@ -78,7 +78,7 @@ fn tail_call_reuses_the_current_frame() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     );
     vm.frames.push(Frame {
         proto: Some(1),
@@ -126,7 +126,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         &chunk,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     );
     vm.frames.push(Frame {
         proto: None,

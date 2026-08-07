@@ -80,6 +80,21 @@ fn cleanup_failures_bound_records_bytes_and_utf8() {
 }
 
 #[test]
+fn unrestricted_cleanup_retention_keeps_every_report() {
+    let mut failures = CleanupFailures::unrestricted();
+    for index in 0..=DEFAULT_MAX_CLEANUP_FAILURES {
+        failures.push(
+            CleanupPhase::RuntimeTeardown,
+            CleanupSubject::UniqueStorage,
+            format!("cleanup failure {index}"),
+        );
+    }
+    assert_eq!(failures.retained().len(), DEFAULT_MAX_CLEANUP_FAILURES + 1);
+    assert_eq!(failures.omitted_failures(), 0);
+    assert_eq!(failures.omitted_message_bytes(), 0);
+}
+
+#[test]
 fn cleanup_attachment_retains_primary_outcome() {
     let mut failures = CleanupFailures::new(CleanupFailureLimits::default());
     failures.push(

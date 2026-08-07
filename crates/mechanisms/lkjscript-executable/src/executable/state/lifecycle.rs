@@ -10,7 +10,12 @@ impl<'a> NativeCallState<'a> {
         let native_entries = try_entry_counts(image)?;
         let mut active_frames = Vec::new();
         active_frames
-            .try_reserve_exact(config.max_active_frames.min(image.entries().len()))
+            .try_reserve_exact(
+                config
+                    .max_active_frames
+                    .unwrap_or(image.entries().len())
+                    .min(image.entries().len()),
+            )
             .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         let mut heap_arguments = Vec::new();
         heap_arguments
@@ -96,12 +101,14 @@ impl<'a> NativeCallState<'a> {
             return;
         }
         self.poll_count = self.poll_count.saturating_add(1);
-        if self.poll_fuel_remaining == 0 {
-            self.status = 4;
-            self.payload = 1;
-            return;
+        if let Some(fuel) = &mut self.poll_fuel_remaining {
+            if *fuel == 0 {
+                self.status = 4;
+                self.payload = 1;
+                return;
+            }
+            *fuel -= 1;
         }
-        self.poll_fuel_remaining -= 1;
         if self.deadline_ms >= 0 && crate::now_ms_monotonic() >= self.deadline_ms {
             self.status = 3;
         }

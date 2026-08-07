@@ -6,7 +6,7 @@ use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lkjscript_core::{
-    CapabilityKind, CleanupFailureLimits, CleanupFailures, Error, OwnedReservation, ProviderId,
+    CapabilityKind, CleanupFailures, CleanupRetentionPolicy, Error, OwnedReservation, ProviderId,
     ResourceKey, ResourceKind, ResourceOwnership, ResourceTable as CoreResourceTable,
     ResourceTableError, ResourceTableLimits, ResourceTokenParts, Result, ScopeId, Value,
 };
@@ -107,7 +107,7 @@ pub struct ResourceTable {
     metrics: Cell<ResourceMetrics>,
     limit_exceeded: bool,
     scope_exhausted: bool,
-    cleanup_failure_limits: CleanupFailureLimits,
+    cleanup_retention: CleanupRetentionPolicy,
 }
 
 mod files;

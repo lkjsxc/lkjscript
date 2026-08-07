@@ -1,9 +1,9 @@
 impl AggregateAdapters {
-    pub(super) fn new(max_slots: u64) -> Self {
+    pub(super) fn new(max_slots: Option<u64>) -> Self {
         Self {
             slots: Vec::new(),
             free: Vec::new(),
-            max_slots: u32::try_from(max_slots).unwrap_or(u32::MAX),
+            max_slots: max_slots.and_then(|maximum| u32::try_from(maximum).ok()),
         }
     }
 
@@ -32,7 +32,7 @@ impl AggregateAdapters {
                     "aggregate adapter slot identity exhausted",
                 )
             })?;
-            if slot >= self.max_slots {
+            if self.max_slots.is_some_and(|maximum| slot >= maximum) {
                 return Err(Error::resource(
                     ResourceLimitKind::Allocations,
                     "aggregate adapter slot limit exceeded",

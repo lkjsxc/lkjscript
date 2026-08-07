@@ -18,7 +18,6 @@ impl Evaluator<'_> {
             return Err(Flow::Trap("enum construction metadata mismatch".into()));
         }
         let physical_tag = selected.physical_tag;
-        self.charge_aggregate()?;
         self.allocate()?;
         let value_type = self.structural_type(ty)?;
         let structural_fields = field_types
@@ -91,7 +90,6 @@ impl Evaluator<'_> {
             return Err(Flow::Trap("enum payload shape mismatch".into()));
         }
         if mode != super::AggregateMode::Structural {
-            self.charge_aggregate()?;
             self.allocate()?;
             let SsaType::Enum { id, .. } = ty else {
                 return Err(Flow::Trap("expected enum type".into()));
@@ -104,7 +102,6 @@ impl Evaluator<'_> {
                 payload,
             });
         }
-        self.charge_aggregate()?;
         self.allocate()?;
         let value_type = self.structural_type(ty)?;
         let structural_fields = fields

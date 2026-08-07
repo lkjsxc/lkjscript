@@ -1,6 +1,6 @@
 use crate::oracle::{compare_source, ScalarOutcome};
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 #[test]
@@ -30,7 +30,7 @@ fn conditional_resource_close_executes_exactly_once_in_vm() {
                 capabilities: vec![CapabilityKind::FileSystem],
                 host: lkjscript_host::HostEnvironment::default(),
             },
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         );
         assert!(matches!(outcome, ExecutionOutcome::Returned(_)));
     }

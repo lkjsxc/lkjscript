@@ -1,6 +1,6 @@
 use crate::ResourceKind;
 
-use super::CleanupFailureLimits;
+use super::{CleanupFailureLimits, CleanupRetentionPolicy};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CleanupPhase {
@@ -71,7 +71,7 @@ impl CleanupFailure {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CleanupFailures {
-    limits: CleanupFailureLimits,
+    retention: CleanupRetentionPolicy,
     retained: Vec<CleanupFailure>,
     retained_message_bytes: usize,
     omitted_message_bytes: usize,
@@ -86,8 +86,16 @@ impl Default for CleanupFailures {
 
 impl CleanupFailures {
     pub const fn new(limits: CleanupFailureLimits) -> Self {
+        Self::with_retention(CleanupRetentionPolicy::Limited(limits))
+    }
+
+    pub const fn unrestricted() -> Self {
+        Self::with_retention(CleanupRetentionPolicy::Unrestricted)
+    }
+
+    pub const fn with_retention(retention: CleanupRetentionPolicy) -> Self {
         Self {
-            limits,
+            retention,
             retained: Vec::new(),
             retained_message_bytes: 0,
             omitted_message_bytes: 0,
@@ -97,15 +105,20 @@ impl CleanupFailures {
 
     pub fn push(&mut self, phase: CleanupPhase, subject: CleanupSubject, message: impl AsRef<str>) {
         let message = message.as_ref();
-        if self.retained.len() >= self.limits.max_failures {
-            self.omitted_failures = self.omitted_failures.saturating_add(1);
-            self.omitted_message_bytes = self.omitted_message_bytes.saturating_add(message.len());
-            return;
-        }
-        let remaining = self
-            .limits
-            .max_message_bytes
-            .saturating_sub(self.retained_message_bytes);
+        let remaining = match self.retention {
+            CleanupRetentionPolicy::Unrestricted => message.len(),
+            CleanupRetentionPolicy::Limited(limits) => {
+                if self.retained.len() >= limits.max_failures {
+                    self.omitted_failures = self.omitted_failures.saturating_add(1);
+                    self.omitted_message_bytes =
+                        self.omitted_message_bytes.saturating_add(message.len());
+                    return;
+                }
+                limits
+                    .max_message_bytes
+                    .saturating_sub(self.retained_message_bytes)
+            }
+        };
         let retained_len = utf8_prefix_len(message, remaining);
         let omitted = message.len().saturating_sub(retained_len);
         self.retained.push(CleanupFailure {

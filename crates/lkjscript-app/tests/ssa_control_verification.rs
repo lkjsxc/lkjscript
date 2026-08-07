@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{verify, BlockId, Terminator, ValueId};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
@@ -47,7 +47,7 @@ fn generated_source_executes_more_than_four_thousand_ssa_blocks_in_vm() {
         run_chunk(
             compiled.bytecode(),
             &ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         ExecutionOutcome::Returned(value)
             if value.as_i64() == i64::try_from(BRANCHES).ok()

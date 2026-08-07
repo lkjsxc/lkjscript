@@ -45,16 +45,14 @@ pub(super) fn charge_region_product<J: RuntimeTier>(
     vm: &mut Vm<'_, J>,
     fields: usize,
 ) -> Result<()> {
-    if vm.logical_aggregate_constructions >= vm.config.max_logical_aggregate_constructions {
-        return Err(Error::resource(
-            ResourceLimitKind::Allocations,
-            "VM region-product logical construction limit exceeded",
-        ));
-    }
     let allocations = vm
         .list_allocations
         .saturating_add(vm.region_product_allocations);
-    if allocations >= vm.config.max_allocations {
+    if vm
+        .config
+        .max_allocations()
+        .is_some_and(|maximum| allocations >= maximum)
+    {
         return Err(Error::resource(
             ResourceLimitKind::Allocations,
             "VM region-product allocation limit exceeded",
@@ -68,13 +66,16 @@ pub(super) fn charge_region_product<J: RuntimeTier>(
         .list_reserved_bytes_estimate()
         .saturating_add(region.metrics().reserved_bytes_estimate)
         .saturating_add(region.publish_storage_increase(fields));
-    if projected > u64::try_from(vm.config.max_heap_bytes).unwrap_or(u64::MAX) {
+    if vm
+        .config
+        .max_heap_bytes()
+        .is_some_and(|maximum| u64::try_from(maximum).is_ok_and(|maximum| projected > maximum))
+    {
         return Err(Error::resource(
             ResourceLimitKind::HeapBytes,
             "VM region-product heap-byte limit exceeded",
         ));
     }
-    vm.logical_aggregate_constructions = vm.logical_aggregate_constructions.saturating_add(1);
     Ok(())
 }
 

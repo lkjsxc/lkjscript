@@ -7,7 +7,6 @@ pub enum ResourceLimitKind {
     FrameDepth,
     HeapBytes,
     Allocations,
-    LogicalAggregateConstructions,
     Handles,
     OutputBytes,
 }

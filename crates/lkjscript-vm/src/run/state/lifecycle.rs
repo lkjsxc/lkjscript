@@ -88,7 +88,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         });
         let mut cleanup_failures = std::mem::replace(
             &mut self.cleanup_failures,
-            CleanupFailures::new(self.config.cleanup_failure_limits),
+            CleanupFailures::with_retention(self.config.cleanup_retention()),
         );
         if let Err(error) = structural_cleanup {
             cleanup_failures.push(

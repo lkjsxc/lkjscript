@@ -25,10 +25,10 @@ fn structural_enum_bypasses_legacy_heap_allocation_limits() {
     let float_source = source().replace("i64", "f64").replace("42", "1.5");
     let compiled =
         compile_source(&float_source, "enum-float-limit.lkjscript").expect("compile F64 enum");
-    let execution = ExecutionConfig {
+    let execution = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     for result in [
         execute_forced(compiled.ssa(), &execution, JitConfig::default())
             .expect("baseline returns enum allocation resource outcome"),

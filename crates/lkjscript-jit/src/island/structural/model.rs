@@ -4,23 +4,23 @@ pub(in crate::island) struct JitStructuralRuntime {
     pub(super) runtime: StructuralValueRuntime,
     pub(super) calls: u64,
     pub(super) last_resource: Option<ResourceLimitKind>,
-    pub(super) logical_constructions: u64,
-    pub(super) max_logical_constructions: u64,
     pub(super) owners: std::collections::BTreeMap<u64, NativeOwnerRecord>,
     pub(super) last_trap: Option<String>,
 }
 
 impl JitStructuralRuntime {
-    pub(in crate::island) fn new(config: &ExecutionConfig) -> Result<Self, EngineError> {
+    pub(in crate::island) fn new(config: &ExecutionPolicy) -> Result<Self, EngineError> {
         let mut limits = StructuralValueRuntimeLimits::default();
-        let handles = u32::try_from(config.max_handles).unwrap_or(u32::MAX).max(1);
-        limits.max_objects = limits.max_objects.min(handles);
-        limits.max_destinations = limits.max_destinations.min(handles);
-        limits.max_views = limits.max_views.min(handles);
-        limits.max_payload_bytes = limits
-            .max_payload_bytes
-            .min(u64::try_from(config.max_heap_bytes).unwrap_or(u64::MAX))
-            .max(1);
+        if let Some(policy) = config.limited_policy() {
+            let handles = u32::try_from(policy.max_handles).unwrap_or(u32::MAX).max(1);
+            limits.max_objects = limits.max_objects.min(handles);
+            limits.max_destinations = limits.max_destinations.min(handles);
+            limits.max_views = limits.max_views.min(handles);
+            limits.max_payload_bytes = limits
+                .max_payload_bytes
+                .min(u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX))
+                .max(1);
+        }
         let runtime = StructuralValueRuntime::new(limits).map_err(|error| {
             EngineError::new(
                 FailureCode::InvocationFailure,
@@ -32,20 +32,9 @@ impl JitStructuralRuntime {
             runtime,
             calls: 0,
             last_resource: None,
-            logical_constructions: 0,
-            max_logical_constructions: config.max_logical_aggregate_constructions,
             owners: std::collections::BTreeMap::new(),
             last_trap: None,
         })
-    }
-
-    pub(super) fn reserve_construction(&mut self) -> Result<(), NativeServiceError> {
-        if self.logical_constructions >= self.max_logical_constructions {
-            self.last_resource = Some(ResourceLimitKind::LogicalAggregateConstructions);
-            return Err(NativeServiceError::ResourceLimitExceeded);
-        }
-        self.logical_constructions = self.logical_constructions.saturating_add(1);
-        Ok(())
     }
 
     pub(in crate::island) fn export(

@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome};
 use lkjscript_vm::run_chunk;
 
@@ -93,10 +93,10 @@ fn instruction_failure_closes_live_vm_resource_without_emergency_teardown() {
                         ],
                         host: lkjscript_host::HostEnvironment::portable(),
                     },
-                    &ExecutionConfig {
+                    &ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                         instruction_fuel: *fuel,
-                        ..ExecutionConfig::default()
-                    },
+                        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+                    }),
                 ),
                 ExecutionOutcome::Returned(_)
             )
@@ -112,10 +112,10 @@ fn instruction_failure_closes_live_vm_resource_without_emergency_teardown() {
             ],
             host: lkjscript_host::HostEnvironment::portable(),
         },
-        &ExecutionConfig {
+        &ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
             instruction_fuel: completion_fuel / 2,
-            ..ExecutionConfig::default()
-        },
+            ..lkjscript_core::LimitedExecutionPolicy::conservative()
+        }),
     );
     assert!(completion_fuel > 32, "{completion_fuel}");
     assert!(

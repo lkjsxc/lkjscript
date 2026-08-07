@@ -27,7 +27,7 @@ fn missing_and_wrong_grants_fail_before_host_dispatch() {
                 capabilities,
                 host: lkjscript_host::HostEnvironment::default(),
             },
-            ExecutionConfig::default(),
+            ExecutionPolicy::unrestricted(),
         )
         .run();
         assert!(matches!(
@@ -53,7 +53,7 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
             capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
             host,
         },
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(output, ExecutionOutcome::Returned(_)));
@@ -76,7 +76,7 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
             capabilities: vec![lkjscript_core::CapabilityKind::Clock],
             host: lkjscript_host::HostEnvironment::portable(),
         },
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(matches!(
@@ -96,7 +96,7 @@ fn matching_capability_without_provider_fails_before_ambient_effect() {
             capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
             host: lkjscript_host::HostEnvironment::default(),
         },
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     )
     .run();
     assert!(

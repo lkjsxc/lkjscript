@@ -2,8 +2,8 @@ use std::io::{self, Read, Write};
 
 use lkjscript_contracts::PreparedProgramIdentity;
 use lkjscript_core::{
-    CapabilityKind, ExecutionConfig, ExecutionOutcome, ExecutionOutcomeCodecLimits,
-    StructuralSnapshotLimits,
+    CapabilityKind, ExecutionOutcome, ExecutionOutcomeCodecLimits, ExecutionPolicy,
+    LimitedExecutionPolicy, StructuralSnapshotLimits,
 };
 
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
@@ -41,7 +41,7 @@ pub struct ProcessBootstrap {
     pub expected_root_witness_group: [u8; 32],
     pub expected_root_witness_member: [u8; 32],
     pub capabilities: Vec<CapabilityKind>,
-    pub execution: ExecutionConfig,
+    pub execution: ExecutionPolicy,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

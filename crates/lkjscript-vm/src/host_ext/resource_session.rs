@@ -3,17 +3,19 @@ use super::*;
 
 impl Default for ResourceTable {
     fn default() -> Self {
-        Self::new(4_096, CleanupFailureLimits::default())
+        Self::new(None, CleanupRetentionPolicy::Unrestricted)
     }
 }
 
 impl ResourceTable {
-    pub fn new(max_handles: usize, cleanup_failure_limits: CleanupFailureLimits) -> Self {
+    pub fn new(max_handles: Option<usize>, cleanup_retention: CleanupRetentionPolicy) -> Self {
         let (scope, scope_exhausted) = match next_scope() {
             Some(scope) => (scope, false),
             None => (exhausted_scope(), true),
         };
-        let max_owned = max_handles.min(TOKEN_SLOT_COUNT - 1);
+        let max_owned = max_handles
+            .unwrap_or(TOKEN_SLOT_COUNT - 1)
+            .min(TOKEN_SLOT_COUNT - 1);
         let limits = ResourceTableLimits::new(
             max_owned + 1,
             max_owned + 1,
@@ -37,7 +39,7 @@ impl ResourceTable {
             metrics: Cell::new(ResourceMetrics::default()),
             limit_exceeded: false,
             scope_exhausted,
-            cleanup_failure_limits,
+            cleanup_retention,
         }
     }
 

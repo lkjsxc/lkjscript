@@ -17,7 +17,7 @@ fn bootstrap() -> ProcessBootstrap {
         expected_root_witness_group: [9; 32],
         expected_root_witness_member: [10; 32],
         capabilities: vec![CapabilityKind::Arguments, CapabilityKind::Stdio],
-        execution: ExecutionConfig::default(),
+        execution: ExecutionPolicy::limited(LimitedExecutionPolicy::conservative()),
     }
 }
 
@@ -43,6 +43,14 @@ fn process_protocol_round_trips_closed_messages() {
     assert_eq!(
         read_bootstrap(&mut bytes.as_slice()).expect("bootstrap decode"),
         bootstrap()
+    );
+    let mut unrestricted = bootstrap();
+    unrestricted.execution = ExecutionPolicy::unrestricted();
+    bytes.clear();
+    write_bootstrap(&mut bytes, &unrestricted).expect("unrestricted bootstrap encode");
+    assert_eq!(
+        read_bootstrap(&mut bytes.as_slice()).expect("unrestricted bootstrap decode"),
+        unrestricted
     );
 
     for request in [

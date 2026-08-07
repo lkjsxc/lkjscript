@@ -17,8 +17,9 @@ compatibility.
   rather than claiming generated execution after fallback. Native entry accounting uses a
   fallibly installed wide source-ID mapping and invocation-local counts keyed by installed entry,
   so a hot eligible function above source ID 63 can enter native code. Active native frames grow
-  dynamically under `ExecutionConfig`; bookkeeping allocation failure disables an automatic
-  optimization before VM continuation, while forced native mode reports a typed backend failure.
+  dynamically under an explicit `ExecutionPolicy`; bookkeeping allocation failure disables an
+  automatic optimization before VM continuation, while forced native mode reports a typed backend
+  failure.
 - Host adapters cover standard I/O and selected filesystem, TCP, hashing, terminal, and SQLite
   operations behind typed capability checks.
 - Ordinary runtime memory is collector-free. Unique storage, invocation regions, structural
@@ -263,8 +264,21 @@ may build elsewhere, but no other host or native target is currently claimed as 
   Bytecode validation has no project-selected encoded-size, physical-table, metadata-size,
   constant-size, cleanup-node/range, witness, region-product, or structural-operation table
   admission. `ValidationPolicy::Limited` remains an explicit untrusted total-byte policy, while
-  trusted compilation and prepared binding use unrestricted validation. VM `ExecutionConfig`
-  remains explicit runtime host policy over execution resources rather than language validity.
+  trusted compilation and prepared binding use unrestricted validation. Ordinary local
+  `lkjscript run` explicitly selects `ExecutionPolicy::Unrestricted`; the type has no `Default`.
+  Isolated process manifests and workers require `ExecutionPolicy::Limited`, whose current
+  conservative values preserve the prior process behavior. Fuel, VM values/frames, heap bytes,
+  allocations, handles, output bytes, wall deadline/hard-deadline requirement, and cleanup-report
+  retention are absent under unrestricted execution rather than encoded as maximum-value
+  sentinels. VM and native checks are conditional, and automatic VM-to-native transitions forward
+  remaining fuel and wall time without replacing the selected policy. Cleanup-report retention is
+  host output policy only; cleanup attempts continue after retention is exhausted. The former
+  logical-aggregate-construction work count and resource outcome are removed from VM, evaluator,
+  native services, and process encoding.
+  Structural list, region-product, unique, structural-value, semantic-DAG snapshot, and returned
+  structural snapshot stores still retain independent encoded-key widths and fixed structural
+  limits. These are immediate residual representation blockers, not execution policy or language
+  validity, and this commit does not redesign their stores, snapshots, or keys.
   Structural list equality in the VM, evaluator, and native runtime is iterative and complete for
   the acyclic segmented-list representation; there is no independent comparison-step quota.
   Dynamic byte vectors and static-byte clones have no per-buffer size rule: checked, fallible

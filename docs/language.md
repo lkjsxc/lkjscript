@@ -117,7 +117,9 @@ constant-data-byte, cleanup-node/range, region-product, witness, structural-dest
 structural-operation-reference counts. An untrusted artifact caller may explicitly select
 `ValidationPolicy::Limited { max_total_bytes }`; this checks only one checked-arithmetic total-byte
 observation, reports byte-policy exhaustion separately from malformed bytecode, and does not alter
-validity under `Unrestricted`. VM `ExecutionConfig` remains explicit runtime host policy. List
+validity under `Unrestricted`. Runtime `ExecutionPolicy` is explicit and non-defaultable: trusted
+local execution selects `Unrestricted`, while untrusted process work selects a coarse `Limited`
+policy. List
 value equality is complete and iterative for the implemented acyclic immutable list
 representation; it has no independent step quota. Byte vectors, static-byte clones, and bytes
 literals have no project-selected per-buffer size rule: decoding and runtime storage use checked,

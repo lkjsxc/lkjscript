@@ -48,12 +48,12 @@ pub(super) fn transient() -> Destructor {
 pub(super) fn column_text_bytes(
     statement: NonNull<Sqlite3Stmt>,
     index: i64,
-    max_bytes: usize,
+    max_bytes: Option<usize>,
 ) -> Result<Vec<u8>, SqliteError> {
     let index = column_index(index)?;
     let length = unsafe { sqlite3_column_bytes(statement.as_ptr(), index) };
     let length = usize::try_from(length).map_err(|_| SqliteError::new("column text", -1))?;
-    if length > max_bytes {
+    if max_bytes.is_some_and(|maximum| length > maximum) {
         return Err(SqliteError::new("column text limit", -1));
     }
     let pointer = unsafe { sqlite3_column_text(statement.as_ptr(), index) };
@@ -70,12 +70,12 @@ pub(super) fn column_text_bytes(
 pub(super) fn column_bytes(
     statement: NonNull<Sqlite3Stmt>,
     index: i64,
-    max_bytes: usize,
+    max_bytes: Option<usize>,
 ) -> Result<Vec<u8>, SqliteError> {
     let index = column_index(index)?;
     let length = unsafe { sqlite3_column_bytes(statement.as_ptr(), index) };
     let length = usize::try_from(length).map_err(|_| SqliteError::new("column bytes", -1))?;
-    if length > max_bytes {
+    if max_bytes.is_some_and(|maximum| length > maximum) {
         return Err(SqliteError::new("column bytes limit", -1));
     }
     let pointer = unsafe { sqlite3_column_blob(statement.as_ptr(), index) };

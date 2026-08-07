@@ -30,7 +30,10 @@ pub(in crate::executable::runtime) fn cleanup_result(
         unit_result(state, result);
     } else {
         if let Err(error) = result {
-            if state.cleanup_failures.len() < state.maximum_cleanup_failures {
+            if state
+                .maximum_cleanup_failures
+                .is_none_or(|maximum| state.cleanup_failures.len() < maximum)
+            {
                 state
                     .cleanup_failures
                     .push(NativeCleanupFailure::new(slot, error));

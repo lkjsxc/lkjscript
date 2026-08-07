@@ -73,13 +73,13 @@ fn sealed_residual_generic_executes_in_all_four_tiers() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("residual generic enters baseline with hidden witness ABI");
@@ -95,7 +95,7 @@ fn sealed_residual_generic_executes_in_all_four_tiers() {
     assert_sealed_native_metrics(&baseline.stats.native_structural);
     let proof = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("residual generic enters proof tier with hidden witness ABI");

@@ -14,7 +14,7 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
         &trap,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     );
     trapped_vm
         .resources
@@ -34,7 +34,7 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
         &exit,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     );
     exited_vm
         .resources
@@ -60,7 +60,7 @@ fn runtime_teardown_failure_attaches_without_replacing_trap() {
         &trap,
         NullJit,
         crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
+        ExecutionPolicy::unrestricted(),
     );
     vm.resources.inject_borrowed_cleanup_failure();
 

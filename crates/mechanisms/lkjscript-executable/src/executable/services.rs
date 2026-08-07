@@ -9,44 +9,57 @@ pub(super) use noop::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NativeInvocationConfig {
-    pub(super) poll_fuel: u64,
+    pub(super) poll_fuel: Option<u64>,
     pub(super) wall_time: Option<Duration>,
-    pub(super) max_active_frames: usize,
-    pub(super) max_active_values: usize,
+    pub(super) max_active_frames: Option<usize>,
+    pub(super) max_active_values: Option<usize>,
     pub(super) max_native_stack_bytes: usize,
     pub(super) max_native_frame_bytes: usize,
-    pub(super) max_cleanup_failures: usize,
+    pub(super) max_cleanup_failures: Option<usize>,
 }
 
 impl NativeInvocationConfig {
     #[must_use]
-    pub const fn new(poll_fuel: u64, wall_time: Option<Duration>) -> Self {
+    pub const fn unrestricted() -> Self {
         Self {
-            poll_fuel,
-            wall_time,
-            max_active_frames: usize::MAX,
-            max_active_values: usize::MAX,
+            poll_fuel: None,
+            wall_time: None,
+            max_active_frames: None,
+            max_active_values: None,
             max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
             max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
-            max_cleanup_failures: 32,
+            max_cleanup_failures: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn limited(poll_fuel: u64, wall_time: Option<Duration>) -> Self {
+        Self {
+            poll_fuel: Some(poll_fuel),
+            wall_time,
+            max_active_frames: None,
+            max_active_values: None,
+            max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
+            max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
+            max_cleanup_failures: None,
         }
     }
 
     #[must_use]
     pub const fn with_max_active_frames(mut self, maximum: usize) -> Self {
-        self.max_active_frames = maximum;
+        self.max_active_frames = Some(maximum);
         self
     }
 
     #[must_use]
     pub const fn with_max_active_values(mut self, maximum: usize) -> Self {
-        self.max_active_values = maximum;
+        self.max_active_values = Some(maximum);
         self
     }
 
     #[must_use]
     pub const fn with_max_cleanup_failures(mut self, maximum: usize) -> Self {
-        self.max_cleanup_failures = maximum;
+        self.max_cleanup_failures = Some(maximum);
         self
     }
 
@@ -59,12 +72,6 @@ impl NativeInvocationConfig {
         self.max_native_stack_bytes = maximum_aggregate_bytes;
         self.max_native_frame_bytes = maximum_frame_bytes;
         self
-    }
-}
-
-impl Default for NativeInvocationConfig {
-    fn default() -> Self {
-        Self::new(u64::MAX, None)
     }
 }
 

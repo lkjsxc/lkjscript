@@ -37,7 +37,7 @@ fn explicit_trap_reports_preserve_full_u64_site_identity() -> Result<(), Box<dyn
     let installed = ExecutableInstaller::default().install(image)?;
     for (function, site) in functions {
         let report =
-            installed.invoke_with_config(function, &[], &NativeInvocationConfig::default())?;
+            installed.invoke_with_config(function, &[], &NativeInvocationConfig::unrestricted())?;
         assert_eq!(
             report.outcome(),
             InvocationOutcome::Trapped(TrapCode::Explicit)

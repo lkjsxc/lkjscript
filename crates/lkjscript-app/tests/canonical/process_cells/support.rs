@@ -2,7 +2,7 @@ use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
-use lkjscript_core::{CapabilityKind, ExecutionConfig};
+use lkjscript_core::{CapabilityKind, ExecutionPolicy};
 use lkjscript_runtime::{
     ApplicationKind, ApplicationManifest, DeploymentScope, ExecutionCellClass, PackageContentId,
     ResourceQuota, RestartPolicy,
@@ -28,10 +28,10 @@ pub(super) fn manifest(name: &str) -> ApplicationManifest {
         quota: ResourceQuota {
             max_concurrent_invocations: NonZeroUsize::new(2).expect("concurrency"),
             max_total_invocations: NonZeroU64::new(8).expect("total"),
-            execution: ExecutionConfig {
+            execution: ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_output_bytes: 1024 * 1024,
-                ..ExecutionConfig::default()
-            },
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            }),
         },
         restart: RestartPolicy::Never,
     }

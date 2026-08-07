@@ -44,7 +44,7 @@ pub(crate) struct StructuralInvocation {
 }
 
 impl StructuralInvocation {
-    pub(super) fn new(max_adapters: u64) -> Result<Self> {
+    pub(super) fn new(max_adapters: Option<u64>) -> Result<Self> {
         let runtime = StructuralValueRuntime::new(StructuralValueRuntimeLimits::default())
             .map_err(map_value_error)?;
         Ok(Self {

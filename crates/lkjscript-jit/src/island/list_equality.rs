@@ -98,11 +98,11 @@ mod tests {
     #[test]
     #[ignore = "release stress crosses the former one-million-element ceiling"]
     fn native_list_equality_completes_beyond_former_limit() {
-        let config = ExecutionConfig {
+        let config = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
             max_allocations: 3_000_000,
             max_heap_bytes: 256 * 1024 * 1024,
-            ..ExecutionConfig::default()
-        };
+            ..lkjscript_core::LimitedExecutionPolicy::conservative()
+        });
         let scope = lkjscript_core::ScopeId::new(7).expect("nonzero stress scope");
         let mut services = JitIslandServices::new(scope, &config).expect("native services");
         let mut left = services.lists.empty();

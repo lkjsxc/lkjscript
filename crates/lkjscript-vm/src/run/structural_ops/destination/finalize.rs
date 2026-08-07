@@ -51,17 +51,6 @@ fn abort<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn charge_construction<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    if vm.logical_aggregate_constructions >= vm.config.max_logical_aggregate_constructions {
-        return Err(Error::resource(
-            ResourceLimitKind::LogicalAggregateConstructions,
-            "logical aggregate construction limit exceeded before structural destination",
-        ));
-    }
-    vm.logical_aggregate_constructions = vm.logical_aggregate_constructions.saturating_add(1);
-    Ok(())
-}
-
 fn destination_metadata(
     chunk: &ValidatedChunk,
     id: StructuralDestinationId,

@@ -32,18 +32,25 @@ pub(super) struct JitUniqueRuntime {
 }
 
 impl JitUniqueRuntime {
-    pub(super) fn new(config: &ExecutionConfig) -> Result<Self, EngineError> {
-        let objects = u32::try_from(config.max_allocations).unwrap_or(u32::MAX);
-        let bytes = u64::try_from(config.max_heap_bytes).unwrap_or(u64::MAX);
+    pub(super) fn new(config: &ExecutionPolicy) -> Result<Self, EngineError> {
+        let limits = match config.limited_policy() {
+            Some(policy) => {
+                let objects = u32::try_from(policy.max_allocations).unwrap_or(u32::MAX);
+                let bytes = u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX);
+                UniqueStoreLimits::new(objects, bytes, objects, policy.max_allocations, u32::MAX)
+                    .map_err(|error| config_error().with_detail(error.to_string()))?
+            }
+            None => UniqueStoreLimits::representation_boundary(),
+        };
         let id = UniqueStoreId::new(1).ok_or_else(config_error)?;
-        let limits =
-            UniqueStoreLimits::new(objects, bytes, objects, config.max_allocations, u32::MAX)
-                .map_err(|error| config_error().with_detail(error.to_string()))?;
         Ok(Self {
             store: UniqueStore::new(id, limits),
             owners: Vec::new(),
             loans: Vec::new(),
-            max_loans: config.max_stack_values.min(u32::MAX as usize),
+            max_loans: config
+                .max_stack_values()
+                .unwrap_or(u32::MAX as usize)
+                .min(u32::MAX as usize),
             stats: NativeUniqueStats::default(),
             last_resource: None,
         })

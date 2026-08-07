@@ -12,7 +12,7 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionConfig, ExecutionOutcome, HostError,
+    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionPolicy, HostError,
     OwnedValue, ResourceLimitKind, SemanticValue, Trap, UniqueKeyWord, UniqueStore,
     UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value,
 };
@@ -148,20 +148,17 @@ impl fmt::Debug for JitSession {
 
 #[derive(Clone, Copy)]
 struct JitValueLimits {
-    logical_aggregates: u64,
-    allocations: u64,
-    runtime_bytes: u64,
+    allocations: Option<u64>,
+    runtime_bytes: Option<u64>,
 }
 
 struct JitValueServices<'a> {
     lists: &'a mut lkjscript_core::SegmentedListArena<Value>,
     region_products: &'a mut lkjscript_core::RegionProductArena<Value>,
-    logical_aggregate_constructions: u64,
-    max_logical_aggregate_constructions: u64,
     list_allocations: u64,
     region_product_allocations: u64,
-    max_list_allocations: u64,
-    max_runtime_bytes: u64,
+    max_list_allocations: Option<u64>,
+    max_runtime_bytes: Option<u64>,
     last_trap: Option<String>,
     last_resource: Option<ResourceLimitKind>,
 }

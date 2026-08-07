@@ -94,11 +94,11 @@ pub(super) fn invoke(
     let installed = ExecutableInstaller::default().install(image)?;
     assert!(installed.wx_transition_verified());
     let scope = ScopeId::new(1).ok_or_else(|| std::io::Error::other("scope"))?;
-    let mut services = JitIslandServices::new(scope, &ExecutionConfig::default())?;
+    let mut services = JitIslandServices::new(scope, &ExecutionPolicy::unrestricted())?;
     let report = installed.invoke_island_with_services(
         entry,
         arguments,
-        &NativeInvocationConfig::default(),
+        &NativeInvocationConfig::unrestricted(),
         &mut services,
     )?;
     let exported = match report.outcome() {

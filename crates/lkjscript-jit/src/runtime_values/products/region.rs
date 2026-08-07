@@ -19,14 +19,13 @@ impl JitValueServices<'_> {
         &mut self,
         fields: usize,
     ) -> Result<(), NativeServiceError> {
-        if self.logical_aggregate_constructions >= self.max_logical_aggregate_constructions {
-            self.last_resource = Some(ResourceLimitKind::Allocations);
-            return Err(NativeServiceError::ResourceLimitExceeded);
-        }
         let allocations = self
             .list_allocations
             .saturating_add(self.region_product_allocations);
-        if allocations >= self.max_list_allocations {
+        if self
+            .max_list_allocations
+            .is_some_and(|maximum| allocations >= maximum)
+        {
             self.last_resource = Some(ResourceLimitKind::Allocations);
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
@@ -36,12 +35,13 @@ impl JitValueServices<'_> {
             .reserved_bytes_estimate()
             .saturating_add(self.region_products.metrics().reserved_bytes_estimate)
             .saturating_add(increase);
-        if projected > self.max_runtime_bytes {
+        if self
+            .max_runtime_bytes
+            .is_some_and(|maximum| projected > maximum)
+        {
             self.last_resource = Some(ResourceLimitKind::HeapBytes);
             return Err(NativeServiceError::ResourceLimitExceeded);
         }
-        self.logical_aggregate_constructions =
-            self.logical_aggregate_constructions.saturating_add(1);
         Ok(())
     }
 

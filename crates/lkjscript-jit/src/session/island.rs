@@ -50,7 +50,7 @@ impl JitSession {
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> Result<InvocationReport, EngineError> {
         let scope = lkjscript_core::ScopeId::new(self.next_resource_scope).ok_or_else(|| {
             EngineError::new(

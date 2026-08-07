@@ -1,5 +1,5 @@
 use crate::canonical::{compile, f64_loop};
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::VerifiedProgram;
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitExecution};
 use lkjscript_linux_host::{discover_linux_host, LinuxWorkerBinder};
@@ -33,9 +33,17 @@ impl TaskExecutor for KernelExecutor<'_> {
             self.unique
         };
         let execution = if task.slot.is_multiple_of(2) {
-            execute_forced(program, &ExecutionConfig::default(), JitConfig::default())
+            execute_forced(
+                program,
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+            )
         } else {
-            execute_optimizing(program, &ExecutionConfig::default(), JitConfig::default())
+            execute_optimizing(
+                program,
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+            )
         }
         .map_err(|error| error.to_string())?;
         Ok(evidence(execution))

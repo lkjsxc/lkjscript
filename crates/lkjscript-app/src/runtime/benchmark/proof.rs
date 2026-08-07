@@ -2,7 +2,7 @@ use std::error::Error;
 use std::time::Instant;
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_jit::{execute_optimizing, JitConfig};
 
 pub(super) fn run(samples: usize) -> Result<(), Box<dyn Error>> {
@@ -21,7 +21,8 @@ pub(super) fn run(samples: usize) -> Result<(), Box<dyn Error>> {
                 ..JitConfig::default()
             };
             let start = Instant::now();
-            let execution = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)?;
+            let execution =
+                execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)?;
             let duration = start.elapsed().as_nanos();
             if execution.stats.optimizing_native_entries == 0 || execution.stats.vm_fallbacks != 0 {
                 return Err("proof benchmark did not execute optimizing native code".into());

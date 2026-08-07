@@ -1,6 +1,6 @@
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy};
 
 use crate::{
     ApplicationId, ApplicationIncarnationId, ExecutionCellId, PackageContentId, RuntimeError,
@@ -53,7 +53,7 @@ impl RestartPolicy {
 pub struct ResourceQuota {
     pub max_concurrent_invocations: NonZeroUsize,
     pub max_total_invocations: NonZeroU64,
-    pub execution: ExecutionConfig,
+    pub execution: ExecutionPolicy,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,6 +86,13 @@ impl ApplicationManifest {
         if !self.capabilities.windows(2).all(|pair| pair[0] < pair[1]) {
             return Err(RuntimeError::InvalidManifest(
                 "capabilities must be sorted and unique",
+            ));
+        }
+        if matches!(self.cell, ExecutionCellClass::IsolatedProcess { .. })
+            && self.quota.execution.limited_policy().is_none()
+        {
+            return Err(RuntimeError::InvalidManifest(
+                "isolated process execution requires an explicit limited host policy",
             ));
         }
         if self.restart.max_attempts() > MAX_RESTART_ATTEMPTS {

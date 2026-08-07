@@ -8,12 +8,12 @@ fn nested_region_product_and_list_graph_is_collector_free_in_all_engines() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     let config = JitConfig::default();
-    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+    let native = execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("nested graph executes through generated runtime-value sites");
-    let optimized = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+    let optimized = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("nested graph executes through optimized runtime-value sites");
     assert_eq!(expected, Scalar::I64(42));
     assert_eq!(vm, expected);

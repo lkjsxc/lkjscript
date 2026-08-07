@@ -53,7 +53,7 @@ fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers(
     let ExecutionOutcome::Returned(vm) = run_chunk(
         compiled.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM returns recursive tree")
     };
@@ -61,13 +61,13 @@ fn finite_generic_recursive_tree_is_structural_on_evaluator_vm_and_native_tiers(
     for execution in [
         execute_forced(
             compiled.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline returns recursive tree"),
         execute_optimizing(
             compiled.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof returns recursive tree"),
@@ -95,7 +95,7 @@ fn recursive_branch_match_runs_on_evaluator_and_vm() {
     let ExecutionOutcome::Returned(vm) = run_chunk(
         compiled.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM returns recursive field projection")
     };

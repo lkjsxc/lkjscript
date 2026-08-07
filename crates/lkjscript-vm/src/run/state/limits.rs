@@ -24,47 +24,54 @@ impl Interruption {
 
 impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(crate) fn check_runtime_limits(&mut self) -> Result<()> {
-        if self.stack.len() > self.config.max_stack_values {
-            return Err(Error::resource(
-                ResourceLimitKind::StackValues,
-                "VM stack value limit exceeded",
-            ));
+        if let Some(policy) = self.config.limited_policy() {
+            if self.stack.len() > policy.max_stack_values {
+                return Err(Error::resource(
+                    ResourceLimitKind::StackValues,
+                    "VM stack value limit exceeded",
+                ));
+            }
+            if self.frames.len() > policy.max_frames {
+                return Err(Error::resource(
+                    ResourceLimitKind::FrameDepth,
+                    "VM frame depth limit exceeded",
+                ));
+            }
+            if self
+                .list_allocations
+                .saturating_add(self.region_product_allocations)
+                > policy.max_allocations
+            {
+                return Err(Error::resource(
+                    ResourceLimitKind::Allocations,
+                    "VM aggregate allocation limit exceeded",
+                ));
+            }
+            let list_bytes =
+                usize::try_from(self.list_reserved_bytes_estimate()).unwrap_or(usize::MAX);
+            let region_bytes = self
+                .region_products
+                .as_ref()
+                .map_or(0, |arena| arena.metrics().reserved_bytes_estimate);
+            let runtime_bytes =
+                list_bytes.saturating_add(usize::try_from(region_bytes).unwrap_or(usize::MAX));
+            if runtime_bytes > policy.max_heap_bytes {
+                return Err(Error::resource(
+                    ResourceLimitKind::HeapBytes,
+                    "VM deterministic runtime byte limit exceeded",
+                ));
+            }
+            if self.resources.allocated_handle_slots() > policy.max_handles {
+                return Err(Error::resource(
+                    ResourceLimitKind::Handles,
+                    "VM handle limit exceeded",
+                ));
+            }
         }
-        if self.frames.len() > self.config.max_frames {
-            return Err(Error::resource(
-                ResourceLimitKind::FrameDepth,
-                "VM frame depth limit exceeded",
-            ));
-        }
-        if self
-            .list_allocations
-            .saturating_add(self.region_product_allocations)
-            > self.config.max_allocations
-        {
-            return Err(Error::resource(
-                ResourceLimitKind::Allocations,
-                "VM aggregate allocation limit exceeded",
-            ));
-        }
-        let list_bytes = usize::try_from(self.list_reserved_bytes_estimate()).unwrap_or(usize::MAX);
-        let region_bytes = self
-            .region_products
-            .as_ref()
-            .map_or(0, |arena| arena.metrics().reserved_bytes_estimate);
-        let runtime_bytes =
-            list_bytes.saturating_add(usize::try_from(region_bytes).unwrap_or(usize::MAX));
-        if runtime_bytes > self.config.max_heap_bytes {
-            return Err(Error::resource(
-                ResourceLimitKind::HeapBytes,
-                "VM deterministic runtime byte limit exceeded",
-            ));
-        }
-        if self.resources.limit_exceeded()
-            || self.resources.allocated_handle_slots() > self.config.max_handles
-        {
+        if self.resources.limit_exceeded() {
             return Err(Error::resource(
                 ResourceLimitKind::Handles,
-                "VM handle limit exceeded",
+                "VM handle representation exhausted",
             ));
         }
         self.check_interruption()
@@ -73,7 +80,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(crate) fn interruption(&self) -> Result<Interruption> {
         let deadline = self
             .config
-            .wall_time
+            .wall_time()
             .map(|limit| {
                 self.started.checked_add(limit).ok_or_else(|| {
                     Error::host("execution wall deadline exceeds monotonic clock range")
@@ -95,7 +102,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(crate) fn check_deadline(&self) -> Result<()> {
         if self
             .config
-            .wall_time
+            .wall_time()
             .is_some_and(|limit| self.started.elapsed() >= limit)
         {
             return Err(Error::deadline("execution wall deadline exceeded"));
@@ -104,7 +111,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     }
 
     pub(crate) fn remaining_wall_time(&self) -> Result<Option<Duration>> {
-        let Some(limit) = self.config.wall_time else {
+        let Some(limit) = self.config.wall_time() else {
             return Ok(None);
         };
         let elapsed = self.started.elapsed();
@@ -120,8 +127,8 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         operation: &str,
         hard_deadline_supported: bool,
     ) -> Result<()> {
-        if self.config.require_hard_deadline
-            && self.config.wall_time.is_some()
+        if self.config.require_hard_deadline()
+            && self.config.wall_time().is_some()
             && !hard_deadline_supported
         {
             return Err(Error::host(format!(
@@ -139,26 +146,31 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         Ok(Some(i32::try_from(milliseconds).unwrap_or(i32::MAX)))
     }
 
-    pub(crate) fn remaining_output_capacity(&self) -> Result<usize> {
+    pub(crate) fn remaining_output_capacity(&self) -> Result<Option<usize>> {
         self.config
-            .max_output_bytes
-            .checked_sub(self.output_bytes)
-            .ok_or_else(|| {
-                Error::resource(
-                    ResourceLimitKind::OutputBytes,
-                    "VM output byte counter exceeds configured policy",
-                )
+            .max_output_bytes()
+            .map(|maximum| {
+                maximum.checked_sub(self.output_bytes).ok_or_else(|| {
+                    Error::resource(
+                        ResourceLimitKind::OutputBytes,
+                        "VM output byte counter exceeds configured policy",
+                    )
+                })
             })
+            .transpose()
     }
 
     pub(crate) fn record_output(&mut self, bytes: usize) -> Result<()> {
+        let Some(maximum) = self.config.max_output_bytes() else {
+            return Ok(());
+        };
         let total = self.output_bytes.checked_add(bytes).ok_or_else(|| {
             Error::resource(
                 ResourceLimitKind::OutputBytes,
                 "VM output byte counter overflow",
             )
         })?;
-        if total > self.config.max_output_bytes {
+        if total > maximum {
             return Err(Error::resource(
                 ResourceLimitKind::OutputBytes,
                 "VM output byte limit exceeded",

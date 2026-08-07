@@ -50,7 +50,8 @@ impl<J: RuntimeTier> Vm<'_, J> {
         &self,
         value: Value,
     ) -> Result<lkjscript_core::OwnedValue> {
-        let limit = usize::try_from(self.config.max_allocations).unwrap_or(usize::MAX);
+        let limit = usize::try_from(self.list_arena()?.metrics().live_entries)
+            .map_err(|_| Error::host("list snapshot entry count exceeds host usize"))?;
         lkjscript_core::OwnedValue::from_segmented_list_snapshot(value, limit, |word| {
             let arena = self.list_arena()?;
             let key = arena.key_from_word(word).map_err(segmented_list_error)?;

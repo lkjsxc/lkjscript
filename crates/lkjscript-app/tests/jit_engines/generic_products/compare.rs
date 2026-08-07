@@ -40,7 +40,7 @@ fn residual_compare_executes_in_all_four_tiers() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
@@ -73,7 +73,7 @@ fn residual_compare_executes_in_all_four_tiers() {
     }
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("residual compare enters baseline native code");
@@ -84,7 +84,7 @@ fn residual_compare_executes_in_all_four_tiers() {
 
     let proof = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("residual compare enters proof native code");

@@ -1,6 +1,6 @@
 use crate::canonical::compile;
 use lkjscript_core::{
-    decode_execution_outcome, encode_execution_outcome, ExecutionConfig, ExecutionOutcome,
+    decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, ExecutionPolicy,
     OwnedValue, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
     SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticPayload, StructuralKind,
     StructuralLimits, StructuralSnapshotLimits, StructuralType,
@@ -48,7 +48,7 @@ fn copy_product_returns_are_flat_key_free_and_codec_stable() {
     let expected = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     assert!(matches!(expected, ExecutionOutcome::Returned(_)));
     let ExecutionOutcome::Returned(value) = &expected else {
@@ -61,9 +61,9 @@ fn copy_product_returns_are_flat_key_free_and_codec_stable() {
     ));
     let config = JitConfig::default();
     for result in [
-        execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("baseline returns copy product"),
-        execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+        execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("proof returns copy product"),
     ] {
         assert!(matches!(result.outcome, ExecutionOutcome::Returned(_)));

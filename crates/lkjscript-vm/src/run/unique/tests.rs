@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn stale_owner_and_view_payloads_fail_closed() -> Result<()> {
-    let mut runtime = UniqueRuntime::new(&ExecutionConfig::default());
+    let mut runtime = UniqueRuntime::new(&ExecutionPolicy::unrestricted());
     let owner = runtime.allocate(2)?;
     let view = runtime.borrow(owner, false)?;
     runtime.end_borrow(view)?;
@@ -17,7 +17,7 @@ fn stale_owner_and_view_payloads_fail_closed() -> Result<()> {
 
 #[test]
 fn trap_cleanup_releases_owner_and_exclusive_loan_once() -> Result<()> {
-    let mut runtime = UniqueRuntime::new(&ExecutionConfig::default());
+    let mut runtime = UniqueRuntime::new(&ExecutionPolicy::unrestricted());
     let owner = runtime.allocate(4)?;
     let view = runtime.borrow(owner, true)?;
     runtime.set_byte(view, 3, 91)?;
@@ -31,10 +31,10 @@ fn trap_cleanup_releases_owner_and_exclusive_loan_once() -> Result<()> {
 #[test]
 fn byte_vector_crosses_former_per_buffer_limit_under_explicit_heap_policy() -> Result<()> {
     let size = 1_000_001;
-    let low = ExecutionConfig {
+    let low = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: size - 1,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut limited = UniqueRuntime::new(&low);
     let error = limited
         .allocate(i64::try_from(size).expect("test size fits i64"))
@@ -53,10 +53,10 @@ fn byte_vector_crosses_former_per_buffer_limit_under_explicit_heap_policy() -> R
     );
     limited.verify_empty()?;
 
-    let high = ExecutionConfig {
+    let high = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_heap_bytes: size * 2,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut runtime = UniqueRuntime::new(&high);
     let owner = runtime.allocate(i64::try_from(size).expect("test size fits i64"))?;
     let view = runtime.borrow(owner, false)?;
@@ -72,10 +72,10 @@ fn byte_vector_crosses_former_per_buffer_limit_under_explicit_heap_policy() -> R
 
 #[test]
 fn allocation_failure_publishes_no_owner() -> Result<()> {
-    let config = ExecutionConfig {
+    let config = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         max_allocations: 0,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     let mut runtime = UniqueRuntime::new(&config);
     assert!(runtime.allocate(1).is_err());
     runtime.verify_empty()?;

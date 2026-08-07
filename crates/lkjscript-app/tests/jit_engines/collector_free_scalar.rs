@@ -1,5 +1,5 @@
 use crate::canonical::{compile, execution, f64_loop, Scalar};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitStats};
 use lkjscript_native::RuntimeCallSlot;
 
@@ -9,13 +9,13 @@ fn forced_scalar_groups_have_structurally_zero_collector_interaction() {
     let program = compile(&source, "collector-free-scalar.lkjscript");
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced baseline scalar island");
     let proof = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced proof scalar island");

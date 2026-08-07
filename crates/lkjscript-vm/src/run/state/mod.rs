@@ -9,7 +9,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         chunk: &'a ValidatedChunk,
         jit: J,
         inputs: ExecutionInputs,
-        config: ExecutionConfig,
+        config: ExecutionPolicy,
     ) -> Self {
         let mut globals = Vec::new();
         let global_initialization_error = globals
@@ -20,22 +20,26 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             globals.resize(chunk.global_names().len(), Value::INVALID);
         }
         let (structural, structural_initialization_error) =
-            match structural_ops::StructuralInvocation::new(config.max_allocations) {
+            match structural_ops::StructuralInvocation::new(config.max_allocations()) {
                 Ok(runtime) => (Some(runtime), None),
                 Err(error) => (None, Some(error)),
             };
-        let (lists, list_initialization_error) = match lkjscript_core::SegmentedListArena::new(
-            lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(config.max_allocations),
-        ) {
-            Ok(lists) => (Some(lists), None),
-            Err(error) => (
-                None,
-                Some(Error::msg(format!(
-                    "segmented-list arena initialization failed: {error:?}"
-                ))),
-            ),
-        };
-        let region_limit = u32::try_from(config.max_allocations)
+        let (lists, list_initialization_error) =
+            match lkjscript_core::SegmentedListArena::new(config.max_allocations().map_or_else(
+                lkjscript_core::SegmentedListArenaLimits::default,
+                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
+            )) {
+                Ok(lists) => (Some(lists), None),
+                Err(error) => (
+                    None,
+                    Some(Error::msg(format!(
+                        "segmented-list arena initialization failed: {error:?}"
+                    ))),
+                ),
+            };
+        let region_limit = config
+            .max_allocations()
+            .and_then(|maximum| u32::try_from(maximum).ok())
             .unwrap_or(u32::MAX)
             .max(1);
         let region_limits = lkjscript_core::RegionProductLimits {
@@ -64,18 +68,17 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             jit,
             exit_code: None,
             inputs,
-            resources: ResourceTable::new(config.max_handles, config.cleanup_failure_limits),
+            resources: ResourceTable::new(config.max_handles(), config.cleanup_retention()),
             unique: unique::UniqueRuntime::new(&config),
             structural,
             structural_initialization_error,
             global_initialization_error,
             list_initialization_error,
             region_product_initialization_error,
-            fuel_remaining: config.instruction_fuel,
+            fuel_remaining: config.instruction_fuel(),
             output_bytes: 0,
             allocation_error: None,
-            cleanup_failures: CleanupFailures::new(config.cleanup_failure_limits),
-            logical_aggregate_constructions: 0,
+            cleanup_failures: CleanupFailures::with_retention(config.cleanup_retention()),
             list_allocations: 0,
             region_product_allocations: 0,
             started: Instant::now(),

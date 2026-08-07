@@ -13,7 +13,7 @@ fn sealed_destination_copy_and_disposal_use_exact_route() -> Result<(), Box<dyn 
         StructuralAggregateKind::Product,
         Vec::new(),
     );
-    let mut runtime = JitStructuralRuntime::new(&ExecutionConfig::default())?;
+    let mut runtime = JitStructuralRuntime::new(&ExecutionPolicy::unrestricted())?;
     let destination = service(runtime.create_destination(&aggregate, storage))?;
     let owner = service(runtime.finish_destination(destination, &aggregate, storage))?;
     let owners_before = runtime.owners.clone();
@@ -43,7 +43,7 @@ fn sealed_destination_copy_and_disposal_use_exact_route() -> Result<(), Box<dyn 
 #[test]
 fn sealed_publish_replaces_unique_source_key() -> Result<(), Box<dyn std::error::Error>> {
     let value_type = ty(37, StructuralKind::String);
-    let mut runtime = JitStructuralRuntime::new(&ExecutionConfig::default())?;
+    let mut runtime = JitStructuralRuntime::new(&ExecutionPolicy::unrestricted())?;
     let unique = service(runtime.publish_static(
         b"sealed",
         value_type,
@@ -68,7 +68,7 @@ fn sealed_publish_replaces_unique_source_key() -> Result<(), Box<dyn std::error:
 fn registry_failures_dispose_new_runtime_owners() -> Result<(), Box<dyn std::error::Error>> {
     let value_type = ty(38, StructuralKind::String);
     let expected = service(core_type(value_type))?;
-    let mut runtime = JitStructuralRuntime::new(&ExecutionConfig::default())?;
+    let mut runtime = JitStructuralRuntime::new(&ExecutionPolicy::unrestricted())?;
     let key = runtime
         .runtime
         .publish_owned(SemanticValue::new(

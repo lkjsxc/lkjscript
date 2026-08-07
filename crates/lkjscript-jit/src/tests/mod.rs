@@ -4,7 +4,7 @@ mod structural_cutover;
 mod trap_sites;
 
 use crate::*;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{
     verify, Block, BlockId, BlockMetadata, BlockParameter, CallTarget, Constant, EffectSet,
     FailureBehavior, FrameState, Function, FunctionId, Instruction, InstructionKind,

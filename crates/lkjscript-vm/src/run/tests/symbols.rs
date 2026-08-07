@@ -11,11 +11,11 @@ fn returned_symbol_retains_text_after_artifact_release() {
         chunk.main.emit(Op::Return);
         let chunk =
             validate_chunk(chunk, ValidationPolicy::Unrestricted).expect("symbol validates");
-        let config = ExecutionConfig {
+        let config = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
             max_heap_bytes: 0,
             max_allocations: 0,
-            ..ExecutionConfig::default()
-        };
+            ..lkjscript_core::LimitedExecutionPolicy::conservative()
+        });
         Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), config).run()
     };
     assert!(matches!(

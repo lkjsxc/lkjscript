@@ -24,10 +24,18 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
         EvalOutcome::Returned(EvalValue::I64(42))
     );
     for execution in [
-        execute_forced(&program, &ExecutionConfig::default(), JitConfig::default())
-            .expect("baseline projects enum"),
-        execute_optimizing(&program, &ExecutionConfig::default(), JitConfig::default())
-            .expect("proof tier projects enum"),
+        execute_forced(
+            &program,
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+        )
+        .expect("baseline projects enum"),
+        execute_optimizing(
+            &program,
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+        )
+        .expect("proof tier projects enum"),
     ] {
         let ExecutionOutcome::Returned(value) = execution.outcome else {
             panic!("generated tier must return projection")
@@ -53,7 +61,7 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
     let ExecutionOutcome::Returned(vm) = run_chunk(
         compiled.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) else {
         panic!("VM returns nullary enum")
     };
@@ -61,13 +69,13 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
     for execution in [
         execute_forced(
             compiled.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline returns nullary enum"),
         execute_optimizing(
             compiled.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof returns nullary enum"),
@@ -90,9 +98,9 @@ fn nested_generic_enum_uses_structural_storage_in_generated_tiers() {
         .expect("evaluator returns nested structural enum");
     let config = JitConfig::default();
     for execution in [
-        execute_forced(compiled.ssa(), &ExecutionConfig::default(), config)
+        execute_forced(compiled.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("baseline returns nested enum"),
-        execute_optimizing(compiled.ssa(), &ExecutionConfig::default(), config)
+        execute_optimizing(compiled.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("proof returns nested enum"),
     ] {
         let ExecutionOutcome::Returned(value) = execution.outcome else {

@@ -42,17 +42,22 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
                         .map(|(ty, value)| native_from_value(ty, value))
                         .collect::<Result<Vec<_>>>()?;
                     let mut execution = vm.config.clone();
-                    execution.instruction_fuel = vm.fuel_remaining;
-                    execution.wall_time = vm.remaining_wall_time()?;
-                    execution.max_stack_values =
-                        execution.max_stack_values.saturating_sub(vm.stack.len());
+                    if let Some(policy) = execution.limited_policy_mut() {
+                        policy.instruction_fuel = vm.fuel_remaining.ok_or_else(|| {
+                            Error::host("limited VM execution lost its fuel counter")
+                        })?;
+                        policy.wall_time = vm.remaining_wall_time()?;
+                        policy.max_stack_values =
+                            policy.max_stack_values.saturating_sub(vm.stack.len());
+                    }
                     match vm
                         .jit
                         .invoke_scalar(function, &native_arguments, &execution)
                     {
                         Ok(invocation) => {
-                            vm.fuel_remaining =
-                                vm.fuel_remaining.saturating_sub(invocation.poll_count);
+                            if let Some(fuel) = &mut vm.fuel_remaining {
+                                *fuel = fuel.saturating_sub(invocation.poll_count);
+                            }
                             vm.cleanup_failures.append(invocation.cleanup_failures);
                             match invocation.outcome {
                                 ScalarInvocationOutcome::Returned(value) => {
@@ -113,7 +118,11 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: usize, call_offset: usize)
             let frame_end = stack_base
                 .checked_add(locals)
                 .ok_or_else(|| Error::msg("VM call frame size overflow"))?;
-            if frame_end > vm.config.max_stack_values {
+            if vm
+                .config
+                .max_stack_values()
+                .is_some_and(|maximum| frame_end > maximum)
+            {
                 return Err(Error::resource(
                     lkjscript_core::ResourceLimitKind::StackValues,
                     "VM call frame exceeds the stack value limit",

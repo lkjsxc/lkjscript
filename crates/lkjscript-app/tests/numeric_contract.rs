@@ -8,7 +8,7 @@ mod malformed;
 mod support;
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, OwnedValue};
+use lkjscript_core::{Error, ExecutionOutcome, ExecutionPolicy, OwnedValue};
 use lkjscript_vm::run_chunk;
 
 fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
@@ -17,7 +17,7 @@ fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result
     match run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ) {
         ExecutionOutcome::Returned(value) => Ok(value),
         ExecutionOutcome::Trapped(trap) => Err(Error::msg(trap.to_string())),

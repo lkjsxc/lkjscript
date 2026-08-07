@@ -114,7 +114,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
 }
 
 fn send_string<J: RuntimeTier>(vm: &mut Vm<'_, J>, handle: Value, data: &[u8]) -> Result<i64> {
-    if data.len() > vm.remaining_output_capacity()? {
+    if vm
+        .remaining_output_capacity()?
+        .is_some_and(|remaining| data.len() > remaining)
+    {
         return Err(Error::resource(
             lkjscript_core::ResourceLimitKind::OutputBytes,
             "send-string output policy exhausted",
@@ -168,11 +171,11 @@ mod tests {
             &chunk,
             NoTier,
             crate::ExecutionInputs::default(),
-            lkjscript_core::ExecutionConfig {
+            lkjscript_core::ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 max_heap_bytes: len * 4,
                 max_output_bytes: len * 2,
-                ..lkjscript_core::ExecutionConfig::default()
-            },
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            }),
         );
         let listener = vm.resources.sys_socket()?;
         vm.resources.sys_bind(listener, i64::from(port))?;

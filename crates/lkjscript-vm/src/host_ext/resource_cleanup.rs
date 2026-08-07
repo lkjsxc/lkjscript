@@ -64,7 +64,7 @@ impl ResourceTable {
             Err(_) => self.table.stats().ordinary_obligations(),
         };
         let emergency_obligations = self.table.emergency_obligations().count();
-        let mut cleanup_failures = CleanupFailures::new(self.cleanup_failure_limits);
+        let mut cleanup_failures = CleanupFailures::with_retention(self.cleanup_retention);
         let cleanup_attempts = match self.table.cleanup_owned_reverse(|_, payload| drop(payload)) {
             Ok(report) => report.count(),
             Err(error) => {

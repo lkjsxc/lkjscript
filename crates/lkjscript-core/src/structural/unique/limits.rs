@@ -34,6 +34,18 @@ impl UniqueStoreLimits {
         })
     }
 
+    /// Current encoded-key representation boundary used when host execution
+    /// policy is unrestricted. Widening these keys remains separate work.
+    pub const fn representation_boundary() -> Self {
+        Self {
+            max_objects: u32::MAX,
+            max_bytes: u64::MAX,
+            max_slots: u32::MAX,
+            max_allocations: u64::MAX,
+            max_generation: NonZeroU32::MAX,
+        }
+    }
+
     pub const fn max_objects(self) -> u32 {
         self.max_objects
     }

@@ -18,7 +18,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 self.inputs.capabilities
             )));
         }
-        if self.chunk.main().locals > self.config.max_stack_values {
+        if self
+            .config
+            .max_stack_values()
+            .is_some_and(|maximum| self.chunk.main().locals > maximum)
+        {
             return Err(Error::resource(
                 ResourceLimitKind::StackValues,
                 "VM entry frame exceeds the stack value limit",
@@ -69,16 +73,18 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     self.execute_failure_unwind(site, true);
                     return Err(error);
                 }
-                if self.fuel_remaining == 0 {
-                    let error = Error::resource(
-                        ResourceLimitKind::InstructionFuel,
-                        "instruction fuel exhausted",
-                    );
-                    self.restore_structural_handoffs();
-                    self.execute_failure_unwind(site, true);
-                    return Err(error);
+                if let Some(fuel) = &mut self.fuel_remaining {
+                    if *fuel == 0 {
+                        let error = Error::resource(
+                            ResourceLimitKind::InstructionFuel,
+                            "instruction fuel exhausted",
+                        );
+                        self.restore_structural_handoffs();
+                        self.execute_failure_unwind(site, true);
+                        return Err(error);
+                    }
+                    *fuel -= 1;
                 }
-                self.fuel_remaining -= 1;
             }
             if let Err(error) = self.step() {
                 self.restore_structural_handoffs();

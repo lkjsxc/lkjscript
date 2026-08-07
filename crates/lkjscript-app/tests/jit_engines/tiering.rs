@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, f64_loop, Scalar};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_ir::{evaluate, EvalConfig, OptimizationLimits};
 use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, Tier, TierState};
 use lkjscript_vm::run_chunk;
@@ -10,12 +10,12 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
     let native = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("source-derived forced baseline JIT");
@@ -46,7 +46,7 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
 
     let optimized = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("source-derived forced optimizing JIT");
@@ -64,17 +64,17 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     let baseline = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced baseline execution");
     let optimizing = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("forced proof optimizing execution");
@@ -132,7 +132,7 @@ fn forced_native_tiers_reject_path_entries_without_fallback() {
     );
     let baseline = execute_forced(
         path.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect_err("forced baseline Path entry must not fall back");
@@ -142,7 +142,7 @@ fn forced_native_tiers_reject_path_entries_without_fallback() {
     ));
     let optimizing = execute_optimizing(
         path.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect_err("forced optimizing Path entry must not fall back");
@@ -164,7 +164,7 @@ fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() 
     );
     let error = execute_optimizing(
         unsupported.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect_err("forced optimizing host operation must not fall back");
@@ -177,7 +177,7 @@ fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() 
         max_work_units: 0,
         ..OptimizationLimits::default()
     };
-    let error = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+    let error = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect_err("forced optimizing budget must not run baseline or VM");
     assert_eq!(error.code(), FailureCode::OptimizationBudget);
 }

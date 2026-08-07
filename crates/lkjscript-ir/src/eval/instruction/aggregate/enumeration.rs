@@ -94,7 +94,6 @@ impl Evaluator<'_> {
                     return Err(Flow::Trap("enum construction layout mismatch".into()));
                 }
                 let physical_tag = selected.physical_tag;
-                self.charge_aggregate()?;
                 self.allocate()?;
                 Ok(EvalValue::Enum {
                     enum_id,

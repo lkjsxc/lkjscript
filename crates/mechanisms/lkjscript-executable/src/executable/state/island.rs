@@ -24,7 +24,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) trap_site_present: u64,
     pub(in crate::executable) _scratch_integer_arguments: [u64; 5],
     pub(in crate::executable) _scratch_float_arguments: [u64; 2],
-    pub(in crate::executable) poll_fuel_remaining: u64,
+    pub(in crate::executable) poll_fuel_remaining: Option<u64>,
     pub(in crate::executable) deadline_ms: i64,
     pub(in crate::executable) poll_count: u64,
     pub(in crate::executable) native_entries: Vec<NativeEntryCount>,
@@ -32,8 +32,8 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) image: &'a InstallableImage,
     pub(in crate::executable) services: &'a mut dyn NativeIslandRuntimeServices,
     pub(in crate::executable) active_frames: Vec<IslandFrame>,
-    pub(in crate::executable) maximum_active_frames: usize,
-    pub(in crate::executable) maximum_active_values: usize,
+    pub(in crate::executable) maximum_active_frames: Option<usize>,
+    pub(in crate::executable) maximum_active_values: Option<usize>,
     pub(in crate::executable) maximum_native_stack_bytes: usize,
     pub(in crate::executable) maximum_native_frame_bytes: usize,
     pub(in crate::executable) native_stack_low: usize,
@@ -52,7 +52,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) heap_operation_successes: u64,
     pub(in crate::executable) cleanup_failures: Vec<NativeCleanupFailure>,
     pub(in crate::executable) omitted_cleanup_failures: usize,
-    pub(in crate::executable) maximum_cleanup_failures: usize,
+    pub(in crate::executable) maximum_cleanup_failures: Option<usize>,
     pub(in crate::executable) entry_rejected: bool,
     pub(in crate::executable) invalid_entry_accounting: Option<u64>,
     pub(in crate::executable) bookkeeping_allocation_failed: bool,
@@ -69,7 +69,12 @@ impl<'a> IslandCallState<'a> {
         let native_entries = try_entry_counts(image)?;
         let mut active_frames = Vec::new();
         active_frames
-            .try_reserve_exact(config.max_active_frames.min(image.entries().len()))
+            .try_reserve_exact(
+                config
+                    .max_active_frames
+                    .unwrap_or(image.entries().len())
+                    .min(image.entries().len()),
+            )
             .map_err(|_| InvocationError::NativeBookkeepingAllocationFailed)?;
         let (native_stack_low, native_stack_high) =
             platform::native_stack_bounds().unwrap_or((0, 0));
@@ -129,12 +134,14 @@ impl<'a> IslandCallState<'a> {
             return;
         }
         self.poll_count = self.poll_count.saturating_add(1);
-        if self.poll_fuel_remaining == 0 {
-            self.status = 4;
-            self.payload = 1;
-            return;
+        if let Some(fuel) = &mut self.poll_fuel_remaining {
+            if *fuel == 0 {
+                self.status = 4;
+                self.payload = 1;
+                return;
+            }
+            *fuel -= 1;
         }
-        self.poll_fuel_remaining -= 1;
         if self.deadline_ms >= 0 && crate::now_ms_monotonic() >= self.deadline_ms {
             self.status = 3;
         }

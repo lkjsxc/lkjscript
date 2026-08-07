@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -14,7 +14,7 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     let program = compile(source, "host.lkjscript");
     let error = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect_err("forced native must reject unsupported semantics");
@@ -27,7 +27,7 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     let program = compile(recursion, "recursion.lkjscript");
     let executed = execute_forced(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("direct recursion is a bounded native SCC");
@@ -43,7 +43,7 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     );
     let executed = execute_forced(
         allocation.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("source allocation reaches generated structural dispatch");
@@ -76,14 +76,14 @@ fn bytes_conversion_results_match_evaluator_vm_and_forced_native_fails_closed() 
         execution(run_chunk(
             success_program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
     assert_eq!(
         execute_forced(
             success_program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect_err("mixed structural string and unique bytes reject before native entry")
@@ -109,19 +109,19 @@ fn bytes_conversion_results_match_evaluator_vm_and_forced_native_fails_closed() 
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         )),
         expected
     );
     for result in [
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         ),
     ] {

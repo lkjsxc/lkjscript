@@ -1,5 +1,5 @@
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalResourcePolicy};
 use lkjscript_vm::run_chunk;
 
@@ -134,7 +134,7 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
             capabilities: vec![lkjscript_core::CapabilityKind::FileSystem],
             host: lkjscript_host::HostEnvironment::default(),
         },
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     );
     let _removed = std::fs::remove_file(path);
     assert!(

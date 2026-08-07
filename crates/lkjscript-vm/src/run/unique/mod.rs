@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use lkjscript_core::{
-    Error, ExecutionConfig, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId,
+    Error, ExecutionPolicy, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId,
     UniqueStoreLimits, Value,
 };
 
@@ -36,16 +36,26 @@ pub(crate) struct UniqueRuntime {
 }
 
 impl UniqueRuntime {
-    pub(crate) fn new(config: &ExecutionConfig) -> Self {
-        let objects = u32::try_from(config.max_allocations).unwrap_or(u32::MAX);
-        let bytes = u64::try_from(config.max_heap_bytes).unwrap_or(u64::MAX);
+    pub(crate) fn new(config: &ExecutionPolicy) -> Self {
+        let limits = match config.limited_policy() {
+            Some(policy) => {
+                let objects = u32::try_from(policy.max_allocations).unwrap_or(u32::MAX);
+                let bytes = u64::try_from(policy.max_heap_bytes).unwrap_or(u64::MAX);
+                let Ok(limits) = UniqueStoreLimits::new(
+                    objects,
+                    bytes,
+                    objects,
+                    policy.max_allocations,
+                    u32::MAX,
+                ) else {
+                    unreachable!("VM unique-store limits are constructed consistently")
+                };
+                limits
+            }
+            None => UniqueStoreLimits::representation_boundary(),
+        };
         let Some(id) = UniqueStoreId::new(1) else {
             unreachable!("nonzero VM unique-store identity")
-        };
-        let Ok(limits) =
-            UniqueStoreLimits::new(objects, bytes, objects, config.max_allocations, u32::MAX)
-        else {
-            unreachable!("VM unique-store limits are constructed consistently")
         };
         Self {
             store: UniqueStore::new(id, limits),

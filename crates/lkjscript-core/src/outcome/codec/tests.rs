@@ -47,7 +47,7 @@ fn process_outcome_codec_preserves_closed_outcomes() {
     round_trip(ExecutionOutcome::Trapped(Trap::new("cell trap")));
     round_trip(ExecutionOutcome::DeadlineExceeded);
     round_trip(ExecutionOutcome::ResourceLimitExceeded(
-        ResourceLimitKind::LogicalAggregateConstructions,
+        ResourceLimitKind::Allocations,
     ));
     round_trip(ExecutionOutcome::HostFailure(HostError::new(
         "provider failed",

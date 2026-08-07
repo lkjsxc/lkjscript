@@ -33,10 +33,10 @@ fn native_poll_failure_cleans_not_yet_transferred_arguments() {
         let executed = run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig {
+            &ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
                 instruction_fuel: fuel,
-                ..ExecutionConfig::default()
-            },
+                ..lkjscript_core::LimitedExecutionPolicy::conservative()
+            }),
         );
         if matches!(executed, ExecutionOutcome::Returned(_)) {
             vm_completed = true;
@@ -51,10 +51,10 @@ fn native_poll_failure_cleans_not_yet_transferred_arguments() {
     }
     assert!(evaluator_completed && vm_completed);
 
-    let limits = ExecutionConfig {
+    let limits = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
         instruction_fuel: 1,
-        ..ExecutionConfig::default()
-    };
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
     for (proof, execution) in forced_pair(&program, &limits) {
         assert!(matches!(
             execution.outcome,

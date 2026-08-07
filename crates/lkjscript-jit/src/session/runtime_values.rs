@@ -8,7 +8,7 @@ impl JitSession {
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> Result<InvocationReport, EngineError> {
         self.invoke_value_services(function, object_index, native, arguments, config, execution)
     }
@@ -20,9 +20,9 @@ impl JitSession {
         native: lkjscript_native::FunctionId,
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
-        execution: &ExecutionConfig,
+        execution: &ExecutionPolicy,
     ) -> Result<InvocationReport, EngineError> {
-        self.initialize_region_arenas(function, execution.max_allocations)?;
+        self.initialize_region_arenas(function, execution.max_allocations())?;
         let lists = self
             .lists
             .as_mut()
@@ -35,9 +35,10 @@ impl JitSession {
             lists,
             products,
             JitValueLimits {
-                logical_aggregates: execution.max_logical_aggregate_constructions,
-                allocations: execution.max_allocations,
-                runtime_bytes: u64::try_from(execution.max_heap_bytes).unwrap_or(u64::MAX),
+                allocations: execution.max_allocations(),
+                runtime_bytes: execution
+                    .max_heap_bytes()
+                    .and_then(|bytes| u64::try_from(bytes).ok()),
             },
         );
         let report = self.objects[object_index].installed.invoke_with_services(
@@ -54,15 +55,19 @@ impl JitSession {
     fn initialize_region_arenas(
         &mut self,
         function: FunctionId,
-        max_allocations: u64,
+        max_allocations: Option<u64>,
     ) -> Result<(), EngineError> {
         self.lists = Some(
-            lkjscript_core::SegmentedListArena::new(
-                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy(max_allocations),
-            )
+            lkjscript_core::SegmentedListArena::new(max_allocations.map_or_else(
+                lkjscript_core::SegmentedListArenaLimits::default,
+                lkjscript_core::SegmentedListArenaLimits::for_allocation_policy,
+            ))
             .map_err(|error| arena_error(function, "segmented-list", error))?,
         );
-        let records = u32::try_from(max_allocations).unwrap_or(u32::MAX).max(1);
+        let records = max_allocations
+            .and_then(|maximum| u32::try_from(maximum).ok())
+            .unwrap_or(u32::MAX)
+            .max(1);
         self.region_products = Some(
             lkjscript_core::RegionProductArena::new(lkjscript_core::RegionProductLimits {
                 max_records: std::num::NonZeroU32::new(records)

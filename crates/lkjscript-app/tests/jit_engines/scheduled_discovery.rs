@@ -1,5 +1,5 @@
 use crate::canonical::{compile, execution};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_jit::{execute_optimizing, JitConfig};
 
 #[test]
@@ -8,13 +8,13 @@ fn forced_scheduled_proof_discovery_preserves_native_output_and_proof_counts() {
     let program = compile(source, "scheduled-optimizing-loop.lkjscript");
     let sequential = execute_optimizing(
         program.ssa(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
         JitConfig::default(),
     )
     .expect("sequential proof discovery");
     let mut config = JitConfig::default();
     config.proof_discovery_workers = 2;
-    let scheduled = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+    let scheduled = execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
         .expect("scheduled proof discovery");
     assert_eq!(execution(scheduled.outcome), execution(sequential.outcome));
     assert_eq!(

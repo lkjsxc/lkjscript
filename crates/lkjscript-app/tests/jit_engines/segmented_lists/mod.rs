@@ -1,5 +1,5 @@
 use crate::canonical::{compile, evaluator, execution, Scalar};
-use lkjscript_core::ExecutionConfig;
+use lkjscript_core::ExecutionPolicy;
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -20,13 +20,13 @@ fn list_only_execution_uses_segmented_invocation_storage() {
     let vm = execution(run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
-        &ExecutionConfig::default(),
+        &ExecutionPolicy::unrestricted(),
     ));
     let config = JitConfig::default();
     for result in [
-        execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        execute_forced(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("baseline segmented list"),
-        execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+        execute_optimizing(program.ssa(), &ExecutionPolicy::unrestricted(), config)
             .expect("proof segmented list"),
     ] {
         assert_eq!(execution(result.outcome), expected);
@@ -56,18 +56,18 @@ fn nested_copy_lists_return_without_runtime_keys_in_all_engines() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline returns nested list")
         .outcome,
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof returns nested list")
@@ -110,18 +110,18 @@ fn copy_list_returns_are_key_free_and_codec_stable_across_engines() {
         run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
         ),
         execute_forced(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("baseline returns segmented list")
         .outcome,
         execute_optimizing(
             program.ssa(),
-            &ExecutionConfig::default(),
+            &ExecutionPolicy::unrestricted(),
             JitConfig::default(),
         )
         .expect("proof returns segmented list")
