@@ -1,7 +1,4 @@
 mod model;
-#[cfg(test)]
-mod tests;
-mod verifier;
 
 pub(crate) use model::PreparationProvenance;
 pub use model::PreparedProgram;
@@ -57,14 +54,6 @@ pub(crate) fn bind(
         .map_err(|error| Error::msg(error.to_string()))?;
     let ssa = bind_ssa(ssa, identity).map_err(|error| Error::msg(error.to_string()))?;
     let bytecode = bind_bytecode(bytecode, identity)?;
-    verifier::verify(
-        descriptor,
-        identity,
-        &ssa,
-        &bytecode,
-        memory_plan,
-        &provenance,
-    )?;
     Ok((
         PreparedProgram {
             descriptor,

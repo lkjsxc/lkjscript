@@ -216,7 +216,8 @@ builds, and application smokes now run directly.
 Validation remains fail-closed where data or authority crosses:
 
 - source, package, manifest, semantic-operation, and path-containment boundaries;
-- persisted package locks, prepared programs, runtime-control stores, and serialized messages;
+- persisted package locks, prepared-program identities carried by process frames, runtime-control
+  stores, and serialized messages;
 - daemon/process-cell framing and provenance;
 - capability grants and host providers;
 - bytecode and executable-IR deserialization;
@@ -241,8 +242,8 @@ consolidated; unsafe code must not spread into semantic compiler or product-runt
 
 ## Persistence and processes
 
-Package locks, prepared descriptors, control-store snapshots, and process frames are validated
-serialized boundaries. Compiler HIR, verified SSA, bytecode under construction, and JIT plans are
-in-process structures. The future semantic snapshot will begin in memory; persistence will be
-added only after edit-latency, retained-memory, concurrency, or crash-recovery measurements justify
-it.
+Package locks, control-store snapshots, and process frames are validated serialized boundaries.
+Prepared descriptors and programs remain in-process; only prepared identity crosses process
+frames. Compiler HIR, verified SSA, bytecode under construction, and JIT plans are also in-process
+structures. The future semantic snapshot will begin in memory; persistence will be added only
+after edit-latency, retained-memory, concurrency, or crash-recovery measurements justify it.
