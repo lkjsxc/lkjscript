@@ -168,8 +168,6 @@ impl CleanupFailures {
     }
 }
 
-include!("cleanup/wire.rs");
-
 fn utf8_prefix_len(message: &str, maximum: usize) -> usize {
     let mut length = message.len().min(maximum);
     while !message.is_char_boundary(length) {

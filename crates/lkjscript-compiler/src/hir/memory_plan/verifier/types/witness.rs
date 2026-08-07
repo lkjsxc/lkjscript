@@ -60,7 +60,7 @@ impl VerifiedTypes<'_> {
                 .map(|id| self.verified_witness_path(id))
                 .transpose()?,
             equality: verified_witness_equality(ty),
-            process_codec: verified_witness_process_codec(ty, derived),
+            semantic_snapshot: verified_witness_semantic_snapshot(ty, derived),
             list_element: verified_witness_list_element(ty, derived),
             list: self.verified_witness_list(ty, derived)?,
             dynamic_size: verified_witness_dynamic_size(ty),

@@ -51,14 +51,14 @@ fn authenticate_return_witness(chunk: &ValidatedChunk) -> Result<(), SealedSeman
     };
     let authenticated = witness.facts.mode == expected_mode
         && witness.facts.capabilities.sealed_region
-        && witness.facts.capabilities.process_codec
+        && witness.facts.capabilities.semantic_snapshot
         && !witness.facts.contains_borrow
         && witness.facts.root == lkjscript_contracts::MemoryWitnessRoot::Structural
-        && witness.facts.codec == lkjscript_contracts::MemoryWitnessCodec::Eligible
+        && witness.facts.snapshot == lkjscript_contracts::MemoryWitnessSnapshot::Eligible
         && witness
             .facts
             .operations
-            .binary_search(&lkjscript_contracts::MemoryWitnessOperation::Decode)
+            .binary_search(&lkjscript_contracts::MemoryWitnessOperation::SnapshotImport)
             .is_ok()
         && witness.value_kind == MemoryWitnessValueKind::Structural(representation_id);
     if !authenticated {

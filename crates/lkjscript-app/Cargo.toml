@@ -9,39 +9,14 @@ publish.workspace = true
 name = "lkjscript"
 path = "src/main.rs"
 
-[[bin]]
-name = "lkjscript-resource-bench"
-path = "src/runtime/benchmark.rs"
-
-[[bin]]
-name = "lkjscript-cell"
-path = "src/runtime/process_cell/main.rs"
-
-[[bin]]
-name = "lkjscript-cell-test-worker"
-path = "src/runtime/process_cell/test_worker.rs"
-
-[[bin]]
-name = "lkjscriptd"
-path = "../lkjscript-runtime/src/bin/lkjscriptd.rs"
-
-[[bin]]
-name = "lkjscript-session"
-path = "src/runtime/session_broker/main.rs"
-
 [dependencies]
 lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
-lkjscript-database = { path = "../lkjscript-database" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-jit = { path = "../lkjscript-jit" }
-lkjscript-linux-host = { path = "../mechanisms/lkjscript-linux-host" }
-lkjscript-resource = { path = "../lkjscript-resource" }
-lkjscript-runtime = { path = "../lkjscript-runtime" }
 lkjscript-vm = { path = "../lkjscript-vm" }
-
 
 [dev-dependencies]
 lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }

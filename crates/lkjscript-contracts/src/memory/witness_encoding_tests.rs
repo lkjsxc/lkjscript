@@ -19,7 +19,7 @@ fn facts() -> ExecutableMemoryWitnessFacts {
             ordinary_region: true,
             sealed_region: true,
             borrow: true,
-            process_codec: true,
+            semantic_snapshot: true,
             list_element: true,
             equality: true,
         },
@@ -28,7 +28,7 @@ fn facts() -> ExecutableMemoryWitnessFacts {
         copy: MemoryWitnessCopy::Structural,
         drop: MemoryWitnessDrop::RegionReset,
         equality: MemoryWitnessEquality::Value,
-        codec: MemoryWitnessCodec::Eligible,
+        snapshot: MemoryWitnessSnapshot::Eligible,
         list_element: MemoryWitnessListElement::ImmutableValue,
         size: MemoryWitnessSize::CheckedDynamic,
         alignment: 8,
@@ -129,7 +129,7 @@ fn every_executable_fact_changes_the_canonical_encoding() {
             ..capabilities
         },
         MemoryWitnessCapabilities {
-            process_codec: false,
+            semantic_snapshot: false,
             ..capabilities
         },
         MemoryWitnessCapabilities {
@@ -161,7 +161,7 @@ fn every_executable_fact_changes_the_canonical_encoding() {
     item.equality = MemoryWitnessEquality::List;
     candidates.push(item);
     let mut item = facts();
-    item.codec = MemoryWitnessCodec::Ineligible;
+    item.snapshot = MemoryWitnessSnapshot::Ineligible;
     candidates.push(item);
     let mut item = facts();
     item.list_element = MemoryWitnessListElement::Copy;

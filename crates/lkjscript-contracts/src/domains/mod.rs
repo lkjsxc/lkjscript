@@ -9,7 +9,6 @@ pub const SOURCE: &str = "lkjscript.source";
 pub const SEMANTIC_SOURCE: &str = "lkjscript.semantic-source";
 pub const AGENT_PROTOCOL: &str = "lkjscript.agent-protocol";
 pub const DIAGNOSTICS: &str = "lkjscript.diagnostics";
-pub const SEMANTIC_RESOURCE_PLANE: &str = "lkjscript.semantic-resource-plane";
 pub const TYPED_HIR: &str = "lkjscript.typed-hir";
 pub const VERIFIED_SSA: &str = "lkjscript.verified-ssa";
 pub const BYTECODE: &str = "lkjscript.bytecode";
@@ -21,8 +20,6 @@ pub const STRUCTURAL_OWNERSHIP_DOMAINS: &str = "lkjscript.structural-ownership-d
 pub const PACKAGE_MANIFEST: &str = "lkjscript.package";
 pub const PACKAGE_LOCK: &str = "lkjscript.package-lock";
 pub const MODULE_INTERFACE: &str = "lkjscript.module-interface";
-pub const COMPONENT_INTERFACE: &str = "lkjscript.component-interface";
-pub const RUNTIME_CONTROL: &str = "lkjscript.runtime-control";
 pub const PREPARED_PROGRAM: &str = "lkjscript.prepared-program";
 
 pub const AGENT_PROTOCOL_DIGEST: ContractDigest = ContractDigest::from_bytes([
@@ -61,10 +58,6 @@ pub const VERIFIED_SSA_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x5c, 0x59, 0xea, 0x13, 0x56, 0x07, 0x45, 0x27, 0xb1, 0xa8, 0xbe, 0x7a, 0x16, 0xe0, 0x6c, 0x13,
     0x76, 0x23, 0xef, 0x3d, 0x16, 0xd8, 0xf1, 0xff, 0x0f, 0x79, 0xb8, 0x40, 0x36, 0xae, 0x11, 0xfe,
 ]);
-pub const SEMANTIC_RESOURCE_PLANE_DIGEST: ContractDigest = ContractDigest::from_bytes([
-    0x44, 0x59, 0xdc, 0x91, 0x91, 0x47, 0x25, 0x5e, 0x6e, 0xd8, 0xba, 0xaf, 0x3b, 0x32, 0x5f, 0x0b,
-    0x20, 0x88, 0x88, 0xe5, 0x28, 0xd8, 0x09, 0xad, 0x8b, 0x99, 0x50, 0xdd, 0xb3, 0xcd, 0x8f, 0xf4,
-]);
 pub const SOURCE_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x89, 0x46, 0xb3, 0x4d, 0x1f, 0x05, 0x69, 0xc5, 0xdf, 0xf7, 0x40, 0x78, 0x02, 0x6e, 0xcf, 0x0f,
     0x97, 0x85, 0x40, 0x7e, 0x7c, 0xe7, 0xd7, 0x4d, 0x2d, 0x2c, 0x93, 0x50, 0xe8, 0x17, 0x38, 0xdc,
@@ -81,12 +74,10 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     let diagnostics = add(&mut set, language::diagnostics(language))?;
     let semantic = add(&mut set, language::semantic_source(source, diagnostics))?;
     add(&mut set, language::agent_protocol(semantic))?;
-    let runtime_control = add(&mut set, platform::runtime_control())?;
     let memory = add(&mut set, execution::memory_obligations(language))?;
     add(&mut set, execution::structural_ownership_domains(memory))?;
     let hir = add(&mut set, execution::typed_hir(language))?;
     let ssa = add(&mut set, execution::verified_ssa(hir))?;
-    add(&mut set, platform::semantic_resource_plane(ssa))?;
     let bytecode = add(&mut set, execution::bytecode(ssa))?;
     let runtime = add(&mut set, execution::runtime_calls())?;
     let native = add(&mut set, execution::native_layout(ssa, runtime))?;
@@ -94,7 +85,6 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     let manifest = add(&mut set, platform::package_manifest())?;
     let module = add(&mut set, platform::module_interface(language))?;
     let package_lock = add(&mut set, platform::package_lock(manifest, module))?;
-    add(&mut set, platform::component_interface(module))?;
     add(
         &mut set,
         execution::prepared_program(execution::PreparedDependencies {
@@ -103,7 +93,6 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
             bytecode,
             runtime_calls: runtime,
             native_layout: native,
-            runtime_control,
         }),
     )?;
     Ok(set)

@@ -58,7 +58,7 @@ pub(super) fn encode_facts(
         facts.capabilities.ordinary_region,
         facts.capabilities.sealed_region,
         facts.capabilities.borrow,
-        facts.capabilities.process_codec,
+        facts.capabilities.semantic_snapshot,
         facts.capabilities.list_element,
         facts.capabilities.equality,
     ] {
@@ -69,7 +69,7 @@ pub(super) fn encode_facts(
     output.byte(copy(facts.copy));
     output.byte(drop_route(facts.drop));
     output.byte(equality(facts.equality));
-    output.byte(codec(facts.codec));
+    output.byte(snapshot(facts.snapshot));
     output.byte(list_element(facts.list_element));
     match facts.size {
         MemoryWitnessSize::Fixed(bytes) => {

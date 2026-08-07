@@ -15,10 +15,10 @@ mod witness_routes;
 
 pub use model::MemoryObligation;
 pub use witness::{
-    ExecutableMemoryWitnessFacts, MemoryWitnessCodec, MemoryWitnessContention, MemoryWitnessCopy,
-    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
-    MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
-    MemoryWitnessSize,
+    ExecutableMemoryWitnessFacts, MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain,
+    MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode,
+    MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+    MemoryWitnessSnapshot,
 };
 pub use witness_capabilities::MemoryWitnessCapabilities;
 pub use witness_encoding::{

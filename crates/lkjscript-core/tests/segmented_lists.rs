@@ -1,9 +1,6 @@
 #![allow(clippy::expect_used)]
 
-use lkjscript_core::{
-    decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, OwnedValue,
-    SegmentedListArena, SegmentedListError, Value,
-};
+use lkjscript_core::{OwnedValue, SegmentedListArena, SegmentedListError, Value};
 
 #[test]
 fn linear_prepend_crosses_former_entry_limit_and_preserves_order() -> Result<(), SegmentedListError>
@@ -63,7 +60,7 @@ fn wrong_arena_and_empty_fail_without_mutation() -> Result<(), SegmentedListErro
 }
 
 #[test]
-fn nested_segmented_lists_materialize_before_wire_snapshots() -> lkjscript_core::Result<()> {
+fn nested_segmented_lists_materialize_into_owned_snapshots() -> lkjscript_core::Result<()> {
     let mut lists = SegmentedListArena::new()
         .map_err(|error| lkjscript_core::Error::msg(format!("list arena: {error:?}")))?;
     let empty = lists.empty();
@@ -84,8 +81,5 @@ fn nested_segmented_lists_materialize_before_wire_snapshots() -> lkjscript_core:
     })?;
     assert_eq!(owned.list_len(), Some(1));
     assert_eq!(owned.snapshot_object_count(), 2);
-    let outcome = ExecutionOutcome::Returned(owned);
-    let encoded = encode_execution_outcome(&outcome, 64 * 1024)?;
-    assert_eq!(decode_execution_outcome(&encoded, 64 * 1024)?, outcome);
     Ok(())
 }

@@ -31,8 +31,8 @@ fn nested_copy_lists_select_exact_witnesses() -> Result<()> {
         );
         assert_eq!(ty_witness.facts.domain, MemoryDomain::OrdinaryRegion);
         assert_eq!(
-            ty_witness.facts.process_codec,
-            MemoryProcessCodecEligibility::Eligible
+            ty_witness.facts.semantic_snapshot,
+            MemorySemanticSnapshotEligibility::Eligible
         );
         let list = ty_witness.facts.list.as_ref().ok_or_else(|| {
             lkjscript_core::Error::msg("nested segmented list witness is missing")
@@ -97,8 +97,8 @@ fn nested_affine_or_unresolved_lists_remain_rejected() -> Result<()> {
         let ty_witness = witness(&plan, &producer::memory_type(&outer))?;
         assert_eq!(ty_witness.facts.domain, MemoryDomain::UnsupportedRuntime);
         assert_eq!(
-            ty_witness.facts.process_codec,
-            MemoryProcessCodecEligibility::Ineligible
+            ty_witness.facts.semantic_snapshot,
+            MemorySemanticSnapshotEligibility::Ineligible
         );
         assert!(
             !ty_witness

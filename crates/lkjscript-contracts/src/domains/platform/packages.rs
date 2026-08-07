@@ -1,8 +1,6 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, ContractItemKind};
 
-use super::super::{
-    name, COMPONENT_INTERFACE, LANGUAGE, MODULE_INTERFACE, PACKAGE_LOCK, PACKAGE_MANIFEST,
-};
+use super::super::{name, LANGUAGE, MODULE_INTERFACE, PACKAGE_LOCK, PACKAGE_MANIFEST};
 
 pub(crate) fn package_manifest() -> ContractDescriptor {
     descriptor(PACKAGE_MANIFEST).item(
@@ -55,7 +53,7 @@ pub(crate) fn module_interface(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "ownership",
                     "ownership",
-                    "public parameter modes result mode equality and process-codec constraints",
+                    "public parameter modes result mode equality and semantic-snapshot constraints",
                 ))
                 .fact(fact(
                     "memory-interface",
@@ -97,22 +95,6 @@ pub(crate) fn package_lock(manifest: ContractDigest, module: ContractDigest) -> 
                         "MemoryPlanId atomic witness groups members role-bearing external ",
                         "closure and specialization support",
                     ),
-                )),
-        )
-}
-
-pub(crate) fn component_interface(module: ContractDigest) -> ContractDescriptor {
-    descriptor(COMPONENT_INTERFACE)
-        .dependency(name(MODULE_INTERFACE), module.as_bytes())
-        .item(
-            ContractItem::new("component", ContractItemKind::Type)
-                .fact(fact("support", "support", "unsupported current boundary"))
-                .fact(fact("imports", "imports", "future typed interfaces"))
-                .fact(fact("exports", "exports", "future typed interfaces"))
-                .fact(fact(
-                    "resources",
-                    "resources",
-                    "future typed resource identities",
                 )),
         )
 }

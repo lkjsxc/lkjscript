@@ -43,8 +43,8 @@ fn list_element_eligibility_and_copy_region_selection_are_exact() -> Result<()> 
     assert_eq!(list.facts.copy_share, MemoryCopySharePlan::RegionHandleCopy);
     assert_eq!(list.facts.root_projection, MemoryRootProjection::None);
     assert_eq!(
-        list.facts.process_codec,
-        MemoryProcessCodecEligibility::Eligible
+        list.facts.semantic_snapshot,
+        MemorySemanticSnapshotEligibility::Eligible
     );
     let storage =
         list.facts.list.as_ref().ok_or_else(|| {
@@ -117,8 +117,8 @@ fn nested_products_close_transitively_over_selected_list_regions() -> Result<()>
         assert_eq!(
             witness(&plan, &producer::memory_type(&ty))?
                 .facts
-                .process_codec,
-            MemoryProcessCodecEligibility::Ineligible
+                .semantic_snapshot,
+            MemorySemanticSnapshotEligibility::Ineligible
         );
     }
     Ok(())
@@ -142,8 +142,8 @@ fn product_of_selected_lists_uses_an_ordinary_region() -> Result<()> {
     let product_witness = witness(&plan, &producer::memory_type(&ty))?;
     assert_eq!(product_witness.facts.domain, MemoryDomain::OrdinaryRegion);
     assert_eq!(
-        product_witness.facts.process_codec,
-        MemoryProcessCodecEligibility::Ineligible
+        product_witness.facts.semantic_snapshot,
+        MemorySemanticSnapshotEligibility::Ineligible
     );
     let entry = plan
         .entries

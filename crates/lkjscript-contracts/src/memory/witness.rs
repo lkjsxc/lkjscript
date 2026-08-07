@@ -6,8 +6,8 @@ pub enum MemoryWitnessOperation {
     Drop,
     Share,
     Compare,
-    Encode,
-    Decode,
+    SnapshotExport,
+    SnapshotImport,
     ListImport,
     ListExport,
     IndependentOwner,
@@ -73,7 +73,7 @@ pub enum MemoryWitnessEquality {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MemoryWitnessCodec {
+pub enum MemoryWitnessSnapshot {
     Eligible,
     Ineligible,
     Caller,
@@ -126,7 +126,7 @@ pub struct ExecutableMemoryWitnessFacts {
     pub copy: MemoryWitnessCopy,
     pub drop: MemoryWitnessDrop,
     pub equality: MemoryWitnessEquality,
-    pub codec: MemoryWitnessCodec,
+    pub snapshot: MemoryWitnessSnapshot,
     pub list_element: MemoryWitnessListElement,
     pub size: MemoryWitnessSize,
     pub alignment: u16,

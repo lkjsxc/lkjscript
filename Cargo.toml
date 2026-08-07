@@ -3,17 +3,13 @@ members = [
     "crates/lkjscript-contracts",
     "crates/lkjscript-ir",
     "crates/lkjscript-core",
-    "crates/lkjscript-resource",
     "crates/lkjscript-host",
-    "crates/lkjscript-database",
     "crates/lkjscript-compiler",
     "crates/lkjscript-native",
     "crates/mechanisms/lkjscript-executable",
     "crates/lkjscript-jit",
     "crates/lkjscript-sys",
-    "crates/mechanisms/lkjscript-linux-host",
     "crates/lkjscript-vm",
-    "crates/lkjscript-runtime",
     "crates/lkjscript-app",
 ]
 resolver = "2"

@@ -107,7 +107,7 @@ fn export_record(
         &fields.parameters,
         fields.result,
         &fields.equality,
-        &fields.codec,
+        &fields.snapshot,
         &contract_hex,
     ))
     .map_err(|error| Error::msg(format!("encode package memory interface: {error}")))?;
@@ -126,7 +126,7 @@ fn export_record(
         parameter_modes: fields.parameters,
         result_mode: fields.result,
         equality_constraints: fields.equality,
-        process_codec_constraints: fields.codec,
+        semantic_snapshot_constraints: fields.snapshot,
         module_interface_contract: contract_hex,
         package_memory_interface_sha256: digest,
     })

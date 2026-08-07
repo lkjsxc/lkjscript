@@ -30,7 +30,6 @@ pub(crate) fn bind(
         .transpose()?;
     let validated_bytecode = validated_bytecode_identity(&bytecode)?.bytes();
     let descriptor = PreparedProgramDescriptor {
-        platform_revision: lkjscript_contracts::PLATFORM_REVISION,
         package_kind: provenance.kind,
         package_content: provenance.package_content,
         package_root: provenance.package_root,
@@ -122,18 +121,12 @@ fn contract_digests() -> Result<PreparedContractDigests> {
             .map(|value| value.digest().as_bytes())
             .ok_or_else(|| Error::msg(format!("prepared contract is not registered: {name}")))
     };
-    let runtime_control = get(lkjscript_contracts::RUNTIME_CONTROL)?;
-    let mut codec = Vec::from(b"lkjscript.process-outcome-codec".as_slice());
-    codec.extend_from_slice(&runtime_control);
-    codec.extend_from_slice(&lkjscript_contracts::STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST.as_bytes());
     Ok(PreparedContractDigests {
         prepared_program: get(lkjscript_contracts::PREPARED_PROGRAM)?,
         runtime_calls: lkjscript_contracts::RUNTIME_CALLS_DIGEST.as_bytes(),
         native_layout: lkjscript_contracts::NATIVE_LAYOUT_DIGEST.as_bytes(),
         verified_ssa: lkjscript_contracts::VERIFIED_SSA_DIGEST.as_bytes(),
         bytecode: get(lkjscript_contracts::BYTECODE)?,
-        runtime_control,
-        process_outcome_codec: lkjscript_contracts::sha256(&codec),
     })
 }
 

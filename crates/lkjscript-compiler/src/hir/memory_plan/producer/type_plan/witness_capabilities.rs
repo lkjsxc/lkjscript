@@ -3,7 +3,7 @@ fn witness_capabilities(
     derived: &DerivedType,
 ) -> lkjscript_contracts::MemoryWitnessCapabilities {
     let domain = witness_domain(ty, derived);
-    let codec = witness_process_codec(ty, derived);
+    let snapshot = witness_semantic_snapshot(ty, derived);
     let list = witness_list_element(ty, derived);
     let equality = witness_equality(ty);
     let immutable = derived.mode != MemoryAggregateMode::Affine
@@ -24,12 +24,12 @@ fn witness_capabilities(
                 | MemoryDomain::SealedRegion
         ),
         ordinary_region: immutable,
-        sealed_region: immutable && codec == MemoryProcessCodecEligibility::Eligible,
+        sealed_region: immutable && snapshot == MemorySemanticSnapshotEligibility::Eligible,
         borrow: !matches!(
             domain,
             MemoryDomain::UnsupportedRuntime | MemoryDomain::ExternalResource
         ),
-        process_codec: codec == MemoryProcessCodecEligibility::Eligible,
+        semantic_snapshot: snapshot == MemorySemanticSnapshotEligibility::Eligible,
         list_element: matches!(
             list,
             MemoryListElementEligibility::Copy | MemoryListElementEligibility::ImmutableValue

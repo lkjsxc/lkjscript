@@ -37,7 +37,6 @@ impl PreparedProgramIdentity {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PreparedProgramError {
-    ZeroPlatformRevision,
     ZeroDigest,
     EmptyClosure,
     ClosureOrder,
@@ -47,7 +46,6 @@ pub enum PreparedProgramError {
 impl fmt::Display for PreparedProgramError {
     fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
         output.write_str(match self {
-            Self::ZeroPlatformRevision => "prepared platform revision is zero",
             Self::ZeroDigest => "prepared digest is zero",
             Self::EmptyClosure => "prepared closure is empty",
             Self::ClosureOrder => "prepared closure is not strictly ordered and unique",

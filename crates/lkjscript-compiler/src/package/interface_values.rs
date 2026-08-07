@@ -116,7 +116,7 @@ pub(super) fn constraints(
     analysis: &ModuleAnalysis,
 ) -> Result<(Vec<LockedMemoryConstraint>, Vec<LockedMemoryConstraint>)> {
     let mut equality = Vec::with_capacity(parameters.len());
-    let mut codec = Vec::with_capacity(parameters.len());
+    let mut snapshot = Vec::with_capacity(parameters.len());
     for parameter in parameters {
         let fact = analysis
             .memory_plan
@@ -133,12 +133,12 @@ pub(super) fn constraints(
             parameter: parameter.clone(),
             support: equality_support(witness.facts.equality),
         });
-        codec.push(LockedMemoryConstraint {
+        snapshot.push(LockedMemoryConstraint {
             parameter: parameter.clone(),
-            support: codec_support(witness.facts.process_codec),
+            support: snapshot_support(witness.facts.semantic_snapshot),
         });
     }
-    Ok((equality, codec))
+    Ok((equality, snapshot))
 }
 
 const fn equality_support(
@@ -156,17 +156,17 @@ const fn equality_support(
     }
 }
 
-const fn codec_support(
-    value: crate::memory_plan::MemoryProcessCodecEligibility,
+const fn snapshot_support(
+    value: crate::memory_plan::MemorySemanticSnapshotEligibility,
 ) -> LockedConstraintSupport {
     match value {
-        crate::memory_plan::MemoryProcessCodecEligibility::Eligible => {
+        crate::memory_plan::MemorySemanticSnapshotEligibility::Eligible => {
             LockedConstraintSupport::Eligible
         }
-        crate::memory_plan::MemoryProcessCodecEligibility::Ineligible => {
+        crate::memory_plan::MemorySemanticSnapshotEligibility::Ineligible => {
             LockedConstraintSupport::Ineligible
         }
-        crate::memory_plan::MemoryProcessCodecEligibility::CallerWitnessRequired => {
+        crate::memory_plan::MemorySemanticSnapshotEligibility::CallerWitnessRequired => {
             LockedConstraintSupport::CallerWitnessRequired
         }
     }

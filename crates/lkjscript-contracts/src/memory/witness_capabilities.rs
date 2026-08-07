@@ -6,7 +6,7 @@ pub struct MemoryWitnessCapabilities {
     pub ordinary_region: bool,
     pub sealed_region: bool,
     pub borrow: bool,
-    pub process_codec: bool,
+    pub semantic_snapshot: bool,
     pub list_element: bool,
     pub equality: bool,
 }
@@ -19,7 +19,7 @@ impl MemoryWitnessCapabilities {
         ordinary_region: false,
         sealed_region: false,
         borrow: false,
-        process_codec: false,
+        semantic_snapshot: false,
         list_element: false,
         equality: false,
     };

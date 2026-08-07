@@ -152,31 +152,6 @@ impl SemanticDagSnapshot {
             ))
         }
     }
-
-    pub(super) fn validate_encode(&self) -> Result<StructuralSnapshotMetrics> {
-        let metrics = validate_semantic_dag(&self.nodes, self.root)?;
-        if metrics == self.metrics {
-            Ok(metrics)
-        } else {
-            Err(Error::msg("semantic DAG snapshot metrics disagree"))
-        }
-    }
-
-    pub(super) fn from_decoded(
-        nodes: Vec<SemanticDagNode>,
-        root: SemanticDagNodeId,
-        measured: StructuralSnapshotMetrics,
-    ) -> Result<Self> {
-        let metrics = validate_semantic_dag(&nodes, root)?;
-        if metrics != measured {
-            return Err(Error::msg("semantic DAG decode accounting disagrees"));
-        }
-        Ok(Self {
-            nodes,
-            root,
-            metrics,
-        })
-    }
 }
 
 include!("semantic_dag/validation_support.rs");

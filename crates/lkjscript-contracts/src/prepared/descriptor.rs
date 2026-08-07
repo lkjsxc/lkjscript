@@ -15,13 +15,10 @@ pub struct PreparedContractDigests {
     pub native_layout: [u8; 32],
     pub verified_ssa: [u8; 32],
     pub bytecode: [u8; 32],
-    pub runtime_control: [u8; 32],
-    pub process_outcome_codec: [u8; 32],
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct PreparedProgramDescriptor {
-    pub platform_revision: u64,
     pub package_kind: PackageProvenanceKind,
     pub package_content: [u8; 32],
     pub package_root: [u8; 32],
@@ -40,35 +37,31 @@ impl PreparedProgramDescriptor {
         self.validate()?;
         let mut out = Encoder::new(DOMAIN);
         out.tag(1);
-        out.u64(self.platform_revision);
-        out.tag(2);
         out.u8(self.package_kind as u8);
         for (tag, value) in [
-            (3, self.package_content),
-            (4, self.package_root),
-            (5, self.entry),
-            (6, self.module_memory_closure),
-            (7, self.memory_plan),
-            (8, self.witness_closure),
-            (9, self.semantic_ssa),
+            (2, self.package_content),
+            (3, self.package_root),
+            (4, self.entry),
+            (5, self.module_memory_closure),
+            (6, self.memory_plan),
+            (7, self.witness_closure),
+            (8, self.semantic_ssa),
         ] {
             out.tag(tag);
             out.fixed(&value);
         }
-        out.tag(10);
+        out.tag(9);
         out.u8(u8::from(self.native_specialization_ssa.is_some()));
         if let Some(value) = self.native_specialization_ssa {
             out.fixed(&value);
         }
         for (tag, value) in [
-            (11, self.validated_bytecode),
-            (12, self.contracts.prepared_program),
-            (13, self.contracts.runtime_calls),
-            (14, self.contracts.native_layout),
-            (15, self.contracts.verified_ssa),
-            (16, self.contracts.bytecode),
-            (17, self.contracts.runtime_control),
-            (18, self.contracts.process_outcome_codec),
+            (10, self.validated_bytecode),
+            (11, self.contracts.prepared_program),
+            (12, self.contracts.runtime_calls),
+            (13, self.contracts.native_layout),
+            (14, self.contracts.verified_ssa),
+            (15, self.contracts.bytecode),
         ] {
             out.tag(tag);
             out.fixed(&value);
@@ -77,9 +70,6 @@ impl PreparedProgramDescriptor {
     }
 
     fn validate(&self) -> Result<(), PreparedProgramError> {
-        if self.platform_revision == 0 {
-            return Err(PreparedProgramError::ZeroPlatformRevision);
-        }
         for value in [
             self.package_content,
             self.package_root,
@@ -94,8 +84,6 @@ impl PreparedProgramDescriptor {
             self.contracts.native_layout,
             self.contracts.verified_ssa,
             self.contracts.bytecode,
-            self.contracts.runtime_control,
-            self.contracts.process_outcome_codec,
         ] {
             nonzero(value)?;
         }

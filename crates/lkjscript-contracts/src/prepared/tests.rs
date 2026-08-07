@@ -4,7 +4,6 @@ use super::*;
 
 fn descriptor() -> PreparedProgramDescriptor {
     PreparedProgramDescriptor {
-        platform_revision: 17,
         package_kind: PackageProvenanceKind::Locked,
         package_content: [1; 32],
         package_root: [2; 32],
@@ -21,8 +20,6 @@ fn descriptor() -> PreparedProgramDescriptor {
             native_layout: [12; 32],
             verified_ssa: [13; 32],
             bytecode: [14; 32],
-            runtime_control: [15; 32],
-            process_outcome_codec: [16; 32],
         },
     }
 }
@@ -35,7 +32,7 @@ fn descriptor_identity_is_known_and_field_sensitive() {
         .bytes();
     assert_eq!(
         crate::ContractDigest::from_bytes(identity).to_hex(),
-        "2d3119af8e284c6b7930c69e09b0962b696ce05acabfa6a8942d8f75bdf0e91c"
+        "63cbfa520b3c7c329a8f7d90005d75632065188eb95e0e3b8fa637bde3aeb340"
     );
     let mut forged = descriptor();
     forged.entry = [17; 32];
@@ -81,8 +78,5 @@ fn closure_accepts_more_than_former_entry_boundary() {
 fn descriptor_rejects_missing_fields() {
     let mut missing = descriptor();
     missing.contracts.bytecode = [0; 32];
-    assert!(missing.identity().is_err());
-    missing = descriptor();
-    missing.platform_revision = 0;
     assert!(missing.identity().is_err());
 }

@@ -7,7 +7,6 @@ mod domains;
 mod encoding;
 mod memory;
 mod model;
-mod platform;
 mod prepared;
 mod registry;
 mod resource;
@@ -17,12 +16,11 @@ mod vocabulary;
 pub use capability::CapabilityKind;
 pub use digest::ContractDigest;
 pub use domains::{
-    current_contracts, AGENT_PROTOCOL, AGENT_PROTOCOL_DIGEST, BYTECODE, COMPONENT_INTERFACE,
-    DIAGNOSTICS, DIAGNOSTICS_DIGEST, LANGUAGE, LANGUAGE_DIGEST, MEMORY_OBLIGATIONS,
-    MEMORY_OBLIGATIONS_DIGEST, METRICS, METRICS_DIGEST, MODULE_INTERFACE, NATIVE_LAYOUT,
-    NATIVE_LAYOUT_DIGEST, PACKAGE_LOCK, PACKAGE_MANIFEST, PREPARED_PROGRAM, RUNTIME_CALLS,
-    RUNTIME_CALLS_DIGEST, RUNTIME_CONTROL, SEMANTIC_RESOURCE_PLANE, SEMANTIC_RESOURCE_PLANE_DIGEST,
-    SEMANTIC_SOURCE, SEMANTIC_SOURCE_DIGEST, SOURCE, SOURCE_DIGEST, STRUCTURAL_OWNERSHIP_DOMAINS,
+    current_contracts, AGENT_PROTOCOL, AGENT_PROTOCOL_DIGEST, BYTECODE, DIAGNOSTICS,
+    DIAGNOSTICS_DIGEST, LANGUAGE, LANGUAGE_DIGEST, MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST,
+    METRICS, METRICS_DIGEST, MODULE_INTERFACE, NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST, PACKAGE_LOCK,
+    PACKAGE_MANIFEST, PREPARED_PROGRAM, RUNTIME_CALLS, RUNTIME_CALLS_DIGEST, SEMANTIC_SOURCE,
+    SEMANTIC_SOURCE_DIGEST, SOURCE, SOURCE_DIGEST, STRUCTURAL_OWNERSHIP_DOMAINS,
     STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST, TYPED_HIR, VERIFIED_SSA, VERIFIED_SSA_DIGEST,
 };
 pub use encoding::canonical_bytes;
@@ -36,10 +34,10 @@ pub use memory::{
     validate_semantic_descriptor, ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessFacts,
     ExecutableMemoryWitnessGroup, ExecutableMemoryWitnessGroupError,
     ExecutableMemoryWitnessGroupMember, ExecutableMemoryWitnessRole, ExecutableMemoryWitnessTarget,
-    MemoryObligation, MemoryWitnessCapabilities, MemoryWitnessCodec, MemoryWitnessContention,
-    MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality,
-    MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability,
-    MemoryWitnessRoot, MemoryWitnessSize, SemanticContractError, SemanticDeclaration,
+    MemoryObligation, MemoryWitnessCapabilities, MemoryWitnessContention, MemoryWitnessCopy,
+    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
+    MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
+    MemoryWitnessSize, MemoryWitnessSnapshot, SemanticContractError, SemanticDeclaration,
     SemanticDescriptor, SemanticEnumDeclaration, SemanticEnumVariant, SemanticEnumVariantField,
     SemanticPrimitiveKind, SemanticProductDeclaration, SemanticProductField, SemanticType,
 };
@@ -47,7 +45,6 @@ pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,
     ContractItemKind, ContractName, FactOrdering, NameIdentity,
 };
-pub use platform::{PublicContractIdentity, PLATFORM_REVISION};
 pub use prepared::{
     prepared_ordered_closure_digest, PackageProvenanceKind, PreparedContractDigests,
     PreparedProgramDescriptor, PreparedProgramError, PreparedProgramIdentity,

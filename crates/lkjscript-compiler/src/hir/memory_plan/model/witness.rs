@@ -53,7 +53,7 @@ pub enum MemoryEqualitySupport {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MemoryProcessCodecEligibility {
+pub enum MemorySemanticSnapshotEligibility {
     Eligible,
     Ineligible,
     CallerWitnessRequired,
@@ -118,7 +118,7 @@ pub struct MemoryWitnessFacts {
     pub drop_glue: Option<MemoryDropGlueKind>,
     pub drop_path: Option<Vec<MemoryWitnessDropBranch>>,
     pub equality: MemoryEqualitySupport,
-    pub process_codec: MemoryProcessCodecEligibility,
+    pub semantic_snapshot: MemorySemanticSnapshotEligibility,
     pub list_element: MemoryListElementEligibility,
     pub list: Option<MemoryListWitness>,
     pub dynamic_size: MemoryDynamicSize,

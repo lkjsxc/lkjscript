@@ -49,8 +49,48 @@ cargo build --locked --release -p lkjscript-app
 A successful run prints `3628800`. For a comparable final measurement, use a fresh target directory
 for the cold build, record the number of warm process samples and the same host metadata, and measure
 the command above without recompilation. The original raw samples and sample count were not
-committed, so this baseline is **pre-reset orientation only**. A final post-reset comparable
-measurement is pending.
+committed, so this baseline is **pre-reset orientation only**. A representative post-reset runtime
+baseline remains pending.
+
+## Phase 2 build and binary comparison
+
+**Measured build evidence, not a runtime-performance claim.** The hypothesis was that deleting the
+unused broader-platform products would reduce the final `lkjscript` binary and cold build work while
+leaving an unchanged warm no-op build in the same order of magnitude. The workload was exactly:
+
+```sh
+cargo build --locked --release -p lkjscript-app --bin lkjscript
+```
+
+[`meta/scripts/build-footprint.py`](../meta/scripts/build-footprint.py) retains the harness. Each
+cold sample used a fresh empty `CARGO_TARGET_DIR`; Cargo registry/download caches remained warm. A
+warm sample immediately repeated the unchanged command in that same target directory. Three paired
+samples were collected before deletion at `698b40aa96682b6d875959306130bde7d82f513e` and three after
+the final Rust/manifests/lock changes. The post-change working-tree diff before this results-only
+documentation update had SHA-256
+`3366b85194a65cbbd08e796f0e68da8a25c4746c7fe579c38e99cdf54438ead4` against that base.
+Raw JSON, build logs, and sample values were retained under
+`target/reset-audit/phase2-direct-deletion/` and are intentionally not committed.
+
+Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 logical CPUs,
+32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The workspace release profile
+used LTO, one codegen unit, and symbol stripping. For three samples, nearest-rank p95 is the maximum;
+it is shown as orientation rather than a stable tail estimate.
+
+| Measurement | Before median (p95) | After median (p95) | Median change |
+| --- | ---: | ---: | ---: |
+| Fresh-target locked release build | 79.606 s (80.327 s) | 76.638 s (77.139 s) | -2.967 s (-3.73%) |
+| Immediate warm no-op build | 0.0265 s (0.0272 s) | 0.0238 s (0.0379 s) | -0.0026 s |
+| Stripped `lkjscript` binary | 8,503,176 bytes | 8,082,368 bytes | -420,808 bytes (-4.95%) |
+
+The warm samples are too short and noisy to support an improvement claim; the post-change p95 is
+higher despite the lower median. The measured cold median and binary size support the deletion's
+build-footprint hypothesis on this host only. The architectural deletion does not depend on a timing
+win: restore a removed component only for a demonstrated product requirement, and re-investigate if
+repeated equivalent builds show a material cold-build or binary-size regression.
+
+No startup, execution throughput, generated-code, allocation, or peak-memory comparison was made in
+this Phase 2 measurement. Existing runtime-selection evidence below is unchanged.
 
 ## Retained generated-scale evidence
 
@@ -132,16 +172,15 @@ renamed to `src/examples/scalar-redundancy`; its operation mix is
 retained rather than presented as an engine-specific example. The CLI scalar fixture is likewise
 `scalar-loop.lkjscript`.
 
-The artifact does not record machine/compiler metadata, peak memory, generated-code size, release
-binary size, or target coverage, so it is selection evidence rather than the final post-cutover
-baseline. Product metrics now identify `execution_path=baseline-native|vm-fallback`, a nullable
-fallback reason, whether native entry began, and preflight/lower/install/prepare/native/VM/total
-durations. Threshold, automatic-transition, public engine, and tier fields are absent. Retain the
-harness, record the missing dimensions with environment metadata after internal losing-path deletion, and reverse the
-choice if equivalent representative measurements show the group preflight cost or baseline
-maintenance cost outweighs its scalar benefit. This deletion commit does not claim a new timing
-measurement; the recorded matrix is the selection evidence and a post-deletion multi-sample
-baseline remains pending.
+The artifact does not record machine/compiler metadata, peak memory, generated-code size, or target
+coverage, so it remains selection evidence rather than a final runtime baseline. Phase 2 records the
+release binary size separately above, but does not fill those runtime-matrix gaps. Product metrics
+identify `execution_path=baseline-native|vm-fallback`, a nullable fallback reason, whether native
+entry began, and preflight/lower/install/prepare/native/VM/total durations. Threshold,
+automatic-transition, public engine, and tier fields are absent. Retain the harness, record the
+missing runtime dimensions with environment metadata, and reverse the choice if equivalent
+representative measurements show the group preflight or baseline maintenance cost outweighs its
+scalar benefit. A post-deletion multi-sample runtime baseline remains pending.
 
 ### Cutover path smoke evidence
 
@@ -159,5 +198,4 @@ tail value and establishes path selection and timing-field integrity only.
 
 All four returned successfully. Hello emitted 7 bytes, bench 18 bytes, and mandel 1,176 bytes once;
 the scalar fixture emitted none. The three fallback records reported `unsupported-shape`, while the
-scalar record had a null fallback reason. The final multi-sample post-deletion baseline remains
-pending.
+scalar record had a null fallback reason. A multi-sample runtime baseline remains pending.

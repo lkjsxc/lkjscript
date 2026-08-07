@@ -28,7 +28,7 @@ fn compiler_authenticates_path_rehydration() {
         .find(|item| item.id == path_type.witness)
         .expect("installed path witness");
     assert!(witness.facts.capabilities.sealed_region);
-    assert!(witness.facts.capabilities.process_codec);
+    assert!(witness.facts.capabilities.semantic_snapshot);
     let snapshot = SemanticDagSnapshot::new(
         vec![SemanticDagNode::new(
             SemanticDagType::new(

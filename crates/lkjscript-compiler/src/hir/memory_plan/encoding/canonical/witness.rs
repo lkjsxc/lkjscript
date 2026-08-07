@@ -7,7 +7,7 @@ unit_enum!(MemoryEqualitySupport {
     EqualList = 2,
     CallerWitnessRequired = 3,
 });
-unit_enum!(MemoryProcessCodecEligibility {
+unit_enum!(MemorySemanticSnapshotEligibility {
     Eligible = 0,
     Ineligible = 1,
     CallerWitnessRequired = 2,
@@ -41,7 +41,7 @@ canonical_struct!(lkjscript_contracts::MemoryWitnessCapabilities {
     ordinary_region,
     sealed_region,
     borrow,
-    process_codec,
+    semantic_snapshot,
     list_element,
     equality,
 });
@@ -77,7 +77,7 @@ canonical_struct!(MemoryWitnessFacts {
     drop_glue,
     drop_path,
     equality,
-    process_codec,
+    semantic_snapshot,
     list_element,
     list,
     dynamic_size,

@@ -56,8 +56,8 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     assert_eq!(
         witness(&first, &MemoryType::Product("record".into()))?
             .facts
-            .process_codec,
-        MemoryProcessCodecEligibility::Eligible
+            .semantic_snapshot,
+        MemorySemanticSnapshotEligibility::Eligible
     );
     assert_eq!(first.type_facts.len(), first.witnesses.len());
     assert_eq!(first.work.type_nodes, first.work.witnesses);
@@ -127,7 +127,7 @@ fn generic_parameter_requires_specialization_without_claiming_a_runtime_witness(
 }
 
 #[test]
-fn option_and_result_witnesses_close_equality_codec_and_element_eligibility() -> Result<()> {
+fn option_and_result_witnesses_close_equality_snapshot_and_element_eligibility() -> Result<()> {
     let mut option = enum_definition(
         10,
         "option",
@@ -152,8 +152,8 @@ fn option_and_result_witnesses_close_equality_codec_and_element_eligibility() ->
         MemoryEqualitySupport::EqualValue
     );
     assert_eq!(
-        option_witness.facts.process_codec,
-        MemoryProcessCodecEligibility::Eligible
+        option_witness.facts.semantic_snapshot,
+        MemorySemanticSnapshotEligibility::Eligible
     );
     assert_eq!(
         option_witness.facts.list_element,

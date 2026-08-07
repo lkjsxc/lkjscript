@@ -153,7 +153,7 @@ fn public_generic_interface_binds_hidden_transport_witness() {
         LockedConstraintSupport::CallerWitnessRequired
     );
     assert_eq!(
-        interface.process_codec_constraints[0].support,
+        interface.semantic_snapshot_constraints[0].support,
         LockedConstraintSupport::CallerWitnessRequired
     );
     assert_eq!(interface.package_memory_interface_sha256.len(), 64);

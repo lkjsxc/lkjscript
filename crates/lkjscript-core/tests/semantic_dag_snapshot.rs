@@ -3,9 +3,9 @@
 use std::num::NonZeroU64;
 
 use lkjscript_core::{
-    decode_execution_outcome, encode_execution_outcome, ExecutionOutcome, InlineStructuralValue,
-    LayoutIdentity, OwnedValue, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
-    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticTypeIdentity,
+    InlineStructuralValue, LayoutIdentity, OwnedValue, SemanticDagKind, SemanticDagNode,
+    SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot, SemanticDagType,
+    SemanticTypeIdentity,
 };
 
 fn ty(id: u64, kind: SemanticDagKind) -> SemanticDagType {
@@ -69,7 +69,7 @@ fn product_list_product() -> SemanticDagSnapshot {
 }
 
 #[test]
-fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
+fn product_list_product_dag_preserves_sharing_and_exact_identity_in_memory() {
     let snapshot = product_list_product();
     assert_eq!(snapshot.metrics().nodes, 6);
     assert_eq!(snapshot.metrics().fields, 7);
@@ -86,12 +86,8 @@ fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
         .require_root_type(ty(4, SemanticDagKind::Product))
         .is_err());
 
-    let outcome = ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot));
-    let bytes = encode_execution_outcome(&outcome, 2 * 1024 * 1024).expect("encode");
-    let decoded = decode_execution_outcome(&bytes, 2 * 1024 * 1024).expect("decode");
-    assert_eq!(decoded, outcome);
-    let returned = decoded.returned().expect("returned value");
-    let decoded = returned.as_semantic_dag().expect("semantic DAG");
+    let owned = OwnedValue::from_semantic_dag(snapshot);
+    let decoded = owned.as_semantic_dag().expect("semantic DAG");
     assert_eq!(
         decoded.nodes()[3].payload,
         SemanticDagPayload::List {
@@ -109,7 +105,7 @@ fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
 }
 
 #[test]
-fn semantic_dag_codec_crosses_former_node_and_field_limits() {
+fn semantic_dag_snapshot_crosses_former_node_and_field_limits() {
     const COUNT: u64 = 65_537;
     let mut nodes = Vec::with_capacity(usize::try_from(COUNT).expect("test count fits usize"));
     for value in 0..COUNT - 1 {
@@ -128,14 +124,7 @@ fn semantic_dag_codec_crosses_former_node_and_field_limits() {
     ));
     let snapshot = SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(COUNT - 1))
         .expect("wide semantic DAG");
-    let outcome = ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot));
-    let bytes = encode_execution_outcome(&outcome, 16 * 1024 * 1024).expect("wide encode");
-    let decoded = decode_execution_outcome(&bytes, 16 * 1024 * 1024).expect("wide decode");
-    let metrics = decoded
-        .returned()
-        .and_then(OwnedValue::as_semantic_dag)
-        .expect("wide returned DAG")
-        .metrics();
+    let metrics = snapshot.metrics();
     assert_eq!(metrics.nodes, COUNT);
     assert_eq!(metrics.fields, COUNT - 1);
 }
@@ -150,24 +139,15 @@ fn high_malformed_dag_references_fail_before_host_indexing() {
     )];
     assert!(SemanticDagSnapshot::new(nodes, SemanticDagNodeId::new(0)).is_err());
 
-    let valid = ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(
-        SemanticDagSnapshot::new(
-            vec![node(
-                13,
-                SemanticDagKind::I64,
-                SemanticDagPayload::Inline(InlineStructuralValue::I64(1)),
-            )],
-            SemanticDagNodeId::new(0),
-        )
-        .expect("valid DAG"),
-    ));
-    let mut wire = encode_execution_outcome(&valid, 4096).expect("encode DAG");
-    let root = wire
-        .len()
-        .checked_sub(8)
-        .expect("wire contains canonical u64 root ID");
-    wire[root..].copy_from_slice(&high.to_le_bytes());
-    assert!(decode_execution_outcome(&wire, 4096).is_err());
+    assert!(SemanticDagSnapshot::new(
+        vec![node(
+            13,
+            SemanticDagKind::I64,
+            SemanticDagPayload::Inline(InlineStructuralValue::I64(1)),
+        )],
+        SemanticDagNodeId::new(high),
+    )
+    .is_err());
 }
 
 #[path = "semantic_dag_snapshot/rejection.rs"]

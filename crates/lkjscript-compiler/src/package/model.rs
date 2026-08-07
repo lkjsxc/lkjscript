@@ -92,7 +92,7 @@ pub struct PackageMemoryInterface {
     pub parameter_modes: Vec<LockedMemoryParameterMode>,
     pub result_mode: LockedMemoryResultMode,
     pub equality_constraints: Vec<LockedMemoryConstraint>,
-    pub process_codec_constraints: Vec<LockedMemoryConstraint>,
+    pub semantic_snapshot_constraints: Vec<LockedMemoryConstraint>,
     pub module_interface_contract: String,
     pub package_memory_interface_sha256: String,
 }

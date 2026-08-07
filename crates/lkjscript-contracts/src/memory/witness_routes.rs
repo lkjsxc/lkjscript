@@ -31,10 +31,10 @@ pub fn required_memory_witness_operations(
     if facts.equality != MemoryWitnessEquality::Unsupported {
         operations.push(MemoryWitnessOperation::Compare);
     }
-    if facts.codec == MemoryWitnessCodec::Eligible {
+    if facts.snapshot == MemoryWitnessSnapshot::Eligible {
         operations.extend([
-            MemoryWitnessOperation::Encode,
-            MemoryWitnessOperation::Decode,
+            MemoryWitnessOperation::SnapshotExport,
+            MemoryWitnessOperation::SnapshotImport,
         ]);
     }
     if matches!(
@@ -52,7 +52,7 @@ pub fn required_memory_witness_operations(
 
 pub fn memory_witness_routes_are_compatible(facts: &ExecutableMemoryWitnessFacts) -> bool {
     let capabilities = facts.capabilities;
-    if capabilities.process_codec != (facts.codec == MemoryWitnessCodec::Eligible)
+    if capabilities.semantic_snapshot != (facts.snapshot == MemoryWitnessSnapshot::Eligible)
         || capabilities.list_element
             != matches!(
                 facts.list_element,
@@ -81,7 +81,7 @@ pub fn memory_witness_routes_are_compatible(facts: &ExecutableMemoryWitnessFacts
         && (facts.mode == MemoryWitnessMode::Affine
             || (facts.mode != MemoryWitnessMode::ImmutableValue && !facts.contains_dynamic_owner)
             || facts.contains_borrow
-            || !capabilities.process_codec)
+            || !capabilities.semantic_snapshot)
     {
         return false;
     }

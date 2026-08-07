@@ -13,7 +13,7 @@ scale-safe compilation, and one measured production execution path.
 ## Build and first run
 
 ```sh
-cargo build --locked -p lkjscript-app
+cargo build --locked -p lkjscript-app --bin lkjscript
 cargo run --locked -p lkjscript-app --bin lkjscript -- \
   run src/examples/hello/main.lkjscript
 ```
@@ -26,6 +26,12 @@ optimizing runtime and forced execution helpers are deleted. The SSA evaluator i
 only as the opt-in `lkjscript-ir/test-oracle` feature used by development and differential tests;
 production dependencies do not enable it.
 
+The active product scope is local package compile/run plus the Semantic Source stdio interface. The
+workspace has one application binary, `lkjscript`. Daemon, process-cell, session, scheduler,
+resource-topology, service-database, and Linux-observation products are intentionally absent. The
+language's SQLite capability remains implemented directly by the VM and `lkjscript-sys`, alongside
+stdio, clock, filesystem, network, and terminal operations.
+
 ## Verification
 
 ```sh
@@ -35,7 +41,8 @@ cargo test --workspace --all-targets --locked
 cargo build --workspace --release --locked
 ```
 
-The retained container verification also runs application smoke tests:
+The retained container verification builds only `--bin lkjscript` and runs hello, Mandelbrot, and
+all seven local shell smoke/check scripts, including the direct SQLite path:
 
 ```sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify

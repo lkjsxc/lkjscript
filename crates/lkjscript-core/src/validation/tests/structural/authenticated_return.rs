@@ -3,7 +3,7 @@ fn install_authenticated_return_witness(
     mode: crate::StructuralTypeMode,
 ) {
     use lkjscript_contracts::{
-        ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessCodec,
+        ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessSnapshot,
         MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
         MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode,
         MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, SemanticDescriptor,
@@ -33,7 +33,7 @@ fn install_authenticated_return_witness(
             ordinary_region: immutable,
             sealed_region: immutable,
             borrow: true,
-            process_codec: immutable,
+            semantic_snapshot: immutable,
             list_element: immutable,
             equality: false,
         },
@@ -42,10 +42,10 @@ fn install_authenticated_return_witness(
         copy: MemoryWitnessCopy::Structural,
         drop: MemoryWitnessDrop::Structural,
         equality: MemoryWitnessEquality::Unsupported,
-        codec: if immutable {
-            MemoryWitnessCodec::Eligible
+        snapshot: if immutable {
+            MemoryWitnessSnapshot::Eligible
         } else {
-            MemoryWitnessCodec::Ineligible
+            MemoryWitnessSnapshot::Ineligible
         },
         list_element: if immutable {
             MemoryWitnessListElement::ImmutableValue

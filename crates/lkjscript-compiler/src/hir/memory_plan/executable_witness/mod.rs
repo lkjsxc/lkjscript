@@ -1,7 +1,7 @@
 use lkjscript_contracts::{
-    ExecutableMemoryWitnessFacts, MemoryWitnessCodec, MemoryWitnessContention, MemoryWitnessCopy,
-    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
-    MemoryWitnessMode, MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+    ExecutableMemoryWitnessFacts, MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain,
+    MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode,
+    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, MemoryWitnessSnapshot,
 };
 use lkjscript_core::Result;
 
@@ -23,7 +23,7 @@ pub(crate) fn executable_facts(facts: &MemoryWitnessFacts) -> Result<ExecutableM
         copy: map_copy(facts.copy_share),
         drop: witness_drop(facts),
         equality: map_equality(facts.equality),
-        codec: map_codec(facts.process_codec),
+        snapshot: map_snapshot(facts.semantic_snapshot),
         list_element: map_list_element(facts.list_element),
         size: witness_size(&facts.ty, facts.dynamic_size),
         alignment: witness_alignment(&facts.ty),

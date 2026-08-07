@@ -59,7 +59,7 @@ fn exercise(source: &str, name: &str, active: &str, child_kind: StructuralKind, 
         "witness facts: {:?}",
         witness.facts
     );
-    assert!(witness.facts.capabilities.process_codec);
+    assert!(witness.facts.capabilities.semantic_snapshot);
     let StructuralTypeKind::Enum(enum_id) = enum_type.kind else {
         panic!("enum identity")
     };

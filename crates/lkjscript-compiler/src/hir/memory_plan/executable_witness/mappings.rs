@@ -60,11 +60,11 @@ fn map_equality(value: super::MemoryEqualitySupport) -> MemoryWitnessEquality {
     }
 }
 
-fn map_codec(value: super::MemoryProcessCodecEligibility) -> MemoryWitnessCodec {
+fn map_snapshot(value: super::MemorySemanticSnapshotEligibility) -> MemoryWitnessSnapshot {
     match value {
-        super::MemoryProcessCodecEligibility::Eligible => MemoryWitnessCodec::Eligible,
-        super::MemoryProcessCodecEligibility::Ineligible => MemoryWitnessCodec::Ineligible,
-        super::MemoryProcessCodecEligibility::CallerWitnessRequired => MemoryWitnessCodec::Caller,
+        super::MemorySemanticSnapshotEligibility::Eligible => MemoryWitnessSnapshot::Eligible,
+        super::MemorySemanticSnapshotEligibility::Ineligible => MemoryWitnessSnapshot::Ineligible,
+        super::MemorySemanticSnapshotEligibility::CallerWitnessRequired => MemoryWitnessSnapshot::Caller,
     }
 }
 

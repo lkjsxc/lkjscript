@@ -9,8 +9,6 @@ use lkjscript_vm::run_chunk;
 mod adversarial;
 #[path = "enum_execution/authenticated_option_result.rs"]
 mod authenticated_option_result;
-#[path = "enum_execution/authenticated_rehydration.rs"]
-mod authenticated_rehydration;
 #[path = "enum_execution/recursive.rs"]
 mod recursive;
 #[path = "enum_execution/scale.rs"]

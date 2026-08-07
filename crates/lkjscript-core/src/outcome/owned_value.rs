@@ -137,5 +137,4 @@ include!("owned_value/views_semantic_dag.rs");
 include!("owned_value/views_static.rs");
 include!("owned_value/symbols.rs");
 include!("owned_value/symbol_rewrite.rs");
-include!("owned_value/wire.rs");
 include!("owned_value/debug.rs");

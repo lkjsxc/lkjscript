@@ -1,9 +1,9 @@
 use crate::*;
 use lkjscript_contracts::{
-    ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessCodec,
-    MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
-    MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
-    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, SemanticDescriptor,
+    ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessContention,
+    MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality,
+    MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability,
+    MemoryWitnessRoot, MemoryWitnessSize, MemoryWitnessSnapshot, SemanticDescriptor,
     SemanticPrimitiveKind, SemanticType,
 };
 use std::num::NonZeroU64;
@@ -27,7 +27,7 @@ pub(super) fn witness() -> InstalledMemoryWitness {
             ordinary_region: false,
             sealed_region: false,
             borrow: true,
-            process_codec: true,
+            semantic_snapshot: true,
             list_element: true,
             equality: true,
         },
@@ -36,7 +36,7 @@ pub(super) fn witness() -> InstalledMemoryWitness {
         copy: MemoryWitnessCopy::Trivial,
         drop: MemoryWitnessDrop::Trivial,
         equality: MemoryWitnessEquality::Value,
-        codec: MemoryWitnessCodec::Eligible,
+        snapshot: MemoryWitnessSnapshot::Eligible,
         list_element: MemoryWitnessListElement::Copy,
         size: MemoryWitnessSize::Fixed(8),
         alignment: 8,

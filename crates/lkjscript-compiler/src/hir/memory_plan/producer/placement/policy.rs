@@ -83,8 +83,8 @@ fn sealed_selected(
     let facts = &witness.facts;
     facts.mode == MemoryAggregateMode::ImmutableValue
         && facts.capabilities.sealed_region
-        && facts.capabilities.process_codec
-        && facts.process_codec == MemoryProcessCodecEligibility::Eligible
+        && facts.capabilities.semantic_snapshot
+        && facts.semantic_snapshot == MemorySemanticSnapshotEligibility::Eligible
         && !facts.contains_borrow
         && !memory_type_has_affine_or_resource(&facts.ty)
         && independent >= 2

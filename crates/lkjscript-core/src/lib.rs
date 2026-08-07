@@ -39,14 +39,13 @@ pub use opcode::{
     ControlFlow, DecodedInstruction, DecodedOperand, Op, OpInfo, OperandLayout, StackEffect,
 };
 pub use outcome::{
-    decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
-    CleanupFailures, CleanupPhase, CleanupRetentionPolicy, CleanupSubject, ExecutionOutcome,
-    ExecutionOutcomeCodecLimits, HostError, OwnedValue, ResourceLimitKind, SealedSemanticDagBorrow,
-    SealedSemanticDagBorrowFailure, SealedSemanticDagError, SealedSemanticDagFailure,
-    SealedSemanticDagMetrics, SealedSemanticDagOwner, SealedSemanticDagReleaseFailure,
-    SealedSemanticDagReleaseReport, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode,
-    SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot, SemanticDagType,
-    StructuralSnapshotMetrics, Trap, DEFAULT_MAX_CLEANUP_FAILURES,
+    CleanupFailure, CleanupFailureLimits, CleanupFailures, CleanupPhase, CleanupRetentionPolicy,
+    CleanupSubject, ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind,
+    SealedSemanticDagBorrow, SealedSemanticDagBorrowFailure, SealedSemanticDagError,
+    SealedSemanticDagFailure, SealedSemanticDagMetrics, SealedSemanticDagOwner,
+    SealedSemanticDagReleaseFailure, SealedSemanticDagReleaseReport, SealedSemanticDagRuntime,
+    SemanticDagKind, SemanticDagNode, SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot,
+    SemanticDagType, StructuralSnapshotMetrics, Trap, DEFAULT_MAX_CLEANUP_FAILURES,
     DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
 };
 pub use prelude::*;

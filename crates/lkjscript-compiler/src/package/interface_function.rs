@@ -13,7 +13,7 @@ pub(super) struct FunctionFields {
     pub(super) parameters: Vec<LockedMemoryParameterMode>,
     pub(super) result: LockedMemoryResultMode,
     pub(super) equality: Vec<LockedMemoryConstraint>,
-    pub(super) codec: Vec<LockedMemoryConstraint>,
+    pub(super) snapshot: Vec<LockedMemoryConstraint>,
 }
 
 pub(super) fn fields(
@@ -50,7 +50,7 @@ pub(super) fn fields(
         .collect();
     let result = super::interface_values::result_mode(planned.signature.result);
     let traits = super::interface_values::trait_parameters(function, analysis)?;
-    let (equality, codec) = super::interface_values::constraints(&types, analysis)?;
+    let (equality, snapshot) = super::interface_values::constraints(&types, analysis)?;
     Ok(FunctionFields {
         types,
         traits,
@@ -58,7 +58,7 @@ pub(super) fn fields(
         parameters,
         result,
         equality,
-        codec,
+        snapshot,
     })
 }
 
@@ -70,6 +70,6 @@ pub(super) fn not_applicable() -> FunctionFields {
         parameters: Vec::new(),
         result: LockedMemoryResultMode::NotApplicable,
         equality: Vec::new(),
-        codec: Vec::new(),
+        snapshot: Vec::new(),
     }
 }

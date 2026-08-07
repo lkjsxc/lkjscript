@@ -29,7 +29,7 @@ impl TypePlanner<'_> {
             drop_glue: drop_glue.map(|id| self.witness_glue(id)).transpose()?,
             drop_path: drop_path.map(|id| self.witness_path(id)).transpose()?,
             equality: witness_equality(ty),
-            process_codec: witness_process_codec(ty, derived),
+            semantic_snapshot: witness_semantic_snapshot(ty, derived),
             list_element: witness_list_element(ty, derived),
             list: self.witness_list(ty, derived)?,
             dynamic_size: witness_dynamic_size(ty),

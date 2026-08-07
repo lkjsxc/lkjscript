@@ -61,12 +61,12 @@ fn verified_value_equality(ty: &Type) -> bool {
     }
 }
 
-fn verified_witness_process_codec(
+fn verified_witness_semantic_snapshot(
     ty: &Type,
     derived: &VerifiedDerived,
-) -> MemoryProcessCodecEligibility {
+) -> MemorySemanticSnapshotEligibility {
     if matches!(ty, Type::Param(_)) {
-        return MemoryProcessCodecEligibility::CallerWitnessRequired;
+        return MemorySemanticSnapshotEligibility::CallerWitnessRequired;
     }
     if (matches!(ty, Type::Product(_) | Type::Enum { .. })
         && derived.closure.class == MemoryClosureClass::RegionClosed)
@@ -76,15 +76,15 @@ fn verified_witness_process_codec(
         )
         || derived.mode == MemoryAggregateMode::Affine
         || derived.contains_borrow
-        || !verified_witness_codec_type(ty)
+        || !verified_witness_snapshot_type(ty)
     {
-        MemoryProcessCodecEligibility::Ineligible
+        MemorySemanticSnapshotEligibility::Ineligible
     } else {
-        MemoryProcessCodecEligibility::Eligible
+        MemorySemanticSnapshotEligibility::Eligible
     }
 }
 
-fn verified_witness_codec_type(ty: &Type) -> bool {
+fn verified_witness_snapshot_type(ty: &Type) -> bool {
     let mut pending = vec![ty];
     while let Some(ty) = pending.pop() {
         match ty {

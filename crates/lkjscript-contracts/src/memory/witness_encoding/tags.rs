@@ -64,11 +64,11 @@ pub(super) const fn equality(value: MemoryWitnessEquality) -> u8 {
     }
 }
 
-pub(super) const fn codec(value: MemoryWitnessCodec) -> u8 {
+pub(super) const fn snapshot(value: MemoryWitnessSnapshot) -> u8 {
     match value {
-        MemoryWitnessCodec::Eligible => 0,
-        MemoryWitnessCodec::Ineligible => 1,
-        MemoryWitnessCodec::Caller => 2,
+        MemoryWitnessSnapshot::Eligible => 0,
+        MemoryWitnessSnapshot::Ineligible => 1,
+        MemoryWitnessSnapshot::Caller => 2,
     }
 }
 
@@ -109,8 +109,8 @@ pub(super) const fn operation_tag(value: MemoryWitnessOperation) -> u8 {
         MemoryWitnessOperation::Drop => 2,
         MemoryWitnessOperation::Share => 3,
         MemoryWitnessOperation::Compare => 4,
-        MemoryWitnessOperation::Encode => 5,
-        MemoryWitnessOperation::Decode => 6,
+        MemoryWitnessOperation::SnapshotExport => 5,
+        MemoryWitnessOperation::SnapshotImport => 6,
         MemoryWitnessOperation::ListImport => 7,
         MemoryWitnessOperation::ListExport => 8,
         MemoryWitnessOperation::IndependentOwner => 9,

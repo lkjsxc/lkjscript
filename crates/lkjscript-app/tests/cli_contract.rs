@@ -3,15 +3,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-#[path = "canonical/application_control.rs"]
-mod application_control;
-#[path = "canonical/application_control/support.rs"]
-mod application_control_support;
-#[path = "canonical/process_cells.rs"]
-mod process_cells;
-#[path = "canonical/session_broker.rs"]
-mod session_broker;
-
 #[test]
 fn help_cli_and_metrics_expose_one_product_execution_path() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
@@ -25,6 +16,8 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     assert!(help.contains("run <file.lkjscript> [--] [script-args...]"));
     assert!(help.contains("one baseline-native attempt, then VM fallback before entry"));
     assert!(help.contains("memory inventory [--json]"));
+    assert!(!help.contains("runtime topology"));
+    assert!(!help.contains("host-scheduler"));
     for removed in [
         "--engine",
         "--auto-jit-threshold",
@@ -45,6 +38,7 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     let description = String::from_utf8(description.stdout).expect("describe is UTF-8");
     assert!(description.contains("\"execution_path\":\"baseline-native-with-vm-fallback\""));
     assert!(!description.contains("\"engines\":"));
+    assert!(!description.contains("platform_revision"));
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scalar-loop.lkjscript");
@@ -125,44 +119,31 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
 }
 
 #[test]
-fn runtime_topology_scheduler_and_plan_are_exact_public_evidence() {
+fn deleted_platform_commands_are_rejected() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
-    for (operation, schema) in [
-        (
-            &["runtime", "topology", "--json"][..],
-            "lkjscript.runtime-topology",
-        ),
-        (
-            &["runtime", "host-scheduler", "--json"][..],
-            "lkjscript.host-scheduler",
-        ),
-        (
-            &[
-                "runtime",
-                "plan",
-                "--json",
-                "--parallelism",
-                "2",
-                "--tasks",
-                "4",
-            ][..],
-            "lkjscript.execution-resource-plan",
-        ),
-    ] {
+    for command in ["runtime", "system"] {
         let output = Command::new(binary)
-            .args(operation)
+            .arg(command)
             .output()
-            .expect("run runtime evidence command");
-        assert!(output.status.success(), "stderr={:?}", output.stderr);
-        assert!(output.stderr.is_empty());
-        let json = String::from_utf8(output.stdout).expect("runtime JSON is UTF-8");
-        assert!(json.contains(&format!("\"schema\":\"{schema}\"")));
-        assert!(json.contains(&format!(
-            "\"contract\":\"{}\"",
-            lkjscript_contracts::SEMANTIC_RESOURCE_PLANE_DIGEST
-        )));
-        assert!(json.contains("\"snapshot\":"));
+            .expect("run deleted command");
+        assert!(
+            !output.status.success(),
+            "deleted command accepted: {command}"
+        );
+        assert!(String::from_utf8(output.stderr)
+            .expect("diagnostic is UTF-8")
+            .contains(&format!("unknown command: {command}")));
     }
+
+    let version = Command::new(binary)
+        .arg("--version")
+        .output()
+        .expect("run version command");
+    assert!(version.status.success());
+    assert_eq!(
+        String::from_utf8(version.stdout).expect("version is UTF-8"),
+        format!("lkjscript {}\n", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]
