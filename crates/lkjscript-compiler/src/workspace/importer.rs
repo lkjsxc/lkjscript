@@ -14,7 +14,17 @@ pub fn import_path(path: &Path) -> Result<WorkspaceSnapshot> {
 }
 
 pub fn import_path_with_metrics(path: &Path) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
-    import_path_in_namespace(path, WorkspaceNamespace::fresh()?)
+    import_path_in_namespace(path, WorkspaceNamespace::fresh()?, false)
+}
+
+pub(crate) fn import_package_path(path: &Path) -> Result<WorkspaceSnapshot> {
+    import_package_path_with_metrics(path).map(|(snapshot, _)| snapshot)
+}
+
+pub(crate) fn import_package_path_with_metrics(
+    path: &Path,
+) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
+    import_path_in_namespace(path, WorkspaceNamespace::fresh()?, true)
 }
 
 pub fn import_source(source: &str, path: &str) -> Result<WorkspaceSnapshot> {
@@ -25,13 +35,25 @@ pub fn import_source(source: &str, path: &str) -> Result<WorkspaceSnapshot> {
 fn import_path_in_namespace(
     path: &Path,
     namespace: WorkspaceNamespace,
+    package_required: bool,
 ) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
     crate::ensure_source_path(path)?;
+    let package_started = Instant::now();
     let package = crate::package::verify_for_compilation(path)?;
+    let mut package_validation = package_started.elapsed();
+    if package_required && package.is_none() {
+        return Err(Error::msg(format!(
+            "no {} contains {}",
+            crate::package::MANIFEST_FILE,
+            path.display()
+        )));
+    }
     let (source_tree, loading) = crate::source::load_with_metrics(path)
         .map_err(crate::source::SourceDiagnostic::into_core)?;
     if let Some(verified) = &package {
+        let locked_sources_started = Instant::now();
         crate::package::verify_loaded_sources(verified, &source_tree)?;
+        package_validation = package_validation.saturating_add(locked_sources_started.elapsed());
     }
     let development_source = source_tree
         .files()
@@ -53,9 +75,12 @@ fn import_path_in_namespace(
     let effect_analysis = effects_started.elapsed();
 
     let provenance = match package {
-        Some(verified) => CapturedCompilationProvenance::Locked(Arc::new(
-            crate::package::capture_compilation(&verified)?,
-        )),
+        Some(verified) => {
+            let capture_started = Instant::now();
+            let captured = crate::package::capture_compilation(&verified)?;
+            package_validation = package_validation.saturating_add(capture_started.elapsed());
+            CapturedCompilationProvenance::Locked(Arc::new(captured))
+        }
         None => CapturedCompilationProvenance::Development(development_source),
     };
     let snapshot = WorkspaceSnapshot::new(namespace, hir, provenance, Some(attachments))?;
@@ -66,6 +91,7 @@ fn import_path_in_namespace(
             parsing: loading.parsing,
             hir_analysis,
             effect_analysis,
+            package_validation,
             source_files,
         },
     ))
@@ -110,6 +136,7 @@ fn import_source_in_namespace(
             parsing,
             hir_analysis,
             effect_analysis,
+            package_validation: Default::default(),
             source_files,
         },
     ))

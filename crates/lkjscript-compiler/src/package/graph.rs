@@ -28,6 +28,10 @@ struct PackageFrame {
 }
 
 pub(super) fn build(root: &Path) -> Result<LockFile> {
+    build_with_root_manifest(root).map(|(lock, _)| lock)
+}
+
+pub(super) fn build_with_root_manifest(root: &Path) -> Result<(LockFile, Manifest)> {
     let canonical = root
         .canonicalize()
         .map_err(|error| Error::host(format!("canonicalize package root: {error}")))?;
@@ -41,7 +45,9 @@ pub(super) fn build(root: &Path) -> Result<LockFile> {
     frames
         .try_reserve(1)
         .map_err(|_| Error::host("package graph work stack allocation failed"))?;
-    frames.push(prepare(canonical.clone())?);
+    let root_frame = prepare(canonical.clone())?;
+    let root_manifest = root_frame.manifest.clone();
+    frames.push(root_frame);
 
     let mut packages = Vec::new();
     let mut package_identities = HashMap::new();
@@ -150,13 +156,16 @@ pub(super) fn build(root: &Path) -> Result<LockFile> {
     };
 
     packages.sort_by(|left, right| left.package_sha256.cmp(&right.package_sha256));
-    Ok(LockFile {
-        schema: "lkjscript.package-lock".into(),
-        contract: super::contracts::expected(lkjscript_contracts::PACKAGE_LOCK)?.to_hex(),
-        root: root_hash,
-        contracts: super::contracts::all()?,
-        packages,
-    })
+    Ok((
+        LockFile {
+            schema: "lkjscript.package-lock".into(),
+            contract: super::contracts::expected(lkjscript_contracts::PACKAGE_LOCK)?.to_hex(),
+            root: root_hash,
+            contracts: super::contracts::all()?,
+            packages,
+        },
+        root_manifest,
+    ))
 }
 
 fn prepare(canonical: PathBuf) -> Result<PackageFrame> {

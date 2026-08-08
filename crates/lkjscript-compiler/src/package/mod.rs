@@ -30,6 +30,7 @@ pub(crate) struct VerifiedCompilationPackage {
     root: PathBuf,
     lock: LockFile,
     entry_module: String,
+    capabilities: Vec<lkjscript_core::CapabilityKind>,
 }
 
 impl VerifiedCompilationPackage {
@@ -43,6 +44,10 @@ impl VerifiedCompilationPackage {
 
     pub(crate) fn entry_module(&self) -> &str {
         &self.entry_module
+    }
+
+    pub(crate) fn capabilities(&self) -> &[lkjscript_core::CapabilityKind] {
+        &self.capabilities
     }
 }
 pub(crate) use compilation::{capture as capture_compilation, CapturedPackageCompilation};
@@ -70,8 +75,7 @@ pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
 
 fn verify_with_lock(entry: &Path) -> Result<(PathBuf, Manifest, LockFile, Option<String>)> {
     let root = root(entry)?;
-    let (manifest, _) = manifest::load(&root)?;
-    let current = graph::build(&root)?;
+    let (current, manifest) = graph::build_with_root_manifest(&root)?;
     let (locked, locked_bytes) = encoding::read(&root)?;
     contracts::require(&locked.contract, lkjscript_contracts::PACKAGE_LOCK)?;
     if locked.contracts != contracts::all()? {
@@ -111,13 +115,23 @@ pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<VerifiedComp
         .map_err(|error| Error::host(format!("canonicalize package search root: {error}")))?;
     loop {
         if current.join(MANIFEST_FILE).is_file() {
-            return verify_with_lock(entry).and_then(|(root, _, lock, entry_module)| {
+            return verify_with_lock(entry).and_then(|(root, manifest, lock, entry_module)| {
+                let mut capabilities = Vec::new();
+                capabilities
+                    .try_reserve(manifest.capabilities.len())
+                    .map_err(|_| Error::host("package capability grant allocation failed"))?;
+                for name in &manifest.capabilities {
+                    capabilities.push(lkjscript_core::CapabilityKind::parse(name).ok_or_else(
+                        || Error::msg(format!("unknown package capability: {name}")),
+                    )?);
+                }
                 Ok(Some(VerifiedCompilationPackage {
                     root,
                     lock,
                     entry_module: entry_module.ok_or_else(|| {
                         Error::msg("compiled package entry is not a source module")
                     })?,
+                    capabilities,
                 }))
             });
         }

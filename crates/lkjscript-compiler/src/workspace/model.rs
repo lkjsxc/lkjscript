@@ -227,6 +227,7 @@ pub struct ImportMetrics {
     pub parsing: Duration,
     pub hir_analysis: Duration,
     pub effect_analysis: Duration,
+    pub package_validation: Duration,
     pub source_files: usize,
 }
 

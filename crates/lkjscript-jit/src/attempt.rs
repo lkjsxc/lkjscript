@@ -48,12 +48,50 @@ pub enum BaselineDeclineReason {
 }
 
 impl BaselineDeclineReason {
-    pub const fn metric_label(&self) -> &'static str {
+    pub const fn stage(&self) -> &'static str {
         match self {
-            Self::Lowering(_) => "lowering-declined",
-            Self::Installation(_) => "installation-declined",
-            Self::Preparation(_) => "pre-entry-declined",
-            Self::PreparationFailure(_) => "preparation-failed",
+            Self::Lowering(_) => "lowering",
+            Self::Installation(_) => "installation",
+            Self::Preparation(_) | Self::PreparationFailure(_) => "preparation",
+        }
+    }
+
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::Lowering(error) | Self::Installation(error) | Self::PreparationFailure(error) => {
+                error.code().as_str()
+            }
+            Self::Preparation(error) => match error {
+                PreEntryError::UnknownEntry => "unknown-entry",
+                PreEntryError::ArgumentCount { .. } => "argument-count",
+                PreEntryError::ArgumentType { .. } => "argument-type",
+                PreEntryError::UnsupportedSignature => "unsupported-signature",
+                PreEntryError::EntryAddressRepresentation => "entry-address-representation",
+                PreEntryError::BookkeepingAllocationFailed => "bookkeeping-allocation-failed",
+                PreEntryError::NativeStackUnavailable(_) => "native-stack-unavailable",
+                PreEntryError::Cancelled => "cancelled",
+                PreEntryError::DeadlineExceeded => "deadline-exceeded",
+                PreEntryError::ResourceLimitExceeded(_) => "resource-limit-exceeded",
+                PreEntryError::ExecutionDomain => "execution-domain",
+            },
+        }
+    }
+
+    pub const fn function(&self) -> Option<FunctionId> {
+        match self {
+            Self::Lowering(error) | Self::Installation(error) | Self::PreparationFailure(error) => {
+                error.function()
+            }
+            Self::Preparation(_) => None,
+        }
+    }
+
+    pub fn detail(&self) -> String {
+        match self {
+            Self::Lowering(error) | Self::Installation(error) | Self::PreparationFailure(error) => {
+                error.detail().to_string()
+            }
+            Self::Preparation(error) => error.to_string(),
         }
     }
 }

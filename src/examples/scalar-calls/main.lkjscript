@@ -1,7 +1,7 @@
 imports/
 import/
 module/
-src/examples/jit-scalar/kernel.lkjscript
+src/examples/scalar-calls/kernel.lkjscript
 /module
 declarations/
 scalar-step

@@ -8,7 +8,8 @@ responsibility, data flow, ownership, and trust boundaries; it is not a second d
 
 ```text
 package manifest, lock, and line-oriented .lkjscript files
-    -> private checked text/path importer and exact import resolution
+    -> one compiler-owned required-package verification
+    -> private checked text/path importer using the same verified lock and grants
     -> source tree and type/effect/ownership analysis
     -> immutable WorkspaceSnapshot owning typed HIR and complete/typed-hole state
     -> optional in-process Workspace transaction and one-revision Arc publication
@@ -20,8 +21,11 @@ package manifest, lock, and line-oriented .lkjscript files
 ```
 
 Text and package files remain persistent importer inputs, not semantic authority and not a post-HIR
-compiler input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA,
-and bytecode. All text/path compile APIs import and delegate. The snapshot has private fields and
+compiler input. The product's required-package path verifies the root manifest, decoded lock,
+selected module, and typed capability grants once; source import, locked-source checking, provenance
+capture, target checking, and capability checking consume that same verified value. `compile_snapshot`
+is public and is the sole boundary into memory planning, SSA, and bytecode. All text/path compile
+APIs import and delegate. The snapshot has private fields and
 owns `Arc`-shared typed HIR, complete or typed-hole-overlay state, immutable import provenance or
 deterministic post-edit development provenance, optional presentation/source attachments, and
 deterministic semantic indexes. An unedited locked import retains the exact target record needed to
@@ -140,11 +144,14 @@ descriptor, or bind a synthetic shared identity back into them. Baseline native 
 retained verified SSA and computes eligibility and target-specific machine facts only while building
 an actual attempt. VM execution receives the retained validated bytecode unchanged.
 
-Package validation remains separate from this deletion. The importer verifies the manifest and
-lock, carries that same decoded lock value through source-closure checking, and captures its target
-record without rereading mutable path state. After HIR memory planning,
-`compile_snapshot` compares the generated target memory and witness facts with that captured record
-before continuing; a development snapshot needs no equivalent package check. Executable-image
+Package validation remains separate from this deletion. The graph builder returns the root manifest
+from the same read that produced the current lock candidate; the compiler compares that candidate
+with the decoded lock, parses grants only from the bound manifest, carries the same lock and grants
+through source-closure checking, and captures its target record without rereading mutable path state.
+Required-package compilation fails when no
+root package exists. After HIR memory planning, `compile_snapshot` compares generated target memory
+and witness facts with that captured record and rejects any validated-bytecode capability omitted by
+the verified manifest; a development snapshot needs no equivalent package check. Executable-image
 content identity, relocation validation, contract checks, private RW construction, RX sealing, and
 failure-atomic installation remain at the real native artifact boundary.
 

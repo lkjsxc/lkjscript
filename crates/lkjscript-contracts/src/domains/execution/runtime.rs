@@ -97,12 +97,12 @@ pub(crate) fn metrics() -> ContractDescriptor {
             .fact(fact(
                 "compile",
                 "compile",
-                "phase timing and observed source-file count",
+                "phase timing including package verification and observed source-file count",
             ))
             .fact(fact(
                 "execution-path",
                 "execution path",
-                "baseline-native or vm-fallback with nullable decline reason",
+                "baseline-native or vm-fallback with one nullable typed stage code function and detail decline",
             ))
             .fact(fact(
                 "entry",
@@ -113,6 +113,16 @@ pub(crate) fn metrics() -> ContractDescriptor {
                 "timings",
                 "execution timings",
                 "preflight lower install prepare native VM and total durations",
+            ))
+            .fact(fact(
+                "native-artifact",
+                "native artifact",
+                "published installed object function code metadata mapping work and relocation counts or unavailable",
+            ))
+            .fact(fact(
+                "native-runtime",
+                "native runtime",
+                "explicitly saturating entry call stack heap unique cleanup and structural observation counts or unavailable",
             )),
     )
 }

@@ -19,6 +19,7 @@ inputs/
 capability/
 file-system
 /capability
+string
 byte-vector
 /inputs
 output/
@@ -30,6 +31,8 @@ file-system
 capability/
 file-system
 /capability
+path
+string
 payload
 byte-vector
 /params
@@ -40,9 +43,7 @@ unwrap-ok/
 open-file-writer/
 file-system
 absolute-path/
-string-literal/
-/tmp/lkjscript-bulk-bytes-smoke.txt
-/string-literal
+path
 /absolute-path
 /open-file-writer
 /unwrap-ok
@@ -79,6 +80,7 @@ inputs/
 capability/
 file-system
 /capability
+string
 i64
 /inputs
 output/
@@ -90,6 +92,8 @@ file-system
 capability/
 file-system
 /capability
+path
+string
 size
 i64
 /params
@@ -100,9 +104,7 @@ unwrap-ok/
 open-file-reader/
 file-system
 absolute-path/
-string-literal/
-/tmp/lkjscript-bulk-bytes-smoke.txt
-/string-literal
+path
 /absolute-path
 /open-file-reader
 /unwrap-ok

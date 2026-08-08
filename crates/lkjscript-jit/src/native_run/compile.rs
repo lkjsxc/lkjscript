@@ -77,7 +77,14 @@ impl NativeRun {
             .map_err(|error| install_error(root, error))?;
         let installation = install_started.elapsed();
         self.last_installation = installation;
-        let accounted_allocation_bytes = installed.accounted_allocation_bytes();
+        let accounted_allocation_bytes =
+            installed.accounted_allocation_bytes().ok_or_else(|| {
+                EngineError::new(
+                    FailureCode::InstallLimit,
+                    Some(root),
+                    "installed mapping byte count exceeds u64 metric representation",
+                )
+            })?;
         let total = lowering_and_encoding.saturating_add(installation);
         if total > self.config.max_object_compile_time
             || self.total_compile_time.saturating_add(total) > self.config.max_total_compile_time

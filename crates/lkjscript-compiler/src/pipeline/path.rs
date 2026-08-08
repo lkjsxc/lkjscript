@@ -12,9 +12,31 @@ pub fn compile_path(path: &Path) -> Result<ExecutableProgram> {
     compile_snapshot(&snapshot).map_err(crate::CompileSnapshotError::into_core)
 }
 
+pub fn compile_package_path(path: &Path) -> Result<ExecutableProgram> {
+    let snapshot = crate::workspace::import_package_path(path)?;
+    compile_snapshot(&snapshot).map_err(crate::CompileSnapshotError::into_core)
+}
+
 pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, CompileMetrics)> {
+    compile_path_with_metrics_internal(path, false)
+}
+
+pub fn compile_package_path_with_metrics(
+    path: &Path,
+) -> Result<(ExecutableProgram, CompileMetrics)> {
+    compile_path_with_metrics_internal(path, true)
+}
+
+fn compile_path_with_metrics_internal(
+    path: &Path,
+    package_required: bool,
+) -> Result<(ExecutableProgram, CompileMetrics)> {
     let total_started = Instant::now();
-    let (snapshot, import) = crate::workspace::import_path_with_metrics(path)?;
+    let (snapshot, import) = if package_required {
+        crate::workspace::import_package_path_with_metrics(path)?
+    } else {
+        crate::workspace::import_path_with_metrics(path)?
+    };
     let (program, compile) = compile_snapshot_with_metrics(&snapshot)?;
     Ok((
         program,
@@ -30,7 +52,9 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
             normalization: compile.normalization,
             bytecode_lowering: compile.bytecode_lowering,
             bytecode_validation: compile.bytecode_validation,
-            package_validation: compile.package_validation,
+            package_validation: import
+                .package_validation
+                .saturating_add(compile.package_validation),
             source_files: import.source_files,
         },
     ))

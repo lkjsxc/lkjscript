@@ -21,6 +21,7 @@ lkjscript-vm = { path = "../lkjscript-vm" }
 [dev-dependencies]
 lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }
 lkjscript-native = { path = "../lkjscript-native" }
+serde_json.workspace = true
 
 [lints]
 workspace = true

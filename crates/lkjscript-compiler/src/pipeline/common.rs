@@ -54,7 +54,7 @@ pub(super) fn compile_snapshot_with_metrics(
     let memory_plan = memory_verified.plan().clone();
     let package_validation_started = Instant::now();
     snapshot.validate_memory_plan(&memory_plan)?;
-    let package_validation = package_validation_started.elapsed();
+    let mut package_validation = package_validation_started.elapsed();
 
     let (ssa, ssa_metrics) = lower_program_with_metrics(&memory_verified)?;
 
@@ -65,6 +65,10 @@ pub(super) fn compile_snapshot_with_metrics(
     let validation_started = Instant::now();
     let bytecode = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let bytecode_validation = validation_started.elapsed();
+
+    let capability_validation_started = Instant::now();
+    snapshot.validate_required_capabilities(bytecode.required_capabilities())?;
+    package_validation = package_validation.saturating_add(capability_validation_started.elapsed());
 
     Ok((
         ExecutableProgram {

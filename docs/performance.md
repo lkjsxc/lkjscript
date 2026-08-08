@@ -49,8 +49,8 @@ cargo build --locked --release -p lkjscript-app
 A successful run prints `3628800`. For a comparable final measurement, use a fresh target directory
 for the cold build, record the number of warm process samples and the same host metadata, and measure
 the command above without recompilation. The original raw samples and sample count were not
-committed, so this baseline is **pre-reset orientation only**. A representative post-reset runtime
-baseline remains pending.
+committed, so this baseline is **pre-reset orientation only**. The representative selected-product
+baseline later in this document supersedes it.
 
 ## Phase 2 build and binary comparison
 
@@ -331,36 +331,123 @@ retained rather than presented as an engine-specific example. The CLI scalar fix
 
 The historical selection artifact did not record machine/compiler metadata, peak memory,
 generated-code size, or target coverage, so it remains selection evidence rather than a complete
-runtime baseline. Product metrics identify `execution_path=baseline-native|vm-fallback`, a nullable
-fallback reason, whether native entry began, and preflight/lower/install/prepare/native/VM/total
-durations. Threshold, automatic-transition, public engine, and tier fields are absent. Reverse the
+runtime baseline. Product metrics identify `execution_path=baseline-native|vm-fallback`, one
+nullable typed decline, whether native entry began, package/compiler and native/VM timings,
+published installed-artifact measurements, and selected explicitly saturating runtime observations.
+Unavailable native sections are `null`. Threshold, automatic-transition, public engine, and tier
+fields are absent. Reverse the
 choice if equivalent representative measurements show the group preflight or baseline maintenance
 cost outweighs its scalar benefit.
 
-### Post-cutover product-path baseline
+### Representative selected-product baseline and package correction
 
-**Measured orientation, not a cross-machine performance promise.** At
-`e291d849971e4abe4b3135ee794754b5bd955ef0`, five warm-cache release process samples per workload
-were run on `devbox`, Linux x86-64, 20 logical CPUs, 63,873,589,248 host bytes, with
-`rustc 1.96.0 (ac68faa20 2026-05-25)`. Nearest-rank p95 is the maximum of five samples. Raw JSON is
-retained outside Git at `target/reset-audit/final/selected-runtime-matrix.json`.
+**Measured on one host; not a cross-machine performance promise.** The hypothesis was that
+`lkjscript run` verified the complete package once in the application and then rebuilt and verified
+it again in the compiler importer. If true, removing only the application pass should eliminate
+about one package-validation duration outside the compiler timer while preserving the same validated
+program, selected execution path, result, host effects, and failure behavior. The correction is one
+required-package compiler entry point: it verifies the root manifest, lock, selected module, source
+identities, target, and typed capability grants once and carries that value through import and
+`compile_snapshot`. It rejects missing packages and ungranted bytecode capabilities; it does not
+weaken package validation.
 
-| Workload | Selected path | Process median (p95) | Compile median | Product total median |
-|---|---|---:|---:|---:|
-| hello | VM fallback | 228.36 ms (235.72 ms) | 111.73 ms | 0.14 ms |
-| scalar | baseline native | 228.34 ms (231.20 ms) | 110.90 ms | 3.96 ms |
-| scalar redundancy | baseline native | 226.65 ms (229.25 ms) | 111.25 ms | 2.19 ms |
-| bench | VM fallback | 980.55 ms (1,012.84 ms) | 111.04 ms | 753.50 ms |
-| mandel | VM fallback | 286.86 ms (293.87 ms) | 114.82 ms | 58.40 ms |
+[`meta/scripts/runtime-baseline.py`](../meta/scripts/runtime-baseline.py) retains the product harness.
+It covers scalar loop/branch, direct calls, redundant scalar work, products/lists, enum matching,
+unique ownership and cleanup, an entered checked failure, larger benchmark and Mandelbrot programs,
+a nested polymorphic package, bytes/hash, two filesystem paths, and direct SQLite. Every sample
+checks exit status, exact outcome, stdout SHA-256, expected path/native-entry state, and applicable
+file or SQLite effects; the current ownership sample also checks exact allocation/drop counts and
+zero live owners, loans, release backlog, and teardown failures. Host-effect paths are arguments
+beneath one harness-owned mode-0700 temporary directory, never predictable shared `/tmp` files. One
+validated fresh-process warmup precedes five measured fresh processes per workload. The command is:
 
-All 25 runs succeeded. The selected path entered native code exactly for the two eligible scalar
-workloads and used the complete VM fallback for the other three. Relative to the historical
-multi-transition `auto` medians above, selected-path scalar process latency fell from 1,700 ms to
-228.34 ms and bench fell from 3,493 ms to 980.55 ms on this host. Those large differences support
-the cutover; the smaller differences are within the limits of this sample geometry.
+```sh
+meta/scripts/runtime-baseline.py --label single-package-current-5 --samples 5 --warmups 1
+```
 
-The final stripped `target/release/lkjscript` was 6,452,416 bytes, 2,154,008 bytes (25.03%) smaller
-than the 8,606,424-byte pre-reset orientation. An incremental locked workspace release build after
-the semantic-service deletion took 57.387 s; that is not comparable to the pre-reset fresh-target
-build. Peak RSS, allocation counts, generated native-code size, other targets, and application-scale
-steady-state throughput remain unmeasured.
+The paired retained binary used `--no-build` with explicit commit, worktree, profile, and build-command
+attestations. Both records have identical workload-input hashes. Environment: `devbox`, Linux
+`7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available of 32 configured logical CPUs, 32 GiB
+RAM, and `rustc 1.96.0 (ac68faa20 2026-05-25)`. The workspace release profile uses LTO, one codegen
+unit, and symbol stripping. The harness removes Cargo/Rust profile, wrapper, target, incremental,
+and flag overrides and records the resolved tool/cache locations; none of those overrides was set
+for the final runs. Nearest-rank p95 is the maximum of five and is orientation only.
+
+The RSS column is 1 ms `/proc` process-tree polling. It may miss short-lived or final peaks, may
+report zero for a very short run, and may double-count shared pages; it is not unique physical
+memory. Total allocation count and bytes were unavailable. Raw JSON remains ignored at
+`target/runtime-baseline/`; current and before-record SHA-256 values are respectively
+`14bd924e2e55e542fc988bc3105ac3d781c3c6655c5ea850c3291e53d5099829` and
+`259a8a3713928b7bc1e2c5364e06d1faffc0994738373201d804de1390c9a060`.
+
+| Workload | Path | Before process median (p95) | After process median (p95) | Median change | Approx. RSS before / after |
+| --- | --- | ---: | ---: | ---: | ---: |
+| scalar loop | native | 223.891 ms (230.342) | 117.154 ms (119.386) | -47.7% | 28.5 / 28.7 MiB |
+| scalar calls | native | 228.297 ms (231.909) | 118.912 ms (123.996) | -47.9% | 28.6 / 28.7 MiB |
+| scalar redundancy | native | 232.161 ms (245.890) | 120.109 ms (121.371) | -48.3% | 28.6 / 28.7 MiB |
+| product/list | native | 225.791 ms (233.253) | 115.250 ms (122.912) | -49.0% | 28.1 / 28.0 MiB |
+| enum match | native | 225.253 ms (232.096) | 115.840 ms (120.333) | -48.6% | 28.1 / 28.0 MiB |
+| ownership/control | native | 226.031 ms (234.901) | 118.470 ms (121.404) | -47.6% | 28.6 / 28.0 MiB |
+| checked failure | native | 228.876 ms (233.960) | 115.233 ms (120.347) | -49.7% | 28.4 / 28.0 MiB |
+| hello | VM | 227.112 ms (230.096) | 117.346 ms (118.467) | -48.3% | 27.9 / 27.9 MiB |
+| bench | VM | 1,031.528 ms (1,042.922) | 927.697 ms (932.748) | -10.1% | 28.7 / 28.9 MiB |
+| Mandelbrot | VM | 281.486 ms (284.133) | 179.831 ms (183.688) | -36.1% | 28.7 / 28.9 MiB |
+| polymorphic transport | VM | 27.241 ms (28.481) | 15.334 ms (15.502) | -43.7% | 7.9 / 7.6 MiB |
+| bytes/hash | VM | 224.523 ms (227.179) | 116.693 ms (118.585) | -48.0% | 28.0 / 28.0 MiB |
+| bulk bytes/filesystem | VM | 229.357 ms (233.664) | 117.863 ms (124.644) | -48.6% | 28.1 / 28.2 MiB |
+| durable filesystem | VM | 234.965 ms (244.029) | 125.469 ms (130.196) | -46.6% | 28.7 / 28.9 MiB |
+| SQLite | VM | 250.768 ms (260.286) | 141.029 ms (145.785) | -43.8% | 29.4 / 29.6 MiB |
+
+The compile medians remain in the same range: for example, scalar loop changed from 108.776 ms to
+113.010 ms and bench from 112.481 ms to 113.422 ms. The new package-validation timer owns 111.627 ms
+and 111.903 ms of those respective medians. In contrast, median process time outside the reported
+compiler and execution intervals fell from 114.633 ms to 2.781 ms for scalar loop and from
+115.966 ms to 3.692 ms for bench. Across root-package workloads, this outside interval fell from
+112.956-118.916 ms to 2.353-3.692 ms; for the smaller nested package it fell from 14.257 ms to
+1.934 ms. That work-shape result, rather than one timing cell alone, supports deletion of the
+duplicate pass. The execution-heavy bench improves only 10.1%, as expected; approximate RSS is
+effectively unchanged.
+
+Current metrics classify native fallback without a broad duplicate label. Hello, bench, bytes/hash,
+and the host workloads decline at lowering with `unsupported-type`; Mandelbrot declines with
+`unsupported-operation` for `WriteByte`; the nested polymorphic package declines with
+`unsupported-signature`. All declines occur before entry and execute the validated VM program once.
+The checked-failure workload records `baseline-native` and native entry before the expected checked
+division trap. Engine tests independently prove entered failure does not retry and a generated
+65-function group crossing the current private 64-function native tuning boundary declines with
+`backend-verification`, executes the VM exactly once, and returns `42`.
+
+Published installed-artifact observations for the seven native workloads are:
+
+| Workload | Functions | Code bytes | Mapped bytes | Median first native entry | Peak native stack bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| scalar loop | 2 | 3,240 | 4,096 | 0.432 ms | 864 |
+| scalar calls | 2 | 3,143 | 4,096 | 3.916 ms | 832 |
+| scalar redundancy | 3 | 6,178 | 8,192 | 2.172 ms | 1,424 |
+| product/list | 5 | 4,609 | 8,192 | 0.241 ms | 528 |
+| enum match | 1 | 3,029 | 4,096 | 0.285 ms | 688 |
+| ownership/control | 1 | 1,383 | 4,096 | 0.188 ms | 272 |
+| checked failure | 1 | 731 | 4,096 | 0.168 ms | 112 |
+
+Each row has one published object. Declined attempts report artifact data as unavailable rather than
+claiming generated work was zero. Runtime event counters are explicitly saturating. These selected
+service observations are not total allocator measurements.
+
+Three fresh-target locked release builds measured by
+[`meta/scripts/build-footprint.py`](../meta/scripts/build-footprint.py) had a 57.330 s median and
+57.388 s p95; immediate no-op rebuilds had a 24.182 ms median and 24.568 ms p95. All three produced
+the same 6,324,552-byte binary with SHA-256
+`e52ca11faa3a6796d526f17a89f161a65e6dbe7340fcef27d85c59cb6e7e01d8`. That digest also matches the
+runtime binary. The retained before binary was 6,304,576 bytes, so the final instrumentation and
+correction add 19,976 bytes (0.317%). No paired fresh-build before sample was retained, so no
+cold-build improvement claim follows. Raw build JSON remains ignored with SHA-256
+`3e5d9debb40f01d0be867131a3202ac2643284f22669a7d028b06934b5836868`.
+
+Keep the single-pass package path while it remains fail-closed and removes one whole validation pass.
+Reverse it for a manifest, lock, source-identity, target, capability, mutation, or publication
+correctness regression, or if repeated equivalent product profiles no longer show eliminated work
+and its API cost outweighs the benefit. Do not restore application-side preverification merely for
+compatibility. The still-required package verification now dominates small-run compile/startup time;
+profile that pass before attempting another runtime optimization. First user-visible output timing,
+total allocations/bytes, semantic edit/query latency, retained warm-process memory, other targets,
+and broader application throughput remain unmeasured.

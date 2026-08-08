@@ -62,6 +62,40 @@ fn canonical_lock_detects_every_source_change() {
     )
     .unwrap();
     assert!(verify(&root).unwrap_err().to_string().contains("stale"));
+    assert!(crate::compile_package_path(&root.join("main.lkjscript"))
+        .unwrap_err()
+        .to_string()
+        .contains("stale"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn graph_returns_the_manifest_that_produced_the_root_lock() {
+    let root = fixture("bound-root-manifest");
+    let (lock, captured) = graph::build_with_root_manifest(&root).unwrap();
+    let root_package = lock
+        .packages
+        .iter()
+        .find(|package| package.origin == ".")
+        .unwrap();
+    let canonical = serde_json::to_vec(&captured).unwrap();
+    assert_eq!(
+        root_package.manifest_sha256,
+        lkjscript_contracts::ContractDigest::from_bytes(lkjscript_contracts::sha256(&canonical))
+            .to_hex()
+    );
+
+    let manifest_path = root.join(MANIFEST_FILE);
+    let mut replacement = captured.clone();
+    replacement.capabilities.push("stdio".into());
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&replacement).unwrap(),
+    )
+    .unwrap();
+    assert!(captured.capabilities.is_empty());
+    assert_ne!(captured, replacement);
+
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -163,6 +197,128 @@ fn public_generic_interface_binds_hidden_transport_witness() {
 }
 
 #[test]
+fn required_package_compile_rejects_development_source() {
+    let root = directory("required-package");
+    let entry = root.join("main.lkjscript");
+    fs::write(
+        &entry,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .unwrap();
+
+    let error = crate::compile_package_path(&entry).unwrap_err().to_string();
+    assert!(
+        error.contains("no lkjscript.package.json contains"),
+        "{error}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn locked_capability_grants_are_checked_during_compilation() {
+    let root = fixture("locked-capability-grants");
+    let entry = root.join("main.lkjscript");
+    fs::write(
+        &entry,
+        concat!(
+            "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\n",
+            "output/\nunit\n/output\n/sig\nparams/\nstdio\ncapability/\nstdio\n",
+            "/capability\n/params\nunit\n/main\n"
+        ),
+    )
+    .unwrap();
+    let (lock_path, lock) = create_lock(&root).unwrap();
+    fs::write(&lock_path, lock).unwrap();
+
+    let error = crate::compile_package_path(&entry).unwrap_err().to_string();
+    assert_eq!(error, "package does not grant required stdio capability");
+
+    let manifest_path = root.join(MANIFEST_FILE);
+    let mut manifest: Manifest =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest.capabilities.push("stdio".into());
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let (_, lock) = create_lock(&root).unwrap();
+    fs::write(lock_path, lock).unwrap();
+    let program = crate::compile_package_path(&entry).unwrap();
+    assert_eq!(
+        program.bytecode().required_capabilities(),
+        [lkjscript_core::CapabilityKind::Stdio]
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn required_package_compile_and_loaded_source_checks_fail_closed() {
+    let root = fixture("required-package-boundaries");
+    let entry = root.join("main.lkjscript");
+    let undeclared = root.join("undeclared.lkjscript");
+    fs::write(
+        &undeclared,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .unwrap();
+    let (lock_path, lock) = create_lock(&root).unwrap();
+    fs::write(lock_path, lock).unwrap();
+
+    let error = crate::compile_package_path(&undeclared)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("entry module is not declared"), "{error}");
+
+    let verified = verify_for_compilation(&entry).unwrap().unwrap();
+    fs::write(
+        &entry,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\ndo/\nunit\n/do\n/main\n",
+    )
+    .unwrap();
+    let loaded = crate::source::load(&entry).unwrap();
+    let error = verify_loaded_sources(&verified, &loaded)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("source identity differs from lock"),
+        "{error}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn required_package_compile_rejects_non_target_module() {
+    let root = fixture("non-target-module");
+    let module = root.join("other.lkjscript");
+    fs::write(
+        &module,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .unwrap();
+    let manifest_path = root.join(MANIFEST_FILE);
+    let mut manifest: Manifest =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest.modules.push("other.lkjscript".into());
+    manifest.modules.sort();
+    manifest.public.push("other.lkjscript".into());
+    manifest.public.sort();
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let (lock_path, lock) = create_lock(&root).unwrap();
+    fs::write(lock_path, lock).unwrap();
+
+    let error = crate::compile_package_path(&module)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("not an executable target"), "{error}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn package_capabilities_are_closed_and_exact() {
     let root = fixture("capabilities");
     let path = root.join(MANIFEST_FILE);
@@ -195,10 +351,17 @@ fn metrics_collection_does_not_change_verified_program() {
     let (lock_path, lock) = create_lock(&root).unwrap();
     fs::write(lock_path, lock).unwrap();
     let entry = root.join("main.lkjscript");
-    let plain = crate::compile_path(&entry).unwrap();
-    let (measured, metrics) = crate::compile_path_with_metrics(&entry).unwrap();
+    let plain = crate::compile_package_path(&entry).unwrap();
+    let (measured, metrics) = crate::compile_package_path_with_metrics(&entry).unwrap();
     assert_eq!(plain.ssa(), measured.ssa());
+    assert_eq!(plain.memory_plan(), measured.memory_plan());
+    assert_eq!(plain.bytecode_links(), measured.bytecode_links());
+    assert_eq!(
+        plain.bytecode().required_capabilities(),
+        measured.bytecode().required_capabilities()
+    );
     assert_eq!(metrics.source_files, 1);
+    assert!(metrics.package_validation <= metrics.total);
     fs::remove_dir_all(root).unwrap();
 }
 

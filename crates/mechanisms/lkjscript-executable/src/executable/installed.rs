@@ -118,8 +118,8 @@ impl InstalledImage {
     }
 
     #[must_use]
-    pub fn accounted_allocation_bytes(&self) -> u64 {
-        u64::try_from(self.mapping.allocation_length()).unwrap_or(u64::MAX)
+    pub fn accounted_allocation_bytes(&self) -> Option<u64> {
+        u64::try_from(self.mapping.allocation_length()).ok()
     }
 
     #[must_use]

@@ -18,6 +18,25 @@ pub enum FailureCode {
     InvocationFailure,
 }
 
+impl FailureCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedType => "unsupported-type",
+            Self::UnsupportedOperation => "unsupported-operation",
+            Self::UnsupportedSignature => "unsupported-signature",
+            Self::IndirectCall => "indirect-call",
+            Self::RecursionUnsupported => "recursion-unsupported",
+            Self::InvalidVerifiedProgram => "invalid-verified-program",
+            Self::BackendVerification => "backend-verification",
+            Self::CompileWallTime => "compile-wall-time",
+            Self::InstallLimit => "install-limit",
+            Self::InstallFailure => "install-failure",
+            Self::NativeStackBoundary => "native-stack-boundary",
+            Self::InvocationFailure => "invocation-failure",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EngineError {
     code: FailureCode,

@@ -87,6 +87,9 @@ main/
 sig/
 inputs/
 capability/
+arguments
+/capability
+capability/
 sqlite
 /capability
 capability/
@@ -98,6 +101,10 @@ unit
 /output
 /sig
 params/
+arguments
+capability/
+arguments
+/capability
 sqlite
 capability/
 sqlite
@@ -113,9 +120,12 @@ database
 sqlite-open/
 sqlite
 absolute-path/
-string-literal/
-/tmp/lkjscript-sqlite-example.db
-/string-literal
+unwrap-some/
+argument-at/
+arguments
+0
+/argument-at
+/unwrap-some
 /absolute-path
 /sqlite-open
 /bind

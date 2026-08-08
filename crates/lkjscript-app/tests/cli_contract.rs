@@ -3,6 +3,14 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+fn read_metrics(path: &std::path::Path) -> serde_json::Value {
+    let line = std::fs::read_to_string(path).expect("read metrics output");
+    let json = line
+        .strip_prefix("LKJSCRIPT_METRICS ")
+        .expect("metrics marker");
+    serde_json::from_str(json).expect("metrics are valid JSON")
+}
+
 #[test]
 fn help_cli_and_metrics_expose_one_product_execution_path() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
@@ -59,25 +67,42 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     assert!(output.status.success(), "stderr={:?}", output.stderr);
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
-    let json = std::fs::read_to_string(&metrics).expect("read metrics output");
+    let json = read_metrics(&metrics);
     std::fs::remove_file(&metrics).expect("remove metrics output");
+    assert_eq!(json["execution_path"].as_str(), Some("baseline-native"));
+    assert!(json.get("fallback_reason").is_none());
+    assert!(json["native_decline"].is_null());
+    assert_eq!(json["native_entered"].as_bool(), Some(true));
     for field in [
-        "\"execution_path\":\"baseline-native\"",
-        "\"fallback_reason\":null",
-        "\"native_entered\":true",
-        "\"preflight\":",
-        "\"lower\":",
-        "\"install\":",
-        "\"prepare\":",
-        "\"native\":",
-        "\"vm\":",
-        "\"total\":",
+        "preflight",
+        "lower",
+        "install",
+        "prepare",
+        "native",
+        "vm",
+        "total",
     ] {
-        assert!(json.contains(field), "missing metrics field {field}");
-    }
-    for removed in ["\"engine\":", "\"tier\":", "\"jit\":"] {
         assert!(
-            !json.contains(removed),
+            json["timings_ns"][field].is_number(),
+            "missing timing {field}"
+        );
+    }
+    let artifact = &json["native_artifact"];
+    assert_eq!(
+        artifact["availability"].as_str(),
+        Some("published-installed-object")
+    );
+    assert_eq!(artifact["objects"].as_u64(), Some(1));
+    for field in ["code_bytes", "metadata_bytes", "mapped_bytes"] {
+        assert!(artifact[field].as_u64().is_some_and(|value| value > 0));
+    }
+    let runtime = &json["native_runtime"];
+    assert_eq!(runtime["counter_semantics"].as_str(), Some("saturating"));
+    assert!(runtime["entries"].as_u64().is_some_and(|value| value > 0));
+    assert_eq!(runtime["invocations"].as_u64(), Some(1));
+    for removed in ["engine", "tier", "jit", "fallback_reason"] {
+        assert!(
+            json.get(removed).is_none(),
             "removed metrics field remains: {removed}"
         );
     }
@@ -93,11 +118,24 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
         .expect("run fallback CLI metrics fixture");
     assert!(output.status.success(), "stderr={:?}", output.stderr);
     assert_eq!(output.stdout, b"3628800");
-    let fallback_json = std::fs::read_to_string(&metrics).expect("read fallback metrics output");
+    let fallback_json = read_metrics(&metrics);
     std::fs::remove_file(&metrics).expect("remove fallback metrics output");
-    assert!(fallback_json.contains("\"execution_path\":\"vm-fallback\""));
-    assert!(fallback_json.contains("\"fallback_reason\":\"lowering-declined\""));
-    assert!(fallback_json.contains("\"native_entered\":false"));
+    assert_eq!(
+        fallback_json["execution_path"].as_str(),
+        Some("vm-fallback")
+    );
+    assert!(fallback_json.get("fallback_reason").is_none());
+    assert_eq!(
+        fallback_json["native_decline"]["stage"].as_str(),
+        Some("lowering")
+    );
+    assert_eq!(
+        fallback_json["native_decline"]["code"].as_str(),
+        Some("unsupported-type")
+    );
+    assert!(fallback_json["native_decline"]["detail"].is_string());
+    assert_eq!(fallback_json["native_entered"].as_bool(), Some(false));
+    assert!(fallback_json["native_artifact"].is_null());
 
     for arguments in [
         vec!["run", "--engine", "vm"],
@@ -118,6 +156,72 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
             .expect("removed option diagnostic is UTF-8")
             .contains(&format!("unknown run option: {}", arguments[1])));
     }
+}
+
+#[test]
+fn package_capability_denial_prevents_host_effects() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let root = std::env::temp_dir().join(format!(
+        "lkjscript-cli-capability-denial-{}-{}",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("cli")
+    ));
+    std::fs::create_dir_all(&root).expect("create capability fixture");
+    let entry = root.join("main.lkjscript");
+    std::fs::write(
+        &entry,
+        concat!(
+            "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\n",
+            "output/\nunit\n/output\n/sig\nparams/\nstdio\ncapability/\nstdio\n",
+            "/capability\n/params\nprint/\nstdio\nstring-literal/\nshould-not-run\n",
+            "/string-literal\n/print\n/main\n"
+        ),
+    )
+    .expect("write capability fixture source");
+    let contracts = lkjscript_contracts::current_contracts().expect("load current contracts");
+    let manifest_contract = contracts
+        .get(lkjscript_contracts::PACKAGE_MANIFEST)
+        .expect("package manifest contract")
+        .digest()
+        .to_hex();
+    std::fs::write(
+        root.join(lkjscript_compiler::package::MANIFEST_FILE),
+        format!(
+            concat!(
+                "{{\n  \"schema\": \"lkjscript.package\",\n",
+                "  \"contract\": \"{}\",\n  \"name\": \"denial\",\n",
+                "  \"source_root\": \".\",\n  \"modules\": [\"main.lkjscript\"],\n",
+                "  \"public\": [\"main.lkjscript\"],\n  \"dependencies\": [],\n",
+                "  \"capabilities\": [],\n  \"targets\": [{{\"name\": \"main\", ",
+                "\"module\": \"main.lkjscript\"}}]\n}}\n"
+            ),
+            manifest_contract
+        ),
+    )
+    .expect("write capability fixture manifest");
+    let (lock_path, lock) =
+        lkjscript_compiler::package::create_lock(&entry).expect("create capability fixture lock");
+    std::fs::write(lock_path, lock).expect("write capability fixture lock");
+
+    let output = Command::new(binary)
+        .args([
+            "run",
+            entry.to_str().expect("UTF-8 capability fixture path"),
+        ])
+        .output()
+        .expect("run denied capability fixture");
+    std::fs::remove_dir_all(&root).expect("remove capability fixture");
+
+    assert!(!output.status.success());
+    assert!(
+        output.stdout.is_empty(),
+        "denied program performed stdout effect"
+    );
+    let stderr = String::from_utf8(output.stderr).expect("denial diagnostic is UTF-8");
+    assert!(
+        stderr.contains("package does not grant required stdio capability"),
+        "{stderr}"
+    );
 }
 
 #[test]

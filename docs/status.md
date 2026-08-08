@@ -13,9 +13,12 @@ a sibling semantic authority. Text and path entry points import exactly once int
 without text publication. Snapshots own clone-safe resolved typed HIR,
 complete or typed-hole-overlay state, deterministic post-edit development provenance, optional
 source attachments, opaque namespace-scoped stable entity/node identities, semantic indexes, type
-facts, diagnostics, and hole contexts. Every product compile API delegates to public
-`compile_snapshot`, the sole post-import boundary, before HIR memory planning, locked-package target
-validation, SSA lowering and verification, bytecode validation, and execution.
+facts, diagnostics, and hole contexts. The CLI's required-package compiler entry verifies the root
+manifest, lock, selected module, source identities, target, and capability grants once inside the
+compiler; it does not preverify the package in the application and then reconstruct it during
+import. Every product compile API delegates to public `compile_snapshot`, the sole post-import
+boundary, before HIR memory planning, locked-package target validation, SSA lowering and
+verification, bytecode validation, and execution.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -75,11 +78,14 @@ returns a non-cloneable `PreparedInvocation`; `enter(self)` consumes it exactly 
 unsafe generated ABI call. Pre-entry and entered failures are disjoint types, and there is no VM
 retry after entry.
 
-Product metrics report `baseline-native` or `vm-fallback`, an optional decline reason, whether
-native entry began, and preflight/lower/install/prepare/native/VM/total durations. Automatic
-thresholds, per-function call records, retries, invalidation, runtime sessions, forced execution,
-optimizing native lowering, optimization certificates, and the proof-oriented optimizer are
-absent. Baseline normalization retains only the independently verified simple pass sequence.
+Product metrics report `baseline-native` or `vm-fallback`, one nullable typed native decline with
+stage/code/function/detail, whether native entry began, package validation and compiler/native/VM
+timings, published installed-artifact size/work counts when available, and explicitly saturating
+native runtime/cleanup observations when available. Missing native observations are `null`, not
+measured zero. Automatic thresholds, per-function call records, retries, invalidation, runtime
+sessions, forced execution, optimizing native lowering, optimization certificates, and the
+proof-oriented optimizer are absent. Baseline normalization retains only the independently
+verified simple pass sequence.
 
 ## Scale and policy result
 
@@ -207,7 +213,8 @@ consumer.
   generic VM before entry when it cannot represent an otherwise supported program.
 - Daemon, multi-tenant database, distributed, scheduler, and broader platform products are absent by
   design until the local semantic model and measurements justify them.
-- A five-sample selected product-path process baseline and final binary-size comparison are recorded
-  in [`performance.md`](performance.md). Semantic edit/query latency, peak memory, allocation counts,
-  generated-code size, other targets, and application-scale steady-state throughput remain
-  unmeasured.
+- The representative five-sample selected-product baseline in
+  [`performance.md`](performance.md) covers process wall time, approximate process-tree RSS,
+  compiler/runtime phases, typed native declines, published native code/mapping sizes, exact
+  outcomes, cleanup, and host effects. Total allocator counts/bytes, semantic edit/query latency,
+  other targets, and application-scale steady-state throughput remain unmeasured.

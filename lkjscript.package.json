@@ -5,6 +5,9 @@
   "source_root": ".",
   "modules": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/checked-failure.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/enum-match.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript",
     "crates/lkjscript-app/tests/fixtures/scalar-loop.lkjscript",
     "src/examples/bench/leibniz-loop.lkjscript", "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/io.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
@@ -13,7 +16,6 @@
     "src/examples/hello/base.lkjscript",
     "src/examples/hello/dec.lkjscript", "src/examples/hello/fact.lkjscript", "src/examples/hello/main.lkjscript",
     "src/examples/http/crlf.lkjscript", "src/examples/http/hello.lkjscript", "src/examples/http/resp.lkjscript",
-    "src/examples/jit-scalar/kernel.lkjscript", "src/examples/jit-scalar/main.lkjscript",
     "src/examples/lkjedit/buffer-demo.lkjscript",
     "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
     "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/core/escape.lkjscript",
@@ -30,6 +32,7 @@
     "src/examples/polymorphic-transport/history-workload.lkjscript",
     "src/examples/polymorphic-transport/history/history.lkjscript",
     "src/examples/polymorphic-transport/main.lkjscript",
+    "src/examples/scalar-calls/kernel.lkjscript", "src/examples/scalar-calls/main.lkjscript",
     "src/examples/scalar-redundancy/kernel.lkjscript",
     "src/examples/scalar-redundancy/kernel/redundant-divisions.lkjscript",
     "src/examples/scalar-redundancy/main.lkjscript",
@@ -53,17 +56,20 @@
   ],
   "public": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/checked-failure.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/enum-match.lkjscript",
+    "crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript",
     "crates/lkjscript-app/tests/fixtures/scalar-loop.lkjscript",
     "src/examples/bench/main.lkjscript",
     "src/examples/bulk-bytes/main.lkjscript",
     "src/examples/durable-files/main.lkjscript", "src/examples/hello/main.lkjscript",
-    "src/examples/http/hello.lkjscript", "src/examples/jit-scalar/main.lkjscript",
-    "src/examples/lkjedit/buffer-demo.lkjscript",
+    "src/examples/http/hello.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
     "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
     "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/main.lkjscript",
     "src/examples/polymorphic-transport/history-snapshot.lkjscript",
     "src/examples/polymorphic-transport/history-workload.lkjscript",
     "src/examples/polymorphic-transport/main.lkjscript",
+    "src/examples/scalar-calls/main.lkjscript",
     "src/examples/scalar-redundancy/main.lkjscript",
     "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript"
   ],
@@ -89,6 +95,10 @@
       "module": "src/examples/bulk-bytes/main.lkjscript"
     },
 {
+      "name": "checked-failure",
+      "module": "crates/lkjscript-app/tests/fixtures/checked-failure.lkjscript"
+    },
+{
       "name": "durable-files-main",
       "module": "src/examples/durable-files/main.lkjscript"
     },
@@ -97,16 +107,16 @@
       "module": "src/examples/lkjedit/edit-mem.lkjscript"
     },
 {
+      "name": "enum-match",
+      "module": "crates/lkjscript-app/tests/fixtures/enum-match.lkjscript"
+    },
+{
       "name": "hello-main",
       "module": "src/examples/hello/main.lkjscript"
     },
 {
       "name": "http-hello",
       "module": "src/examples/http/hello.lkjscript"
-    },
-{
-      "name": "jit-scalar-main",
-      "module": "src/examples/jit-scalar/main.lkjscript"
     },
 {
       "name": "lkjedit-hello",
@@ -121,6 +131,10 @@
       "module": "src/examples/mandel/main.lkjscript"
     },
 {
+      "name": "ownership-control",
+      "module": "crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript"
+    },
+{
       "name": "polymorphic-history-snapshot",
       "module": "src/examples/polymorphic-transport/history-snapshot.lkjscript"
     },
@@ -131,6 +145,10 @@
 {
       "name": "polymorphic-transport-main",
       "module": "src/examples/polymorphic-transport/main.lkjscript"
+    },
+{
+      "name": "scalar-calls-main",
+      "module": "src/examples/scalar-calls/main.lkjscript"
     },
 {
       "name": "scalar-loop",

@@ -4,7 +4,7 @@ use lkjscript_compiler::ExecutableProgram;
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_jit::{
     attempt_baseline_with_capabilities_from_start, BaselineAttempt, BaselineAttemptTimings,
-    JitConfig, JitStats,
+    BaselineDeclineReason, JitConfig, JitStats,
 };
 use lkjscript_vm::{run_chunk_from_start, ExecutionInputs};
 
@@ -27,7 +27,7 @@ pub struct Execution {
     pub outcome: ExecutionOutcome,
     pub stats: Option<JitStats>,
     pub path: ExecutionPath,
-    pub fallback_reason: Option<&'static str>,
+    pub decline: Option<BaselineDeclineReason>,
     pub native_entered: bool,
     pub native_timings: BaselineAttemptTimings,
     pub vm_duration: Duration,
@@ -54,7 +54,7 @@ pub fn execute(
             outcome: execution.outcome,
             stats: Some(execution.stats),
             path: ExecutionPath::BaselineNative,
-            fallback_reason: None,
+            decline: None,
             native_entered: true,
             native_timings: execution.timings,
             vm_duration: Duration::ZERO,
@@ -73,7 +73,7 @@ pub fn execute(
                 outcome,
                 stats: decline.stats,
                 path: ExecutionPath::VmFallback,
-                fallback_reason: Some(decline.reason.metric_label()),
+                decline: Some(decline.reason),
                 native_entered: false,
                 native_timings: decline.timings,
                 vm_duration,
@@ -91,6 +91,7 @@ pub fn execute(
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
+    use std::fmt::Write as _;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -107,6 +108,26 @@ mod tests {
         scalar(&format!(
             "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n{expression}\n/main\n"
         ))
+    }
+
+    fn direct_call_chain(functions: usize) -> ExecutableProgram {
+        let mut source = String::new();
+        for index in 0..functions {
+            let body = if index + 1 == functions {
+                "42".to_string()
+            } else {
+                format!("chain-{}/\n/chain-{}", index + 1, index + 1)
+            };
+            write!(
+                source,
+                "def/\nname/\nchain-{index}\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\n/params\n{body}\n/fn\n/def\n"
+            )
+            .expect("write direct-call chain source");
+        }
+        source.push_str(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nchain-0/\n/chain-0\n/main\n",
+        );
+        scalar(&source)
     }
 
     #[test]
@@ -237,6 +258,62 @@ mod tests {
     }
 
     #[test]
+    fn generated_group_crosses_backend_function_admission_and_falls_back_once() {
+        let program = direct_call_chain(64);
+        let execution = execute(
+            &program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            true,
+        )
+        .expect("wide native group falls back to the VM");
+        assert_eq!(execution.path, ExecutionPath::VmFallback);
+        assert!(!execution.native_entered);
+        assert_eq!(execution.vm_executions, 1);
+        let decline = execution.decline.expect("typed native decline");
+        assert_eq!(decline.stage(), "lowering");
+        assert_eq!(decline.code(), "backend-verification");
+        assert!(decline.detail().contains("function count"));
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        ));
+    }
+
+    #[test]
+    fn installation_decline_publishes_no_artifact_and_falls_back_once() {
+        let program = scalar_main("add/\n40\n2\n/add");
+        let config = JitConfig {
+            retain_machine_code_diagnostics: true,
+            max_diagnostic_bytes: 0,
+            ..JitConfig::default()
+        };
+        let execution = execute(
+            &program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            config,
+            true,
+        )
+        .expect("installation decline falls back");
+        assert_eq!(execution.path, ExecutionPath::VmFallback);
+        assert!(!execution.native_entered);
+        assert_eq!(execution.vm_executions, 1);
+        let decline = execution.decline.expect("typed installation decline");
+        assert_eq!(decline.stage(), "installation");
+        assert_eq!(decline.code(), "install-limit");
+        assert!(execution
+            .stats
+            .as_ref()
+            .is_some_and(|stats| stats.code_objects.is_empty()));
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        ));
+    }
+
+    #[test]
     fn typed_pre_entry_decline_runs_the_vm_once_with_the_original_policy() {
         let program = scalar_main("add/\n40\n2\n/add");
         let policy = ExecutionPolicy::limited(LimitedExecutionPolicy {
@@ -254,7 +331,14 @@ mod tests {
         assert_eq!(execution.path, ExecutionPath::VmFallback);
         assert!(!execution.native_entered);
         assert_eq!(execution.vm_executions, 1);
-        assert_eq!(execution.fallback_reason, Some("pre-entry-declined"));
+        assert_eq!(
+            execution.decline.as_ref().map(BaselineDeclineReason::stage),
+            Some("preparation")
+        );
+        assert_eq!(
+            execution.decline.as_ref().map(BaselineDeclineReason::code),
+            Some("resource-limit-exceeded")
+        );
         assert_eq!(
             execution.outcome,
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)

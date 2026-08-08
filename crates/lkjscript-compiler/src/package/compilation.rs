@@ -1,4 +1,4 @@
-use lkjscript_core::{Error, Result};
+use lkjscript_core::{CapabilityKind, Error, Result};
 
 use super::{model::Target, LockedTargetMemory, VerifiedCompilationPackage};
 
@@ -6,6 +6,7 @@ use super::{model::Target, LockedTargetMemory, VerifiedCompilationPackage};
 pub(crate) struct CapturedPackageCompilation {
     semantic_identity: [u8; 32],
     target: LockedTargetMemory,
+    capabilities: Vec<CapabilityKind>,
 }
 
 /// Capture the locked target needed to validate a later in-process memory plan.
@@ -28,6 +29,7 @@ pub(crate) fn capture(verified: &VerifiedCompilationPackage) -> Result<CapturedP
     Ok(CapturedPackageCompilation {
         semantic_identity: digest(&package.package_sha256, "package content")?,
         target,
+        capabilities: verified.capabilities().to_vec(),
     })
 }
 
@@ -48,6 +50,18 @@ impl CapturedPackageCompilation {
             return Err(Error::msg(
                 "compiled memory plan or witness closure differs from locked target",
             ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_required_capabilities(&self, required: &[CapabilityKind]) -> Result<()> {
+        for capability in required {
+            if !self.capabilities.contains(capability) {
+                return Err(Error::msg(format!(
+                    "package does not grant required {} capability",
+                    capability.as_str()
+                )));
+            }
         }
         Ok(())
     }

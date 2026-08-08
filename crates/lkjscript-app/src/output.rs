@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use lkjscript_core::ExecutionOutcome;
-use lkjscript_jit::JitStats;
+use lkjscript_jit::{BaselineDeclineReason, JitStats};
 
 pub fn diagnostics_enabled() -> bool {
     env::var_os("LKJSCRIPT_JIT_DIAGNOSTICS").is_some()
@@ -14,14 +14,24 @@ pub fn print_jit_diagnostics(
     program: &lkjscript_ir::VerifiedProgram,
     stats: Option<&JitStats>,
     path: crate::engine::ExecutionPath,
-    fallback_reason: Option<&str>,
+    decline: Option<&BaselineDeclineReason>,
     native_entered: bool,
 ) {
     eprintln!(
-        "execution.path={} execution.fallback_reason={} execution.native_entered={native_entered}",
+        "execution.path={} execution.native_entered={native_entered}",
         path.as_str(),
-        fallback_reason.unwrap_or("none"),
     );
+    if let Some(decline) = decline {
+        eprintln!(
+            "execution.native_decline.stage={} execution.native_decline.code={} execution.native_decline.function={} execution.native_decline.detail={:?}",
+            decline.stage(),
+            decline.code(),
+            decline
+                .function()
+                .map_or_else(|| "none".to_string(), |function| function.raw().to_string()),
+            decline.detail(),
+        );
+    }
     let Some(stats) = stats else {
         return;
     };

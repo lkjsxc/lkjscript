@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use lkjscript_compiler::{compile_path, compile_path_with_metrics, CompileMetrics};
+use lkjscript_compiler::{compile_package_path, compile_package_path_with_metrics, CompileMetrics};
 use lkjscript_core::ExecutionPolicy;
 use lkjscript_jit::JitConfig;
 
@@ -16,30 +16,16 @@ mod args;
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;
     let source = PathBuf::from(&options.file);
-    let (_, manifest) =
-        lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
-        compile_path_with_metrics(&source).map_err(|error| error.to_string())?
+        compile_package_path_with_metrics(&source).map_err(|error| error.to_string())?
     } else {
         (
-            compile_path(&source).map_err(|error| error.to_string())?,
+            compile_package_path(&source).map_err(|error| error.to_string())?,
             CompileMetrics::default(),
         )
     };
     let required = program.bytecode().required_capabilities();
-    for capability in required {
-        if manifest
-            .capabilities
-            .binary_search_by_key(&capability.as_str(), String::as_str)
-            .is_err()
-        {
-            return Err(format!(
-                "package does not grant required {} capability",
-                capability.as_str()
-            ));
-        }
-    }
     let inputs = lkjscript_vm::ExecutionInputs {
         arguments: options.script_args.clone(),
         capabilities: required.to_vec(),
@@ -66,17 +52,18 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
             program.ssa(),
             execution.stats.as_ref(),
             execution.path,
-            execution.fallback_reason,
+            execution.decline.as_ref(),
             execution.native_entered,
         );
     }
     if metrics_enabled {
         metrics::emit(MetricReport {
             execution_path: execution.path,
-            fallback_reason: execution.fallback_reason,
+            decline: execution.decline.as_ref(),
             native_entered: execution.native_entered,
             compile: &compile_metrics,
             native: execution.native_timings,
+            native_stats: execution.stats.as_ref(),
             vm_execution: execution.vm_duration,
             execution_total: engine_duration,
             outcome: &execution.outcome,

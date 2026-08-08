@@ -20,6 +20,9 @@ main/
 sig/
 inputs/
 capability/
+arguments
+/capability
+capability/
 file-system
 /capability
 capability/
@@ -31,6 +34,10 @@ unit
 /output
 /sig
 params/
+arguments
+capability/
+arguments
+/capability
 file-system
 capability/
 file-system
@@ -63,6 +70,12 @@ bind/
 received
 roundtrip-payload/
 file-system
+unwrap-some/
+argument-at/
+arguments
+0
+/argument-at
+/unwrap-some
 move/
 payload
 /move

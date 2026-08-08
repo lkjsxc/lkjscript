@@ -30,8 +30,9 @@ pub use memory_plan::{
     MemoryValuePlacement, MemoryValueRepresentationId, MemoryValueRoute,
 };
 pub use pipeline::{
-    compile_path, compile_path_with_metrics, compile_path_with_sources, compile_snapshot,
-    compile_source, validate_source,
+    compile_package_path, compile_package_path_with_metrics, compile_path,
+    compile_path_with_metrics, compile_path_with_sources, compile_snapshot, compile_source,
+    validate_source,
 };
 pub use types::Type;
 pub use workspace::{

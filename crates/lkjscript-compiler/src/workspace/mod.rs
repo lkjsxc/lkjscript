@@ -23,6 +23,7 @@ use lkjscript_core::{Error, Result};
 pub use draft::{DraftNode, DraftNodeId, ExpressionDraft};
 pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
 pub use ids::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
+pub(crate) use importer::{import_package_path, import_package_path_with_metrics};
 pub use importer::{import_path, import_path_with_metrics, import_source};
 pub use model::{
     CallEdge, ContainmentEdge, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, EntityHeader,
@@ -61,6 +62,16 @@ impl CapturedCompilationProvenance {
         match self {
             Self::Development(_) => Ok(()),
             Self::Locked(captured) => captured.validate_memory_plan(plan),
+        }
+    }
+
+    fn validate_required_capabilities(
+        &self,
+        required: &[lkjscript_core::CapabilityKind],
+    ) -> Result<()> {
+        match self {
+            Self::Development(_) => Ok(()),
+            Self::Locked(captured) => captured.validate_required_capabilities(required),
         }
     }
 }
@@ -208,6 +219,13 @@ impl WorkspaceSnapshot {
 
     pub(crate) fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
         self.provenance.validate_memory_plan(plan)
+    }
+
+    pub(crate) fn validate_required_capabilities(
+        &self,
+        required: &[lkjscript_core::CapabilityKind],
+    ) -> Result<()> {
+        self.provenance.validate_required_capabilities(required)
     }
 
     #[cfg(test)]
