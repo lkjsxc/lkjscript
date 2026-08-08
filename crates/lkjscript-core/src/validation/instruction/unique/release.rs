@@ -39,11 +39,14 @@ fn drop_owner(
         ));
     }
     reject_live_loan(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: None,
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: None,
+        },
+    );
     state.stack.push(Kind::Unit);
     Ok(())
 }
@@ -54,15 +57,17 @@ fn place_end(
     state: &mut State,
 ) -> Result<()> {
     let place = instruction_operand(proto, instruction)?;
-    let target = state.unique_places.get_mut(place).ok_or_else(|| {
+    let target = state.unique_places.get(place).copied().ok_or_else(|| {
         error(
             proto,
             instruction,
             "byte-vector place index is out of range",
         )
     })?;
-    match *target {
-        UniquePlaceState::Active { owner: None, .. } => *target = UniquePlaceState::Inactive,
+    match target {
+        UniquePlaceState::Active { owner: None, .. } => {
+            state.set_unique_place(place, UniquePlaceState::Inactive);
+        }
         UniquePlaceState::Active { owner: Some(_), .. } => {
             return Err(error(
                 proto,

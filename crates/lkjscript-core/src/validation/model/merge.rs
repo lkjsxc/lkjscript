@@ -68,6 +68,9 @@ pub(super) fn merge_state(
             "incompatible structural destination state at CFG join",
         ));
     }
+    if changed {
+        current.refresh_cleanup_requirement(proto);
+    }
     Ok(changed)
 }
 

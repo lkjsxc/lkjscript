@@ -6,36 +6,6 @@ pub struct ValidatedChunk {
 }
 
 impl ValidatedChunk {
-    pub const fn prepared_identity(&self) -> lkjscript_contracts::PreparedProgramIdentity {
-        self.chunk.prepared_identity
-    }
-
-    pub fn require_prepared_identity(
-        &self,
-        expected: lkjscript_contracts::PreparedProgramIdentity,
-    ) -> Result<()> {
-        if !expected.is_bound() || self.chunk.prepared_identity != expected {
-            return Err(Error::msg("bytecode prepared program identity mismatch"));
-        }
-        Ok(())
-    }
-
-    pub fn bind_prepared_identity(
-        mut self,
-        identity: lkjscript_contracts::PreparedProgramIdentity,
-    ) -> Result<Self> {
-        if !identity.is_bound()
-            || (self.chunk.prepared_identity.is_bound()
-                && self.chunk.prepared_identity != identity)
-        {
-            return Err(Error::msg(
-                "bytecode prepared program identity is zero or stale",
-            ));
-        }
-        self.chunk.prepared_identity = identity;
-        Ok(self)
-    }
-
     pub fn constants(&self) -> &[Constant] {
         &self.chunk.constants
     }

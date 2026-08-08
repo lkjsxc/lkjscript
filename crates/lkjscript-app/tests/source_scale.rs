@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Write as IoWrite;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use lkjscript_compiler::{
     compile_path, compile_path_with_metrics, compile_source, validate_source,
@@ -724,6 +725,74 @@ fn generated_borrow_calls_source(calls: usize) -> Result<String, std::fmt::Error
     Ok(source)
 }
 
+fn compile_and_run_borrow_call_scale(calls: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let body_started = Instant::now();
+    let source = generated_borrow_calls_source(calls)?;
+    let source_bytes = source.len();
+    let directory = TempDir::new()?;
+    let path = directory.0.join("wide-borrow-calls.lkjscript");
+    fs::write(&path, source)?;
+    let (program, metrics) = compile_path_with_metrics(&path)?;
+    assert!(program.memory_plan().calls.len() >= calls);
+    assert_eq!(program.memory_plan().borrow_scopes.len(), calls);
+    assert!(program.memory_plan().work.calls >= u64::try_from(calls)?);
+    assert_eq!(
+        program.memory_plan().work.borrow_scopes,
+        u64::try_from(calls)?
+    );
+
+    let vm_started = Instant::now();
+    let outcome = run_chunk(
+        program.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    let vm_execution = vm_started.elapsed();
+    let value = match outcome {
+        ExecutionOutcome::Returned(value) => value,
+        other => return Err(format!("wide borrow-call program did not return: {other:?}").into()),
+    };
+    assert_eq!(value.as_i64(), Some(42));
+
+    let main = program.bytecode().main();
+    eprintln!(
+        concat!(
+            "LKJSCRIPT_BORROW_SCALE {{",
+            "\"calls\":{},\"source_bytes\":{},\"instructions\":{},",
+            "\"locals\":{},\"unique_places\":{},\"cleanup_ranges\":{},",
+            "\"source_loading_ns\":{},\"parsing_ns\":{},",
+            "\"hir_analysis_ns\":{},\"effect_analysis_ns\":{},",
+            "\"memory_planning_ns\":{},\"ssa_construction_ns\":{},",
+            "\"ssa_verification_ns\":{},\"normalization_ns\":{},",
+            "\"bytecode_lowering_ns\":{},\"bytecode_validation_ns\":{},",
+            "\"package_validation_ns\":{},\"compile_total_ns\":{},",
+            "\"vm_execution_ns\":{},\"test_body_ns\":{},\"result\":42",
+            "}}"
+        ),
+        calls,
+        source_bytes,
+        program.bytecode().main_instructions().len(),
+        main.locals,
+        main.unique_places,
+        main.failure_cleanup_ranges.len(),
+        metrics.source_loading.as_nanos(),
+        metrics.parsing.as_nanos(),
+        metrics.hir_analysis.as_nanos(),
+        metrics.effect_analysis.as_nanos(),
+        metrics.memory_planning.as_nanos(),
+        metrics.ssa_construction.as_nanos(),
+        metrics.ssa_verification.as_nanos(),
+        metrics.normalization.as_nanos(),
+        metrics.bytecode_lowering.as_nanos(),
+        metrics.bytecode_validation.as_nanos(),
+        metrics.package_validation.as_nanos(),
+        metrics.total.as_nanos(),
+        vm_execution.as_nanos(),
+        body_started.elapsed().as_nanos(),
+    );
+    Ok(())
+}
+
 fn generated_wide_transport_source(width: usize) -> Result<String, std::fmt::Error> {
     let mut source = String::from("def/\nname/\nwide-transport\n/name\nfn/\nforall/\n");
     for index in 0..width {
@@ -819,29 +888,17 @@ fn four_thousand_ninety_seven_functions_compile_validate_and_execute_in_vm(
 }
 
 #[test]
+#[ignore = "opt-in release scaling sample selected by LKJSCRIPT_BORROW_CALLS"]
+fn borrow_call_scale_sample() -> Result<(), Box<dyn std::error::Error>> {
+    let calls = std::env::var("LKJSCRIPT_BORROW_CALLS")
+        .map_err(|_| "LKJSCRIPT_BORROW_CALLS must select the generated test geometry")?
+        .parse::<usize>()?;
+    compile_and_run_borrow_call_scale(calls)
+}
+
+#[test]
 #[ignore = "opt-in release 16,385-call and borrow-scope production-pipeline stress geometry"]
 fn sixteen_thousand_three_hundred_eighty_five_calls_and_borrow_scopes_execute_in_vm(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    const CALLS: usize = 16_385;
-    let source = generated_borrow_calls_source(CALLS)?;
-    let directory = TempDir::new()?;
-    let path = directory.0.join("wide-borrow-calls.lkjscript");
-    fs::write(&path, source)?;
-    let (program, metrics) = compile_path_with_metrics(&path)?;
-    eprintln!("wide borrow-call compile metrics: {metrics:?}");
-    assert!(program.memory_plan().calls.len() >= CALLS);
-    assert_eq!(program.memory_plan().borrow_scopes.len(), CALLS);
-    assert!(program.memory_plan().work.calls >= 16_385);
-    assert_eq!(program.memory_plan().work.borrow_scopes, 16_385);
-    let outcome = run_chunk(
-        program.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
-    );
-    let value = match outcome {
-        ExecutionOutcome::Returned(value) => value,
-        other => return Err(format!("wide borrow-call program did not return: {other:?}").into()),
-    };
-    assert_eq!(value.as_i64(), Some(42));
-    Ok(())
+    compile_and_run_borrow_call_scale(16_385)
 }

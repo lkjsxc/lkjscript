@@ -13,19 +13,19 @@ package manifest, lock, and line-oriented .lkjscript files
     -> immutable WorkspaceSnapshot owning typed HIR and complete/typed-hole state
     -> optional in-process Workspace transaction and one-revision Arc publication
     -> compile_snapshot typed completeness and consistency validation
-    -> HIR memory planning
+    -> HIR memory planning and captured locked-target validation
     -> typed SSA lowering, verification, and simple normalization
     -> bytecode lowering and unrestricted trusted validation
-    -> in-process prepared descriptor and bound prepared identity
     -> one baseline-native group attempt, otherwise validated VM execution
 ```
 
 Text and package files remain persistent importer inputs, not semantic authority and not a post-HIR
 compiler input. `compile_snapshot` is public and is the sole boundary into memory planning, SSA,
-bytecode, and preparation. All text/path compile APIs import and delegate. The snapshot has private fields and owns `Arc`-shared typed HIR, complete or typed-hole-overlay
-state, immutable import provenance or deterministic post-edit development provenance, optional
-presentation/source attachments, and deterministic semantic indexes. Package preparation after an
-unedited import uses captured lock facts and performs no file-system provenance reconstruction. A
+and bytecode. All text/path compile APIs import and delegate. The snapshot has private fields and
+owns `Arc`-shared typed HIR, complete or typed-hole-overlay state, immutable import provenance or
+deterministic post-edit development provenance, optional presentation/source attachments, and
+deterministic semantic indexes. An unedited locked import retains the exact target record needed to
+validate its completed memory plan without reconstructing provenance from the file system. A
 semantic edit removes source attachments and derives development identity from the prior semantic
 digest and published diff, so an edited program never falsely retains locked-source provenance.
 
@@ -37,8 +37,18 @@ index construction records containment, references, calls, dependencies, actual/
 headers, and diagnostics. Compilation revalidates complete HIR references, signatures, origins, and
 index shape before lowering. Native
 execution consumes verified SSA directly; the VM consumes validated bytecode. The deleted optimizer
-pipeline, proof metadata, automatic transition, and redundant SSA memory inventory are not
-constructed.
+pipeline, proof metadata, automatic transition, redundant SSA memory inventory, generic
+cross-representation identity, and native-specialized SSA copy are not constructed.
+
+Bytecode validation decodes each function once and partitions decoded instructions at entry, jump
+targets, and control boundaries. It retains incoming abstract state only at basic-block entries,
+clones that state once per block visit, mutates one working state through the straight-line body, and
+merges only into successor block entries. A finite monotone worklist handles joins and backedges.
+Failure-cleanup ranges are already shape-validated as sorted and nonoverlapping; each block visit
+uses a local sweep cursor rather than searching all ranges per instruction. `State` maintains exact
+counts of live placed owners, non-parameter borrowed locals, and structural destinations as the
+corresponding dense facts change. Full cleanup plans and place coverage are still checked at range
+starts against the exact pre-instruction state.
 
 Trusted compilation has no compiler profile, cross-phase budget ledger, source-shape quota, HIR
 memory count quota, or SSA work quota. Checked timings and work totals are observation. User-scale
@@ -103,22 +113,22 @@ segmented lists, semantic DAGs, returned snapshots, and host resources stage all
 identity-map publication. Opaque handles resolve through runtime-owned wide maps rather than packed
 index arithmetic. Cleanup continues even when diagnostic retention is exhausted.
 
-## Prepared identity and snapshots
+## In-process compiler authority and snapshots
 
-The importer captures immutable locked or development compilation provenance in the workspace
-snapshot. After memory planning, the compiler constructs `PreparedProgramDescriptor` and
-`PreparedProgram` in-process from:
+Verified SSA and validated bytecode are retained directly in `ExecutableProgram` as typed in-process
+values. Neither crosses a process, persistence, artifact-load, or compilation-cache boundary, so the
+compiler does not canonically traverse and hash both representations, construct a generic prepared
+descriptor, or bind a synthetic shared identity back into them. Baseline native receives the
+retained verified SSA and computes eligibility and target-specific machine facts only while building
+an actual attempt. VM execution receives the retained validated bytecode unchanged.
 
-- the captured package content, root, entry, and memory closure;
-- verified HIR memory-plan and witness-closure identities;
-- semantic SSA and optional native-specialization SSA identities;
-- validated bytecode identity; and
-- prepared-program, runtime-call, native-layout, verified-SSA, and bytecode contract digests.
-
-One nonzero `PreparedProgramIdentity` is privately bound to the already verified SSA and validated
-bytecode without serialization or revalidation. The identity remains in-process and may participate
-in compilation cache keys. There is no process provenance, bootstrap frame, global platform
-revision, runtime-control digest, or process-outcome-codec digest in the descriptor.
+Package validation remains separate from this deletion. The importer verifies the manifest and
+lock, carries that same decoded lock value through source-closure checking, and captures its target
+record without rereading mutable path state. After HIR memory planning,
+`compile_snapshot` compares the generated target memory and witness facts with that captured record
+before continuing; a development snapshot needs no equivalent package check. Executable-image
+content identity, relocation validation, contract checks, private RW construction, RX sealing, and
+failure-atomic installation remain at the real native artifact boundary.
 
 Execution outcomes are ordinary in-memory Rust values. The process outcome wire codec is deleted.
 `SemanticDagSnapshot` remains a validated in-memory graph, and `SealedSemanticDagRuntime` retains
@@ -129,8 +139,8 @@ facts call this capability `semantic_snapshot`; it is not a process transport pr
 
 Cargo metadata currently reports 11 workspace members and one app binary. Conceptually:
 
-- `lkjscript-contracts` owns retained language, IR, memory, package, and prepared descriptors and
-  content identities;
+- `lkjscript-contracts` owns retained language, IR, memory, package, native, and runtime-call
+  descriptors and identities;
 - `lkjscript-core` owns values, execution policy/outcomes, validated bytecode, memory witnesses,
   structural storage, semantic snapshots, and resource tables;
 - `lkjscript-compiler` owns the public immutable semantic workspace snapshot and direct snapshot
@@ -160,8 +170,8 @@ Fail-closed validation remains at:
 - filesystem, socket, terminal, SQLite, FFI, and operating-system calls.
 
 Within one synchronous compiler pipeline, typed verified wrappers and Rust ownership carry
-validated authority. Prepared-identity binding does not serialize or independently verify the same
-program again.
+validated authority. The compiler does not serialize, hash, or independently reverify those values
+to manufacture another in-process authority token.
 
 `lkjscript-executable` is the narrow unsafe executable-memory and generated-entry mechanism.
 `lkjscript-sys` is the direct operating-system/SQLite FFI mechanism. The deleted process framing,

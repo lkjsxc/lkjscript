@@ -75,20 +75,7 @@ fn aggregate_consume_payload(
         );
     }
     reject_live_view(state, owner, proto, instruction)?;
-    for place in &mut state.unique_places {
-        if matches!(
-            place,
-            UniquePlaceState::Active {
-                owner: Some(actual),
-                ..
-            } if *actual == owner
-        ) {
-            *place = UniquePlaceState::Active {
-                owner: None,
-                transferred: None,
-            };
-        }
-    }
+    state.clear_unique_owner(owner);
     let result = match reference.result.route {
         StructuralFieldRoute::Copy => field_result_kind(
             chunk,

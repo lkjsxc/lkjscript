@@ -30,8 +30,8 @@ fn import_path_in_namespace(
     let package = crate::package::verify_for_compilation(path)?;
     let (source_tree, loading) = crate::source::load_with_metrics(path)
         .map_err(crate::source::SourceDiagnostic::into_core)?;
-    if let Some(root) = &package {
-        crate::package::verify_loaded_sources(root, path, &source_tree)?;
+    if let Some(verified) = &package {
+        crate::package::verify_loaded_sources(verified, &source_tree)?;
     }
     let development_source = source_tree
         .files()
@@ -53,13 +53,10 @@ fn import_path_in_namespace(
     let effect_analysis = effects_started.elapsed();
 
     let provenance = match package {
-        Some(root) => CapturedCompilationProvenance::Locked(Arc::new(
-            crate::package::capture_preparation(&root, path)?,
+        Some(verified) => CapturedCompilationProvenance::Locked(Arc::new(
+            crate::package::capture_compilation(&verified)?,
         )),
-        None => CapturedCompilationProvenance::Development {
-            source_identity: development_source,
-            path: Arc::from(path.to_string_lossy().as_ref()),
-        },
+        None => CapturedCompilationProvenance::Development(development_source),
     };
     let snapshot = WorkspaceSnapshot::new(namespace, hir, provenance, Some(attachments))?;
     Ok((
@@ -103,10 +100,7 @@ fn import_source_in_namespace(
     let snapshot = WorkspaceSnapshot::new(
         namespace,
         hir,
-        CapturedCompilationProvenance::Development {
-            source_identity,
-            path: Arc::from(path),
-        },
+        CapturedCompilationProvenance::Development(source_identity),
         Some(attachments),
     )?;
     Ok((

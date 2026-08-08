@@ -3,7 +3,6 @@ use super::*;
 #[test]
 fn exact_memory_metadata_selects_structural_execution() {
     let mut program = Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),
@@ -104,7 +103,6 @@ fn structural_type_metadata_rejects_zero_and_duplicate_memory_witnesses() {
 #[test]
 fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
     let mut program = Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

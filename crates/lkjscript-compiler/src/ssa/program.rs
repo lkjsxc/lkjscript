@@ -141,7 +141,6 @@ pub(in crate::ssa) fn construct_program(
 
     let enums = lower_enums(&program.enums, &product_ids)?;
     Ok(Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: structural,
         region_products,
         sources: program

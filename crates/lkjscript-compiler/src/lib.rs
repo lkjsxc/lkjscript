@@ -29,8 +29,6 @@ pub use memory_plan::{
     HirMemoryPlan, MemoryDomain, MemoryValueCategory, MemoryValueFailureCleanup,
     MemoryValuePlacement, MemoryValueRepresentationId, MemoryValueRoute,
 };
-pub use package::program::PreparedProgram;
-
 pub use pipeline::{
     compile_path, compile_path_with_metrics, compile_path_with_sources, compile_snapshot,
     compile_source, validate_source,
@@ -63,14 +61,13 @@ pub struct CompileMetrics {
     pub normalization: Duration,
     pub bytecode_lowering: Duration,
     pub bytecode_validation: Duration,
-    pub preparation: Duration,
+    pub package_validation: Duration,
     pub source_files: usize,
 }
 
 /// One compiled semantic program shared by the reference VM and later backends.
 #[derive(Debug, Clone)]
 pub struct ExecutableProgram {
-    prepared: PreparedProgram,
     bytecode: ValidatedChunk,
     ssa: VerifiedProgram,
     memory_plan: HirMemoryPlan,
@@ -78,14 +75,6 @@ pub struct ExecutableProgram {
 }
 
 impl ExecutableProgram {
-    pub const fn prepared(&self) -> PreparedProgram {
-        self.prepared
-    }
-
-    pub const fn prepared_identity(&self) -> lkjscript_contracts::PreparedProgramIdentity {
-        self.prepared.identity()
-    }
-
     pub fn bytecode(&self) -> &ValidatedChunk {
         &self.bytecode
     }

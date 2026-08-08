@@ -15,7 +15,7 @@ fn place_init(
             "structural owner is already bound to another place",
         );
     }
-    let target = state.unique_places.get_mut(place).ok_or_else(|| {
+    let target = state.unique_places.get(place).copied().ok_or_else(|| {
         instruction_error(
             proto,
             instruction.op(),
@@ -23,17 +23,18 @@ fn place_init(
             "structural place index is out of range",
         )
     })?;
-    match *target {
+    match target {
         UniquePlaceState::Inactive
         | UniquePlaceState::Active {
             owner: None,
             transferred: None,
-        } => {
-            *target = UniquePlaceState::Active {
+        } => state.set_unique_place(
+            place,
+            UniquePlaceState::Active {
                 owner: Some(owner),
                 transferred: None,
-            };
-        }
+            },
+        ),
         UniquePlaceState::Active { .. } => {
             return fail(
                 proto,
@@ -55,11 +56,14 @@ fn move_owner(
     let (representation, owner, active_variant) = local_owner(state, slot, proto, instruction)?;
     require_place_owner(state, place, owner, proto, instruction)?;
     reject_live_view(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: Some(owner),
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: Some(owner),
+        },
+    );
     state.stack.push(Kind::StructuralOwner {
         representation,
         owner,
@@ -91,11 +95,14 @@ fn drop_owner(
         );
     }
     reject_live_view(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: None,
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: None,
+        },
+    );
     state.stack.push(Kind::Unit);
     Ok(())
 }
@@ -106,7 +113,7 @@ fn place_end(
     state: &mut State,
 ) -> Result<()> {
     let place = instruction_operand(proto, instruction)?;
-    let target = state.unique_places.get_mut(place).ok_or_else(|| {
+    let target = state.unique_places.get(place).copied().ok_or_else(|| {
         instruction_error(
             proto,
             instruction.op(),
@@ -114,8 +121,10 @@ fn place_end(
             "structural place index is out of range",
         )
     })?;
-    match *target {
-        UniquePlaceState::Active { owner: None, .. } => *target = UniquePlaceState::Inactive,
+    match target {
+        UniquePlaceState::Active { owner: None, .. } => {
+            state.set_unique_place(place, UniquePlaceState::Inactive);
+        }
         UniquePlaceState::Active { owner: Some(_), .. } => {
             return fail(proto, instruction, "structural PlaceEnd is missing Drop")
         }

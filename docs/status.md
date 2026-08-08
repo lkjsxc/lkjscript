@@ -14,8 +14,8 @@ without text publication. Snapshots own clone-safe resolved typed HIR,
 complete or typed-hole-overlay state, deterministic post-edit development provenance, optional
 source attachments, opaque namespace-scoped stable entity/node identities, semantic indexes, type
 facts, diagnostics, and hole contexts. Every product compile API delegates to public
-`compile_snapshot`, the sole post-import boundary, before HIR memory planning, SSA lowering and
-verification, bytecode validation, prepared-identity binding, and execution.
+`compile_snapshot`, the sole post-import boundary, before HIR memory planning, locked-package target
+validation, SSA lowering and verification, bytecode validation, and execution.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -50,10 +50,10 @@ feature-flagged:
 - target-matrix, platform-revision, and empty configuration placeholders.
 
 The app no longer has dependencies or tests for those surfaces. Contract and package locks are
-regenerated from the retained local product. Prepared descriptors now contain only package
-provenance, memory-plan and witness closure, semantic and optional native SSA identities, validated
-bytecode identity, and the local execution contract digests. The resulting prepared identity is
-used only in-process by verified SSA, validated bytecode, and compilation caches.
+regenerated from the retained local product. Verified SSA and validated bytecode remain typed
+in-process authorities; there is no generic prepared descriptor, cross-representation program
+identity, compilation cache, or unconditional native-specialization artifact. A locked snapshot
+retains only the package target fact needed to compare its completed HIR memory plan with the lock.
 
 Deleting the service database wrapper did not delete the language SQLite capability. VM host
 operations still dispatch SQLite directly through `lkjscript-sys`; stdio, clock, filesystem,
@@ -100,8 +100,14 @@ tuning, not a language-depth limit.
 Committed generated tests cross former boundaries, including 20,000 nested source expressions,
 10,000-block CFG verification, 44,000 owned SSA parameters/places, 300-field products and enums,
 1,024 parameters/arguments/locals, table index 65,536, and runtime structural collections above
-65,535. Some largest production geometries remain ignored release stress tests because of high
-runtime and memory cost.
+65,535. Some largest production geometries remain ignored release stress tests.
+
+Bytecode control-flow validation stores abstract state only at basic-block entries, mutates one
+working state through each straight-line block, and merges only at block edges. Failure-cleanup
+ranges use a block-local sorted-range cursor, while an incrementally maintained summary makes
+cleanup-required checks constant-time between plan-validation boundaries. The retained 16,385-call
+fixture now completes in release mode on the measured host without a validity quota; compact results
+and protocol are recorded in [`performance.md`](performance.md).
 
 ## Retained validation and host boundaries
 
@@ -175,13 +181,14 @@ consumer.
   names, ambiguities, conflicts, and recovery states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- Recursive transaction, runtime structural-value, and specialization paths do not all have
-  deep-stack evidence. Some scale paths retain poor complexity and high peak memory.
+- Recursive transaction and runtime structural-value paths do not all have deep-stack evidence.
+  The repaired borrow-call fixture now exposes HIR analysis, bytecode lowering, and VM execution as
+  the next superlinear scale costs rather than validator-state retention or generic preparation.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host
-  `usize` remain private or external representation boundaries. Native specialization must decline
-  to the generic VM before entry when it cannot represent an otherwise supported program.
+  `usize` remain private or external representation boundaries. Native lowering must decline to the
+  generic VM before entry when it cannot represent an otherwise supported program.
 - Daemon, multi-tenant database, distributed, scheduler, and broader platform products are absent by
   design until the local semantic model and measurements justify them.
 - A five-sample selected product-path process baseline and final binary-size comparison are recorded

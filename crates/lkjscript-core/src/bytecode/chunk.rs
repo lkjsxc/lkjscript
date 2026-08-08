@@ -120,7 +120,6 @@ pub struct FunctionProto {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    pub prepared_identity: lkjscript_contracts::PreparedProgramIdentity,
     pub constants: Vec<Constant>,
     pub protos: Vec<FunctionProto>,
     pub main: FunctionProto,
@@ -172,7 +171,6 @@ impl Default for Chunk {
 impl Chunk {
     pub fn new() -> Self {
         Self {
-            prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
             constants: Vec::new(),
             protos: Vec::new(),
             main: FunctionProto {

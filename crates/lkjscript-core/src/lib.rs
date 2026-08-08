@@ -79,8 +79,5 @@ pub use structural::{
     UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
     UniqueStoreStats, WeakSealedRef,
 };
-pub use validation::{
-    validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity, ValidatedChunk,
-    ValidationPolicy,
-};
+pub use validation::{validate_chunk, ValidatedChunk, ValidationPolicy};
 pub use value::{CapabilityKind, ResourceKind, Value};

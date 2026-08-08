@@ -41,48 +41,34 @@ pub use transaction::{
 
 #[derive(Clone)]
 enum CapturedCompilationProvenance {
-    Development {
-        source_identity: [u8; 32],
-        path: Arc<str>,
-    },
-    Locked(Arc<crate::package::CapturedPackageProvenance>),
+    Development([u8; 32]),
+    Locked(Arc<crate::package::CapturedPackageCompilation>),
 }
 
 impl CapturedCompilationProvenance {
     fn semantic_base_identity(&self) -> [u8; 32] {
         match self {
-            Self::Development {
-                source_identity, ..
-            } => *source_identity,
+            Self::Development(source_identity) => *source_identity,
             Self::Locked(captured) => captured.semantic_base_identity(),
         }
     }
 
-    fn edited(identity: [u8; 32]) -> Self {
-        Self::Development {
-            source_identity: identity,
-            path: Arc::from("workspace://semantic-development"),
-        }
+    const fn edited(identity: [u8; 32]) -> Self {
+        Self::Development(identity)
     }
 
-    fn finish(
-        &self,
-        plan: &crate::HirMemoryPlan,
-    ) -> Result<crate::package::program::PreparationProvenance> {
+    fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
         match self {
-            Self::Development {
-                source_identity,
-                path,
-            } => crate::package::program::development(*source_identity, path, plan),
-            Self::Locked(captured) => Ok(crate::package::program::locked(captured.finish(plan)?)),
+            Self::Development(_) => Ok(()),
+            Self::Locked(captured) => captured.validate_memory_plan(plan),
         }
     }
 }
 
 /// One immutable, clone-safe semantic program revision.
 ///
-/// All fields are private so dense HIR identities, vectors, and preparation
-/// provenance cannot become public semantic identities.
+/// All fields are private so dense HIR identities, vectors, and captured
+/// package-boundary facts cannot become public semantic identities.
 #[derive(Clone)]
 pub struct WorkspaceSnapshot {
     namespace: WorkspaceNamespace,
@@ -220,11 +206,8 @@ impl WorkspaceSnapshot {
         &self.hir
     }
 
-    pub(crate) fn preparation_provenance(
-        &self,
-        plan: &crate::HirMemoryPlan,
-    ) -> Result<crate::package::program::PreparationProvenance> {
-        self.provenance.finish(plan)
+    pub(crate) fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
+        self.provenance.validate_memory_plan(plan)
     }
 
     #[cfg(test)]

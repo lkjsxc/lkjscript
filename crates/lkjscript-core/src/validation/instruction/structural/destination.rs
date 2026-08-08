@@ -7,8 +7,7 @@ fn destination_create(
     let destination = destination_operand(chunk, proto, instruction)?;
     let identity = fresh_identity(proto, instruction, 1)?;
     if state
-        .structural_destinations
-        .insert(
+        .insert_structural_destination(
             identity,
             StructuralDestinationState {
                 destination: destination.id,
@@ -159,8 +158,7 @@ fn destination_finish(
         return fail(proto, instruction, "destination finish metadata is stale");
     }
     let current = state
-        .structural_destinations
-        .remove(&identity)
+        .remove_structural_destination(&identity)
         .ok_or_else(|| {
             instruction_error(
                 proto,
@@ -199,7 +197,7 @@ fn destination_abort(
             "destination abort expects a destination",
         );
     };
-    if destination != expected.id || state.structural_destinations.remove(&identity).is_none() {
+    if destination != expected.id || state.remove_structural_destination(&identity).is_none() {
         return fail(
             proto,
             instruction,

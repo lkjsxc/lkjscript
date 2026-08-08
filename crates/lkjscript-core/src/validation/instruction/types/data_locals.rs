@@ -43,7 +43,7 @@ fn store_local(
             &format!("unique owners/views require typed local opcodes: {value:?}"),
         ));
     }
-    let target = state.locals.get_mut(slot).ok_or_else(|| {
+    let target = state.locals.get(slot).copied().ok_or_else(|| {
         instruction_error(
             proto,
             instruction.op(),
@@ -59,7 +59,7 @@ fn store_local(
             "resource store would overwrite a distinct live affine handle",
         ));
     }
-    *target = Some(value);
+    state.set_local(proto, slot, Some(value));
     if resource {
         let top = state.stack.last_mut().ok_or_else(|| {
             instruction_error(

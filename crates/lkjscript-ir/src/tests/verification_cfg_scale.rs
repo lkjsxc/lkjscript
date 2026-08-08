@@ -31,7 +31,6 @@ fn branch(id: usize, target: usize) -> Block {
 
 fn program(function: Function) -> Program {
     Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

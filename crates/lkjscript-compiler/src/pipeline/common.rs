@@ -14,7 +14,7 @@ pub(super) struct SnapshotCompileMetrics {
     pub normalization: Duration,
     pub bytecode_lowering: Duration,
     pub bytecode_validation: Duration,
-    pub preparation: Duration,
+    pub package_validation: Duration,
 }
 
 /// The sole post-import compiler boundary.
@@ -51,8 +51,12 @@ pub(super) fn compile_snapshot_with_metrics(
     let memory_verified = crate::memory_plan::verify_hir_memory(snapshot.hir())?;
     let memory_planning = memory_started.elapsed();
 
-    let (ssa, ssa_metrics) = lower_program_with_metrics(&memory_verified)?;
     let memory_plan = memory_verified.plan().clone();
+    let package_validation_started = Instant::now();
+    snapshot.validate_memory_plan(&memory_plan)?;
+    let package_validation = package_validation_started.elapsed();
+
+    let (ssa, ssa_metrics) = lower_program_with_metrics(&memory_verified)?;
 
     let bytecode_started = Instant::now();
     let (chunk, bytecode_links) = compile_program(&ssa)?;
@@ -62,15 +66,8 @@ pub(super) fn compile_snapshot_with_metrics(
     let bytecode = validate_chunk(chunk, ValidationPolicy::Unrestricted)?;
     let bytecode_validation = validation_started.elapsed();
 
-    let preparation_started = Instant::now();
-    let provenance = snapshot.preparation_provenance(&memory_plan)?;
-    let (prepared, ssa, bytecode) =
-        crate::package::program::bind(ssa, bytecode, &memory_plan, provenance)?;
-    let preparation = preparation_started.elapsed();
-
     Ok((
         ExecutableProgram {
-            prepared,
             bytecode,
             ssa,
             memory_plan,
@@ -83,7 +80,7 @@ pub(super) fn compile_snapshot_with_metrics(
             normalization: ssa_metrics.normalization,
             bytecode_lowering,
             bytecode_validation,
-            preparation,
+            package_validation,
         },
     ))
 }

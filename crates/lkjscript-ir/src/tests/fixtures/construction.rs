@@ -49,7 +49,6 @@ pub(crate) fn constant(id: u64, value: i64) -> Instruction {
 
 pub(crate) fn one_block_program() -> Program {
     Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

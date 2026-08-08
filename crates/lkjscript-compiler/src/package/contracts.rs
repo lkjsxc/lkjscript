@@ -28,7 +28,6 @@ pub(super) fn all() -> Result<std::collections::BTreeMap<String, String>> {
         lkjscript_contracts::MODULE_INTERFACE,
         lkjscript_contracts::PACKAGE_MANIFEST,
         lkjscript_contracts::PACKAGE_LOCK,
-        lkjscript_contracts::PREPARED_PROGRAM,
     ]
     .into_iter()
     .map(|name| expected(name).map(|digest| (name.to_string(), digest.to_hex())))

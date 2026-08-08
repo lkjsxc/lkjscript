@@ -14,7 +14,6 @@ pub(crate) fn bounded_call_program() -> Program {
     };
     let resolved = Signature::monomorphic(vec![SsaType::I64], SsaType::I64);
     Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: vec![SourceMetadata {

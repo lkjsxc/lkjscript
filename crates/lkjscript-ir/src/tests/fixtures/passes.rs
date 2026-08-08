@@ -4,7 +4,6 @@ use crate::*;
 pub(crate) fn pass_program() -> Program {
     let add_signature = Signature::monomorphic(vec![SsaType::I64, SsaType::I64], SsaType::I64);
     Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

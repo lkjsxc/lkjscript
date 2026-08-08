@@ -30,7 +30,7 @@ pub fn compile_path_with_metrics(path: &Path) -> Result<(ExecutableProgram, Comp
             normalization: compile.normalization,
             bytecode_lowering: compile.bytecode_lowering,
             bytecode_validation: compile.bytecode_validation,
-            preparation: compile.preparation,
+            package_validation: compile.package_validation,
             source_files: import.source_files,
         },
     ))

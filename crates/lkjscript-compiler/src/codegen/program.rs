@@ -3,7 +3,6 @@ use crate::codegen::*;
 pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, BytecodeLinkMetadata)> {
     let program = verified.program();
     let mut chunk = Chunk::new();
-    chunk.prepared_identity = program.prepared_identity;
     chunk.main.name = "main".into();
     install_enum_metadata(&mut chunk, program)?;
     for product in &program.products {

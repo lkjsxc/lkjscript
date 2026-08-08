@@ -392,8 +392,7 @@ fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
         &wide_product_source(WIDE_COUNT),
         "generated-wide-product.lkjscript",
     )
-    .expect("compile wide product through HIR, memory plan, SSA, and prepared bytecode");
-    assert!(program.prepared_identity().is_bound());
+    .expect("compile wide product through HIR, memory plan, SSA, and validated bytecode");
     assert_eq!(program.bytecode().products()[0].fields.len(), WIDE_COUNT);
     assert!(program
         .bytecode()
@@ -431,8 +430,7 @@ fn three_hundred_field_product_executes_high_projection_and_update_in_vm() {
 fn three_hundred_variant_enum_executes_high_tag_field_and_exhaustive_match_in_vm() {
     let source = wide_enum_match_source(WIDE_COUNT, WIDE_COUNT);
     let program = compile_source(&source, "generated-wide-enum-match.lkjscript")
-        .expect("compile wide enum through exhaustive matching and prepared bytecode");
-    assert!(program.prepared_identity().is_bound());
+        .expect("compile wide enum through exhaustive matching and validated bytecode");
     let variants = program
         .bytecode()
         .structural_layouts()
@@ -500,7 +498,6 @@ fn generated_source_crosses_constant_memory_plan_and_bytecode_widths() {
         "generated-wide-constants.lkjscript",
     )
     .expect("compile wide constants through HIR memory plan, SSA, and bytecode validation");
-    assert!(program.prepared_identity().is_bound());
     assert_eq!(program.memory_plan().constants.len(), WIDE_CONSTANT_COUNT);
     assert!(program.memory_plan().entries.len() > usize::from(u16::MAX));
     assert!(program.memory_plan().work.verifier_steps > u64::from(u16::MAX));

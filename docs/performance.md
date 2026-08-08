@@ -105,12 +105,91 @@ implemented operations described in [`status.md`](status.md), the flow in
 [`architecture.md`](architecture.md), and the contract in
 [`spec/workspace.md`](spec/workspace.md) rather than reviving the deleted wire service.
 
+## Borrow-call validation and generic-preparation correction
+
+**Measured product-path correction, not a universal performance promise.** The hypothesis was that
+instruction-indexed full validator states plus per-instruction cleanup scans caused quadratic time
+and memory, while generic preparation performed whole-program native specialization and identity
+work with no cache, transfer, persistence, or runtime consumer. Equivalent semantics were the same
+generated program: one string owner, repeated borrowed calls, VM execution, and result `42`.
+
+The retained harness is [`meta/scripts/compiler-scale.py`](../meta/scripts/compiler-scale.py) plus
+`borrow_call_scale_sample` in
+[`source_scale.rs`](../crates/lkjscript-app/tests/source_scale.rs). Each sample used a locked release
+build, warm Cargo dependencies/artifacts, and a fresh test process. The script polls `/proc` every
+10 ms and sums resident pages for the Cargo process tree; this is approximate process-tree RSS, not
+unique physical memory. Three samples per size report median and nearest-rank p95 (the maximum with
+three samples). Commands were:
+
+```sh
+meta/scripts/compiler-scale.py --label before-block-validation \
+  --sizes 1024,2048,4096 --samples 3
+meta/scripts/compiler-scale.py --label final-complete \
+  --sizes 1024,2048,4096,8192,16385 --samples 3 --exact-stress
+```
+
+Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 online logical CPUs,
+32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The before samples used product
+code at `54f63fb4cc5164ba5d22579a027c69faa874e86b`; the dirty tree contained the replacement
+`AGENTS.md` and measurement harness but no validator or compiler-path change. The original baseline harness recorded only HEAD and a dirty Boolean, so its exact dirty tree relies
+on this operator attestation. Final samples used the completed compiler tree with combined worktree
+SHA-256 `d086cb27d141a0c0349b17b05d47a02a6cd0b640d11882d9b64c40476b4e121a`;
+the harness records tracked-diff and untracked-file hashes. Raw JSON remains under
+`target/compiler-scale/` and is not committed.
+
+| Calls | Bytecode validation before | Bytecode validation after | Generic preparation before | Package-validation timer after | Compile total before | Compile total after | Peak RSS before | Peak RSS after |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,024 | 86.181 ms (96.959) | 0.297 ms (0.303) | 3.617 ms (3.655) | <0.001 ms | 114.156 ms (128.895) | 24.706 ms (26.449) | 399.9 MiB (399.9) | 34.2 MiB (34.7) |
+| 2,048 | 316.264 ms (318.288) | 0.541 ms (0.550) | 6.582 ms (6.722) | <0.001 ms | 390.046 ms (391.729) | 65.750 ms (71.090) | 1,491.5 MiB (1,492.7) | 43.2 MiB (43.4) |
+| 4,096 | 1,197.054 ms (1,219.526) | 1.055 ms (1.098) | 12.762 ms (13.684) | <0.001 ms | 1,407.925 ms (1,435.959) | 194.084 ms (198.502) | 5,837.4 MiB (5,837.6) | 56.6 MiB (56.7) |
+
+Across a fourfold input increase in the before matrix, validator time grows 13.89x and RSS 14.60x.
+After the cutover, validator time grows 3.55x and RSS 1.65x; over the full 1,024-to-16,385 matrix,
+validation grows 13.80x for 16x as many calls. At 4,096 calls, median validation is 1,135x faster and
+approximate peak RSS is 103x smaller. Generic preparation was only 3.6-12.8 ms at these safe sizes,
+so this baseline does **not** reproduce the old 261 s preparation observation under near-capacity
+memory pressure. The producer/consumer audit nevertheless found its work wholly unconsumed;
+deleting it and the rest of the in-process prepared identity reduced post-validator compile medians
+by 10.2-15.9% at the three shared sizes.
+
+Final phase medians show the remaining shape; `SSA` is the sum of the separate construction,
+verification, and normalization medians. These temporary paths are development fixtures, so their
+0.00014-0.00017 ms
+package-validation timer is the no-op development branch, not a locked-package validation
+measurement.
+
+| Calls | HIR analysis | Memory planning | SSA | Bytecode lowering | Bytecode validation | VM execution | Test body | Peak RSS |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,024 | 7.818 ms | 9.315 ms | 1.981 ms | 1.158 ms | 0.297 ms | 2.543 ms | 27.656 ms | 34.2 MiB |
+| 2,048 | 29.893 ms | 18.207 ms | 4.015 ms | 3.962 ms | 0.541 ms | 8.746 ms | 79.435 ms | 43.2 MiB |
+| 4,096 | 116.291 ms | 37.269 ms | 7.563 ms | 15.128 ms | 1.055 ms | 28.106 ms | 226.315 ms | 56.6 MiB |
+| 8,192 | 479.293 ms | 77.088 ms | 15.570 ms | 56.208 ms | 2.189 ms | 106.038 ms | 777.840 ms | 89.2 MiB |
+| 16,385 | 1,876.925 ms | 172.229 ms | 31.305 ms | 233.240 ms | 4.100 ms | 573.811 ms | 2,967.116 ms | 148.5 MiB |
+
+The exact named 16,385-call stress test was retained in the final JSON and returned `42`; its sample
+reported 2.457 s compile, 4.805 ms bytecode validation, 554.856 ms VM execution, 3.021 s body time,
+3.062 s process wall time, and 153.7 MiB approximate peak RSS. The separate three-sample
+parameterized row above uses the same generator and compile/run helper. The old recorded 333.24 s /
+30.4 GiB result is historical and was not copied forward as a new sample.
+
+The structural correction is block-entry dataflow with a range sweep and incrementally maintained
+cleanup summary; no instruction, block, iteration, state, or program quota was added. Generic
+preparation, both whole-program content encoders, the discarded native-specialization transform,
+and their descriptor/identity contracts were deleted rather than bypassed. Reverse the validator
+change if malformed-bytecode or fixed-point semantics fail, not for compatibility with old internal
+state layout. Reintroduce a target-specific artifact identity only at a real cache, transfer,
+persistence, or executable-artifact boundary that consumes the artifact.
+
+The remaining doubling trend is superlinear in HIR analysis, bytecode lowering, and VM execution;
+HIR analysis now dominates compile time at 16,385 calls. The VM also still linearly searches all
+failure-cleanup ranges around each instruction step, an evident candidate for its measured trend.
+Those paths, not another validity limit or language expansion, are the next scale investigation.
+
 ## Retained generated-scale evidence
 
-**Recorded before this documentation cutover; harnesses remain committed.** The measurements below
-came from the local 20-logical-CPU AMD Ryzen 9 9955HX host with 32 GiB RAM and `rustc 1.96.0`. Times
-are recorded test-body observations from the prior reset work, not results rerun by this docs-only
-change.
+**Historical rows retained for geometries not remeasured here.** These observations came from the
+local AMD Ryzen 9 9955HX host and `rustc 1.96.0`. The 16,385-call row is superseded by the measured
+post-correction section above; the other rows were not rerun by this change.
 
 | Retained harness | Geometry | Recorded time |
 | --- | --- | ---: |
@@ -121,10 +200,9 @@ change.
 | `crates/lkjscript-core/src/validation/tests/structural/mod.rs` / `structural_operation_references_cross_the_former_limit` | 65,537 validated operation references | 0.01 s |
 | `crates/lkjscript-ir/src/tests/verification_region_product_scale.rs` / `region_product_metadata_crosses_the_former_sixteen_thousand_limit` | 16,385 verified SSA region products | 0.02 s |
 
-The 16,385-call run peaked at approximately 30.4 GiB process-tree RSS. Its emitted compiler metrics
-attributed 140 ms to memory planning, 59.44 s to bytecode validation, and 261.05 s to preparation.
-Those downstream phases and memory use are active scale problems, not reasons to restore a validity
-quota.
+The historical 16,385-call run peaked at approximately 30.4 GiB process-tree RSS. Its emitted
+compiler metrics attributed 140 ms to memory planning, 59.44 s to bytecode validation, and 261.05 s
+to preparation. It remains evidence of the removed pathology, not current performance.
 
 The two application scale tests are ignored release stress tests. Reproduce individual rows with a
 release build and the unique test-name filter, for example:
@@ -148,8 +226,8 @@ cargo test --locked --release -p lkjscript-ir \
   region_product_metadata_crosses_the_former_sixteen_thousand_limit -- --nocapture
 ```
 
-Do not run the 16,385-call geometry on a constrained host without expecting near-machine-capacity
-memory pressure.
+The exact 16,385-call geometry is still ignored so ordinary debug CI does not absorb a release
+scale workload; its current measured release RSS is recorded above.
 
 ## Accepted runtime selection
 

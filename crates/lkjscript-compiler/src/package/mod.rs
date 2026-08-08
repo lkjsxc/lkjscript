@@ -1,4 +1,5 @@
 mod analysis;
+mod compilation;
 mod contracts;
 mod encoding;
 mod graph;
@@ -7,8 +8,6 @@ mod interface_function;
 mod interface_values;
 mod manifest;
 mod model;
-mod prepared;
-pub(crate) mod program;
 mod read;
 mod target_memory;
 
@@ -26,9 +25,27 @@ pub use model::{
 
 pub const MANIFEST_FILE: &str = manifest::MANIFEST;
 pub const LOCK_FILE: &str = manifest::LOCK;
-pub(crate) use prepared::{
-    capture as capture_preparation, CapturedPackageProvenance, PreparedPackageFacts,
-};
+
+pub(crate) struct VerifiedCompilationPackage {
+    root: PathBuf,
+    lock: LockFile,
+    entry_module: String,
+}
+
+impl VerifiedCompilationPackage {
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(crate) const fn lock(&self) -> &LockFile {
+        &self.lock
+    }
+
+    pub(crate) fn entry_module(&self) -> &str {
+        &self.entry_module
+    }
+}
+pub(crate) use compilation::{capture as capture_compilation, CapturedPackageCompilation};
 
 pub fn root(entry: &Path) -> Result<PathBuf> {
     manifest::find_root(entry)
@@ -48,6 +65,10 @@ pub fn create_lock(entry: &Path) -> Result<(PathBuf, Vec<u8>)> {
 }
 
 pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
+    verify_with_lock(entry).map(|(root, manifest, _, _)| (root, manifest))
+}
+
+fn verify_with_lock(entry: &Path) -> Result<(PathBuf, Manifest, LockFile, Option<String>)> {
     let root = root(entry)?;
     let (manifest, _) = manifest::load(&root)?;
     let current = graph::build(&root)?;
@@ -61,7 +82,9 @@ pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
             "package lock is stale; run `lkjscript package lock`",
         ));
     }
-    if !entry.is_dir() {
+    let entry_module = if entry.is_dir() {
+        None
+    } else {
         let canonical = entry
             .canonicalize()
             .map_err(|error| Error::host(format!("canonicalize package entry: {error}")))?;
@@ -76,18 +99,27 @@ pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
                 "entry module is not declared: {module}"
             )));
         }
-    }
-    Ok((root, manifest))
+        Some(module)
+    };
+    Ok((root, manifest, locked, entry_module))
 }
 
-pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<PathBuf>> {
+pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<VerifiedCompilationPackage>> {
     let start = entry.parent().unwrap_or_else(|| Path::new("."));
     let mut current = start
         .canonicalize()
         .map_err(|error| Error::host(format!("canonicalize package search root: {error}")))?;
     loop {
         if current.join(MANIFEST_FILE).is_file() {
-            return verify(entry).map(|(root, _)| Some(root));
+            return verify_with_lock(entry).and_then(|(root, _, lock, entry_module)| {
+                Ok(Some(VerifiedCompilationPackage {
+                    root,
+                    lock,
+                    entry_module: entry_module.ok_or_else(|| {
+                        Error::msg("compiled package entry is not a source module")
+                    })?,
+                }))
+            });
         }
         if !current.pop() {
             return Ok(None);
@@ -96,25 +128,17 @@ pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<PathBuf>> {
 }
 
 pub(crate) fn verify_loaded_sources(
-    root: &Path,
-    entry: &Path,
+    verified: &VerifiedCompilationPackage,
     loaded: &crate::source::ValidatedSourceTree,
 ) -> Result<()> {
-    let (lock, _) = encoding::read(root)?;
-    let package = lock
+    let root = verified.root();
+    let package = verified
+        .lock()
         .packages
         .iter()
         .find(|package| package.origin == ".")
         .ok_or_else(|| Error::msg("package lock omits root package"))?;
-    let canonical = entry
-        .canonicalize()
-        .map_err(|error| Error::host(format!("canonicalize compiled entry: {error}")))?;
-    let id = canonical
-        .strip_prefix(root)
-        .map_err(|_| Error::msg("compiled package entry escapes root"))?
-        .to_str()
-        .ok_or_else(|| Error::msg("compiled package entry is not UTF-8"))?
-        .replace('\\', "/");
+    let id = verified.entry_module();
     let module = package
         .modules
         .iter()
@@ -152,8 +176,7 @@ pub(crate) fn verify_loaded_sources(
 pub fn verify_content(
     entry: &Path,
 ) -> Result<(PathBuf, Manifest, lkjscript_contracts::ContractDigest)> {
-    let (root, manifest) = verify(entry)?;
-    let (locked, _) = encoding::read(&root)?;
+    let (root, manifest, locked, _) = verify_with_lock(entry)?;
     let identity = lkjscript_contracts::ContractDigest::from_hex(&locked.root)
         .ok_or_else(|| Error::msg("package lock root is not a full lowercase SHA-256"))?;
     Ok((root, manifest, identity))

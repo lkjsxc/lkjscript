@@ -212,6 +212,21 @@ pub(super) struct StructuralDestinationState {
     pub(super) initialized: Vec<bool>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct CleanupRequirement {
+    active_unique_owners: usize,
+    borrowed_locals: usize,
+    structural_destinations: usize,
+}
+
+impl CleanupRequirement {
+    const fn required(self) -> bool {
+        self.active_unique_owners != 0
+            || self.borrowed_locals != 0
+            || self.structural_destinations != 0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct State {
     pub(super) stack: Vec<Kind>,
@@ -220,4 +235,226 @@ pub(super) struct State {
     pub(super) unique_places: Vec<UniquePlaceState>,
     pub(super) structural_destinations:
         std::collections::BTreeMap<OwnerIdentity, StructuralDestinationState>,
+    cleanup: CleanupRequirement,
+}
+
+impl State {
+    pub(super) fn new(
+        proto: &crate::FunctionProto,
+        stack: Vec<Kind>,
+        locals: Vec<Option<Kind>>,
+        globals: Vec<Option<Kind>>,
+        unique_places: Vec<UniquePlaceState>,
+    ) -> Self {
+        let mut state = Self {
+            stack,
+            locals,
+            globals,
+            unique_places,
+            structural_destinations: std::collections::BTreeMap::new(),
+            cleanup: CleanupRequirement::default(),
+        };
+        state.refresh_cleanup_requirement(proto);
+        state
+    }
+
+    pub(super) const fn cleanup_required(&self) -> bool {
+        self.cleanup.required()
+    }
+
+    pub(super) fn set_local(
+        &mut self,
+        proto: &crate::FunctionProto,
+        index: usize,
+        value: Option<Kind>,
+    ) {
+        let before = local_requires_cleanup(proto, index, self.locals[index]);
+        let after = local_requires_cleanup(proto, index, value);
+        update_count(&mut self.cleanup.borrowed_locals, before, after);
+        self.locals[index] = value;
+    }
+
+    pub(super) fn set_unique_place(&mut self, index: usize, value: UniquePlaceState) {
+        let before = place_requires_cleanup(self.unique_places[index]);
+        let after = place_requires_cleanup(value);
+        update_count(&mut self.cleanup.active_unique_owners, before, after);
+        self.unique_places[index] = value;
+    }
+
+    pub(super) fn clear_unique_owner(&mut self, owner: OwnerIdentity) {
+        for index in 0..self.unique_places.len() {
+            if matches!(
+                self.unique_places[index],
+                UniquePlaceState::Active {
+                    owner: Some(actual),
+                    ..
+                } if actual == owner
+            ) {
+                self.set_unique_place(
+                    index,
+                    UniquePlaceState::Active {
+                        owner: None,
+                        transferred: None,
+                    },
+                );
+            }
+        }
+    }
+
+    pub(super) fn insert_structural_destination(
+        &mut self,
+        identity: OwnerIdentity,
+        destination: StructuralDestinationState,
+    ) -> Option<StructuralDestinationState> {
+        let previous = self.structural_destinations.insert(identity, destination);
+        if previous.is_none() {
+            self.cleanup.structural_destinations += 1;
+        }
+        previous
+    }
+
+    pub(super) fn remove_structural_destination(
+        &mut self,
+        identity: &OwnerIdentity,
+    ) -> Option<StructuralDestinationState> {
+        let removed = self.structural_destinations.remove(identity);
+        if removed.is_some() {
+            debug_assert!(self.cleanup.structural_destinations != 0);
+            self.cleanup.structural_destinations -= 1;
+        }
+        removed
+    }
+
+    pub(super) fn refresh_cleanup_requirement(&mut self, proto: &crate::FunctionProto) {
+        self.cleanup = self.calculated_cleanup_requirement(proto);
+    }
+
+    #[cfg(any(debug_assertions, test))]
+    pub(super) fn cleanup_requirement_is_consistent(
+        &self,
+        proto: &crate::FunctionProto,
+    ) -> bool {
+        self.cleanup == self.calculated_cleanup_requirement(proto)
+    }
+
+    fn calculated_cleanup_requirement(
+        &self,
+        proto: &crate::FunctionProto,
+    ) -> CleanupRequirement {
+        CleanupRequirement {
+            active_unique_owners: self
+                .unique_places
+                .iter()
+                .filter(|place| place_requires_cleanup(**place))
+                .count(),
+            borrowed_locals: self
+                .locals
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(index, kind)| local_requires_cleanup(proto, *index, *kind))
+                .count(),
+            structural_destinations: self.structural_destinations.len(),
+        }
+    }
+}
+
+fn update_count(count: &mut usize, before: bool, after: bool) {
+    match (before, after) {
+        (false, true) => *count += 1,
+        (true, false) => {
+            debug_assert!(*count != 0);
+            *count -= 1;
+        }
+        (false, false) | (true, true) => {}
+    }
+}
+
+fn place_requires_cleanup(place: UniquePlaceState) -> bool {
+    matches!(
+        place,
+        UniquePlaceState::Active {
+            owner: Some(_),
+            ..
+        }
+    )
+}
+
+fn local_requires_cleanup(
+    proto: &crate::FunctionProto,
+    index: usize,
+    kind: Option<Kind>,
+) -> bool {
+    kind.is_some_and(|kind| {
+        matches!(
+            kind,
+            Kind::BytesBorrow { .. }
+                | Kind::ByteSlice { .. }
+                | Kind::StructuralView { .. }
+                | Kind::StructuralDestination { .. }
+        ) && !borrowed_parameter(proto, index)
+    })
+}
+
+fn borrowed_parameter(proto: &crate::FunctionProto, index: usize) -> bool {
+    index < proto.arity
+        && matches!(
+            proto.parameter_uniques.get(index).copied().flatten(),
+            Some(crate::UniqueValueKind::ByteSlice | crate::UniqueValueKind::ByteSliceMut)
+        )
+}
+
+#[cfg(test)]
+mod cleanup_requirement_tests {
+    use super::*;
+
+    #[test]
+    fn local_place_and_destination_transitions_update_the_summary_exactly() {
+        let mut chunk = crate::Chunk::new();
+        chunk.main.locals = 1;
+        chunk.main.unique_places = 1;
+        let owner = OwnerIdentity::instruction(7, 1);
+        let mut state = State::new(
+            &chunk.main,
+            Vec::new(),
+            vec![None],
+            Vec::new(),
+            vec![UniquePlaceState::Inactive],
+        );
+        assert!(!state.cleanup_required());
+
+        state.set_local(
+            &chunk.main,
+            0,
+            Some(Kind::BytesBorrow { owner, used: false }),
+        );
+        assert!(state.cleanup_required());
+        state.set_local(&chunk.main, 0, None);
+        assert!(!state.cleanup_required());
+
+        state.set_unique_place(
+            0,
+            UniquePlaceState::Active {
+                owner: Some(owner),
+                transferred: None,
+            },
+        );
+        assert!(state.cleanup_required());
+        state.set_unique_place(0, UniquePlaceState::Inactive);
+        assert!(!state.cleanup_required());
+
+        let destination = StructuralDestinationState {
+            destination: crate::StructuralDestinationId::new(0),
+            initialized: vec![false],
+        };
+        assert!(
+            state
+                .insert_structural_destination(owner, destination)
+                .is_none()
+        );
+        assert!(state.cleanup_required());
+        assert!(state.remove_structural_destination(&owner).is_some());
+        assert!(!state.cleanup_required());
+        assert!(state.cleanup_requirement_is_consistent(&chunk.main));
+    }
 }

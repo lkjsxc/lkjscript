@@ -73,7 +73,6 @@ impl Function {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub prepared_identity: lkjscript_contracts::PreparedProgramIdentity,
     pub memory: StructuralMemoryMetadata,
     pub region_products: Vec<RegionProductMetadata>,
     pub sources: Vec<SourceMetadata>,

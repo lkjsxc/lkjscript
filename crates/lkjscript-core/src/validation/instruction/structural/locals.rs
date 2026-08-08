@@ -20,7 +20,7 @@ fn store_local(
             &format!("structural store expects a fresh structural value, got {value}"),
         );
     }
-    let target = state.locals.get_mut(slot).ok_or_else(|| {
+    let target = state.locals.get(slot).copied().ok_or_else(|| {
         instruction_error(
             proto,
             instruction.op(),
@@ -38,7 +38,7 @@ fn store_local(
             "structural store would overwrite a live affine value",
         );
     }
-    *target = Some(value);
+    state.set_local(proto, slot, Some(value));
     Ok(())
 }
 
@@ -74,7 +74,7 @@ fn take_local(
             )
         }
     }
-    state.locals[slot] = None;
+    state.set_local(proto, slot, None);
     state.stack.push(value);
     Ok(())
 }
@@ -113,7 +113,7 @@ fn load_view(
         used: true,
     };
     if mutable {
-        state.locals[slot] = Some(observed);
+        state.set_local(proto, slot, Some(observed));
     }
     state.stack.push(observed);
     Ok(())
@@ -151,7 +151,7 @@ fn end_view(
             "structural EndBorrow has a live operand-stack view",
         );
     }
-    state.locals[slot] = None;
+    state.set_local(proto, slot, None);
     state.stack.push(Kind::Unit);
     Ok(())
 }

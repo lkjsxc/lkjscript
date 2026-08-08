@@ -83,7 +83,7 @@ fn load_view(
             ))
         }
     };
-    state.locals[slot] = Some(used);
+    state.set_local(proto, slot, Some(used));
     state.stack.push(used);
     Ok(())
 }
@@ -131,7 +131,7 @@ fn end_borrow(
             "EndBorrow has a live operand-stack view",
         ));
     }
-    state.locals[slot] = None;
+    state.set_local(proto, slot, None);
     state.stack.push(Kind::Unit);
     Ok(())
 }

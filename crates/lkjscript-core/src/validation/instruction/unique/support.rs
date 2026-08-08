@@ -64,7 +64,8 @@ pub(super) fn store_empty_local(
 ) -> Result<()> {
     let target = state
         .locals
-        .get_mut(slot)
+        .get(slot)
+        .copied()
         .ok_or_else(|| error(proto, instruction, "unique local index is out of range"))?;
     if target.is_some() {
         return Err(error(
@@ -75,7 +76,7 @@ pub(super) fn store_empty_local(
             ),
         ));
     }
-    *target = Some(value);
+    state.set_local(proto, slot, Some(value));
     Ok(())
 }
 

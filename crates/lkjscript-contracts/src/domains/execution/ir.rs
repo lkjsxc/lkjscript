@@ -76,11 +76,6 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                     "atomic group tables group-derived members and authenticated hidden operation locators",
                 ))
                 .fact(fact(
-                    "prepared-program",
-                    "prepared program",
-                    "mandatory nonzero immutable prepared identity excluded from SSA content identity",
-                ))
-                .fact(fact(
                     "representations",
                     "representations",
                     "exact witness group member layout category storage and route tuple",
@@ -119,11 +114,6 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                     "memory-witnesses",
                     "memory witnesses",
                     "atomically validated group tables local ordinals external DAG and group-derived member identities",
-                ))
-                .fact(fact(
-                    "prepared-program",
-                    "prepared program",
-                    "mandatory nonzero prepared identity excluded from bytecode content identity",
                 ))
                 .fact(fact(
                     "representations",

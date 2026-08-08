@@ -43,7 +43,8 @@ pub(super) fn place_init(
     }
     let target = state
         .unique_places
-        .get_mut(place)
+        .get(place)
+        .copied()
         .ok_or_else(|| error(proto, instruction, "bytes place out of range"))?;
     if !matches!(
         target,
@@ -59,10 +60,13 @@ pub(super) fn place_init(
             "bytes place is already initialized",
         ));
     }
-    *target = UniquePlaceState::Active {
-        owner: Some(owner),
-        transferred: None,
-    };
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: Some(owner),
+            transferred: None,
+        },
+    );
     state.stack.push(Kind::Unit);
     Ok(())
 }
@@ -76,11 +80,14 @@ pub(super) fn move_owner(
     let owner = local_bytes(state, slot, proto, instruction)?;
     expect_place_owner(state, place, owner, proto, instruction)?;
     reject_owner_views(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: Some(owner),
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: Some(owner),
+        },
+    );
     state.stack.push(Kind::Bytes(owner));
     Ok(())
 }
@@ -138,11 +145,14 @@ pub(super) fn drop_owner(
         ));
     }
     reject_owner_views(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: None,
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: None,
+        },
+    );
     state.stack.push(Kind::Unit);
     Ok(())
 }
@@ -155,10 +165,13 @@ pub(super) fn place_end(
     let place = instruction_operand(proto, instruction)?;
     let target = state
         .unique_places
-        .get_mut(place)
+        .get(place)
+        .copied()
         .ok_or_else(|| error(proto, instruction, "bytes place out of range"))?;
     match target {
-        UniquePlaceState::Active { owner: None, .. } => *target = UniquePlaceState::Inactive,
+        UniquePlaceState::Active { owner: None, .. } => {
+            state.set_unique_place(place, UniquePlaceState::Inactive);
+        }
         UniquePlaceState::Active { owner: Some(_), .. } => {
             return Err(error(proto, instruction, "bytes PlaceEnd is missing Drop"))
         }

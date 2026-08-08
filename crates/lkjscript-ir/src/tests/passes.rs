@@ -67,7 +67,6 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
     let signature = Signature::monomorphic(Vec::new(), SsaType::I64);
     let call_effects = EffectSet::CONSERVATIVE_CALL;
     let program = Program {
-        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

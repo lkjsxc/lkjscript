@@ -51,24 +51,25 @@ fn place_init(
             "byte-vector owner is already bound to another place",
         ));
     }
-    let target = state.unique_places.get_mut(place).ok_or_else(|| {
+    let target = state.unique_places.get(place).copied().ok_or_else(|| {
         error(
             proto,
             instruction,
             "byte-vector place index is out of range",
         )
     })?;
-    match *target {
+    match target {
         UniquePlaceState::Inactive
         | UniquePlaceState::Active {
             owner: None,
             transferred: None,
-        } => {
-            *target = UniquePlaceState::Active {
+        } => state.set_unique_place(
+            place,
+            UniquePlaceState::Active {
                 owner: Some(owner),
                 transferred: None,
-            };
-        }
+            },
+        ),
         UniquePlaceState::Active { .. } => {
             return Err(error(
                 proto,
@@ -90,11 +91,14 @@ fn move_owner(
     let owner = local_owner(state, slot, proto, instruction)?;
     expect_place_owner(state, place, owner, proto, instruction)?;
     reject_live_loan(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
-    state.unique_places[place] = UniquePlaceState::Active {
-        owner: None,
-        transferred: Some(owner),
-    };
+    state.set_local(proto, slot, None);
+    state.set_unique_place(
+        place,
+        UniquePlaceState::Active {
+            owner: None,
+            transferred: Some(owner),
+        },
+    );
     state.stack.push(Kind::ByteVector(owner));
     Ok(())
 }
@@ -144,7 +148,7 @@ fn store_owner(
         ));
     }
     if state.locals.get(slot) == Some(&Some(Kind::StaticBytes)) {
-        state.locals[slot] = None;
+        state.set_local(proto, slot, None);
     }
     store_empty_local(state, slot, value, proto, instruction)
 }
@@ -166,7 +170,7 @@ fn take_owner(
         _ => return Err(error(proto, instruction, "unique local has wrong type")),
     };
     reject_live_loan(state, owner, proto, instruction)?;
-    state.locals[slot] = None;
+    state.set_local(proto, slot, None);
     state.stack.push(value);
     Ok(())
 }

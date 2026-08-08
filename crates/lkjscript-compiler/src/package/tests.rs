@@ -190,15 +190,35 @@ fn lock_decoder_rejects_noncanonical_bytes() {
 }
 
 #[test]
-fn metrics_collection_does_not_change_prepared_identity() {
-    let root = fixture("metrics-identity");
+fn metrics_collection_does_not_change_verified_program() {
+    let root = fixture("metrics-program");
     let (lock_path, lock) = create_lock(&root).unwrap();
     fs::write(lock_path, lock).unwrap();
     let entry = root.join("main.lkjscript");
     let plain = crate::compile_path(&entry).unwrap();
     let (measured, metrics) = crate::compile_path_with_metrics(&entry).unwrap();
-    assert_eq!(plain.prepared_identity(), measured.prepared_identity());
+    assert_eq!(plain.ssa(), measured.ssa());
     assert_eq!(metrics.source_files, 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn captured_locked_target_rejects_a_mismatched_completed_memory_plan() {
+    let root = fixture("captured-target-plan");
+    let (lock_path, lock) = create_lock(&root).unwrap();
+    fs::write(lock_path, lock).unwrap();
+    let entry = root.join("main.lkjscript");
+    let program = crate::compile_path(&entry).unwrap();
+    let verified = verify_for_compilation(&entry).unwrap().unwrap();
+    let captured = capture_compilation(&verified).unwrap();
+    assert!(captured.validate_memory_plan(program.memory_plan()).is_ok());
+
+    let mut mismatched = program.memory_plan().clone();
+    mismatched.id = crate::memory_plan::MemoryPlanId::from_bytes([0x5a; 32]);
+    let result = captured.validate_memory_plan(&mismatched);
+    assert!(result.is_err(), "mismatched completed plan must fail");
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("differs from locked target"), "{error}");
     fs::remove_dir_all(root).unwrap();
 }
 
