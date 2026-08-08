@@ -84,23 +84,9 @@ impl Emitter<'_> {
     }
 
     pub(in crate::codegen) fn value_type(&self, value: ValueId) -> Result<&SsaType> {
-        self.function
-            .blocks
-            .iter()
-            .find_map(|block| {
-                block
-                    .parameters
-                    .iter()
-                    .find(|parameter| parameter.id == value)
-                    .map(|parameter| &parameter.ty)
-                    .or_else(|| {
-                        block
-                            .instructions
-                            .iter()
-                            .find(|instruction| instruction.id == value)
-                            .map(|instruction| &instruction.ty)
-                    })
-            })
+        self.local_metadata
+            .get(&value)
+            .map(|metadata| &metadata.ty)
             .ok_or_else(|| Error::msg("SSA bytecode lowering lost a value type"))
     }
 

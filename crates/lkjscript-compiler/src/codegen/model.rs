@@ -10,7 +10,7 @@ pub(in crate::codegen) fn compile_function(
     code_base: u64,
     prototype: Option<u64>,
 ) -> Result<(FunctionProto, FunctionBytecodeLink)> {
-    let slots = allocate_locals(function, chunk)?;
+    let LocalAllocation { slots, metadata } = allocate_locals(function, chunk)?;
     let entry = function
         .blocks
         .iter()
@@ -192,6 +192,7 @@ pub(in crate::codegen) fn compile_function(
         globals,
         function,
         slots,
+        local_metadata: metadata,
         code_base,
         proto,
         block_offsets,

@@ -3,7 +3,11 @@ impl Emitter<'_> {
         &self,
         value: ValueId,
     ) -> Result<Option<StructuralLocalKind>> {
-        let ty = self.value_type(value)?;
+        let metadata = self
+            .local_metadata
+            .get(&value)
+            .ok_or_else(|| Error::msg("SSA structural local lost value metadata"))?;
+        let ty = &metadata.ty;
         if matches!(ty, SsaType::StructuralDestination(_)) {
             return Ok(Some(StructuralLocalKind::Destination));
         }
@@ -27,58 +31,18 @@ impl Emitter<'_> {
         if !dynamic_owner && structural_owner_representation(self.chunk, ty).is_none() {
             return Ok(None);
         }
-        let producer = self.function.blocks.iter().find_map(|block| {
-            block
-                .instructions
-                .iter()
-                .find(|instruction| instruction.id == value)
-        });
-        let kind = match producer.map(|instruction| &instruction.kind) {
-            Some(InstructionKind::StructuralPublish { .. })
-            | Some(InstructionKind::StructuralCopy { .. })
-            | Some(InstructionKind::MemoryWitnessIndependentOwner { .. })
-            | Some(InstructionKind::DestinationFinish { .. })
-            | Some(InstructionKind::AggregateConsumePayload { .. })
-            | Some(InstructionKind::ProductField { .. }) => {
-                Some(StructuralLocalKind::Owner)
-            }
-            Some(InstructionKind::Move { place, .. }) if self.is_structural_owner_place(*place) => {
-                Some(StructuralLocalKind::Owner)
-            }
-            Some(InstructionKind::Call { .. }) => Some(StructuralLocalKind::Owner),
-            Some(InstructionKind::Runtime { .. })
-            | Some(InstructionKind::F64FromI64Exact { .. })
-            | Some(InstructionKind::I64FromF64Exact { .. })
-            | Some(InstructionKind::I64FromF64Trunc { .. }) => Some(StructuralLocalKind::Owner),
-            Some(InstructionKind::Borrow { .. })
-            | Some(InstructionKind::AggregateFieldBorrow { .. }) => Some(StructuralLocalKind::View),
-            Some(
-                InstructionKind::Constant(_)
-                | InstructionKind::Copy(_)
-                | InstructionKind::PlaceInit { .. }
-                | InstructionKind::PlaceEnd { .. }
-                | InstructionKind::EndBorrow { .. }
-                | InstructionKind::Drop { .. }
-                | InstructionKind::Move { .. }
-                | InstructionKind::DestinationCreate { .. }
-                | InstructionKind::DestinationFieldInit { .. }
-                | InstructionKind::DestinationAbort { .. }
-                | InstructionKind::AggregateTag { .. }
-                | InstructionKind::StringUtf8View { .. }
-                | InstructionKind::MemoryWitnessCompare { .. }
-                | InstructionKind::MemoryWitnessDispose { .. }
-                | InstructionKind::FunctionRef(_)
-                | InstructionKind::F64FromI64Rounded { .. }
-                | InstructionKind::ProductValue { .. }
-                | InstructionKind::WithProductField { .. }
-                | InstructionKind::EnumValue { .. }
-                | InstructionKind::EnumIsVariant { .. }
-                | InstructionKind::EnumField { .. },
-            ) => None,
-            None if self.nonowned_structural_values().contains(&value) => {
+        let kind = match metadata.producer {
+            LocalProducerKind::Owner
+            | LocalProducerKind::ProductField
+            | LocalProducerKind::StructuralMove
+            | LocalProducerKind::Call
+            | LocalProducerKind::RuntimeOrConversion => Some(StructuralLocalKind::Owner),
+            LocalProducerKind::View => Some(StructuralLocalKind::View),
+            LocalProducerKind::Parameter if self.nonowned_structural_values().contains(&value) => {
                 Some(StructuralLocalKind::OwnerRef)
             }
-            None => Some(StructuralLocalKind::Owner),
+            LocalProducerKind::Parameter => Some(StructuralLocalKind::Owner),
+            LocalProducerKind::Other => None,
         };
         Ok(kind)
     }
@@ -133,13 +97,6 @@ impl Emitter<'_> {
             }
         }
         values
-    }
-
-    fn is_structural_owner_place(&self, place: lkjscript_ir::PlaceId) -> bool {
-        self.function.places.iter().any(|metadata| {
-            metadata.id == place
-                && matches!(metadata.drop_glue, Some(DropGlueIdentity::Structural(_)))
-        })
     }
 
 }

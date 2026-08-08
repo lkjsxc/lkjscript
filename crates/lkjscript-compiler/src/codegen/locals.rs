@@ -3,24 +3,18 @@ mod coloring;
 mod storage;
 use crate::codegen::*;
 use cleanup::cleanup_values;
+pub(in crate::codegen) use storage::{LocalMetadata, LocalProducerKind};
+
+pub(in crate::codegen) struct LocalAllocation {
+    pub(in crate::codegen) slots: HashMap<ValueId, usize>,
+    pub(in crate::codegen) metadata: HashMap<ValueId, LocalMetadata>,
+}
+
 pub(in crate::codegen) fn allocate_locals(
     function: &Function,
     chunk: &Chunk,
-) -> Result<HashMap<ValueId, usize>> {
-    let _entry = function
-        .blocks
-        .iter()
-        .find(|block| block.id == function.entry)
-        .ok_or_else(|| Error::msg("SSA function entry block is missing"))?;
-    let mut value_types = HashMap::new();
-    for block in &function.blocks {
-        for parameter in &block.parameters {
-            value_types.insert(parameter.id, parameter.ty.clone());
-        }
-        for instruction in &block.instructions {
-            value_types.insert(instruction.id, instruction.ty.clone());
-        }
-    }
+) -> Result<LocalAllocation> {
+    let local_metadata = storage::collect_local_metadata(function, chunk)?;
     let mut uses = HashMap::new();
     let mut definitions = HashMap::new();
     for block in &function.blocks {
@@ -90,7 +84,7 @@ pub(in crate::codegen) fn allocate_locals(
             }
         }
     }
-    let value_count = value_types.len();
+    let value_count = local_metadata.len();
     let mut interference = vec![HashSet::new(); value_count];
     for block in &function.blocks {
         let mut live = live_out.get(&block.id).cloned().unwrap_or_default();
@@ -124,5 +118,9 @@ pub(in crate::codegen) fn allocate_locals(
             }
         }
     }
-    coloring::color_locals(function, chunk, value_types, interference)
+    let slots = coloring::color_locals(function, &local_metadata, interference)?;
+    Ok(LocalAllocation {
+        slots,
+        metadata: local_metadata,
+    })
 }
