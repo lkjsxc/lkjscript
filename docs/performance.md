@@ -185,30 +185,38 @@ renamed to `src/examples/scalar-redundancy`; its operation mix is
 retained rather than presented as an engine-specific example. The CLI scalar fixture is likewise
 `scalar-loop.lkjscript`.
 
-The artifact does not record machine/compiler metadata, peak memory, generated-code size, or target
-coverage, so it remains selection evidence rather than a final runtime baseline. Phase 2 records the
-release binary size separately above, but does not fill those runtime-matrix gaps. Product metrics
-identify `execution_path=baseline-native|vm-fallback`, a nullable fallback reason, whether native
-entry began, and preflight/lower/install/prepare/native/VM/total durations. Threshold,
-automatic-transition, public engine, and tier fields are absent. Retain the harness, record the
-missing runtime dimensions with environment metadata, and reverse the choice if equivalent
-representative measurements show the group preflight or baseline maintenance cost outweighs its
-scalar benefit. A post-deletion multi-sample runtime baseline remains pending.
+The historical selection artifact did not record machine/compiler metadata, peak memory,
+generated-code size, or target coverage, so it remains selection evidence rather than a complete
+runtime baseline. Product metrics identify `execution_path=baseline-native|vm-fallback`, a nullable
+fallback reason, whether native entry began, and preflight/lower/install/prepare/native/VM/total
+durations. Threshold, automatic-transition, public engine, and tier fields are absent. Reverse the
+choice if equivalent representative measurements show the group preflight or baseline maintenance
+cost outweighs its scalar benefit.
 
-### Cutover path smoke evidence
+### Post-cutover product-path baseline
 
-**Implemented-path verification, not a performance baseline.** After the cutover, one warm-cache
-locked release process was run per workload on `devbox`, Linux x86-64, 20 logical CPUs,
-63,873,589,248 host bytes, with `rustc 1.96.0 (ac68faa20 2026-05-25)`. One sample has no median or
-tail value and establishes path selection and timing-field integrity only.
+**Measured orientation, not a cross-machine performance promise.** At
+`e291d849971e4abe4b3135ee794754b5bd955ef0`, five warm-cache release process samples per workload
+were run on `devbox`, Linux x86-64, 20 logical CPUs, 63,873,589,248 host bytes, with
+`rustc 1.96.0 (ac68faa20 2026-05-25)`. Nearest-rank p95 is the maximum of five samples. Raw JSON is
+retained outside Git at `target/reset-audit/final/selected-runtime-matrix.json`.
 
-| Workload | Path | Native entered | Process wall | Product total | Native | VM |
-|---|---|---:|---:|---:|---:|---:|
-| scalar | baseline-native | yes | 240.831 ms | 0.457 ms | 0.222 ms | 0 ms |
-| hello | VM fallback | no | 239.944 ms | 0.108 ms | 0 ms | 0.103 ms |
-| bench | VM fallback | no | 986.250 ms | 747.499 ms | 0 ms | 747.494 ms |
-| mandel | VM fallback | no | 299.363 ms | 58.134 ms | 0 ms | 58.133 ms |
+| Workload | Selected path | Process median (p95) | Compile median | Product total median |
+|---|---|---:|---:|---:|
+| hello | VM fallback | 228.36 ms (235.72 ms) | 111.73 ms | 0.14 ms |
+| scalar | baseline native | 228.34 ms (231.20 ms) | 110.90 ms | 3.96 ms |
+| scalar redundancy | baseline native | 226.65 ms (229.25 ms) | 111.25 ms | 2.19 ms |
+| bench | VM fallback | 980.55 ms (1,012.84 ms) | 111.04 ms | 753.50 ms |
+| mandel | VM fallback | 286.86 ms (293.87 ms) | 114.82 ms | 58.40 ms |
 
-All four returned successfully. Hello emitted 7 bytes, bench 18 bytes, and mandel 1,176 bytes once;
-the scalar fixture emitted none. The three fallback records reported `unsupported-shape`, while the
-scalar record had a null fallback reason. A multi-sample runtime baseline remains pending.
+All 25 runs succeeded. The selected path entered native code exactly for the two eligible scalar
+workloads and used the complete VM fallback for the other three. Relative to the historical
+multi-transition `auto` medians above, selected-path scalar process latency fell from 1,700 ms to
+228.34 ms and bench fell from 3,493 ms to 980.55 ms on this host. Those large differences support
+the cutover; the smaller differences are within the limits of this sample geometry.
+
+The final stripped `target/release/lkjscript` was 6,452,416 bytes, 2,154,008 bytes (25.03%) smaller
+than the 8,606,424-byte pre-reset orientation. An incremental locked workspace release build after
+the semantic-service deletion took 57.387 s; that is not comparable to the pre-reset fresh-target
+build. Peak RSS, allocation counts, generated native-code size, other targets, and application-scale
+steady-state throughput remain unmeasured.
