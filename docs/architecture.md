@@ -30,20 +30,25 @@ edit drops locked provenance and source attachments without constructing a repla
 digest.
 
 A semantic program owns bindings, nominal declarations, match plans, functions, an optional `main`,
-and expression trees. A hole is an actual leaf with an explicit unknown effect bit. Hole records own
-only kind/goal/type/context metadata; they never retain the removed subtree. Fixed compiler
-operations, prelude enums, and core traits are excluded from mutable program-entity indexes. A
-source-free complete snapshot installs required fixed core metadata only in its ephemeral compiler
-HIR.
+and expression trees. Products and enums carry explicit `Source`, `Semantic`, or `Builtin` origin;
+source-free nominal/layout identities derive privately from staged stable entities rather than names,
+source hashes, or compiler-dense indexes. A hole is an actual leaf with an explicit unknown effect
+bit. Hole records own only kind/goal/type/context metadata; they never retain the removed subtree.
+Fixed compiler operations, prelude enums, and core traits are excluded from mutable program-entity
+indexes. Expression operations use the canonical operation catalog directly rather than a fabricated
+editable operation binding. A source-free complete snapshot installs required fixed core metadata
+only in its ephemeral compiler HIR.
 
 Opaque public identities remain separate from dense compiler IDs. Tagged `EntityAddress` variants
 distinguish main, binding, product/field, enum/variant/field, trait, and implementation domains.
 `NodeAddress` adds root-local preorder only as a private reconstruction coordinate. The immutable
 snapshot carries the exact generation/free-list state, so reopening a snapshot cannot resurrect a
 tombstoned ID. Reconciliation preserves explicit edit/hole roots, unchanged addresses, and unique
-meaning-preserving descendants; deletions advance generations. Index construction builds one
+meaning-preserving descendants; logical child-ordinal paths relocate disjoint batch targets after an
+earlier subtree changes preorder size. Deletions advance generations. Index construction builds one
 entity-to-address map and performs one lookup per node, then records containment, references, calls,
-dependencies, types, and diagnostics iteratively.
+dependencies, types, and diagnostics iteratively. Private enum, variant, and enum-field identity maps
+avoid repeated declaration scans while indexing aggregate references.
 
 `compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
 phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
@@ -91,33 +96,49 @@ route available.
 
 ```text
 Arc<WorkspaceSnapshot> plus base revision
-    -> typed create/rename/flat-expression/hole batch
-    -> namespace/generation/revision, declaration, scope, type, disjointness, and draft preflight
+    -> typed declaration/rename/expression/hole batch
+    -> namespace/generation/revision, declaration, shape, lexical scope, type, and disjointness preflight
     -> clone SemanticProgram and identity allocator into staging
-    -> apply real semantic nodes; recompute partial effects and derived indexes
+    -> lower one flat draft into real semantic nodes; recompute partial effects and derived indexes
     -> on completion derive HIR and validate ownership/matches/consistency
     -> reconcile stable IDs, blockers, diagnostics, and semantic diff
     -> publish one new Arc plus allocator state, or publish nothing
 ```
 
-`CreateFunction` creates a non-generic scalar signature, stable parameter entities, and a real
-missing-body hole. `CreateMain` creates parameterless scalar `main` with a real missing-body hole.
-Their ordering is independent: tagged addresses preserve a function when main is added later, and
-hole scope refreshes when a function is added after main. Created IDs are returned in the diff.
+`CreateProduct` and `CreateEnum` reserve stable declaration/member entities first, derive private
+nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
+and publish the complete declaration atomically. `CreateFunction` creates a non-generic signature,
+stable parameter entities, and a real missing-body hole. `CreateMain` creates parameterless `main`
+with a real missing-body hole. Public `SemanticTypeRef` nominal inputs name product/enum entities;
+compiler-local nominal and layout IDs never cross this edit boundary. Creation ordering is
+independent: tagged addresses preserve a function when main is added later, and hole scope refreshes
+when a declaration is added after main. Created declaration, member, parameter, local, and hole IDs
+are returned through the diff.
 
-`ExpressionDraft` is child-before-parent and non-recursive. Implemented constructors are
-i64/f64/bool/unit literals, visible copy-safe parameter loads, non-generic function calls, and `if`.
-Local storage, ownership moves, generic calls, and matches are absent rather than represented by
-reserved public variants. Introducing a typed hole physically replaces and drops its subtree;
-filling preserves the hole/root ID. Missing-entry, missing-body, and typed-hole blockers are
-structured and projected. Incomplete snapshots retain normal indexes and deterministic diagnostics
-but no compiler HIR.
+`ExpressionDraft` is flat and non-recursive; iterative postorder makes physical node order
+irrelevant while validation requires one connected tree. Draft-local immutable bindings have a
+separate transaction-scoped identity domain. Implemented constructors are scalar and byte literals,
+selected canonical built-in operations, non-generic calls, `if`, immutable `let`, copy-safe loads,
+byte-vector move/shared borrow, product construction/projection, enum construction, and variant
+testing. Shape/scope/type lowering is preflight; complete-HIR ownership checking remains the one
+move/borrow authority. Mutable locals, generic calls, payload extraction/matches, and executable
+fallbacks for unsupported forms are absent. Because published local bindings currently live in the
+program-wide HIR binding table, edits that would remove or hide their defining subtree reject rather
+than leave orphan bindings or introduce compaction machinery.
+
+Introducing a typed hole physically replaces and drops its subtree; filling preserves the hole/root
+ID. Missing-entry, missing-body, and typed-hole blockers are structured and projected. Incomplete
+snapshots retain normal indexes and deterministic diagnostics but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and legal constructors. Definition, node type, and hole context are direct
-identity queries. A continuation is bound to its namespace, revision, and query. Semantic diffs
-report rename, replacement, created/deleted descendants, hole transitions, and reference/call
-rewiring; invalidation currently reports coarse truthful domains rather than incremental cache work.
+calls, diagnostics, and legal constructors. Definition, structured entity/function/node type, and
+hole context with exact lexical visibility are direct identity queries. Known nominal type views use
+stable entity IDs; an unsupported generic view is explicit and retains its nominal identity when
+available. Legal-constructor results distinguish established constructors from move/borrow
+candidates that still require canonical ownership validation, and do not advertise generic enum
+construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
+rename, replacement, created/deleted descendants, hole transitions, and reference/call rewiring;
+invalidation currently reports coarse truthful domains rather than incremental cache work.
 
 Selected entity, body, type, reference, and hole headers have one concise deterministic projection.
 It traverses body ownership iteratively, reports allocation failure, marks holes as `[HOLE]`, and
@@ -239,16 +260,18 @@ capability checking; they are not a replacement service sandbox.
 ## Target delta
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
-authority. Missing entry/body and real typed-hole nodes, scalar function/main construction, atomic
-batch edits, tombstone-stable identities, deterministic queries/projections/diffs, one complete-HIR
-derivation, and direct execution are implemented. Parser and compiler-phase counters, imported
-convergence, reopened-generation tests, exact per-node index work, and 20,000-level small-stack
-release execution protect the selected vertical. Formatting-only attachment changes preserve IDs
-and projection.
+authority. Missing entry/body and real typed-hole nodes; non-generic product, enum, function, and
+entry creation; immutable lexical locals; selected byte-vector move/borrow and canonical operations;
+aggregate construction/observation; atomic batch edits; tombstone-stable identities; structured
+stable nominal type views; deterministic queries/projections/diffs; one complete-HIR derivation; and
+direct execution are implemented. Source-loading/parser/compiler-phase counters, imported scalar,
+nominal, local, and ownership convergence, malformed/atomic retry tests, exact per-node index work,
+and 20,000-level nested-expression and local small-stack release execution protect the selected
+vertical. Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds declaration deletion and movement,
-local storage and ownership moves, generics, matches, unresolved references, ambiguities, conflicts,
-recovery nodes, richer declaration kinds, and finer analysis contexts without adding another mutable
-semantic AST. Persistence, collaboration, a measured wire consumer, incremental recomputation,
-daemon, database service, scheduler, and broader platform work wait for evidence after real use of
-the local semantic model.
+mutable locals, generic calls, enum payload extraction and matches, unresolved references,
+ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer analysis contexts
+without adding another mutable semantic AST. Persistence, collaboration, a measured wire consumer,
+incremental recomputation, daemon, database service, scheduler, and broader platform work wait for
+evidence after real use of the local semantic model.

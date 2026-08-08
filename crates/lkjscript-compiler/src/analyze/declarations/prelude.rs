@@ -135,7 +135,7 @@ impl Analyzer {
         self.enums.push(EnumDefinition {
             id: *id,
             name: name.clone(),
-            origin: None,
+            origin: Origin::Builtin,
             type_parameters: parameters,
             variants,
             layout: EnumLayoutFacts {

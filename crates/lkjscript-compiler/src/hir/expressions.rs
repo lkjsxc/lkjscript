@@ -175,12 +175,10 @@ fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
             instantiation: instantiation.clone(),
         },
         ExprKind::Operation {
-            binding,
             operation,
             resolved_signature,
             ..
         } => ExprKind::Operation {
-            binding: *binding,
             operation: *operation,
             resolved_signature: resolved_signature.clone(),
             args: children,
@@ -582,7 +580,6 @@ pub enum ExprKind {
         instantiation: Option<GenericInstantiation>,
     },
     Operation {
-        binding: BindingId,
         operation: Operation,
         resolved_signature: Type,
         args: Vec<Expr>,

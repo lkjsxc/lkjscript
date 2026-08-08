@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{
     CallEdge, DiagnosticHeader, EntityHeader, EntityId, EntityKind, HoleId, HoleState, NodeId,
-    ReferenceEdge, RevisionId, WorkspaceError, WorkspaceSnapshot,
+    ReferenceEdge, RevisionId, SemanticTypeView, WorkspaceError, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,6 +48,29 @@ pub struct NodeTypeFacts {
     pub node: NodeId,
     pub actual: Arc<str>,
     pub expected: Option<Arc<str>>,
+    pub actual_semantic: SemanticTypeView,
+    pub expected_semantic: Option<SemanticTypeView>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EntityTypeFacts {
+    pub revision: RevisionId,
+    pub entity: EntityId,
+    pub declared: Option<SemanticTypeView>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionSignatureView {
+    pub revision: RevisionId,
+    pub function: EntityId,
+    pub parameters: Vec<SemanticTypeView>,
+    pub result: SemanticTypeView,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ConstructorStatus {
+    Established,
+    RequiresOwnershipValidation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -58,7 +81,17 @@ pub enum LegalConstructor {
     BoolLiteral,
     UnitLiteral,
     Load(EntityId),
+    Move {
+        binding: EntityId,
+        status: ConstructorStatus,
+    },
+    BorrowShared {
+        binding: EntityId,
+        status: ConstructorStatus,
+    },
     Call(EntityId),
+    Product(EntityId),
+    EnumVariant(EntityId),
     If,
 }
 
@@ -169,11 +202,123 @@ impl WorkspaceSnapshot {
     ) -> Result<NodeTypeFacts, WorkspaceError> {
         self.check_query_revision(revision)?;
         let header = self.workspace_node(node)?;
+        let index = self
+            .indexes
+            .node_lookup
+            .get(&node)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node type")))?;
+        let actual = self
+            .indexes
+            .node_actual_types
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node type")))?;
+        let expected = self
+            .indexes
+            .node_expected_types
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node expectation")))?;
         Ok(NodeTypeFacts {
             revision,
             node,
             actual: Arc::clone(&header.actual_type),
             expected: header.expected_type.clone(),
+            actual_semantic: super::types::view(&self.program, &self.indexes, actual)?,
+            expected_semantic: expected
+                .as_ref()
+                .map(|ty| super::types::view(&self.program, &self.indexes, ty))
+                .transpose()?,
+        })
+    }
+
+    pub fn entity_type(
+        &self,
+        revision: RevisionId,
+        entity: EntityId,
+    ) -> Result<EntityTypeFacts, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        self.workspace_entity(entity)?;
+        let index = self
+            .indexes
+            .entity_lookup
+            .get(&entity)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity type")))?;
+        let declared = self
+            .indexes
+            .entity_types
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity type")))?
+            .as_ref()
+            .map(|ty| super::types::view(&self.program, &self.indexes, ty))
+            .transpose()?;
+        Ok(EntityTypeFacts {
+            revision,
+            entity,
+            declared,
+        })
+    }
+
+    pub fn function_signature(
+        &self,
+        revision: RevisionId,
+        function: EntityId,
+    ) -> Result<FunctionSignatureView, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        let header = self.workspace_entity(function)?;
+        let (parameters, result) = if header.kind == EntityKind::Main {
+            let main = self
+                .program
+                .main
+                .as_ref()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main")))?;
+            (&main.param_types, &main.return_type)
+        } else {
+            if header.kind != EntityKind::Function {
+                return Err(WorkspaceError::WrongEntityKind {
+                    operation: Arc::from("function signature query"),
+                    expected: Arc::from("function or main"),
+                    actual: Arc::from(format!("{:?}", header.kind)),
+                });
+            }
+            let address = self
+                .indexes
+                .entity_lookup
+                .get(&function)
+                .and_then(|index| self.indexes.entity_addresses.get(*index))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+            let super::model::EntityAddress::Binding(raw) = address else {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("function")));
+            };
+            let binding = self
+                .program
+                .bindings
+                .get(
+                    usize::try_from(raw)
+                        .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("function")))?,
+                )
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+            let crate::Type::Fn { params, ret } = &binding.ty else {
+                return Err(WorkspaceError::unsupported(
+                    "function-signature",
+                    "generic signatures are explicit unsupported query results in this vertical",
+                ));
+            };
+            (params, ret.as_ref())
+        };
+        let mut parameter_views = Vec::new();
+        parameter_views
+            .try_reserve(parameters.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("signature view allocation failed")))?;
+        for parameter in parameters {
+            parameter_views.push(super::types::view(&self.program, &self.indexes, parameter)?);
+        }
+        Ok(FunctionSignatureView {
+            revision,
+            function,
+            parameters: parameter_views,
+            result: super::types::view(&self.program, &self.indexes, result)?,
         })
     }
 
@@ -251,9 +396,31 @@ impl WorkspaceSnapshot {
                 .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
             match header.kind {
                 EntityKind::Parameter
-                    if crate::Type::unify_assignable(&binding.ty, &context.expected_type) =>
-                {
-                    values.push(LegalConstructor::Load(entity));
+                | EntityKind::ImmutableLocal
+                | EntityKind::StaticBytesLocal => {
+                    if crate::ownership::draft_parameter_load_is_supported(&binding.ty)
+                        && crate::Type::unify_assignable(&binding.ty, &context.expected_type)
+                    {
+                        values.push(LegalConstructor::Load(entity));
+                    }
+                    if matches!(
+                        binding.ty,
+                        crate::Type::Bytes | crate::Type::ByteVector | crate::Type::Resource(_)
+                    ) && crate::Type::unify_assignable(&binding.ty, &context.expected_type)
+                    {
+                        values.push(LegalConstructor::Move {
+                            binding: entity,
+                            status: ConstructorStatus::RequiresOwnershipValidation,
+                        });
+                    }
+                    if binding.ty == crate::Type::ByteVector
+                        && context.expected_type == crate::Type::ByteSlice
+                    {
+                        values.push(LegalConstructor::BorrowShared {
+                            binding: entity,
+                            status: ConstructorStatus::RequiresOwnershipValidation,
+                        });
+                    }
                 }
                 EntityKind::Function => {
                     if let crate::Type::Fn { ret, .. } = &binding.ty {
@@ -264,6 +431,60 @@ impl WorkspaceSnapshot {
                 }
                 _ => {}
             }
+        }
+        match &context.expected_type {
+            crate::Type::Product(name) => {
+                if let Some((index, _)) = self
+                    .program
+                    .products
+                    .iter()
+                    .enumerate()
+                    .find(|(_, product)| product.name == *name)
+                {
+                    let raw = u64::try_from(index).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("product constructor index exceeds u64"))
+                    })?;
+                    if let Some(entity) = self
+                        .indexes
+                        .address_entities
+                        .get(&super::model::EntityAddress::Product(raw))
+                        .copied()
+                    {
+                        values.push(LegalConstructor::Product(entity));
+                    }
+                }
+            }
+            crate::Type::Enum { id, arguments, .. } if arguments.is_empty() => {
+                if let Some((index, definition)) = self
+                    .program
+                    .enums
+                    .iter()
+                    .enumerate()
+                    .find(|(_, definition)| definition.id == *id)
+                    .filter(|(_, definition)| definition.type_parameters.is_empty())
+                {
+                    let raw = u64::try_from(index).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("enum constructor index exceeds u64"))
+                    })?;
+                    for (variant, _) in definition.variants.iter().enumerate() {
+                        let variant = u64::try_from(variant).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("enum variant index exceeds u64"))
+                        })?;
+                        if let Some(entity) = self
+                            .indexes
+                            .address_entities
+                            .get(&super::model::EntityAddress::EnumVariant {
+                                enumeration: raw,
+                                variant,
+                            })
+                            .copied()
+                        {
+                            values.push(LegalConstructor::EnumVariant(entity));
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
         values.sort();
         values.dedup();

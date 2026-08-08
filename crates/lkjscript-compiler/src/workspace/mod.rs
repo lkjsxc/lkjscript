@@ -15,6 +15,7 @@ mod program;
 mod projection;
 mod query;
 mod transaction;
+mod types;
 mod validate;
 
 use std::fmt;
@@ -22,7 +23,10 @@ use std::sync::Arc;
 
 use lkjscript_core::{Error, Result};
 
-pub use draft::{DraftNode, DraftNodeId, ExpressionDraft};
+pub use draft::{
+    DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, ExpressionDraft,
+    LocalDraft,
+};
 pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
 use identity::IdentityAllocator;
 pub use ids::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
@@ -38,12 +42,14 @@ use model::{HoleRecord, SnapshotIndexes};
 use program::SemanticProgram;
 pub use projection::ProjectionSlice;
 pub use query::{
-    Continuation, EntityPage, LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
+    ConstructorStatus, Continuation, EntityPage, EntityTypeFacts, FunctionSignatureView,
+    LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
 };
 pub use transaction::{
-    Edit, InvalidatedDomain, ParameterDraft, SemanticDiff, SemanticDiffEntry, Transaction,
-    TransactionOutcome, Workspace,
+    Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
+    SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome, Workspace,
 };
+pub use types::{SemanticTypeRef, SemanticTypeView};
 
 #[derive(Clone)]
 enum CapturedCompilationProvenance {
@@ -234,8 +240,10 @@ impl WorkspaceSnapshot {
             return Err(Error::msg("workspace completeness state is stale"));
         }
         if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
+            || self.indexes.entities.len() != self.indexes.entity_types.len()
         {
             return Err(Error::msg("workspace snapshot semantic indexes are stale"));
         }
@@ -306,8 +314,10 @@ impl WorkspaceSnapshot {
             return Err(Error::msg("workspace snapshot is incomplete"));
         }
         if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
+            || self.indexes.entities.len() != self.indexes.entity_types.len()
         {
             return Err(Error::msg("workspace snapshot semantic indexes are stale"));
         }

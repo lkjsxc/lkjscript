@@ -102,6 +102,10 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
     resolution::matching::verify_match_plans(program)
 }
 
+pub(crate) fn is_reserved_semantic_name(name: &str) -> bool {
+    declarations::is_builtin_type_name(name) || resolution::is_contextual_name(name)
+}
+
 struct Resolver<'a> {
     analyzer: &'a mut Analyzer,
     origin: SourceId,

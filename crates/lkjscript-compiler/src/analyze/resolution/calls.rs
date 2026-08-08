@@ -115,7 +115,6 @@ impl Resolver<'_> {
                 (Operation::I64FromF64Trunc, Some(value), _) => ExprKind::I64FromF64Trunc(value),
                 (_, _, Some(kind)) => kind,
                 _ => ExprKind::Operation {
-                    binding: callee,
                     operation,
                     resolved_signature,
                     args: resolved_args,

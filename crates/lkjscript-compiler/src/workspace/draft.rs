@@ -1,4 +1,5 @@
 use super::EntityId;
+use crate::operation::Operation;
 
 /// Dense identity into one flat expression draft. It is never a workspace identity.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -12,6 +13,42 @@ impl DraftNodeId {
     pub(super) fn index(self) -> Option<usize> {
         usize::try_from(self.0).ok()
     }
+}
+
+/// Identity of one immutable local inside a single [`ExpressionDraft`].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DraftBindingId(u64);
+
+impl DraftBindingId {
+    pub const fn new(index: u64) -> Self {
+        Self(index)
+    }
+
+    pub(super) const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// A binding reference whose identity domain is explicit.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum DraftBindingRef {
+    /// A stable parameter or local already published in this workspace.
+    Entity(EntityId),
+    /// A transaction-local immutable binding in this draft.
+    Local(DraftBindingId),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalDraft {
+    pub binding: DraftBindingId,
+    pub name: String,
+    pub value: DraftNodeId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DraftFieldValue {
+    pub field: EntityId,
+    pub value: DraftNodeId,
 }
 
 /// A non-recursive proposed expression graph. Child IDs refer to entries in `nodes`.
@@ -50,9 +87,16 @@ pub enum DraftNode {
     F64(f64),
     Bool(bool),
     Unit,
-    Load(EntityId),
+    Bytes(Vec<u8>),
+    Load(DraftBindingRef),
+    Move(DraftBindingRef),
+    BorrowShared(DraftBindingRef),
     Call {
         callee: EntityId,
+        arguments: Vec<DraftNodeId>,
+    },
+    Operation {
+        operation: Operation,
         arguments: Vec<DraftNodeId>,
     },
     If {
@@ -60,12 +104,47 @@ pub enum DraftNode {
         then_branch: DraftNodeId,
         else_branch: DraftNodeId,
     },
+    Let {
+        bindings: Vec<LocalDraft>,
+        body: DraftNodeId,
+    },
+    ProductValue {
+        product: EntityId,
+        fields: Vec<DraftFieldValue>,
+    },
+    ProductField {
+        field: EntityId,
+        value: DraftNodeId,
+    },
+    EnumValue {
+        variant: EntityId,
+        fields: Vec<DraftFieldValue>,
+    },
+    EnumIsVariant {
+        variant: EntityId,
+        value: DraftNodeId,
+    },
 }
 
 impl DraftNode {
+    pub(super) fn child_count(&self) -> Option<usize> {
+        match self {
+            Self::Call { arguments, .. } | Self::Operation { arguments, .. } => {
+                Some(arguments.len())
+            }
+            Self::If { .. } => Some(3),
+            Self::Let { bindings, .. } => bindings.len().checked_add(1),
+            Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
+                Some(fields.len())
+            }
+            Self::ProductField { .. } | Self::EnumIsVariant { .. } => Some(1),
+            _ => Some(0),
+        }
+    }
+
     pub(super) fn for_each_child(&self, mut visit: impl FnMut(DraftNodeId)) {
         match self {
-            Self::Call { arguments, .. } => {
+            Self::Call { arguments, .. } | Self::Operation { arguments, .. } => {
                 for child in arguments {
                     visit(*child);
                 }
@@ -79,6 +158,18 @@ impl DraftNode {
                 visit(*then_branch);
                 visit(*else_branch);
             }
+            Self::Let { bindings, body } => {
+                for binding in bindings {
+                    visit(binding.value);
+                }
+                visit(*body);
+            }
+            Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
+                for field in fields {
+                    visit(field.value);
+                }
+            }
+            Self::ProductField { value, .. } | Self::EnumIsVariant { value, .. } => visit(*value),
             _ => {}
         }
     }

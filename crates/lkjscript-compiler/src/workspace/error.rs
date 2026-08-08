@@ -18,6 +18,11 @@ pub enum WorkspaceError {
         actual: Arc<str>,
     },
     InvisibleEntity,
+    WrongEntityKind {
+        operation: Arc<str>,
+        expected: Arc<str>,
+        actual: Arc<str>,
+    },
     UnsupportedEdit {
         operation: Arc<str>,
         reason: Arc<str>,
@@ -71,6 +76,14 @@ impl fmt::Display for WorkspaceError {
             Self::InvisibleEntity => {
                 formatter.write_str("draft entity is not visible from the edited expression")
             }
+            Self::WrongEntityKind {
+                operation,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "{operation} requires {expected}, but the identity names {actual}"
+            ),
             Self::UnsupportedEdit { operation, reason } => {
                 write!(formatter, "unsupported semantic edit {operation}: {reason}")
             }

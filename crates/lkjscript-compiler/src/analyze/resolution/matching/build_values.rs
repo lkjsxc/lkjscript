@@ -44,17 +44,10 @@ impl Resolver<'_> {
 
     pub(super) fn match_equal(&self, value: Expr, ty: Type, literal: ExprKind) -> Result<Expr> {
         let operation = Operation::EqualValue;
-        let binding = self
-            .analyzer
-            .operations
-            .get(&operation)
-            .copied()
-            .ok_or_else(|| self.error("equal-value operation is unavailable for match"))?;
         let literal = self.expression(ty.clone(), literal);
         Ok(self.expression(
             Type::Bool,
             ExprKind::Operation {
-                binding,
                 operation,
                 resolved_signature: Type::Fn {
                     params: vec![ty, value.ty.clone()],
@@ -67,16 +60,9 @@ impl Resolver<'_> {
 
     pub(super) fn match_and(&self, left: Expr, right: Expr) -> Result<Expr> {
         let operation = Operation::And;
-        let binding = self
-            .analyzer
-            .operations
-            .get(&operation)
-            .copied()
-            .ok_or_else(|| self.error("and operation is unavailable for match"))?;
         Ok(self.expression(
             Type::Bool,
             ExprKind::Operation {
-                binding,
                 operation,
                 resolved_signature: Type::Fn {
                     params: vec![Type::Bool, Type::Bool],

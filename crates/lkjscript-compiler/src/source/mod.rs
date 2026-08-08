@@ -14,6 +14,11 @@ mod modules;
 pub(crate) use modules::public_names as module_public_names;
 mod parse;
 #[cfg(test)]
+pub(crate) use load::{
+    invocation_count as source_load_invocation_count,
+    reset_invocation_count as reset_source_load_invocation_count,
+};
+#[cfg(test)]
 pub(crate) use parse::{
     invocation_count as parser_invocation_count,
     reset_invocation_count as reset_parser_invocation_count,

@@ -38,6 +38,16 @@ struct EntityMaps {
     bindings: Vec<Option<EntityId>>,
     products: Vec<(EntityId, Vec<EntityId>)>,
     enums: Vec<EnumEntityMap>,
+    enum_indices: HashMap<crate::hir::EnumId, usize>,
+    variant_indices: HashMap<(crate::hir::EnumId, crate::hir::VariantId), usize>,
+    enum_field_indices: HashMap<
+        (
+            crate::hir::EnumId,
+            crate::hir::VariantId,
+            crate::hir::VariantFieldId,
+        ),
+        usize,
+    >,
     traits: Vec<Option<EntityId>>,
     implementations: Vec<EntityId>,
 }
@@ -56,6 +66,7 @@ pub(super) fn build(
     namespace: WorkspaceNamespace,
 ) -> Result<SnapshotIndexes> {
     let (mut indexes, maps) = build_entities(program, namespace)?;
+    install_entity_types(program, &maps, &mut indexes)?;
     add_entity_dependencies(program, &maps, &mut indexes)?;
     indexes
         .dependencies
@@ -131,7 +142,9 @@ fn build_entities(
         node_addresses: Vec::new(),
         node_keys: Vec::new(),
         node_fingerprints: Vec::new(),
+        node_actual_types: Vec::new(),
         node_expected_types: Vec::new(),
+        entity_types: Vec::new(),
         entity_lookup: HashMap::new(),
         node_lookup: HashMap::new(),
         address_entities: HashMap::new(),
@@ -215,8 +228,42 @@ fn build_entities(
 
     let mut enums = Vec::new();
     reserve(&mut enums, program.enums.len(), "enum entity map")?;
+    let mut enum_indices = HashMap::new();
+    enum_indices
+        .try_reserve(program.enums.len())
+        .map_err(|_| Error::host("enum identity index allocation failed"))?;
+    let variant_count = program
+        .enums
+        .iter()
+        .try_fold(0_usize, |count, definition| {
+            count.checked_add(definition.variants.len())
+        })
+        .ok_or_else(|| Error::host("enum variant identity count overflow"))?;
+    let mut variant_indices = HashMap::new();
+    variant_indices
+        .try_reserve(variant_count)
+        .map_err(|_| Error::host("enum variant identity index allocation failed"))?;
+    let field_count = program
+        .enums
+        .iter()
+        .flat_map(|definition| &definition.variants)
+        .try_fold(0_usize, |count, variant| {
+            count.checked_add(variant.fields.len())
+        })
+        .ok_or_else(|| Error::host("enum field identity count overflow"))?;
+    let mut enum_field_indices = HashMap::new();
+    enum_field_indices
+        .try_reserve(field_count)
+        .map_err(|_| Error::host("enum field identity index allocation failed"))?;
     for (enum_index, definition) in program.enums.iter().enumerate() {
-        if definition.origin.is_none() {
+        enum_indices.insert(definition.id, enum_index);
+        for (variant_index, variant) in definition.variants.iter().enumerate() {
+            variant_indices.insert((definition.id, variant.id), variant_index);
+            for (field_index, field) in variant.fields.iter().enumerate() {
+                enum_field_indices.insert((definition.id, variant.id, field.id), field_index);
+            }
+        }
+        if definition.origin == crate::hir::Origin::Builtin {
             enums.push(None);
             continue;
         }
@@ -341,10 +388,73 @@ fn build_entities(
             bindings,
             products,
             enums,
+            enum_indices,
+            variant_indices,
+            enum_field_indices,
             traits,
             implementations,
         },
     ))
+}
+
+fn install_entity_types(
+    program: &SemanticProgram,
+    maps: &EntityMaps,
+    indexes: &mut SnapshotIndexes,
+) -> Result<()> {
+    indexes
+        .entity_types
+        .try_reserve(indexes.entities.len())
+        .map_err(|_| Error::host("workspace entity type allocation failed"))?;
+    indexes.entity_types.resize(indexes.entities.len(), None);
+    let mut set = |entity: EntityId, ty: Type| -> Result<()> {
+        let index = index_of(entity.slot(), "workspace entity type")?;
+        let slot = indexes
+            .entity_types
+            .get_mut(index)
+            .ok_or_else(|| Error::msg("workspace entity type identity is stale"))?;
+        *slot = Some(ty);
+        Ok(())
+    };
+    if let (Some(entity), Some(main)) = (maps.main, program.main.as_ref()) {
+        set(entity, main.return_type.clone())?;
+    }
+    for (index, binding) in program.bindings.iter().enumerate() {
+        if let Some(entity) = maps.bindings[index] {
+            set(entity, binding.ty.clone())?;
+        }
+    }
+    for (index, product) in program.products.iter().enumerate() {
+        let (entity, fields) = &maps.products[index];
+        let ty = Type::Product(product.name.clone());
+        set(*entity, ty)?;
+        for (field, entity) in product.fields.iter().zip(fields) {
+            set(*entity, field.ty.clone())?;
+        }
+    }
+    for (index, definition) in program.enums.iter().enumerate() {
+        let Some((entity, variants)) = &maps.enums[index] else {
+            continue;
+        };
+        let ty = Type::Enum {
+            id: definition.id,
+            name: definition.name.clone(),
+            arguments: definition
+                .type_parameters
+                .iter()
+                .cloned()
+                .map(Type::Param)
+                .collect(),
+        };
+        set(*entity, ty.clone())?;
+        for (variant, (variant_entity, fields)) in definition.variants.iter().zip(variants) {
+            set(*variant_entity, ty.clone())?;
+            for (field, entity) in variant.fields.iter().zip(fields) {
+                set(*entity, field.ty.clone())?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn add_entity_dependencies(
@@ -557,9 +667,6 @@ fn add_expression_relations(
                 site: node,
             });
         }
-        ExprKind::Operation { binding, .. } => {
-            reference(*binding)?;
-        }
         ExprKind::Let { bindings, .. } => {
             for local in bindings {
                 if local.slot >= local_count {
@@ -584,20 +691,97 @@ fn add_expression_relations(
             }
             reference(*target)?;
         }
-        ExprKind::ProductValue { product, .. }
-        | ExprKind::ProductField { product, .. }
-        | ExprKind::WithProductField { product, .. } => {
+        ExprKind::ProductValue { product, .. } => {
             let target = product_entity(maps, *product)?;
             push_reference(indexes, node, target)?;
             push_dependency(indexes, enclosing, target)?;
+            let (_, fields) = maps
+                .products
+                .get(index_of(product.raw(), "product")?)
+                .ok_or_else(|| Error::msg("product identity is stale"))?;
+            for field in fields {
+                push_reference(indexes, node, *field)?;
+                push_dependency(indexes, enclosing, *field)?;
+            }
         }
-        ExprKind::EnumValue { enum_id, .. }
-        | ExprKind::EnumIsVariant { enum_id, .. }
-        | ExprKind::EnumField { enum_id, .. }
-        | ExprKind::EnumUnwrap { enum_id, .. } => {
-            if let Some(target) = enum_entity(program, maps, *enum_id)? {
+        ExprKind::ProductField { product, field, .. }
+        | ExprKind::WithProductField { product, field, .. } => {
+            let target = product_entity(maps, *product)?;
+            push_reference(indexes, node, target)?;
+            push_dependency(indexes, enclosing, target)?;
+            let field_entity = maps
+                .products
+                .get(index_of(product.raw(), "product")?)
+                .and_then(|(_, fields)| fields.get(index_of(*field, "product field").ok()?))
+                .copied()
+                .ok_or_else(|| Error::msg("product field identity is stale"))?;
+            push_reference(indexes, node, field_entity)?;
+            push_dependency(indexes, enclosing, field_entity)?;
+        }
+        ExprKind::EnumValue {
+            enum_id,
+            variant,
+            fields,
+            ..
+        } => {
+            if let Some(target) = enum_entity(maps, *enum_id)? {
                 push_reference(indexes, node, target)?;
                 push_dependency(indexes, enclosing, target)?;
+                let enum_index = enum_index(maps, *enum_id)?;
+                let variant_index = enum_variant_index(maps, *enum_id, *variant)?;
+                let (_, variants) = maps.enums[enum_index]
+                    .as_ref()
+                    .ok_or_else(|| Error::msg("user enum identity map is missing"))?;
+                let (variant_entity, field_entities) = &variants[variant_index];
+                if fields.len() != field_entities.len() {
+                    return Err(Error::msg("enum value field identity map is stale"));
+                }
+                push_reference(indexes, node, *variant_entity)?;
+                push_dependency(indexes, enclosing, *variant_entity)?;
+                for field in field_entities {
+                    push_reference(indexes, node, *field)?;
+                    push_dependency(indexes, enclosing, *field)?;
+                }
+            }
+        }
+        ExprKind::EnumIsVariant {
+            enum_id, variant, ..
+        } => {
+            if let Some(target) = enum_entity(maps, *enum_id)? {
+                push_reference(indexes, node, target)?;
+                push_dependency(indexes, enclosing, target)?;
+                let enum_index = enum_index(maps, *enum_id)?;
+                let variant_index = enum_variant_index(maps, *enum_id, *variant)?;
+                if let Some((_, variants)) = &maps.enums[enum_index] {
+                    push_reference(indexes, node, variants[variant_index].0)?;
+                    push_dependency(indexes, enclosing, variants[variant_index].0)?;
+                }
+            }
+        }
+        ExprKind::EnumField {
+            enum_id,
+            variant,
+            field,
+            ..
+        }
+        | ExprKind::EnumUnwrap {
+            enum_id,
+            variant,
+            field,
+            ..
+        } => {
+            if let Some(target) = enum_entity(maps, *enum_id)? {
+                push_reference(indexes, node, target)?;
+                push_dependency(indexes, enclosing, target)?;
+                let enum_index = enum_index(maps, *enum_id)?;
+                if let Some((_, variants)) = &maps.enums[enum_index] {
+                    let variant_index = enum_variant_index(maps, *enum_id, *variant)?;
+                    let field_index = enum_field_index(maps, *enum_id, *variant, *field)?;
+                    push_reference(indexes, node, variants[variant_index].0)?;
+                    push_dependency(indexes, enclosing, variants[variant_index].0)?;
+                    push_reference(indexes, node, variants[variant_index].1[field_index])?;
+                    push_dependency(indexes, enclosing, variants[variant_index].1[field_index])?;
+                }
             }
         }
         ExprKind::MatchUnreachable { plan } => {
@@ -929,6 +1113,12 @@ fn push_node(
         .node_fingerprints
         .push(expression_fingerprint(expression)?);
     reserve(
+        &mut indexes.node_actual_types,
+        1,
+        "workspace actual type index",
+    )?;
+    indexes.node_actual_types.push(expression.ty.clone());
+    reserve(
         &mut indexes.node_expected_types,
         1,
         "workspace typed expectation index",
@@ -1027,18 +1217,39 @@ fn product_entity(maps: &EntityMaps, product: lkjscript_core::ProductId) -> Resu
         .ok_or_else(|| Error::msg("product identity is stale"))
 }
 
-fn enum_entity(
-    program: &SemanticProgram,
+fn enum_index(maps: &EntityMaps, id: crate::hir::EnumId) -> Result<usize> {
+    maps.enum_indices
+        .get(&id)
+        .copied()
+        .ok_or_else(|| Error::msg("enum identity is stale"))
+}
+
+fn enum_variant_index(
     maps: &EntityMaps,
-    id: crate::hir::EnumId,
-) -> Result<Option<EntityId>> {
-    let index = program
-        .enums
-        .iter()
-        .position(|item| item.id == id)
-        .ok_or_else(|| Error::msg("enum identity is stale"))?;
+    enumeration: crate::hir::EnumId,
+    variant: crate::hir::VariantId,
+) -> Result<usize> {
+    maps.variant_indices
+        .get(&(enumeration, variant))
+        .copied()
+        .ok_or_else(|| Error::msg("enum variant identity is stale"))
+}
+
+fn enum_field_index(
+    maps: &EntityMaps,
+    enumeration: crate::hir::EnumId,
+    variant: crate::hir::VariantId,
+    field: crate::hir::VariantFieldId,
+) -> Result<usize> {
+    maps.enum_field_indices
+        .get(&(enumeration, variant, field))
+        .copied()
+        .ok_or_else(|| Error::msg("enum field identity is stale"))
+}
+
+fn enum_entity(maps: &EntityMaps, id: crate::hir::EnumId) -> Result<Option<EntityId>> {
     maps.enums
-        .get(index)
+        .get(enum_index(maps, id)?)
         .map(|item| item.as_ref().map(|item| item.0))
         .ok_or_else(|| Error::msg("enum identity map is stale"))
 }
@@ -1218,8 +1429,8 @@ fn expression_fingerprint(expression: &Expr) -> Result<[u8; 32]> {
             bytes.extend_from_slice(&callee.binding.raw().to_be_bytes());
             11
         }
-        ExprKind::Operation { binding, .. } => {
-            bytes.extend_from_slice(&binding.raw().to_be_bytes());
+        ExprKind::Operation { operation, .. } => {
+            bytes.extend_from_slice(&operation.identity().as_u16().to_be_bytes());
             12
         }
         ExprKind::F64FromI64Exact(_) => 13,

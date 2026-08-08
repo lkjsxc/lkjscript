@@ -23,42 +23,58 @@ is retained behind a hole. Source-free expressions have an honest semantic origi
 paths and digests do not create logical identity.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
-creation is one non-generic scalar function with scalar parameters/result and one parameterless
-scalar `main`; both begin with typed missing bodies. Implemented flat child-before-parent expression
-construction covers i64/f64/Boolean/unit literals, visible parameter loads, non-generic calls, and
-`if`. Transactions also rename supported bindings, replace expressions, and introduce/refine/fill
-typed holes. They reject duplicate/reserved global declarations or function renames, duplicate parameters at creation,
-foreign or stale identity, stale revision, invalid or cyclic drafts, overlapping subtree edits,
-invisible bindings, unsupported ownership
-shapes, and type/arity failures
-before publication. Failure preserves the exact published `Arc`, revision, tombstones, future
-allocation, diagnostics, and projection. Success publishes one revision and returns created entity
-and hole IDs through the semantic diff.
+creation covers non-generic products and enums with stable field/variant identities, non-generic
+functions, and one parameterless `main`; function and entry bodies begin as typed holes. Public type
+inputs use `SemanticTypeRef`, whose nominal cases carry stable workspace entity identities rather
+than product names, compiler enum IDs, layout IDs, or source identities.
+
+`ExpressionDraft` is a flat non-recursive tree whose physical node order is not semantic. It covers
+i64/f64/Boolean/unit/byte literals, selected canonical built-in operations, calls, conditionals, lexical
+immutable `let` bindings, copy-safe loads, byte-vector moves and shared borrows, product construction
+and field projection, enum construction, and enum-variant testing. Published bindings use stable
+entity identities; transaction-local binding handles are a separate checked identity domain and
+cannot escape the draft. The complete staged HIR ownership checker remains authoritative for
+move/borrow legality and cleanup. Mutable locals, generic calls, and matches are not fabricated.
+
+Transactions also rename supported bindings, replace expressions, and introduce/refine/fill typed
+holes. They reject invalid, duplicate, or reserved declarations and members; foreign, stale, or
+wrong-kind identity; stale revision; disconnected, cyclic, reused-child, forward-binding, or
+out-of-scope drafts; overlapping subtree edits; type/arity/field/variant mismatch; and ownership
+failure before publication. A structural edit that would orphan a globally indexed local is rejected.
+Failure preserves the exact published `Arc`, revision, tombstones, future allocation, diagnostics,
+and projection. Success publishes one revision and returns created entity, member, local, and hole
+IDs through the semantic diff.
 
 Structured blockers currently cover missing entry point, missing declaration/entry body, and typed
 expression hole. Every blocker is revision-labelled through the snapshot or
 `IncompleteSnapshotError`. Incomplete compilation returns before complete-HIR derivation, memory
 planning, SSA, bytecode lowering, or execution. A complete revision derives one ephemeral
 source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
-parsing source. Semantic edits and compilation invoke the parser zero times; imported and
-source-free `identity(42)` fixtures have equal user declaration signatures, expression kinds,
-references/calls, diagnostics, compiler outcome, and VM result.
+parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
+and source-free scalar, product, enum, lexical-local, and borrow-then-move fixtures have equal
+normalized entities/types, containment, references, dependencies, node kinds/types/effects,
+compiler outcomes, memory obligations, VM results or traps, and cleanup behavior.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
-definitions/references, callers/callees, actual/expected node types, diagnostics, hole context, and
-expected-type-filtered legal constructors. Hole scope is recomputed after later declaration
-creation. Continuations bind namespace, revision, and query. A fallible iterative projection renders
-state, blockers, selected entity/body/type/reference headers, and explicit holes without source
-attachments. Projection labels never construct identity.
+definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
+context, exact visible bindings, and expected-type-filtered legal constructors. Known nominal type
+views preserve stable entity identity; unsupported generic imported views remain explicit and retain
+a nominal identity when one exists. Move and borrow candidates are labelled as requiring canonical
+ownership validation rather than claimed legal from branch-insensitive filtering. Generic enum
+constructors are not advertised while generic authoring is unsupported. Hole scope is recomputed
+after later declaration creation. Continuations bind namespace, revision, and query. A fallible
+iterative projection renders state, blockers, selected entity/body/type/reference headers, local and
+aggregate structure, and explicit holes without source attachments. Projection labels never
+construct identity.
 
 The former syntax-shaped editing service, source-node protocol identities, hidden-body hole overlay,
 stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 General unresolved references, ambiguities, conflicts, recovery nodes, declaration deletion/movement,
-local-storage construction, generic-call construction, match construction, source rendering,
-persistence, collaboration, and incremental recomputation remain gaps. Everything below continues
-to define the broader target contract.
+mutable-local construction, generic-call construction, enum payload extraction and match
+construction, source rendering, persistence, collaboration, and incremental recomputation remain
+gaps. Everything below continues to define the broader target contract.
 
 ## 1. Snapshot authority
 

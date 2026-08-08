@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use lkjscript_core::{Error, Result};
 
-use super::model::NodeKey;
+use super::model::{EntityAddress, NodeAddress, NodeKey};
 use super::{EntityId, NodeId, SemanticChild, SemanticOwner, SnapshotIndexes, WorkspaceNamespace};
 
 #[derive(Clone)]
@@ -65,6 +65,10 @@ impl IdentityAllocator {
         Ok(())
     }
 
+    pub(super) fn reserve_entity(&mut self) -> Result<EntityId> {
+        self.allocate_entity()
+    }
+
     fn allocate_entity(&mut self) -> Result<EntityId> {
         let (slot, generation) = allocate_slot(
             &mut self.entity_generations,
@@ -112,7 +116,8 @@ pub(super) fn reconcile(
     mut next: SnapshotIndexes,
     previous: &SnapshotIndexes,
     allocator: &mut IdentityAllocator,
-    forced_nodes: &HashMap<NodeKey, NodeId>,
+    forced_entities: &HashMap<EntityAddress, EntityId>,
+    forced_nodes: &HashMap<NodeAddress, NodeId>,
 ) -> Result<SnapshotIndexes> {
     let mut entity_map = HashMap::new();
     entity_map
@@ -123,17 +128,36 @@ pub(super) fn reconcile(
         .try_reserve(next.entities.len())
         .map_err(|_| Error::host("workspace entity reconciliation set allocation failed"))?;
 
+    let mut consumed_forced_entities = HashSet::new();
+    consumed_forced_entities
+        .try_reserve(forced_entities.len())
+        .map_err(|_| Error::host("forced entity reconciliation allocation failed"))?;
     for index in 0..next.entities.len() {
         let temporary = next.entities[index].id;
         let address = next.entity_addresses[index];
-        let stable = previous
-            .address_entities
-            .get(&address)
-            .copied()
-            .map_or_else(|| allocator.allocate_entity(), Ok)?;
+        let previous_id = previous.address_entities.get(&address).copied();
+        let forced_id = forced_entities.get(&address).copied();
+        if previous_id.is_some() && forced_id.is_some() {
+            return Err(Error::msg(
+                "forced entity targets an existing semantic address",
+            ));
+        }
+        let stable = match (previous_id, forced_id) {
+            (Some(id), None) | (None, Some(id)) => id,
+            (None, None) => allocator.allocate_entity()?,
+            (Some(_), Some(_)) => unreachable!("forced entity conflict checked above"),
+        };
+        if !used_entities.insert(stable) {
+            return Err(Error::msg("workspace entity identity is duplicated"));
+        }
+        if forced_id.is_some() {
+            consumed_forced_entities.insert(address);
+        }
         entity_map.insert(temporary, stable);
-        used_entities.insert(stable);
         next.entities[index].id = stable;
+    }
+    if consumed_forced_entities.len() != forced_entities.len() {
+        return Err(Error::msg("reserved forced entity was not published"));
     }
     for header in &previous.entities {
         if !used_entities.contains(&header.id) {
@@ -174,6 +198,10 @@ pub(super) fn reconcile(
     used_nodes
         .try_reserve(next.nodes.len())
         .map_err(|_| Error::host("workspace node reconciliation set allocation failed"))?;
+    let mut consumed_forced_nodes = HashSet::new();
+    consumed_forced_nodes
+        .try_reserve(forced_nodes.len())
+        .map_err(|_| Error::host("forced node reconciliation allocation failed"))?;
 
     for index in 0..next.nodes.len() {
         let temporary = next.nodes[index].id;
@@ -183,8 +211,10 @@ pub(super) fn reconcile(
             ordinal: next.node_keys[index].ordinal,
         };
         let fingerprint = next.node_fingerprints[index];
-        let stable = if let Some(id) = forced_nodes.get(&key).copied() {
+        let address = next.node_addresses[index];
+        let stable = if let Some(id) = forced_nodes.get(&address).copied() {
             if previous.node_lookup.contains_key(&id) && !used_nodes.contains(&id) {
+                consumed_forced_nodes.insert(address);
                 id
             } else {
                 return Err(Error::msg("forced workspace node identity is stale"));
@@ -204,6 +234,9 @@ pub(super) fn reconcile(
         next.nodes[index].id = stable;
         next.nodes[index].owner = owner;
         next.node_keys[index] = key;
+    }
+    if consumed_forced_nodes.len() != forced_nodes.len() {
+        return Err(Error::msg("reserved forced node was not published"));
     }
     for header in &previous.nodes {
         if !used_nodes.contains(&header.id) {

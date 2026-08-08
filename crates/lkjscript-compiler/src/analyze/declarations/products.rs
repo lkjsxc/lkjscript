@@ -108,7 +108,7 @@ impl Analyzer {
                     id: product,
                     identity,
                     name: product_name,
-                    origin: source,
+                    origin: Origin::Source(source),
                     fields,
                 });
             }

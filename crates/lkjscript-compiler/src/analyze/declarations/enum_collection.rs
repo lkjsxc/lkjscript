@@ -144,7 +144,7 @@ impl Analyzer {
                 self.enums.push(EnumDefinition {
                     id,
                     name: parsed.name,
-                    origin: Some(source),
+                    origin: Origin::Source(source),
                     type_parameters: parameters,
                     variants,
                     layout,

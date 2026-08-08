@@ -95,46 +95,61 @@ this Phase 2 measurement. Existing runtime-selection evidence below is unchanged
 ## Source-free semantic-workspace vertical
 
 **Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
-source-free construction could converge with imported semantics and compile directly without
-requiring hidden source/HIR state, parser work, quadratic entity-root lookup, or recursion on
-expression depth. Equivalent semantics were `identity(value: i64) -> i64 { value }` and
-`main() -> i64 { identity(42) }`, once imported and once created from `Workspace::empty` through
-transactions. Selection required equal user declaration signatures, expression-kind preorder,
-reference/call summaries, diagnostics, successful production compilation, and VM result `42`.
+source-free nominal declarations, lexical immutable locals, and byte-vector ownership could converge
+with imported semantics and compile directly without hidden source/HIR state, source loading,
+parsing, repeated enum-declaration scans during indexing, or recursion on expression/local depth. The
+equivalent workloads were the imported and transaction-created forms of:
 
-Retained deterministic counters and assertions show:
+- `identity(value: i64) -> i64` plus `main() -> identity(42)`;
+- a two-field product constructed, bound, and projected;
+- a two-variant enum constructed, bound, and tested; and
+- a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed.
 
-- empty, create, and fill transactions invoke the parser zero times;
+Selection required equal normalized stable entity kinds/types, containment, references,
+dependencies, node kinds/types/effects, compiler outcomes, memory obligations, exact VM values or
+traps, and cleanup behavior. Product/enum names are normalized only in the test observation because
+imported names retain module qualification; nominal identity stays workspace-local and structured.
+
+Retained deterministic counters, indexes, and assertions show:
+
+- selected source-free create/fill/compile paths invoke source loading and the parser zero times;
 - incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
-- source-free and imported complete snapshots have equal selected semantic observations and outcome;
+- scalar, product, enum, local, and ownership source-free/imported snapshots have equal selected
+  semantic observations and production outcomes;
 - index construction performs exactly one root-address lookup per semantic node for retained nested
-  `if` geometries at depths 32, 64, and 128; and
-- the ignored locked-release fixture completes source-free main creation, 20,000-level nested-`if`
-  fill (60,001 expression nodes), semantic clone, identity reconciliation, query, projection,
-  complete-HIR derivation, memory planning, SSA, bytecode, VM execution, and destruction on a
-  128 KiB worker stack. The small `identity(42)` test separately asserts one aggregate post-
-  completeness lowering invocation, so incomplete revisions enter none and the selected complete
-  revision enters the production compiler boundary once.
+  `if` geometries at depths 32, 64, and 128; enum, variant, and enum-field relation lookup uses
+  prebuilt identity maps rather than scanning declarations per expression;
+- one ignored locked-release fixture completes a 20,000-level nested-`if` draft (60,001 expression
+  nodes), while a second completes 20,000 lexical locals (40,001 expression nodes); each includes
+  staged lowering, semantic clone, identity reconciliation, complete-HIR/ownership derivation,
+  memory planning, SSA, bytecode, VM execution, and destruction on a 128 KiB worker stack; and
+- the small scalar test asserts one post-completeness lowering invocation, so incomplete revisions
+  enter none and the selected complete revision enters the production compiler boundary once.
 
-Reproduce the focused vertical and deep fixture with:
+Reproduce the focused convergence and locked-release stack fixtures with:
 
 ```sh
 cargo test --locked -p lkjscript-compiler \
-  workspace::tests::source_free_construction_never_invokes_parser_and_executes -- --exact
+  workspace::tests::imported_nominal_local_and_ownership_programs_converge -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_byte_vector_borrow_then_move_executes_and_cleans_up -- --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_source_free_locals_compile_execute_and_drop_on_small_stack \
+  -- --ignored --exact
 ```
 
-On the development host, the final retained command reported 18.92 seconds for the test body after
-a 1 minute 5 second release rebuild. This single noisy sample is not a product-latency claim or
-gate. No allocator count, peak RSS, retained memory, edit/query distribution, or representative
-application throughput was measured.
-The implementation should be reversed or redesigned if equivalent observations diverge, any
-incomplete path enters a compiler phase, lookup work ceases to equal node count, the selected depth
-fails on the small stack, or broader source-free construction requires maintaining two mutable
-semantic representations. Future measurements should extend these retained product operations
-rather than revive the deleted text publication or wire service.
+On the development host, one final sequential invocation reported 18.19 seconds for the nested test
+body and 1.10 seconds for the local test body after a 1 minute 9 second release rebuild. These single
+noisy samples are orientation, not product-latency claims or gates. No allocator count, peak RSS,
+retained memory, edit/query latency distribution, or representative application throughput was
+measured. Reverse or redesign the implementation if equivalent observations diverge, an incomplete
+path enters a compiler phase, lookup work ceases to track semantic work, either selected depth fails
+on the small stack, cleanup changes, or broader authorship requires two mutable semantic
+representations. Future measurements should extend these retained product operations rather than
+revive the deleted text publication or wire service.
 
 ## Owned structural-value stack and work correction
 

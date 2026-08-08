@@ -8,6 +8,21 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+#[cfg(test)]
+thread_local! {
+    static SOURCE_LOAD_INVOCATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_invocation_count() {
+    SOURCE_LOAD_INVOCATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn invocation_count() -> u64 {
+    SOURCE_LOAD_INVOCATIONS.with(std::cell::Cell::get)
+}
+
 use crate::source::{
     api::LoadMetrics, validate::finish_tree, SourceFile, SourceOrigin, SourceResult, SourceSpan,
     ValidatedSourceTree,
@@ -49,6 +64,8 @@ struct LoadFrame {
 }
 
 pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
+    #[cfg(test)]
+    SOURCE_LOAD_INVOCATIONS.with(|count| count.set(count.get().saturating_add(1)));
     ensure_source_path(path)?;
     let loading_started = Instant::now();
     let entry = path.canonicalize().map_err(|error| {

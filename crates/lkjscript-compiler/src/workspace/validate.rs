@@ -58,7 +58,10 @@ fn validate_bindings(program: &Program) -> Result<()> {
 fn validate_declarations(program: &Program) -> Result<()> {
     for (index, product) in program.products.iter().enumerate() {
         require_dense(product.id.raw(), index, "HIR product")?;
-        validate_source(program, product.origin)?;
+        validate_origin(program, product.origin)?;
+        if product.origin == Origin::Builtin {
+            return Err(Error::msg("user product has a builtin origin"));
+        }
         if product.identity == [0; 32] || product.name.is_empty() {
             return Err(Error::msg("HIR product identity or name is invalid"));
         }
@@ -83,9 +86,7 @@ fn validate_declarations(program: &Program) -> Result<()> {
         {
             return Err(Error::msg("HIR enum identity, layout, or name is invalid"));
         }
-        if let Some(origin) = definition.origin {
-            validate_source(program, origin)?;
-        }
+        validate_origin(program, definition.origin)?;
         let mut variants = HashSet::new();
         variants
             .try_reserve(definition.variants.len())
@@ -513,23 +514,20 @@ fn validate_expression_kind(
             )?;
         }
         ExprKind::Operation {
-            binding,
+            operation,
             resolved_signature,
             args,
-            ..
         } => {
-            let binding = require_binding(program, *binding, "HIR operation binding")?;
-            if !matches!(binding.kind, BindingKind::BuiltinOperation(_)) {
-                return Err(Error::msg("HIR operation target is not builtin"));
-            }
-            let (parameters, result) = function_signature(resolved_signature)
-                .ok_or_else(|| Error::msg("HIR operation signature is not a function"))?;
-            if parameters.len() != args.len()
-                || parameters
-                    .iter()
-                    .zip(args)
-                    .any(|(parameter, argument)| *parameter != argument.ty)
-                || Type::join_control(&expression.ty, result) != Some(result.clone())
+            let mut argument_types = Vec::new();
+            argument_types
+                .try_reserve(args.len())
+                .map_err(|_| Error::host("HIR operation type allocation failed"))?;
+            argument_types.extend(args.iter().map(|argument| argument.ty.clone()));
+            let (canonical_signature, canonical_result) = operation
+                .resolve_types(&argument_types)
+                .map_err(|message| Error::msg(format!("HIR operation is invalid: {message}")))?;
+            if *resolved_signature != canonical_signature
+                || Type::join_control(&expression.ty, &canonical_result) != Some(canonical_result)
             {
                 return Err(Error::msg("HIR operation signature is stale"));
             }

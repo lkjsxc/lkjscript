@@ -171,47 +171,66 @@ entity addresses are independent of public ordering, so adding `main` does not r
 function. Removed slots retain tombstone generations across snapshot cloning and reopening.
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
-and no attachments. `Transaction` adds `CreateFunction` and `CreateMain` to rename, replacement, and
-hole operations. Current declaration construction is deliberately scalar and non-generic. Created
-function parameters and body holes are returned as stable `EntityCreated` and `HoleIntroduced` diff
-entries. Flat drafts implement scalar literals, visible parameter loads, non-generic calls, and
-conditionals; placeholder storage/generic/match draft variants are gone.
+and no attachments. `Transaction` adds non-generic `CreateProduct`, `CreateEnum`, `CreateFunction`,
+and `CreateMain` to rename, replacement, and hole operations. Products, enums, variants, fields,
+functions, parameters, locals, bodies, and holes receive opaque stable entities independent of
+compiler-dense nominal/layout identities. Public `SemanticTypeRef` inputs use those entities for
+nominal types. Invalid names, duplicate declarations/members, ownership-containing aggregate fields,
+foreign/stale/wrong-kind type identities, and allocation failure reject without consuming their
+reserved stable IDs.
+
+`ExpressionDraft` is a flat non-recursive tree with transaction-local lexical binding handles; its
+physical node order is irrelevant. It implements scalar and byte literals, selected canonical
+built-in operations, non-generic calls, conditionals, immutable lexical locals, copy-safe loads,
+byte-vector moves and shared borrows, product construction/projection, enum construction, and variant
+tests.
+Malformed/disconnected/cyclic/reused-child trees, forward or out-of-scope local handles, field and
+variant coverage/type failures, and edits that would orphan published local entities reject. Mutable
+locals, generic calls, match authoring, and executable placeholders are absent.
 
 The authoritative `SemanticProgram` permits absent `main` and real hole expression leaves. Missing
 body and typed-hole metadata describe those leaves; no prior expression survives introduction.
 Effects use an explicit unknown fact while holes remain and are recomputed after every transaction.
-Completion derives and validates HIR, including ownership, before publication. Scalar construction
-rejects unsupported owned/affine signature shapes; stale/foreign IDs, invisible bindings, bad arity
-or types, cyclic drafts, overlapping subtree edits, duplicate parameters, duplicate/reserved global
-creation or function rename, and stale revisions fail before publication.
-Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and future IDs.
+Shape, lexical scope, and type preflight lower once into staged HIR; canonical complete-HIR ownership
+validation decides move/borrow legality and cleanup before publication. Failure preserves the exact
+`Arc`, revision, diagnostics, projection, tombstones, and deterministic future IDs. Structural edits
+that remove a local-defining subtree are currently rejected rather than retaining orphan bindings or
+adding a second mutable local authority.
 
 Completeness blockers distinguish missing entry point, missing body with declaration/hole/type, and
 typed hole with hole/type/owner/context. Incomplete snapshots remain fully queryable and projectable.
 `compile_snapshot` returns those revision-labelled blockers before deriving HIR or entering memory,
 SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
-and lowers directly. Complete source-free `identity(value: i64) -> i64` plus
-`main() -> identity(42)` returns `42` through bytecode/VM with zero parser invocations. Canonical
-memory-plan origins explicitly tag source-backed and source-free cases; current package locks reflect
-that non-colliding encoding.
+and lowers directly. Selected source-free scalar, nominal aggregate, lexical-local, and byte-vector
+borrow-then-move paths enter source loading and parsing zero times, retain canonical memory-plan
+obligations, compile to validated bytecode, execute in the VM, and clean up on normal and trapped
+paths. Canonical memory-plan origins explicitly tag source-backed and source-free cases; current
+package locks reflect that non-colliding encoding.
 
 Revision-labelled queries implement deterministic pagination, definitions/references, calls,
-actual/expected types, diagnostics, hole context, and expected-type-filtered legal constructors.
-Hole visibility refreshes when declarations are added in a later revision. Projections render state
-and blockers before selected entity/body/type/reference/hole headers, use stable review-local
-labels, and require no source attachment. Index root-address resolution performs one map lookup per
-semantic node rather than scanning every entity.
+structured entity/function/node types, diagnostics, hole context with exact lexical visibility, and
+expected-type-filtered legal constructors. Known nominal types carry stable entity IDs; unsupported
+generic views are explicit and preserve a nominal ID when available. Copy loads are advertised only
+for copy-safe values; affine move/borrow candidates are marked `RequiresOwnershipValidation`, and
+unsupported generic enum constructors are omitted. Hole visibility refreshes when declarations are
+added in a later revision. Projections render state and blockers before selected
+entity/body/type/reference/hole headers, use stable review-local labels, and require no source
+attachment. Index root-address resolution performs one map lookup per semantic node, while enum,
+variant, and enum-field relation indexing uses private identity maps rather than repeated declaration
+scans.
 
 The source/path importer privately owns loading, parsing, initial analysis, package validation, and
 source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
-compiler operations/prelude/core traits are excluded from mutable program-entity queries. Imported
-and source-free equivalent fixtures agree on user declaration kinds/signatures, expression kinds,
-references/calls, diagnostics, compilation, and VM outcome. Attachment changes preserve IDs and
-projection. The ignored 20,000-level source-free release fixture performs creation, flat draft
-lowering, semantic clone, indexing/reconciliation, projection, complete-HIR derivation, memory/SSA/
-bytecode compilation, VM execution, and destruction on a 128 KiB worker stack. Canonical block
-ordering is iterative on this path.
+compiler operations/prelude/core traits are excluded from mutable program-entity queries, and HIR
+operations carry only canonical catalog operation identity/signature. Imported and source-free
+scalar, product, enum, lexical-local, and borrow/move fixtures agree on normalized entities and
+structured types, containment, references/dependencies, node kinds/types/effects, compilation,
+memory obligations, VM outcomes, traps, and cleanup. Attachment changes preserve IDs and
+projection. Separate ignored locked-release fixtures construct and compile either a 20,000-level
+nested expression or 20,000 lexical locals, execute, and destroy the complete path on a 128 KiB
+worker stack. Draft postorder, local lowering, semantic clone, indexing/reconciliation, projection,
+and canonical block ordering are iterative on these paths.
 
 The hidden-body hole overlay, test-only HIR construction surrogate, syntax-shaped editing service,
 dense source-node identities, protocol/session schemas, text journal/publication path, CLI routing,
@@ -222,14 +241,16 @@ replacement exists pending a measured consumer.
 
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
-  currently covers scalar non-generic functions and parameterless scalar `main`; deletion/movement,
-  locals, owned/affine body construction, generic/match creation, unresolved names, ambiguities,
-  conflicts, and recovery states remain.
+  covers non-generic products, enums, functions, and parameterless `main`; expression construction
+  covers immutable locals and the selected byte-vector move/borrow vertical. Declaration
+  deletion/movement, mutable locals, generic calls, enum payload extraction and matches, unresolved
+  names, ambiguities, conflicts, and recovery states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- Owned runtime structural values and the source-free scalar workspace/compiler path now each have
-  20,000-level release evidence on a 128 KiB worker stack. This does not prove every compiler form,
-  type traversal, ownership failure, or general runtime throughput path stack-safe.
+- Owned runtime structural values and source-free nested-expression and lexical-local
+  workspace/compiler paths have 20,000-level release evidence on a 128 KiB worker stack. This does
+  not prove every compiler form, type traversal, ownership failure, or general runtime throughput
+  path stack-safe.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

@@ -10,15 +10,34 @@ use super::identity::{self, IdentityAllocator};
 use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
 use super::program::SemanticProgram;
 use super::{
-    CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftNode, EntityId, EntityKind,
-    ExpressionDraft, HoleId, HoleKind, HoleState, NodeId, NodeKind, ProgramState, RevisionId,
-    SemanticChild, SemanticOwner, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftBindingId, DraftBindingRef,
+    DraftFieldValue, DraftNode, DraftNodeId, EntityId, EntityKind, ExpressionDraft, HoleId,
+    HoleKind, HoleState, NodeId, NodeKind, ProgramState, RevisionId, SemanticChild, SemanticOwner,
+    SemanticTypeRef, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParameterDraft {
     pub name: String,
-    pub ty: Type,
+    pub ty: SemanticTypeRef,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProductFieldDraft {
+    pub name: String,
+    pub ty: SemanticTypeRef,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumFieldDraft {
+    pub name: String,
+    pub ty: SemanticTypeRef,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumVariantDraft {
+    pub name: String,
+    pub fields: Vec<EnumFieldDraft>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,13 +49,21 @@ pub struct Transaction {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Edit {
+    CreateProduct {
+        name: String,
+        fields: Vec<ProductFieldDraft>,
+    },
+    CreateEnum {
+        name: String,
+        variants: Vec<EnumVariantDraft>,
+    },
     CreateFunction {
         name: String,
         parameters: Vec<ParameterDraft>,
-        return_type: Type,
+        return_type: SemanticTypeRef,
     },
     CreateMain {
-        return_type: Type,
+        return_type: SemanticTypeRef,
     },
     RenameEntity {
         entity: EntityId,
@@ -52,7 +79,7 @@ pub enum Edit {
     },
     RefineHole {
         hole: HoleId,
-        expected_type: Option<Type>,
+        expected_type: Option<SemanticTypeRef>,
         goal: String,
     },
     FillHole {
@@ -207,7 +234,6 @@ impl Workspace {
 struct StructuralAction {
     target: NodeId,
     address: NodeAddress,
-    key: NodeKey,
     replacement: Expr,
 }
 
@@ -260,17 +286,46 @@ fn stage(
     structural_targets
         .try_reserve(edit_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("structural preflight allocation failed")))?;
+    let mut forced_entities = HashMap::new();
+    forced_entities
+        .try_reserve(edit_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced entity allocation failed")))?;
+    let mut lowering = LoweringState::new(&program)?;
 
     for edit in transaction.edits {
         match edit {
+            Edit::CreateProduct { name, fields } => {
+                create_product(
+                    base,
+                    &mut program,
+                    allocator,
+                    &mut forced_entities,
+                    &mut new_entities,
+                    name,
+                    fields,
+                )?;
+            }
+            Edit::CreateEnum { name, variants } => {
+                create_enum(
+                    base,
+                    &mut program,
+                    allocator,
+                    &mut forced_entities,
+                    &mut new_entities,
+                    name,
+                    variants,
+                )?;
+            }
             Edit::CreateFunction {
                 name,
                 parameters,
                 return_type,
             } => {
-                validate_name(&name)?;
-                validate_constructed_type(&return_type, "function return")?;
-                if function_name_exists(&program, &name) {
+                validate_declaration_name(&name)?;
+                let return_type =
+                    resolve_semantic_type(base, &program, return_type, "function return")?;
+                reject_reference_result(&return_type, "function")?;
+                if declaration_name_exists(&program, &name) {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "global declaration name already exists or is reserved",
                     )));
@@ -279,9 +334,20 @@ fn stage(
                 parameter_names.try_reserve(parameters.len()).map_err(|_| {
                     WorkspaceError::Host(Arc::from("parameter name allocation failed"))
                 })?;
+                let mut resolved_parameter_types = Vec::new();
+                resolved_parameter_types
+                    .try_reserve(parameters.len())
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("parameter type allocation failed"))
+                    })?;
                 for parameter in &parameters {
                     validate_name(&parameter.name)?;
-                    validate_constructed_type(&parameter.ty, "function parameter")?;
+                    resolved_parameter_types.push(resolve_semantic_type(
+                        base,
+                        &program,
+                        parameter.ty,
+                        "function parameter",
+                    )?);
                     if !parameter_names.insert(parameter.name.as_str()) {
                         return Err(WorkspaceError::InvalidTransaction(Arc::from(
                             "function parameter name is duplicated",
@@ -313,11 +379,7 @@ fn stage(
                 let function_raw = u64::try_from(program.bindings.len())
                     .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
                 let function_binding = crate::hir::BindingId::new(function_raw);
-                let mut parameter_types = Vec::new();
-                parameter_types.try_reserve(parameters.len()).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("parameter type allocation failed"))
-                })?;
-                parameter_types.extend(parameters.iter().map(|parameter| parameter.ty.clone()));
+                let parameter_types = resolved_parameter_types;
                 program.bindings.push(Binding {
                     id: function_binding,
                     name: name.clone(),
@@ -349,7 +411,7 @@ fn stage(
                         id: binding,
                         name: parameter.name.clone(),
                         kind: BindingKind::Parameter,
-                        ty: parameter.ty,
+                        ty: parameter_types[index].clone(),
                         origin: Origin::Semantic,
                     });
                     parameter_bindings.push(binding);
@@ -392,7 +454,9 @@ fn stage(
                 });
             }
             Edit::CreateMain { return_type } => {
-                validate_constructed_type(&return_type, "main return")?;
+                let return_type =
+                    resolve_semantic_type(base, &program, return_type, "main return")?;
+                reject_reference_result(&return_type, "main")?;
                 if program.main.is_some() {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "main entry point already exists",
@@ -441,10 +505,19 @@ fn stage(
                 }
                 validate_name(&new_name)?;
                 let header = base.workspace_entity(entity)?;
-                if matches!(header.kind, EntityKind::Main | EntityKind::BuiltinOperation) {
+                if matches!(
+                    header.kind,
+                    EntityKind::Main
+                        | EntityKind::BuiltinOperation
+                        | EntityKind::Product
+                        | EntityKind::ProductField
+                        | EntityKind::Enum
+                        | EntityKind::EnumVariant
+                        | EntityKind::EnumField
+                ) {
                     return Err(WorkspaceError::unsupported(
                         "rename-entity",
-                        "main and builtin operations cannot be renamed",
+                        "main, builtin operations, and nominal declarations or members cannot be renamed",
                     ));
                 }
                 let address = base
@@ -463,20 +536,28 @@ fn stage(
             }
             Edit::ReplaceExpression { target, draft } => {
                 ensure_structural_nonoverlapping(base, &mut structural_targets, target)?;
-                let (address, key, expected, visible) = edit_context(base, target)?;
-                let replacement = lower_draft(
+                let (address, _key, expected, visible) = edit_context(base, target)?;
+                if subtree_defines_local(expression_at(&program, address)?) {
+                    return Err(WorkspaceError::unsupported(
+                        "replace-expression",
+                        "local-defining subtrees cannot be removed before declaration deletion is implemented",
+                    ));
+                }
+                let lowered = lower_draft(
                     base,
-                    &program,
+                    &mut program,
                     &draft,
                     &expected,
                     Origin::Semantic,
                     &visible,
+                    address.root,
+                    &mut lowering,
                 )?;
+                new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
                     target,
                     address,
-                    key,
-                    replacement,
+                    replacement: lowered.expression,
                 });
             }
             Edit::IntroduceHole { target, goal } => {
@@ -487,12 +568,23 @@ fn stage(
                     )));
                 }
                 let (address, key, expected, visible) = edit_context(base, target)?;
+                if subtree_defines_local(expression_at(&program, address)?) {
+                    return Err(WorkspaceError::unsupported(
+                        "introduce-hole",
+                        "local-defining subtrees cannot be removed before declaration deletion is implemented",
+                    ));
+                }
                 let owner = root_owner(base, address)?;
                 holes.push(HoleRecord {
                     state: HoleState {
                         id: HoleId(target),
                         kind: HoleKind::TypedExpression,
                         expected_type: expected.clone(),
+                        expected_semantic_type: super::types::view(
+                            &base.program,
+                            &base.indexes,
+                            &expected,
+                        )?,
                         goal: Arc::from(goal),
                         owner,
                         context: target,
@@ -504,7 +596,6 @@ fn stage(
                 structural.push(StructuralAction {
                     target,
                     address,
-                    key,
                     replacement: Expr {
                         ty: expected,
                         effects: EffectSet::UNKNOWN,
@@ -529,6 +620,8 @@ fn stage(
                     .find(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 if let Some(expected_type) = expected_type {
+                    let expected_type =
+                        resolve_semantic_type(base, &program, expected_type, "hole expectation")?;
                     if expected_type != record.state.expected_type {
                         return Err(WorkspaceError::TypeMismatch {
                             expected: Arc::from(record.state.expected_type.to_string()),
@@ -559,19 +652,21 @@ fn stage(
                     .position(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 let record = holes[index].clone();
-                let replacement = lower_draft(
+                let lowered = lower_draft(
                     base,
-                    &program,
+                    &mut program,
                     &draft,
                     &record.state.expected_type,
                     Origin::Semantic,
                     &record.state.visible_entities,
+                    record.address.root,
+                    &mut lowering,
                 )?;
+                new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
                     target: hole.0,
                     address: record.address,
-                    key: record.key,
-                    replacement,
+                    replacement: lowered.expression,
                 });
                 holes.remove(index);
                 entries.push(SemanticDiffEntry::HoleFilled { hole });
@@ -607,6 +702,17 @@ fn stage(
 
     let canonical =
         super::index::build(&program, base.namespace).map_err(WorkspaceError::from_core)?;
+    let mut canonical_keys = HashMap::new();
+    canonical_keys
+        .try_reserve(canonical.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("canonical node key allocation failed")))?;
+    for (index, key) in canonical.node_keys.iter().copied().enumerate() {
+        if canonical_keys.insert(key, index).is_some() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "canonical node key is duplicated",
+            )));
+        }
+    }
     let mut forced = HashMap::new();
     let forced_count = structural
         .len()
@@ -616,16 +722,27 @@ fn stage(
         .try_reserve(forced_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("forced identity allocation failed")))?;
     for action in &structural {
-        forced.insert(action.key, action.target);
+        let path = node_ordinal_path(&base.indexes, action.target, action.address.root)?;
+        let address =
+            node_address_at_path(&canonical, &canonical_keys, action.address.root, &path)?;
+        insert_forced_node(&mut forced, address, action.target)?;
     }
     for hole in &holes {
-        forced.insert(hole.key, hole.state.id.0);
+        let path = node_ordinal_path(&base.indexes, hole.state.id.0, hole.address.root)?;
+        let address = node_address_at_path(&canonical, &canonical_keys, hole.address.root, &path)?;
+        insert_forced_node(&mut forced, address, hole.state.id.0)?;
     }
-    let mut indexes = identity::reconcile(canonical, &base.indexes, allocator, &forced)
-        .map_err(WorkspaceError::from_core)?;
+    let mut indexes = identity::reconcile(
+        canonical,
+        &base.indexes,
+        allocator,
+        &forced_entities,
+        &forced,
+    )
+    .map_err(WorkspaceError::from_core)?;
 
-    refresh_hole_addresses(&mut holes, &indexes)?;
-    install_new_holes(&mut holes, &new_holes, &indexes)?;
+    refresh_hole_addresses(&mut holes, &program, &indexes)?;
+    install_new_holes(&mut holes, &new_holes, &program, &indexes)?;
     for pending in &new_holes {
         let node = indexes
             .address_nodes
@@ -782,31 +899,492 @@ fn node_is_ancestor(
     }
 }
 
-fn validate_name(name: &str) -> Result<(), WorkspaceError> {
-    if name.is_empty()
-        || !name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
+fn node_ordinal_path(
+    indexes: &SnapshotIndexes,
+    target: NodeId,
+    root: EntityAddress,
+) -> Result<Vec<u64>, WorkspaceError> {
+    let expected_owner = indexes
+        .address_entities
+        .get(&root)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?;
+    let mut reversed = Vec::new();
+    let mut current = target;
+    loop {
+        if reversed.len() >= indexes.nodes.len() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "node ownership path contains a cycle",
+            )));
+        }
+        let index = indexes
+            .node_lookup
+            .get(&current)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node path")))?;
+        let key = indexes
+            .node_keys
+            .get(index)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node path")))?;
+        reversed
+            .try_reserve(1)
+            .map_err(|_| WorkspaceError::Host(Arc::from("node path allocation failed")))?;
+        reversed.push(key.ordinal);
+        match key.owner {
+            SemanticOwner::Entity(owner) if owner == expected_owner => break,
+            SemanticOwner::Entity(_) => {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "node path reaches a different root",
+                )));
+            }
+            SemanticOwner::Node(parent) => current = parent,
+        }
+    }
+    reversed.reverse();
+    Ok(reversed)
+}
+
+fn node_address_at_path(
+    indexes: &SnapshotIndexes,
+    keys: &HashMap<NodeKey, usize>,
+    root: EntityAddress,
+    path: &[u64],
+) -> Result<NodeAddress, WorkspaceError> {
+    let root_entity = indexes
+        .address_entities
+        .get(&root)
+        .copied()
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("canonical node root is missing")))?;
+    let mut owner = SemanticOwner::Entity(root_entity);
+    let mut address = None;
+    for ordinal in path {
+        let index = keys
+            .get(&NodeKey {
+                owner,
+                ordinal: *ordinal,
+            })
+            .copied()
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("edited node path was not published"))
+            })?;
+        let node = indexes
+            .nodes
+            .get(index)
+            .ok_or_else(|| WorkspaceError::Validation(Arc::from("canonical node is missing")))?
+            .id;
+        address = indexes.node_addresses.get(index).copied();
+        owner = SemanticOwner::Node(node);
+    }
+    let address = address.ok_or_else(|| {
+        WorkspaceError::Validation(Arc::from("edited node path is unexpectedly empty"))
+    })?;
+    if address.root != root {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "edited node path changed roots",
+        )));
+    }
+    Ok(address)
+}
+
+fn insert_forced_node(
+    forced: &mut HashMap<NodeAddress, NodeId>,
+    address: NodeAddress,
+    node: NodeId,
+) -> Result<(), WorkspaceError> {
+    match forced.entry(address) {
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            entry.insert(node);
+            Ok(())
+        }
+        std::collections::hash_map::Entry::Occupied(entry) if *entry.get() == node => Ok(()),
+        std::collections::hash_map::Entry::Occupied(_) => Err(WorkspaceError::Validation(
+            Arc::from("distinct edited nodes resolved to one canonical path"),
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_product(
+    base: &WorkspaceSnapshot,
+    program: &mut SemanticProgram,
+    allocator: &mut IdentityAllocator,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+    created: &mut Vec<NewEntity>,
+    name: String,
+    fields: Vec<ProductFieldDraft>,
+) -> Result<(), WorkspaceError> {
+    validate_declaration_name(&name)?;
+    if declaration_name_exists(program, &name) {
         return Err(WorkspaceError::InvalidTransaction(Arc::from(
-            "entity name must be a non-empty ASCII semantic identifier",
+            "global declaration name already exists or is reserved",
+        )));
+    }
+    let raw = u64::try_from(program.products.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product identity exceeds u64")))?;
+    let address = EntityAddress::Product(raw);
+    let entity = reserve_forced_entity(allocator, forced, address)?;
+    let identity = entity_derived_identity(b"workspace-product-nominal-v1", entity);
+    let mut names = HashSet::new();
+    names
+        .try_reserve(fields.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product field name allocation failed")))?;
+    let mut resolved = Vec::new();
+    resolved
+        .try_reserve(fields.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product field allocation failed")))?;
+    created
+        .try_reserve(fields.len().checked_add(1).ok_or_else(|| {
+            WorkspaceError::Host(Arc::from("created product entity count overflow"))
+        })?)
+        .map_err(|_| WorkspaceError::Host(Arc::from("created product entity allocation failed")))?;
+    created.push(NewEntity {
+        address,
+        kind: EntityKind::Product,
+        name: Arc::from(name.as_str()),
+    });
+    for (index, field) in fields.into_iter().enumerate() {
+        validate_name(&field.name)?;
+        if !names.insert(field.name.clone()) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "product field name is duplicated",
+            )));
+        }
+        let ty = resolve_semantic_type(base, program, field.ty, "product field")?;
+        reject_ownership_field(&ty, "product field")?;
+        let field_raw = u64::try_from(index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("product field index exceeds u64")))?;
+        let field_address = EntityAddress::ProductField {
+            product: raw,
+            field: field_raw,
+        };
+        let field_entity = reserve_forced_entity(allocator, forced, field_address)?;
+        resolved.push(crate::hir::ProductField {
+            identity: entity_derived_identity(b"workspace-product-field-v1", field_entity),
+            source_order: field_raw,
+            name: field.name.clone(),
+            ty,
+        });
+        created.push(NewEntity {
+            address: field_address,
+            kind: EntityKind::ProductField,
+            name: Arc::from(field.name),
+        });
+    }
+    program
+        .products
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("product allocation failed")))?;
+    program.products.push(crate::hir::ProductDefinition {
+        id: lkjscript_core::ProductId::new(raw),
+        identity,
+        name,
+        origin: Origin::Semantic,
+        fields: resolved,
+    });
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_enum(
+    base: &WorkspaceSnapshot,
+    program: &mut SemanticProgram,
+    allocator: &mut IdentityAllocator,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+    created: &mut Vec<NewEntity>,
+    name: String,
+    variants: Vec<EnumVariantDraft>,
+) -> Result<(), WorkspaceError> {
+    validate_declaration_name(&name)?;
+    if declaration_name_exists(program, &name) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "global declaration name already exists or is reserved",
+        )));
+    }
+    if variants.is_empty() {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "enum must contain at least one variant",
+        )));
+    }
+    let created_count = variants.iter().try_fold(1_usize, |count, variant| {
+        count
+            .checked_add(1)
+            .and_then(|count| count.checked_add(variant.fields.len()))
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("created enum entity count overflow")))
+    })?;
+    created
+        .try_reserve(created_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("created enum entity allocation failed")))?;
+    let raw = u64::try_from(program.enums.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum identity exceeds u64")))?;
+    let address = EntityAddress::Enum(raw);
+    let entity = reserve_forced_entity(allocator, forced, address)?;
+    let nominal = entity_derived_identity(b"workspace-enum-nominal-v1", entity);
+    let enum_id = crate::hir::EnumId::new(nominal);
+    let mut variant_names = HashSet::new();
+    variant_names
+        .try_reserve(variants.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant name allocation failed")))?;
+    let mut resolved_variants = Vec::new();
+    resolved_variants
+        .try_reserve(variants.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant allocation failed")))?;
+    created.push(NewEntity {
+        address,
+        kind: EntityKind::Enum,
+        name: Arc::from(name.as_str()),
+    });
+    for (variant_index, variant) in variants.into_iter().enumerate() {
+        validate_name(&variant.name)?;
+        if !variant_names.insert(variant.name.clone()) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "enum variant name is duplicated",
+            )));
+        }
+        let variant_raw = u64::try_from(variant_index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum variant index exceeds u64")))?;
+        let variant_address = EntityAddress::EnumVariant {
+            enumeration: raw,
+            variant: variant_raw,
+        };
+        let variant_entity = reserve_forced_entity(allocator, forced, variant_address)?;
+        let variant_id = crate::hir::VariantId::new(entity_derived_identity(
+            b"workspace-enum-variant-v1",
+            variant_entity,
+        ));
+        created.push(NewEntity {
+            address: variant_address,
+            kind: EntityKind::EnumVariant,
+            name: Arc::from(variant.name.as_str()),
+        });
+        let mut field_names = HashSet::new();
+        field_names
+            .try_reserve(variant.fields.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum field name allocation failed")))?;
+        let mut fields = Vec::new();
+        fields
+            .try_reserve(variant.fields.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum field allocation failed")))?;
+        for (field_index, field) in variant.fields.into_iter().enumerate() {
+            validate_name(&field.name)?;
+            if !field_names.insert(field.name.clone()) {
+                return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                    "enum field name is duplicated within its variant",
+                )));
+            }
+            let ty = resolve_semantic_type(base, program, field.ty, "enum field")?;
+            reject_ownership_field(&ty, "enum field")?;
+            let field_raw = u64::try_from(field_index)
+                .map_err(|_| WorkspaceError::Host(Arc::from("enum field index exceeds u64")))?;
+            let field_address = EntityAddress::EnumField {
+                enumeration: raw,
+                variant: variant_raw,
+                field: field_raw,
+            };
+            let field_entity = reserve_forced_entity(allocator, forced, field_address)?;
+            fields.push(crate::hir::EnumVariantField {
+                id: crate::hir::VariantFieldId::new(entity_derived_identity(
+                    b"workspace-enum-field-v1",
+                    field_entity,
+                )),
+                name: field.name.clone(),
+                source_order: field_raw,
+                indirect: type_contains_enum(&ty),
+                ty,
+            });
+            created.push(NewEntity {
+                address: field_address,
+                kind: EntityKind::EnumField,
+                name: Arc::from(field.name),
+            });
+        }
+        resolved_variants.push(crate::hir::EnumVariant {
+            id: variant_id,
+            name: variant.name,
+            source_order: variant_raw,
+            fields,
+        });
+    }
+    let layout = crate::hir::RuntimeLayoutId::new(derived_identity(
+        b"workspace-enum-runtime-layout-v1",
+        nominal,
+    ));
+    program
+        .enums
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum allocation failed")))?;
+    program.enums.push(crate::hir::EnumDefinition {
+        id: enum_id,
+        name,
+        origin: Origin::Semantic,
+        type_parameters: Vec::new(),
+        variants: resolved_variants,
+        layout: crate::hir::EnumLayoutFacts {
+            identity: layout,
+            recursive: false,
+        },
+    });
+    Ok(())
+}
+
+fn reserve_forced_entity(
+    allocator: &mut IdentityAllocator,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+    address: EntityAddress,
+) -> Result<EntityId, WorkspaceError> {
+    if forced.contains_key(&address) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "semantic entity address is created more than once",
+        )));
+    }
+    forced
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced entity allocation failed")))?;
+    let entity = allocator
+        .reserve_entity()
+        .map_err(WorkspaceError::from_core)?;
+    forced.insert(address, entity);
+    Ok(entity)
+}
+
+fn entity_derived_identity(domain: &[u8], entity: EntityId) -> [u8; 32] {
+    let mut bytes = [0_u8; 80];
+    bytes[..32].copy_from_slice(&lkjscript_core::sha256(domain));
+    bytes[32..64].copy_from_slice(&entity.namespace().bytes());
+    bytes[64..72].copy_from_slice(&entity.slot().to_be_bytes());
+    bytes[72..].copy_from_slice(&entity.generation().to_be_bytes());
+    lkjscript_core::sha256(&bytes)
+}
+
+fn derived_identity(domain: &[u8], parent: [u8; 32]) -> [u8; 32] {
+    let mut bytes = [0_u8; 64];
+    bytes[..32].copy_from_slice(&lkjscript_core::sha256(domain));
+    bytes[32..].copy_from_slice(&parent);
+    lkjscript_core::sha256(&bytes)
+}
+
+fn validate_name(name: &str) -> Result<(), WorkspaceError> {
+    if !lkjscript_contracts::is_identifier(name) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "entity name must be a non-empty semantic identifier",
         )));
     }
     Ok(())
 }
 
-fn validate_constructed_type(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
-    if matches!(ty, Type::I64 | Type::F64 | Type::Bool | Type::Unit) {
-        Ok(())
-    } else {
+fn validate_declaration_name(name: &str) -> Result<(), WorkspaceError> {
+    validate_name(name)?;
+    if crate::analyze::is_reserved_semantic_name(name)
+        || crate::hir::Operation::from_name(name).is_some()
+    {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "global declaration name is reserved by the language",
+        )));
+    }
+    Ok(())
+}
+
+fn resolve_semantic_type(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    ty: SemanticTypeRef,
+    subject: &str,
+) -> Result<Type, WorkspaceError> {
+    Ok(match ty {
+        SemanticTypeRef::Unit => Type::Unit,
+        SemanticTypeRef::Bool => Type::Bool,
+        SemanticTypeRef::I64 => Type::I64,
+        SemanticTypeRef::F64 => Type::F64,
+        SemanticTypeRef::Bytes => Type::Bytes,
+        SemanticTypeRef::ByteVector => Type::ByteVector,
+        SemanticTypeRef::ByteSlice => Type::ByteSlice,
+        SemanticTypeRef::ByteSliceMut => Type::ByteSliceMut,
+        SemanticTypeRef::Product(entity) => {
+            let header = base.workspace_entity(entity)?;
+            if header.kind != EntityKind::Product {
+                return Err(wrong_kind(subject, "product declaration", header.kind));
+            }
+            let address = entity_address(base, entity)?;
+            let EntityAddress::Product(raw) = address else {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("product")));
+            };
+            let definition = program
+                .products
+                .get(host_index(raw, "product")?)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+            Type::Product(definition.name.clone())
+        }
+        SemanticTypeRef::Enum(entity) => {
+            let header = base.workspace_entity(entity)?;
+            if header.kind != EntityKind::Enum {
+                return Err(wrong_kind(subject, "enum declaration", header.kind));
+            }
+            let address = entity_address(base, entity)?;
+            let EntityAddress::Enum(raw) = address else {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("enum")));
+            };
+            let definition = program
+                .enums
+                .get(host_index(raw, "enum")?)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+            if !definition.type_parameters.is_empty() {
+                return Err(WorkspaceError::unsupported(
+                    "construct-type",
+                    "generic enum authoring is not implemented",
+                ));
+            }
+            Type::Enum {
+                id: definition.id,
+                name: definition.name.clone(),
+                arguments: Vec::new(),
+            }
+        }
+    })
+}
+
+fn reject_reference_result(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
+    if matches!(ty, Type::ByteSlice | Type::ByteSliceMut) {
         Err(WorkspaceError::unsupported(
             "create-declaration",
-            &format!("{subject} type {ty} is outside the implemented scalar construction surface"),
+            &format!("{subject} cannot return a lexical reference"),
         ))
+    } else {
+        Ok(())
     }
 }
 
-fn function_name_exists(program: &SemanticProgram, name: &str) -> bool {
+fn reject_ownership_field(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
+    if matches!(
+        ty,
+        Type::Bytes | Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut | Type::Resource(_)
+    ) {
+        Err(WorkspaceError::unsupported(
+            "create-declaration",
+            &format!("{subject} cannot store ownership or reference type {ty}"),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn type_contains_enum(ty: &Type) -> bool {
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Enum { .. } => return true,
+            Type::List(inner) => pending.push(inner),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
+        }
+    }
+    false
+}
+
+fn declaration_name_exists(program: &SemanticProgram, name: &str) -> bool {
     function_name_conflicts(program, name, None)
 }
 
@@ -817,6 +1395,7 @@ fn function_name_conflicts(
 ) -> bool {
     name == "main"
         || crate::hir::Operation::from_name(name).is_some()
+        || crate::analyze::is_reserved_semantic_name(name)
         || program.bindings.iter().any(|binding| {
             binding.kind == BindingKind::Function
                 && Some(binding.id) != except
@@ -919,20 +1498,105 @@ fn visible_entities(
     snapshot: &WorkspaceSnapshot,
     address: NodeAddress,
 ) -> Result<Vec<EntityId>, WorkspaceError> {
-    let owner = root_owner(snapshot, address)?;
+    visible_entities_in(&snapshot.program, &snapshot.indexes, address)
+}
+
+fn visible_entities_in(
+    program: &SemanticProgram,
+    indexes: &SnapshotIndexes,
+    address: NodeAddress,
+) -> Result<Vec<EntityId>, WorkspaceError> {
+    enum ScopeWork<'a> {
+        Visit(&'a Expr),
+        Add(crate::hir::BindingId),
+        Remove(Vec<crate::hir::BindingId>),
+    }
+
+    let owner = indexes
+        .address_entities
+        .get(&address.root)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?;
     let mut visible = Vec::new();
     visible
-        .try_reserve(snapshot.indexes.entities.len())
+        .try_reserve(indexes.entities.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("visible entity allocation failed")))?;
-    for entity in &snapshot.indexes.entities {
+    for entity in &indexes.entities {
         if entity.kind == EntityKind::Function
             || (entity.kind == EntityKind::Parameter && entity.owner == Some(owner))
         {
             visible.push(entity.id);
         }
     }
-    visible.sort();
-    Ok(visible)
+    let root = expression_root(program, address.root)?;
+    let mut work = vec![ScopeWork::Visit(root)];
+    let mut active = HashSet::new();
+    let mut preorder = 0_u64;
+    while let Some(item) = work.pop() {
+        match item {
+            ScopeWork::Add(binding) => {
+                active.insert(binding);
+            }
+            ScopeWork::Remove(bindings) => {
+                for binding in bindings {
+                    active.remove(&binding);
+                }
+            }
+            ScopeWork::Visit(expression) => {
+                if preorder == address.preorder {
+                    for binding in active {
+                        if let Some(entity) = indexes
+                            .address_entities
+                            .get(&EntityAddress::Binding(binding.raw()))
+                            .copied()
+                        {
+                            visible.push(entity);
+                        }
+                    }
+                    visible.sort();
+                    visible.dedup();
+                    return Ok(visible);
+                }
+                preorder = preorder.checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("visibility preorder overflow"))
+                })?;
+                match &expression.kind {
+                    ExprKind::Let { bindings, body } => {
+                        let mut removed = Vec::new();
+                        removed.try_reserve(bindings.len()).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("visibility scope allocation failed"))
+                        })?;
+                        removed.extend(bindings.iter().map(|local| local.binding));
+                        work.push(ScopeWork::Remove(removed));
+                        work.push(ScopeWork::Visit(body));
+                        for local in bindings.iter().rev() {
+                            work.push(ScopeWork::Add(local.binding));
+                            work.push(ScopeWork::Visit(&local.value));
+                        }
+                    }
+                    ExprKind::MutableLocal {
+                        binding,
+                        initial,
+                        body,
+                        ..
+                    } => {
+                        work.push(ScopeWork::Remove(vec![*binding]));
+                        work.push(ScopeWork::Visit(body));
+                        work.push(ScopeWork::Add(*binding));
+                        work.push(ScopeWork::Visit(initial));
+                    }
+                    _ => {
+                        let mut children = Vec::new();
+                        crate::hir::for_each_expression_child(expression, &mut |child| {
+                            children.push(child)
+                        });
+                        work.extend(children.into_iter().rev().map(ScopeWork::Visit));
+                    }
+                }
+            }
+        }
+    }
+    Err(WorkspaceError::StaleIdentity(Arc::from("node preorder")))
 }
 
 fn root_owner(
@@ -976,6 +1640,23 @@ fn expression_root(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))
 }
 
+fn subtree_defines_local(root: &Expr) -> bool {
+    let mut pending = vec![root];
+    while let Some(expression) = pending.pop() {
+        if matches!(
+            &expression.kind,
+            ExprKind::Let { bindings, .. } if !bindings.is_empty()
+        ) || matches!(
+            &expression.kind,
+            ExprKind::MutableLocal { .. } | ExprKind::MatchUnreachable { .. }
+        ) {
+            return true;
+        }
+        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+    }
+    false
+}
+
 fn replace_expression(
     program: &mut SemanticProgram,
     address: NodeAddress,
@@ -1006,15 +1687,149 @@ fn replace_expression(
     Ok(())
 }
 
+struct LoweredDraft {
+    expression: Expr,
+    entities: Vec<NewEntity>,
+}
+
+#[derive(Clone)]
+struct ResolvedDraftBinding {
+    binding: crate::hir::BindingId,
+    slot: usize,
+    place: crate::hir::PlaceId,
+    ty: Type,
+    static_bytes: bool,
+}
+
+struct LoweringState {
+    root_places: HashMap<EntityAddress, u64>,
+    next_loan: u64,
+}
+
+impl LoweringState {
+    fn new(program: &SemanticProgram) -> Result<Self, WorkspaceError> {
+        let mut next_loan = 0_u64;
+        let mut roots = Vec::new();
+        roots
+            .try_reserve(
+                program.functions.len().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("lowering root count overflow"))
+                })?,
+            )
+            .map_err(|_| WorkspaceError::Host(Arc::from("lowering root allocation failed")))?;
+        roots.extend(program.functions.iter().map(|function| &function.body));
+        if let Some(main) = &program.main {
+            roots.push(&main.body);
+        }
+        for root in roots {
+            let mut pending = vec![root];
+            while let Some(expression) = pending.pop() {
+                if let ExprKind::Borrow { loan, .. } | ExprKind::BorrowBytes { loan, .. } =
+                    &expression.kind
+                {
+                    next_loan = next_loan.max(loan.raw().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("loan identity exhausted"))
+                    })?);
+                }
+                crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+            }
+        }
+        Ok(Self {
+            root_places: HashMap::new(),
+            next_loan,
+        })
+    }
+
+    fn place(
+        &mut self,
+        program: &SemanticProgram,
+        root: EntityAddress,
+    ) -> Result<crate::hir::PlaceId, WorkspaceError> {
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.root_places.entry(root) {
+            let mut next = 0_u64;
+            let (parameters, expression) = if root == EntityAddress::Main {
+                let main = program
+                    .main
+                    .as_ref()
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?;
+                (&main.param_places, &main.body)
+            } else {
+                let EntityAddress::Binding(raw) = root else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("expression root")));
+                };
+                let function = program
+                    .functions
+                    .iter()
+                    .find(|function| function.binding.raw() == raw)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?;
+                (&function.param_places, &function.body)
+            };
+            for place in parameters {
+                next =
+                    next.max(place.raw().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("place identity exhausted"))
+                    })?);
+            }
+            let mut pending = vec![expression];
+            while let Some(expression) = pending.pop() {
+                match &expression.kind {
+                    ExprKind::Move { place, .. }
+                    | ExprKind::Borrow { place, .. }
+                    | ExprKind::BorrowBytes { place, .. }
+                    | ExprKind::MutableLocal { place, .. } => {
+                        next = next.max(place.raw().checked_add(1).ok_or_else(|| {
+                            WorkspaceError::Host(Arc::from("place identity exhausted"))
+                        })?);
+                    }
+                    ExprKind::Let { bindings, .. } => {
+                        for local in bindings {
+                            next = next.max(local.place.raw().checked_add(1).ok_or_else(|| {
+                                WorkspaceError::Host(Arc::from("place identity exhausted"))
+                            })?);
+                        }
+                    }
+                    _ => {}
+                }
+                crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+            }
+            slot.insert(next);
+        }
+        let next = self
+            .root_places
+            .get_mut(&root)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("place allocator")))?;
+        let place = crate::hir::PlaceId::new(*next);
+        *next = next
+            .checked_add(1)
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("place identity exhausted")))?;
+        Ok(place)
+    }
+
+    fn loan(&mut self) -> Result<crate::hir::LoanId, WorkspaceError> {
+        let loan = crate::hir::LoanId::new(self.next_loan);
+        self.next_loan = self
+            .next_loan
+            .checked_add(1)
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("loan identity exhausted")))?;
+        Ok(loan)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn lower_draft(
     snapshot: &WorkspaceSnapshot,
-    program: &SemanticProgram,
+    program: &mut SemanticProgram,
     draft: &ExpressionDraft,
     expected: &Type,
     origin: Origin,
     visible: &[EntityId],
-) -> Result<Expr, WorkspaceError> {
+    root: EntityAddress,
+    lowering: &mut LoweringState,
+) -> Result<LoweredDraft, WorkspaceError> {
     validate_draft_shape(draft)?;
+    let order = draft_postorder(draft)?;
+    let mut definition_events = draft_definition_events(draft)?;
+    validate_draft_binding_scopes(draft)?;
     let mut visible_set = HashSet::new();
     visible_set
         .try_reserve(visible.len())
@@ -1024,33 +1839,115 @@ fn lower_draft(
     completed
         .try_reserve(draft.nodes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("draft lowering allocation failed")))?;
+    completed.resize_with(draft.nodes.len(), || None);
+    let mut locals: HashMap<DraftBindingId, ResolvedDraftBinding> = HashMap::new();
+    locals
+        .try_reserve(definition_events.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft local allocation failed")))?;
+    let mut entities = Vec::new();
+    entities
+        .try_reserve(definition_events.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft local entity allocation failed")))?;
+    let mut next_slot = root_local_count(program, root)?;
 
-    for node in &draft.nodes {
+    for node_index in order {
+        let node = draft.nodes.get(node_index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("draft lowering order is stale"))
+        })?;
         let expression = match node {
             DraftNode::I64(value) => scalar(Type::I64, ExprKind::LitI64(*value), origin),
             DraftNode::F64(value) => scalar(Type::F64, ExprKind::LitF64(*value), origin),
             DraftNode::Bool(value) => scalar(Type::Bool, ExprKind::LitBool(*value), origin),
             DraftNode::Unit => scalar(Type::Unit, ExprKind::LitUnit, origin),
-            DraftNode::Load(entity) => {
-                snapshot.workspace_entity(*entity)?;
-                if !visible_set.contains(entity) {
-                    return Err(WorkspaceError::InvisibleEntity);
-                }
-                let (binding, slot, ty) = parameter_binding(snapshot, program, *entity)?;
-                if !crate::ownership::draft_parameter_load_is_supported(&ty) {
+            DraftNode::Bytes(value) => scalar(
+                Type::Bytes,
+                ExprKind::LitBytes(try_clone_values(value, "bytes literal")?),
+                origin,
+            ),
+            DraftNode::Load(reference) => {
+                let resolved = resolve_draft_binding(
+                    snapshot,
+                    program,
+                    root,
+                    *reference,
+                    &visible_set,
+                    &locals,
+                )?;
+                if !crate::ownership::draft_parameter_load_is_supported(&resolved.ty) {
                     return Err(WorkspaceError::unsupported(
                         "load",
-                        "owned and affine parameters require move construction, which is not implemented",
+                        "affine values cannot be copied; use an explicit move",
                     ));
                 }
                 Expr {
-                    ty,
+                    ty: resolved.ty,
                     effects: EffectSet::PURE,
                     origin,
                     kind: ExprKind::Load(BindingRef {
-                        binding,
-                        storage: BindingStorage::Local(slot),
+                        binding: resolved.binding,
+                        storage: BindingStorage::Local(resolved.slot),
                     }),
+                }
+            }
+            DraftNode::Move(reference) => {
+                let resolved = resolve_draft_binding(
+                    snapshot,
+                    program,
+                    root,
+                    *reference,
+                    &visible_set,
+                    &locals,
+                )?;
+                if !matches!(
+                    resolved.ty,
+                    Type::Bytes | Type::ByteVector | Type::Resource(_)
+                ) {
+                    return Err(WorkspaceError::unsupported(
+                        "move",
+                        "move requires affine bytes, byte-vector, or a typed resource",
+                    ));
+                }
+                Expr {
+                    ty: resolved.ty,
+                    effects: EffectSet::PURE,
+                    origin,
+                    kind: ExprKind::Move {
+                        place: resolved.place,
+                        binding: BindingRef {
+                            binding: resolved.binding,
+                            storage: BindingStorage::Local(resolved.slot),
+                        },
+                    },
+                }
+            }
+            DraftNode::BorrowShared(reference) => {
+                let resolved = resolve_draft_binding(
+                    snapshot,
+                    program,
+                    root,
+                    *reference,
+                    &visible_set,
+                    &locals,
+                )?;
+                if resolved.ty != Type::ByteVector {
+                    return Err(WorkspaceError::TypeMismatch {
+                        expected: Arc::from(Type::ByteVector.to_string()),
+                        actual: Arc::from(resolved.ty.to_string()),
+                    });
+                }
+                Expr {
+                    ty: Type::ByteSlice,
+                    effects: EffectSet::PURE,
+                    origin,
+                    kind: ExprKind::Borrow {
+                        place: resolved.place,
+                        loan: lowering.loan()?,
+                        kind: crate::hir::BorrowKind::Shared,
+                        binding: BindingRef {
+                            binding: resolved.binding,
+                            storage: BindingStorage::Local(resolved.slot),
+                        },
+                    },
                 }
             }
             DraftNode::Call { callee, arguments } => {
@@ -1090,6 +1987,45 @@ fn lower_draft(
                     },
                 }
             }
+            DraftNode::Operation {
+                operation,
+                arguments,
+            } => {
+                if !source_free_operation_supported(*operation) {
+                    return Err(WorkspaceError::unsupported(
+                        "operation",
+                        "this canonical operation is outside the selected source-free ownership surface",
+                    ));
+                }
+                let mut args = Vec::new();
+                let mut argument_types = Vec::new();
+                args.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("operation argument allocation failed"))
+                })?;
+                argument_types.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("operation type allocation failed"))
+                })?;
+                let mut effects = operation.effects();
+                for argument in arguments {
+                    let value = take_draft_child(&mut completed, *argument)?;
+                    argument_types.push(value.ty.clone());
+                    effects = effects.union(value.effects);
+                    args.push(value);
+                }
+                let (resolved_signature, ty) = operation
+                    .resolve_types(&argument_types)
+                    .map_err(|message| WorkspaceError::InvalidDraft(Arc::from(message)))?;
+                Expr {
+                    ty,
+                    effects,
+                    origin,
+                    kind: ExprKind::Operation {
+                        operation: *operation,
+                        resolved_signature,
+                        args,
+                    },
+                }
+            }
             DraftNode::If {
                 condition,
                 then_branch,
@@ -1119,17 +2055,772 @@ fn lower_draft(
                     },
                 }
             }
+            DraftNode::Let { bindings, body } => {
+                let mut definitions = Vec::new();
+                definitions.try_reserve(bindings.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("let definition allocation failed"))
+                })?;
+                let mut effects = EffectSet::PURE;
+                for binding in bindings {
+                    let value = take_draft_child(&mut completed, binding.value)?;
+                    let info = locals.get(&binding.binding).cloned().ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from(
+                            "draft local definition was not established by its initializer",
+                        ))
+                    })?;
+                    require_type(&value.ty, &info.ty)?;
+                    effects = effects.union(value.effects);
+                    definitions.push(crate::hir::LocalDefinition {
+                        binding: info.binding,
+                        place: info.place,
+                        static_bytes: info.static_bytes,
+                        slot: info.slot,
+                        value,
+                    });
+                }
+                let body = take_draft_child(&mut completed, *body)?;
+                effects = effects.union(body.effects);
+                let ty = body.ty.clone();
+                for binding in bindings {
+                    locals.remove(&binding.binding);
+                }
+                Expr {
+                    ty,
+                    effects,
+                    origin,
+                    kind: ExprKind::Let {
+                        bindings: definitions,
+                        body: Box::new(body),
+                    },
+                }
+            }
+            DraftNode::ProductValue { product, fields } => {
+                lower_product_value(snapshot, program, *product, fields, &mut completed, origin)?
+            }
+            DraftNode::ProductField { field, value } => {
+                lower_product_field(snapshot, program, *field, *value, &mut completed, origin)?
+            }
+            DraftNode::EnumValue { variant, fields } => {
+                lower_enum_value(snapshot, program, *variant, fields, &mut completed, origin)?
+            }
+            DraftNode::EnumIsVariant { variant, value } => {
+                lower_enum_is_variant(snapshot, program, *variant, *value, &mut completed, origin)?
+            }
         };
-        completed.push(Some(expression));
+        let slot = completed.get_mut(node_index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("draft lowering slot is stale"))
+        })?;
+        if slot.replace(expression).is_some() {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "draft node was lowered more than once",
+            )));
+        }
+
+        if let Some(events) = definition_events.remove(&node_index) {
+            for (binding, name) in events {
+                let initializer = completed
+                    .get(node_index)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from("local initializer is missing"))
+                    })?;
+                if initializer.ty == Type::Never {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "divergent expression cannot initialize a local",
+                    )));
+                }
+                let raw = u64::try_from(program.bindings.len())
+                    .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+                let hir_binding = crate::hir::BindingId::new(raw);
+                let static_bytes = matches!(initializer.kind, ExprKind::LitBytes(_))
+                    || matches!(
+                        initializer.kind,
+                        ExprKind::Load(reference)
+                            if program.binding(reference.binding).is_some_and(|item| item.kind == BindingKind::StaticBytesLocal)
+                    );
+                let info = ResolvedDraftBinding {
+                    binding: hir_binding,
+                    slot: next_slot,
+                    place: lowering.place(program, root)?,
+                    ty: initializer.ty.clone(),
+                    static_bytes,
+                };
+                next_slot = next_slot
+                    .checked_add(1)
+                    .ok_or_else(|| WorkspaceError::Host(Arc::from("local slot count overflow")))?;
+                program.bindings.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("local binding allocation failed"))
+                })?;
+                program.bindings.push(Binding {
+                    id: hir_binding,
+                    name: name.clone(),
+                    kind: if static_bytes {
+                        BindingKind::StaticBytesLocal
+                    } else {
+                        BindingKind::ImmutableLocal
+                    },
+                    ty: info.ty.clone(),
+                    origin,
+                });
+                if locals.insert(binding, info).is_some() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft binding handle is defined more than once",
+                    )));
+                }
+                entities.push(NewEntity {
+                    address: EntityAddress::Binding(raw),
+                    kind: if static_bytes {
+                        EntityKind::StaticBytesLocal
+                    } else {
+                        EntityKind::ImmutableLocal
+                    },
+                    name: Arc::from(name),
+                });
+            }
+        }
     }
-    let root = draft
+    if !definition_events.is_empty() || !locals.is_empty() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "draft binding scope did not close deterministically",
+        )));
+    }
+    let root_expression = draft
         .root
         .index()
         .and_then(|index| completed.get_mut(index))
         .and_then(Option::take)
         .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft root is unavailable")))?;
-    require_type(&root.ty, expected)?;
-    Ok(root)
+    require_type(&root_expression.ty, expected)?;
+    set_root_local_count(program, root, next_slot)?;
+    Ok(LoweredDraft {
+        expression: root_expression,
+        entities,
+    })
+}
+
+fn source_free_operation_supported(operation: crate::hir::Operation) -> bool {
+    matches!(
+        operation,
+        crate::hir::Operation::Add
+            | crate::hir::Operation::ByteVectorNew
+            | crate::hir::Operation::ByteSliceLength
+            | crate::hir::Operation::ByteSliceByteAt
+            | crate::hir::Operation::BytesLength
+            | crate::hir::Operation::ThawBytes
+    )
+}
+
+fn draft_definition_events(
+    draft: &ExpressionDraft,
+) -> Result<HashMap<usize, Vec<(DraftBindingId, String)>>, WorkspaceError> {
+    let mut events = HashMap::new();
+    let mut handles = HashSet::new();
+    for node in &draft.nodes {
+        let DraftNode::Let { bindings, .. } = node else {
+            continue;
+        };
+        let mut names = HashSet::new();
+        names
+            .try_reserve(bindings.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("let name allocation failed")))?;
+        for binding in bindings {
+            if !lkjscript_contracts::is_identifier(&binding.name) {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "local name must be a non-empty semantic identifier",
+                )));
+            }
+            if !names.insert(binding.name.as_str()) {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "local name is duplicated in one lexical scope",
+                )));
+            }
+            if !handles.insert(binding.binding) {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "draft binding handle is defined more than once",
+                )));
+            }
+            let initializer = binding.value.index().ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("local initializer exceeds host index"))
+            })?;
+            events
+                .entry(initializer)
+                .or_insert_with(Vec::new)
+                .push((binding.binding, binding.name.clone()));
+        }
+    }
+    Ok(events)
+}
+
+fn draft_postorder(draft: &ExpressionDraft) -> Result<Vec<usize>, WorkspaceError> {
+    enum Work {
+        Visit(DraftNodeId),
+        Finish(usize),
+    }
+
+    let mut work = Vec::new();
+    work.try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
+    work.push(Work::Visit(draft.root));
+    let mut order = Vec::new();
+    order
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
+    while let Some(item) = work.pop() {
+        match item {
+            Work::Finish(index) => order.push(index),
+            Work::Visit(id) => {
+                let index = id.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft node exceeds host index"))
+                })?;
+                let node = draft.nodes.get(index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft node identity is stale"))
+                })?;
+                let child_count = node
+                    .child_count()
+                    .ok_or_else(|| WorkspaceError::Host(Arc::from("draft child count overflow")))?;
+                let mut children = Vec::new();
+                children.try_reserve(child_count).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("draft child allocation failed"))
+                })?;
+                node.for_each_child(|child| children.push(child));
+                work.try_reserve(
+                    children.len().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("draft order work overflow"))
+                    })?,
+                )
+                .map_err(|_| {
+                    WorkspaceError::Host(Arc::from("draft order work allocation failed"))
+                })?;
+                work.push(Work::Finish(index));
+                work.extend(children.into_iter().rev().map(Work::Visit));
+            }
+        }
+    }
+    if order.len() == draft.nodes.len() {
+        Ok(order)
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(
+            "draft traversal did not cover every node",
+        )))
+    }
+}
+
+fn validate_draft_binding_scopes(draft: &ExpressionDraft) -> Result<(), WorkspaceError> {
+    enum ScopeWork {
+        Visit(DraftNodeId),
+        Add(DraftBindingId),
+        Remove(Vec<DraftBindingId>),
+    }
+
+    let mut work = vec![ScopeWork::Visit(draft.root)];
+    let mut active = HashSet::new();
+    while let Some(item) = work.pop() {
+        match item {
+            ScopeWork::Add(binding) => {
+                if !active.insert(binding) {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft binding handle has overlapping lexical scopes",
+                    )));
+                }
+            }
+            ScopeWork::Remove(bindings) => {
+                for binding in bindings {
+                    if !active.remove(&binding) {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "draft binding scope closed without an active definition",
+                        )));
+                    }
+                }
+            }
+            ScopeWork::Visit(id) => {
+                let index = id.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft node exceeds host index"))
+                })?;
+                let node = draft.nodes.get(index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft node identity is stale"))
+                })?;
+                match node {
+                    DraftNode::Load(DraftBindingRef::Local(binding))
+                    | DraftNode::Move(DraftBindingRef::Local(binding))
+                    | DraftNode::BorrowShared(DraftBindingRef::Local(binding)) => {
+                        if !active.contains(binding) {
+                            return Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+                                "draft binding handle {} is forward or out of lexical scope",
+                                binding.raw()
+                            ))));
+                        }
+                    }
+                    DraftNode::Let { bindings, body } => {
+                        let mut removed = Vec::new();
+                        removed.try_reserve(bindings.len()).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("draft scope allocation failed"))
+                        })?;
+                        removed.extend(bindings.iter().map(|binding| binding.binding));
+                        work.try_reserve(
+                            bindings
+                                .len()
+                                .checked_mul(2)
+                                .and_then(|count| count.checked_add(2))
+                                .ok_or_else(|| {
+                                    WorkspaceError::Host(Arc::from("draft scope work overflow"))
+                                })?,
+                        )
+                        .map_err(|_| {
+                            WorkspaceError::Host(Arc::from("draft scope work allocation failed"))
+                        })?;
+                        work.push(ScopeWork::Remove(removed));
+                        work.push(ScopeWork::Visit(*body));
+                        for binding in bindings.iter().rev() {
+                            work.push(ScopeWork::Add(binding.binding));
+                            work.push(ScopeWork::Visit(binding.value));
+                        }
+                    }
+                    _ => {
+                        let mut children = Vec::new();
+                        node.for_each_child(|child| children.push(child));
+                        work.try_reserve(children.len()).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("draft scope work allocation failed"))
+                        })?;
+                        work.extend(children.into_iter().rev().map(ScopeWork::Visit));
+                    }
+                }
+            }
+        }
+    }
+    if active.is_empty() {
+        Ok(())
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(
+            "draft binding scope did not close",
+        )))
+    }
+}
+
+fn root_local_count(
+    program: &SemanticProgram,
+    root: EntityAddress,
+) -> Result<usize, WorkspaceError> {
+    if root == EntityAddress::Main {
+        return program
+            .main
+            .as_ref()
+            .map(|main| main.local_count)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")));
+    }
+    let EntityAddress::Binding(raw) = root else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("expression root")));
+    };
+    program
+        .functions
+        .iter()
+        .find(|function| function.binding.raw() == raw)
+        .map(|function| function.local_count)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))
+}
+
+fn set_root_local_count(
+    program: &mut SemanticProgram,
+    root: EntityAddress,
+    local_count: usize,
+) -> Result<(), WorkspaceError> {
+    if root == EntityAddress::Main {
+        program
+            .main
+            .as_mut()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?
+            .local_count = local_count;
+        return Ok(());
+    }
+    let EntityAddress::Binding(raw) = root else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("expression root")));
+    };
+    program
+        .functions
+        .iter_mut()
+        .find(|function| function.binding.raw() == raw)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?
+        .local_count = local_count;
+    Ok(())
+}
+
+fn resolve_draft_binding(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    root: EntityAddress,
+    reference: DraftBindingRef,
+    visible: &HashSet<EntityId>,
+    locals: &HashMap<DraftBindingId, ResolvedDraftBinding>,
+) -> Result<ResolvedDraftBinding, WorkspaceError> {
+    match reference {
+        DraftBindingRef::Local(binding) => locals.get(&binding).cloned().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from(format!(
+                "draft binding handle {} is forward, malformed, or out of scope",
+                binding.raw()
+            )))
+        }),
+        DraftBindingRef::Entity(entity) => {
+            let header = snapshot.workspace_entity(entity)?;
+            if !visible.contains(&entity) {
+                return Err(WorkspaceError::InvisibleEntity);
+            }
+            if !matches!(
+                header.kind,
+                EntityKind::Parameter | EntityKind::ImmutableLocal | EntityKind::StaticBytesLocal
+            ) {
+                return Err(wrong_kind(
+                    "binding reference",
+                    "parameter or immutable local",
+                    header.kind,
+                ));
+            }
+            let binding = binding_from_entity(snapshot, program, entity)?;
+            let (slot, place) = binding_location(program, root, binding)?;
+            let definition = program
+                .binding(binding)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("binding")))?;
+            Ok(ResolvedDraftBinding {
+                binding,
+                slot,
+                place,
+                ty: definition.ty.clone(),
+                static_bytes: definition.kind == BindingKind::StaticBytesLocal,
+            })
+        }
+    }
+}
+
+fn binding_location(
+    program: &SemanticProgram,
+    root: EntityAddress,
+    binding: crate::hir::BindingId,
+) -> Result<(usize, crate::hir::PlaceId), WorkspaceError> {
+    let (params, places, expression) = if root == EntityAddress::Main {
+        let main = program
+            .main
+            .as_ref()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?;
+        (&main.params, &main.param_places, &main.body)
+    } else {
+        let EntityAddress::Binding(raw) = root else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("expression root")));
+        };
+        let function = program
+            .functions
+            .iter()
+            .find(|function| function.binding.raw() == raw)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?;
+        (&function.params, &function.param_places, &function.body)
+    };
+    if let Some(index) = params.iter().position(|candidate| *candidate == binding) {
+        let place = places
+            .get(index)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter place")))?;
+        return Ok((index, place));
+    }
+    let mut pending = vec![expression];
+    while let Some(expression) = pending.pop() {
+        match &expression.kind {
+            ExprKind::Let { bindings, .. } => {
+                if let Some(local) = bindings.iter().find(|local| local.binding == binding) {
+                    return Ok((local.slot, local.place));
+                }
+            }
+            ExprKind::MutableLocal {
+                binding: candidate,
+                place,
+                slot,
+                ..
+            } if *candidate == binding => return Ok((*slot, *place)),
+            _ => {}
+        }
+        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+    }
+    Err(WorkspaceError::StaleIdentity(Arc::from("local binding")))
+}
+
+fn lower_product_value(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    product_entity: EntityId,
+    fields: &[DraftFieldValue],
+    completed: &mut [Option<Expr>],
+    origin: Origin,
+) -> Result<Expr, WorkspaceError> {
+    let product_header = snapshot.workspace_entity(product_entity)?;
+    if product_header.kind != EntityKind::Product {
+        return Err(wrong_kind(
+            "product value",
+            "product declaration",
+            product_header.kind,
+        ));
+    }
+    let EntityAddress::Product(product_raw) = entity_address(snapshot, product_entity)? else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("product")));
+    };
+    let definition = program
+        .products
+        .get(host_index(product_raw, "product")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+    if fields.len() != definition.fields.len() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "product value must provide exactly one value per field",
+        )));
+    }
+    let mut ordered = Vec::new();
+    ordered
+        .try_reserve(definition.fields.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product value allocation failed")))?;
+    ordered.resize_with(definition.fields.len(), || None);
+    for field in fields {
+        let header = snapshot.workspace_entity(field.field)?;
+        if header.kind != EntityKind::ProductField {
+            return Err(wrong_kind(
+                "product value field",
+                "product field",
+                header.kind,
+            ));
+        }
+        let EntityAddress::ProductField {
+            product,
+            field: field_raw,
+        } = entity_address(snapshot, field.field)?
+        else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("product field")));
+        };
+        if product != product_raw {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "product value field belongs to a different product",
+            )));
+        }
+        let index = host_index(field_raw, "product field")?;
+        let value = take_draft_child(completed, field.value)?;
+        let expected = definition
+            .fields
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+        require_type(&value.ty, &expected.ty)?;
+        let slot = ordered
+            .get_mut(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+        if slot.replace(value).is_some() {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "product value field is duplicated",
+            )));
+        }
+    }
+    let fields = ordered
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("product value field is missing")))?;
+    let effects = fields
+        .iter()
+        .fold(EffectSet::PURE, |set, field| set.union(field.effects));
+    Ok(Expr {
+        ty: Type::Product(definition.name.clone()),
+        effects,
+        origin,
+        kind: ExprKind::ProductValue {
+            product: definition.id,
+            fields,
+        },
+    })
+}
+
+fn lower_product_field(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    field_entity: EntityId,
+    value: DraftNodeId,
+    completed: &mut [Option<Expr>],
+    origin: Origin,
+) -> Result<Expr, WorkspaceError> {
+    let header = snapshot.workspace_entity(field_entity)?;
+    if header.kind != EntityKind::ProductField {
+        return Err(wrong_kind(
+            "product projection",
+            "product field",
+            header.kind,
+        ));
+    }
+    let EntityAddress::ProductField { product, field } = entity_address(snapshot, field_entity)?
+    else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("product field")));
+    };
+    let definition = program
+        .products
+        .get(host_index(product, "product")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+    let field_definition = definition
+        .fields
+        .get(host_index(field, "product field")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+    let value = take_draft_child(completed, value)?;
+    require_type(&value.ty, &Type::Product(definition.name.clone()))?;
+    Ok(Expr {
+        ty: field_definition.ty.clone(),
+        effects: value.effects,
+        origin,
+        kind: ExprKind::ProductField {
+            product: definition.id,
+            field,
+            value: Box::new(value),
+        },
+    })
+}
+
+fn lower_enum_value(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    variant_entity: EntityId,
+    fields: &[DraftFieldValue],
+    completed: &mut [Option<Expr>],
+    origin: Origin,
+) -> Result<Expr, WorkspaceError> {
+    let header = snapshot.workspace_entity(variant_entity)?;
+    if header.kind != EntityKind::EnumVariant {
+        return Err(wrong_kind("enum value", "enum variant", header.kind));
+    }
+    let EntityAddress::EnumVariant {
+        enumeration,
+        variant,
+    } = entity_address(snapshot, variant_entity)?
+    else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
+    };
+    let definition = program
+        .enums
+        .get(host_index(enumeration, "enum")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+    if !definition.type_parameters.is_empty() {
+        return Err(WorkspaceError::unsupported(
+            "enum value",
+            "generic enum authoring is not implemented",
+        ));
+    }
+    let selected = definition
+        .variants
+        .get(host_index(variant, "enum variant")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+    if fields.len() != selected.fields.len() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "enum value must provide exactly one value per variant field",
+        )));
+    }
+    let mut ordered = Vec::new();
+    ordered
+        .try_reserve(selected.fields.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum value allocation failed")))?;
+    ordered.resize_with(selected.fields.len(), || None);
+    for field in fields {
+        let field_header = snapshot.workspace_entity(field.field)?;
+        if field_header.kind != EntityKind::EnumField {
+            return Err(wrong_kind(
+                "enum value field",
+                "enum field",
+                field_header.kind,
+            ));
+        }
+        let EntityAddress::EnumField {
+            enumeration: field_enum,
+            variant: field_variant,
+            field: field_raw,
+        } = entity_address(snapshot, field.field)?
+        else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("enum field")));
+        };
+        if field_enum != enumeration || field_variant != variant {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "enum value field belongs to a different enum variant",
+            )));
+        }
+        let index = host_index(field_raw, "enum field")?;
+        let value = take_draft_child(completed, field.value)?;
+        let expected = selected
+            .fields
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+        require_type(&value.ty, &expected.ty)?;
+        let slot = ordered
+            .get_mut(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+        if slot.replace(value).is_some() {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "enum value field is duplicated",
+            )));
+        }
+    }
+    let fields = ordered
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("enum value field is missing")))?;
+    let effects = fields
+        .iter()
+        .fold(EffectSet::PURE, |set, field| set.union(field.effects));
+    Ok(Expr {
+        ty: Type::Enum {
+            id: definition.id,
+            name: definition.name.clone(),
+            arguments: Vec::new(),
+        },
+        effects,
+        origin,
+        kind: ExprKind::EnumValue {
+            enum_id: definition.id,
+            variant: selected.id,
+            layout: definition.layout.identity,
+            fields,
+        },
+    })
+}
+
+fn lower_enum_is_variant(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    variant_entity: EntityId,
+    value: DraftNodeId,
+    completed: &mut [Option<Expr>],
+    origin: Origin,
+) -> Result<Expr, WorkspaceError> {
+    let header = snapshot.workspace_entity(variant_entity)?;
+    if header.kind != EntityKind::EnumVariant {
+        return Err(wrong_kind("enum variant test", "enum variant", header.kind));
+    }
+    let EntityAddress::EnumVariant {
+        enumeration,
+        variant,
+    } = entity_address(snapshot, variant_entity)?
+    else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
+    };
+    let definition = program
+        .enums
+        .get(host_index(enumeration, "enum")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+    let selected = definition
+        .variants
+        .get(host_index(variant, "enum variant")?)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+    let value = take_draft_child(completed, value)?;
+    require_type(
+        &value.ty,
+        &Type::Enum {
+            id: definition.id,
+            name: definition.name.clone(),
+            arguments: Vec::new(),
+        },
+    )?;
+    Ok(Expr {
+        ty: Type::Bool,
+        effects: value.effects,
+        origin,
+        kind: ExprKind::EnumIsVariant {
+            enum_id: definition.id,
+            variant: selected.id,
+            layout: definition.layout.identity,
+            value: Box::new(value),
+        },
+    })
 }
 
 fn scalar(ty: Type, kind: ExprKind, origin: Origin) -> Expr {
@@ -1150,28 +2841,20 @@ fn validate_draft_shape(draft: &ExpressionDraft) -> Result<(), WorkspaceError> {
     let root = draft
         .root
         .index()
-        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft root exceeds host index")))?;
-    if root != draft.nodes.len() - 1 {
-        return Err(WorkspaceError::InvalidDraft(Arc::from(
-            "draft root must be the final dense node",
-        )));
-    }
+        .filter(|index| *index < draft.nodes.len())
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft root is stale")))?;
     let mut parents = Vec::new();
     parents
         .try_reserve(draft.nodes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("draft shape allocation failed")))?;
     parents.resize(draft.nodes.len(), 0_u64);
-    for (index, node) in draft.nodes.iter().enumerate() {
+    for node in &draft.nodes {
         let mut failure = None;
         node.for_each_child(|child| {
-            let Some(child_index) = child.index() else {
-                failure = Some("draft child exceeds host index");
+            let Some(child_index) = child.index().filter(|index| *index < draft.nodes.len()) else {
+                failure = Some("draft child is stale");
                 return;
             };
-            if child_index >= index {
-                failure = Some("draft is cyclic or not in child-before-parent order");
-                return;
-            }
             let Some(count) = parents[child_index].checked_add(1) else {
                 failure = Some("draft parent count overflow");
                 return;
@@ -1182,9 +2865,52 @@ fn validate_draft_shape(draft: &ExpressionDraft) -> Result<(), WorkspaceError> {
             return Err(WorkspaceError::InvalidDraft(Arc::from(message)));
         }
     }
-    if parents[root] != 0 || parents[..root].iter().any(|count| *count != 1) {
+    if parents[root] != 0
+        || parents
+            .iter()
+            .enumerate()
+            .any(|(index, count)| index != root && *count != 1)
+    {
         return Err(WorkspaceError::InvalidDraft(Arc::from(
-            "draft must be a dense, fully reachable expression tree",
+            "draft must be a connected expression tree with no reused child",
+        )));
+    }
+
+    let mut reached = Vec::new();
+    reached
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft reachability allocation failed")))?;
+    reached.resize(draft.nodes.len(), false);
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft reachability allocation failed")))?;
+    pending.push(draft.root);
+    let mut reached_count = 0_usize;
+    while let Some(node) = pending.pop() {
+        let index = node.index().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("draft traversal identity is stale"))
+        })?;
+        let visited = reached.get_mut(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("draft traversal identity is stale"))
+        })?;
+        if *visited {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "draft contains a cycle or reused child",
+            )));
+        }
+        *visited = true;
+        reached_count = reached_count
+            .checked_add(1)
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("draft reachability overflow")))?;
+        let current = draft.nodes.get(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("draft traversal identity is stale"))
+        })?;
+        current.for_each_child(|child| pending.push(child));
+    }
+    if reached_count != draft.nodes.len() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "draft contains nodes disconnected from its root",
         )));
     }
     Ok(())
@@ -1198,58 +2924,6 @@ fn take_draft_child(
         .and_then(|index| completed.get_mut(index))
         .and_then(Option::take)
         .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft child is stale or reused")))
-}
-
-fn parameter_binding(
-    snapshot: &WorkspaceSnapshot,
-    program: &SemanticProgram,
-    entity: EntityId,
-) -> Result<(crate::hir::BindingId, usize, Type), WorkspaceError> {
-    let header = snapshot.workspace_entity(entity)?;
-    if header.kind != EntityKind::Parameter {
-        return Err(WorkspaceError::unsupported(
-            "load",
-            "initial draft loads support visible parameters; local storage edits are not implemented",
-        ));
-    }
-    let binding = binding_from_entity(snapshot, program, entity)?;
-    let owner = header
-        .owner
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?;
-    let owner_address = snapshot
-        .indexes
-        .entity_lookup
-        .get(&owner)
-        .and_then(|index| snapshot.indexes.entity_addresses.get(*index))
-        .copied()
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?;
-    let parameters = if owner_address == EntityAddress::Main {
-        &program
-            .main
-            .as_ref()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?
-            .params
-    } else {
-        let EntityAddress::Binding(raw) = owner_address else {
-            return Err(WorkspaceError::StaleIdentity(Arc::from("parameter owner")));
-        };
-        &program
-            .functions
-            .iter()
-            .find(|function| function.binding.raw() == raw)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?
-            .params
-    };
-    let slot = parameters
-        .iter()
-        .position(|candidate| *candidate == binding)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter")))?;
-    let ty = program
-        .binding(binding)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter")))?
-        .ty
-        .clone();
-    Ok((binding, slot, ty))
 }
 
 fn callable_binding(
@@ -1281,6 +2955,51 @@ fn callable_binding(
         .map(|function| function.summary)
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
     Ok((binding, params.clone(), ret.as_ref().clone(), summary))
+}
+
+fn entity_address(
+    snapshot: &WorkspaceSnapshot,
+    entity: EntityId,
+) -> Result<EntityAddress, WorkspaceError> {
+    snapshot.workspace_entity(entity)?;
+    snapshot
+        .indexes
+        .entity_lookup
+        .get(&entity)
+        .and_then(|index| snapshot.indexes.entity_addresses.get(*index))
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))
+}
+
+fn host_index(raw: u64, subject: &str) -> Result<usize, WorkspaceError> {
+    usize::try_from(raw).map_err(|_| WorkspaceError::StaleIdentity(Arc::from(subject.to_owned())))
+}
+
+fn wrong_kind(operation: &str, expected: &str, actual: EntityKind) -> WorkspaceError {
+    WorkspaceError::WrongEntityKind {
+        operation: Arc::from(operation),
+        expected: Arc::from(expected),
+        actual: Arc::from(entity_kind_name(actual)),
+    }
+}
+
+fn entity_kind_name(kind: EntityKind) -> &'static str {
+    match kind {
+        EntityKind::Main => "main",
+        EntityKind::Parameter => "parameter",
+        EntityKind::ImmutableLocal => "immutable local",
+        EntityKind::StaticBytesLocal => "static bytes local",
+        EntityKind::MutableLocal => "mutable local",
+        EntityKind::Function => "function",
+        EntityKind::BuiltinOperation => "builtin operation",
+        EntityKind::Product => "product",
+        EntityKind::ProductField => "product field",
+        EntityKind::Enum => "enum",
+        EntityKind::EnumVariant => "enum variant",
+        EntityKind::EnumField => "enum field",
+        EntityKind::Trait => "trait",
+        EntityKind::Implementation => "implementation",
+    }
 }
 
 fn binding_from_entity(
@@ -1321,6 +3040,7 @@ fn require_type(actual: &Type, expected: &Type) -> Result<(), WorkspaceError> {
 
 fn refresh_hole_addresses(
     holes: &mut [HoleRecord],
+    program: &SemanticProgram,
     indexes: &SnapshotIndexes,
 ) -> Result<(), WorkspaceError> {
     for hole in holes {
@@ -1337,7 +3057,9 @@ fn refresh_hole_addresses(
             .copied()
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole owner")))?;
         hole.state.context = hole.state.id.0;
-        hole.state.visible_entities = hole_visibility(indexes, hole.state.owner)?.into();
+        hole.state.visible_entities = visible_entities_in(program, indexes, hole.address)?.into();
+        hole.state.expected_semantic_type =
+            super::types::view(program, indexes, &hole.state.expected_type)?;
     }
     Ok(())
 }
@@ -1345,6 +3067,7 @@ fn refresh_hole_addresses(
 fn install_new_holes(
     holes: &mut Vec<HoleRecord>,
     pending: &[NewHole],
+    program: &SemanticProgram,
     indexes: &SnapshotIndexes,
 ) -> Result<(), WorkspaceError> {
     for hole in pending {
@@ -1362,7 +3085,7 @@ fn install_new_holes(
             .get(&hole.address.root)
             .copied()
             .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole owner is missing")))?;
-        let visible = hole_visibility(indexes, owner)?;
+        let visible = visible_entities_in(program, indexes, hole.address)?;
         let expected_type = indexes
             .node_expected_types
             .get(index)
@@ -1374,6 +3097,7 @@ fn install_new_holes(
             state: HoleState {
                 id: HoleId(node),
                 kind: hole.kind,
+                expected_semantic_type: super::types::view(program, indexes, &expected_type)?,
                 expected_type,
                 goal: Arc::clone(&hole.goal),
                 owner,
@@ -1386,25 +3110,6 @@ fn install_new_holes(
     }
     holes.sort_by_key(|hole| hole.state.id);
     Ok(())
-}
-
-fn hole_visibility(
-    indexes: &SnapshotIndexes,
-    owner: EntityId,
-) -> Result<Vec<EntityId>, WorkspaceError> {
-    let mut visible = Vec::new();
-    visible
-        .try_reserve(indexes.entities.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole visibility allocation failed")))?;
-    for entity in &indexes.entities {
-        if entity.kind == EntityKind::Function
-            || (entity.kind == EntityKind::Parameter && entity.owner == Some(owner))
-        {
-            visible.push(entity.id);
-        }
-    }
-    visible.sort();
-    Ok(visible)
 }
 
 fn apply_hole_diagnostics(

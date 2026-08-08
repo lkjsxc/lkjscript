@@ -29,6 +29,7 @@ pub use memory_plan::{
     HirMemoryPlan, MemoryDomain, MemoryValueCategory, MemoryValueFailureCleanup,
     MemoryValuePlacement, MemoryValueRepresentationId, MemoryValueRoute,
 };
+pub use operation::Operation;
 pub use pipeline::{
     compile_package_path, compile_package_path_with_metrics, compile_path,
     compile_path_with_metrics, compile_path_with_sources, compile_snapshot, compile_source,
@@ -37,13 +38,16 @@ pub use pipeline::{
 pub use types::Type;
 pub use workspace::{
     import_path, import_path_with_metrics, import_source, CallEdge, CompileSnapshotError,
-    CompletenessBlocker, Continuation, DependencyEdge, DiagnosticHeader, DiagnosticSeverity,
-    DraftNode, DraftNodeId, Edit, EntityHeader, EntityId, EntityKind, EntityPage, ExpressionDraft,
-    HoleId, HoleKind, HoleState, ImportMetrics, IncompleteSnapshotError, InvalidatedDomain,
-    LegalConstructor, NodeHeader, NodeId, NodeKind, NodeTypeFacts, PageRequest, ParameterDraft,
-    PresentationAttachments, ProgramState, ProjectionSlice, QueryPage, ReferenceEdge, RevisionId,
-    SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticOwner, SourceAttachment, Transaction,
-    TransactionOutcome, Workspace, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    CompletenessBlocker, ConstructorStatus, Continuation, DependencyEdge, DiagnosticHeader,
+    DiagnosticSeverity, DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId,
+    Edit, EntityHeader, EntityId, EntityKind, EntityPage, EntityTypeFacts, EnumFieldDraft,
+    EnumVariantDraft, ExpressionDraft, FunctionSignatureView, HoleId, HoleKind, HoleState,
+    ImportMetrics, IncompleteSnapshotError, InvalidatedDomain, LegalConstructor, LocalDraft,
+    NodeHeader, NodeId, NodeKind, NodeTypeFacts, PageRequest, ParameterDraft,
+    PresentationAttachments, ProductFieldDraft, ProgramState, ProjectionSlice, QueryPage,
+    ReferenceEdge, RevisionId, SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticOwner,
+    SemanticTypeRef, SemanticTypeView, SourceAttachment, Transaction, TransactionOutcome,
+    Workspace, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";

@@ -20,7 +20,7 @@ pub(in crate::analyze) fn is_control_name(name: &str) -> bool {
     matches!(name, "loop" | "return" | "break" | "continue" | "trap")
 }
 
-pub(in crate::analyze) fn is_contextual_name(name: &str) -> bool {
+pub(crate) fn is_contextual_name(name: &str) -> bool {
     matches!(
         name,
         "if" | "while"

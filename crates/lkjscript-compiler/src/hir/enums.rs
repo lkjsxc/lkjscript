@@ -4,7 +4,7 @@ use super::*;
 pub struct EnumDefinition {
     pub id: EnumId,
     pub name: String,
-    pub origin: Option<SourceId>,
+    pub origin: Origin,
     pub type_parameters: Vec<String>,
     pub variants: Vec<EnumVariant>,
     pub layout: EnumLayoutFacts,

@@ -93,7 +93,7 @@ pub(in crate::analyze) fn is_declaration_type_name(name: &str) -> bool {
     lkjscript_contracts::is_identifier(name) || crate::source::module_names::is_internal_name(name)
 }
 
-pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
+pub(crate) fn is_builtin_type_name(name: &str) -> bool {
     matches!(
         name,
         "never"

@@ -64,7 +64,7 @@ pub(super) fn product(id: u64, name: &str, fields: &[(&str, hir::Type)]) -> hir:
         id: hir::ProductId::new(id),
         identity,
         name: name.into(),
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         fields: fields
             .iter()
             .enumerate()
@@ -135,7 +135,7 @@ pub(super) fn enum_definition(
     hir::EnumDefinition {
         id: id_value,
         name: name.into(),
-        origin: Some(origin()),
+        origin: hir::Origin::Source(origin()),
         type_parameters: parameters.iter().map(|item| (*item).into()).collect(),
         variants,
         layout: hir::EnumLayoutFacts {
