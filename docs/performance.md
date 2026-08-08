@@ -105,6 +105,92 @@ implemented operations described in [`status.md`](status.md), the flow in
 [`architecture.md`](architecture.md), and the contract in
 [`spec/workspace.md`](spec/workspace.md) rather than reviving the deleted wire service.
 
+## Owned structural-value stack and work correction
+
+**Measured generated-boundary correction, not representative application performance.** The
+hypothesis was that the safe owned `SemanticValue` tree could not contain cycles, so
+`OwnedValue::from_structural` spent quadratic work scanning every active ancestor, while derived
+Debug/equality and recursive symbol rewriting still consumed native stack. Equivalent before/after
+semantics were one generated alternating product/enum chain whose base product contains unit, Bool,
+I64, F64-bits, string, path, bytes, byte-vector, and static-symbol leaves. Focused correctness tests
+check exact node/field/byte metrics and leaf contents; timing samples use the same generator and one
+named operation. No depth or work limit was added.
+
+The retained fixture is
+[`owned_structural_depth.rs`](../crates/lkjscript-core/tests/owned_structural_depth.rs). Internal
+phase timing excludes fixture construction and result destruction except for the named construction
+and destruction phases. Each sample used a locked release profile, shared Cargo caches/artifacts, a
+fresh test process, and a 128 KiB worker stack. The first invocation in a matrix could compile the
+test binary, but compilation occurs before the internal phase clock. Five validation samples and
+three samples for each other phase were collected at depths 1,024, 2,048, 4,096, 8,192, and 20,000.
+Nearest-rank p95 is the maximum and
+is orientation only. Reproduce a sample with:
+
+```sh
+LKJSCRIPT_STRUCTURAL_DEPTH=20000 \
+LKJSCRIPT_STRUCTURAL_OPERATION=validation \
+cargo test --locked --release -p lkjscript-core --test owned_structural_depth \
+  owned_structural_scale_sample -- --ignored --exact --nocapture --test-threads=1
+```
+
+The before samples used detached product code at `f7707560fd036924555d945010d35aeea365b327`
+plus the same validation operation copied from the then-untracked sampler. The after tracked Rust
+diff against that commit had SHA-256
+`a1289ca27a6c11aa56c9380678c28025e21b885c1ce3b0c5289b9c6259f16405`; the retained core sampler
+and VM fixture had SHA-256 values
+`7cbbf36946488049811d5620fd99597c2234d32bb718871ff36b222ed7335c38` and
+`f0280247bcf9912c3392aa3c7958595a215f9539a7189c5c8062b3afd485b883`. Documentation and the
+user-supplied `AGENTS.md` replacement are excluded from those values. Raw output remains ignored
+under `target/structural-scale/`. Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen
+9 9955HX, 20 available logical CPUs, 32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo
+1.96.0.
+
+| Depth | Validation before median (p95), us | Validation after median (p95), us |
+| ---: | ---: | ---: |
+| 1,024 | 148.509 (245.261) | 4.829 (5.400) |
+| 2,048 | 905.272 (981.475) | 7.444 (8.636) |
+| 4,096 | 2,667.966 (2,812.047) | 13.736 (14.207) |
+| 8,192 | 8,518.837 (10,017.445) | 24.877 (34.575) |
+| 20,000 | 44,921.690 (49,781.487) | 56.817 (62.237) |
+
+For 19.53x depth, the before median grows 302.48x and the after median 11.77x. At depth 20,000 the
+median falls 790.64x. More importantly, the retained structural assertion is exact: depth 20,000
+has 20,010 nodes, 20,009 fields, 25 aggregate leaf bytes, and 40,044 units of validation work;
+node, field, and byte charges are each visited once. That structural result, not microsecond timing,
+is the linear-work correctness evidence.
+
+Post-correction endpoint medians show the other retained tree operations have the expected bounded
+or near-linear shape. Validation uses five samples; the other rows use three.
+
+| Operation | Depth 1,024 median, us | Depth 20,000 median, us | Growth |
+| --- | ---: | ---: | ---: |
+| iterative construction | 27.832 | 752.775 | 27.05x |
+| owned validation/conversion | 4.829 | 56.817 | 11.77x |
+| runtime image publish/export | 99.537 | 1,855.219 | 18.64x |
+| clone | 50.685 | 896.556 | 17.69x |
+| fallible equality | 3.207 | 67.908 | 21.17x |
+| trait equality | 3.667 | 69.320 | 18.90x |
+| symbol canonicalization | 7.905 | 97.583 | 12.34x |
+| destruction | 14.307 | 257.835 | 18.02x |
+| bounded Debug | 2.074 | 2.384 | 1.15x |
+
+Before the correction, Debug completed at depth 128 with 25,187 output bytes but overflowed the 128
+KiB stack at depth 256; trait equality completed at 2,048 and overflowed at 4,096; symbol rewriting
+completed at 1,024 and overflowed at 2,048. Afterward every sampled operation completed at depth
+20,000 on the same stack, and Debug emitted 174 bytes at every measured depth. A separate generated
+VM fixture returns a 20,000-level alternating result; baseline native reports a typed recursive
+call-graph stack decline before entry, and the VM constructs, exports, clones, compares, and destroys
+the result once.
+
+The correction removes the impossible tree ancestry/cycle state, gives semantic payload/value/
+children bounded Debug and one shared iterative equality algorithm, makes symbol rewriting
+iterative, and makes the SSA/VM result oracle compare full owned values rather than bounded Debug
+text. Keep it while `SemanticValue` remains an exclusively owned safe tree. If a future unsafe,
+serialized, shared, or graph producer is introduced, validate cycles at that real boundary or use
+`SemanticDagSnapshot`; do not restore a depth-linear ancestry scan inside the owned tree. Reverse
+trait or traversal changes for an equality, allocation-failure, cleanup, or malformed-value
+semantic regression, not for compatibility with recursive debug output.
+
 ## Borrow-call validation and generic-preparation correction
 
 **Measured product-path correction, not a universal performance promise.** The hypothesis was that

@@ -138,3 +138,18 @@ include!("owned_value/views_static.rs");
 include!("owned_value/symbols.rs");
 include!("owned_value/symbol_rewrite.rs");
 include!("owned_value/debug.rs");
+
+#[cfg(test)]
+mod structural_validation_tests {
+    use super::*;
+
+    #[test]
+    fn structural_snapshot_accounting_overflow_is_rejected() {
+        assert!(checked_add(u64::MAX, 1).is_err());
+        let mut metrics = StructuralSnapshotMetrics {
+            aggregate_bytes: u64::MAX,
+            ..StructuralSnapshotMetrics::default()
+        };
+        assert!(charge_bytes(&mut metrics, 1, ByteClass::Other).is_err());
+    }
+}

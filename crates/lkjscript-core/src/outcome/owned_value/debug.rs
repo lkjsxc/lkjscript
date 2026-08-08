@@ -22,7 +22,7 @@ impl fmt::Debug for OwnedValue {
             return value.fmt(formatter);
         }
         if let Some(value) = self.as_str() {
-            return value.fmt(formatter);
+            return write!(formatter, "#<owned-string-or-symbol:{}>", value.len());
         }
         if let Some(value) = self.as_path_bytes() {
             return write!(formatter, "#<owned-path:{}>", value.len());

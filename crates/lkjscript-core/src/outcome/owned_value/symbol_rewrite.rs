@@ -1,18 +1,27 @@
-fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u64>]) -> Result<()> {
-    match &mut value.payload {
-        SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
-            *symbol = canonical_symbol(*symbol, mapping)?;
-        }
-        SemanticPayload::Product(fields)
-        | SemanticPayload::Enum {
-            active_payload: fields,
-            ..
-        } => {
-            for field in fields {
-                rewrite_structural_symbols(field, mapping)?;
+fn rewrite_structural_symbols(
+    value: &mut SemanticValue,
+    mapping: &[Option<u64>],
+    node_count: u64,
+) -> Result<()> {
+    let capacity = usize::try_from(node_count)
+        .map_err(|_| Error::msg("owned structural symbol count exceeds platform"))?;
+    let mut pending = Vec::new();
+    pending
+        .try_reserve_exact(capacity)
+        .map_err(|_| Error::msg("owned structural symbol rewrite allocation failed"))?;
+    pending.push(value);
+    while let Some(value) = pending.pop() {
+        match &mut value.payload {
+            SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
+                *symbol = canonical_symbol(*symbol, mapping)?;
             }
+            SemanticPayload::Product(fields)
+            | SemanticPayload::Enum {
+                active_payload: fields,
+                ..
+            } => pending.extend(fields.iter_mut().rev()),
+            _ => {}
         }
-        _ => {}
     }
     Ok(())
 }

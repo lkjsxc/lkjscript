@@ -99,9 +99,19 @@ Source positions and spans, semantic workspace entity/node IDs, HIR and SSA iden
 operands and links, structural metadata, and runtime structural identities use wide representations
 where they carry user-scale data, with checked conversion before host indexing. Parser/source-tree,
 package, type/match, CFG, structural graph, and tested deep-destruction paths use explicit work
-stacks or equivalent stack-safe designs. A few compiler-recursive paths remain localized behind
-[`stack.rs`](../crates/lkjscript-compiler/src/stack.rs); its heap-backed segment geometry is private
-tuning, not a language-depth limit.
+stacks or equivalent stack-safe designs. The owned `SemanticValue` product/enum tree uses iterative
+clone, destruction, fallible and trait equality, symbol rewriting, image conversion, and outcome
+validation. Its Debug implementations report bounded root kind/type/field or byte-count summaries;
+they do not expand descendants or complete leaf bytes. Safe ownership makes cycles unrepresentable,
+so owned-outcome validation performs one checked node/field/byte traversal rather than scanning an
+ancestry list. The separate `SemanticDagSnapshot` remains a validated graph boundary.
+
+Ordinary 2,048-level and ignored 20,000-level tests run the complete owned tree boundary on a 128
+KiB native stack. A generated VM program also constructs, returns, clones, compares, and destroys a
+20,000-level alternating enum/product result; baseline native declines its recursive call graph
+before entry and the unchanged program executes once in the VM. A few compiler-recursive paths
+remain localized behind [`stack.rs`](../crates/lkjscript-compiler/src/stack.rs); its heap-backed
+segment geometry is private tuning, not a language-depth limit.
 
 Committed generated tests cross former boundaries, including 20,000 nested source expressions,
 10,000-block CFG verification, 44,000 owned SSA parameters/places, 300-field products and enums,
@@ -203,9 +213,10 @@ consumer.
   names, ambiguities, conflicts, and recovery states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- Recursive transaction and runtime structural-value paths do not all have deep-stack evidence.
-  The measured borrow-call ownership, lowering, frame-size, and VM cleanup-range path is repaired;
-  no broader compiler or runtime throughput claim follows from that generated fixture.
+- The selected owned runtime structural-value boundary now has 20,000-level small-stack evidence
+  and linear-work validation. Remaining stack-safety work is in compiler/workspace paths not covered
+  by the existing deep transaction fixture; no whole-compiler or general runtime-throughput claim
+  follows from either generated workload.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

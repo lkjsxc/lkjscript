@@ -1,40 +1,16 @@
-enum Task<'a> {
-    Visit(&'a SemanticValue),
-    Exit(*const SemanticValue),
-}
-
+// `SemanticValue` is an owned tree: aggregate edges are values inside private `Vec` storage.
+// Safe Rust cannot point an edge at an ancestor, and no unsafe constructor or aliasing owner exists
+// in this module. Graph cycle checks belong to `SemanticDagSnapshot`, not this tree boundary.
 pub(super) fn validate_structural_snapshot(
     value: &SemanticValue,
 ) -> Result<StructuralSnapshotMetrics> {
     let mut tasks = Vec::new();
-    let mut active = Vec::new();
     tasks
         .try_reserve(1)
         .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
-    tasks.push(Task::Visit(value));
+    tasks.push(value);
     let mut metrics = StructuralSnapshotMetrics::default();
-    while let Some(task) = tasks.pop() {
-        let value = match task {
-            Task::Exit(address) => {
-                if active.pop() != Some(address) {
-                    return Err(Error::msg("structural snapshot traversal state is invalid"));
-                }
-                continue;
-            }
-            Task::Visit(value) => value,
-        };
-        let address = std::ptr::from_ref(value);
-        if active.contains(&address) {
-            return Err(Error::msg("cyclic structural snapshot"));
-        }
-        active
-            .try_reserve(1)
-            .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
-        active.push(address);
-        tasks
-            .try_reserve(1)
-            .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
-        tasks.push(Task::Exit(address));
+    while let Some(value) = tasks.pop() {
         metrics.nodes = metrics
             .nodes
             .checked_add(1)
@@ -78,7 +54,7 @@ pub(super) fn validate_structural_snapshot(
 }
 
 fn schedule_fields<'a>(
-    tasks: &mut Vec<Task<'a>>,
+    tasks: &mut Vec<&'a SemanticValue>,
     fields: &'a [SemanticValue],
     metrics: &mut StructuralSnapshotMetrics,
 ) -> Result<()> {
@@ -92,7 +68,7 @@ fn schedule_fields<'a>(
     tasks
         .try_reserve(fields.len())
         .map_err(|_| Error::msg("structural snapshot validation allocation failed"))?;
-    tasks.extend(fields.iter().rev().map(Task::Visit));
+    tasks.extend(fields.iter().rev());
     Ok(())
 }
 

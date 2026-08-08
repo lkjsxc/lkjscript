@@ -135,6 +135,22 @@ segmented lists, semantic DAGs, returned snapshots, and host resources stage all
 identity-map publication. Opaque handles resolve through runtime-owned wide maps rather than packed
 index arithmetic. Cleanup continues even when diagnostic retention is exhausted.
 
+A returned `SemanticValue` is a key-free owned tree, not a graph: aggregate edges move values into
+private vector storage and there is no shared owner, reference edge, or unsafe constructor through
+which a child can point to an ancestor. Clone and destruction use explicit work vectors. Fallible
+runtime equality and infallible Rust trait equality share one iterative comparison algorithm; the
+fallible route reports work allocation failure, while the trait follows ordinary Rust allocation
+behavior rather than turning failure into inequality. Symbol canonicalization pre-reserves from
+validated node metrics before iteratively rewriting leaves. Debug output is a bounded root summary.
+
+`OwnedValue::from_structural` validates kind/payload agreement, UTF-8 strings, paths, checked
+node/field/byte accounting, and work allocation before publishing the box. Because cycles are
+unrepresentable in this ownership tree, validation visits every node and field once and carries no
+ancestor set. `SemanticDagSnapshot` is a separate reverse-topological graph representation and keeps
+its graph-reference, reachability, and cycle validation. Runtime-local `StructuralImage` remains the
+flat typed owner/handle storage used by VM and native structural services; it is not another semantic
+authority.
+
 ## In-process compiler authority and snapshots
 
 Verified SSA and validated bytecode are retained directly in `ExecutableProgram` as typed in-process

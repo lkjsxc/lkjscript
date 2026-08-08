@@ -1,9 +1,34 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 use super::super::value_runtime::{SemanticPayload, SemanticValue, StructuralType};
 
-#[derive(Debug, Default, Eq, PartialEq)]
+/// Owned child edges for an acyclic semantic value tree.
+///
+/// Every edge moves a `SemanticValue` into private vector storage; this representation has no
+/// references, shared owners, or unsafe constructor through which a child could point to an
+/// ancestor. Graph-shaped semantic snapshots use the separate `SemanticDagSnapshot` type.
+#[derive(Default)]
 pub struct SemanticChildren(Vec<SemanticValue>);
+
+impl fmt::Debug for SemanticChildren {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SemanticChildren")
+            .field("field_count", &self.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for SemanticChildren {
+    fn eq(&self, other: &Self) -> bool {
+        SemanticValue::slices_equal(&self.0, &other.0)
+    }
+}
+
+impl Eq for SemanticChildren {}
 
 impl SemanticChildren {
     pub const fn new() -> Self {

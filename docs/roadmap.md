@@ -6,9 +6,10 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Complete stack-safety evidence for the selected local architecture.** Convert or otherwise
-   prove remaining recursive transaction and runtime structural-value paths under deep generated
-   tests. Keep concise workspace projection iterative and fallible as its semantic slices expand.
+1. **Close the next evidenced compiler/workspace deep-stack path.** Audit transaction and compiler
+   trait, diagnostic, failure, and cleanup routes not covered by the existing 20,000-level workspace
+   fixture; replace user-depth recursion or add focused proof before broadening the semantic surface.
+   Keep concise projection iterative and fallible as its slices expand.
 2. **Expand the implemented workspace vertical without adding another authority.** Add declaration
    and node create/delete/move, local-storage construction, generic calls, matches, and broader
    incomplete states on the retained identity/transaction/query/projection model.

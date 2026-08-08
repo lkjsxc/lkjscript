@@ -120,7 +120,11 @@ impl OwnedValue {
             rewrite_symbol(&mut node.tail, &mapping)?;
         }
         if let Some(structural) = self.structural.as_mut() {
-            rewrite_structural_symbols(&mut structural.value, &mapping)?;
+            rewrite_structural_symbols(
+                &mut structural.value,
+                &mapping,
+                structural.metrics.nodes,
+            )?;
         }
         if let Some(snapshot) = self.semantic_dag.as_mut() {
             for node in snapshot.nodes_mut() {
