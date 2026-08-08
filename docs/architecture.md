@@ -50,6 +50,24 @@ counts of live placed owners, non-parameter borrowed locals, and structural dest
 corresponding dense facts change. Full cleanup plans and place coverage are still checked at range
 starts against the exact pre-instruction state.
 
+HIR ownership uses one iterative per-function liveness plan. The plan assigns each expression a
+half-open traversal range and indexes direct lexical uses sparsely by binding; ownership checking
+queries only future uses in the current range and expires affected loans at semantic operations and
+joins. It does not materialize a suffix-use set per expression or recurse on user depth.
+
+SSA bytecode lowering gathers local type, storage class, and producer kind in one per-function map.
+Interference coloring and value emission share that derived map rather than independently scanning
+all blocks. The slot map remains authoritative for every emitted operand and cleanup action;
+`FunctionProto.locals` is its checked highest physical color plus one, not the number of SSA values.
+
+The validated VM treats sorted failure-cleanup ranges as an execution index. Unwind performs a
+binary half-open lookup. Each active frame stores one cursor for the common sequential path; it
+advances one adjacent range directly and falls back to binary lookup for forward skips, backedges,
+and other nonlocal movement. Entry, ordinary call, and tail-call frame construction initialize the
+cursor. Pre-instruction policy failure includes the unentered call plan, failed call setup cleans
+moved arguments in reverse order, and post-instruction policy failure uses the exact next boundary.
+Tail-call capacity is reserved before caller cleanup or stack truncation.
+
 Trusted compilation has no compiler profile, cross-phase budget ledger, source-shape quota, HIR
 memory count quota, or SSA work quota. Checked timings and work totals are observation. User-scale
 source, HIR, SSA, bytecode, structural, and runtime identities are generally wide integers or opaque

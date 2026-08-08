@@ -102,12 +102,28 @@ Committed generated tests cross former boundaries, including 20,000 nested sourc
 1,024 parameters/arguments/locals, table index 65,536, and runtime structural collections above
 65,535. Some largest production geometries remain ignored release stress tests.
 
+Borrow ownership builds one iterative liveness plan over complete HIR child traversal. Half-open
+expression ranges and sparse per-binding direct-use indexes replace suffix reconstruction; targeted
+loan expiration preserves call argument pinning, branches, loops, and mutable-local continuation
+without scanning every live reference at every expression.
+
+Bytecode local allocation classifies each SSA value's type, storage, and producer once. Coloring and
+emission consume that same per-function metadata, and emitted frame size is checked highest physical
+slot plus one rather than SSA value count. Straight-line borrow-call temporaries therefore reuse
+three physical locals at every retained matrix size.
+
 Bytecode control-flow validation stores abstract state only at basic-block entries, mutates one
 working state through each straight-line block, and merges only at block edges. Failure-cleanup
 ranges use a block-local sorted-range cursor, while an incrementally maintained summary makes
-cleanup-required checks constant-time between plan-validation boundaries. The retained 16,385-call
-fixture now completes in release mode on the measured host without a validity quota; compact results
-and protocol are recorded in [`performance.md`](performance.md).
+cleanup-required checks constant-time between plan-validation boundaries. VM execution uses binary
+lookup for unwind and nonlocal cleanup-range movement plus one advancing cursor per active frame for
+sequential boundaries. Failed call entry cleans moved arguments in reverse order, and post-step
+policy failure unwinds the exact next boundary before ordinary frame cleanup.
+
+The retained 16,385-call fixture completes in release mode on the measured host without a validity
+quota. Final medians are 7.303 ms HIR ownership analysis, 7.924 ms bytecode lowering, 6.612 ms VM
+execution, and 290.426 ms total compile time; compact protocol, tails, RSS, and exact-stress evidence
+are recorded in [`performance.md`](performance.md).
 
 ## Retained validation and host boundaries
 
@@ -182,8 +198,8 @@ consumer.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
 - Recursive transaction and runtime structural-value paths do not all have deep-stack evidence.
-  The repaired borrow-call fixture now exposes HIR analysis, bytecode lowering, and VM execution as
-  the next superlinear scale costs rather than validator-state retention or generic preparation.
+  The measured borrow-call ownership, lowering, frame-size, and VM cleanup-range path is repaired;
+  no broader compiler or runtime throughput claim follows from that generated fixture.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

@@ -131,10 +131,10 @@ meta/scripts/compiler-scale.py --label final-complete \
 Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 online logical CPUs,
 32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The before samples used product
 code at `54f63fb4cc5164ba5d22579a027c69faa874e86b`; the dirty tree contained the replacement
-`AGENTS.md` and measurement harness but no validator or compiler-path change. The original baseline harness recorded only HEAD and a dirty Boolean, so its exact dirty tree relies
-on this operator attestation. Final samples used the completed compiler tree with combined worktree
-SHA-256 `d086cb27d141a0c0349b17b05d47a02a6cd0b640d11882d9b64c40476b4e121a`;
-the harness records tracked-diff and untracked-file hashes. Raw JSON remains under
+`AGENTS.md` and measurement harness but no validator or compiler-path change. The original baseline
+harness recorded only HEAD and a dirty Boolean, so its exact dirty tree relies on this operator
+attestation. First-correction samples used the completed compiler tree with combined worktree
+SHA-256 `d086cb27d141a0c0349b17b05d47a02a6cd0b640d11882d9b64c40476b4e121a`; the harness records tracked-diff and untracked-file hashes. Raw JSON remains under
 `target/compiler-scale/` and is not committed.
 
 | Calls | Bytecode validation before | Bytecode validation after | Generic preparation before | Package-validation timer after | Compile total before | Compile total after | Peak RSS before | Peak RSS after |
@@ -152,9 +152,9 @@ memory pressure. The producer/consumer audit nevertheless found its work wholly 
 deleting it and the rest of the in-process prepared identity reduced post-validator compile medians
 by 10.2-15.9% at the three shared sizes.
 
-Final phase medians show the remaining shape; `SSA` is the sum of the separate construction,
-verification, and normalization medians. These temporary paths are development fixtures, so their
-0.00014-0.00017 ms
+First-correction phase medians showed the remaining shape; `SSA` is the sum of the separate
+construction, verification, and normalization medians. These temporary paths are development
+fixtures, so their 0.00014-0.00017 ms
 package-validation timer is the no-op development branch, not a locked-package validation
 measurement.
 
@@ -166,9 +166,9 @@ measurement.
 | 8,192 | 479.293 ms | 77.088 ms | 15.570 ms | 56.208 ms | 2.189 ms | 106.038 ms | 777.840 ms | 89.2 MiB |
 | 16,385 | 1,876.925 ms | 172.229 ms | 31.305 ms | 233.240 ms | 4.100 ms | 573.811 ms | 2,967.116 ms | 148.5 MiB |
 
-The exact named 16,385-call stress test was retained in the final JSON and returned `42`; its sample
-reported 2.457 s compile, 4.805 ms bytecode validation, 554.856 ms VM execution, 3.021 s body time,
-3.062 s process wall time, and 153.7 MiB approximate peak RSS. The separate three-sample
+The exact named 16,385-call stress test was retained in that first-correction JSON and returned
+`42`; its sample reported 2.457 s compile, 4.805 ms bytecode validation, 554.856 ms VM execution,
+3.021 s body time, 3.062 s process wall time, and 153.7 MiB approximate peak RSS. The separate three-sample
 parameterized row above uses the same generator and compile/run helper. The old recorded 333.24 s /
 30.4 GiB result is historical and was not copied forward as a new sample.
 
@@ -180,10 +180,76 @@ change if malformed-bytecode or fixed-point semantics fail, not for compatibilit
 state layout. Reintroduce a target-specific artifact identity only at a real cache, transfer,
 persistence, or executable-artifact boundary that consumes the artifact.
 
-The remaining doubling trend is superlinear in HIR analysis, bytecode lowering, and VM execution;
-HIR analysis now dominates compile time at 16,385 calls. The VM also still linearly searches all
-failure-cleanup ranges around each instruction step, an evident candidate for its measured trend.
-Those paths, not another validity limit or language expansion, are the next scale investigation.
+## Remaining borrow-call scale correction
+
+**Measured completion of the same product-path investigation, not a general compiler-throughput
+promise.** The follow-up hypothesis was that borrow ownership repeatedly reconstructed suffix uses,
+bytecode local classification and emission repeatedly scanned complete SSA functions, VM boundary
+checks searched every cleanup range, and bytecode frame size incorrectly used SSA value count rather
+than allocated physical slots. The workload and semantics are unchanged: one string owner, repeated
+borrowed calls, validated bytecode, unrestricted VM execution, and result `42`. No validity quota,
+general cache, parallel path, or alternate IR was added.
+
+The retained commands were:
+
+```sh
+meta/scripts/compiler-scale.py --label before-remaining-scale-correction \
+  --sizes 1024,2048,4096,8192,16385 --samples 3 --exact-stress
+meta/scripts/compiler-scale.py --label final-remaining-scale-correction \
+  --sizes 1024,2048,4096,8192,16385 --samples 5 --exact-stress
+```
+
+Both matrices used locked release builds, warm Cargo dependencies/artifacts, a fresh test process
+per sample, and the same 10 ms approximate process-tree RSS polling described above. Environment:
+`devbox`, Linux x86-64, AMD Ryzen 9 9955HX, 20 online logical CPUs, 32 GiB RAM,
+`rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. Nearest-rank p95 is the maximum for both
+three and five samples and remains orientation rather than a stable production tail estimate.
+
+The before matrix used `0705fdf8d233e0be3f8eb0370c9d4d9454ba2038` with combined worktree
+SHA-256 `965b4fbe611827283c21ea8ff4a4aed6c0ed0685985e647d7e9bf3a653502695`.
+The final matrix used clean commit `81222f140de5bdfde71cccd01478010466a0c330` with combined
+worktree SHA-256 `c23b4cecce65071a7b65351f30bb2811308af598a2695ea39f5a76c6850b2b5e`.
+Raw JSON remains ignored at `target/compiler-scale/`; the final JSON SHA-256 is
+`d60a246e29f773d1dca9418aa2bf37d02412122b15a114fe8452e5f53711cb57`.
+
+| Calls | HIR analysis | Bytecode lowering | VM execution | Compile total | Test body | Peak RSS | Physical locals |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,024 | 0.578 ms (0.599) | 0.406 ms (0.411) | 0.450 ms (0.470) | 16.746 ms (17.373) | 17.558 ms (18.350) | 32.9 MiB (33.2) | 3 |
+| 2,048 | 1.061 ms (1.139) | 0.798 ms (0.942) | 0.842 ms (0.896) | 32.626 ms (34.274) | 35.505 ms (38.490) | 40.9 MiB (43.3) | 3 |
+| 4,096 | 1.870 ms (1.909) | 1.534 ms (1.559) | 1.642 ms (2.001) | 65.254 ms (68.105) | 68.966 ms (72.979) | 57.4 MiB (57.6) | 3 |
+| 8,192 | 3.666 ms (4.242) | 3.135 ms (3.504) | 3.225 ms (3.594) | 135.611 ms (135.998) | 141.457 ms (145.593) | 86.4 MiB (86.5) | 3 |
+| 16,385 | 7.303 ms (7.766) | 7.924 ms (8.034) | 6.612 ms (6.698) | 290.426 ms (299.238) | 303.119 ms (311.186) | 147.9 MiB (148.5) | 3 |
+
+For 16.001x as many calls, final HIR analysis grows 12.63x, bytecode lowering 19.49x, VM
+execution 14.70x, compile total 17.34x, and body time 17.26x. The corresponding before factors were
+209.95x, 194.02x, 201.67x, 89.15x, and 98.45x. At 16,385 calls, median HIR analysis fell from
+1,895.232 ms to 7.303 ms (259.5x), lowering from 227.915 ms to 7.924 ms (28.8x), VM execution from
+583.732 ms to 6.612 ms (88.3x), compile total from 2,392.294 ms to 290.426 ms (8.24x), and body time
+from 2,980.669 ms to 303.119 ms (9.83x). Approximate peak RSS is effectively unchanged at that
+geometry because retained compiler state, not the now three-slot VM frame, owns the sampled peak.
+Memory planning is now the largest measured compile phase: its final median grows from 9.104 ms at
+1,024 calls to 165.349 ms at 16,385 calls.
+
+A temporary three-sample A/B on the physical-slot checkout retained the per-frame cursor: binary
+lookup at every boundary had a 16,385-call VM median of 9.573 ms (p95 10.034 ms), while the cursor
+had a 6.102 ms median (p95 6.394 ms), 36.3% lower. The cursor advances one adjacent range in
+constant time and uses binary lookup for multi-range jumps and backedges; it adds one `usize` to an
+active frame. Raw labels are `after-physical-binary-only` and `after-physical-cursor-ab` under the
+same ignored directory.
+
+The exact named 16,385-call final stress returned `42` with 3 physical locals. It reported 6.993 ms
+HIR analysis, 8.827 ms bytecode lowering, 4.711 ms bytecode validation, 300.367 ms compile,
+7.960 ms VM execution, 312.321 ms body time, 360.757 ms process wall time, and 147.8 MiB approximate
+peak RSS.
+
+The correction is one iterative ownership-liveness plan with sparse direct-use indexes, one
+per-function local metadata pass shared by coloring and emission, checked `max(slot) + 1` physical
+frame sizing, binary unwind lookup, and one sequential per-frame cleanup-range cursor. Failed call
+entry and post-step policy regressions additionally preserve reverse argument cleanup, unentered
+plans, next-boundary state, and failure-atomic tail-frame reservation. Reverse these changes for a
+semantic or cleanup failure, or if representative equivalent workloads show their retained state
+cost outweighs the measured benefit; do not restore suffix reconstruction, whole-function local
+rescans, per-step range scans, or SSA-sized physical frames for compatibility.
 
 ## Retained generated-scale evidence
 
