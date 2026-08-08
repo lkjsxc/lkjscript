@@ -755,6 +755,13 @@ fn compile_and_run_borrow_call_scale(calls: usize) -> Result<(), Box<dyn std::er
     assert_eq!(value.as_i64(), Some(42));
 
     let main = program.bytecode().main();
+    if calls >= 16 {
+        assert!(
+            main.locals < calls,
+            "straight-line call temporaries must reuse physical frame slots: {} locals for {calls} calls",
+            main.locals,
+        );
+    }
     eprintln!(
         concat!(
             "LKJSCRIPT_BORROW_SCALE {{",

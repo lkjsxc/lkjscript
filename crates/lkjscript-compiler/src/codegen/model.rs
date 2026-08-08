@@ -16,7 +16,7 @@ pub(in crate::codegen) fn compile_function(
         .iter()
         .find(|block| block.id == function.entry)
         .ok_or_else(|| Error::msg("SSA function entry block is missing"))?;
-    let locals = slots.len();
+    let locals = physical_local_count(&slots)?;
     let arity = function.signature.parameters.len();
     let failure_index = FailureCodegenIndex::new(function)?;
     let (failure_cleanups, failure_cleanup_map) =
@@ -218,4 +218,39 @@ pub(in crate::codegen) fn compile_function(
     ))
 }
 
+fn physical_local_count(slots: &HashMap<ValueId, usize>) -> Result<usize> {
+    slots
+        .values()
+        .copied()
+        .max()
+        .map(|slot| {
+            slot.checked_add(1)
+                .ok_or_else(|| Error::host("bytecode local count overflow"))
+        })
+        .transpose()
+        .map(|count| count.unwrap_or(0))
+}
+
 include!("model/helpers.rs");
+
+#[cfg(test)]
+mod tests {
+    use super::physical_local_count;
+    use lkjscript_ir::ValueId;
+    use std::collections::HashMap;
+
+    #[test]
+    fn bytecode_frame_size_tracks_physical_colors_not_ssa_value_count() -> lkjscript_core::Result<()>
+    {
+        let slots = HashMap::from([
+            (ValueId::new(0), 0),
+            (ValueId::new(1), 1),
+            (ValueId::new(2), 0),
+            (ValueId::new(3), 2),
+            (ValueId::new(4), 1),
+        ]);
+        assert_eq!(physical_local_count(&slots)?, 3);
+        assert_eq!(physical_local_count(&HashMap::new())?, 0);
+        Ok(())
+    }
+}
