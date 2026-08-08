@@ -41,7 +41,7 @@ pub(super) fn direct_call_program(
     ];
     let function = hir::Function {
         binding: function_binding,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         params: vec![parameter],
         param_places: vec![hir::PlaceId::new(0)],
         bounds: Vec::new(),
@@ -90,7 +90,7 @@ pub(super) fn direct_call_program(
         match_plans: Vec::new(),
         functions: vec![function],
         main: hir::Main {
-            origin: origin(),
+            origin: hir::Origin::Source(origin()),
             params: Vec::new(),
             param_places: Vec::new(),
             param_types: Vec::new(),

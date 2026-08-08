@@ -1,7 +1,8 @@
 //! Syntax-independent immutable typed semantic workspace snapshots.
 //!
-//! Text is accepted only by the importer in this module. Once import has
-//! produced a snapshot, compiler phases consume the owned typed HIR directly.
+//! Text is accepted only by the importer in this module. Imported and
+//! programmatically constructed programs share one partial-capable semantic
+//! authority; complete revisions derive compiler HIR without source text.
 
 mod draft;
 mod error;
@@ -10,6 +11,7 @@ mod ids;
 mod importer;
 mod index;
 mod model;
+mod program;
 mod projection;
 mod query;
 mod transaction;
@@ -22,45 +24,37 @@ use lkjscript_core::{Error, Result};
 
 pub use draft::{DraftNode, DraftNodeId, ExpressionDraft};
 pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
+use identity::IdentityAllocator;
 pub use ids::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
 pub(crate) use importer::{import_package_path, import_package_path_with_metrics};
 pub use importer::{import_path, import_path_with_metrics, import_source};
 pub use model::{
-    CallEdge, ContainmentEdge, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, EntityHeader,
-    EntityKind, HoleId, HoleState, ImportMetrics, NodeHeader, NodeKind, PresentationAttachments,
-    ProgramState, ReferenceEdge, SemanticChild, SemanticOwner, SourceAttachment,
+    CallEdge, CompletenessBlocker, ContainmentEdge, DependencyEdge, DiagnosticHeader,
+    DiagnosticSeverity, EntityHeader, EntityKind, HoleId, HoleKind, HoleState, ImportMetrics,
+    NodeHeader, NodeKind, PresentationAttachments, ProgramState, ReferenceEdge, SemanticChild,
+    SemanticOwner, SourceAttachment,
 };
-use model::{HoleOverlay, SnapshotIndexes};
+use model::{HoleRecord, SnapshotIndexes};
+use program::SemanticProgram;
 pub use projection::ProjectionSlice;
 pub use query::{
     Continuation, EntityPage, LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
 };
 pub use transaction::{
-    Edit, InvalidatedDomain, SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome,
-    Workspace,
+    Edit, InvalidatedDomain, ParameterDraft, SemanticDiff, SemanticDiffEntry, Transaction,
+    TransactionOutcome, Workspace,
 };
 
 #[derive(Clone)]
 enum CapturedCompilationProvenance {
-    Development([u8; 32]),
+    Development,
     Locked(Arc<crate::package::CapturedPackageCompilation>),
 }
 
 impl CapturedCompilationProvenance {
-    fn semantic_base_identity(&self) -> [u8; 32] {
-        match self {
-            Self::Development(source_identity) => *source_identity,
-            Self::Locked(captured) => captured.semantic_base_identity(),
-        }
-    }
-
-    const fn edited(identity: [u8; 32]) -> Self {
-        Self::Development(identity)
-    }
-
     fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
         match self {
-            Self::Development(_) => Ok(()),
+            Self::Development => Ok(()),
             Self::Locked(captured) => captured.validate_memory_plan(plan),
         }
     }
@@ -70,7 +64,7 @@ impl CapturedCompilationProvenance {
         required: &[lkjscript_core::CapabilityKind],
     ) -> Result<()> {
         match self {
-            Self::Development(_) => Ok(()),
+            Self::Development => Ok(()),
             Self::Locked(captured) => captured.validate_required_capabilities(required),
         }
     }
@@ -85,12 +79,14 @@ pub struct WorkspaceSnapshot {
     namespace: WorkspaceNamespace,
     revision: RevisionId,
     state: ProgramState,
-    hir: Arc<crate::hir::Program>,
+    program: Arc<SemanticProgram>,
+    source_origins: Arc<[crate::hir::Source]>,
     provenance: Arc<CapturedCompilationProvenance>,
-    semantic_digest: [u8; 32],
     attachments: Option<Arc<PresentationAttachments>>,
     indexes: Arc<SnapshotIndexes>,
-    holes: Arc<[HoleOverlay]>,
+    holes: Arc<[HoleRecord]>,
+    blockers: Arc<[CompletenessBlocker]>,
+    allocator: IdentityAllocator,
 }
 
 impl WorkspaceSnapshot {
@@ -115,12 +111,14 @@ impl WorkspaceSnapshot {
             namespace: self.namespace,
             revision: self.revision,
             state: self.state,
-            hir: Arc::clone(&self.hir),
+            program: Arc::clone(&self.program),
+            source_origins: Arc::clone(&self.source_origins),
             provenance: Arc::clone(&self.provenance),
-            semantic_digest: self.semantic_digest,
             attachments: None,
             indexes: Arc::clone(&self.indexes),
             holes: Arc::clone(&self.holes),
+            blockers: Arc::clone(&self.blockers),
+            allocator: self.allocator.clone(),
         }
     }
 
@@ -153,7 +151,11 @@ impl WorkspaceSnapshot {
     }
 
     pub fn holes(&self) -> impl ExactSizeIterator<Item = &HoleState> {
-        self.holes.iter().map(|overlay| &overlay.state)
+        self.holes.iter().map(|record| &record.state)
+    }
+
+    pub fn completeness_blockers(&self) -> &[CompletenessBlocker] {
+        &self.blockers
     }
 
     pub fn entity(&self, id: EntityId) -> Result<&EntityHeader> {
@@ -179,18 +181,46 @@ impl WorkspaceSnapshot {
         attachments: Option<PresentationAttachments>,
     ) -> Result<Self> {
         validate::program(&hir)?;
-        let indexes = index::build(&hir, namespace)?;
-        let semantic_digest = provenance.semantic_base_identity();
+        let (program, source_origins) = SemanticProgram::from_hir(hir);
+        let indexes = index::build(&program, namespace)?;
+        let allocator = IdentityAllocator::from_indexes(namespace, &indexes)?;
         Ok(Self {
             namespace,
             revision: RevisionId::initial(namespace),
             state: ProgramState::Complete,
-            hir: Arc::new(hir),
+            program: Arc::new(program),
+            source_origins,
             provenance: Arc::new(provenance),
-            semantic_digest,
             attachments: attachments.map(Arc::new),
             indexes: Arc::new(indexes),
             holes: Arc::from([]),
+            blockers: Arc::from([]),
+            allocator,
+        })
+    }
+
+    fn empty(namespace: WorkspaceNamespace) -> Result<Self> {
+        let program = SemanticProgram::empty();
+        let mut indexes = index::build(&program, namespace)?;
+        indexes.diagnostics.push(DiagnosticHeader {
+            code: Arc::from("workspace.missing-entry-point"),
+            severity: DiagnosticSeverity::Error,
+            subject: None,
+            message: Arc::from("program requires a main entry point"),
+        });
+        let allocator = IdentityAllocator::from_indexes(namespace, &indexes)?;
+        Ok(Self {
+            namespace,
+            revision: RevisionId::initial(namespace),
+            state: ProgramState::Incomplete,
+            program: Arc::new(program),
+            source_origins: Arc::from([]),
+            provenance: Arc::new(CapturedCompilationProvenance::Development),
+            attachments: None,
+            indexes: Arc::new(indexes),
+            holes: Arc::from([]),
+            blockers: Arc::from([CompletenessBlocker::MissingEntryPoint]),
+            allocator,
         })
     }
 
@@ -200,21 +230,91 @@ impl WorkspaceSnapshot {
                 "workspace revision and namespace are inconsistent",
             ));
         }
-        if self.state != ProgramState::Complete || !self.holes.is_empty() {
-            return Err(Error::msg("workspace snapshot is not executable"));
+        if (self.state == ProgramState::Complete) != self.blockers.is_empty() {
+            return Err(Error::msg("workspace completeness state is stale"));
         }
-        validate::program(&self.hir)?;
         if self.indexes.nodes.len() != self.indexes.node_addresses.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
         {
             return Err(Error::msg("workspace snapshot semantic indexes are stale"));
         }
+        let indexed_holes = self
+            .indexes
+            .nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::Hole)
+            .count();
+        if indexed_holes != self.holes.len()
+            || self.blockers.len() != self.indexes.diagnostics.len()
+        {
+            return Err(Error::msg(
+                "workspace incomplete-node indexes and diagnostics are inconsistent",
+            ));
+        }
+        for hole in self.holes.iter() {
+            let index = self
+                .indexes
+                .node_lookup
+                .get(&hole.state.id.0)
+                .copied()
+                .ok_or_else(|| Error::msg("workspace hole identity is stale"))?;
+            if self.indexes.nodes[index].kind != NodeKind::Hole
+                || self.indexes.node_addresses[index] != hole.address
+                || self.indexes.node_keys[index] != hole.key
+                || self.indexes.node_expected_types[index].as_ref()
+                    != Some(&hole.state.expected_type)
+            {
+                return Err(Error::msg("workspace hole facts are inconsistent"));
+            }
+        }
+        let mut expected_blockers = Vec::new();
+        if self.program.main.is_none() {
+            expected_blockers.push(CompletenessBlocker::MissingEntryPoint);
+        }
+        for hole in self.holes.iter() {
+            expected_blockers.push(match hole.state.kind {
+                HoleKind::MissingBody => CompletenessBlocker::MissingBody {
+                    declaration: hole.state.owner,
+                    hole: hole.state.id,
+                    expected_type: hole.state.expected_type.clone(),
+                },
+                HoleKind::TypedExpression => CompletenessBlocker::TypedHole {
+                    hole: hole.state.id,
+                    expected_type: hole.state.expected_type.clone(),
+                    owner: hole.state.owner,
+                    context: hole.state.context,
+                },
+            });
+        }
+        if expected_blockers.as_slice() != self.blockers.as_ref() {
+            return Err(Error::msg("workspace completeness blockers are stale"));
+        }
+        if self.state == ProgramState::Complete {
+            let _ = self.validated_complete_hir()?;
+        }
         Ok(())
     }
 
-    pub(crate) fn hir(&self) -> &crate::hir::Program {
-        &self.hir
+    pub(crate) fn validated_complete_hir(&self) -> Result<crate::hir::Program> {
+        if self.revision.namespace() != self.namespace {
+            return Err(Error::msg(
+                "workspace revision and namespace are inconsistent",
+            ));
+        }
+        if self.state != ProgramState::Complete || !self.blockers.is_empty() {
+            return Err(Error::msg("workspace snapshot is incomplete"));
+        }
+        if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
+            || self.indexes.entities.len() != self.indexes.entity_addresses.len()
+        {
+            return Err(Error::msg("workspace snapshot semantic indexes are stale"));
+        }
+        let mut hir = self.program.try_complete(&self.source_origins)?;
+        program::install_core_traits_if_absent(&mut hir)?;
+        validate::program(&hir)?;
+        Ok(hir)
     }
 
     pub(crate) fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
@@ -226,42 +326,6 @@ impl WorkspaceSnapshot {
         required: &[lkjscript_core::CapabilityKind],
     ) -> Result<()> {
         self.provenance.validate_required_capabilities(required)
-    }
-
-    #[cfg(test)]
-    fn from_hir_for_test(
-        namespace: WorkspaceNamespace,
-        hir: crate::hir::Program,
-        provenance: Arc<CapturedCompilationProvenance>,
-    ) -> Result<Self> {
-        validate::program(&hir)?;
-        let indexes = index::build(&hir, namespace)?;
-        Ok(Self {
-            namespace,
-            revision: RevisionId::initial(namespace),
-            state: ProgramState::Complete,
-            hir: Arc::new(hir),
-            semantic_digest: provenance.semantic_base_identity(),
-            provenance,
-            attachments: None,
-            indexes: Arc::new(indexes),
-            holes: Arc::from([]),
-        })
-    }
-
-    #[cfg(test)]
-    fn malformed_hir_for_test(&self, hir: crate::hir::Program) -> Self {
-        Self {
-            namespace: self.namespace,
-            revision: self.revision,
-            state: self.state,
-            hir: Arc::new(hir),
-            provenance: Arc::clone(&self.provenance),
-            semantic_digest: self.semantic_digest,
-            attachments: self.attachments.clone(),
-            indexes: Arc::clone(&self.indexes),
-            holes: Arc::clone(&self.holes),
-        }
     }
 }
 

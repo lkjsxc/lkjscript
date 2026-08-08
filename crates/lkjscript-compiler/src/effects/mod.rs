@@ -12,14 +12,34 @@ use call_graph::{
 use facts::recompute_expr;
 
 pub(crate) fn infer(program: &mut Program) {
-    let binding_to_function = binding_to_function(program);
-    let order = stable_function_order(program);
-    let call_graph = direct_call_graph(program, &binding_to_function);
+    infer_parts(
+        program.bindings.len(),
+        &mut program.functions,
+        Some(&mut program.main.body),
+    );
+}
+
+pub(crate) fn infer_partial(
+    binding_count: usize,
+    functions: &mut [crate::hir::Function],
+    main: Option<&mut Expr>,
+) {
+    infer_parts(binding_count, functions, main);
+}
+
+fn infer_parts(
+    binding_count: usize,
+    functions: &mut [crate::hir::Function],
+    main: Option<&mut Expr>,
+) {
+    let binding_to_function = binding_to_function(binding_count, functions);
+    let order = stable_function_order(functions);
+    let call_graph = direct_call_graph(functions, &binding_to_function);
     let recursive = recursive_functions(&call_graph, &order);
-    let mut summaries = vec![None; program.bindings.len()];
+    let mut summaries = vec![None; binding_count];
 
     for &function_index in &order {
-        let function = &program.functions[function_index];
+        let function = &functions[function_index];
         if let Some(slot) = function
             .binding
             .index()
@@ -36,9 +56,8 @@ pub(crate) fn infer(program: &mut Program) {
     loop {
         let mut changed = false;
         for &function_index in &order {
-            let binding = program.functions[function_index].binding;
-            let body_effects =
-                recompute_expr(&mut program.functions[function_index].body, &summaries);
+            let binding = functions[function_index].binding;
+            let body_effects = recompute_expr(&mut functions[function_index].body, &summaries);
             let cycle_effects = if recursive[function_index] {
                 EffectSet::MAY_DIVERGE
             } else {
@@ -59,10 +78,12 @@ pub(crate) fn infer(program: &mut Program) {
     }
 
     for &function_index in &order {
-        let binding = program.functions[function_index].binding;
+        let binding = functions[function_index].binding;
         let summary = summary_for_binding(binding, &summaries);
-        recompute_expr(&mut program.functions[function_index].body, &summaries);
-        program.functions[function_index].summary = summary;
+        recompute_expr(&mut functions[function_index].body, &summaries);
+        functions[function_index].summary = summary;
     }
-    recompute_expr(&mut program.main.body, &summaries);
+    if let Some(main) = main {
+        recompute_expr(main, &summaries);
+    }
 }

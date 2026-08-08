@@ -8,7 +8,7 @@ impl FunctionBuilder<'_> {
         slot: usize,
         initial: &Expr,
         body: &Expr,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let place_ty = lower_type(&initial.ty, self.product_ids)?;
         let Some(initial) = self.lower_expr(initial)? else {
@@ -35,7 +35,7 @@ impl FunctionBuilder<'_> {
         target: BindingId,
         slot: usize,
         value: &Expr,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(value)? else {
             return Ok(None);

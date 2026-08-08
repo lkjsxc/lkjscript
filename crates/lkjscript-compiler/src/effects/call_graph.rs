@@ -12,9 +12,12 @@ pub(super) fn summary_for_binding(
         .unwrap_or(EffectSet::CONSERVATIVE_CALL)
 }
 
-pub(super) fn binding_to_function(program: &Program) -> Vec<Option<usize>> {
-    let mut result = vec![None; program.bindings.len()];
-    for (function_index, function) in program.functions.iter().enumerate() {
+pub(super) fn binding_to_function(
+    binding_count: usize,
+    functions: &[crate::hir::Function],
+) -> Vec<Option<usize>> {
+    let mut result = vec![None; binding_count];
+    for (function_index, function) in functions.iter().enumerate() {
         if let Some(binding_index) = function.binding.index() {
             if let Some(slot) = result.get_mut(binding_index) {
                 *slot = Some(function_index);
@@ -24,25 +27,24 @@ pub(super) fn binding_to_function(program: &Program) -> Vec<Option<usize>> {
     result
 }
 
-pub(super) fn stable_function_order(program: &Program) -> Vec<usize> {
-    let mut order: Vec<_> = (0..program.functions.len()).collect();
-    order.sort_unstable_by_key(|&index| program.functions[index].binding.raw());
+pub(super) fn stable_function_order(functions: &[crate::hir::Function]) -> Vec<usize> {
+    let mut order: Vec<_> = (0..functions.len()).collect();
+    order.sort_unstable_by_key(|&index| functions[index].binding.raw());
     order
 }
 
 pub(super) fn direct_call_graph(
-    program: &Program,
+    functions: &[crate::hir::Function],
     binding_to_function: &[Option<usize>],
 ) -> Vec<Vec<usize>> {
-    let mut graph = vec![Vec::new(); program.functions.len()];
-    for (function_index, function) in program.functions.iter().enumerate() {
+    let mut graph = vec![Vec::new(); functions.len()];
+    for (function_index, function) in functions.iter().enumerate() {
         collect_direct_callees(
             &function.body,
             binding_to_function,
             &mut graph[function_index],
         );
-        graph[function_index]
-            .sort_unstable_by_key(|&callee| program.functions[callee].binding.raw());
+        graph[function_index].sort_unstable_by_key(|&callee| functions[callee].binding.raw());
         graph[function_index].dedup();
     }
     graph
@@ -64,7 +66,8 @@ fn collect_direct_callees_inner(
     callees: &mut Vec<usize>,
 ) {
     match &expression.kind {
-        ExprKind::LitI64(_)
+        ExprKind::Hole
+        | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit

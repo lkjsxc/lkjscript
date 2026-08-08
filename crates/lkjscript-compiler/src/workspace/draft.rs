@@ -60,20 +60,6 @@ pub enum DraftNode {
         then_branch: DraftNodeId,
         else_branch: DraftNodeId,
     },
-    /// Reserved shape for an explicit unsupported initial-vertical result.
-    Store {
-        target: EntityId,
-        value: DraftNodeId,
-    },
-    /// Reserved shape for an explicit unsupported initial-vertical result.
-    GenericCall {
-        callee: EntityId,
-        arguments: Vec<DraftNodeId>,
-    },
-    /// Reserved shape for an explicit unsupported initial-vertical result.
-    Match {
-        scrutinee: DraftNodeId,
-    },
 }
 
 impl DraftNode {
@@ -93,13 +79,6 @@ impl DraftNode {
                 visit(*then_branch);
                 visit(*else_branch);
             }
-            Self::Store { value, .. } => visit(*value),
-            Self::GenericCall { arguments, .. } => {
-                for child in arguments {
-                    visit(*child);
-                }
-            }
-            Self::Match { scrutinee } => visit(*scrutinee),
             _ => {}
         }
     }

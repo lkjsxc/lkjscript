@@ -44,7 +44,7 @@ impl<'a> Producer<'a> {
                     expression.effects.bits(),
                     MemoryEscape::Local,
                     MemoryOrigin {
-                        source: expression.origin.raw(),
+                        source: crate::memory_plan::source_origin(expression.origin),
                         expression: Some(expression_id),
                     },
                 )?;
@@ -80,7 +80,7 @@ impl<'a> Producer<'a> {
                     expression.effects.bits(),
                     MemoryEscape::Local,
                     MemoryOrigin {
-                        source: expression.origin.raw(),
+                        source: crate::memory_plan::source_origin(expression.origin),
                         expression: Some(expression_id),
                     },
                 )?;
@@ -207,7 +207,10 @@ impl<'a> Producer<'a> {
         match &expression.kind {
             ExprKind::Let { bindings, body } => {
                 for (index, local) in bindings.iter().enumerate() {
-                    self.add_local_place(local, expression.origin.raw())?;
+                    self.add_local_place(
+                        local,
+                        crate::memory_plan::source_origin(expression.origin),
+                    )?;
                     let binding = matches!(local.value.kind, ExprKind::Borrow { .. })
                         .then_some(local.binding);
                     self.walk_expr(
@@ -239,7 +242,7 @@ impl<'a> Producer<'a> {
                     *binding,
                     place.raw(),
                     &ty,
-                    expression.origin.raw(),
+                    crate::memory_plan::source_origin(expression.origin),
                     true,
                 )?;
                 self.walk_expr(initial, Some(expression_id), 0, MemoryEscape::Local, None)?;
@@ -316,7 +319,11 @@ impl<'a> Producer<'a> {
         }
         Ok(())
     }
-    pub(super) fn add_local_place(&mut self, local: &LocalDefinition, source: u64) -> Result<()> {
+    pub(super) fn add_local_place(
+        &mut self,
+        local: &LocalDefinition,
+        source: MemorySourceOrigin,
+    ) -> Result<()> {
         let ty = self.binding_type(local.binding)?.clone();
         self.add_place(
             self.current_function,
@@ -334,7 +341,7 @@ impl<'a> Producer<'a> {
         binding: BindingId,
         place: u64,
         ty: &Type,
-        source: u64,
+        source: MemorySourceOrigin,
         owns_obligation: bool,
     ) -> Result<MemoryEntryId> {
         if place != self.next_place {

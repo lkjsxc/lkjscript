@@ -10,7 +10,7 @@ pub(super) fn expression(ty: hir::Type, kind: hir::ExprKind) -> hir::Expr {
     hir::Expr {
         ty,
         effects: hir::EffectSet::PURE,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         kind,
     }
 }
@@ -44,7 +44,7 @@ pub(super) fn program(
         match_plans: Vec::new(),
         functions: Vec::new(),
         main: hir::Main {
-            origin: origin(),
+            origin: hir::Origin::Source(origin()),
             params: Vec::new(),
             param_places: Vec::new(),
             param_types: Vec::new(),

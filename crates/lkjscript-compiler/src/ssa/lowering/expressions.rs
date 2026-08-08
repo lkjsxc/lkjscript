@@ -11,6 +11,7 @@ impl FunctionBuilder<'_> {
             lower_type(&expression.ty, self.product_ids)?
         };
         let value = match &expression.kind {
+            ExprKind::Hole => return Err(Error::msg("complete HIR cannot contain a hole")),
             ExprKind::LitI64(value) => {
                 self.constant(SsaType::I64, Constant::I64(*value), expression.origin)?
             }

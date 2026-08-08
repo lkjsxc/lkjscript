@@ -7,42 +7,50 @@ responsibility, data flow, ownership, and trust boundaries; it is not a second d
 ## Current compiler and execution flow
 
 ```text
-package manifest, lock, and line-oriented .lkjscript files
-    -> one compiler-owned required-package verification
-    -> private checked text/path importer using the same verified lock and grants
-    -> source tree and type/effect/ownership analysis
-    -> immutable WorkspaceSnapshot owning typed HIR and complete/typed-hole state
-    -> optional in-process Workspace transaction and one-revision Arc publication
-    -> compile_snapshot typed completeness and consistency validation
+Workspace::empty OR verified text/path import
+    -> one partial-capable SemanticProgram authority
+    -> optional source/presentation provenance beside semantic meaning
+    -> immutable WorkspaceSnapshot with stable IDs, tombstones, indexes, and blockers
+    -> optional atomic semantic transactions and one-revision Arc publication
+    -> compile_snapshot structured completeness gate
+    -> one derived source-optional complete HIR and consistency witness
     -> HIR memory planning and captured locked-target validation
-    -> typed SSA lowering, verification, and simple normalization
+    -> typed SSA lowering, verification, and iterative baseline normalization
     -> bytecode lowering and unrestricted trusted validation
     -> one baseline-native group attempt, otherwise validated VM execution
 ```
 
-Text and package files remain persistent importer inputs, not semantic authority and not a post-HIR
-compiler input. The product's required-package path verifies the root manifest, decoded lock,
-selected module, and typed capability grants once; source import, locked-source checking, provenance
-capture, target checking, and capability checking consume that same verified value. `compile_snapshot`
-is public and is the sole boundary into memory planning, SSA, and bytecode. All text/path compile
-APIs import and delegate. The snapshot has private fields and
-owns `Arc`-shared typed HIR, complete or typed-hole-overlay state, immutable import provenance or
-deterministic post-edit development provenance, optional presentation/source attachments, and
-deterministic semantic indexes. An unedited locked import retains the exact target record needed to
-validate its completed memory plan without reconstructing provenance from the file system. A
-semantic edit removes source attachments and derives development identity from the prior semantic
-digest and published diff, so an edited program never falsely retains locked-source provenance.
+Text and package files remain persistent importer inputs, not semantic authority or a post-import
+compiler input. The required-package path verifies manifest, lock, selected module, source
+identities, and grants once, then moves analyzed declarations/expressions into the same
+`SemanticProgram` used by source-free construction. Optional imported `Source` records are retained
+as diagnostic provenance outside that program; presentation attachments are independently removable.
+An unedited locked import retains only target/capability facts needed at compilation. Any semantic
+edit drops locked provenance and source attachments without constructing a replacement content
+digest.
 
-Opaque public workspace identities are separate from HIR dense IDs. Entity and node IDs carry a
-workspace namespace, logical slot, and generation; a revision carries the same namespace. Import assigns them deterministically inside a fresh namespace, and cross-workspace use fails before
-lookup. `Workspace` owns generation-aware allocators; private `EntityAddress` and `NodeAddress` maps
-reconcile preserved roots and unchanged descendants while removed nodes are tombstoned. Iterative
-index construction records containment, references, calls, dependencies, actual/expected type
-headers, and diagnostics. Compilation revalidates complete HIR references, signatures, origins, and
-index shape before lowering. Native
-execution consumes verified SSA directly; the VM consumes validated bytecode. The deleted optimizer
-pipeline, proof metadata, automatic transition, redundant SSA memory inventory, generic
-cross-representation identity, and native-specialized SSA copy are not constructed.
+A semantic program owns bindings, nominal declarations, match plans, functions, an optional `main`,
+and expression trees. A hole is an actual leaf with an explicit unknown effect bit. Hole records own
+only kind/goal/type/context metadata; they never retain the removed subtree. Fixed compiler
+operations, prelude enums, and core traits are excluded from mutable program-entity indexes. A
+source-free complete snapshot installs required fixed core metadata only in its ephemeral compiler
+HIR.
+
+Opaque public identities remain separate from dense compiler IDs. Tagged `EntityAddress` variants
+distinguish main, binding, product/field, enum/variant/field, trait, and implementation domains.
+`NodeAddress` adds root-local preorder only as a private reconstruction coordinate. The immutable
+snapshot carries the exact generation/free-list state, so reopening a snapshot cannot resurrect a
+tombstoned ID. Reconciliation preserves explicit edit/hole roots, unchanged addresses, and unique
+meaning-preserving descendants; deletions advance generations. Index construction builds one
+entity-to-address map and performs one lookup per node, then records containment, references, calls,
+dependencies, types, and diagnostics iteratively.
+
+`compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
+phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
+signatures, known effects, holes, and index shape. Source origins lower to source metadata; semantic
+origins lower honestly to synthetic compiler diagnostics and semantic memory origins. Native
+execution consumes verified SSA directly; the VM consumes validated bytecode. No render/parse,
+source identity reconstruction, compilation cache, or stale HIR copy exists in a snapshot.
 
 Bytecode validation decodes each function once and partitions decoded instructions at entry, jump
 targets, and control boundaries. It retains incoming abstract state only at basic-block entries,
@@ -83,20 +91,27 @@ route available.
 
 ```text
 Arc<WorkspaceSnapshot> plus base revision
-    -> typed batch of rename, flat expression, and typed-hole edits
-    -> namespace/generation/revision and complete draft preflight
-    -> direct staged HIR mutation
-    -> effect, ownership, match-plan, HIR, and index validation
-    -> stable-ID reconciliation and semantic diff
-    -> one new Arc<WorkspaceSnapshot>, or no publication
+    -> typed create/rename/flat-expression/hole batch
+    -> namespace/generation/revision, declaration, scope, type, disjointness, and draft preflight
+    -> clone SemanticProgram and identity allocator into staging
+    -> apply real semantic nodes; recompute partial effects and derived indexes
+    -> on completion derive HIR and validate ownership/matches/consistency
+    -> reconcile stable IDs, blockers, diagnostics, and semantic diff
+    -> publish one new Arc plus allocator state, or publish nothing
 ```
 
-The flat `ExpressionDraft` representation is child-before-parent and non-recursive. The implemented
-constructors are i64/f64/bool/unit literals, visible parameter loads, non-generic function calls,
-and `if`. Local storage, generic calls, and match creation fail explicitly as unsupported. Typed
-holes retain expected type, goal, owning context, visible entities, and a private replaced address.
-Incomplete snapshots retain ordinary query indexes and deterministic diagnostics but expose no
-executable placeholder; `compile_snapshot` returns stable hole IDs.
+`CreateFunction` creates a non-generic scalar signature, stable parameter entities, and a real
+missing-body hole. `CreateMain` creates parameterless scalar `main` with a real missing-body hole.
+Their ordering is independent: tagged addresses preserve a function when main is added later, and
+hole scope refreshes when a function is added after main. Created IDs are returned in the diff.
+
+`ExpressionDraft` is child-before-parent and non-recursive. Implemented constructors are
+i64/f64/bool/unit literals, visible copy-safe parameter loads, non-generic function calls, and `if`.
+Local storage, ownership moves, generic calls, and matches are absent rather than represented by
+reserved public variants. Introducing a typed hole physically replaces and drops its subtree;
+filling preserves the hole/root ID. Missing-entry, missing-body, and typed-hole blockers are
+structured and projected. Incomplete snapshots retain normal indexes and deterministic diagnostics
+but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
 calls, diagnostics, and legal constructors. Definition, node type, and hole context are direct
@@ -223,15 +238,17 @@ capability checking; they are not a replacement service sandbox.
 
 ## Target delta
 
-**Current fact:** complete text imports and in-process semantic edits share one revision-labelled
-snapshot authority. Stable identity, one typed-hole incomplete state, atomic batch edits,
-deterministic paginated queries and concise projections, semantic diffs, and direct executable
-lowering are implemented for the selected vertical. Directness tests prove editing and compilation
-do not invoke the parser; attachment-free and edited complete snapshots execute through the VM.
-Formatting-only attachment changes preserve IDs and projection.
+**Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
+authority. Missing entry/body and real typed-hole nodes, scalar function/main construction, atomic
+batch edits, tombstone-stable identities, deterministic queries/projections/diffs, one complete-HIR
+derivation, and direct execution are implemented. Parser and compiler-phase counters, imported
+convergence, reopened-generation tests, exact per-node index work, and 20,000-level small-stack
+release execution protect the selected vertical. Formatting-only attachment changes preserve IDs
+and projection.
 
-**Target, not implemented:** later workspace expansion adds declaration and node
-movement/creation/deletion, local storage, generics, matches, unresolved references, ambiguities,
-conflicts, recovery nodes, and finer analysis contexts without adding another semantic AST.
-Persistence, collaboration, a measured wire consumer, incremental recomputation, daemon, database
-service, scheduler, and broader platform work wait for evidence after the local semantic model.
+**Target, not implemented:** later workspace expansion adds declaration deletion and movement,
+local storage and ownership moves, generics, matches, unresolved references, ambiguities, conflicts,
+recovery nodes, richer declaration kinds, and finer analysis contexts without adding another mutable
+semantic AST. Persistence, collaboration, a measured wire consumer, incremental recomputation,
+daemon, database service, scheduler, and broader platform work wait for evidence after real use of
+the local semantic model.

@@ -37,13 +37,13 @@ pub use pipeline::{
 pub use types::Type;
 pub use workspace::{
     import_path, import_path_with_metrics, import_source, CallEdge, CompileSnapshotError,
-    Continuation, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, DraftNode, DraftNodeId,
-    Edit, EntityHeader, EntityId, EntityKind, EntityPage, ExpressionDraft, HoleId, HoleState,
-    ImportMetrics, IncompleteSnapshotError, InvalidatedDomain, LegalConstructor, NodeHeader,
-    NodeId, NodeKind, NodeTypeFacts, PageRequest, PresentationAttachments, ProgramState,
-    ProjectionSlice, QueryPage, ReferenceEdge, RevisionId, SemanticChild, SemanticDiff,
-    SemanticDiffEntry, SemanticOwner, SourceAttachment, Transaction, TransactionOutcome, Workspace,
-    WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    CompletenessBlocker, Continuation, DependencyEdge, DiagnosticHeader, DiagnosticSeverity,
+    DraftNode, DraftNodeId, Edit, EntityHeader, EntityId, EntityKind, EntityPage, ExpressionDraft,
+    HoleId, HoleKind, HoleState, ImportMetrics, IncompleteSnapshotError, InvalidatedDomain,
+    LegalConstructor, NodeHeader, NodeId, NodeKind, NodeTypeFacts, PageRequest, ParameterDraft,
+    PresentationAttachments, ProgramState, ProjectionSlice, QueryPage, ReferenceEdge, RevisionId,
+    SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticOwner, SourceAttachment, Transaction,
+    TransactionOutcome, Workspace, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";

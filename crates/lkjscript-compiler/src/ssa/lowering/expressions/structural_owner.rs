@@ -10,7 +10,7 @@ impl FunctionBuilder<'_> {
         expression: &Expr,
         value: ValueId,
         ty: &SsaType,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<StructuralOwnerPlace> {
         if let ExprKind::Load(reference) = expression.kind {
             let place = self

@@ -3,6 +3,8 @@ mod path;
 mod source;
 
 pub use common::compile_snapshot;
+#[cfg(test)]
+pub(crate) use common::{lowering_invocations, reset_lowering_invocations};
 pub use path::{
     compile_package_path, compile_package_path_with_metrics, compile_path,
     compile_path_with_metrics, compile_path_with_sources,

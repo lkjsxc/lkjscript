@@ -8,7 +8,7 @@ impl FunctionBuilder<'_> {
         input: &Expr,
         trap: &str,
         ty: SsaType,
-        source: hir::SourceId,
+        source: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(input)? else {
             return Ok(None);
@@ -52,7 +52,7 @@ impl FunctionBuilder<'_> {
         input: &Expr,
         trap: &str,
         ty: SsaType,
-        source: hir::SourceId,
+        source: hir::Origin,
         value: ValueId,
     ) -> Result<ValueId> {
         let test = self.append(
@@ -66,7 +66,7 @@ impl FunctionBuilder<'_> {
             EffectSet::READS_MEMORY,
             source,
         )?;
-        let block_origin = origin(source.raw(), self.next_position);
+        let block_origin = origin(source, self.next_position);
         let success = self.new_block(block_origin, false)?;
         let failure = self.new_block(block_origin, false)?;
         let incoming_env = self.env.clone();
@@ -132,7 +132,7 @@ impl FunctionBuilder<'_> {
         _layout: hir::RuntimeLayoutId,
         value: ValueId,
         ty: SsaType,
-        source: hir::SourceId,
+        source: hir::Origin,
     ) -> Result<ValueId> {
         let owner_ty = self.value_type(value)?.clone();
         if self.structural.type_for(&owner_ty).is_some() {

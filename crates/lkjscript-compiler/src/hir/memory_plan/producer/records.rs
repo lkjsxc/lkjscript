@@ -33,7 +33,7 @@ impl<'a> Producer<'a> {
             hir_expression.effects.bits(),
             escape,
             MemoryOrigin {
-                source: hir_expression.origin.raw(),
+                source: crate::memory_plan::source_origin(hir_expression.origin),
                 expression: Some(expression),
             },
         )?;
@@ -149,7 +149,7 @@ impl<'a> Producer<'a> {
             hir_expression.effects.bits(),
             escape,
             MemoryOrigin {
-                source: hir_expression.origin.raw(),
+                source: crate::memory_plan::source_origin(hir_expression.origin),
                 expression: Some(expression),
             },
         )?;

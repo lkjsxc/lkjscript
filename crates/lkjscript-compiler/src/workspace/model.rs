@@ -146,6 +146,7 @@ impl HoleId {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HoleState {
     pub id: HoleId,
+    pub kind: HoleKind,
     pub expected_type: crate::Type,
     pub goal: Arc<str>,
     pub owner: EntityId,
@@ -153,8 +154,50 @@ pub struct HoleState {
     pub visible_entities: Arc<[EntityId]>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) struct EntityAddress(pub u64);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum HoleKind {
+    MissingBody,
+    TypedExpression,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CompletenessBlocker {
+    MissingEntryPoint,
+    MissingBody {
+        declaration: EntityId,
+        hole: HoleId,
+        expected_type: crate::Type,
+    },
+    TypedHole {
+        hole: HoleId,
+        expected_type: crate::Type,
+        owner: EntityId,
+        context: NodeId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(super) enum EntityAddress {
+    Main,
+    Binding(u64),
+    Product(u64),
+    ProductField {
+        product: u64,
+        field: u64,
+    },
+    Enum(u64),
+    EnumVariant {
+        enumeration: u64,
+        variant: u64,
+    },
+    EnumField {
+        enumeration: u64,
+        variant: u64,
+        field: u64,
+    },
+    Trait(u64),
+    Implementation(u64),
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct NodeAddress {
@@ -169,7 +212,7 @@ pub(super) struct NodeKey {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct HoleOverlay {
+pub(super) struct HoleRecord {
     pub state: HoleState,
     pub address: NodeAddress,
     pub key: NodeKey,

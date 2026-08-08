@@ -55,11 +55,6 @@ fn import_path_in_namespace(
         crate::package::verify_loaded_sources(verified, &source_tree)?;
         package_validation = package_validation.saturating_add(locked_sources_started.elapsed());
     }
-    let development_source = source_tree
-        .files()
-        .first()
-        .ok_or_else(|| Error::msg("imported source closure is empty"))?
-        .exact_source_sha256;
     let attachments = attachments(&source_tree)?;
     let source_files = attachments.files().len();
     let projection = source_tree
@@ -81,7 +76,7 @@ fn import_path_in_namespace(
             package_validation = package_validation.saturating_add(capture_started.elapsed());
             CapturedCompilationProvenance::Locked(Arc::new(captured))
         }
-        None => CapturedCompilationProvenance::Development(development_source),
+        None => CapturedCompilationProvenance::Development,
     };
     let snapshot = WorkspaceSnapshot::new(namespace, hir, provenance, Some(attachments))?;
     Ok((
@@ -106,11 +101,6 @@ fn import_source_in_namespace(
     let parsing_started = Instant::now();
     let source_tree = crate::source::validate_for_compiler(source, path)?;
     let parsing = parsing_started.elapsed();
-    let source_file = source_tree
-        .files()
-        .first()
-        .ok_or_else(|| Error::msg("imported development source closure is empty"))?;
-    let source_identity = source_file.exact_source_sha256;
     let attachments = attachments(&source_tree)?;
     let source_files = attachments.files().len();
     let projection = source_tree
@@ -126,7 +116,7 @@ fn import_source_in_namespace(
     let snapshot = WorkspaceSnapshot::new(
         namespace,
         hir,
-        CapturedCompilationProvenance::Development(source_identity),
+        CapturedCompilationProvenance::Development,
         Some(attachments),
     )?;
     Ok((

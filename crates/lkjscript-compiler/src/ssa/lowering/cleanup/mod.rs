@@ -10,7 +10,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn finish_memory_expression(
         &mut self,
         expression: MemoryExpressionId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let loans = self
             .cleanup
@@ -60,7 +60,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         binding: BindingId,
         value: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let place = self
             .owned_place_for_binding(binding)?
@@ -91,7 +91,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn end_owned_place(
         &mut self,
         binding: BindingId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         if !self.active_place_bindings.contains(&binding) {
             return Ok(());
@@ -138,7 +138,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn cleanup_places_to(
         &mut self,
         depth: usize,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let bindings: Vec<_> = self
             .active_place_bindings
@@ -154,7 +154,7 @@ impl FunctionBuilder<'_> {
 
     pub(in crate::ssa) fn cleanup_all_places(
         &mut self,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         self.cleanup_places_to(0, expression_origin)
     }

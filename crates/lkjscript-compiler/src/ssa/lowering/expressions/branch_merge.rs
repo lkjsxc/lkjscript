@@ -3,7 +3,7 @@ impl FunctionBuilder<'_> {
     fn merge_live_branches(
         &mut self,
         result_type: SsaType,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
         incoming_env: BTreeMap<BindingId, ValueId>,
         incoming_slots: BTreeMap<BindingId, u64>,
         mut then_result: BranchResult,
@@ -36,12 +36,12 @@ impl FunctionBuilder<'_> {
                 expression_origin,
             )?;
         }
-        let merge = self.new_block(origin(expression_origin.raw(), self.next_position), false)?;
+        let merge = self.new_block(origin(expression_origin, self.next_position), false)?;
         let result = self.add_block_parameter(
             merge,
             result_type,
             None,
-            origin(expression_origin.raw(), self.next_position),
+            origin(expression_origin, self.next_position),
         )?;
         let mut bindings = Vec::new();
         for binding in incoming_env.keys().copied() {
@@ -91,7 +91,7 @@ impl FunctionBuilder<'_> {
                 merge,
                 ty,
                 owner_place,
-                origin(expression_origin.raw(), self.next_position),
+                origin(expression_origin, self.next_position),
             )?;
             owner_parameters.insert(key, (parameter, owner_place));
             argument_bindings.push(*binding);
@@ -134,7 +134,7 @@ impl FunctionBuilder<'_> {
                 merge,
                 ty,
                 None,
-                origin(expression_origin.raw(), self.next_position),
+                origin(expression_origin, self.next_position),
             )?);
         }
         let mut then_arguments =

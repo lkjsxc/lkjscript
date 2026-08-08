@@ -6,18 +6,19 @@ manifests remain the executable authority.
 
 ## User path
 
-The active product is local package compile/run plus an in-process semantic workspace API. Package
-files and the provisional line-oriented `.lkjscript` notation remain persistent importer inputs, not
-a sibling semantic authority. Text and path entry points import exactly once into an immutable
-`WorkspaceSnapshot`; in-process `Workspace` transactions then edit that semantic snapshot directly
-without text publication. Snapshots own clone-safe resolved typed HIR,
-complete or typed-hole-overlay state, deterministic post-edit development provenance, optional
-source attachments, opaque namespace-scoped stable entity/node identities, semantic indexes, type
-facts, diagnostics, and hole contexts. The CLI's required-package compiler entry verifies the root
-manifest, lock, selected module, source identities, target, and capability grants once inside the
-compiler; it does not preverify the package in the application and then reconstruct it during
-import. Every product compile API delegates to public `compile_snapshot`, the sole post-import
-boundary, before HIR memory planning, locked-package target validation, SSA lowering and
+The active product is local package compile/run plus an in-process semantic workspace API. The
+`.lkjscript` extension is fixed; the current line-oriented bytes are a provisional importer format,
+not a textuality or compatibility promise and not semantic authority. `Workspace::empty` creates a
+source-free revision with no entities, source/path/hash attachment, entry point, or body. Text and
+path entry points import exactly once into the same partial-capable immutable `WorkspaceSnapshot`.
+
+Snapshots own one clone-safe `SemanticProgram`, optional imported diagnostic/presentation origins,
+opaque namespace/slot/generation IDs, allocator tombstones, derived indexes, type facts, real hole
+nodes, diagnostics, and structured completeness blockers. Source-free and imported complete
+revisions derive one ephemeral complete HIR at `compile_snapshot`; they never render or reparse
+source. The CLI's required-package compiler entry still verifies the root manifest, lock, selected
+module, source identities, target, and capability grants once. Every product compile API delegates
+to `compile_snapshot` before HIR memory planning, locked-package target validation, SSA lowering and
 verification, bytecode validation, and execution.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
@@ -163,60 +164,72 @@ Their memory witness facts are named semantic-snapshot facts rather than process
 
 ## Semantic workspace compiler cutover
 
-The compiler's public `workspace` module owns one syntax-independent in-memory
-`WorkspaceSnapshot` representation and an in-process `Workspace` owner for its current `Arc` and
-identity allocators. Public `WorkspaceNamespace`, `RevisionId`, `EntityId`, `NodeId`, and `HoleId`
-values are opaque. Entity/node IDs contain a namespace, logical slot, and tombstone generation rather
-than exposing HIR vector positions. Private entity/node address maps reconcile unchanged identities
-across rename, replacement, branch movement/reordering, attachment removal, and unrelated edits;
-removed descendants become stale and allocator reuse changes generation.
+The compiler's public `workspace` module owns one syntax-independent in-memory authority. An
+in-process `Workspace` owns its current `Arc<WorkspaceSnapshot>` and stages the exact
+identity-allocator state. Public namespace/revision/entity/node/hole IDs are opaque. Tagged private
+entity addresses are independent of public ordering, so adding `main` does not renumber an existing
+function. Removed slots retain tombstone generations across snapshot cloning and reopening.
 
-`Transaction` batches `RenameEntity`, `ReplaceExpression`, `IntroduceHole`, `RefineHole`, and
-`FillHole` against one base revision. Expression proposals are dense flat child-before-parent graphs
-for scalar literals, visible parameter loads, non-generic function calls, and conditionals. The
-staging path validates namespace/generation/revision, draft shape, lexical visibility, arity, type,
-effect, ownership, and HIR consistency, then publishes one revision. Failure leaves the prior `Arc`,
-revision, IDs, and provenance unchanged. Success returns deterministic rename/replacement,
-created/deleted-descendant, hole, reference, and call diff entries plus diagnostics and coarse
-invalidation domains. Semantic edits remove source attachments and derive development provenance
-from the prior semantic digest and diff rather than retaining locked-source claims.
+`Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
+and no attachments. `Transaction` adds `CreateFunction` and `CreateMain` to rename, replacement, and
+hole operations. Current declaration construction is deliberately scalar and non-generic. Created
+function parameters and body holes are returned as stable `EntityCreated` and `HoleIntroduced` diff
+entries. Flat drafts implement scalar literals, visible parameter loads, non-generic calls, and
+conditionals; placeholder storage/generic/match draft variants are gone.
 
-A typed-hole snapshot remains queryable but its private backing HIR cannot be compiled. Hole
-introduction prunes and tombstones replaced descendants from public indexes; refinement changes the
-goal; fill lowers a checked flat draft directly to HIR, preserves the hole/root `NodeId`, and returns
-to complete state after the last hole. `compile_snapshot` returns `CompileSnapshotError::Incomplete`
-with stable hole IDs and never installs an executable placeholder.
+The authoritative `SemanticProgram` permits absent `main` and real hole expression leaves. Missing
+body and typed-hole metadata describe those leaves; no prior expression survives introduction.
+Effects use an explicit unknown fact while holes remain and are recomputed after every transaction.
+Completion derives and validates HIR, including ownership, before publication. Scalar construction
+rejects unsupported owned/affine signature shapes; stale/foreign IDs, invisible bindings, bad arity
+or types, cyclic drafts, overlapping subtree edits, duplicate parameters, duplicate/reserved global
+creation or function rename, and stale revisions fail before publication.
+Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and future IDs.
 
-Revision-labelled queries implement paginated entity listing/search, definition and references,
-callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
-Continuations are stable over one result ordering and reject another namespace, revision, or query.
-A deterministic concise projection renders selected entity, body, type, reference, and explicit
-`[HOLE]` headers. It uses stable snapshot-local labels, works without source attachments, and does
-not create identity. Projection body traversal is iterative and allocation failure is typed.
+Completeness blockers distinguish missing entry point, missing body with declaration/hole/type, and
+typed hole with hole/type/owner/context. Incomplete snapshots remain fully queryable and projectable.
+`compile_snapshot` returns those revision-labelled blockers before deriving HIR or entering memory,
+SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
+compiler-owned core context only in that derived compiler value when needed, validates consistency,
+and lowers directly. Complete source-free `identity(value: i64) -> i64` plus
+`main() -> identity(42)` returns `42` through bytecode/VM with zero parser invocations. Canonical
+memory-plan origins explicitly tag source-backed and source-free cases; current package locks reflect
+that non-colliding encoding.
+
+Revision-labelled queries implement deterministic pagination, definitions/references, calls,
+actual/expected types, diagnostics, hole context, and expected-type-filtered legal constructors.
+Hole visibility refreshes when declarations are added in a later revision. Projections render state
+and blockers before selected entity/body/type/reference/hole headers, use stable review-local
+labels, and require no source attachment. Index root-address resolution performs one map lookup per
+semantic node rather than scanning every entity.
 
 The source/path importer privately owns loading, parsing, initial analysis, package validation, and
-initial provenance capture. Parser-counter tests prove rename, replacement, hole fill, and direct
-compile perform no parse, render, or text round trip; complete edited snapshots execute in the VM.
-Attachment-change tests prove formatting and source attachment removal do not alter semantic IDs or
-projection. An opt-in 20,000-level small-stack edit/drop/projection stress test covers the flat
-draft, HIR clone, index, diff, rendering, and destruction path. The former syntax-shaped editing
-service, dense source-node identities, protocol/session schemas, text journal/publication path, CLI
-routing, and protocol contracts are deleted. No replacement wire service exists pending a measured
-consumer.
+source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
+compiler operations/prelude/core traits are excluded from mutable program-entity queries. Imported
+and source-free equivalent fixtures agree on user declaration kinds/signatures, expression kinds,
+references/calls, diagnostics, compilation, and VM outcome. Attachment changes preserve IDs and
+projection. The ignored 20,000-level source-free release fixture performs creation, flat draft
+lowering, semantic clone, indexing/reconciliation, projection, complete-HIR derivation, memory/SSA/
+bytecode compilation, VM execution, and destruction on a 128 KiB worker stack. Canonical block
+ordering is iterative on this path.
+
+The hidden-body hole overlay, test-only HIR construction surrogate, syntax-shaped editing service,
+dense source-node identities, protocol/session schemas, text journal/publication path, CLI routing,
+unsupported draft placeholders, and unconsumed development semantic digest are deleted. No wire
+replacement exists pending a measured consumer.
 
 ## Known gaps
 
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
-  implemented concise projection is review/debug output, not a complete source renderer. Semantic
-  transactions cover only rename, scalar/load/non-generic-call/if replacement, and one typed-hole
-  state; declaration creation/deletion/movement, local storage, generic/match creation, unresolved
-  names, ambiguities, conflicts, and recovery states remain.
+  concise projection is review/debug output, not a complete source renderer. Declaration creation
+  currently covers scalar non-generic functions and parameterless scalar `main`; deletion/movement,
+  locals, owned/affine body construction, generic/match creation, unresolved names, ambiguities,
+  conflicts, and recovery states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- The selected owned runtime structural-value boundary now has 20,000-level small-stack evidence
-  and linear-work validation. Remaining stack-safety work is in compiler/workspace paths not covered
-  by the existing deep transaction fixture; no whole-compiler or general runtime-throughput claim
-  follows from either generated workload.
+- Owned runtime structural values and the source-free scalar workspace/compiler path now each have
+  20,000-level release evidence on a 128 KiB worker stack. This does not prove every compiler form,
+  type traversal, ownership failure, or general runtime throughput path stack-safe.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

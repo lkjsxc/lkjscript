@@ -32,7 +32,7 @@ pub(super) fn construct(
         "main".into(),
         signature,
         effects(program.main.body.effects),
-        origin(program.main.origin.raw(), 0),
+        origin(program.main.origin, 0),
         CleanupPlan::new(
             memory_plan,
             MemoryFunctionId::new(main_id.raw()),
@@ -40,7 +40,7 @@ pub(super) fn construct(
             structural,
         )?,
     );
-    let entry = builder.new_block(origin(program.main.origin.raw(), 0), false)?;
+    let entry = builder.new_block(origin(program.main.origin, 0), false)?;
     builder.entry = entry;
     builder.current = Some(entry);
     if program.main.params.len() != builder.signature.parameters.len()
@@ -59,12 +59,8 @@ pub(super) fn construct(
     {
         builder.register_place(place, binding, ty.clone())?;
         let owner_place = builder.owned_place_for_binding(binding)?;
-        let parameter = builder.add_block_parameter(
-            entry,
-            ty,
-            owner_place,
-            origin(program.main.origin.raw(), 0),
-        )?;
+        let parameter =
+            builder.add_block_parameter(entry, ty, owner_place, origin(program.main.origin, 0))?;
         builder.env.insert(binding, parameter);
         if owner_place.is_some() {
             builder.mark_entry_owner(binding);

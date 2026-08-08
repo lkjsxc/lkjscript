@@ -14,7 +14,7 @@ impl FunctionBuilder<'_> {
         let Some(left) = self.lower_expr(left)? else {
             return Ok(None);
         };
-        let branch_origin = origin(expression.origin.raw(), self.next_position);
+        let branch_origin = origin(expression.origin, self.next_position);
         let evaluate_right = self.new_block(branch_origin, false)?;
         let skip_right = self.new_block(branch_origin, false)?;
         let (true_target, false_target, skipped) = if operation == Operation::And {

@@ -6,7 +6,7 @@ impl FunctionBuilder<'_> {
         input: &Expr,
         trap: &str,
         ty: SsaType,
-        source: hir::SourceId,
+        source: hir::Origin,
         value: ValueId,
         owner_ty: SsaType,
     ) -> Result<ValueId> {
@@ -38,7 +38,7 @@ impl FunctionBuilder<'_> {
             RuntimeOp::EqualValue.effects(),
             source,
         )?;
-        let block_origin = origin(source.raw(), self.next_position);
+        let block_origin = origin(source, self.next_position);
         let success = self.new_block(block_origin, false)?;
         let failure = self.new_block(block_origin, false)?;
         let incoming_env = self.env.clone();

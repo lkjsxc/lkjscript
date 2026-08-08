@@ -45,7 +45,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn end_conditional_branch_place(
         &mut self,
         binding: BindingId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let place = self
             .owned_place_for_binding(binding)?
@@ -64,7 +64,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn drop_conditional_branch_owner(
         &mut self,
         binding: BindingId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let Some(value) = self.env.get(&binding).copied() else {
             return Ok(());

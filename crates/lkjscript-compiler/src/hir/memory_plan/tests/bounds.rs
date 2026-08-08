@@ -140,7 +140,7 @@ fn generated_structural_parameter_program(count: u64) -> Result<hir::Program> {
         .collect();
     program.functions.push(hir::Function {
         binding: function_binding,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         params: parameter_ids.clone(),
         param_places: (0_u64..)
             .take(parameter_ids.len())

@@ -2,6 +2,9 @@
 pub struct EffectSet(u16);
 
 impl EffectSet {
+    /// Effects are not yet knowable because an incomplete expression remains.
+    /// The bit propagates through unions and is rejected at the executable boundary.
+    pub const UNKNOWN: Self = Self(1 << 15);
     pub const PURE: Self = Self(0);
     pub const ALLOCATES: Self = Self(1 << 0);
     pub const READS_MEMORY: Self = Self(1 << 1);
@@ -26,6 +29,10 @@ impl EffectSet {
 
     pub const fn bits(self) -> u16 {
         self.0
+    }
+
+    pub const fn is_known(self) -> bool {
+        self.0 & Self::UNKNOWN.0 == 0
     }
 
     pub(crate) const fn from_bits(bits: u16) -> Self {

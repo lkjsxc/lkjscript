@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use lkjscript_core::Error;
 
-use super::{HoleId, RevisionId};
+use super::{CompletenessBlocker, RevisionId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -83,15 +83,15 @@ impl std::error::Error for WorkspaceError {}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IncompleteSnapshotError {
     pub revision: RevisionId,
-    pub holes: Vec<HoleId>,
+    pub blockers: Vec<CompletenessBlocker>,
 }
 
 impl fmt::Display for IncompleteSnapshotError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "workspace snapshot is incomplete ({} typed hole(s))",
-            self.holes.len()
+            "workspace snapshot is incomplete ({} blocker(s))",
+            self.blockers.len()
         )
     }
 }

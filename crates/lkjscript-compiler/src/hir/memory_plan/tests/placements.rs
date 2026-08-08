@@ -44,7 +44,7 @@ fn shared_program() -> hir::Program {
     ];
     let function_definition = hir::Function {
         binding: function,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         params: vec![left, right],
         param_places: vec![hir::PlaceId::new(0), hir::PlaceId::new(1)],
         bounds: Vec::new(),
@@ -97,7 +97,7 @@ fn shared_program() -> hir::Program {
         match_plans: Vec::new(),
         functions: vec![function_definition],
         main: hir::Main {
-            origin: origin(),
+            origin: hir::Origin::Source(origin()),
             params: Vec::new(),
             param_places: Vec::new(),
             param_types: Vec::new(),

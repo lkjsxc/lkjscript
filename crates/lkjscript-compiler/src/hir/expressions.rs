@@ -4,7 +4,7 @@ use super::*;
 pub struct Expr {
     pub ty: Type,
     pub effects: EffectSet,
-    pub origin: SourceId,
+    pub origin: Origin,
     pub kind: ExprKind,
 }
 
@@ -112,7 +112,8 @@ pub(crate) fn for_each_expression_child<'a>(
             action(initial);
             action(body);
         }
-        ExprKind::LitI64(_)
+        ExprKind::Hole
+        | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit
@@ -131,6 +132,7 @@ pub(crate) fn for_each_expression_child<'a>(
 
 fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
     match kind {
+        ExprKind::Hole => ExprKind::Hole,
         ExprKind::LitI64(value) => ExprKind::LitI64(*value),
         ExprKind::LitF64(value) => ExprKind::LitF64(*value),
         ExprKind::LitBool(value) => ExprKind::LitBool(*value),
@@ -522,7 +524,8 @@ fn take_children(expression: &mut Expr, pending: &mut Vec<Expr>) {
             pending.push(*value);
             pending.push(*replacement);
         }
-        ExprKind::LitI64(_)
+        ExprKind::Hole
+        | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit
@@ -548,6 +551,8 @@ pub enum BorrowKind {
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
+    /// A real incomplete expression. No executable expression exists beneath it.
+    Hole,
     LitI64(i64),
     LitF64(f64),
     LitBool(bool),

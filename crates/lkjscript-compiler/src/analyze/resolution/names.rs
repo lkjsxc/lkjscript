@@ -51,13 +51,14 @@ impl Resolver<'_> {
         Expr {
             ty,
             effects,
-            origin: self.origin,
+            origin: Origin::Source(self.origin),
             kind,
         }
     }
 
     pub(in crate::analyze) fn effects(&self, kind: &ExprKind) -> EffectSet {
         match kind {
+            ExprKind::Hole => EffectSet::UNKNOWN,
             ExprKind::LitI64(_)
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)

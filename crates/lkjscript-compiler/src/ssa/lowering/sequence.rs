@@ -4,7 +4,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_sequence(
         &mut self,
         expressions: &[Expr],
-        sequence_origin: hir::SourceId,
+        sequence_origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let mut result = None;
         for (index, expression) in expressions.iter().enumerate() {

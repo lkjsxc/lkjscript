@@ -57,7 +57,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_continue(
         &mut self,
         loop_id: hir::LoopId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let target = self.loop_target(loop_id)?;
         self.cleanup_places_to(target.active_place_bindings.len(), expression_origin)?;
@@ -81,7 +81,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_match_unreachable(
         &mut self,
         plan: hir::MatchPlanId,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let message = format!(
             "verified exhaustive match plan {} reached unreachable edge",

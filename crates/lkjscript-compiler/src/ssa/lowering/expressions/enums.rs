@@ -6,7 +6,7 @@ impl FunctionBuilder<'_> {
         _layout: hir::RuntimeLayoutId,
         fields: &[Expr],
         ty: SsaType,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         if self.structural.type_for(&ty).is_none() {
             return Err(Error::msg(
@@ -26,7 +26,7 @@ impl FunctionBuilder<'_> {
         variant: hir::VariantId,
         _layout: hir::RuntimeLayoutId,
         input: &Expr,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(input)? else {
             return Ok(None);
@@ -78,7 +78,7 @@ impl FunctionBuilder<'_> {
         layout: hir::RuntimeLayoutId,
         input: &Expr,
         ty: SsaType,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(input)? else {
             return Ok(None);

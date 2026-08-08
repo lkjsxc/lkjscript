@@ -170,6 +170,7 @@ fn walk_inner<'a>(
     }
     add(&mut facts.steps, 1)?;
     match &expression.kind {
+        ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)

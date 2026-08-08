@@ -16,8 +16,11 @@ pub(in crate::ssa) fn failure_behavior(effects: EffectSet) -> FailureBehavior {
     }
 }
 
-pub(in crate::ssa) const fn origin(source: u64, node: u64) -> Origin {
-    Origin::source(source, node)
+pub(in crate::ssa) const fn origin(source: hir::Origin, node: u64) -> Origin {
+    match source {
+        hir::Origin::Source(source) => Origin::source(source.raw(), node),
+        hir::Origin::Semantic | hir::Origin::Builtin => Origin::SYNTHETIC,
+    }
 }
 
 pub(in crate::ssa) fn ir_error(error: lkjscript_ir::IrError) -> Error {

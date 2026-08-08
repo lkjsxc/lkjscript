@@ -7,39 +7,58 @@ is not a claim that every target exists. Current checkout status remains owned b
 
 ## Current implementation
 
-**Currently implemented.** Text and path APIs are private-parser importer conveniences that create
-one syntax-independent immutable `WorkspaceSnapshot`; they are not a sibling compiler or editing
-authority. `compile_snapshot` consumes a complete snapshot directly. Parser-counter tests prove
-direct compilation and semantic edits do not render or reparse text.
+**Currently implemented.** `Workspace::empty` creates a fresh namespace at revision 1 with no
+source records, attachments, entities, entry point, or body. The empty revision is a valid
+queryable/projectable editing state with a `MissingEntryPoint` blocker and diagnostic. Text and path
+APIs are private-parser importer conveniences that produce the same immutable semantic program
+authority; compiler-owned operations, prelude enums, and core traits are fixed language context, not
+mutable program entities.
 
-An in-process `Workspace` owns the current `Arc<WorkspaceSnapshot>`, one-revision atomic publication,
-and generation-aware entity/node allocation. Snapshots own complete or typed-hole program state,
-private typed HIR, deterministic post-edit provenance, optional source attachments, opaque
-namespace/slot/generation IDs, semantic indexes, type facts, diagnostics, and hole contexts. IDs
-survive rename, formatting attachment changes, attachment removal, unrelated edits, and meaning-
-preserving descendant movement; removed identities are tombstoned.
+A `WorkspaceSnapshot` owns one partial-capable `SemanticProgram`, optional imported diagnostic
+origins and presentation attachments, opaque namespace/slot/generation identities, the exact
+identity allocator including tombstones, derived indexes, typed hole records, diagnostics, and
+structured completeness blockers. The semantic program may omit `main`; missing bodies and typed
+expression holes are actual `ExprKind::Hole` leaves with unknown effects. No executable expression
+is retained behind a hole. Source-free expressions have an honest semantic origin; imported source
+paths and digests do not create logical identity.
 
-Transactions atomically batch function/binding rename, flat typed expression replacement, and typed
-hole introduce/refine/fill. They reject foreign namespaces, stale generations and revisions,
-invalid or cyclic drafts, invisible references, type/arity/effect/ownership failures, and currently
-unsupported storage/generic/match constructors before publication. Failure consumes no identity or
-revision. Success returns deterministic semantic diff, diagnostics, and coarse invalidation domains.
+All construction and later editing uses one revision-checked atomic transaction path. Implemented
+creation is one non-generic scalar function with scalar parameters/result and one parameterless
+scalar `main`; both begin with typed missing bodies. Implemented flat child-before-parent expression
+construction covers i64/f64/Boolean/unit literals, visible parameter loads, non-generic calls, and
+`if`. Transactions also rename supported bindings, replace expressions, and introduce/refine/fill
+typed holes. They reject duplicate/reserved global declarations or function renames, duplicate parameters at creation,
+foreign or stale identity, stale revision, invalid or cyclic drafts, overlapping subtree edits,
+invisible bindings, unsupported ownership
+shapes, and type/arity failures
+before publication. Failure preserves the exact published `Arc`, revision, tombstones, future
+allocation, diagnostics, and projection. Success publishes one revision and returns created entity
+and hole IDs through the semantic diff.
 
-Revision-labelled in-process queries cover paginated entity listing/search, definitions/references,
-callers/callees, actual/expected node types, diagnostics, hole context, and legal constructors.
-Continuations bind namespace, revision, and query. A fallible, iterative concise projection renders
-selected entity, body, type, reference, and explicit `[HOLE]` headers without source attachments.
-Projection labels and formatting never construct semantic identity.
+Structured blockers currently cover missing entry point, missing declaration/entry body, and typed
+expression hole. Every blocker is revision-labelled through the snapshot or
+`IncompleteSnapshotError`. Incomplete compilation returns before complete-HIR derivation, memory
+planning, SSA, bytecode lowering, or execution. A complete revision derives one ephemeral
+source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
+parsing source. Semantic edits and compilation invoke the parser zero times; imported and
+source-free `identity(42)` fixtures have equal user declaration signatures, expression kinds,
+references/calls, diagnostics, compiler outcome, and VM result.
 
-The former syntax-shaped editing service, source-node protocol identities, stdio/session schemas,
-text journal/publication path, CLI routes, and protocol descriptors are deleted. There is no
-replacement wire service until a measured consumer justifies a process boundary and explicit host
-policy.
+Revision-labelled queries cover deterministic paginated entity listing/search,
+definitions/references, callers/callees, actual/expected node types, diagnostics, hole context, and
+expected-type-filtered legal constructors. Hole scope is recomputed after later declaration
+creation. Continuations bind namespace, revision, and query. A fallible iterative projection renders
+state, blockers, selected entity/body/type/reference headers, and explicit holes without source
+attachments. Projection labels never construct identity.
 
-General unresolved references, ambiguities, conflicts, recovery nodes, declaration
-creation/deletion/movement, local-storage construction, generic-call construction, match
-construction, complete source rendering, persistence, collaboration, and incremental recomputation
-remain gaps. Everything below continues to define the target contract.
+The former syntax-shaped editing service, source-node protocol identities, hidden-body hole overlay,
+stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
+and development semantic-digest surrogate are deleted. There is no replacement wire service.
+
+General unresolved references, ambiguities, conflicts, recovery nodes, declaration deletion/movement,
+local-storage construction, generic-call construction, match construction, source rendering,
+persistence, collaboration, and incremental recomputation remain gaps. Everything below continues
+to define the broader target contract.
 
 ## 1. Snapshot authority
 
@@ -76,9 +95,10 @@ and transfer bytes. They do not replace logical identity for every mutable node.
 
 ## 3. Incomplete states
 
-**Target.** A workspace may preserve typed holes, untyped holes, unresolved references, ambiguous
-choices, type/effect/capability/ownership mismatches, missing fields, arms, parameters or
-declarations, import failures, explicit conflicts, and recovery nodes.
+**Target.** A workspace may preserve an absent entry point, missing declaration bodies, typed holes,
+untyped holes, unresolved references, ambiguous choices, type/effect/capability/ownership mismatches,
+missing fields, arms, parameters or declarations, import failures, explicit conflicts, and recovery
+nodes.
 
 Incomplete snapshots are valid editing states. Analysis preserves every sound fact available around
 an error. Diagnostics attach to semantic identities rather than depending only on text spans. A
@@ -132,7 +152,9 @@ or resolution. Text diffs remain available for human review.
 
 ```text
 semantic snapshot
-    -> name, type, effect, capability, and ownership analysis
+    -> structured completeness and semantic consistency witness
+    -> complete source-optional compiler HIR
+    -> effect, ownership, memory, and typed lowering validation
     -> canonical typed core
     -> verified executable representation
     -> selected production execution path

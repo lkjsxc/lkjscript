@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         ty: SsaType,
         source: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<ValueId> {
         let Some(representation) = self
             .selected_structural_representation(&ty, StructuralValueCategory::Owner)
@@ -29,7 +29,7 @@ impl FunctionBuilder<'_> {
         ty: SsaType,
         active_variant: Option<lkjscript_ir::VariantId>,
         fields: Vec<ValueId>,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(type_fact) = self.structural.type_for(&ty) else {
             return Ok(None);

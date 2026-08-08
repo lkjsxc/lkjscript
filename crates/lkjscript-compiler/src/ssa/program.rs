@@ -69,7 +69,7 @@ pub(in crate::ssa) fn construct_program(
             binding.name.clone(),
             signature,
             effects(function.summary),
-            origin(function.origin.raw(), 0),
+            origin(function.origin, 0),
             CleanupPlan::new(
                 memory_plan,
                 MemoryFunctionId::new(id.raw()),
@@ -77,7 +77,7 @@ pub(in crate::ssa) fn construct_program(
                 &structural,
             )?,
         );
-        let entry = builder.new_block(origin(function.origin.raw(), 0), false)?;
+        let entry = builder.new_block(origin(function.origin, 0), false)?;
         builder.entry = entry;
         builder.current = Some(entry);
         if function.params.len() != builder.signature.parameters.len()
@@ -100,12 +100,8 @@ pub(in crate::ssa) fn construct_program(
             let owner_place = builder
                 .owned_place_for_binding(binding_id)?
                 .filter(|_| is_owned_value(&structural, &ty));
-            let parameter = builder.add_block_parameter(
-                entry,
-                ty,
-                owner_place,
-                origin(function.origin.raw(), 0),
-            )?;
+            let parameter =
+                builder.add_block_parameter(entry, ty, owner_place, origin(function.origin, 0))?;
             builder.env.insert(binding_id, parameter);
             if owner_place.is_some() {
                 builder.mark_entry_owner(binding_id);

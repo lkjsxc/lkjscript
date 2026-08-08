@@ -20,6 +20,7 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u64]) -> Resul
 
 fn expression_inner(value: &Expr, program: &hir::Program, counts: &mut [u64]) -> Result<()> {
     match &value.kind {
+        ExprKind::Hole => {}
         ExprKind::MatchUnreachable { plan } => {
             let index = usize::try_from(plan.raw())
                 .map_err(|_| Error::msg("match unreachable plan identity exceeds usize"))?;
@@ -28,7 +29,7 @@ fn expression_inner(value: &Expr, program: &hir::Program, counts: &mut [u64]) ->
                 .get(index)
                 .filter(|item| item.id == *plan)
                 .ok_or_else(|| Error::msg("match unreachable edge has stale plan identity"))?;
-            if value.ty != Type::Never || value.origin != planned.origin {
+            if value.ty != Type::Never || value.origin != Origin::Source(planned.origin) {
                 return Err(Error::msg(
                     "match unreachable edge has stale Never type or origin",
                 ));

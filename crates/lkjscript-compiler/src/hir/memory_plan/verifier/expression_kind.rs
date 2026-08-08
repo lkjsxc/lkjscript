@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn verified_expression_kind(kind: &hir::ExprKind) -> MemoryExpressionKind {
     use hir::ExprKind as K;
     match kind {
+        K::Hole => unreachable!("complete HIR cannot contain a hole"),
         K::LitI64(value) => MemoryExpressionKind::I64Literal(*value),
         K::LitF64(value) => MemoryExpressionKind::F64Literal(value.to_bits()),
         K::LitBool(value) => MemoryExpressionKind::BoolLiteral(*value),

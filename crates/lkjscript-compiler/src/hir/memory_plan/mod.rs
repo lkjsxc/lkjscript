@@ -11,6 +11,13 @@ mod verifier;
 pub use model::*;
 
 use encoding::compute_plan_id;
+
+pub(crate) const fn source_origin(origin: hir::Origin) -> MemorySourceOrigin {
+    match origin {
+        hir::Origin::Source(source) => MemorySourceOrigin::Source(source.raw()),
+        hir::Origin::Semantic | hir::Origin::Builtin => MemorySourceOrigin::Semantic,
+    }
+}
 pub(crate) use executable_witness::executable_facts;
 
 pub(crate) fn memory_type_identity(ty: &MemoryType) -> Result<[u8; 32]> {

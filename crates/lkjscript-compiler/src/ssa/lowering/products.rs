@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         product: ProductId,
         fields: &[Expr],
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(fields) = self.lower_arguments(fields)? else {
             return Ok(None);
@@ -29,7 +29,7 @@ impl FunctionBuilder<'_> {
         field: u64,
         value: &Expr,
         ty: SsaType,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(value)? else {
             return Ok(None);
@@ -64,7 +64,7 @@ impl FunctionBuilder<'_> {
         field: u64,
         value: &Expr,
         replacement: &Expr,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let Some(value) = self.lower_expr(value)? else {
             return Ok(None);

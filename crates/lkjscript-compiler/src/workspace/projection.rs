@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{
-    EntityId, EntityKind, HoleId, NodeHeader, NodeId, NodeKind, ProgramState, ReferenceEdge,
-    SemanticOwner, WorkspaceError, WorkspaceSnapshot,
+    CompletenessBlocker, EntityId, EntityKind, HoleId, NodeHeader, NodeId, NodeKind, ProgramState,
+    ReferenceEdge, SemanticOwner, WorkspaceError, WorkspaceSnapshot,
 };
 
 /// One concise human-readable view selected from a workspace snapshot.
@@ -35,6 +35,43 @@ impl WorkspaceSnapshot {
             ProgramState::Incomplete => "incomplete",
         })?;
         output.push("\n")?;
+        for blocker in self.completeness_blockers() {
+            output.push("blocker ")?;
+            match blocker {
+                CompletenessBlocker::MissingEntryPoint => {
+                    output.push("missing-entry-point\n")?;
+                }
+                CompletenessBlocker::MissingBody {
+                    declaration,
+                    hole,
+                    expected_type,
+                } => {
+                    output.push("missing-body declaration=")?;
+                    output.entity_id(*declaration)?;
+                    output.push(" hole=")?;
+                    output.node_id(hole.node())?;
+                    output.push(" expected=")?;
+                    output.quoted(&expected_type.to_string())?;
+                    output.push("\n")?;
+                }
+                CompletenessBlocker::TypedHole {
+                    hole,
+                    expected_type,
+                    owner,
+                    context,
+                } => {
+                    output.push("typed-hole hole=")?;
+                    output.node_id(hole.node())?;
+                    output.push(" expected=")?;
+                    output.quoted(&expected_type.to_string())?;
+                    output.push(" owner=")?;
+                    output.entity_id(*owner)?;
+                    output.push(" context=")?;
+                    output.node_id(*context)?;
+                    output.push("\n")?;
+                }
+            }
+        }
 
         for slice in slices {
             match *slice {
@@ -219,7 +256,7 @@ impl WorkspaceSnapshot {
     fn is_hole(&self, node: NodeId) -> bool {
         self.holes
             .iter()
-            .any(|overlay| overlay.state.id.node() == node)
+            .any(|record| record.state.id.node() == node)
     }
 }
 

@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         conversion: &ExprKind,
         result: SsaType,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let (operation, input) = match conversion {
             ExprKind::F64FromI64Exact(input) => (Operation::F64FromI64Exact, input),

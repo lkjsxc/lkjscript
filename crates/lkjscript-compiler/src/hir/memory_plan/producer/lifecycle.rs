@@ -159,7 +159,7 @@ impl<'a> Producer<'a> {
                 0,
                 MemoryEscape::Caller,
                 MemoryOrigin {
-                    source: function.origin.raw(),
+                    source: crate::memory_plan::source_origin(function.origin),
                     expression: None,
                 },
             )?;
@@ -169,7 +169,7 @@ impl<'a> Producer<'a> {
                 binding,
                 place.raw(),
                 &ty,
-                function.origin.raw(),
+                crate::memory_plan::source_origin(function.origin),
                 mode == MemoryParameterMode::Consume,
             )?;
         }
@@ -180,7 +180,7 @@ impl<'a> Producer<'a> {
             function.summary.bits(),
             MemoryEscape::Returned,
             MemoryOrigin {
-                source: function.origin.raw(),
+                source: crate::memory_plan::source_origin(function.origin),
                 expression: None,
             },
         )?;
@@ -195,7 +195,7 @@ impl<'a> Producer<'a> {
             id,
             name,
             binding: Some(function.binding.raw()),
-            source: function.origin.raw(),
+            source: crate::memory_plan::source_origin(function.origin),
             signature,
             parameter_entries,
             result_entry,
@@ -234,7 +234,7 @@ impl<'a> Producer<'a> {
                 0,
                 MemoryEscape::Caller,
                 MemoryOrigin {
-                    source: self.program.main.origin.raw(),
+                    source: crate::memory_plan::source_origin(self.program.main.origin),
                     expression: None,
                 },
             )?;
@@ -244,7 +244,7 @@ impl<'a> Producer<'a> {
                 binding,
                 place.raw(),
                 ty,
-                self.program.main.origin.raw(),
+                crate::memory_plan::source_origin(self.program.main.origin),
                 mode == MemoryParameterMode::Consume,
             )?;
         }
@@ -254,7 +254,7 @@ impl<'a> Producer<'a> {
             self.program.main.body.effects.bits(),
             MemoryEscape::Returned,
             MemoryOrigin {
-                source: self.program.main.origin.raw(),
+                source: crate::memory_plan::source_origin(self.program.main.origin),
                 expression: None,
             },
         )?;
@@ -269,7 +269,7 @@ impl<'a> Producer<'a> {
             id,
             name: "main".into(),
             binding: None,
-            source: self.program.main.origin.raw(),
+            source: crate::memory_plan::source_origin(self.program.main.origin),
             signature,
             parameter_entries,
             result_entry,
@@ -311,11 +311,12 @@ impl<'a> Producer<'a> {
             expression.effects.bits(),
             escape,
             MemoryOrigin {
-                source: expression.origin.raw(),
+                source: crate::memory_plan::source_origin(expression.origin),
                 expression: Some(expression_id),
             },
         )?;
         match &expression.kind {
+            ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
             ExprKind::LitI64(_)
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)

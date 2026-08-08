@@ -3,6 +3,8 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     Source(SourceId),
+    /// Semantic state with no source attachment.
+    Semantic,
     Builtin,
 }
 
@@ -54,7 +56,7 @@ impl Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Main {
-    pub origin: SourceId,
+    pub origin: Origin,
     pub params: Vec<BindingId>,
     pub param_places: Vec<PlaceId>,
     pub param_types: Vec<Type>,
@@ -67,7 +69,7 @@ pub struct Main {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub binding: BindingId,
-    pub origin: SourceId,
+    pub origin: Origin,
     pub params: Vec<BindingId>,
     pub param_places: Vec<PlaceId>,
     pub bounds: Vec<TraitBound>,

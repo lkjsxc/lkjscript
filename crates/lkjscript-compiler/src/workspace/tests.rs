@@ -7,6 +7,7 @@ use super::*;
 
 const SCALAR: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n42\n/main\n";
 const FUNCTION_PROGRAM: &str = "def/\nname/\nidentity\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nvalue\ni64\n/params\nvalue\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nidentity/\n41\n/identity\n/main\n";
+const FUNCTION_PROGRAM_42: &str = "def/\nname/\nidentity\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nvalue\ni64\n/params\nvalue\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nidentity/\n42\n/identity\n/main\n";
 const CONDITIONAL: &str =
     "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nif/\ntrue\n1\n2\n/if\n/main\n";
 
@@ -20,6 +21,108 @@ fn run_i64(snapshot: &WorkspaceSnapshot) -> i64 {
         ExecutionOutcome::Returned(value) => value.as_i64().expect("returned i64"),
         outcome => panic!("unexpected execution outcome: {outcome:?}"),
     }
+}
+
+fn create_source_free_declarations(
+    seed: u64,
+) -> (Workspace, EntityId, EntityId, EntityId, HoleId, HoleId) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: crate::Type::I64,
+                    }],
+                    return_type: crate::Type::I64,
+                },
+                Edit::CreateMain {
+                    return_type: crate::Type::I64,
+                },
+            ],
+        })
+        .expect("create source-free declarations");
+    let function = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("function")
+        .id;
+    let parameter = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Parameter)
+        .expect("parameter")
+        .id;
+    let main = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("main")
+        .id;
+    let function_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("function hole")
+        .id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+    (
+        workspace,
+        function,
+        parameter,
+        main,
+        function_hole,
+        main_hole,
+    )
+}
+
+fn fill_source_free_identity(
+    workspace: &mut Workspace,
+    function: EntityId,
+    parameter: EntityId,
+    function_hole: HoleId,
+    main_hole: HoleId,
+) -> Arc<WorkspaceSnapshot> {
+    let function_filled = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole: function_hole,
+                draft: ExpressionDraft::new(vec![DraftNode::Load(parameter)], DraftNodeId::new(0)),
+            }],
+        })
+        .expect("fill identity function");
+    workspace
+        .apply(Transaction {
+            base_revision: function_filled.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: function,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("fill main")
+        .snapshot
 }
 
 #[test]
@@ -69,50 +172,765 @@ fn identities_from_another_workspace_are_rejected_before_lookup() {
 }
 
 #[test]
-fn compile_snapshot_never_invokes_the_parser_and_attachment_free_snapshot_executes() {
+fn source_free_construction_never_invokes_parser_and_executes() {
     crate::source::reset_parser_invocation_count();
-    let imported = importer::import_source_with_namespace(
-        SCALAR,
-        "workspace-direct.lkjscript",
-        WorkspaceNamespace::deterministic(11),
-    )
-    .expect("import typed snapshot");
-    assert_eq!(crate::source::parser_invocation_count(), 1);
-
-    let direct = WorkspaceSnapshot::from_hir_for_test(
-        WorkspaceNamespace::deterministic(12),
-        imported.hir().clone(),
-        Arc::clone(&imported.provenance),
-    )
-    .expect("construct attachment-free programmatic snapshot from typed HIR");
-    assert!(direct.attachments().is_none());
-
-    crate::source::reset_parser_invocation_count();
-    let executable = crate::compile_snapshot(&direct).expect("compile snapshot directly");
-    assert_eq!(crate::source::parser_invocation_count(), 0);
-    let outcome = run_chunk(
-        executable.bytecode(),
-        &ExecutionInputs::default(),
-        &ExecutionPolicy::unrestricted(),
+    crate::pipeline::reset_lowering_invocations();
+    let mut workspace = Workspace::empty_deterministic(12).expect("empty workspace");
+    let empty = workspace.current();
+    assert_eq!(empty.state(), ProgramState::Incomplete);
+    assert!(empty.entities().is_empty());
+    assert!(empty.nodes().is_empty());
+    assert!(empty.attachments().is_none());
+    assert!(empty.source_origins.is_empty());
+    empty
+        .check_consistency()
+        .expect("consistent empty snapshot");
+    assert_eq!(empty.diagnostics().len(), 1);
+    assert_eq!(
+        empty.diagnostics()[0].code.as_ref(),
+        "workspace.missing-entry-point"
+    );
+    assert_eq!(
+        empty.project(&[]).expect("empty projection"),
+        "workspace revision=1 state=incomplete\nblocker missing-entry-point\n"
+    );
+    assert_eq!(
+        empty.completeness_blockers(),
+        &[CompletenessBlocker::MissingEntryPoint]
     );
     assert!(matches!(
-        outcome,
-        ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        crate::compile_snapshot(&empty),
+        Err(crate::CompileSnapshotError::Incomplete(_))
     ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+
+    let created = workspace
+        .apply(Transaction {
+            base_revision: empty.revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: crate::Type::I64,
+                    }],
+                    return_type: crate::Type::I64,
+                },
+                Edit::CreateMain {
+                    return_type: crate::Type::I64,
+                },
+            ],
+        })
+        .expect("create declarations");
+    let function = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("function")
+        .id;
+    let parameter = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Parameter)
+        .expect("parameter")
+        .id;
+    let main = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("main")
+        .id;
+    assert_eq!(created.snapshot.holes().len(), 2);
+    let created_ids = created
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::EntityCreated { entity, .. } => Some(*entity),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(created_ids.len(), 3);
+    assert!(created_ids.contains(&function));
+    assert!(created_ids.contains(&parameter));
+    assert!(created_ids.contains(&main));
+    assert!(created
+        .snapshot
+        .completeness_blockers()
+        .iter()
+        .all(|blocker| matches!(blocker, CompletenessBlocker::MissingBody { .. })));
+    let identity_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("identity hole")
+        .id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+    let introduced_holes = created
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::HoleIntroduced { hole } => Some(*hole),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(introduced_holes.len(), 2);
+    assert!(introduced_holes.contains(&identity_hole));
+    assert!(introduced_holes.contains(&main_hole));
+    let identity_context = created
+        .snapshot
+        .hole_context(created.snapshot.revision(), identity_hole)
+        .expect("identity context");
+    assert_eq!(identity_context.expected_type, crate::Type::I64);
+    assert!(identity_context.visible_entities.contains(&parameter));
+    assert!(identity_context.visible_entities.contains(&function));
+    assert!(matches!(
+        crate::compile_snapshot(&created.snapshot),
+        Err(crate::CompileSnapshotError::Incomplete(_))
+    ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+
+    let identity_filled = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: identity_hole,
+                draft: ExpressionDraft::new(vec![DraftNode::Load(parameter)], DraftNodeId::new(0)),
+            }],
+        })
+        .expect("fill identity");
+    assert_eq!(identity_filled.snapshot.state(), ProgramState::Incomplete);
+    assert!(identity_filled
+        .snapshot
+        .program
+        .functions
+        .iter()
+        .find(|candidate| candidate.binding.raw() == 0)
+        .expect("identity semantic function")
+        .summary
+        .is_known());
+    assert!(matches!(
+        crate::compile_snapshot(&identity_filled.snapshot),
+        Err(crate::CompileSnapshotError::Incomplete(_))
+    ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: identity_filled.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: function,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("fill main");
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert!(completed.snapshot.completeness_blockers().is_empty());
+    assert!(completed.snapshot.diagnostics().is_empty());
+    completed
+        .snapshot
+        .check_consistency()
+        .expect("consistent complete snapshot");
+    assert!(completed.snapshot.source_origins.is_empty());
+    assert_eq!(completed.snapshot.entities().len(), 3);
+    assert_eq!(completed.snapshot.calls().len(), 1);
+    assert_eq!(completed.snapshot.calls()[0].callee, function);
+    assert!(completed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == parameter));
+    let projection = completed
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(function),
+            ProjectionSlice::Body(function),
+            ProjectionSlice::Entity(main),
+            ProjectionSlice::Body(main),
+        ])
+        .expect("source-free projection");
+    assert!(projection.contains("name=\"identity\""));
+    assert_eq!(
+        projection,
+        completed
+            .snapshot
+            .project(&[
+                ProjectionSlice::Entity(function),
+                ProjectionSlice::Body(function),
+                ProjectionSlice::Entity(main),
+                ProjectionSlice::Body(main),
+            ])
+            .expect("repeat source-free projection")
+    );
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(crate::pipeline::lowering_invocations(), 1);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
 }
 
 #[test]
-fn compile_snapshot_rejects_malformed_hir_before_lowering() {
-    let valid =
-        import_source(SCALAR, "workspace-malformed.lkjscript").expect("import valid snapshot");
-    let mut malformed_hir = valid.hir().clone();
-    malformed_hir.main.arity = 1;
-    let malformed = valid.malformed_hir_for_test(malformed_hir);
+fn imported_and_source_free_programs_converge_semantically() {
+    let imported = import_source(FUNCTION_PROGRAM_42, "workspace-convergence.lkjscript")
+        .expect("import equivalent program");
+    let (mut workspace, function, parameter, _main, function_hole, main_hole) =
+        create_source_free_declarations(31);
+    let source_free = fill_source_free_identity(
+        &mut workspace,
+        function,
+        parameter,
+        function_hole,
+        main_hole,
+    );
 
-    let failure = crate::compile_snapshot(&malformed).expect_err("reject malformed snapshot HIR");
-    assert!(failure
-        .to_string()
-        .contains("main signature lengths are inconsistent"));
+    let observations = |snapshot: &WorkspaceSnapshot| {
+        let mut entities = snapshot
+            .entities()
+            .iter()
+            .map(|entity| {
+                (
+                    entity.kind,
+                    entity
+                        .name
+                        .rsplit(':')
+                        .next()
+                        .unwrap_or(&entity.name)
+                        .to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+        entities.sort();
+        let node_kinds = snapshot
+            .nodes()
+            .iter()
+            .map(|node| (node.kind, node.actual_type.to_string()))
+            .collect::<Vec<_>>();
+        let function_signatures = snapshot
+            .program
+            .functions
+            .iter()
+            .map(|function| {
+                snapshot
+                    .program
+                    .binding(function.binding)
+                    .expect("function binding")
+                    .ty
+                    .clone()
+            })
+            .collect::<Vec<_>>();
+        (
+            entities,
+            function_signatures,
+            snapshot
+                .program
+                .main
+                .as_ref()
+                .expect("complete main")
+                .return_type
+                .clone(),
+            node_kinds,
+            snapshot.calls().len(),
+            snapshot.references().len(),
+            snapshot.diagnostics().to_vec(),
+        )
+    };
+    assert_eq!(observations(&imported), observations(&source_free));
+    assert_eq!(run_i64(&imported), 42);
+    assert_eq!(run_i64(&source_free), 42);
+}
+
+#[test]
+fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() {
+    crate::source::reset_parser_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(32).expect("empty workspace");
+    let before = workspace.current();
+    let before_projection = before.project(&[]).expect("projection");
+    let failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::CreateFunction {
+                name: "identity".to_owned(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: crate::Type::I64,
+                }],
+                return_type: crate::Type::I64,
+            },
+            Edit::CreateMain {
+                return_type: crate::Type::I64,
+            },
+            Edit::CreateMain {
+                return_type: crate::Type::I64,
+            },
+        ],
+    });
+    assert!(matches!(
+        failure,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(
+        workspace.current().project(&[]).expect("projection"),
+        before_projection
+    );
+    assert!(workspace.current().entities().is_empty());
+    assert!(workspace.current().nodes().is_empty());
+
+    let (control, ..) = create_source_free_declarations(32);
+    let retry = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: crate::Type::I64,
+                    }],
+                    return_type: crate::Type::I64,
+                },
+                Edit::CreateMain {
+                    return_type: crate::Type::I64,
+                },
+            ],
+        })
+        .expect("retry creation");
+    assert_eq!(retry.snapshot.entities(), control.current().entities());
+    assert_eq!(retry.snapshot.nodes(), control.current().nodes());
+
+    let function = retry
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("function")
+        .id;
+    let parameter = retry
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Parameter)
+        .expect("parameter")
+        .id;
+    let main = retry
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("main")
+        .id;
+    let main_hole = retry
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+    let published = workspace.current();
+    let duplicate_function = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "identity".to_owned(),
+            parameters: Vec::new(),
+            return_type: crate::Type::I64,
+        }],
+    });
+    assert!(matches!(
+        duplicate_function,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let reserved_function = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "main".to_owned(),
+            parameters: Vec::new(),
+            return_type: crate::Type::I64,
+        }],
+    });
+    assert!(matches!(
+        reserved_function,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let unsupported_signature = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "owned".to_owned(),
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: crate::Type::ByteVector,
+            }],
+            return_type: crate::Type::ByteVector,
+        }],
+    });
+    assert!(matches!(
+        unsupported_signature,
+        Err(WorkspaceError::UnsupportedEdit { .. })
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let duplicate_parameters = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "other".to_owned(),
+            parameters: vec![
+                ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: crate::Type::I64,
+                },
+                ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: crate::Type::I64,
+                },
+            ],
+            return_type: crate::Type::I64,
+        }],
+    });
+    assert!(matches!(
+        duplicate_parameters,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let invisible = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(vec![DraftNode::Load(parameter)], DraftNodeId::new(0)),
+        }],
+    });
+    assert!(matches!(invisible, Err(WorkspaceError::InvisibleEntity)));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let wrong_arity = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(
+                vec![DraftNode::Call {
+                    callee: function,
+                    arguments: Vec::new(),
+                }],
+                DraftNodeId::new(0),
+            ),
+        }],
+    });
+    assert!(matches!(wrong_arity, Err(WorkspaceError::InvalidDraft(_))));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let wrong_type = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::Bool(true),
+                    DraftNode::Call {
+                        callee: function,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(
+        wrong_type,
+        Err(WorkspaceError::TypeMismatch { .. })
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let stale = EntityId::new(
+        retry.snapshot.namespace(),
+        function.slot(),
+        function.generation().checked_add(1).expect("generation"),
+    );
+    let stale_call = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(42),
+                    DraftNode::Call {
+                        callee: stale,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(stale_call, Err(WorkspaceError::StaleIdentity(_))));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let foreign = Workspace::empty_deterministic(33)
+        .expect("foreign workspace")
+        .current();
+    let foreign_id = EntityId::new(foreign.namespace(), 0, 1);
+    let foreign_call = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(42),
+                    DraftNode::Call {
+                        callee: foreign_id,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(
+        foreign_call,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let cyclic = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole: main_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(0),
+                    DraftNode::If {
+                        condition: DraftNodeId::new(1),
+                        then_branch: DraftNodeId::new(0),
+                        else_branch: DraftNodeId::new(0),
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(cyclic, Err(WorkspaceError::InvalidDraft(_))));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+    assert_eq!(workspace.current().entities(), published.entities());
+    assert_eq!(workspace.current().nodes(), published.nodes());
+    assert_eq!(
+        workspace.current().holes().cloned().collect::<Vec<_>>(),
+        published.holes().cloned().collect::<Vec<_>>()
+    );
+    assert_eq!(workspace.current().diagnostics(), published.diagnostics());
+    assert_eq!(
+        workspace
+            .current()
+            .project(&[])
+            .expect("current projection"),
+        published.project(&[]).expect("published projection")
+    );
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+}
+
+#[test]
+fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() {
+    let mut function_first = Workspace::empty_deterministic(34).expect("function-first workspace");
+    let function_created = function_first
+        .apply(Transaction {
+            base_revision: function_first.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "identity".to_owned(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: crate::Type::I64,
+                }],
+                return_type: crate::Type::I64,
+            }],
+        })
+        .expect("create function before main");
+    let function = function_created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("function entity")
+        .id;
+    let parameter = function_created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Parameter)
+        .expect("parameter entity")
+        .id;
+    let function_hole = function_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("function hole")
+        .id;
+    assert_eq!(
+        function_created.snapshot.completeness_blockers()[0],
+        CompletenessBlocker::MissingEntryPoint
+    );
+    let main_created = function_first
+        .apply(Transaction {
+            base_revision: function_created.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: crate::Type::I64,
+            }],
+        })
+        .expect("create main after function");
+    assert_eq!(
+        main_created
+            .snapshot
+            .definition(main_created.snapshot.revision(), function)
+            .expect("stable function")
+            .id,
+        function
+    );
+    assert_eq!(
+        main_created
+            .snapshot
+            .definition(main_created.snapshot.revision(), parameter)
+            .expect("stable parameter")
+            .id,
+        parameter
+    );
+    assert_eq!(
+        main_created
+            .snapshot
+            .hole_context(main_created.snapshot.revision(), function_hole)
+            .expect("stable function hole")
+            .id,
+        function_hole
+    );
+
+    let mut main_first = Workspace::empty_deterministic(35).expect("main-first workspace");
+    let main_created = main_first
+        .apply(Transaction {
+            base_revision: main_first.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: crate::Type::I64,
+            }],
+        })
+        .expect("create main before function");
+    let main_hole = main_created.snapshot.holes().next().expect("main hole").id;
+    assert!(main_created
+        .snapshot
+        .hole_context(main_created.snapshot.revision(), main_hole)
+        .expect("initial main context")
+        .visible_entities
+        .is_empty());
+    let function_created = main_first
+        .apply(Transaction {
+            base_revision: main_created.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "identity".to_owned(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: crate::Type::I64,
+                }],
+                return_type: crate::Type::I64,
+            }],
+        })
+        .expect("create function after main");
+    let later_function = function_created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("later function")
+        .id;
+    let refreshed = function_created
+        .snapshot
+        .hole_context(function_created.snapshot.revision(), main_hole)
+        .expect("refreshed main context");
+    assert!(refreshed.visible_entities.contains(&later_function));
+    assert!(function_created
+        .snapshot
+        .legal_constructors(
+            function_created.snapshot.revision(),
+            main_hole,
+            PageRequest::new(16).expect("page"),
+            None,
+        )
+        .expect("main constructors")
+        .items
+        .contains(&LegalConstructor::Call(later_function)));
+}
+
+#[test]
+fn tombstoned_node_generations_survive_snapshot_reopening() {
+    let snapshot = importer::import_source_with_namespace(
+        CONDITIONAL,
+        "workspace-reopen.lkjscript",
+        WorkspaceNamespace::deterministic(36),
+    )
+    .expect("conditional import");
+    let root = snapshot.nodes()[0].id;
+    let deleted = snapshot.nodes()[1..]
+        .iter()
+        .map(|node| node.id)
+        .collect::<Vec<_>>();
+    let mut workspace = Workspace::new(snapshot).expect("workspace");
+    let holed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: root,
+                goal: "replace the conditional".to_owned(),
+            }],
+        })
+        .expect("remove descendants with a real hole");
+    for id in &deleted {
+        assert!(holed.snapshot.node(*id).is_err());
+    }
+
+    let reopened_snapshot = (*holed.snapshot).clone();
+    let hole = reopened_snapshot.holes().next().expect("hole").id;
+    let mut reopened = Workspace::new(reopened_snapshot).expect("reopen snapshot");
+    let filled = reopened
+        .apply(Transaction {
+            base_revision: reopened.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::I64(1),
+                        DraftNode::I64(2),
+                        DraftNode::If {
+                            condition: DraftNodeId::new(0),
+                            then_branch: DraftNodeId::new(1),
+                            else_branch: DraftNodeId::new(2),
+                        },
+                    ],
+                    DraftNodeId::new(3),
+                ),
+            }],
+        })
+        .expect("fill reopened hole");
+    assert_eq!(filled.snapshot.node(root).expect("root identity").id, root);
+    for id in &deleted {
+        assert!(filled.snapshot.node(*id).is_err());
+    }
+    assert!(filled
+        .snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node.id != root)
+        .all(|node| node.id.generation() > 1));
 }
 
 #[test]
@@ -339,6 +1157,17 @@ fn atomic_rename_replace_queries_and_direct_compile_use_no_parser() {
             .id,
         root
     );
+    assert_eq!(
+        outcome
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .body
+            .origin,
+        crate::hir::Origin::Semantic
+    );
     assert_eq!(run_i64(&outcome.snapshot), 42);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert!(outcome.diff.entries.iter().any(|entry| matches!(entry, SemanticDiffEntry::EntityRenamed { entity, .. } if *entity == function)));
@@ -378,6 +1207,28 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
         })
         .expect("introduce hole");
     assert_eq!(introduced.snapshot.state(), ProgramState::Incomplete);
+    assert!(matches!(
+        introduced
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .body
+            .kind,
+        crate::hir::ExprKind::Hole
+    ));
+    assert_eq!(
+        introduced
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .body
+            .origin,
+        crate::hir::Origin::Semantic
+    );
     assert!(!introduced
         .snapshot
         .dependencies()
@@ -433,7 +1284,9 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
     let failure =
         crate::compile_snapshot(&introduced.snapshot).expect_err("incomplete is not executable");
     match failure {
-        crate::CompileSnapshotError::Incomplete(error) => assert_eq!(error.holes, vec![hole]),
+        crate::CompileSnapshotError::Incomplete(error) => assert!(error.blockers.iter().any(
+            |blocker| matches!(blocker, CompletenessBlocker::TypedHole { hole: blocked, .. } if *blocked == hole)
+        )),
         other => panic!("unexpected compile failure: {other}"),
     }
 
@@ -498,27 +1351,6 @@ fn failed_transaction_stale_revision_foreign_id_and_cursor_leave_snapshot_unchan
     assert!(matches!(failure, Err(WorkspaceError::TypeMismatch { .. })));
     assert!(Arc::ptr_eq(&before, &workspace.current()));
     assert_eq!(workspace.current().revision(), old_revision);
-    let unsupported = workspace.apply(Transaction {
-        base_revision: old_revision,
-        edits: vec![Edit::ReplaceExpression {
-            target: root,
-            draft: ExpressionDraft::new(
-                vec![
-                    DraftNode::I64(1),
-                    DraftNode::Match {
-                        scrutinee: DraftNodeId::new(0),
-                    },
-                ],
-                DraftNodeId::new(1),
-            ),
-        }],
-    });
-    assert!(matches!(
-        unsupported,
-        Err(WorkspaceError::UnsupportedEdit { .. })
-    ));
-    assert!(Arc::ptr_eq(&before, &workspace.current()));
-
     let committed = workspace
         .apply(Transaction {
             base_revision: old_revision,
@@ -554,6 +1386,91 @@ fn failed_transaction_stale_revision_foreign_id_and_cursor_leave_snapshot_unchan
             .definition(committed.snapshot.revision(), foreign.entities()[0].id),
         Err(WorkspaceError::ForeignNamespace(_))
     ));
+}
+
+#[test]
+fn overlapping_structural_edits_and_reserved_function_rename_are_atomic() {
+    let imported = importer::import_source_with_namespace(
+        CONDITIONAL,
+        "workspace-overlap.lkjscript",
+        WorkspaceNamespace::deterministic(43),
+    )
+    .expect("import conditional");
+    let mut workspace = Workspace::new(imported).expect("workspace");
+    let before = workspace.current();
+    let main = before
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("main")
+        .id;
+    let root = before
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("root")
+        .id;
+    let condition = before
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Node(root) && node.actual_type.as_ref() == "bool")
+        .expect("condition")
+        .id;
+    let before_projection = before.project(&[]).expect("projection");
+
+    for edits in [
+        vec![
+            Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::new(vec![DraftNode::I64(7)], DraftNodeId::new(0)),
+            },
+            Edit::ReplaceExpression {
+                target: condition,
+                draft: ExpressionDraft::new(vec![DraftNode::Bool(false)], DraftNodeId::new(0)),
+            },
+        ],
+        vec![
+            Edit::ReplaceExpression {
+                target: condition,
+                draft: ExpressionDraft::new(vec![DraftNode::Bool(false)], DraftNodeId::new(0)),
+            },
+            Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::new(vec![DraftNode::I64(7)], DraftNodeId::new(0)),
+            },
+        ],
+    ] {
+        let error = workspace
+            .apply(Transaction {
+                base_revision: before.revision(),
+                edits,
+            })
+            .expect_err("reject overlapping subtree edits");
+        assert!(error.to_string().contains("disjoint expression subtrees"));
+        assert!(Arc::ptr_eq(&workspace.current(), &before));
+        assert_eq!(workspace.current().revision(), before.revision());
+        assert_eq!(
+            workspace
+                .current()
+                .project(&[])
+                .expect("projection after failure"),
+            before_projection
+        );
+    }
+
+    let (mut source_free, function, _, _, _, _) = create_source_free_declarations(44);
+    let source_free_before = source_free.current();
+    let error = source_free
+        .apply(Transaction {
+            base_revision: source_free_before.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: function,
+                new_name: "main".to_owned(),
+            }],
+        })
+        .expect_err("reject reserved global name");
+    assert!(error.to_string().contains("exists or is reserved"));
+    assert!(Arc::ptr_eq(&source_free.current(), &source_free_before));
 }
 
 #[test]
@@ -620,22 +1537,11 @@ fn unchanged_descendant_ids_follow_branch_reordering_and_removed_ids_are_stale()
     assert!(filled.snapshot.node(old_one).is_err());
 }
 
-#[test]
-#[ignore = "20k-node small-stack stress geometry"]
-fn twenty_thousand_level_edit_and_drop_complete_on_a_small_native_stack() {
-    const DEPTH: usize = 20_000;
-    let snapshot = importer::import_source_with_namespace(
-        SCALAR,
-        "workspace-deep.lkjscript",
-        WorkspaceNamespace::deterministic(26),
-    )
-    .expect("scalar import");
-    let main = snapshot.entities()[0].id;
-    let root = snapshot.nodes()[0].id;
+fn deep_if_draft(depth: usize) -> ExpressionDraft {
     let mut nodes = Vec::new();
     nodes
         .try_reserve(
-            DEPTH
+            depth
                 .checked_mul(3)
                 .and_then(|count| count.checked_add(1))
                 .expect("draft geometry"),
@@ -643,7 +1549,7 @@ fn twenty_thousand_level_edit_and_drop_complete_on_a_small_native_stack() {
         .expect("draft allocation");
     nodes.push(DraftNode::I64(1));
     let mut expression = DraftNodeId::new(0);
-    for _ in 0..DEPTH {
+    for _ in 0..depth {
         let condition = DraftNodeId::new(u64::try_from(nodes.len()).expect("condition id"));
         nodes.push(DraftNode::Bool(true));
         let alternative = DraftNodeId::new(u64::try_from(nodes.len()).expect("alternative id"));
@@ -656,31 +1562,87 @@ fn twenty_thousand_level_edit_and_drop_complete_on_a_small_native_stack() {
         });
         expression = next;
     }
-    let draft = ExpressionDraft::new(nodes, expression);
-    std::thread::Builder::new()
-        .name("workspace-deep-edit".to_owned())
-        .stack_size(128 * 1024)
-        .spawn(move || {
-            let revision = snapshot.revision();
-            let mut workspace = Workspace::new(snapshot).expect("workspace");
-            let edited = workspace
-                .apply(Transaction {
-                    base_revision: revision,
-                    edits: vec![Edit::ReplaceExpression {
-                        target: root,
-                        draft,
-                    }],
-                })
-                .expect("deep semantic edit");
-            assert_eq!(edited.snapshot.nodes().len(), DEPTH * 3 + 1);
-            let projection = edited
-                .snapshot
-                .project(&[ProjectionSlice::Body(main)])
-                .expect("deep body projection");
-            assert_eq!(projection.matches("node n").count(), DEPTH * 3 + 1);
-            drop(edited);
-            drop(workspace);
+    ExpressionDraft::new(nodes, expression)
+}
+
+fn run_source_free_deep(depth: usize, seed: u64) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: crate::Type::I64,
+            }],
         })
+        .expect("create main");
+    let main = created.snapshot.entities()[0].id;
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: deep_if_draft(depth),
+            }],
+        })
+        .expect("fill deep main");
+    assert_eq!(completed.snapshot.nodes().len(), depth * 3 + 1);
+    let projection = completed
+        .snapshot
+        .project(&[ProjectionSlice::Body(main)])
+        .expect("deep body projection");
+    assert_eq!(projection.matches("node n").count(), depth * 3 + 1);
+    assert_eq!(run_i64(&completed.snapshot), 1);
+}
+
+#[test]
+fn source_free_index_root_resolution_is_one_lookup_per_node() {
+    for (seed, depth) in [(40, 32_usize), (41, 64), (42, 128)] {
+        let mut workspace = Workspace::empty_deterministic(seed).expect("empty workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: crate::Type::I64,
+                }],
+            })
+            .expect("create main");
+        let hole = created.snapshot.holes().next().expect("main hole").id;
+        super::index::reset_root_address_lookups();
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: deep_if_draft(depth),
+                }],
+            })
+            .expect("fill generated body");
+        assert_eq!(
+            super::index::root_address_lookups(),
+            u64::try_from(completed.snapshot.nodes().len()).expect("node count fits u64")
+        );
+    }
+}
+
+#[test]
+fn modest_source_free_depth_compiles_executes_and_drops_on_small_stack() {
+    std::thread::Builder::new()
+        .name("workspace-modest-source-free".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_source_free_deep(128, 26))
+        .expect("spawn small-stack edit")
+        .join()
+        .expect("small-stack edit completes");
+}
+
+#[test]
+#[ignore = "20k-node locked-release source-free small-stack stress geometry"]
+fn twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack() {
+    std::thread::Builder::new()
+        .name("workspace-deep-source-free".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_source_free_deep(20_000, 27))
         .expect("spawn small-stack edit")
         .join()
         .expect("small-stack edit completes");

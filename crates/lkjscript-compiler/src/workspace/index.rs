@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use lkjscript_core::{Error, Result};
 
-use crate::hir::{BindingId, BindingKind, Expr, ExprKind, GenericInstantiation, Program, Type};
+use crate::hir::{BindingId, BindingKind, Expr, ExprKind, GenericInstantiation, Type};
+
+use super::program::SemanticProgram;
 
 use super::model::{EntityAddress, NodeAddress, NodeKey};
 use super::{
@@ -14,14 +16,29 @@ use super::{
 
 const INITIAL_GENERATION: u64 = 1;
 
-type EnumEntityMap = (EntityId, Vec<(EntityId, Vec<EntityId>)>);
+#[cfg(test)]
+thread_local! {
+    static ROOT_ADDRESS_LOOKUPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_root_address_lookups() {
+    ROOT_ADDRESS_LOOKUPS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn root_address_lookups() -> u64 {
+    ROOT_ADDRESS_LOOKUPS.with(std::cell::Cell::get)
+}
+
+type EnumEntityMap = Option<(EntityId, Vec<(EntityId, Vec<EntityId>)>)>;
 
 struct EntityMaps {
-    main: EntityId,
-    bindings: Vec<EntityId>,
+    main: Option<EntityId>,
+    bindings: Vec<Option<EntityId>>,
     products: Vec<(EntityId, Vec<EntityId>)>,
     enums: Vec<EnumEntityMap>,
-    traits: Vec<EntityId>,
+    traits: Vec<Option<EntityId>>,
     implementations: Vec<EntityId>,
 }
 
@@ -34,7 +51,10 @@ struct PendingExpression<'a> {
     local_count: usize,
 }
 
-pub(super) fn build(program: &Program, namespace: WorkspaceNamespace) -> Result<SnapshotIndexes> {
+pub(super) fn build(
+    program: &SemanticProgram,
+    namespace: WorkspaceNamespace,
+) -> Result<SnapshotIndexes> {
     let (mut indexes, maps) = build_entities(program, namespace)?;
     add_entity_dependencies(program, &maps, &mut indexes)?;
     indexes
@@ -51,18 +71,20 @@ pub(super) fn build(program: &Program, namespace: WorkspaceNamespace) -> Result<
         .declaration_dependencies
         .extend(indexes.dependencies.iter().copied());
 
-    set_parameter_owners(&mut indexes, &maps, maps.main, &program.main.params)?;
-    walk_root(
-        program,
-        &maps,
-        &mut indexes,
-        &program.main.body,
-        maps.main,
-        &program.main.return_type,
-        program.main.local_count,
-    )?;
+    if let (Some(main_entity), Some(main)) = (maps.main, program.main.as_ref()) {
+        set_parameter_owners(&mut indexes, &maps, main_entity, &main.params)?;
+        walk_root(
+            program,
+            &maps,
+            &mut indexes,
+            &main.body,
+            main_entity,
+            &main.return_type,
+            main.local_count,
+        )?;
+    }
     for function in &program.functions {
-        let owner = binding_entity(&maps, function.binding)?;
+        let owner = require_binding_entity(&maps, function.binding)?;
         set_parameter_owners(&mut indexes, &maps, owner, &function.params)?;
         let return_type = function_return_type(program, function.binding)?;
         walk_root(
@@ -93,7 +115,7 @@ pub(super) fn build(program: &Program, namespace: WorkspaceNamespace) -> Result<
 }
 
 fn build_entities(
-    program: &Program,
+    program: &SemanticProgram,
     namespace: WorkspaceNamespace,
 ) -> Result<(SnapshotIndexes, EntityMaps)> {
     let mut indexes = SnapshotIndexes {
@@ -115,26 +137,48 @@ fn build_entities(
         address_entities: HashMap::new(),
         address_nodes: HashMap::new(),
     };
-    let main = push_entity(&mut indexes, namespace, EntityKind::Main, "main", None)?;
+    let main = program
+        .main
+        .as_ref()
+        .map(|_| {
+            push_entity(
+                &mut indexes,
+                namespace,
+                EntityAddress::Main,
+                EntityKind::Main,
+                "main",
+                None,
+            )
+        })
+        .transpose()?;
 
     let mut bindings = Vec::new();
     reserve(&mut bindings, program.bindings.len(), "binding entity map")?;
     for binding in &program.bindings {
-        bindings.push(push_entity(
-            &mut indexes,
-            namespace,
-            binding_kind(&binding.kind),
-            &binding.name,
-            None,
-        )?);
+        let entity = if matches!(binding.kind, BindingKind::BuiltinOperation(_)) {
+            None
+        } else {
+            Some(push_entity(
+                &mut indexes,
+                namespace,
+                EntityAddress::Binding(binding.id.raw()),
+                binding_kind(&binding.kind),
+                &binding.name,
+                None,
+            )?)
+        };
+        bindings.push(entity);
     }
 
     let mut products = Vec::new();
     reserve(&mut products, program.products.len(), "product entity map")?;
-    for product in &program.products {
+    for (product_index, product) in program.products.iter().enumerate() {
+        let product_index = u64::try_from(product_index)
+            .map_err(|_| Error::host("workspace product address exceeds u64"))?;
         let entity = push_entity(
             &mut indexes,
             namespace,
+            EntityAddress::Product(product_index),
             EntityKind::Product,
             &product.name,
             None,
@@ -145,10 +189,16 @@ fn build_entities(
             product.fields.len(),
             "product field entity map",
         )?;
-        for field in &product.fields {
+        for (field_index, field) in product.fields.iter().enumerate() {
+            let field_index = u64::try_from(field_index)
+                .map_err(|_| Error::host("workspace product field address exceeds u64"))?;
             let field_entity = push_entity(
                 &mut indexes,
                 namespace,
+                EntityAddress::ProductField {
+                    product: product_index,
+                    field: field_index,
+                },
                 EntityKind::ProductField,
                 &field.name,
                 Some(entity),
@@ -165,10 +215,17 @@ fn build_entities(
 
     let mut enums = Vec::new();
     reserve(&mut enums, program.enums.len(), "enum entity map")?;
-    for definition in &program.enums {
+    for (enum_index, definition) in program.enums.iter().enumerate() {
+        if definition.origin.is_none() {
+            enums.push(None);
+            continue;
+        }
+        let enum_index = u64::try_from(enum_index)
+            .map_err(|_| Error::host("workspace enum address exceeds u64"))?;
         let entity = push_entity(
             &mut indexes,
             namespace,
+            EntityAddress::Enum(enum_index),
             EntityKind::Enum,
             &definition.name,
             None,
@@ -179,10 +236,16 @@ fn build_entities(
             definition.variants.len(),
             "enum variant entity map",
         )?;
-        for variant in &definition.variants {
+        for (variant_index, variant) in definition.variants.iter().enumerate() {
+            let variant_index = u64::try_from(variant_index)
+                .map_err(|_| Error::host("workspace enum variant address exceeds u64"))?;
             let variant_entity = push_entity(
                 &mut indexes,
                 namespace,
+                EntityAddress::EnumVariant {
+                    enumeration: enum_index,
+                    variant: variant_index,
+                },
                 EntityKind::EnumVariant,
                 &variant.name,
                 Some(entity),
@@ -194,10 +257,17 @@ fn build_entities(
             )?;
             let mut fields = Vec::new();
             reserve(&mut fields, variant.fields.len(), "enum field entity map")?;
-            for field in &variant.fields {
+            for (field_index, field) in variant.fields.iter().enumerate() {
+                let field_index = u64::try_from(field_index)
+                    .map_err(|_| Error::host("workspace enum field address exceeds u64"))?;
                 let field_entity = push_entity(
                     &mut indexes,
                     namespace,
+                    EntityAddress::EnumField {
+                        enumeration: enum_index,
+                        variant: variant_index,
+                        field: field_index,
+                    },
                     EntityKind::EnumField,
                     &field.name,
                     Some(variant_entity),
@@ -211,19 +281,27 @@ fn build_entities(
             }
             variants.push((variant_entity, fields));
         }
-        enums.push((entity, variants));
+        enums.push(Some((entity, variants)));
     }
 
     let mut traits = Vec::new();
     reserve(&mut traits, program.traits.len(), "trait entity map")?;
-    for definition in &program.traits {
-        traits.push(push_entity(
-            &mut indexes,
-            namespace,
-            EntityKind::Trait,
-            &definition.name,
-            None,
-        )?);
+    for (trait_index, definition) in program.traits.iter().enumerate() {
+        let entity = if definition.origin == crate::hir::Origin::Builtin {
+            None
+        } else {
+            let trait_index = u64::try_from(trait_index)
+                .map_err(|_| Error::host("workspace trait address exceeds u64"))?;
+            Some(push_entity(
+                &mut indexes,
+                namespace,
+                EntityAddress::Trait(trait_index),
+                EntityKind::Trait,
+                &definition.name,
+                None,
+            )?)
+        };
+        traits.push(entity);
     }
 
     let mut implementations = Vec::new();
@@ -232,7 +310,9 @@ fn build_entities(
         program.implementations.len(),
         "implementation entity map",
     )?;
-    for implementation in &program.implementations {
+    for (implementation_index, implementation) in program.implementations.iter().enumerate() {
+        let implementation_index = u64::try_from(implementation_index)
+            .map_err(|_| Error::host("workspace implementation address exceeds u64"))?;
         let trait_name = program
             .traits
             .get(index_of(implementation.trait_id.raw(), "trait")?)
@@ -247,6 +327,7 @@ fn build_entities(
         implementations.push(push_entity(
             &mut indexes,
             namespace,
+            EntityAddress::Implementation(implementation_index),
             EntityKind::Implementation,
             &name,
             None,
@@ -267,29 +348,25 @@ fn build_entities(
 }
 
 fn add_entity_dependencies(
-    program: &Program,
+    program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
 ) -> Result<()> {
-    add_types_dependencies(
-        program,
-        maps,
-        indexes,
-        maps.main,
-        program
-            .main
-            .param_types
-            .iter()
-            .chain(std::iter::once(&program.main.return_type)),
-    )?;
-    for binding in &program.bindings {
+    if let (Some(main_entity), Some(main)) = (maps.main, program.main.as_ref()) {
         add_types_dependencies(
             program,
             maps,
             indexes,
-            binding_entity(maps, binding.id)?,
-            std::iter::once(&binding.ty),
+            main_entity,
+            main.param_types
+                .iter()
+                .chain(std::iter::once(&main.return_type)),
         )?;
+    }
+    for binding in &program.bindings {
+        if let Some(owner) = binding_entity(maps, binding.id)? {
+            add_types_dependencies(program, maps, indexes, owner, std::iter::once(&binding.ty))?;
+        }
     }
     for (product_index, product) in program.products.iter().enumerate() {
         let owner = maps.products[product_index].0;
@@ -302,25 +379,24 @@ fn add_entity_dependencies(
         )?;
     }
     for (enum_index, definition) in program.enums.iter().enumerate() {
-        let owner = maps.enums[enum_index].0;
-        add_types_dependencies(
-            program,
-            maps,
-            indexes,
-            owner,
-            definition
-                .variants
-                .iter()
-                .flat_map(|variant| variant.fields.iter().map(|field| &field.ty)),
-        )?;
+        if let Some((owner, _)) = &maps.enums[enum_index] {
+            add_types_dependencies(
+                program,
+                maps,
+                indexes,
+                *owner,
+                definition
+                    .variants
+                    .iter()
+                    .flat_map(|variant| variant.fields.iter().map(|field| &field.ty)),
+            )?;
+        }
     }
     for (index, implementation) in program.implementations.iter().enumerate() {
         let owner = maps.implementations[index];
-        push_dependency(
-            indexes,
-            owner,
-            maps.traits[index_of(implementation.trait_id.raw(), "trait")?],
-        )?;
+        let trait_entity = maps.traits[index_of(implementation.trait_id.raw(), "trait")?]
+            .ok_or_else(|| Error::msg("explicit implementation targets a compiler-owned trait"))?;
+        push_dependency(indexes, owner, trait_entity)?;
         push_dependency(
             indexes,
             owner,
@@ -331,7 +407,7 @@ fn add_entity_dependencies(
 }
 
 fn add_types_dependencies<'a>(
-    program: &Program,
+    program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
     owner: EntityId,
@@ -361,7 +437,9 @@ fn add_types_dependencies<'a>(
                     .enumerate()
                     .find(|(_, definition)| definition.id == *id)
                 {
-                    push_dependency(indexes, owner, maps.enums[index].0)?;
+                    if let Some((target, _)) = &maps.enums[index] {
+                        push_dependency(indexes, owner, *target)?;
+                    }
                 }
                 reserve(&mut pending, arguments.len(), "type dependency work stack")?;
                 pending.extend(arguments);
@@ -390,7 +468,7 @@ fn add_types_dependencies<'a>(
 }
 
 fn walk_root(
-    program: &Program,
+    program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
     root: &Expr,
@@ -446,7 +524,7 @@ fn walk_root(
 }
 
 fn add_expression_relations(
-    program: &Program,
+    program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
     expression: &Expr,
@@ -454,11 +532,13 @@ fn add_expression_relations(
     enclosing: EntityId,
     local_count: usize,
 ) -> Result<()> {
-    let mut reference = |binding: BindingId| -> Result<EntityId> {
-        let target = binding_entity(maps, binding)?;
+    let mut reference = |binding: BindingId| -> Result<Option<EntityId>> {
+        let Some(target) = binding_entity(maps, binding)? else {
+            return Ok(None);
+        };
         push_reference(indexes, node, target)?;
         push_dependency(indexes, enclosing, target)?;
-        Ok(target)
+        Ok(Some(target))
     };
     match &expression.kind {
         ExprKind::Load(binding)
@@ -468,7 +548,8 @@ fn add_expression_relations(
             reference(binding.binding)?;
         }
         ExprKind::Call { callee, .. } => {
-            let target = reference(callee.binding)?;
+            let target = reference(callee.binding)?
+                .ok_or_else(|| Error::msg("workspace call target is compiler-owned"))?;
             reserve(&mut indexes.calls, 1, "workspace call index")?;
             indexes.calls.push(CallEdge {
                 caller: enclosing,
@@ -484,14 +565,18 @@ fn add_expression_relations(
                 if local.slot >= local_count {
                     return Err(Error::msg("local binding slot exceeds owner local count"));
                 }
-                set_entity_owner(indexes, binding_entity(maps, local.binding)?, enclosing)?;
+                set_entity_owner(
+                    indexes,
+                    require_binding_entity(maps, local.binding)?,
+                    enclosing,
+                )?;
             }
         }
         ExprKind::MutableLocal { binding, slot, .. } => {
             if *slot >= local_count {
                 return Err(Error::msg("mutable local slot exceeds owner local count"));
             }
-            set_entity_owner(indexes, binding_entity(maps, *binding)?, enclosing)?;
+            set_entity_owner(indexes, require_binding_entity(maps, *binding)?, enclosing)?;
         }
         ExprKind::SetLocal { target, slot, .. } => {
             if *slot >= local_count {
@@ -510,9 +595,10 @@ fn add_expression_relations(
         | ExprKind::EnumIsVariant { enum_id, .. }
         | ExprKind::EnumField { enum_id, .. }
         | ExprKind::EnumUnwrap { enum_id, .. } => {
-            let target = enum_entity(program, maps, *enum_id)?;
-            push_reference(indexes, node, target)?;
-            push_dependency(indexes, enclosing, target)?;
+            if let Some(target) = enum_entity(program, maps, *enum_id)? {
+                push_reference(indexes, node, target)?;
+                push_dependency(indexes, enclosing, target)?;
+            }
         }
         ExprKind::MatchUnreachable { plan } => {
             let plan = program
@@ -521,7 +607,7 @@ fn add_expression_relations(
                 .ok_or_else(|| Error::msg("match plan identity is stale"))?;
             set_entity_owner(
                 indexes,
-                binding_entity(maps, plan.scrutinee.binding)?,
+                require_binding_entity(maps, plan.scrutinee.binding)?,
                 enclosing,
             )?;
             for arm in &plan.arms {
@@ -533,7 +619,7 @@ fn add_expression_relations(
                         crate::hir::MatchPattern::Binding { local } => {
                             set_entity_owner(
                                 indexes,
-                                binding_entity(maps, local.binding)?,
+                                require_binding_entity(maps, local.binding)?,
                                 enclosing,
                             )?;
                         }
@@ -543,7 +629,7 @@ fn add_expression_relations(
                                 if let Some(local) = &field.projection {
                                     set_entity_owner(
                                         indexes,
-                                        binding_entity(maps, local.binding)?,
+                                        require_binding_entity(maps, local.binding)?,
                                         enclosing,
                                     )?;
                                 }
@@ -561,7 +647,7 @@ fn add_expression_relations(
 }
 
 fn expression_children<'a>(
-    program: &Program,
+    program: &SemanticProgram,
     expression: &'a Expr,
     return_type: &Type,
     _local_count: usize,
@@ -772,7 +858,7 @@ fn signature_parameters(
     Ok(Some(resolved))
 }
 
-fn function_return_type(program: &Program, binding: BindingId) -> Result<&Type> {
+fn function_return_type(program: &SemanticProgram, binding: BindingId) -> Result<&Type> {
     let binding = program
         .binding(binding)
         .ok_or_else(|| Error::msg("function binding is stale"))?;
@@ -789,6 +875,7 @@ fn function_return_type(program: &Program, binding: BindingId) -> Result<&Type> 
 fn push_entity(
     indexes: &mut SnapshotIndexes,
     namespace: WorkspaceNamespace,
+    address: EntityAddress,
     kind: EntityKind,
     name: &str,
     owner: Option<EntityId>,
@@ -803,6 +890,12 @@ fn push_entity(
         name: Arc::from(name),
         owner,
     });
+    reserve(
+        &mut indexes.entity_addresses,
+        1,
+        "workspace entity addresses",
+    )?;
+    indexes.entity_addresses.push(address);
     Ok(id)
 }
 
@@ -883,7 +976,7 @@ fn set_parameter_owners(
     parameters: &[BindingId],
 ) -> Result<()> {
     for parameter in parameters {
-        set_entity_owner(indexes, binding_entity(maps, *parameter)?, owner)?;
+        set_entity_owner(indexes, require_binding_entity(maps, *parameter)?, owner)?;
     }
     Ok(())
 }
@@ -915,11 +1008,16 @@ fn set_entity_owner(
     )
 }
 
-fn binding_entity(maps: &EntityMaps, binding: BindingId) -> Result<EntityId> {
+fn binding_entity(maps: &EntityMaps, binding: BindingId) -> Result<Option<EntityId>> {
     maps.bindings
         .get(index_of(binding.raw(), "binding")?)
         .copied()
         .ok_or_else(|| Error::msg("binding identity is stale"))
+}
+
+fn require_binding_entity(maps: &EntityMaps, binding: BindingId) -> Result<EntityId> {
+    binding_entity(maps, binding)?
+        .ok_or_else(|| Error::msg("compiler-owned binding has no program entity"))
 }
 
 fn product_entity(maps: &EntityMaps, product: lkjscript_core::ProductId) -> Result<EntityId> {
@@ -929,13 +1027,20 @@ fn product_entity(maps: &EntityMaps, product: lkjscript_core::ProductId) -> Resu
         .ok_or_else(|| Error::msg("product identity is stale"))
 }
 
-fn enum_entity(program: &Program, maps: &EntityMaps, id: crate::hir::EnumId) -> Result<EntityId> {
-    program
+fn enum_entity(
+    program: &SemanticProgram,
+    maps: &EntityMaps,
+    id: crate::hir::EnumId,
+) -> Result<Option<EntityId>> {
+    let index = program
         .enums
         .iter()
         .position(|item| item.id == id)
-        .and_then(|index| maps.enums.get(index).map(|item| item.0))
-        .ok_or_else(|| Error::msg("enum identity is stale"))
+        .ok_or_else(|| Error::msg("enum identity is stale"))?;
+    maps.enums
+        .get(index)
+        .map(|item| item.as_ref().map(|item| item.0))
+        .ok_or_else(|| Error::msg("enum identity map is stale"))
 }
 
 fn binding_kind(kind: &BindingKind) -> EntityKind {
@@ -951,6 +1056,7 @@ fn binding_kind(kind: &BindingKind) -> EntityKind {
 
 fn node_kind(kind: &ExprKind) -> NodeKind {
     match kind {
+        ExprKind::Hole => NodeKind::Hole,
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
@@ -992,15 +1098,8 @@ fn node_kind(kind: &ExprKind) -> NodeKind {
 }
 
 fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
-    reserve(
-        &mut indexes.entity_addresses,
-        indexes.entities.len(),
-        "workspace entity addresses",
-    )?;
-    for slot in 0..indexes.entities.len() {
-        indexes.entity_addresses.push(EntityAddress(
-            u64::try_from(slot).map_err(|_| Error::host("workspace entity address exceeds u64"))?,
-        ));
+    if indexes.entity_addresses.len() != indexes.entities.len() {
+        return Err(Error::msg("workspace entity address index is incomplete"));
     }
 
     reserve(
@@ -1014,11 +1113,18 @@ fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
         "workspace node keys",
     )?;
     let mut root_counts: HashMap<EntityId, u64> = HashMap::new();
+    let mut root_addresses: HashMap<EntityId, EntityAddress> = HashMap::new();
     let mut child_counts: HashMap<SemanticOwner, u64> = HashMap::new();
     let mut node_roots: HashMap<NodeId, EntityId> = HashMap::new();
     root_counts
         .try_reserve(indexes.entities.len())
         .map_err(|_| Error::host("workspace root address allocation failed"))?;
+    root_addresses
+        .try_reserve(indexes.entities.len())
+        .map_err(|_| Error::host("workspace entity address lookup allocation failed"))?;
+    for (entity, address) in indexes.entities.iter().zip(&indexes.entity_addresses) {
+        root_addresses.insert(entity.id, *address);
+    }
     child_counts
         .try_reserve(indexes.nodes.len())
         .map_err(|_| Error::host("workspace child key allocation failed"))?;
@@ -1044,8 +1150,14 @@ fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
         };
         node_roots.insert(header.id, root);
         let preorder = root_counts.entry(root).or_insert(0);
+        #[cfg(test)]
+        ROOT_ADDRESS_LOOKUPS.with(|count| count.set(count.get().saturating_add(1)));
+        let root_address = root_addresses
+            .get(&root)
+            .copied()
+            .ok_or_else(|| Error::msg("workspace node root entity is stale"))?;
         indexes.node_addresses.push(NodeAddress {
-            root: EntityAddress(root.slot()),
+            root: root_address,
             preorder: *preorder,
         });
         *preorder = preorder
@@ -1063,6 +1175,7 @@ fn expression_fingerprint(expression: &Expr) -> Result<[u8; 32]> {
     bytes.extend_from_slice(expression.ty.to_string().as_bytes());
     bytes.extend_from_slice(&expression.effects.bits().to_be_bytes());
     let tag = match &expression.kind {
+        ExprKind::Hole => 255,
         ExprKind::LitI64(value) => {
             bytes.extend_from_slice(&value.to_be_bytes());
             0

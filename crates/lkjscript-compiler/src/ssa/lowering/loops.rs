@@ -23,7 +23,7 @@ impl FunctionBuilder<'_> {
         }
         let incoming = self.env.clone();
         let bindings: Vec<_> = incoming.keys().copied().collect();
-        let block_origin = origin(expression.origin.raw(), self.next_position);
+        let block_origin = origin(expression.origin, self.next_position);
         let header = self.new_block(block_origin, true)?;
         let exit = self.new_block(block_origin, false)?;
         let header_env = self.add_environment_parameters(header, &incoming, block_origin)?;
@@ -127,12 +127,11 @@ impl FunctionBuilder<'_> {
         };
         self.drop_abandoned_structural_owners(condition_value, condition.origin)?;
         let condition_env = self.env.clone();
-        let body_block =
-            self.new_block(origin(expression.origin.raw(), self.next_position), false)?;
+        let body_block = self.new_block(origin(expression.origin, self.next_position), false)?;
         let body_env = self.add_environment_parameters(
             body_block,
             &condition_env,
-            origin(expression.origin.raw(), self.next_position),
+            origin(expression.origin, self.next_position),
         )?;
         let unit = self.constant(SsaType::Unit, Constant::Unit, expression.origin)?;
         let mut exit_arguments = vec![unit];

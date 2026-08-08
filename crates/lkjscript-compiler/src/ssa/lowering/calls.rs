@@ -7,7 +7,7 @@ impl FunctionBuilder<'_> {
         args: &[Expr],
         instantiation: Option<&hir::GenericInstantiation>,
         ty: SsaType,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         let parameter_modes = self.verified_call_parameter_modes()?;
         let (target, call_effects) = match callee.storage {

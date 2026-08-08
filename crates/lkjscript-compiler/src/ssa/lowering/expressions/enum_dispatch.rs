@@ -5,7 +5,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         kind: &ExprKind,
         ty: SsaType,
-        origin: hir::SourceId,
+        origin: hir::Origin,
     ) -> Result<Option<ValueId>> {
         match kind {
             ExprKind::EnumValue {

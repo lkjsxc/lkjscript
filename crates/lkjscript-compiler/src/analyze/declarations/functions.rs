@@ -74,7 +74,7 @@ impl Analyzer {
             ));
         }
         Ok(Main {
-            origin: pending.origin,
+            origin: Origin::Source(pending.origin),
             params,
             param_places,
             param_types: pending.param_types,
@@ -162,7 +162,7 @@ impl Analyzer {
         }
         Ok(Function {
             binding,
-            origin,
+            origin: Origin::Source(origin),
             params,
             param_places,
             bounds,

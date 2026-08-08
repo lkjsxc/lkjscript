@@ -41,6 +41,10 @@ pub(crate) fn check(program: &Program) -> Result<()> {
     check_body(program, &program.main.body, &plan, State::default())
 }
 
+pub(crate) fn draft_parameter_load_is_supported(ty: &Type) -> bool {
+    !is_owned(ty) && !is_affine_resource(ty)
+}
+
 fn check_function(program: &Program, function: &Function) -> Result<()> {
     let plan = OwnershipPlan::build(
         program,

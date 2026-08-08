@@ -205,8 +205,8 @@ impl WorkspaceSnapshot {
         }
         self.holes
             .iter()
-            .find(|overlay| overlay.state.id == hole)
-            .map(|overlay| overlay.state.clone())
+            .find(|record| record.state.id == hole)
+            .map(|record| record.state.clone())
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))
     }
 
@@ -218,21 +218,50 @@ impl WorkspaceSnapshot {
         continuation: Option<&Continuation>,
     ) -> Result<QueryPage<LegalConstructor>, WorkspaceError> {
         let context = self.hole_context(revision, hole)?;
-        let mut values = vec![
-            LegalConstructor::I64Literal,
-            LegalConstructor::F64Literal,
-            LegalConstructor::BoolLiteral,
-            LegalConstructor::UnitLiteral,
-            LegalConstructor::If,
-        ];
+        let mut values = vec![LegalConstructor::If];
+        match &context.expected_type {
+            crate::Type::I64 => values.push(LegalConstructor::I64Literal),
+            crate::Type::F64 => values.push(LegalConstructor::F64Literal),
+            crate::Type::Bool => values.push(LegalConstructor::BoolLiteral),
+            crate::Type::Unit => values.push(LegalConstructor::UnitLiteral),
+            _ => {}
+        }
         values
             .try_reserve(context.visible_entities.len())
             .map_err(|_| WorkspaceError::Host(Arc::from("legal constructor allocation failed")))?;
         for entity in context.visible_entities.iter().copied() {
             let header = self.workspace_entity(entity)?;
+            let address = self
+                .indexes
+                .entity_lookup
+                .get(&entity)
+                .and_then(|index| self.indexes.entity_addresses.get(*index))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
+            let super::model::EntityAddress::Binding(raw) = address else {
+                continue;
+            };
+            let binding = self
+                .program
+                .bindings
+                .get(
+                    usize::try_from(raw)
+                        .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("entity")))?,
+                )
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
             match header.kind {
-                EntityKind::Parameter => values.push(LegalConstructor::Load(entity)),
-                EntityKind::Function => values.push(LegalConstructor::Call(entity)),
+                EntityKind::Parameter
+                    if crate::Type::unify_assignable(&binding.ty, &context.expected_type) =>
+                {
+                    values.push(LegalConstructor::Load(entity));
+                }
+                EntityKind::Function => {
+                    if let crate::Type::Fn { ret, .. } = &binding.ty {
+                        if crate::Type::unify_assignable(ret, &context.expected_type) {
+                            values.push(LegalConstructor::Call(entity));
+                        }
+                    }
+                }
                 _ => {}
             }
         }

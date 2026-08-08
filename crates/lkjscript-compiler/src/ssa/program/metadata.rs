@@ -41,7 +41,7 @@ pub(super) fn lower_trait_metadata(program: &hir::Program) -> Vec<TraitMetadata>
             },
             source: match definition.origin {
                 hir::Origin::Source(source) => Some(source.raw()),
-                hir::Origin::Builtin => None,
+                hir::Origin::Semantic | hir::Origin::Builtin => None,
             },
         })
         .collect()

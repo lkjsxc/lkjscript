@@ -27,10 +27,44 @@ only as the opt-in `lkjscript-ir/test-oracle` feature used by development and di
 production dependencies do not enable it.
 
 The active product scope is local package compile/run plus the compiler's in-process semantic
-workspace library. Text and paths are importer conveniences; an immutable typed
-`WorkspaceSnapshot` is the direct compiler input, and typed transactions, revision-labelled
-queries, holes, and concise review projections operate without rendering and reparsing source. The
-workspace has one application binary, `lkjscript`; there is no semantic wire service pending a
+workspace library. Text and paths are importer conveniences, not program authority. `Workspace::empty`
+creates a source-free incomplete program; revision-checked transactions can create a scalar
+function and `main`, query their typed missing bodies, and fill them with flat `Load`, `Call`,
+literal, and `If` drafts. The complete immutable `WorkspaceSnapshot` derives compiler HIR directly,
+without rendering or parsing source. Imported and programmatically constructed programs use this
+same semantic authority, query/index model, completeness gate, and compiler boundary.
+
+The `.lkjscript` extension is the only fixed source-format property. The current line-oriented
+encoding is provisional and non-authoritative; no textual, binary, or compatibility promise follows
+from it.
+
+A minimal source-free authorship sequence is:
+
+```rust
+use lkjscript_compiler::{Edit, ParameterDraft, Transaction, Type, Workspace};
+
+let mut workspace = Workspace::empty().expect("empty semantic workspace");
+let revision = workspace.current().revision();
+let created = workspace.apply(Transaction {
+    base_revision: revision,
+    edits: vec![
+        Edit::CreateFunction {
+            name: "identity".into(),
+            parameters: vec![ParameterDraft { name: "value".into(), ty: Type::I64 }],
+            return_type: Type::I64,
+        },
+        Edit::CreateMain { return_type: Type::I64 },
+    ],
+}).expect("atomic declaration creation");
+assert!(!created.snapshot.completeness_blockers().is_empty());
+```
+
+The public transaction diff returns the created entity and body-hole identities; subsequent
+`FillHole` transactions complete `identity(value) = value` and `main() = identity(42)`. The focused
+compiler test executes that source-free snapshot through the production bytecode/VM route and
+returns `42` with zero parser invocations.
+
+The workspace has one application binary, `lkjscript`; there is no semantic wire service pending a
 measured consumer. Daemon, process-cell, session, scheduler, resource-topology, service-database,
 and Linux-observation products are intentionally absent. The language's SQLite capability remains
 implemented directly by the VM and `lkjscript-sys`, alongside stdio, clock, filesystem, network,
@@ -41,7 +75,7 @@ and terminal operations.
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-targets --locked
+cargo test --workspace --all-targets --all-features --locked
 cargo build --workspace --release --locked
 ```
 

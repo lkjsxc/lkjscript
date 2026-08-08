@@ -38,15 +38,17 @@ pub(crate) fn canonical_walk(
     seen: &mut HashSet<BlockId>,
     order: &mut Vec<BlockId>,
 ) {
-    if !seen.insert(current) {
-        return;
-    }
-    order.push(current);
-    let Some(block) = blocks.get(&current) else {
-        return;
-    };
-    for successor in successors(&block.terminator) {
-        canonical_walk(successor, blocks, seen, order);
+    let mut pending = vec![current];
+    while let Some(current) = pending.pop() {
+        if !seen.insert(current) {
+            continue;
+        }
+        order.push(current);
+        let Some(block) = blocks.get(&current) else {
+            continue;
+        };
+        let successors = successors(&block.terminator);
+        pending.extend(successors.into_iter().rev());
     }
 }
 

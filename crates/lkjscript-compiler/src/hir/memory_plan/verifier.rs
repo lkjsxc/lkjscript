@@ -77,7 +77,7 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
             .ok_or_else(|| Error::msg("HIR memory verifier found unknown function binding"))?;
         if actual.binding != Some(function.binding.raw())
             || actual.name != binding.name
-            || actual.source != function.origin.raw()
+            || actual.source != crate::memory_plan::source_origin(function.origin)
             || actual.signature.function != id
             || actual.signature.parameters.len() != function.params.len()
         {
@@ -92,7 +92,7 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
         .ok_or_else(|| Error::msg("HIR memory plan is missing main"))?;
     if main.name != "main"
         || main.binding.is_some()
-        || main.source != program.main.origin.raw()
+        || main.source != crate::memory_plan::source_origin(program.main.origin)
         || main.signature.parameters.len() != program.main.param_types.len()
     {
         return Err(Error::msg("HIR main memory signature mismatch"));

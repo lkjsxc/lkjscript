@@ -135,7 +135,7 @@ fn declaration_root(source: &ValidatedSourceTree) -> Result<Main> {
         u64::try_from(index).map_err(|_| Error::msg("declaration root SourceId exceeds u64"))?,
     );
     Ok(Main {
-        origin,
+        origin: Origin::Source(origin),
         params: Vec::new(),
         param_places: Vec::new(),
         param_types: Vec::new(),
@@ -145,7 +145,7 @@ fn declaration_root(source: &ValidatedSourceTree) -> Result<Main> {
         body: Expr {
             ty: Type::Unit,
             effects: EffectSet::PURE,
-            origin,
+            origin: Origin::Source(origin),
             kind: ExprKind::LitUnit,
         },
     })

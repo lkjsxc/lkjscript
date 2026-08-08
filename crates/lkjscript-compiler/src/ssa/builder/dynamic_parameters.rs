@@ -4,7 +4,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn install_dynamic_owner_parameters(
         &mut self,
         parameters: &[BindingId],
-        source: hir::SourceId,
+        source: hir::Origin,
     ) -> Result<()> {
         let mut dynamic = Vec::new();
         dynamic

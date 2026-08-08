@@ -9,7 +9,7 @@ impl FunctionBuilder<'_> {
         let Some(condition_value) = self.lower_expr(condition)? else {
             return Ok(None);
         };
-        let branch_origin = origin(expression.origin.raw(), self.next_position);
+        let branch_origin = origin(expression.origin, self.next_position);
         let then_block = self.new_block(branch_origin, false)?;
         let else_block = self.new_block(branch_origin, false)?;
         let incoming_env = self.env.clone();

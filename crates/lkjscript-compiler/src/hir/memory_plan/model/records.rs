@@ -1,6 +1,17 @@
+/// Optional diagnostic origin for compiler memory facts.
+///
+/// `Source` is constructed from a validated HIR source identity; `Semantic`
+/// means that no source attachment exists. Canonical encoding tags the cases
+/// explicitly rather than reserving an otherwise valid numeric source value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MemorySourceOrigin {
+    Source(u64),
+    Semantic,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MemoryOrigin {
-    pub source: u64,
+    pub source: MemorySourceOrigin,
     pub expression: Option<MemoryExpressionId>,
 }
 
@@ -94,7 +105,7 @@ pub struct FunctionMemoryPlan {
     pub id: MemoryFunctionId,
     pub name: String,
     pub binding: Option<u64>,
-    pub source: u64,
+    pub source: MemorySourceOrigin,
     pub signature: FunctionMemorySignature,
     pub parameter_entries: Vec<MemoryEntryId>,
     pub result_entry: MemoryEntryId,

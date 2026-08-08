@@ -77,7 +77,7 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
         if parent != fact.parent
             || child_index != fact.child_index
             || entry.effects != fact.expression.effects.bits()
-            || entry.origin.source != fact.expression.origin.raw()
+            || entry.origin.source != crate::memory_plan::source_origin(fact.expression.origin)
             || entry.origin.expression != Some(fact.id)
             || *kind != verified_expression_kind(&fact.expression.kind)
             || !type_matches(&fact.expression.ty, &entry.ty)

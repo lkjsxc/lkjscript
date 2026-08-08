@@ -97,7 +97,7 @@ impl<'a> FunctionBuilder<'a> {
         &mut self,
         binding: BindingId,
         value: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         if let Some(place) = self.owned_place_for_binding(binding)? {
             let _fact = self.append(

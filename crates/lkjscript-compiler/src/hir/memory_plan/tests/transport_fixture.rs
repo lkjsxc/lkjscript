@@ -34,7 +34,7 @@ pub(super) fn wide_transport_program(width: usize) -> hir::Program {
         .collect();
     let function = hir::Function {
         binding: function_binding,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         params: parameter_ids.clone(),
         param_places: (0_u64..).take(width).map(hir::PlaceId::new).collect(),
         bounds: Vec::new(),
@@ -89,7 +89,7 @@ pub(super) fn wide_transport_program(width: usize) -> hir::Program {
         match_plans: Vec::new(),
         functions: vec![function],
         main: hir::Main {
-            origin: origin(),
+            origin: hir::Origin::Source(origin()),
             params: Vec::new(),
             param_places: Vec::new(),
             param_types: Vec::new(),
@@ -136,7 +136,7 @@ pub(super) fn generic_copy_product_program() -> hir::Program {
     ];
     let function = hir::Function {
         binding: function_binding,
-        origin: origin(),
+        origin: hir::Origin::Source(origin()),
         params: vec![first, second],
         param_places: vec![hir::PlaceId::new(0), hir::PlaceId::new(1)],
         bounds: Vec::new(),
@@ -190,7 +190,7 @@ pub(super) fn generic_copy_product_program() -> hir::Program {
         match_plans: Vec::new(),
         functions: vec![function],
         main: hir::Main {
-            origin: origin(),
+            origin: hir::Origin::Source(origin()),
             params: Vec::new(),
             param_places: Vec::new(),
             param_types: Vec::new(),

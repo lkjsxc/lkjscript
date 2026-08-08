@@ -2,16 +2,24 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::hir::{
-    BindingKind, BindingRef, BindingStorage, EffectSet, Expr, ExprKind, Program, Type,
+    Binding, BindingKind, BindingRef, BindingStorage, EffectSet, Expr, ExprKind, Origin, PlaceId,
+    Type,
 };
 
 use super::identity::{self, IdentityAllocator};
-use super::model::{EntityAddress, HoleOverlay, NodeAddress, NodeKey, SnapshotIndexes};
+use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
+use super::program::SemanticProgram;
 use super::{
-    DiagnosticHeader, DiagnosticSeverity, DraftNode, EntityId, EntityKind, ExpressionDraft, HoleId,
-    HoleState, NodeId, NodeKind, ProgramState, RevisionId, SemanticChild, SemanticOwner,
-    WorkspaceError, WorkspaceSnapshot,
+    CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftNode, EntityId, EntityKind,
+    ExpressionDraft, HoleId, HoleKind, HoleState, NodeId, NodeKind, ProgramState, RevisionId,
+    SemanticChild, SemanticOwner, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
 };
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParameterDraft {
+    pub name: String,
+    pub ty: Type,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Transaction {
@@ -22,6 +30,14 @@ pub struct Transaction {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Edit {
+    CreateFunction {
+        name: String,
+        parameters: Vec<ParameterDraft>,
+        return_type: Type,
+    },
+    CreateMain {
+        return_type: Type,
+    },
     RenameEntity {
         entity: EntityId,
         new_name: String,
@@ -60,6 +76,11 @@ pub enum InvalidatedDomain {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum SemanticDiffEntry {
+    EntityCreated {
+        entity: EntityId,
+        kind: EntityKind,
+        name: Arc<str>,
+    },
     EntityRenamed {
         entity: EntityId,
         old_name: Arc<str>,
@@ -124,9 +145,21 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    pub fn empty() -> Result<Self, WorkspaceError> {
+        Self::empty_in_namespace(WorkspaceNamespace::fresh().map_err(WorkspaceError::from_core)?)
+    }
+
+    fn empty_in_namespace(namespace: WorkspaceNamespace) -> Result<Self, WorkspaceError> {
+        Self::new(WorkspaceSnapshot::empty(namespace).map_err(WorkspaceError::from_core)?)
+    }
+
+    #[cfg(test)]
+    pub(super) fn empty_deterministic(seed: u64) -> Result<Self, WorkspaceError> {
+        Self::empty_in_namespace(WorkspaceNamespace::deterministic(seed))
+    }
+
     pub fn new(snapshot: WorkspaceSnapshot) -> Result<Self, WorkspaceError> {
-        let allocator = IdentityAllocator::from_indexes(snapshot.namespace, &snapshot.indexes)
-            .map_err(WorkspaceError::from_core)?;
+        let allocator = snapshot.allocator.clone();
         Ok(Self {
             current: Arc::new(snapshot),
             allocator,
@@ -178,6 +211,18 @@ struct StructuralAction {
     replacement: Expr,
 }
 
+struct NewHole {
+    address: NodeAddress,
+    kind: HoleKind,
+    goal: Arc<str>,
+}
+
+struct NewEntity {
+    address: EntityAddress,
+    kind: EntityKind,
+    name: Arc<str>,
+}
+
 fn stage(
     base: &WorkspaceSnapshot,
     transaction: Transaction,
@@ -185,7 +230,7 @@ fn stage(
 ) -> Result<(WorkspaceSnapshot, SemanticDiff, Vec<InvalidatedDomain>), WorkspaceError> {
     let revision = base.revision.next().map_err(WorkspaceError::from_core)?;
     let edit_count = transaction.edits.len();
-    let mut program = try_clone_program(base.hir.as_ref())?;
+    let mut program = try_clone_program(base.program.as_ref())?;
     let mut holes = Vec::new();
     holes
         .try_reserve(base.holes.len())
@@ -195,6 +240,14 @@ fn stage(
     structural
         .try_reserve(edit_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("structural edit allocation failed")))?;
+    let mut new_holes = Vec::new();
+    new_holes
+        .try_reserve(edit_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("new hole allocation failed")))?;
+    let mut new_entities = Vec::new();
+    new_entities
+        .try_reserve(edit_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("new entity allocation failed")))?;
     let mut entries = Vec::new();
     entries
         .try_reserve(edit_count)
@@ -203,13 +256,183 @@ fn stage(
     renamed
         .try_reserve(edit_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("rename preflight allocation failed")))?;
-    let mut structural_targets = HashSet::new();
+    let mut structural_targets = Vec::new();
     structural_targets
         .try_reserve(edit_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("structural preflight allocation failed")))?;
 
     for edit in transaction.edits {
         match edit {
+            Edit::CreateFunction {
+                name,
+                parameters,
+                return_type,
+            } => {
+                validate_name(&name)?;
+                validate_constructed_type(&return_type, "function return")?;
+                if function_name_exists(&program, &name) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "global declaration name already exists or is reserved",
+                    )));
+                }
+                let mut parameter_names = HashSet::new();
+                parameter_names.try_reserve(parameters.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("parameter name allocation failed"))
+                })?;
+                for parameter in &parameters {
+                    validate_name(&parameter.name)?;
+                    validate_constructed_type(&parameter.ty, "function parameter")?;
+                    if !parameter_names.insert(parameter.name.as_str()) {
+                        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                            "function parameter name is duplicated",
+                        )));
+                    }
+                }
+                let created_binding_count = parameters.len().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("created binding count overflow"))
+                })?;
+                program
+                    .bindings
+                    .try_reserve(created_binding_count)
+                    .map_err(|_| WorkspaceError::Host(Arc::from("binding allocation failed")))?;
+                program
+                    .functions
+                    .try_reserve(1)
+                    .map_err(|_| WorkspaceError::Host(Arc::from("function allocation failed")))?;
+                program.global_layout.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("global layout allocation failed"))
+                })?;
+                new_entities
+                    .try_reserve(created_binding_count)
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("created entity allocation failed"))
+                    })?;
+                new_holes.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("created hole allocation failed"))
+                })?;
+                let function_raw = u64::try_from(program.bindings.len())
+                    .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+                let function_binding = crate::hir::BindingId::new(function_raw);
+                let mut parameter_types = Vec::new();
+                parameter_types.try_reserve(parameters.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("parameter type allocation failed"))
+                })?;
+                parameter_types.extend(parameters.iter().map(|parameter| parameter.ty.clone()));
+                program.bindings.push(Binding {
+                    id: function_binding,
+                    name: name.clone(),
+                    kind: BindingKind::Function,
+                    ty: Type::Fn {
+                        params: parameter_types.clone(),
+                        ret: Box::new(return_type.clone()),
+                    },
+                    origin: Origin::Semantic,
+                });
+                let mut parameter_bindings = Vec::new();
+                let mut parameter_places = Vec::new();
+                parameter_bindings
+                    .try_reserve(parameters.len())
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("parameter binding allocation failed"))
+                    })?;
+                parameter_places
+                    .try_reserve(parameters.len())
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("parameter place allocation failed"))
+                    })?;
+                for (index, parameter) in parameters.into_iter().enumerate() {
+                    let raw = u64::try_from(program.bindings.len()).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("binding identity exceeds u64"))
+                    })?;
+                    let binding = crate::hir::BindingId::new(raw);
+                    program.bindings.push(Binding {
+                        id: binding,
+                        name: parameter.name.clone(),
+                        kind: BindingKind::Parameter,
+                        ty: parameter.ty,
+                        origin: Origin::Semantic,
+                    });
+                    parameter_bindings.push(binding);
+                    parameter_places.push(PlaceId::new(u64::try_from(index).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("parameter place exceeds u64"))
+                    })?));
+                    new_entities.push(NewEntity {
+                        address: EntityAddress::Binding(raw),
+                        kind: EntityKind::Parameter,
+                        name: Arc::from(parameter.name),
+                    });
+                }
+                let root = EntityAddress::Binding(function_raw);
+                program.functions.push(crate::hir::Function {
+                    binding: function_binding,
+                    origin: Origin::Semantic,
+                    params: parameter_bindings,
+                    param_places: parameter_places,
+                    bounds: Vec::new(),
+                    arity: parameter_types.len(),
+                    local_count: parameter_types.len(),
+                    summary: EffectSet::UNKNOWN,
+                    body: Expr {
+                        ty: return_type.clone(),
+                        effects: EffectSet::UNKNOWN,
+                        origin: Origin::Semantic,
+                        kind: ExprKind::Hole,
+                    },
+                });
+                program.global_layout.push(function_binding);
+                new_entities.push(NewEntity {
+                    address: root,
+                    kind: EntityKind::Function,
+                    name: Arc::from(name),
+                });
+                new_holes.push(NewHole {
+                    address: NodeAddress { root, preorder: 0 },
+                    kind: HoleKind::MissingBody,
+                    goal: Arc::from("provide the function body"),
+                });
+            }
+            Edit::CreateMain { return_type } => {
+                validate_constructed_type(&return_type, "main return")?;
+                if program.main.is_some() {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "main entry point already exists",
+                    )));
+                }
+                new_entities.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("created entity allocation failed"))
+                })?;
+                new_holes.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("created hole allocation failed"))
+                })?;
+                program.main = Some(crate::hir::Main {
+                    origin: Origin::Semantic,
+                    params: Vec::new(),
+                    param_places: Vec::new(),
+                    param_types: Vec::new(),
+                    return_type: return_type.clone(),
+                    arity: 0,
+                    local_count: 0,
+                    body: Expr {
+                        ty: return_type,
+                        effects: EffectSet::UNKNOWN,
+                        origin: Origin::Semantic,
+                        kind: ExprKind::Hole,
+                    },
+                });
+                new_entities.push(NewEntity {
+                    address: EntityAddress::Main,
+                    kind: EntityKind::Main,
+                    name: Arc::from("main"),
+                });
+                new_holes.push(NewHole {
+                    address: NodeAddress {
+                        root: EntityAddress::Main,
+                        preorder: 0,
+                    },
+                    kind: HoleKind::MissingBody,
+                    goal: Arc::from("provide the entry-point body"),
+                });
+            }
             Edit::RenameEntity { entity, new_name } => {
                 if !renamed.insert(entity) {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
@@ -239,9 +462,16 @@ fn stage(
                 });
             }
             Edit::ReplaceExpression { target, draft } => {
-                ensure_structural_once(&mut structural_targets, target)?;
-                let (address, key, expected, origin, visible) = edit_context(base, target)?;
-                let replacement = lower_draft(base, &program, &draft, &expected, origin, &visible)?;
+                ensure_structural_nonoverlapping(base, &mut structural_targets, target)?;
+                let (address, key, expected, visible) = edit_context(base, target)?;
+                let replacement = lower_draft(
+                    base,
+                    &program,
+                    &draft,
+                    &expected,
+                    Origin::Semantic,
+                    &visible,
+                )?;
                 structural.push(StructuralAction {
                     target,
                     address,
@@ -250,18 +480,19 @@ fn stage(
                 });
             }
             Edit::IntroduceHole { target, goal } => {
-                ensure_structural_once(&mut structural_targets, target)?;
+                ensure_structural_nonoverlapping(base, &mut structural_targets, target)?;
                 if goal.is_empty() {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "typed hole goal must not be empty",
                     )));
                 }
-                let (address, key, expected, _origin, visible) = edit_context(base, target)?;
+                let (address, key, expected, visible) = edit_context(base, target)?;
                 let owner = root_owner(base, address)?;
-                holes.push(HoleOverlay {
+                holes.push(HoleRecord {
                     state: HoleState {
                         id: HoleId(target),
-                        expected_type: expected,
+                        kind: HoleKind::TypedExpression,
+                        expected_type: expected.clone(),
                         goal: Arc::from(goal),
                         owner,
                         context: target,
@@ -269,6 +500,17 @@ fn stage(
                     },
                     address,
                     key,
+                });
+                structural.push(StructuralAction {
+                    target,
+                    address,
+                    key,
+                    replacement: Expr {
+                        ty: expected,
+                        effects: EffectSet::UNKNOWN,
+                        origin: Origin::Semantic,
+                        kind: ExprKind::Hole,
+                    },
                 });
                 entries.push(SemanticDiffEntry::HoleIntroduced {
                     hole: HoleId(target),
@@ -282,14 +524,14 @@ fn stage(
                 if hole.0.namespace() != base.namespace {
                     return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
                 }
-                let overlay = holes
+                let record = holes
                     .iter_mut()
-                    .find(|overlay| overlay.state.id == hole)
+                    .find(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 if let Some(expected_type) = expected_type {
-                    if expected_type != overlay.state.expected_type {
+                    if expected_type != record.state.expected_type {
                         return Err(WorkspaceError::TypeMismatch {
-                            expected: Arc::from(overlay.state.expected_type.to_string()),
+                            expected: Arc::from(record.state.expected_type.to_string()),
                             actual: Arc::from(expected_type.to_string()),
                         });
                     }
@@ -299,37 +541,36 @@ fn stage(
                         "typed hole goal must not be empty",
                     )));
                 }
-                let old_goal = Arc::clone(&overlay.state.goal);
-                overlay.state.goal = Arc::from(goal);
+                let old_goal = Arc::clone(&record.state.goal);
+                record.state.goal = Arc::from(goal);
                 entries.push(SemanticDiffEntry::HoleRefined {
                     hole,
                     old_goal,
-                    new_goal: Arc::clone(&overlay.state.goal),
+                    new_goal: Arc::clone(&record.state.goal),
                 });
             }
             Edit::FillHole { hole, draft } => {
-                ensure_structural_once(&mut structural_targets, hole.0)?;
+                ensure_structural_nonoverlapping(base, &mut structural_targets, hole.0)?;
                 if hole.0.namespace() != base.namespace {
                     return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
                 }
                 let index = holes
                     .iter()
-                    .position(|overlay| overlay.state.id == hole)
+                    .position(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
-                let overlay = holes[index].clone();
-                let origin = expression_at(&program, overlay.address)?.origin;
+                let record = holes[index].clone();
                 let replacement = lower_draft(
                     base,
                     &program,
                     &draft,
-                    &overlay.state.expected_type,
-                    origin,
-                    &overlay.state.visible_entities,
+                    &record.state.expected_type,
+                    Origin::Semantic,
+                    &record.state.visible_entities,
                 )?;
                 structural.push(StructuralAction {
                     target: hole.0,
-                    address: overlay.address,
-                    key: overlay.key,
+                    address: record.address,
+                    key: record.key,
                     replacement,
                 });
                 holes.remove(index);
@@ -342,18 +583,27 @@ fn stage(
         right
             .address
             .root
-            .0
-            .cmp(&left.address.root.0)
+            .cmp(&left.address.root)
             .then_with(|| right.address.preorder.cmp(&left.address.preorder))
     });
     for action in &structural {
         replace_expression(&mut program, action.address, &action.replacement)?;
     }
 
-    crate::effects::infer(&mut program);
-    crate::ownership::check(&program).map_err(WorkspaceError::from_core)?;
-    crate::analyze::verify_match_plans(&program).map_err(WorkspaceError::from_core)?;
-    super::validate::program(&program).map_err(WorkspaceError::from_core)?;
+    let binding_count = program.bindings.len();
+    let main_body = program.main.as_mut().map(|main| &mut main.body);
+    crate::effects::infer_partial(binding_count, &mut program.functions, main_body);
+
+    if program.main.is_some() && holes.is_empty() && new_holes.is_empty() {
+        let complete = program
+            .try_complete(&base.source_origins)
+            .map_err(WorkspaceError::from_core)?;
+        crate::ownership::check(&complete).map_err(WorkspaceError::from_core)?;
+        crate::analyze::verify_match_plans(&complete).map_err(WorkspaceError::from_core)?;
+        super::validate::program(&complete).map_err(WorkspaceError::from_core)?;
+        let (complete_program, _) = SemanticProgram::from_hir(complete);
+        program = complete_program;
+    }
 
     let canonical =
         super::index::build(&program, base.namespace).map_err(WorkspaceError::from_core)?;
@@ -375,7 +625,30 @@ fn stage(
         .map_err(WorkspaceError::from_core)?;
 
     refresh_hole_addresses(&mut holes, &indexes)?;
-    apply_hole_overlay(&mut indexes, &holes, allocator)?;
+    install_new_holes(&mut holes, &new_holes, &indexes)?;
+    for pending in &new_holes {
+        let node = indexes
+            .address_nodes
+            .get(&pending.address)
+            .copied()
+            .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole identity is missing")))?;
+        entries.push(SemanticDiffEntry::HoleIntroduced { hole: HoleId(node) });
+    }
+    apply_hole_diagnostics(&mut indexes, &holes, program.main.is_none())?;
+    for created in new_entities {
+        let entity = indexes
+            .address_entities
+            .get(&created.address)
+            .copied()
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("created entity identity is missing"))
+            })?;
+        entries.push(SemanticDiffEntry::EntityCreated {
+            entity,
+            kind: created.kind,
+            name: created.name,
+        });
+    }
     append_structural_diff(base, &indexes, &structural, &mut entries)?;
     append_graph_diff(base, &indexes, &mut entries)?;
     sort_diff_entries(&mut entries);
@@ -385,8 +658,8 @@ fn stage(
         revision,
         entries,
     };
-    let semantic_digest = semantic_diff_digest(base.semantic_digest, &diff)?;
-    let state = if holes.is_empty() {
+    let blockers = completeness_blockers(&program, &holes);
+    let state = if blockers.is_empty() {
         ProgramState::Complete
     } else {
         ProgramState::Incomplete
@@ -395,14 +668,14 @@ fn stage(
         namespace: base.namespace,
         revision,
         state,
-        hir: Arc::new(program),
-        provenance: Arc::new(super::CapturedCompilationProvenance::edited(
-            semantic_digest,
-        )),
-        semantic_digest,
+        program: Arc::new(program),
+        source_origins: Arc::clone(&base.source_origins),
+        provenance: Arc::new(super::CapturedCompilationProvenance::Development),
         attachments: None,
         indexes: Arc::new(indexes),
         holes: holes.into(),
+        blockers: blockers.into(),
+        allocator: allocator.clone(),
     };
     let invalidated = vec![
         InvalidatedDomain::SemanticIndexes,
@@ -416,7 +689,7 @@ fn stage(
     Ok((snapshot, diff, invalidated))
 }
 
-fn try_clone_program(program: &Program) -> Result<Program, WorkspaceError> {
+fn try_clone_program(program: &SemanticProgram) -> Result<SemanticProgram, WorkspaceError> {
     let mut functions = Vec::new();
     functions
         .try_reserve(program.functions.len())
@@ -437,8 +710,23 @@ fn try_clone_program(program: &Program) -> Result<Program, WorkspaceError> {
                 .map_err(WorkspaceError::from_core)?,
         });
     }
-    Ok(Program {
-        sources: try_clone_values(&program.sources, "source")?,
+    let main = program
+        .main
+        .as_ref()
+        .map(|main| {
+            Ok(crate::hir::Main {
+                origin: main.origin,
+                params: try_clone_values(&main.params, "main parameter")?,
+                param_places: try_clone_values(&main.param_places, "main place")?,
+                param_types: try_clone_values(&main.param_types, "main parameter type")?,
+                return_type: main.return_type.clone(),
+                arity: main.arity,
+                local_count: main.local_count,
+                body: main.body.try_clone().map_err(WorkspaceError::from_core)?,
+            })
+        })
+        .transpose()?;
+    Ok(SemanticProgram {
         bindings: try_clone_values(&program.bindings, "binding")?,
         products: try_clone_values(&program.products, "product")?,
         enums: try_clone_values(&program.enums, "enum")?,
@@ -446,20 +734,7 @@ fn try_clone_program(program: &Program) -> Result<Program, WorkspaceError> {
         implementations: try_clone_values(&program.implementations, "implementation")?,
         match_plans: try_clone_values(&program.match_plans, "match plan")?,
         functions,
-        main: crate::hir::Main {
-            origin: program.main.origin,
-            params: try_clone_values(&program.main.params, "main parameter")?,
-            param_places: try_clone_values(&program.main.param_places, "main place")?,
-            param_types: try_clone_values(&program.main.param_types, "main parameter type")?,
-            return_type: program.main.return_type.clone(),
-            arity: program.main.arity,
-            local_count: program.main.local_count,
-            body: program
-                .main
-                .body
-                .try_clone()
-                .map_err(WorkspaceError::from_core)?,
-        },
+        main,
         global_layout: try_clone_values(&program.global_layout, "global layout")?,
     })
 }
@@ -473,16 +748,38 @@ fn try_clone_values<T: Clone>(values: &[T], kind: &str) -> Result<Vec<T>, Worksp
     Ok(cloned)
 }
 
-fn ensure_structural_once(
-    targets: &mut HashSet<NodeId>,
+fn ensure_structural_nonoverlapping(
+    snapshot: &WorkspaceSnapshot,
+    targets: &mut Vec<NodeId>,
     target: NodeId,
 ) -> Result<(), WorkspaceError> {
-    if !targets.insert(target) {
-        return Err(WorkspaceError::InvalidTransaction(Arc::from(
-            "expression is structurally edited more than once in one transaction",
-        )));
+    snapshot.workspace_node(target)?;
+    for existing in targets.iter().copied() {
+        if existing == target
+            || node_is_ancestor(snapshot, existing, target)?
+            || node_is_ancestor(snapshot, target, existing)?
+        {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "structural edits in one transaction must target disjoint expression subtrees",
+            )));
+        }
     }
+    targets.push(target);
     Ok(())
+}
+
+fn node_is_ancestor(
+    snapshot: &WorkspaceSnapshot,
+    ancestor: NodeId,
+    mut node: NodeId,
+) -> Result<bool, WorkspaceError> {
+    loop {
+        match snapshot.workspace_node(node)?.owner {
+            SemanticOwner::Entity(_) => return Ok(false),
+            SemanticOwner::Node(parent) if parent == ancestor => return Ok(true),
+            SemanticOwner::Node(parent) => node = parent,
+        }
+    }
 }
 
 fn validate_name(name: &str) -> Result<(), WorkspaceError> {
@@ -498,8 +795,46 @@ fn validate_name(name: &str) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
+fn validate_constructed_type(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
+    if matches!(ty, Type::I64 | Type::F64 | Type::Bool | Type::Unit) {
+        Ok(())
+    } else {
+        Err(WorkspaceError::unsupported(
+            "create-declaration",
+            &format!("{subject} type {ty} is outside the implemented scalar construction surface"),
+        ))
+    }
+}
+
+fn function_name_exists(program: &SemanticProgram, name: &str) -> bool {
+    function_name_conflicts(program, name, None)
+}
+
+fn function_name_conflicts(
+    program: &SemanticProgram,
+    name: &str,
+    except: Option<crate::hir::BindingId>,
+) -> bool {
+    name == "main"
+        || crate::hir::Operation::from_name(name).is_some()
+        || program.bindings.iter().any(|binding| {
+            binding.kind == BindingKind::Function
+                && Some(binding.id) != except
+                && binding.name == name
+        })
+        || program.products.iter().any(|product| product.name == name)
+        || program
+            .enums
+            .iter()
+            .any(|enumeration| enumeration.name == name)
+        || program
+            .traits
+            .iter()
+            .any(|declaration| declaration.name == name)
+}
+
 fn rename_entity(
-    program: &mut Program,
+    program: &mut SemanticProgram,
     address: EntityAddress,
     kind: EntityKind,
     new_name: &str,
@@ -517,10 +852,9 @@ fn rename_entity(
             "this declaration kind is not in the initial editing vertical",
         ));
     }
-    let raw = address
-        .0
-        .checked_sub(1)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
+    let EntityAddress::Binding(raw) = address else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("entity")));
+    };
     let index =
         usize::try_from(raw).map_err(|_| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
     let binding = program
@@ -529,15 +863,9 @@ fn rename_entity(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
     let binding_id = binding.id;
     let is_function = matches!(binding.kind, BindingKind::Function);
-    if is_function
-        && program.bindings.iter().any(|candidate| {
-            matches!(candidate.kind, BindingKind::Function)
-                && candidate.id != binding_id
-                && candidate.name == new_name
-        })
-    {
+    if is_function && function_name_conflicts(program, new_name, Some(binding_id)) {
         return Err(WorkspaceError::InvalidTransaction(Arc::from(
-            "function name already exists",
+            "global declaration name already exists or is reserved",
         )));
     }
     let binding = &mut program.bindings[index];
@@ -549,16 +877,7 @@ fn rename_entity(
 fn edit_context(
     snapshot: &WorkspaceSnapshot,
     target: NodeId,
-) -> Result<
-    (
-        NodeAddress,
-        NodeKey,
-        Type,
-        crate::hir::SourceId,
-        Vec<EntityId>,
-    ),
-    WorkspaceError,
-> {
+) -> Result<(NodeAddress, NodeKey, Type, Vec<EntityId>), WorkspaceError> {
     let header = snapshot.workspace_node(target)?;
     if header.kind == NodeKind::Hole {
         return Err(WorkspaceError::InvalidTransaction(Arc::from(
@@ -573,13 +892,12 @@ fn edit_context(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node")))?;
     let address = snapshot.indexes.node_addresses[index];
     let key = snapshot.indexes.node_keys[index];
-    let expression = expression_at(snapshot.hir(), address)?;
+    let expression = expression_at(&snapshot.program, address)?;
     let visible = visible_entities(snapshot, address)?;
     Ok((
         address,
         key,
         base_expected_type(snapshot, index, expression)?,
-        expression.origin,
         visible,
     ))
 }
@@ -629,21 +947,27 @@ fn root_owner(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))
 }
 
-fn expression_at(program: &Program, address: NodeAddress) -> Result<&Expr, WorkspaceError> {
+fn expression_at(program: &SemanticProgram, address: NodeAddress) -> Result<&Expr, WorkspaceError> {
     expression_root(program, address.root)?
         .try_at_preorder(address.preorder)
         .map_err(WorkspaceError::from_core)?
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node address")))
 }
 
-fn expression_root(program: &Program, address: EntityAddress) -> Result<&Expr, WorkspaceError> {
-    if address.0 == 0 {
-        return Ok(&program.main.body);
+fn expression_root(
+    program: &SemanticProgram,
+    address: EntityAddress,
+) -> Result<&Expr, WorkspaceError> {
+    if address == EntityAddress::Main {
+        return program
+            .main
+            .as_ref()
+            .map(|main| &main.body)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")));
     }
-    let binding_raw = address
-        .0
-        .checked_sub(1)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?;
+    let EntityAddress::Binding(binding_raw) = address else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
+    };
     program
         .functions
         .iter()
@@ -653,18 +977,20 @@ fn expression_root(program: &Program, address: EntityAddress) -> Result<&Expr, W
 }
 
 fn replace_expression(
-    program: &mut Program,
+    program: &mut SemanticProgram,
     address: NodeAddress,
     replacement: &Expr,
 ) -> Result<(), WorkspaceError> {
-    let root = if address.root.0 == 0 {
-        &mut program.main.body
+    let root = if address.root == EntityAddress::Main {
+        &mut program
+            .main
+            .as_mut()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?
+            .body
     } else {
-        let raw = address
-            .root
-            .0
-            .checked_sub(1)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?;
+        let EntityAddress::Binding(raw) = address.root else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
+        };
         &mut program
             .functions
             .iter_mut()
@@ -682,10 +1008,10 @@ fn replace_expression(
 
 fn lower_draft(
     snapshot: &WorkspaceSnapshot,
-    program: &Program,
+    program: &SemanticProgram,
     draft: &ExpressionDraft,
     expected: &Type,
-    origin: crate::hir::SourceId,
+    origin: Origin,
     visible: &[EntityId],
 ) -> Result<Expr, WorkspaceError> {
     validate_draft_shape(draft)?;
@@ -706,10 +1032,17 @@ fn lower_draft(
             DraftNode::Bool(value) => scalar(Type::Bool, ExprKind::LitBool(*value), origin),
             DraftNode::Unit => scalar(Type::Unit, ExprKind::LitUnit, origin),
             DraftNode::Load(entity) => {
+                snapshot.workspace_entity(*entity)?;
                 if !visible_set.contains(entity) {
                     return Err(WorkspaceError::InvisibleEntity);
                 }
                 let (binding, slot, ty) = parameter_binding(snapshot, program, *entity)?;
+                if !crate::ownership::draft_parameter_load_is_supported(&ty) {
+                    return Err(WorkspaceError::unsupported(
+                        "load",
+                        "owned and affine parameters require move construction, which is not implemented",
+                    ));
+                }
                 Expr {
                     ty,
                     effects: EffectSet::PURE,
@@ -721,6 +1054,7 @@ fn lower_draft(
                 }
             }
             DraftNode::Call { callee, arguments } => {
+                snapshot.workspace_entity(*callee)?;
                 if !visible_set.contains(callee) {
                     return Err(WorkspaceError::InvisibleEntity);
                 }
@@ -785,24 +1119,6 @@ fn lower_draft(
                     },
                 }
             }
-            DraftNode::Store { .. } => {
-                return Err(WorkspaceError::unsupported(
-                    "storage",
-                    "storage creation is not in the initial semantic editing vertical",
-                ));
-            }
-            DraftNode::GenericCall { .. } => {
-                return Err(WorkspaceError::unsupported(
-                    "generic-call",
-                    "generic call creation is not in the initial semantic editing vertical",
-                ));
-            }
-            DraftNode::Match { .. } => {
-                return Err(WorkspaceError::unsupported(
-                    "match",
-                    "match creation is not in the initial semantic editing vertical",
-                ));
-            }
         };
         completed.push(Some(expression));
     }
@@ -816,7 +1132,7 @@ fn lower_draft(
     Ok(root)
 }
 
-fn scalar(ty: Type, kind: ExprKind, origin: crate::hir::SourceId) -> Expr {
+fn scalar(ty: Type, kind: ExprKind, origin: Origin) -> Expr {
     Expr {
         ty,
         effects: EffectSet::PURE,
@@ -886,7 +1202,7 @@ fn take_draft_child(
 
 fn parameter_binding(
     snapshot: &WorkspaceSnapshot,
-    program: &Program,
+    program: &SemanticProgram,
     entity: EntityId,
 ) -> Result<(crate::hir::BindingId, usize, Type), WorkspaceError> {
     let header = snapshot.workspace_entity(entity)?;
@@ -907,13 +1223,16 @@ fn parameter_binding(
         .and_then(|index| snapshot.indexes.entity_addresses.get(*index))
         .copied()
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?;
-    let parameters = if owner_address.0 == 0 {
-        &program.main.params
+    let parameters = if owner_address == EntityAddress::Main {
+        &program
+            .main
+            .as_ref()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?
+            .params
     } else {
-        let raw = owner_address
-            .0
-            .checked_sub(1)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter owner")))?;
+        let EntityAddress::Binding(raw) = owner_address else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("parameter owner")));
+        };
         &program
             .functions
             .iter()
@@ -935,7 +1254,7 @@ fn parameter_binding(
 
 fn callable_binding(
     snapshot: &WorkspaceSnapshot,
-    program: &Program,
+    program: &SemanticProgram,
     entity: EntityId,
 ) -> Result<(crate::hir::BindingId, Vec<Type>, Type, EffectSet), WorkspaceError> {
     let header = snapshot.workspace_entity(entity)?;
@@ -966,7 +1285,7 @@ fn callable_binding(
 
 fn binding_from_entity(
     snapshot: &WorkspaceSnapshot,
-    program: &Program,
+    program: &SemanticProgram,
     entity: EntityId,
 ) -> Result<crate::hir::BindingId, WorkspaceError> {
     let address = snapshot
@@ -976,10 +1295,9 @@ fn binding_from_entity(
         .and_then(|index| snapshot.indexes.entity_addresses.get(*index))
         .copied()
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("binding")))?;
-    let raw = address
-        .0
-        .checked_sub(1)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("binding")))?;
+    let EntityAddress::Binding(raw) = address else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("binding")));
+    };
     program
         .bindings
         .get(
@@ -1002,7 +1320,7 @@ fn require_type(actual: &Type, expected: &Type) -> Result<(), WorkspaceError> {
 }
 
 fn refresh_hole_addresses(
-    holes: &mut [HoleOverlay],
+    holes: &mut [HoleRecord],
     indexes: &SnapshotIndexes,
 ) -> Result<(), WorkspaceError> {
     for hole in holes {
@@ -1013,115 +1331,107 @@ fn refresh_hole_addresses(
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole root")))?;
         hole.address = indexes.node_addresses[index];
         hole.key = indexes.node_keys[index];
+        hole.state.owner = indexes
+            .address_entities
+            .get(&hole.address.root)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole owner")))?;
+        hole.state.context = hole.state.id.0;
+        hole.state.visible_entities = hole_visibility(indexes, hole.state.owner)?.into();
     }
     Ok(())
 }
 
-fn apply_hole_overlay(
-    indexes: &mut SnapshotIndexes,
-    holes: &[HoleOverlay],
-    allocator: &mut IdentityAllocator,
+fn install_new_holes(
+    holes: &mut Vec<HoleRecord>,
+    pending: &[NewHole],
+    indexes: &SnapshotIndexes,
 ) -> Result<(), WorkspaceError> {
-    let mut removed = HashSet::new();
-    removed
-        .try_reserve(indexes.nodes.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole descendant allocation failed")))?;
-    let mut roots = HashSet::new();
-    roots
-        .try_reserve(holes.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole root allocation failed")))?;
-    roots.extend(holes.iter().map(|hole| hole.state.id.0));
-    for header in &indexes.nodes {
-        if let SemanticOwner::Node(parent) = header.owner {
-            if roots.contains(&parent) || removed.contains(&parent) {
-                removed.insert(header.id);
-            }
-        }
+    for hole in pending {
+        let node = indexes
+            .address_nodes
+            .get(&hole.address)
+            .copied()
+            .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole node is missing")))?;
+        let index =
+            indexes.node_lookup.get(&node).copied().ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("new hole index is missing"))
+            })?;
+        let owner = indexes
+            .address_entities
+            .get(&hole.address.root)
+            .copied()
+            .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole owner is missing")))?;
+        let visible = hole_visibility(indexes, owner)?;
+        let expected_type = indexes
+            .node_expected_types
+            .get(index)
+            .and_then(Clone::clone)
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("new hole expected type is missing"))
+            })?;
+        holes.push(HoleRecord {
+            state: HoleState {
+                id: HoleId(node),
+                kind: hole.kind,
+                expected_type,
+                goal: Arc::clone(&hole.goal),
+                owner,
+                context: node,
+                visible_entities: visible.into(),
+            },
+            address: hole.address,
+            key: indexes.node_keys[index],
+        });
     }
-    for id in &removed {
-        allocator
-            .tombstone_node(*id)
-            .map_err(WorkspaceError::from_core)?;
-    }
+    holes.sort_by_key(|hole| hole.state.id);
+    Ok(())
+}
 
-    let mut retained = Vec::new();
-    let retained_count = indexes
-        .nodes
-        .len()
-        .checked_sub(removed.len())
-        .ok_or_else(|| WorkspaceError::Validation(Arc::from("hole removal set is inconsistent")))?;
-    retained
-        .try_reserve(retained_count)
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole node retention allocation failed")))?;
-    for index in 0..indexes.nodes.len() {
-        if !removed.contains(&indexes.nodes[index].id) {
-            retained.push(index);
+fn hole_visibility(
+    indexes: &SnapshotIndexes,
+    owner: EntityId,
+) -> Result<Vec<EntityId>, WorkspaceError> {
+    let mut visible = Vec::new();
+    visible
+        .try_reserve(indexes.entities.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("hole visibility allocation failed")))?;
+    for entity in &indexes.entities {
+        if entity.kind == EntityKind::Function
+            || (entity.kind == EntityKind::Parameter && entity.owner == Some(owner))
+        {
+            visible.push(entity.id);
         }
     }
-    let mut nodes = Vec::new();
-    let mut addresses = Vec::new();
-    let mut keys = Vec::new();
-    let mut fingerprints = Vec::new();
-    let mut expected_types = Vec::new();
-    nodes
-        .try_reserve(retained.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole node allocation failed")))?;
-    addresses
-        .try_reserve(retained.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole address allocation failed")))?;
-    keys.try_reserve(retained.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole key allocation failed")))?;
-    fingerprints
-        .try_reserve(retained.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole fingerprint allocation failed")))?;
-    expected_types
-        .try_reserve(retained.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("hole expectation allocation failed")))?;
-    for index in retained {
-        nodes.push(indexes.nodes[index].clone());
-        addresses.push(indexes.node_addresses[index]);
-        keys.push(indexes.node_keys[index]);
-        fingerprints.push(indexes.node_fingerprints[index]);
-        expected_types.push(indexes.node_expected_types[index].clone());
-    }
-    indexes.nodes = nodes;
-    indexes.node_addresses = addresses;
-    indexes.node_keys = keys;
-    indexes.node_fingerprints = fingerprints;
-    indexes.node_expected_types = expected_types;
-    indexes.containment.retain(|edge| match edge.child {
-        SemanticChild::Node(node) => !removed.contains(&node),
-        SemanticChild::Entity(_) => true,
-    });
-    indexes.containment.retain(|edge| match edge.owner {
-        SemanticOwner::Node(node) => !removed.contains(&node),
-        SemanticOwner::Entity(_) => true,
-    });
-    indexes
-        .references
-        .retain(|edge| !removed.contains(&edge.site));
-    indexes.calls.retain(|edge| !removed.contains(&edge.site));
+    visible.sort();
+    Ok(visible)
+}
+
+fn apply_hole_diagnostics(
+    indexes: &mut SnapshotIndexes,
+    holes: &[HoleRecord],
+    missing_entry: bool,
+) -> Result<(), WorkspaceError> {
     indexes.diagnostics.clear();
-    for hole in holes {
-        let index = indexes
-            .nodes
-            .iter()
-            .position(|header| header.id == hole.state.id.0)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole root")))?;
-        indexes.nodes[index].kind = NodeKind::Hole;
-        indexes.nodes[index].actual_type = Arc::from(hole.state.expected_type.to_string());
-        indexes.nodes[index].expected_type = Some(Arc::from(hole.state.expected_type.to_string()));
-        indexes.node_expected_types[index] = Some(hole.state.expected_type.clone());
-        indexes
-            .references
-            .retain(|edge| edge.site != hole.state.id.0);
-        indexes.calls.retain(|edge| edge.site != hole.state.id.0);
+    if missing_entry {
         indexes.diagnostics.push(DiagnosticHeader {
-            code: Arc::from("workspace.typed-hole"),
+            code: Arc::from("workspace.missing-entry-point"),
+            severity: DiagnosticSeverity::Error,
+            subject: None,
+            message: Arc::from("program requires a main entry point"),
+        });
+    }
+    for hole in holes {
+        let (code, label) = match hole.state.kind {
+            HoleKind::MissingBody => ("workspace.missing-body", "missing body"),
+            HoleKind::TypedExpression => ("workspace.typed-hole", "typed hole"),
+        };
+        indexes.diagnostics.push(DiagnosticHeader {
+            code: Arc::from(code),
             severity: DiagnosticSeverity::Error,
             subject: Some(SemanticChild::Node(hole.state.id.0)),
             message: Arc::from(format!(
-                "typed hole requires {}: {}",
+                "{label} requires {}: {}",
                 hole.state.expected_type, hole.state.goal
             )),
         });
@@ -1131,6 +1441,32 @@ fn apply_hole_overlay(
         .diagnostics
         .sort_by_key(|diagnostic| diagnostic.subject);
     indexes.rebuild_maps().map_err(WorkspaceError::from_core)
+}
+
+fn completeness_blockers(
+    program: &SemanticProgram,
+    holes: &[HoleRecord],
+) -> Vec<CompletenessBlocker> {
+    let mut blockers = Vec::new();
+    if program.main.is_none() {
+        blockers.push(CompletenessBlocker::MissingEntryPoint);
+    }
+    for hole in holes {
+        blockers.push(match hole.state.kind {
+            HoleKind::MissingBody => CompletenessBlocker::MissingBody {
+                declaration: hole.state.owner,
+                hole: hole.state.id,
+                expected_type: hole.state.expected_type.clone(),
+            },
+            HoleKind::TypedExpression => CompletenessBlocker::TypedHole {
+                hole: hole.state.id,
+                expected_type: hole.state.expected_type.clone(),
+                owner: hole.state.owner,
+                context: hole.state.context,
+            },
+        });
+    }
+    blockers
 }
 
 fn rebuild_visible_dependencies(indexes: &mut SnapshotIndexes) -> Result<(), WorkspaceError> {
@@ -1316,79 +1652,15 @@ fn sort_diff_entries(entries: &mut [SemanticDiffEntry]) {
 
 fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64) {
     match entry {
-        SemanticDiffEntry::EntityRenamed { entity, .. } => (0, entity.slot(), entity.generation()),
-        SemanticDiffEntry::ExpressionReplaced { node, .. } => (1, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantCreated { node, .. } => (2, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantDeleted { node, .. } => (3, node.slot(), node.generation()),
-        SemanticDiffEntry::HoleIntroduced { hole } => (4, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleRefined { hole, .. } => (5, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleFilled { hole } => (6, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::ReferenceRewired { site, .. } => (7, site.slot(), site.generation()),
-        SemanticDiffEntry::CallRewired { site, .. } => (8, site.slot(), site.generation()),
+        SemanticDiffEntry::EntityCreated { entity, .. } => (0, entity.slot(), entity.generation()),
+        SemanticDiffEntry::EntityRenamed { entity, .. } => (1, entity.slot(), entity.generation()),
+        SemanticDiffEntry::ExpressionReplaced { node, .. } => (2, node.slot(), node.generation()),
+        SemanticDiffEntry::DescendantCreated { node, .. } => (3, node.slot(), node.generation()),
+        SemanticDiffEntry::DescendantDeleted { node, .. } => (4, node.slot(), node.generation()),
+        SemanticDiffEntry::HoleIntroduced { hole } => (5, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::HoleRefined { hole, .. } => (6, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::HoleFilled { hole } => (7, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::ReferenceRewired { site, .. } => (8, site.slot(), site.generation()),
+        SemanticDiffEntry::CallRewired { site, .. } => (9, site.slot(), site.generation()),
     }
-}
-
-fn semantic_diff_digest(base: [u8; 32], diff: &SemanticDiff) -> Result<[u8; 32], WorkspaceError> {
-    let mut capacity = 77_usize;
-    for entry in &diff.entries {
-        capacity = capacity
-            .checked_add(17)
-            .ok_or_else(|| WorkspaceError::Host(Arc::from("semantic digest size overflow")))?;
-        match entry {
-            SemanticDiffEntry::EntityRenamed {
-                old_name, new_name, ..
-            } => {
-                capacity = capacity
-                    .checked_add(old_name.len())
-                    .and_then(|value| value.checked_add(new_name.len()))
-                    .and_then(|value| value.checked_add(1))
-                    .ok_or_else(|| {
-                        WorkspaceError::Host(Arc::from("semantic rename digest size overflow"))
-                    })?;
-            }
-            SemanticDiffEntry::HoleRefined {
-                old_goal, new_goal, ..
-            } => {
-                capacity = capacity
-                    .checked_add(old_goal.len())
-                    .and_then(|value| value.checked_add(new_goal.len()))
-                    .and_then(|value| value.checked_add(1))
-                    .ok_or_else(|| {
-                        WorkspaceError::Host(Arc::from("semantic hole digest size overflow"))
-                    })?;
-            }
-            _ => {}
-        }
-    }
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(capacity)
-        .map_err(|_| WorkspaceError::Host(Arc::from("semantic digest allocation failed")))?;
-    bytes.extend_from_slice(b"lkjscript.semantic-workspace-edit.v1");
-    bytes.extend_from_slice(&base);
-    bytes.extend_from_slice(&diff.revision.sequence().to_be_bytes());
-    for entry in &diff.entries {
-        let (tag, slot, generation) = diff_key(entry);
-        bytes.push(tag);
-        bytes.extend_from_slice(&slot.to_be_bytes());
-        bytes.extend_from_slice(&generation.to_be_bytes());
-        match entry {
-            SemanticDiffEntry::EntityRenamed {
-                old_name, new_name, ..
-            } => {
-                bytes.extend_from_slice(old_name.as_bytes());
-                bytes.push(0);
-                bytes.extend_from_slice(new_name.as_bytes());
-            }
-            SemanticDiffEntry::HoleRefined {
-                old_goal, new_goal, ..
-            } => {
-                bytes.extend_from_slice(old_goal.as_bytes());
-                bytes.push(0);
-                bytes.extend_from_slice(new_goal.as_bytes());
-            }
-            _ => {}
-        }
-    }
-    Ok(lkjscript_core::sha256(&bytes))
 }

@@ -1,5 +1,20 @@
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+thread_local! {
+    static LOWERING_INVOCATIONS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_lowering_invocations() {
+    LOWERING_INVOCATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn lowering_invocations() -> u64 {
+    LOWERING_INVOCATIONS.with(std::cell::Cell::get)
+}
+
 use lkjscript_core::{validate_chunk, Result, ValidationPolicy};
 
 use crate::codegen::compile_program;
@@ -19,22 +34,25 @@ pub(super) struct SnapshotCompileMetrics {
 
 /// The sole post-import compiler boundary.
 ///
-/// This module deliberately has no source, parser, formatter, or analyzer
-/// dependency. It consumes the snapshot's complete typed HIR directly.
+/// This module deliberately has no source, parser, formatter, or source
+/// analyzer dependency. It derives complete compiler HIR from the selected
+/// semantic revision and rejects incompleteness before compiler-only lowering.
 pub fn compile_snapshot(
     snapshot: &WorkspaceSnapshot,
 ) -> std::result::Result<ExecutableProgram, CompileSnapshotError> {
     if snapshot.state() == crate::workspace::ProgramState::Incomplete {
-        let mut holes = Vec::new();
-        holes.try_reserve(snapshot.holes().len()).map_err(|_| {
-            CompileSnapshotError::Compiler(lkjscript_core::Error::host(
-                "incomplete snapshot hole-list allocation failed",
-            ))
-        })?;
-        holes.extend(snapshot.holes().map(|hole| hole.id));
+        let mut blockers = Vec::new();
+        blockers
+            .try_reserve(snapshot.completeness_blockers().len())
+            .map_err(|_| {
+                CompileSnapshotError::Compiler(lkjscript_core::Error::host(
+                    "incomplete snapshot blocker allocation failed",
+                ))
+            })?;
+        blockers.extend(snapshot.completeness_blockers().iter().cloned());
         return Err(CompileSnapshotError::Incomplete(IncompleteSnapshotError {
             revision: snapshot.revision(),
-            holes,
+            blockers,
         }));
     }
     compile_snapshot_with_metrics(snapshot)
@@ -45,10 +63,12 @@ pub fn compile_snapshot(
 pub(super) fn compile_snapshot_with_metrics(
     snapshot: &WorkspaceSnapshot,
 ) -> Result<(ExecutableProgram, SnapshotCompileMetrics)> {
-    snapshot.validate_consistency()?;
+    let hir = snapshot.validated_complete_hir()?;
+    #[cfg(test)]
+    LOWERING_INVOCATIONS.with(|count| count.set(count.get().saturating_add(1)));
 
     let memory_started = Instant::now();
-    let memory_verified = crate::memory_plan::verify_hir_memory(snapshot.hir())?;
+    let memory_verified = crate::memory_plan::verify_hir_memory(&hir)?;
     let memory_planning = memory_started.elapsed();
 
     let memory_plan = memory_verified.plan().clone();

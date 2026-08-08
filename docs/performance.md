@@ -92,18 +92,49 @@ repeated equivalent builds show a material cold-build or binary-size regression.
 No startup, execution throughput, generated-code, allocation, or peak-memory comparison was made in
 this Phase 2 measurement. Existing runtime-selection evidence below is unchanged.
 
-## Phase 5 semantic-workspace cutover
+## Source-free semantic-workspace vertical
 
-**Architectural/correctness evidence, not a performance result.** The compiler now consumes
-`WorkspaceSnapshot` directly, and the former syntax-shaped stdio/session/text-publication path is
-deleted rather than retained as a comparison path. Parser-counter tests cover direct compilation,
-rename, replacement, and hole fill. Concise entity/body/type/reference/hole projection is iterative
-and fallible; the retained ignored 20,000-level small-stack geometry also exercises body projection.
-No latency, allocation, peak-RSS, or output-byte samples were recorded for this cutover, so no
-projection or edit-performance claim is made. Future incremental measurements should use the
-implemented operations described in [`status.md`](status.md), the flow in
-[`architecture.md`](architecture.md), and the contract in
-[`spec/workspace.md`](spec/workspace.md) rather than reviving the deleted wire service.
+**Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
+source-free construction could converge with imported semantics and compile directly without
+requiring hidden source/HIR state, parser work, quadratic entity-root lookup, or recursion on
+expression depth. Equivalent semantics were `identity(value: i64) -> i64 { value }` and
+`main() -> i64 { identity(42) }`, once imported and once created from `Workspace::empty` through
+transactions. Selection required equal user declaration signatures, expression-kind preorder,
+reference/call summaries, diagnostics, successful production compilation, and VM result `42`.
+
+Retained deterministic counters and assertions show:
+
+- empty, create, and fill transactions invoke the parser zero times;
+- incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
+- source-free and imported complete snapshots have equal selected semantic observations and outcome;
+- index construction performs exactly one root-address lookup per semantic node for retained nested
+  `if` geometries at depths 32, 64, and 128; and
+- the ignored locked-release fixture completes source-free main creation, 20,000-level nested-`if`
+  fill (60,001 expression nodes), semantic clone, identity reconciliation, query, projection,
+  complete-HIR derivation, memory planning, SSA, bytecode, VM execution, and destruction on a
+  128 KiB worker stack. The small `identity(42)` test separately asserts one aggregate post-
+  completeness lowering invocation, so incomplete revisions enter none and the selected complete
+  revision enters the production compiler boundary once.
+
+Reproduce the focused vertical and deep fixture with:
+
+```sh
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_construction_never_invokes_parser_and_executes -- --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack \
+  -- --ignored --exact
+```
+
+On the development host, the final retained command reported 18.92 seconds for the test body after
+a 1 minute 5 second release rebuild. This single noisy sample is not a product-latency claim or
+gate. No allocator count, peak RSS, retained memory, edit/query distribution, or representative
+application throughput was measured.
+The implementation should be reversed or redesigned if equivalent observations diverge, any
+incomplete path enters a compiler phase, lookup work ceases to equal node count, the selected depth
+fails on the small stack, or broader source-free construction requires maintaining two mutable
+semantic representations. Future measurements should extend these retained product operations
+rather than revive the deleted text publication or wire service.
 
 ## Owned structural-value stack and work correction
 

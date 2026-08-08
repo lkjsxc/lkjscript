@@ -7,6 +7,18 @@ unit_enum!(MemoryUseKind {
     DirectCallTarget = 3,
     IndirectCallTarget = 4,
 });
+impl Canonical for MemorySourceOrigin {
+    fn encode(&self, output: &mut Encoder) -> Result<()> {
+        match self {
+            Self::Source(source) => {
+                output.tag(0)?;
+                output.value(source)
+            }
+            Self::Semantic => output.tag(1),
+        }
+    }
+}
+
 unit_enum!(MemoryWitnessOperation {
     Transport = 0,
     Compare = 1,
@@ -174,4 +186,19 @@ impl Canonical for MemoryCallTarget {
 fn tagged<T: Canonical + ?Sized>(output: &mut Encoder, tag: u8, value: &T) -> Result<()> {
     output.tag(tag)?;
     output.value(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_origin_is_tagged_not_a_reserved_source_identity() -> Result<()> {
+        let mut source = Encoder::new(b"memory-source-origin")?;
+        source.value(&MemorySourceOrigin::Source(u64::MAX))?;
+        let mut semantic = Encoder::new(b"memory-source-origin")?;
+        semantic.value(&MemorySourceOrigin::Semantic)?;
+        assert_ne!(source.finish(), semantic.finish());
+        Ok(())
+    }
 }

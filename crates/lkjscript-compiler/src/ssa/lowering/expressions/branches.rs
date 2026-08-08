@@ -10,7 +10,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn merge_branches(
         &mut self,
         result_type: SsaType,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
         incoming_env: BTreeMap<BindingId, ValueId>,
         incoming_slots: BTreeMap<BindingId, u64>,
         incoming_unplaced: Vec<ValueId>,
@@ -57,7 +57,7 @@ impl FunctionBuilder<'_> {
         branch: &mut BranchResult,
         values: &[ValueId],
         slots: &BTreeMap<BindingId, u64>,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         self.current = branch.1;
         self.env = branch.2.clone();
@@ -113,7 +113,7 @@ impl FunctionBuilder<'_> {
         value: ValueId,
         ty: &SsaType,
         slots: &BTreeMap<BindingId, u64>,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<ValueId> {
         if branch.3.contains(&value) {
             return Ok(value);

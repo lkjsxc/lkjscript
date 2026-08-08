@@ -4,7 +4,6 @@ use super::{model::Target, LockedTargetMemory, VerifiedCompilationPackage};
 
 #[derive(Clone)]
 pub(crate) struct CapturedPackageCompilation {
-    semantic_identity: [u8; 32],
     target: LockedTargetMemory,
     capabilities: Vec<CapabilityKind>,
 }
@@ -27,17 +26,12 @@ pub(crate) fn capture(verified: &VerifiedCompilationPackage) -> Result<CapturedP
         .ok_or_else(|| Error::msg("compiled package module is not an executable target"))?
         .clone();
     Ok(CapturedPackageCompilation {
-        semantic_identity: digest(&package.package_sha256, "package content")?,
         target,
         capabilities: verified.capabilities().to_vec(),
     })
 }
 
 impl CapturedPackageCompilation {
-    pub(crate) const fn semantic_base_identity(&self) -> [u8; 32] {
-        self.semantic_identity
-    }
-
     pub(crate) fn validate_memory_plan(&self, plan: &crate::HirMemoryPlan) -> Result<()> {
         let generated = super::target_memory::target_record(
             &Target {
@@ -65,11 +59,4 @@ impl CapturedPackageCompilation {
         }
         Ok(())
     }
-}
-
-fn digest(text: &str, name: &str) -> Result<[u8; 32]> {
-    lkjscript_contracts::ContractDigest::from_hex(text)
-        .map(lkjscript_contracts::ContractDigest::as_bytes)
-        .filter(|value| *value != [0; 32])
-        .ok_or_else(|| Error::msg(format!("{name} is not a nonzero canonical digest")))
 }

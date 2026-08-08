@@ -31,7 +31,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         value: ValueId,
         ty: &SsaType,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<StructuralOwnerPlace> {
         self.synthetic_owner_place(
             value,
@@ -46,7 +46,7 @@ impl FunctionBuilder<'_> {
         value: ValueId,
         ty: &SsaType,
         drop_glue: DropGlueIdentity,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<StructuralOwnerPlace> {
         let place = SsaPlaceId::new(
             u64::try_from(self.places.len())
@@ -67,7 +67,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn finish_consumed_structural_place(
         &mut self,
         owner: StructuralOwnerPlace,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         self.env.remove(&owner.binding);
         self.active_place_bindings
@@ -84,7 +84,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn drop_unplaced_structural_owner(
         &mut self,
         value: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         if !self.unplaced_owners.contains(&value) {
             return Err(Error::msg("structural cleanup lost its unplaced owner"));
@@ -102,7 +102,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn drop_abandoned_structural_owners(
         &mut self,
         returned: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let candidates = self.unplaced_owners.clone();
         let mut abandoned = Vec::new();

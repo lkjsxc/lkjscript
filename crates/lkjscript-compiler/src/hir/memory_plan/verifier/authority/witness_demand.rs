@@ -54,6 +54,7 @@ fn verifier_compare_only_inner(body: &hir::Expr, parameter: &str) -> bool {
 fn verifier_expression_children(expression: &hir::Expr) -> Vec<&hir::Expr> {
     use hir::ExprKind as Kind;
     match &expression.kind {
+        Kind::Hole => Vec::new(),
         Kind::Call { args, .. }
         | Kind::Operation { args, .. }
         | Kind::Do(args)

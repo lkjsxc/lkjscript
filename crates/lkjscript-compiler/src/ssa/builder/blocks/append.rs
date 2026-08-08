@@ -6,7 +6,7 @@ impl FunctionBuilder<'_> {
         ty: SsaType,
         kind: InstructionKind,
         effects: EffectSet,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<ValueId> {
         let current = self
             .current
@@ -36,7 +36,7 @@ impl FunctionBuilder<'_> {
         let failure = failure_behavior(effects);
         let failure_cleanup = self.intern_failure_cleanup(&call_handoff)?;
         let metadata = InstructionMetadata {
-            origin: self.next_origin(expression_origin.raw())?,
+            origin: self.next_origin(expression_origin)?,
             effects,
             failure,
             failure_cleanup,
@@ -56,7 +56,7 @@ impl FunctionBuilder<'_> {
         Ok(id)
     }
 
-    pub(in crate::ssa) fn next_origin(&mut self, source: u64) -> Result<Origin> {
+    pub(in crate::ssa) fn next_origin(&mut self, source: hir::Origin) -> Result<Origin> {
         allocate_origin(&mut self.next_position, source)
     }
 
@@ -82,7 +82,7 @@ impl FunctionBuilder<'_> {
         &mut self,
         ty: SsaType,
         constant: Constant,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<ValueId> {
         let source = self.append(
             ty.clone(),
@@ -94,7 +94,7 @@ impl FunctionBuilder<'_> {
     }
 }
 
-fn allocate_origin(next_position: &mut u64, source: u64) -> Result<Origin> {
+fn allocate_origin(next_position: &mut u64, source: hir::Origin) -> Result<Origin> {
     let position = *next_position;
     *next_position = next_position
         .checked_add(1)
@@ -188,11 +188,12 @@ mod tests {
 
     #[test]
     fn origin_allocation_fails_before_identity_collision() {
-        let source = 7;
+        let source_id = hir::SourceId::new(7);
+        let source = hir::Origin::Source(source_id);
         let mut next_position = u64::MAX - 1;
         assert_eq!(
             allocate_origin(&mut next_position, source),
-            Ok(Origin::source(source, u64::MAX - 1))
+            Ok(Origin::source(source_id.raw(), u64::MAX - 1))
         );
 
         let exhausted = allocate_origin(&mut next_position, source);

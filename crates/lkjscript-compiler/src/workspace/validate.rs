@@ -30,9 +30,6 @@ fn validate_sources(program: &Program) -> Result<()> {
             return Err(Error::msg("HIR source paths are not unique"));
         }
     }
-    if program.sources.is_empty() {
-        return Err(Error::msg("complete HIR program has no source origins"));
-    }
     Ok(())
 }
 
@@ -46,8 +43,8 @@ fn validate_bindings(program: &Program) -> Result<()> {
         validate_type(program, &binding.ty)?;
         match (&binding.kind, binding.origin) {
             (BindingKind::BuiltinOperation(_), Origin::Builtin) => {}
-            (BindingKind::BuiltinOperation(_), Origin::Source(_)) => {
-                return Err(Error::msg("builtin operation has a source origin"));
+            (BindingKind::BuiltinOperation(_), Origin::Source(_) | Origin::Semantic) => {
+                return Err(Error::msg("builtin operation has a non-builtin origin"));
             }
             (_, Origin::Builtin) => {
                 return Err(Error::msg("ordinary binding has a builtin origin"));
@@ -145,7 +142,7 @@ fn validate_declarations(program: &Program) -> Result<()> {
 }
 
 fn validate_main(program: &Program) -> Result<()> {
-    validate_source(program, program.main.origin)?;
+    validate_program_origin(program, program.main.origin)?;
     if program.main.arity != program.main.params.len()
         || program.main.params.len() != program.main.param_places.len()
         || program.main.params.len() != program.main.param_types.len()
@@ -156,7 +153,7 @@ fn validate_main(program: &Program) -> Result<()> {
     for (parameter, expected) in program.main.params.iter().zip(&program.main.param_types) {
         let binding = require_binding(program, *parameter, "HIR main parameter")?;
         if binding.kind != BindingKind::Parameter
-            || binding.origin != Origin::Source(program.main.origin)
+            || binding.origin != program.main.origin
             || binding.ty != *expected
         {
             return Err(Error::msg("HIR main parameter signature is stale"));
@@ -180,10 +177,13 @@ fn validate_functions(program: &Program) -> Result<()> {
         if !function_bindings.insert(function.binding) {
             return Err(Error::msg("HIR function binding is duplicated"));
         }
-        validate_source(program, function.origin)?;
+        if !function.summary.is_known() {
+            return Err(Error::msg("complete HIR function has unknown effects"));
+        }
+        validate_program_origin(program, function.origin)?;
         let binding = require_binding(program, function.binding, "HIR function")?;
         if binding.kind != BindingKind::Function
-            || binding.origin != Origin::Source(function.origin)
+            || binding.origin != function.origin
             || function.arity != function.params.len()
             || function.params.len() != function.param_places.len()
         {
@@ -204,7 +204,7 @@ fn validate_functions(program: &Program) -> Result<()> {
         {
             let local = require_binding(program, *parameter, "HIR function parameter")?;
             if local.kind != BindingKind::Parameter
-                || local.origin != Origin::Source(function.origin)
+                || local.origin != function.origin
                 || local.ty != *expected
             {
                 return Err(Error::msg("HIR function parameter signature is stale"));
@@ -435,7 +435,7 @@ fn validate_expressions(program: &Program) -> Result<()> {
 fn validate_expression_root(
     program: &Program,
     root: &Expr,
-    origin: SourceId,
+    origin: Origin,
     local_count: usize,
     return_type: &Type,
     unreachable_counts: &mut [u64],
@@ -446,7 +446,10 @@ fn validate_expression_root(
         .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
     pending.push(root);
     while let Some(expression) = pending.pop() {
-        validate_source(program, expression.origin)?;
+        validate_program_origin(program, expression.origin)?;
+        if !expression.effects.is_known() {
+            return Err(Error::msg("complete HIR expression has unknown effects"));
+        }
         validate_type(program, &expression.ty)?;
         validate_expression_kind(
             program,
@@ -464,12 +467,13 @@ fn validate_expression_root(
 fn validate_expression_kind(
     program: &Program,
     expression: &Expr,
-    origin: SourceId,
+    origin: Origin,
     local_count: usize,
     return_type: &Type,
     unreachable_counts: &mut [u64],
 ) -> Result<()> {
     match &expression.kind {
+        ExprKind::Hole => return Err(Error::msg("complete HIR contains a hole")),
         ExprKind::LitI64(_) if expression.ty == Type::I64 => {}
         ExprKind::LitF64(_) if expression.ty == Type::F64 => {}
         ExprKind::LitBool(_) if expression.ty == Type::Bool => {}
@@ -705,7 +709,7 @@ fn validate_expression_kind(
                 .get(index)
                 .filter(|item| item.id == *plan)
                 .ok_or_else(|| Error::msg("HIR match marker plan identity is stale"))?;
-            if expression.ty != Type::Never || expression.origin != planned.origin {
+            if expression.ty != Type::Never || expression.origin != Origin::Source(planned.origin) {
                 return Err(Error::msg("HIR match marker type or origin is stale"));
             }
             unreachable_counts[index] = unreachable_counts[index]
@@ -809,13 +813,13 @@ fn validate_local_binding(
     program: &Program,
     binding: BindingId,
     slot: usize,
-    origin: SourceId,
+    origin: Origin,
     local_count: usize,
     value_type: &Type,
 ) -> Result<()> {
     let binding = require_binding(program, binding, "HIR local binding")?;
     if slot >= local_count
-        || binding.origin != Origin::Source(origin)
+        || binding.origin != origin
         || binding.ty != *value_type
         || !matches!(
             binding.kind,
@@ -1043,7 +1047,15 @@ fn require_product(
 fn validate_origin(program: &Program, origin: Origin) -> Result<()> {
     match origin {
         Origin::Source(source) => validate_source(program, source),
-        Origin::Builtin => Ok(()),
+        Origin::Semantic | Origin::Builtin => Ok(()),
+    }
+}
+
+fn validate_program_origin(program: &Program, origin: Origin) -> Result<()> {
+    match origin {
+        Origin::Source(source) => validate_source(program, source),
+        Origin::Semantic => Ok(()),
+        Origin::Builtin => Err(Error::msg("ordinary HIR program item has a builtin origin")),
     }
 }
 

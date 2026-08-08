@@ -6,7 +6,7 @@ impl FunctionBuilder<'_> {
         else_result: &mut BranchResult,
         then_value: ValueId,
         else_value: ValueId,
-        expression_origin: hir::SourceId,
+        expression_origin: hir::Origin,
     ) -> Result<()> {
         let conditional: Vec<_> = incoming_env
             .keys()
