@@ -3,32 +3,34 @@ use crate::ownership::*;
 pub(in crate::ownership) fn check_expr(
     program: &Program,
     expression: &Expr,
-    places: &BTreeMap<BindingId, PlaceId>,
+    plan: &OwnershipPlan,
+    cursor: &mut ExprCursor,
     state: &mut State,
-    future: &BTreeSet<BindingId>,
+    future: &mut FutureUses,
     context: UseContext,
 ) -> Result<()> {
-    crate::stack::grow(|| check_expr_inner(program, expression, places, state, future, context))
+    crate::stack::grow(|| {
+        check_expr_inner(program, expression, plan, cursor, state, future, context)
+    })
 }
 
 fn check_expr_inner(
     program: &Program,
     expression: &Expr,
-    places: &BTreeMap<BindingId, PlaceId>,
+    plan: &OwnershipPlan,
+    cursor: &mut ExprCursor,
     state: &mut State,
-    future: &BTreeSet<BindingId>,
+    future: &mut FutureUses,
     context: UseContext,
 ) -> Result<()> {
-    if !state.reference_loans.is_empty() {
-        expire_dead_loans(state, &uses(expression).union(future).copied().collect());
-    }
+    let current = cursor.enter(plan)?;
     reject_unsupported_type_placement(&expression.ty)?;
     match &expression.kind {
         ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
         | ExprKind::BorrowBytes { .. } => {
-            check_values_expr(program, expression, places, state, future, context)?;
+            check_values_expr(program, expression, current, plan, state, future, context)?;
         }
         ExprKind::Call { .. }
         | ExprKind::Operation { .. }
@@ -45,7 +47,9 @@ fn check_expr_inner(
         | ExprKind::Continue { .. }
         | ExprKind::Trap { .. }
         | ExprKind::Exit { .. } => {
-            check_control_expr(program, expression, places, state, future, context)?;
+            check_control_expr(
+                program, expression, current, plan, cursor, state, future, context,
+            )?;
         }
         ExprKind::Let { .. }
         | ExprKind::MutableLocal { .. }
@@ -57,7 +61,9 @@ fn check_expr_inner(
         | ExprKind::EnumIsVariant { .. }
         | ExprKind::EnumField { .. }
         | ExprKind::EnumUnwrap { .. } => {
-            check_scopes_expr(program, expression, places, state, future, context)?;
+            check_scopes_expr(
+                program, expression, current, plan, cursor, state, future, context,
+            )?;
         }
         _ => {}
     }

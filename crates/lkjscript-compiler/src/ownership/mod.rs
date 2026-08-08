@@ -1,6 +1,6 @@
 //! Mandatory ownership analysis for the initial `byte-vector` safe island.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use lkjscript_core::{Error, Result};
 
@@ -15,6 +15,7 @@ struct State {
     initialized: BTreeMap<PlaceId, bool>,
     loans: BTreeMap<PlaceId, Vec<Loan>>,
     reference_loans: BTreeMap<BindingId, (PlaceId, LoanId)>,
+    pinned_references: HashMap<BindingId, u64>,
     consumed_ref_mut: BTreeSet<BindingId>,
 }
 
@@ -36,31 +37,21 @@ pub(crate) fn check(program: &Program) -> Result<()> {
     for function in &program.functions {
         check_function(program, function)?;
     }
-    let mut places = BTreeMap::new();
-    collect_places(&program.main.body, &mut places);
-    let mut state = State::default();
-    validate_declared_places(program, &places)?;
-    check_expr(
-        program,
-        &program.main.body,
-        &places,
-        &mut state,
-        &BTreeSet::new(),
-        UseContext::Ordinary,
-    )?;
-    Ok(())
+    let plan = OwnershipPlan::build(program, &program.main.body, std::iter::empty())?;
+    check_body(program, &program.main.body, &plan, State::default())
 }
 
 fn check_function(program: &Program, function: &Function) -> Result<()> {
-    let mut places: BTreeMap<BindingId, PlaceId> = function
-        .params
-        .iter()
-        .copied()
-        .zip(function.param_places.iter().copied())
-        .collect();
-    collect_places(&function.body, &mut places);
+    let plan = OwnershipPlan::build(
+        program,
+        &function.body,
+        function
+            .params
+            .iter()
+            .copied()
+            .zip(function.param_places.iter().copied()),
+    )?;
     let mut state = State::default();
-    validate_declared_places(program, &places)?;
     for (binding, place) in function
         .params
         .iter()
@@ -75,39 +66,33 @@ fn check_function(program: &Program, function: &Function) -> Result<()> {
             state.initialized.insert(place, true);
         }
     }
-    check_expr(
-        program,
-        &function.body,
-        &places,
-        &mut state,
-        &BTreeSet::new(),
-        UseContext::Ordinary,
-    )
+    check_body(program, &function.body, &plan, state)
 }
 
-fn validate_declared_places(
+fn check_body(
     program: &Program,
-    places: &BTreeMap<BindingId, PlaceId>,
+    body: &Expr,
+    plan: &OwnershipPlan,
+    mut state: State,
 ) -> Result<()> {
-    let mut identities = BTreeSet::new();
-    for (binding, place) in places {
-        if !identities.insert(*place) {
-            return Err(Error::msg("ownership analysis found duplicate PlaceId"));
-        }
-        let _ty = &program
-            .binding(*binding)
-            .ok_or_else(|| Error::msg("ownership place references unknown binding"))?
-            .ty;
-    }
-    Ok(())
+    let mut cursor = ExprCursor::default();
+    let mut future = FutureUses::default();
+    check_expr(
+        program,
+        body,
+        plan,
+        &mut cursor,
+        &mut state,
+        &mut future,
+        UseContext::Ordinary,
+    )?;
+    cursor.finish(plan)
 }
 
 mod checking;
-mod places;
+mod liveness;
 mod types;
-mod uses;
 
 use checking::*;
-use places::*;
+use liveness::*;
 use types::*;
-use uses::*;

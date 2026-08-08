@@ -1,30 +1,38 @@
 use crate::ownership::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(in crate::ownership) fn check_scopes_expr(
     program: &Program,
     expression: &Expr,
-    places: &BTreeMap<BindingId, PlaceId>,
+    current: usize,
+    plan: &OwnershipPlan,
+    cursor: &mut ExprCursor,
     state: &mut State,
-    future: &BTreeSet<BindingId>,
+    future: &mut FutureUses,
     _context: UseContext,
 ) -> Result<()> {
+    let parent = plan.range(current)?;
     match &expression.kind {
         ExprKind::Let { bindings, body } => {
-            for (index, local) in bindings.iter().enumerate() {
-                let later = uses_bindings(&bindings[index.saturating_add(1)..], body, future);
+            for local in bindings {
+                let child = cursor.peek_range(plan)?;
+                let checkpoint = future.push_suffix(child, parent)?;
                 let initializer_context = if matches!(local.value.kind, ExprKind::Borrow { .. }) {
                     UseContext::DirectLetInitializer
                 } else {
                     UseContext::Ordinary
                 };
-                check_expr(
+                let result = check_expr(
                     program,
                     &local.value,
-                    places,
+                    plan,
+                    cursor,
                     state,
-                    &later,
+                    future,
                     initializer_context,
-                )?;
+                );
+                future.restore(checkpoint);
+                result?;
                 if (!local.static_bytes
                     && is_owned(&expression_of_binding(program, local.binding)?))
                     || is_affine_resource(&expression_of_binding(program, local.binding)?)
@@ -52,11 +60,19 @@ pub(in crate::ownership) fn check_scopes_expr(
                     }
                 }
             }
-            check_expr(program, body, places, state, future, UseContext::Ordinary)?;
+            check_expr(
+                program,
+                body,
+                plan,
+                cursor,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
             for local in bindings.iter().rev() {
                 end_reference_binding(state, local.binding);
                 require_resource_consumed(program, local.binding, local.place, state)?;
-                end_place_scope(state, local.place);
+                end_place_scope(state, local.place)?;
                 state.consumed_ref_mut.remove(&local.binding);
             }
         }
@@ -67,82 +83,126 @@ pub(in crate::ownership) fn check_scopes_expr(
             body,
             ..
         } => {
-            check_expr(
+            let child = cursor.peek_range(plan)?;
+            let checkpoint = future.push_suffix(child, parent)?;
+            let result = check_expr(
                 program,
                 initial,
-                places,
+                plan,
+                cursor,
                 state,
-                &uses(body),
+                future,
                 UseContext::Ordinary,
-            )?;
+            );
+            future.restore(checkpoint);
+            result?;
             if is_owned(&expression_of_binding(program, *binding)?)
                 || is_affine_resource(&expression_of_binding(program, *binding)?)
             {
                 state.initialized.insert(*place, true);
             }
-            check_expr(program, body, places, state, future, UseContext::Ordinary)?;
+            check_expr(
+                program,
+                body,
+                plan,
+                cursor,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
             end_reference_binding(state, *binding);
             require_resource_consumed(program, *binding, *place, state)?;
-            end_place_scope(state, *place);
+            end_place_scope(state, *place)?;
             state.consumed_ref_mut.remove(binding);
         }
         ExprKind::SetLocal { target, value, .. } => {
-            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+            check_expr(
+                program,
+                value,
+                plan,
+                cursor,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
             let ty = expression_of_binding(program, *target)?;
             if is_owned(&ty) || is_affine_resource(&ty) {
-                let place = places
-                    .get(target)
+                let place = plan
+                    .place(*target)
                     .ok_or_else(|| Error::msg("byte-vector assignment target has no PlaceId"))?;
-                if state.initialized.get(place).copied().unwrap_or(false) {
+                expire_dead_loans_for_place(state, place, plan, None, future)?;
+                if state.initialized.get(&place).copied().unwrap_or(false) {
                     return Err(Error::msg(
                         "affine assignment is only reinitialization after move or drop",
                     ));
                 }
                 if state
                     .loans
-                    .get(place)
+                    .get(&place)
                     .is_some_and(|loans| !loans.is_empty())
                 {
                     return Err(Error::msg(
                         "cannot reinitialize affine value while borrowed",
                     ));
                 }
-                state.initialized.insert(*place, true);
+                state.initialized.insert(place, true);
             }
         }
         ExprKind::ProductValue { fields, .. } => {
-            check_sequence(program, fields, places, state, future)?;
+            check_sequence(program, fields, parent, plan, cursor, state, future)?;
         }
         ExprKind::ProductField { value, .. } => {
-            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+            check_expr(
+                program,
+                value,
+                plan,
+                cursor,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
         }
         ExprKind::WithProductField {
             value, replacement, ..
         } => {
-            check_expr(
+            let child = cursor.peek_range(plan)?;
+            let checkpoint = future.push_suffix(child, parent)?;
+            let result = check_expr(
                 program,
                 value,
-                places,
+                plan,
+                cursor,
                 state,
-                &uses(replacement),
+                future,
                 UseContext::Ordinary,
-            )?;
+            );
+            future.restore(checkpoint);
+            result?;
             check_expr(
                 program,
                 replacement,
-                places,
+                plan,
+                cursor,
                 state,
                 future,
                 UseContext::Ordinary,
             )?;
         }
         ExprKind::EnumValue { fields, .. } => {
-            check_sequence(program, fields, places, state, future)?;
+            check_sequence(program, fields, parent, plan, cursor, state, future)?;
         }
         ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. }
         | ExprKind::EnumUnwrap { value, .. } => {
-            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+            check_expr(
+                program,
+                value,
+                plan,
+                cursor,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
         }
         _ => unreachable!("ownership expression category mismatch"),
     }

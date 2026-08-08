@@ -3,9 +3,10 @@ use crate::ownership::*;
 pub(in crate::ownership) fn check_values_expr(
     program: &Program,
     expression: &Expr,
-    places: &BTreeMap<BindingId, PlaceId>,
+    current: usize,
+    plan: &OwnershipPlan,
     state: &mut State,
-    _future: &BTreeSet<BindingId>,
+    future: &FutureUses,
     context: UseContext,
 ) -> Result<()> {
     match &expression.kind {
@@ -15,10 +16,10 @@ pub(in crate::ownership) fn check_values_expr(
                 .ok_or_else(|| Error::msg("ownership load references unknown binding"))?
                 .ty;
             if is_affine_resource(ty) {
-                let place = places
-                    .get(&reference.binding)
+                let place = plan
+                    .place(reference.binding)
                     .ok_or_else(|| Error::msg("affine typed resource has no ownership place"))?;
-                if state.initialized.get(place) != Some(&true) {
+                if state.initialized.get(&place) != Some(&true) {
                     return Err(Error::msg(
                         "affine typed resource was already moved or dropped",
                     ));
@@ -55,9 +56,10 @@ pub(in crate::ownership) fn check_values_expr(
             }
         }
         ExprKind::Move { place, binding } => {
-            if places.get(&binding.binding) != Some(place) {
+            if plan.place(binding.binding) != Some(*place) {
                 return Err(Error::msg("move has mismatched place/binding identity"));
             }
+            expire_dead_loans_for_place(state, *place, plan, Some(plan.range(current)?), future)?;
             if !state.initialized.get(place).copied().unwrap_or(false) {
                 return Err(Error::msg("use after move or double move of affine value"));
             }
@@ -75,11 +77,12 @@ pub(in crate::ownership) fn check_values_expr(
             loan,
             binding,
         } => {
-            if places.get(&binding.binding) != Some(place) {
+            if plan.place(binding.binding) != Some(*place) {
                 return Err(Error::msg(
                     "bytes borrow has mismatched place/binding identity",
                 ));
             }
+            expire_dead_loans_for_place(state, *place, plan, Some(plan.range(current)?), future)?;
             if !state.initialized.get(place).copied().unwrap_or(false) {
                 return Err(Error::msg("cannot borrow dynamic bytes after move"));
             }
@@ -90,6 +93,8 @@ pub(in crate::ownership) fn check_values_expr(
             if live.iter().any(|item| item.kind == BorrowKind::Mutable) {
                 return Err(Error::msg("dynamic bytes conflicts with an exclusive loan"));
             }
+            live.try_reserve(1)
+                .map_err(|_| Error::host("ownership loan allocation failed"))?;
             live.push(Loan {
                 id: *loan,
                 kind: BorrowKind::Shared,
@@ -111,9 +116,10 @@ pub(in crate::ownership) fn check_values_expr(
                     "direct let initializer in the initial ownership slice"
                 )));
             }
-            if places.get(&binding.binding) != Some(place) {
+            if plan.place(binding.binding) != Some(*place) {
                 return Err(Error::msg("borrow has mismatched place/binding identity"));
             }
+            expire_dead_loans_for_place(state, *place, plan, Some(plan.range(current)?), future)?;
             if !state.initialized.get(place).copied().unwrap_or(false) {
                 return Err(Error::msg("cannot borrow byte-vector after move"));
             }
@@ -129,6 +135,8 @@ pub(in crate::ownership) fn check_values_expr(
                     "conflicting shared and exclusive byte-vector loans",
                 ));
             }
+            live.try_reserve(1)
+                .map_err(|_| Error::host("ownership loan allocation failed"))?;
             live.push(Loan {
                 id: *loan,
                 kind: *kind,

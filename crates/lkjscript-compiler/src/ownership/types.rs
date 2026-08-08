@@ -30,19 +30,6 @@ pub(in crate::ownership) fn contains_ownership(ty: &Type) -> bool {
     false
 }
 
-pub(in crate::ownership) fn uses_reference_binding(
-    program: &Program,
-    expression: &Expr,
-) -> Result<bool> {
-    for binding in uses(expression) {
-        let ty = expression_of_binding(program, binding)?;
-        if is_ref(&ty) || is_ref_mut(&ty) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 pub(in crate::ownership) fn expression_of_binding(
     program: &Program,
     binding: BindingId,

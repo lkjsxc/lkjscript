@@ -10,6 +10,14 @@ fn compile_source(source: &str, path: &str) -> lkjscript_core::Result<crate::Exe
     super::compile_source(&canonical_source(source), path)
 }
 
+fn analyze_source(source: &str) -> lkjscript_core::Result<crate::hir::Program> {
+    let tree = crate::source::validate_source_set_for_analysis(
+        &[("ownership-test.lkjscript", source)],
+        "ownership-test.lkjscript",
+    )?;
+    crate::analyze::analyze_program(&tree)
+}
+
 fn unit_main(body: &str) -> String {
     format!("main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
 }

@@ -888,6 +888,12 @@ fn four_thousand_ninety_seven_functions_compile_validate_and_execute_in_vm(
 }
 
 #[test]
+fn five_hundred_twelve_borrow_calls_compile_validate_and_execute_in_vm(
+) -> Result<(), Box<dyn std::error::Error>> {
+    compile_and_run_borrow_call_scale(512)
+}
+
+#[test]
 #[ignore = "opt-in release scaling sample selected by LKJSCRIPT_BORROW_CALLS"]
 fn borrow_call_scale_sample() -> Result<(), Box<dyn std::error::Error>> {
     let calls = std::env::var("LKJSCRIPT_BORROW_CALLS")

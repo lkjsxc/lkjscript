@@ -47,16 +47,34 @@ impl Clone for Expr {
 }
 
 fn expression_children(expression: &Expr) -> Vec<&Expr> {
+    let mut children = Vec::new();
+    for_each_expression_child(expression, &mut |child| children.push(child));
+    children
+}
+
+pub(crate) fn for_each_expression_child<'a>(
+    expression: &'a Expr,
+    action: &mut impl FnMut(&'a Expr),
+) {
     match &expression.kind {
         ExprKind::Call { args, .. }
         | ExprKind::Operation { args, .. }
         | ExprKind::Do(args)
         | ExprKind::Loop { body: args, .. }
         | ExprKind::ProductValue { fields: args, .. }
-        | ExprKind::EnumValue { fields: args, .. } => args.iter().collect(),
+        | ExprKind::EnumValue { fields: args, .. } => {
+            for child in args {
+                action(child);
+            }
+        }
         ExprKind::While {
             condition, body, ..
-        } => std::iter::once(condition.as_ref()).chain(body).collect(),
+        } => {
+            action(condition);
+            for child in body {
+                action(child);
+            }
+        }
         ExprKind::F64FromI64Exact(value)
         | ExprKind::F64FromI64Rounded(value)
         | ExprKind::I64FromF64Exact(value)
@@ -69,23 +87,31 @@ fn expression_children(expression: &Expr) -> Vec<&Expr> {
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. }
-        | ExprKind::EnumUnwrap { value, .. } => vec![value],
+        | ExprKind::EnumUnwrap { value, .. } => action(value),
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => vec![condition, then_branch, else_branch],
-        ExprKind::Let { bindings, body } => bindings
-            .iter()
-            .map(|binding| &binding.value)
-            .chain(std::iter::once(body.as_ref()))
-            .collect(),
+        } => {
+            action(condition);
+            action(then_branch);
+            action(else_branch);
+        }
+        ExprKind::Let { bindings, body } => {
+            for binding in bindings {
+                action(&binding.value);
+            }
+            action(body);
+        }
         ExprKind::MutableLocal { initial, body, .. }
         | ExprKind::WithProductField {
             value: initial,
             replacement: body,
             ..
-        } => vec![initial, body],
+        } => {
+            action(initial);
+            action(body);
+        }
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
@@ -99,7 +125,7 @@ fn expression_children(expression: &Expr) -> Vec<&Expr> {
         | ExprKind::BorrowBytes { .. }
         | ExprKind::Continue { .. }
         | ExprKind::MatchUnreachable { .. }
-        | ExprKind::QuoteSymbol(_) => Vec::new(),
+        | ExprKind::QuoteSymbol(_) => {}
     }
 }
 
