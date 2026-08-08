@@ -184,6 +184,7 @@ consumer.
   to the generic VM before entry when it cannot represent an otherwise supported program.
 - Daemon, multi-tenant database, distributed, scheduler, and broader platform products are absent by
   design until the local semantic model and measurements justify them.
-- Representative post-reset startup, execution, memory, and generated-code measurements remain
-  pending. The reproducible Phase 2 build-time and final-binary comparison is in
-  [`performance.md`](performance.md).
+- A five-sample selected product-path process baseline and final binary-size comparison are recorded
+  in [`performance.md`](performance.md). Semantic edit/query latency, peak memory, allocation counts,
+  generated-code size, other targets, and application-scale steady-state throughput remain
+  unmeasured.
