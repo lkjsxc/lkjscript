@@ -35,6 +35,7 @@ pub(crate) struct Frame {
     pub proto: Option<usize>,
     pub ip: usize,
     pub instruction_offset: usize,
+    pub failure_cleanup_cursor: usize,
     pub stack_base: usize,
     pub locals_base: usize,
     pub unique_places: Vec<unique::RuntimePlace>,

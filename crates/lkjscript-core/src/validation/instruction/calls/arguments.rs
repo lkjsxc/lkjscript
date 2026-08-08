@@ -55,7 +55,7 @@ fn validate_structural_arguments(
                 Some(variable),
                 _,
                 Kind::StructuralOwner { representation, owner, .. },
-            ) if independent_owner_parameter(callee, variable) => {
+            ) if callee.parameter_requires_independent_owner(index) => {
                 if consuming_owners.contains(&owner) {
                     return Err(instruction_error(
                         caller,
@@ -81,7 +81,7 @@ fn validate_structural_arguments(
                 false,
                 Kind::StructuralOwnerRef { representation, .. },
             ) if copy_structural_representation(chunk, representation)
-                || independent_owner_parameter(callee, variable)
+                || callee.parameter_requires_independent_owner(index)
                 || witness_observer_parameter(callee, variable) => {
                 bind_structural_variable(&mut variables, variable, representation)
             }

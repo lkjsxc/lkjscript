@@ -31,7 +31,7 @@ pub(super) use cleanup::{
 };
 pub(super) use locals::{
     call_memory_witnesses, cleanup_tail_copy_roots, commit_call_arguments, initialize_call_places,
-    prepare_return, restore_handoffs,
+    owner_handoff_is_pending, prepare_return, restore_handoffs,
 };
 pub(super) use values::{
     copy_path, copy_string, export_plain_return, publish_string, semantic_snapshot,

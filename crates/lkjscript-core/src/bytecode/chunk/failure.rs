@@ -143,3 +143,55 @@ pub struct FailureCleanupRange {
     pub plan: Option<FailureCleanupRoots>,
     pub unentered_plan: Option<FailureCleanupId>,
 }
+
+/// Finds the half-open range covering `offset` in validated sorted,
+/// non-overlapping cleanup metadata.
+#[must_use]
+pub fn failure_cleanup_range_at(
+    ranges: &[FailureCleanupRange],
+    offset: u64,
+) -> Option<&FailureCleanupRange> {
+    let index = ranges.partition_point(|range| range.end <= offset);
+    ranges
+        .get(index)
+        .filter(|range| range.start <= offset && offset < range.end)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{failure_cleanup_range_at, FailureCleanupRange};
+
+    fn range(start: u64, end: u64) -> FailureCleanupRange {
+        FailureCleanupRange {
+            start,
+            end,
+            plan: None,
+            unentered_plan: None,
+        }
+    }
+
+    #[test]
+    fn indexed_cleanup_range_lookup_matches_half_open_linear_reference() {
+        let geometries = [
+            Vec::new(),
+            vec![range(4, 9)],
+            vec![range(1, 3), range(3, 7), range(10, 12), range(15, 20)],
+        ];
+        for ranges in &geometries {
+            for offset in (0..=21).chain(std::iter::once(u64::MAX)) {
+                let expected = ranges
+                    .iter()
+                    .find(|range| range.start <= offset && offset < range.end);
+                assert_eq!(failure_cleanup_range_at(ranges, offset), expected);
+            }
+        }
+
+        let ranges = [range(4, 9), range(12, 14)];
+        assert_eq!(failure_cleanup_range_at(&ranges, 4), Some(&ranges[0]));
+        assert_eq!(failure_cleanup_range_at(&ranges, 8), Some(&ranges[0]));
+        assert_eq!(failure_cleanup_range_at(&ranges, 9), None);
+        assert_eq!(failure_cleanup_range_at(&ranges, 11), None);
+        assert_eq!(failure_cleanup_range_at(&ranges, 12), Some(&ranges[1]));
+        assert_eq!(failure_cleanup_range_at(&ranges, 14), None);
+    }
+}

@@ -21,6 +21,17 @@ pub(in crate::run) fn commit_handoff(
     Ok(())
 }
 
+pub(in crate::run) fn owner_handoff_is_pending(vm: &Vm<'_>, value: Value) -> bool {
+    value
+        .as_structural_root()
+        .and_then(|key| {
+            vm.structural
+                .as_ref()
+                .and_then(|structural| structural.owners.get(&key.get()))
+        })
+        .is_some_and(|record| record.taken_from.is_some())
+}
+
 pub(in crate::run) fn restore_handoffs(vm: &mut Vm<'_>) -> Result<()> {
     let Some(structural) = vm.structural.as_ref() else {
         return Ok(());

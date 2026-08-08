@@ -81,6 +81,7 @@ fn tail_call_reuses_the_current_frame() {
         proto: Some(1),
         ip: 1,
         instruction_offset: 0,
+        failure_cleanup_cursor: 0,
         stack_base: 0,
         locals_base: 0,
         unique_places: Vec::new(),
@@ -96,6 +97,64 @@ fn tail_call_reuses_the_current_frame() {
     assert_eq!(vm.frames.len(), 1);
     assert_eq!(vm.frames[0].proto, Some(0));
     assert_eq!(vm.stack, vec![argument]);
+}
+
+#[test]
+fn failed_call_entry_cleans_consuming_arguments_before_frame_unwind() {
+    let mut chunk = Chunk::new();
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let mut callee = Chunk::new().main;
+    callee.name = "owned-argument".into();
+    callee.arity = 1;
+    callee.locals = 2;
+    callee.parameter_structurals = vec![None];
+    callee.parameter_structural_places = vec![None];
+    callee.parameter_type_variables = vec![None];
+    callee.parameter_copy_kinds = vec![None];
+    callee.parameter_region_products = vec![None];
+    callee.parameter_resources = vec![None];
+    callee.parameter_resource_places = vec![None];
+    callee.parameter_uniques = vec![Some(lkjscript_core::UniqueValueKind::ByteVector)];
+    callee.parameter_unique_places = vec![Some(0)];
+    callee.unique_places = 1;
+    callee.emit_op_u64_pair(Op::ByteVectorDropPlace, 0, 0);
+    callee.emit(Op::Pop);
+    callee.emit_op_u64(Op::ByteVectorPlaceEnd, 0);
+    callee.emit(Op::Pop);
+    callee.emit(Op::Unit);
+    callee.emit(Op::Return);
+    chunk.protos.push(callee);
+    let chunk = validate_chunk(chunk, ValidationPolicy::Unrestricted)
+        .expect("owned-argument call validates");
+    let policy = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+        max_stack_values: 1,
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
+    let mut vm = Vm::new(&chunk, crate::ExecutionInputs::default(), policy);
+    vm.frames.push(Frame {
+        proto: None,
+        ip: 0,
+        instruction_offset: 0,
+        failure_cleanup_cursor: 0,
+        stack_base: 0,
+        locals_base: 0,
+        unique_places: Vec::new(),
+        borrowed_resources: Vec::new(),
+        memory_witnesses: Vec::new(),
+    });
+    let owner = vm.unique.allocate(1).expect("allocate call argument");
+    vm.push(owner);
+    vm.push(vm.chunk.function_value(0).expect("function value"));
+
+    let error = call(&mut vm, 1, 0).expect_err("callee frame exceeds stack policy");
+    assert_eq!(
+        error.class(),
+        lkjscript_core::ErrorClass::Resource(lkjscript_core::ResourceLimitKind::StackValues)
+    );
+    vm.unique
+        .verify_empty()
+        .expect("failed call entry released its moved argument");
 }
 
 #[test]
@@ -128,6 +187,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         proto: None,
         ip: 0,
         instruction_offset: 0,
+        failure_cleanup_cursor: 0,
         stack_base: 0,
         locals_base: 0,
         unique_places: Vec::new(),

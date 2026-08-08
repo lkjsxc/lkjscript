@@ -1,17 +1,3 @@
-fn independent_owner_parameter(callee: &FunctionProto, variable: u64) -> bool {
-    callee
-        .memory_witness_parameters
-        .iter()
-        .find(|requirement| requirement.parameter == variable)
-        .is_some_and(|requirement| {
-            requirement.operations.contains(
-                &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
-            ) && requirement
-                .operations
-                .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
-        })
-}
-
 fn witness_observer_parameter(callee: &FunctionProto, variable: u64) -> bool {
     callee
         .memory_witness_parameters

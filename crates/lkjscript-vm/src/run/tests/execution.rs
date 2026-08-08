@@ -30,6 +30,167 @@ fn fuel_and_returned_values_use_structured_outcomes() {
     .run();
     assert!(matches!(unchanged, ExecutionOutcome::Returned(value) if value.is_unit()));
 }
+
+#[test]
+fn cleanup_range_interior_defers_fuel_until_the_next_safe_boundary() {
+    let mut chunk = Chunk::new();
+    let message = chunk
+        .add_const(Constant::Str("inside cleanup range".into()))
+        .expect("add trap message");
+    chunk.main.emit_op_u64(Op::LoadConst, message.0);
+    chunk.main.emit(Op::Trap);
+    let end = u64::try_from(chunk.main.code.len()).expect("test bytecode length fits u64");
+    chunk
+        .main
+        .failure_cleanup_ranges
+        .push(lkjscript_core::FailureCleanupRange {
+            start: 0,
+            end,
+            plan: None,
+            unentered_plan: None,
+        });
+    let chunk = validate(chunk);
+    let policy = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+        instruction_fuel: 1,
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
+    assert!(matches!(
+        Vm::new(&chunk, crate::ExecutionInputs::default(), policy).run(),
+        ExecutionOutcome::Trapped(trap) if trap.as_str() == "inside cleanup range"
+    ));
+}
+
+struct CancelAfterChecks {
+    remaining: std::sync::atomic::AtomicUsize,
+}
+
+impl lkjscript_host::Cancellation for CancelAfterChecks {
+    fn is_cancelled(&self) -> bool {
+        self.remaining
+            .fetch_update(
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+                |remaining| remaining.checked_sub(1),
+            )
+            .is_err()
+    }
+}
+
+#[test]
+fn post_step_limit_unwinds_the_next_cleanup_state() {
+    let mut chunk = Chunk::new();
+    chunk.main.locals = 2;
+    chunk.main.unique_places = 1;
+    let size = chunk
+        .add_const(Constant::I64(1))
+        .expect("add byte-vector size");
+    let owner_start = {
+        chunk.main.emit_op_u64(Op::LoadConst, size.0);
+        chunk.main.emit(Op::ByteVectorNew);
+        chunk.main.emit_op_u64(Op::StoreUniqueLocal, 0);
+        chunk.main.emit_op_u64_pair(Op::ByteVectorPlaceInit, 0, 0);
+        chunk.main.emit(Op::Pop);
+        u64::try_from(chunk.main.code.len()).expect("owner boundary fits u64")
+    };
+    chunk.main.emit_op_u64(Op::ByteVectorBorrow, 0);
+    chunk.main.emit_op_u64(Op::StoreViewLocal, 1);
+    chunk.main.emit_op_u64(Op::LoadViewLocal, 1);
+    chunk.main.emit(Op::ByteSliceLen);
+    chunk.main.emit(Op::Pop);
+    let loan_start = u64::try_from(chunk.main.code.len()).expect("loan boundary fits u64");
+    chunk.main.emit(Op::Nop);
+    let end_borrow = u64::try_from(chunk.main.code.len()).expect("borrow end fits u64");
+    chunk.main.emit_op_u64(Op::EndBorrowLocal, 1);
+    chunk.main.emit(Op::Pop);
+    let drop_owner = u64::try_from(chunk.main.code.len()).expect("owner drop fits u64");
+    chunk.main.emit_op_u64_pair(Op::ByteVectorDropPlace, 0, 0);
+    chunk.main.emit(Op::Pop);
+    let place_end = u64::try_from(chunk.main.code.len()).expect("place end fits u64");
+    chunk.main.emit_op_u64(Op::ByteVectorPlaceEnd, 0);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+
+    let owner_cleanup = lkjscript_core::FailureCleanupId::new(0);
+    let loan_cleanup = lkjscript_core::FailureCleanupId::new(1);
+    let unentered_loan_cleanup = lkjscript_core::FailureCleanupId::new(2);
+    chunk.main.failure_cleanups = vec![
+        lkjscript_core::FailureCleanupNode {
+            action: lkjscript_core::FailureCleanupAction::DropUnique {
+                local: 0,
+                place: Some(0),
+                kind: lkjscript_core::UniqueValueKind::ByteVector,
+            },
+            next: None,
+        },
+        lkjscript_core::FailureCleanupNode {
+            action: lkjscript_core::FailureCleanupAction::EndBorrow {
+                local: 1,
+                place: 0,
+                kind: lkjscript_core::UniqueValueKind::ByteSlice,
+            },
+            next: Some(owner_cleanup),
+        },
+        lkjscript_core::FailureCleanupNode {
+            action: lkjscript_core::FailureCleanupAction::EndBorrow {
+                local: 1,
+                place: 0,
+                kind: lkjscript_core::UniqueValueKind::ByteSlice,
+            },
+            next: None,
+        },
+    ];
+    let owner_plan = Some(lkjscript_core::FailureCleanupRoots::single(owner_cleanup));
+    let loan_plan = Some(lkjscript_core::FailureCleanupRoots::single(loan_cleanup));
+    chunk.main.failure_cleanup_ranges = vec![
+        lkjscript_core::FailureCleanupRange {
+            start: 0,
+            end: owner_start,
+            plan: None,
+            unentered_plan: None,
+        },
+        lkjscript_core::FailureCleanupRange {
+            start: owner_start,
+            end: loan_start,
+            plan: owner_plan,
+            unentered_plan: None,
+        },
+        lkjscript_core::FailureCleanupRange {
+            start: loan_start,
+            end: end_borrow,
+            plan: owner_plan,
+            unentered_plan: Some(unentered_loan_cleanup),
+        },
+        lkjscript_core::FailureCleanupRange {
+            start: end_borrow,
+            end: drop_owner,
+            plan: loan_plan,
+            unentered_plan: None,
+        },
+        lkjscript_core::FailureCleanupRange {
+            start: drop_owner,
+            end: place_end,
+            plan: owner_plan,
+            unentered_plan: None,
+        },
+    ];
+    let chunk = validate(chunk);
+    let mut inputs = crate::ExecutionInputs::default();
+    inputs.host.cancellation = Some(std::sync::Arc::new(CancelAfterChecks {
+        remaining: std::sync::atomic::AtomicUsize::new(2),
+    }));
+    let policy = ExecutionPolicy::limited(lkjscript_core::LimitedExecutionPolicy {
+        wall_time: None,
+        ..lkjscript_core::LimitedExecutionPolicy::conservative()
+    });
+    let outcome = Vm::new(&chunk, inputs, policy).run();
+    assert!(matches!(outcome, ExecutionOutcome::HostFailure(_)));
+    assert!(
+        outcome.cleanup_failures().is_none(),
+        "next-boundary unentered cleanup must end the loan before ordinary owner drop: {outcome:?}"
+    );
+}
+
 #[test]
 fn exit_does_not_terminate_or_contaminate_later_vms() {
     let mut exit = Chunk::new();

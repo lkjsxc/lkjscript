@@ -473,6 +473,27 @@ fn intern_descriptor<T: Copy + Eq + std::hash::Hash>(
 }
 
 impl FunctionProto {
+    #[must_use]
+    pub fn parameter_requires_independent_owner(&self, index: usize) -> bool {
+        let Some(variable) = self.parameter_type_variables.get(index).copied().flatten() else {
+            return false;
+        };
+        self.memory_witness_parameters
+            .binary_search_by_key(&variable, |requirement| requirement.parameter)
+            .ok()
+            .and_then(|index| self.memory_witness_parameters.get(index))
+            .is_some_and(|requirement| {
+                requirement
+                    .operations
+                    .binary_search(&crate::MemoryWitnessOperation::IndependentOwner)
+                    .is_ok()
+                    && requirement
+                        .operations
+                        .binary_search(&crate::MemoryWitnessOperation::Dispose)
+                        .is_ok()
+            })
+    }
+
     pub fn emit(&mut self, op: Op) {
         self.code.push(op as u8);
     }

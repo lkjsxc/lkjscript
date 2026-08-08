@@ -43,6 +43,7 @@ impl<'a> Vm<'a> {
             proto: None,
             ip: 0,
             instruction_offset: 0,
+            failure_cleanup_cursor: 0,
             stack_base: 0,
             locals_base: 0,
             unique_places,
@@ -103,12 +104,8 @@ impl<'a> Vm<'a> {
             let next_site = self.current_failure_offset();
             if self.is_failure_boundary(next_site) {
                 if let Err(error) = self.check_runtime_limits() {
-                    let failure_site = self
-                        .frames
-                        .last()
-                        .map_or(0, |frame| frame.instruction_offset);
                     self.restore_structural_handoffs();
-                    self.execute_failure_unwind(failure_site, false);
+                    self.execute_failure_unwind(next_site, true);
                     return Err(error);
                 }
             }

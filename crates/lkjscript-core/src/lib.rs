@@ -13,8 +13,8 @@ mod validation;
 mod value;
 
 pub use bytecode::{
-    runtime_product_contract_identity, CallWitnessSite, Chunk, ConstId, Constant,
-    EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
+    failure_cleanup_range_at, runtime_product_contract_identity, CallWitnessSite, Chunk, ConstId,
+    Constant, EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
     EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupId,
     FailureCleanupInterner, FailureCleanupNode, FailureCleanupRange, FailureCleanupRoots,
     FunctionProto, GlobalId, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
