@@ -23,6 +23,18 @@ fn run_i64(snapshot: &WorkspaceSnapshot) -> i64 {
     }
 }
 
+fn run_bool(snapshot: &WorkspaceSnapshot) -> bool {
+    let executable = crate::compile_snapshot(snapshot).expect("compile complete snapshot");
+    match run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    ) {
+        ExecutionOutcome::Returned(value) => value.as_bool().expect("returned Boolean"),
+        outcome => panic!("unexpected execution outcome: {outcome:?}"),
+    }
+}
+
 fn create_source_free_declarations(
     seed: u64,
 ) -> (Workspace, EntityId, EntityId, EntityId, HoleId, HoleId) {
@@ -2673,6 +2685,1108 @@ fn create_choice(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId, En
         entity_named(&created.snapshot, EntityKind::EnumVariant, "none"),
         entity_named(&created.snapshot, EntityKind::EnumField, "value"),
     )
+}
+
+#[test]
+fn product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(150).expect("product deletion workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "remove-first".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "first-value".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                },
+                Edit::CreateProduct {
+                    name: "remove-middle".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "middle-value".to_owned(),
+                        ty: SemanticTypeRef::Bool,
+                    }],
+                },
+                Edit::CreateProduct {
+                    name: "keep".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "kept-value".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                },
+                Edit::CreateMain {
+                    return_type: SemanticTypeRef::I64,
+                },
+            ],
+        })
+        .expect("create products");
+    let remove_first = entity_named(&created.snapshot, EntityKind::Product, "remove-first");
+    let first_field = entity_named(&created.snapshot, EntityKind::ProductField, "first-value");
+    let remove_middle = entity_named(&created.snapshot, EntityKind::Product, "remove-middle");
+    let middle_field = entity_named(&created.snapshot, EntityKind::ProductField, "middle-value");
+    let keep = entity_named(&created.snapshot, EntityKind::Product, "keep");
+    let kept_field = entity_named(&created.snapshot, EntityKind::ProductField, "kept-value");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+
+    let unchanged = workspace.current();
+    for invalid in [
+        Transaction {
+            base_revision: unchanged.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: first_field,
+            }],
+        },
+        Transaction {
+            base_revision: unchanged.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: remove_first,
+                },
+                Edit::DeleteEntity {
+                    entity: remove_first,
+                },
+            ],
+        },
+        Transaction {
+            base_revision: unchanged.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: remove_first,
+                },
+                Edit::CreateProduct {
+                    name: "remove-first".to_owned(),
+                    fields: Vec::new(),
+                },
+            ],
+        },
+    ] {
+        assert!(workspace.apply(invalid).is_err());
+        assert!(Arc::ptr_eq(&unchanged, &workspace.current()));
+    }
+
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: unchanged.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::ProductValue {
+                            product: keep,
+                            fields: vec![DraftFieldValue {
+                                field: kept_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::ProductField {
+                            field: kept_field,
+                            value: DraftNodeId::new(1),
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("construct and project retained product");
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    let main_nodes: Vec<_> = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .filter(|node| {
+            node.owner == SemanticOwner::Entity(main)
+                || matches!(node.owner, SemanticOwner::Node(_))
+        })
+        .map(|node| node.id)
+        .collect();
+    let main_root = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("main root")
+        .id;
+    let old_definition = completed.snapshot.program.products[2].clone();
+    let old = completed.snapshot;
+
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: remove_middle,
+                },
+                Edit::DeleteEntity {
+                    entity: remove_first,
+                },
+            ],
+        })
+        .expect("delete two earlier products");
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    assert_eq!(deleted.snapshot.program.products.len(), 1);
+    assert_eq!(deleted.snapshot.program.products[0].id.raw(), 0);
+    assert_eq!(deleted.snapshot.program.products[0].name, "keep");
+    assert_eq!(
+        deleted.snapshot.program.products[0].identity,
+        old_definition.identity
+    );
+    assert_eq!(
+        deleted.snapshot.program.products[0].fields[0].identity,
+        old_definition.fields[0].identity
+    );
+    assert_eq!(
+        deleted.snapshot.program.products[0].fields[0].source_order,
+        old_definition.fields[0].source_order
+    );
+    assert_eq!(
+        deleted.snapshot.entity(keep).expect("retained product").id,
+        keep
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .entity(kept_field)
+            .expect("retained product field")
+            .id,
+        kept_field
+    );
+    for node in &main_nodes {
+        assert_eq!(
+            deleted.snapshot.node(*node).expect("retained node").id,
+            *node
+        );
+    }
+    for removed in [remove_first, first_field, remove_middle, middle_field] {
+        assert!(deleted.snapshot.entity(removed).is_err());
+        assert_eq!(old.entity(removed).expect("old entity remains").id, removed);
+        assert!(deleted.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == removed
+        )));
+    }
+    assert!(deleted
+        .snapshot
+        .project(&[ProjectionSlice::Entity(remove_first)])
+        .is_err());
+    assert!(deleted.snapshot.dependencies().iter().all(|edge| ![
+        remove_first,
+        first_field,
+        remove_middle,
+        middle_field
+    ]
+    .contains(&edge.dependency)));
+    assert_eq!(run_i64(&old), 42);
+
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "remove-first".to_owned(),
+                fields: vec![ProductFieldDraft {
+                    name: "recreated-value".to_owned(),
+                    ty: SemanticTypeRef::I64,
+                }],
+            }],
+        })
+        .expect("recreate a deleted product name later");
+    let recreated_product = entity_named(&recreated.snapshot, EntityKind::Product, "remove-first");
+    assert_ne!(recreated_product, remove_first);
+    assert!(recreated.snapshot.entity(remove_first).is_err());
+
+    let blocked = workspace.apply(Transaction {
+        base_revision: recreated.snapshot.revision(),
+        edits: vec![Edit::DeleteEntity { entity: keep }],
+    });
+    assert!(matches!(
+        blocked,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    let before_final = workspace.current();
+    let final_state = workspace
+        .apply(Transaction {
+            base_revision: before_final.revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: keep },
+                Edit::ReplaceExpression {
+                    target: main_root,
+                    draft: ExpressionDraft::scalar_i64(42),
+                },
+            ],
+        })
+        .expect("remove final body dependency and product atomically");
+    assert!(final_state.snapshot.entity(keep).is_err());
+    assert!(final_state.snapshot.entity(kept_field).is_err());
+    assert_eq!(
+        final_state
+            .snapshot
+            .node(main_root)
+            .expect("replacement root identity")
+            .id,
+        main_root
+    );
+    assert_eq!(run_i64(&final_state.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity() {
+    let mut workspace = Workspace::empty_deterministic(151).expect("enum deletion workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateEnum {
+                    name: "remove-enum".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "removed-variant".to_owned(),
+                        fields: vec![EnumFieldDraft {
+                            name: "removed-field".to_owned(),
+                            ty: SemanticTypeRef::I64,
+                        }],
+                    }],
+                },
+                Edit::CreateEnum {
+                    name: "middle-enum".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "middle-variant".to_owned(),
+                        fields: Vec::new(),
+                    }],
+                },
+                Edit::CreateEnum {
+                    name: "kept-enum".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "kept-variant".to_owned(),
+                        fields: vec![EnumFieldDraft {
+                            name: "kept-field".to_owned(),
+                            ty: SemanticTypeRef::Bool,
+                        }],
+                    }],
+                },
+                Edit::CreateMain {
+                    return_type: SemanticTypeRef::Bool,
+                },
+            ],
+        })
+        .expect("create enums");
+    let removed = entity_named(&created.snapshot, EntityKind::Enum, "remove-enum");
+    let removed_variant = entity_named(
+        &created.snapshot,
+        EntityKind::EnumVariant,
+        "removed-variant",
+    );
+    let removed_field = entity_named(&created.snapshot, EntityKind::EnumField, "removed-field");
+    let middle = entity_named(&created.snapshot, EntityKind::Enum, "middle-enum");
+    let middle_variant = entity_named(&created.snapshot, EntityKind::EnumVariant, "middle-variant");
+    let kept = entity_named(&created.snapshot, EntityKind::Enum, "kept-enum");
+    let kept_variant = entity_named(&created.snapshot, EntityKind::EnumVariant, "kept-variant");
+    let kept_field = entity_named(&created.snapshot, EntityKind::EnumField, "kept-field");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("enum main hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::EnumValue {
+                            variant: kept_variant,
+                            fields: vec![DraftFieldValue {
+                                field: kept_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::EnumIsVariant {
+                            variant: kept_variant,
+                            value: DraftNodeId::new(1),
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("complete retained enum program");
+    assert!(run_bool(&completed.snapshot));
+    let retained_nodes: Vec<_> = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .map(|node| node.id)
+        .collect();
+    let old_definition = completed
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "kept-enum")
+        .expect("kept enum definition")
+        .clone();
+    let old = completed.snapshot;
+
+    for member in [removed_variant, removed_field] {
+        let direct_member = workspace.apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::DeleteEntity { entity: member }],
+        });
+        assert!(matches!(
+            direct_member,
+            Err(WorkspaceError::UnsupportedEdit { .. })
+        ));
+        assert!(Arc::ptr_eq(&old, &workspace.current()));
+    }
+    let redundant = workspace.apply(Transaction {
+        base_revision: old.revision(),
+        edits: vec![
+            Edit::DeleteEntity { entity: removed },
+            Edit::DeleteEntity {
+                entity: removed_field,
+            },
+        ],
+    });
+    assert!(matches!(
+        redundant,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&old, &workspace.current()));
+    let same_name = workspace.apply(Transaction {
+        base_revision: old.revision(),
+        edits: vec![
+            Edit::DeleteEntity { entity: removed },
+            Edit::CreateEnum {
+                name: "remove-enum".to_owned(),
+                variants: vec![EnumVariantDraft {
+                    name: "replacement".to_owned(),
+                    fields: Vec::new(),
+                }],
+            },
+        ],
+    });
+    assert!(matches!(
+        same_name,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&old, &workspace.current()));
+
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: middle },
+                Edit::DeleteEntity { entity: removed },
+            ],
+        })
+        .expect("delete earlier enums");
+    assert!(run_bool(&deleted.snapshot));
+    for node in retained_nodes {
+        assert_eq!(
+            deleted.snapshot.node(node).expect("retained enum node").id,
+            node
+        );
+    }
+    assert_eq!(deleted.snapshot.program.enums.len(), 1);
+    let retained = &deleted.snapshot.program.enums[0];
+    assert_eq!(retained.id, old_definition.id);
+    assert_eq!(retained.layout, old_definition.layout);
+    assert_eq!(retained.variants[0].id, old_definition.variants[0].id);
+    assert_eq!(
+        retained.variants[0].fields[0].id,
+        old_definition.variants[0].fields[0].id
+    );
+    for survivor in [kept, kept_variant, kept_field] {
+        assert_eq!(
+            deleted.snapshot.entity(survivor).expect("survivor").id,
+            survivor
+        );
+    }
+    for removed_entity in [
+        removed,
+        removed_variant,
+        removed_field,
+        middle,
+        middle_variant,
+    ] {
+        assert!(deleted.snapshot.entity(removed_entity).is_err());
+        assert_eq!(
+            old.entity(removed_entity).expect("old enum entity").id,
+            removed_entity
+        );
+        assert!(deleted.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == removed_entity
+        )));
+    }
+    assert_eq!(
+        deleted
+            .snapshot
+            .entity_type(deleted.snapshot.revision(), kept)
+            .expect("retained enum type")
+            .declared,
+        Some(SemanticTypeView::Known(SemanticTypeRef::Enum(kept)))
+    );
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "remove-enum".to_owned(),
+                variants: vec![EnumVariantDraft {
+                    name: "replacement".to_owned(),
+                    fields: Vec::new(),
+                }],
+            }],
+        })
+        .expect("recreate enum name later");
+    let recreated_id = entity_named(&recreated.snapshot, EntityKind::Enum, "remove-enum");
+    assert_ne!(recreated_id, removed);
+    assert!(recreated.snapshot.entity(removed).is_err());
+}
+
+#[test]
+fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_boundary() {
+    let mut workspace = Workspace::empty_deterministic(156).expect("mixed nominal workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "old-product".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "old-product-field".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                },
+                Edit::CreateEnum {
+                    name: "old-enum".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "old-variant".to_owned(),
+                        fields: Vec::new(),
+                    }],
+                },
+            ],
+        })
+        .expect("create old nominals");
+    let old_product = entity_named(&created.snapshot, EntityKind::Product, "old-product");
+    let old_enum = entity_named(&created.snapshot, EntityKind::Enum, "old-enum");
+    let published = created.snapshot;
+    let apply = |creation_first: bool| {
+        let deletions = vec![
+            Edit::DeleteEntity {
+                entity: old_product,
+            },
+            Edit::DeleteEntity { entity: old_enum },
+        ];
+        let creations = vec![
+            Edit::CreateProduct {
+                name: "new-product".to_owned(),
+                fields: vec![ProductFieldDraft {
+                    name: "new-product-field".to_owned(),
+                    ty: SemanticTypeRef::Bool,
+                }],
+            },
+            Edit::CreateEnum {
+                name: "new-enum".to_owned(),
+                variants: vec![EnumVariantDraft {
+                    name: "new-variant".to_owned(),
+                    fields: vec![EnumFieldDraft {
+                        name: "new-enum-field".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                }],
+            },
+        ];
+        let edits = if creation_first {
+            creations.into_iter().chain(deletions).collect()
+        } else {
+            deletions.into_iter().chain(creations).collect()
+        };
+        let mut workspace = Workspace::new((*published).clone()).expect("ordered workspace");
+        workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits,
+            })
+            .expect("mixed nominal lifecycle")
+    };
+    let first = apply(true);
+    let second = apply(false);
+    assert_eq!(first.diff, second.diff);
+    assert_eq!(first.snapshot.entities(), second.snapshot.entities());
+    assert!(first.snapshot.entity(old_product).is_err());
+    assert!(first.snapshot.entity(old_enum).is_err());
+    assert_eq!(first.snapshot.program.products.len(), 1);
+    assert_eq!(first.snapshot.program.products[0].id.raw(), 0);
+    assert_eq!(first.snapshot.program.products[0].name, "new-product");
+    assert_eq!(first.snapshot.program.enums.len(), 1);
+    assert_eq!(first.snapshot.program.enums[0].name, "new-enum");
+    let new_product = entity_named(&first.snapshot, EntityKind::Product, "new-product");
+    let new_enum = entity_named(&first.snapshot, EntityKind::Enum, "new-enum");
+    assert_eq!(
+        first
+            .snapshot
+            .entity_type(first.snapshot.revision(), new_product)
+            .expect("new product type")
+            .declared,
+        Some(SemanticTypeView::Known(SemanticTypeRef::Product(
+            new_product
+        )))
+    );
+    assert_eq!(
+        first
+            .snapshot
+            .entity_type(first.snapshot.revision(), new_enum)
+            .expect("new enum type")
+            .declared,
+        Some(SemanticTypeView::Known(SemanticTypeRef::Enum(new_enum)))
+    );
+}
+
+#[test]
+fn nominal_deletion_dependencies_use_the_final_staged_state_in_any_edit_order() {
+    let (workspace, choice, some, none, value_field) = source_free_choice_match(152);
+    let published = workspace.current();
+    let main = entity_named(&published, EntityKind::Main, "main");
+    let match_node = published
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("match node")
+        .id;
+    let mut blocked_workspace = Workspace::new((*published).clone()).expect("blocked workspace");
+    let blocked_before = blocked_workspace.current();
+    let blocked = blocked_workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::DeleteEntity { entity: choice }],
+    });
+    let message = blocked
+        .expect_err("surviving match blocks enum deletion")
+        .to_string();
+    assert!(message.contains("cannot delete enum"), "{message}");
+    assert!(message.contains("surviving main"), "{message}");
+    assert!(Arc::ptr_eq(&blocked_before, &blocked_workspace.current()));
+
+    let apply_order = |deletion_first: bool| {
+        let mut workspace = Workspace::new((*published).clone()).expect("ordered workspace");
+        let replacement = Edit::ReplaceExpression {
+            target: match_node,
+            draft: ExpressionDraft::scalar_i64(42),
+        };
+        let deletion = Edit::DeleteEntity { entity: choice };
+        let edits = if deletion_first {
+            vec![deletion, replacement]
+        } else {
+            vec![replacement, deletion]
+        };
+        workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits,
+            })
+            .expect("dependency-closed enum deletion")
+    };
+    let first = apply_order(true);
+    let second = apply_order(false);
+    assert_eq!(first.diff, second.diff);
+    assert_eq!(first.snapshot.entities(), second.snapshot.entities());
+    assert_eq!(
+        first.snapshot.dependencies(),
+        second.snapshot.dependencies()
+    );
+    let mut removed_reference_targets: Vec<_> = first
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::ReferenceRewired {
+                site,
+                old_target: Some(target),
+                new_target: None,
+            } if *site == match_node => Some(*target),
+            _ => None,
+        })
+        .collect();
+    removed_reference_targets.sort_unstable();
+    let mut expected_reference_targets = vec![choice, some, none, value_field];
+    expected_reference_targets.sort_unstable();
+    assert_eq!(removed_reference_targets, expected_reference_targets);
+    assert_eq!(run_i64(&first.snapshot), 42);
+    for removed in [choice, some, none, value_field] {
+        assert!(first.snapshot.entity(removed).is_err());
+    }
+    assert!(first.snapshot.program.match_plans.is_empty());
+    assert!(first
+        .snapshot
+        .references()
+        .iter()
+        .all(|edge| { ![choice, some, none, value_field].contains(&edge.target) }));
+    assert!(first
+        .snapshot
+        .project(&[ProjectionSlice::Body(main)])
+        .expect("surviving projection")
+        .contains("kind=literal"));
+
+    let mut hole_workspace = Workspace::empty_deterministic(153).expect("nominal hole workspace");
+    let (hole_choice, ..) = create_choice(&mut hole_workspace);
+    let with_main = hole_workspace
+        .apply(Transaction {
+            base_revision: hole_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::Enum(hole_choice),
+            }],
+        })
+        .expect("create enum-typed main hole");
+    let hole_main = entity_named(&with_main.snapshot, EntityKind::Main, "main");
+    assert!(with_main
+        .snapshot
+        .dependencies()
+        .iter()
+        .any(|edge| { edge.dependent == hole_main && edge.dependency == hole_choice }));
+    let stable = hole_workspace.current();
+    assert!(matches!(
+        hole_workspace.apply(Transaction {
+            base_revision: stable.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: hole_choice,
+            }],
+        }),
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&stable, &hole_workspace.current()));
+    let closed = hole_workspace
+        .apply(Transaction {
+            base_revision: stable.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: hole_choice,
+                },
+                Edit::DeleteEntity { entity: hole_main },
+            ],
+        })
+        .expect("delete enum and enum-typed hole owner");
+    assert_eq!(
+        closed.snapshot.completeness_blockers(),
+        &[CompletenessBlocker::MissingEntryPoint]
+    );
+}
+
+#[test]
+fn imported_enum_deletion_preserves_prelude_identities_and_never_reparses() {
+    let snapshot = import_source(
+        &imported_choice_match_source(),
+        "imported-enum-delete.lkjscript",
+    )
+    .expect("import enum match");
+    assert_eq!(run_i64(&snapshot), 42);
+    let choice = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":choice"))
+        .expect("imported choice")
+        .id;
+    let imported_member = |kind, suffix: &str| {
+        snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.ends_with(suffix))
+            .unwrap_or_else(|| panic!("missing imported {kind:?} ending in {suffix}"))
+            .id
+    };
+    let some = imported_member(EntityKind::EnumVariant, ":some");
+    let none = imported_member(EntityKind::EnumVariant, ":none");
+    let value = imported_member(EntityKind::EnumField, "value");
+    let match_node = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("imported match")
+        .id;
+    let prelude: Vec<_> = snapshot
+        .program
+        .enums
+        .iter()
+        .filter(|definition| definition.origin == crate::hir::Origin::Builtin)
+        .map(|definition| (definition.id, definition.layout.clone()))
+        .collect();
+    assert!(!prelude.is_empty());
+    let old = snapshot.clone();
+    let mut workspace = Workspace::new(snapshot).expect("imported enum workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: choice },
+                Edit::ReplaceExpression {
+                    target: match_node,
+                    draft: ExpressionDraft::scalar_i64(42),
+                },
+            ],
+        })
+        .expect("delete imported enum after removing match");
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    let retained: Vec<_> = deleted
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .map(|definition| (definition.id, definition.layout.clone()))
+        .collect();
+    assert_eq!(retained, prelude);
+    for removed in [choice, some, none, value] {
+        assert!(deleted.snapshot.entity(removed).is_err());
+        assert_eq!(old.entity(removed).expect("old enum member").id, removed);
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_deletion() {
+    let mut workspace = Workspace::empty_deterministic(155).expect("nominal dependency workspace");
+    let root_created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "dependency-root".to_owned(),
+                fields: Vec::new(),
+            }],
+        })
+        .expect("create dependency root");
+    let root = entity_named(
+        &root_created.snapshot,
+        EntityKind::Product,
+        "dependency-root",
+    );
+    let dependents = workspace
+        .apply(Transaction {
+            base_revision: root_created.snapshot.revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "product-dependent".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "product-reference".to_owned(),
+                        ty: SemanticTypeRef::Product(root),
+                    }],
+                },
+                Edit::CreateEnum {
+                    name: "enum-dependent".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "holding".to_owned(),
+                        fields: vec![EnumFieldDraft {
+                            name: "enum-reference".to_owned(),
+                            ty: SemanticTypeRef::Product(root),
+                        }],
+                    }],
+                },
+                Edit::CreateFunction {
+                    name: "function-dependent".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "input".to_owned(),
+                        ty: SemanticTypeRef::Product(root),
+                    }],
+                    return_type: SemanticTypeRef::Product(root),
+                },
+            ],
+        })
+        .expect("create nominal dependents");
+    let product = entity_named(
+        &dependents.snapshot,
+        EntityKind::Product,
+        "product-dependent",
+    );
+    let enumeration = entity_named(&dependents.snapshot, EntityKind::Enum, "enum-dependent");
+    let function = entity_named(
+        &dependents.snapshot,
+        EntityKind::Function,
+        "function-dependent",
+    );
+    let published = dependents.snapshot;
+    let mut blocked_workspace = Workspace::new((*published).clone()).expect("blocked workspace");
+    let before = blocked_workspace.current();
+    let error = blocked_workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::DeleteEntity { entity: root }],
+        })
+        .expect_err("surviving field and signature dependencies block deletion")
+        .to_string();
+    assert!(error.contains("dependency-root"), "{error}");
+    assert!(
+        error.contains("field type") || error.contains("signature type"),
+        "{error}"
+    );
+    assert!(Arc::ptr_eq(&before, &blocked_workspace.current()));
+
+    let delete = |reverse: bool| {
+        let mut workspace = Workspace::new((*published).clone()).expect("ordered workspace");
+        let mut edits = vec![
+            Edit::DeleteEntity { entity: root },
+            Edit::DeleteEntity { entity: product },
+            Edit::DeleteEntity {
+                entity: enumeration,
+            },
+            Edit::DeleteEntity { entity: function },
+        ];
+        if reverse {
+            edits.reverse();
+        }
+        workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits,
+            })
+            .expect("delete complete nominal dependency closure")
+    };
+    let forward = delete(false);
+    let reverse = delete(true);
+    assert_eq!(forward.diff, reverse.diff);
+    assert_eq!(forward.snapshot.entities(), reverse.snapshot.entities());
+    for removed in [root, product, enumeration, function] {
+        assert!(forward.snapshot.entity(removed).is_err());
+    }
+    assert_eq!(
+        forward.snapshot.completeness_blockers(),
+        &[CompletenessBlocker::MissingEntryPoint]
+    );
+}
+
+#[test]
+fn imported_product_deletion_cascades_implementation_and_remaps_surviving_witness() {
+    let source = concat!(
+        "trait/\nname/\nmarked\n/name\n/trait\n",
+        "product/\nname/\nremove\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
+        "product/\nname/\nkeep\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
+        "impl/\ntrait/\nmarked\n/trait\nfor/\nproduct\nremove\n/for\n/impl\n",
+        "impl/\ntrait/\nmarked\n/trait\nfor/\nproduct\nkeep\n/for\n/impl\n",
+        "def/\nname/\nkeep-marked\n/name\nfn/\nforall/\nt\n/forall\nbounds/\nbound/\nt\nmarked\n/bound\n/bounds\nsig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\nparams/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nfield/\nkeep-marked/\nproduct-value/\nkeep\nfield/\nvalue\n42\n/field\n/product-value\n/keep-marked\nvalue\n/field\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "nominal-implementation-delete.lkjscript",
+        WorkspaceNamespace::deterministic(154),
+    )
+    .expect("import implemented products");
+    let blocked_source = source.replacen("product-value/\nkeep", "product-value/\nremove", 1);
+    let blocked_snapshot = importer::import_source_with_namespace(
+        &blocked_source,
+        "nominal-implementation-blocked.lkjscript",
+        WorkspaceNamespace::deterministic(157),
+    )
+    .expect("import call witnessing the removed implementation");
+    let blocked_product = blocked_snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Product && entity.name.ends_with(":remove"))
+        .expect("blocked removed product")
+        .id;
+    let mut blocked_workspace = Workspace::new(blocked_snapshot).expect("blocked impl workspace");
+    let blocked_error = blocked_workspace
+        .apply(Transaction {
+            base_revision: blocked_workspace.current().revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: blocked_product,
+            }],
+        })
+        .expect_err("surviving explicit witness must block implementation cascade")
+        .to_string();
+    assert!(
+        blocked_error.contains("explicit implementation witness"),
+        "{blocked_error}"
+    );
+    assert_eq!(run_i64(&snapshot), 42);
+    let qualified = |kind, suffix: &str| {
+        snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.ends_with(suffix))
+            .unwrap_or_else(|| panic!("missing {kind:?} ending in {suffix}"))
+            .id
+    };
+    let remove = qualified(EntityKind::Product, ":remove");
+    let keep = qualified(EntityKind::Product, ":keep");
+    let trait_entity = qualified(EntityKind::Trait, ":marked");
+    let removed_impl = qualified(EntityKind::Implementation, ":remove");
+    let kept_impl = qualified(EntityKind::Implementation, ":keep");
+    let call_node = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call node")
+        .id;
+    let old = snapshot.clone();
+    let mut forged = old.validated_complete_hir().expect("complete imported HIR");
+    let crate::hir::ExprKind::ProductField { value, .. } = &mut forged.main.body.kind else {
+        panic!("main retains product projection")
+    };
+    let crate::hir::ExprKind::Call {
+        instantiation: Some(instantiation),
+        ..
+    } = &mut value.kind
+    else {
+        panic!("main retains generic call")
+    };
+    let explicit = instantiation
+        .witnesses
+        .iter_mut()
+        .find(|witness| matches!(witness.kind, crate::hir::TraitWitnessKind::Explicit(_)))
+        .expect("explicit witness");
+    explicit.kind = crate::hir::TraitWitnessKind::Explicit(crate::hir::ImplId::new(0));
+    let alias_error = super::validate::program(&forged)
+        .expect_err("in-range witness for a different product must reject")
+        .to_string();
+    assert!(alias_error.contains("wrong product"), "{alias_error}");
+
+    let mut workspace = Workspace::new(snapshot).expect("implemented product workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::DeleteEntity { entity: remove }],
+        })
+        .expect("delete implemented product");
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    assert!(deleted.snapshot.entity(remove).is_err());
+    assert!(deleted.snapshot.entity(removed_impl).is_err());
+    for survivor in [keep, kept_impl, trait_entity] {
+        assert_eq!(
+            deleted.snapshot.entity(survivor).expect("survivor").id,
+            survivor
+        );
+    }
+    assert_eq!(
+        deleted.snapshot.node(call_node).expect("call node").id,
+        call_node
+    );
+    assert_eq!(deleted.snapshot.program.products[0].id.raw(), 0);
+    assert!(deleted.snapshot.program.products[0].name.ends_with(":keep"));
+    assert_eq!(deleted.snapshot.program.implementations.len(), 1);
+    assert_eq!(deleted.snapshot.program.implementations[0].id.raw(), 0);
+    assert_eq!(deleted.snapshot.program.implementations[0].product.raw(), 0);
+    let main = deleted.snapshot.program.main.as_ref().expect("main");
+    let mut pending = vec![&main.body];
+    let mut explicit = None;
+    while let Some(expression) = pending.pop() {
+        if let crate::hir::ExprKind::Call {
+            instantiation: Some(instantiation),
+            ..
+        } = &expression.kind
+        {
+            explicit = instantiation
+                .witnesses
+                .iter()
+                .find_map(|witness| match witness.kind {
+                    crate::hir::TraitWitnessKind::Explicit(implementation) => Some(implementation),
+                    crate::hir::TraitWitnessKind::AutoTrait => None,
+                });
+        }
+        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+    }
+    assert_eq!(explicit.expect("explicit witness").raw(), 0);
+    assert!(deleted.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == removed_impl
+    )));
+    assert_eq!(
+        old.entity(removed_impl).expect("old implementation").id,
+        removed_impl
+    );
+    assert_eq!(run_i64(&old), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn imported_product_pattern_and_value_survive_earlier_product_compaction() {
+    let source = concat!(
+        "product/\nname/\nremove\n/name\nfields/\n/fields\n/product\n",
+        "product/\nname/\npair\n/name\nfields/\n",
+        "field/\nname/\nleft\n/name\ntype/\nbool\n/type\n/field\n",
+        "field/\nname/\nright\n/name\ntype/\nbool\n/type\n/field\n/fields\n/product\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "match/\nproduct-value/\npair\n",
+        "field/\nleft\ntrue\n/field\nfield/\nright\nfalse\n/field\n/product-value\n",
+        "arms/\narm/\nproduct-pattern/\ntype/\nproduct\npair\n/type\nfields/\n",
+        "product-field-pattern/\nname/\nleft\n/name\nwildcard/\n/wildcard\n/product-field-pattern\n",
+        "product-field-pattern/\nname/\nright\n/name\nwildcard/\n/wildcard\n/product-field-pattern\n",
+        "/fields\n/product-pattern\n42\n/arm\n/arms\n/match\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "nominal-product-pattern-delete.lkjscript",
+        WorkspaceNamespace::deterministic(158),
+    )
+    .expect("import product pattern program");
+    assert_eq!(run_i64(&snapshot), 42);
+    let remove = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Product && entity.name.ends_with(":remove"))
+        .expect("removed product")
+        .id;
+    let pair = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Product && entity.name.ends_with(":pair"))
+        .expect("retained product")
+        .id;
+    let match_node = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("product match node")
+        .id;
+    let old = snapshot.clone();
+    let mut workspace = Workspace::new(snapshot).expect("product pattern workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::DeleteEntity { entity: remove }],
+        })
+        .expect("delete earlier product and remap pattern");
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    assert_eq!(
+        deleted.snapshot.entity(pair).expect("retained pair").id,
+        pair
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .node(match_node)
+            .expect("retained product match node")
+            .id,
+        match_node
+    );
+    assert_eq!(deleted.snapshot.program.products.len(), 1);
+    assert_eq!(deleted.snapshot.program.products[0].id.raw(), 0);
+    let crate::hir::MatchPattern::Product { product, .. } =
+        &deleted.snapshot.program.match_plans[0].arms[0].pattern
+    else {
+        panic!("retained product pattern changed kind")
+    };
+    assert_eq!(product.raw(), 0);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
 
 #[test]

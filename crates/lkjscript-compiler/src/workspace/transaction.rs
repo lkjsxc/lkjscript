@@ -273,11 +273,26 @@ struct NewEntity {
     name: Arc<str>,
 }
 
-#[derive(Clone, Copy)]
-struct CallableDeletion {
+#[derive(Clone)]
+struct RequestedDeletion {
     entity: EntityId,
     address: EntityAddress,
-    binding: Option<crate::hir::BindingId>,
+    kind: EntityKind,
+    name: Arc<str>,
+}
+
+struct DeletionPlan {
+    requested: Vec<RequestedDeletion>,
+    entities: HashSet<EntityId>,
+    callable_roots: HashSet<EntityAddress>,
+    callable_bindings: HashSet<crate::hir::BindingId>,
+    products: HashSet<lkjscript_core::ProductId>,
+    enum_vectors: HashSet<u64>,
+    implementations: HashSet<crate::hir::ImplId>,
+    product_requests: HashMap<lkjscript_core::ProductId, EntityId>,
+    enum_requests: HashMap<crate::hir::EnumId, EntityId>,
+    implementation_requests: HashMap<crate::hir::ImplId, EntityId>,
+    binding_requests: HashMap<crate::hir::BindingId, EntityId>,
 }
 
 fn stage(
@@ -288,27 +303,11 @@ fn stage(
     let revision = base.revision.next().map_err(WorkspaceError::from_core)?;
     let edit_count = transaction.edits.len();
     let mut program = try_clone_program(base.program.as_ref())?;
-    let deletions = preflight_callable_deletions(base, &program, &transaction.edits)?;
+    let deletions = preflight_deletions(base, &program, &transaction.edits)?;
     preflight_structural_edits(base, &transaction.edits)?;
-    let mut deleted_entities = HashSet::new();
-    let mut deleted_roots = HashSet::new();
-    let mut deleted_bindings = HashSet::new();
-    deleted_entities
-        .try_reserve(deletions.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("deleted entity set allocation failed")))?;
-    deleted_roots
-        .try_reserve(deletions.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("deleted root set allocation failed")))?;
-    deleted_bindings
-        .try_reserve(deletions.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("deleted binding set allocation failed")))?;
-    for deletion in &deletions {
-        deleted_entities.insert(deletion.entity);
-        deleted_roots.insert(deletion.address);
-        if let Some(binding) = deletion.binding {
-            deleted_bindings.insert(binding);
-        }
-    }
+    let deleted_entities = &deletions.entities;
+    let deleted_roots = &deletions.callable_roots;
+    let deleted_bindings = &deletions.callable_bindings;
     let mut holes = Vec::new();
     holes
         .try_reserve(base.holes.len())
@@ -591,7 +590,7 @@ fn stage(
             }
             Edit::ReplaceExpression { target, draft } => {
                 let (address, _key, expected, visible) = edit_context(base, target)?;
-                reject_deleted_root_edit(&deleted_roots, address.root)?;
+                reject_deleted_root_edit(deleted_roots, address.root)?;
                 let lowered = lower_draft(
                     base,
                     &mut program,
@@ -601,7 +600,7 @@ fn stage(
                     &visible,
                     address.root,
                     &mut lowering,
-                    &deleted_entities,
+                    deleted_entities,
                 )?;
                 new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
@@ -617,7 +616,7 @@ fn stage(
                     )));
                 }
                 let (address, key, expected, visible) = edit_context(base, target)?;
-                reject_deleted_root_edit(&deleted_roots, address.root)?;
+                reject_deleted_root_edit(deleted_roots, address.root)?;
                 let owner = root_owner(base, address)?;
                 holes.push(HoleRecord {
                     state: HoleState {
@@ -663,7 +662,7 @@ fn stage(
                     .iter_mut()
                     .find(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
-                reject_deleted_root_edit(&deleted_roots, record.address.root)?;
+                reject_deleted_root_edit(deleted_roots, record.address.root)?;
                 if let Some(expected_type) = expected_type {
                     let expected_type =
                         resolve_semantic_type(base, &program, expected_type, "hole expectation")?;
@@ -696,7 +695,7 @@ fn stage(
                     .position(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 let record = holes[index].clone();
-                reject_deleted_root_edit(&deleted_roots, record.address.root)?;
+                reject_deleted_root_edit(deleted_roots, record.address.root)?;
                 let lowered = crate::stack::grow(|| {
                     lower_draft(
                         base,
@@ -707,7 +706,7 @@ fn stage(
                         &record.state.visible_entities,
                         record.address.root,
                         &mut lowering,
-                        &deleted_entities,
+                        deleted_entities,
                     )
                 })?;
                 new_entities.extend(lowered.entities);
@@ -733,7 +732,7 @@ fn stage(
         replace_expression(&mut program, action.address, &action.replacement)?;
     }
 
-    reject_surviving_deleted_references(base, &program, &deleted_roots, &deleted_bindings)?;
+    reject_surviving_deleted_dependencies(base, &program, &deletions)?;
     holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
     new_holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
     if deleted_roots.contains(&EntityAddress::Main) {
@@ -746,10 +745,21 @@ fn stage(
         .global_layout
         .retain(|binding| !deleted_bindings.contains(binding));
 
-    let binding_map =
-        super::compaction::compact(&mut program).map_err(WorkspaceError::from_core)?;
-    remap_staged_addresses(&binding_map, &mut new_entities, &mut new_holes)?;
-    install_survivor_entity_relocations(base, &program, &binding_map, &mut forced_entities)?;
+    let compaction =
+        super::compaction::compact(&mut program, &deletions.products, &deletions.enum_vectors)
+            .map_err(WorkspaceError::from_core)?;
+    if deletions
+        .implementations
+        .iter()
+        .any(|implementation| compaction.implementations.contains_key(implementation))
+    {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "implementation selected for deletion survived compaction",
+        )));
+    }
+    remap_forced_entity_addresses(&compaction, &mut forced_entities)?;
+    remap_staged_addresses(&compaction, &mut new_entities, &mut new_holes)?;
+    install_survivor_entity_relocations(base, &program, &compaction, &mut forced_entities)?;
     reserve_new_entity_identities(base, allocator, &mut forced_entities, &new_entities)?;
 
     let binding_count = program.bindings.len();
@@ -901,18 +911,18 @@ fn try_clone_values<T: Clone>(values: &[T], kind: &str) -> Result<Vec<T>, Worksp
     Ok(cloned)
 }
 
-fn preflight_callable_deletions(
+fn preflight_deletions(
     base: &WorkspaceSnapshot,
     program: &SemanticProgram,
     edits: &[Edit],
-) -> Result<Vec<CallableDeletion>, WorkspaceError> {
-    let mut result = Vec::new();
-    result
+) -> Result<DeletionPlan, WorkspaceError> {
+    let mut requested = Vec::new();
+    requested
         .try_reserve(edits.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("callable deletion allocation failed")))?;
+        .map_err(|_| WorkspaceError::Host(Arc::from("deletion intent allocation failed")))?;
     let mut seen = HashSet::new();
     seen.try_reserve(edits.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("callable deletion set allocation failed")))?;
+        .map_err(|_| WorkspaceError::Host(Arc::from("deletion intent set allocation failed")))?;
     for edit in edits {
         let Edit::DeleteEntity { entity } = edit else {
             continue;
@@ -923,21 +933,57 @@ fn preflight_callable_deletions(
                 "an entity is deleted more than once in one transaction",
             )));
         }
-        let index = base
-            .indexes
-            .entity_lookup
-            .get(entity)
-            .copied()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
-        let address = *base
-            .indexes
-            .entity_addresses
-            .get(index)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
-        let binding = match header.kind {
-            EntityKind::Main if address == EntityAddress::Main && program.main.is_some() => None,
+        requested.push(RequestedDeletion {
+            entity: *entity,
+            address: entity_address(base, *entity)?,
+            kind: header.kind,
+            name: Arc::clone(&header.name),
+        });
+    }
+
+    let mut requested_addresses = HashSet::new();
+    requested_addresses
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("deletion address allocation failed")))?;
+    requested_addresses.extend(requested.iter().map(|item| item.address));
+
+    let mut callable_roots = HashSet::new();
+    let mut callable_bindings = HashSet::new();
+    let mut products = HashSet::new();
+    let mut enum_vectors = HashSet::new();
+    let mut product_requests = HashMap::new();
+    let mut enum_requests = HashMap::new();
+    let mut binding_requests = HashMap::new();
+    callable_roots
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("callable root deletion allocation failed")))?;
+    callable_bindings
+        .try_reserve(requested.len())
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from("callable binding deletion allocation failed"))
+        })?;
+    products
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product deletion allocation failed")))?;
+    enum_vectors
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum deletion allocation failed")))?;
+    product_requests
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product request allocation failed")))?;
+    enum_requests
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum request allocation failed")))?;
+    binding_requests
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding request allocation failed")))?;
+    for item in &requested {
+        match item.kind {
+            EntityKind::Main if item.address == EntityAddress::Main && program.main.is_some() => {
+                callable_roots.insert(EntityAddress::Main);
+            }
             EntityKind::Function => {
-                let EntityAddress::Binding(raw) = address else {
+                let EntityAddress::Binding(raw) = item.address else {
                     return Err(WorkspaceError::StaleIdentity(Arc::from("function")));
                 };
                 let binding = program
@@ -949,7 +995,77 @@ fn preflight_callable_deletions(
                             && binding.origin != Origin::Builtin
                     })
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
-                Some(binding.id)
+                callable_roots.insert(item.address);
+                callable_bindings.insert(binding.id);
+                binding_requests.insert(binding.id, item.entity);
+            }
+            EntityKind::Product => {
+                let EntityAddress::Product(raw) = item.address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("product")));
+                };
+                let definition = program
+                    .products
+                    .get(host_index(raw, "product")?)
+                    .filter(|definition| {
+                        definition.id.raw() == raw && definition.origin != Origin::Builtin
+                    })
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+                products.insert(definition.id);
+                product_requests.insert(definition.id, item.entity);
+            }
+            EntityKind::Enum => {
+                let EntityAddress::Enum(raw) = item.address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("enum")));
+                };
+                let definition = program
+                    .enums
+                    .get(host_index(raw, "enum")?)
+                    .filter(|definition| definition.origin != Origin::Builtin)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+                enum_vectors.insert(raw);
+                enum_requests.insert(definition.id, item.entity);
+            }
+            EntityKind::ProductField => {
+                let EntityAddress::ProductField { product, .. } = item.address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("product field")));
+                };
+                if requested_addresses.contains(&EntityAddress::Product(product)) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "deleting a product and one of its owned fields is redundant",
+                    )));
+                }
+                return Err(WorkspaceError::unsupported(
+                    "delete-entity",
+                    "product fields cannot be deleted independently of their product",
+                ));
+            }
+            EntityKind::EnumVariant => {
+                let EntityAddress::EnumVariant { enumeration, .. } = item.address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
+                };
+                if requested_addresses.contains(&EntityAddress::Enum(enumeration)) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "deleting an enum and one of its owned variants is redundant",
+                    )));
+                }
+                return Err(WorkspaceError::unsupported(
+                    "delete-entity",
+                    "enum variants cannot be deleted independently of their enum",
+                ));
+            }
+            EntityKind::EnumField => {
+                let EntityAddress::EnumField { enumeration, .. } = item.address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("enum field")));
+                };
+                if requested_addresses.contains(&EntityAddress::Enum(enumeration)) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "deleting an enum and one of its owned fields is redundant",
+                    )));
+                }
+                return Err(WorkspaceError::unsupported(
+                    "delete-entity",
+                    "enum fields cannot be deleted independently of their enum",
+                ));
             }
             EntityKind::BuiltinOperation => {
                 return Err(WorkspaceError::unsupported(
@@ -957,22 +1073,19 @@ fn preflight_callable_deletions(
                     "fixed compiler operations cannot be deleted",
                 ));
             }
+            EntityKind::Main => {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("main")));
+            }
             _ => {
                 return Err(WorkspaceError::unsupported(
                     "delete-entity",
-                    "only main and ordinary function declarations can be deleted directly",
+                    "only main, ordinary functions, products, and enums can be deleted directly",
                 ));
             }
-        };
-        result.push(CallableDeletion {
-            entity: *entity,
-            address,
-            binding,
-        });
+        }
     }
-    if result
-        .iter()
-        .any(|item| item.address == EntityAddress::Main)
+
+    if callable_roots.contains(&EntityAddress::Main)
         && edits
             .iter()
             .any(|edit| matches!(edit, Edit::CreateMain { .. }))
@@ -981,7 +1094,97 @@ fn preflight_callable_deletions(
             "main cannot be deleted and created in one transaction",
         )));
     }
-    Ok(result)
+    let mut deleted_nominal_names = HashSet::new();
+    deleted_nominal_names
+        .try_reserve(product_requests.len().saturating_add(enum_requests.len()))
+        .map_err(|_| WorkspaceError::Host(Arc::from("deleted nominal name allocation failed")))?;
+    for item in &requested {
+        if matches!(item.kind, EntityKind::Product | EntityKind::Enum) {
+            deleted_nominal_names.insert(item.name.as_ref());
+        }
+    }
+    if edits.iter().any(|edit| match edit {
+        Edit::CreateProduct { name, .. } | Edit::CreateEnum { name, .. } => {
+            deleted_nominal_names.contains(name.as_str())
+        }
+        _ => false,
+    }) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "a nominal declaration cannot be deleted and recreated with the same name in one transaction",
+        )));
+    }
+
+    let mut entities = HashSet::new();
+    entities
+        .try_reserve(base.indexes.entities.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("deletion closure allocation failed")))?;
+    let mut requested_entities = HashSet::new();
+    requested_entities
+        .try_reserve(requested.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("requested deletion allocation failed")))?;
+    requested_entities.extend(requested.iter().map(|item| item.entity));
+    for header in &base.indexes.entities {
+        let mut current = Some(header.id);
+        while let Some(entity) = current {
+            if requested_entities.contains(&entity) {
+                entities.insert(header.id);
+                break;
+            }
+            current = base
+                .indexes
+                .entity_lookup
+                .get(&entity)
+                .and_then(|index| base.indexes.entities.get(*index))
+                .and_then(|item| item.owner);
+        }
+    }
+
+    let mut implementations = HashSet::new();
+    let mut implementation_requests = HashMap::new();
+    implementations
+        .try_reserve(program.implementations.len())
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from("implementation deletion allocation failed"))
+        })?;
+    implementation_requests
+        .try_reserve(program.implementations.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("implementation request allocation failed")))?;
+    for (index, implementation) in program.implementations.iter().enumerate() {
+        let Some(request) = product_requests.get(&implementation.product).copied() else {
+            continue;
+        };
+        let expected = u64::try_from(index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("implementation index exceeds u64")))?;
+        if implementation.id.raw() != expected {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "implementation dense identity is stale before deletion",
+            )));
+        }
+        implementations.insert(implementation.id);
+        implementation_requests.insert(implementation.id, request);
+        let address = EntityAddress::Implementation(expected);
+        let entity = base
+            .indexes
+            .address_entities
+            .get(&address)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("implementation")))?;
+        entities.insert(entity);
+    }
+
+    Ok(DeletionPlan {
+        requested,
+        entities,
+        callable_roots,
+        callable_bindings,
+        products,
+        enum_vectors,
+        implementations,
+        product_requests,
+        enum_requests,
+        implementation_requests,
+        binding_requests,
+    })
 }
 
 fn reject_deleted_root_edit(
@@ -1070,45 +1273,600 @@ fn prune_replaced_subtree_holes(
     Ok(())
 }
 
-fn reject_surviving_deleted_references(
+#[derive(Clone)]
+struct DependencyOwner {
+    entity: Option<EntityId>,
+    kind: EntityKind,
+    name: Arc<str>,
+}
+
+struct DependencyBlocker {
+    requested: EntityId,
+    owner: DependencyOwner,
+    category: &'static str,
+}
+
+fn reject_surviving_deleted_dependencies(
     base: &WorkspaceSnapshot,
     program: &SemanticProgram,
-    deleted_roots: &HashSet<EntityAddress>,
-    deleted_bindings: &HashSet<crate::hir::BindingId>,
+    deletions: &DeletionPlan,
 ) -> Result<(), WorkspaceError> {
-    if deleted_bindings.is_empty() {
+    if deletions.requested.is_empty() {
         return Ok(());
     }
-    if let Some(main) = &program.main {
-        if !deleted_roots.contains(&EntityAddress::Main)
-            && expression_references_any(&main.body, deleted_bindings)?
+    let mut product_names = HashMap::new();
+    product_names
+        .try_reserve(program.products.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("product name lookup allocation failed")))?;
+    for product in &program.products {
+        if product_names
+            .insert(product.name.as_str(), product.id)
+            .is_some()
         {
-            let dependent = base
-                .indexes
-                .address_entities
-                .get(&EntityAddress::Main)
-                .map_or_else(|| "new main".to_owned(), entity_diagnostic_label);
-            return Err(WorkspaceError::InvalidTransaction(Arc::from(format!(
-                "cannot delete function while surviving callable {dependent} still references it"
-            ))));
+            return Err(WorkspaceError::Validation(Arc::from(
+                "product declaration name is duplicated",
+            )));
         }
     }
+    let mut blockers = Vec::new();
+
+    if let Some(main) = &program.main {
+        let address = EntityAddress::Main;
+        let owner = dependency_owner(base, address, EntityKind::Main, "main");
+        if !dependency_owner_is_deleted(deletions, &owner) {
+            for ty in main
+                .param_types
+                .iter()
+                .chain(std::iter::once(&main.return_type))
+            {
+                collect_type_deletion_blockers(
+                    ty,
+                    &owner,
+                    "callable signature type",
+                    deletions,
+                    &product_names,
+                    &mut blockers,
+                )?;
+            }
+            collect_expression_deletion_blockers(
+                program,
+                &main.body,
+                &owner,
+                deletions,
+                &product_names,
+                &mut blockers,
+            )?;
+        }
+    }
+
     for function in &program.functions {
-        let root = EntityAddress::Binding(function.binding.raw());
-        if deleted_roots.contains(&root) {
+        let address = EntityAddress::Binding(function.binding.raw());
+        let name = program
+            .binding(function.binding)
+            .map(|binding| binding.name.as_str())
+            .unwrap_or("<stale-function>");
+        let owner = dependency_owner(base, address, EntityKind::Function, name);
+        if dependency_owner_is_deleted(deletions, &owner) {
             continue;
         }
-        if expression_references_any(&function.body, deleted_bindings)? {
-            let dependent = base
-                .indexes
-                .address_entities
-                .get(&root)
-                .map_or_else(|| "new function".to_owned(), entity_diagnostic_label);
-            return Err(WorkspaceError::InvalidTransaction(Arc::from(format!(
-                "cannot delete function while surviving callable {dependent} still references it"
-            ))));
+        let signature = program
+            .binding(function.binding)
+            .ok_or_else(|| WorkspaceError::Validation(Arc::from("function binding is stale")))?;
+        collect_type_deletion_blockers(
+            &signature.ty,
+            &owner,
+            "callable signature type",
+            deletions,
+            &product_names,
+            &mut blockers,
+        )?;
+        collect_expression_deletion_blockers(
+            program,
+            &function.body,
+            &owner,
+            deletions,
+            &product_names,
+            &mut blockers,
+        )?;
+    }
+
+    for (index, product) in program.products.iter().enumerate() {
+        if deletions.products.contains(&product.id) {
+            continue;
+        }
+        let raw = u64::try_from(index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("product index exceeds u64")))?;
+        let owner = dependency_owner(
+            base,
+            EntityAddress::Product(raw),
+            EntityKind::Product,
+            &product.name,
+        );
+        for field in &product.fields {
+            collect_type_deletion_blockers(
+                &field.ty,
+                &owner,
+                "product field type",
+                deletions,
+                &product_names,
+                &mut blockers,
+            )?;
         }
     }
+
+    for (index, definition) in program.enums.iter().enumerate() {
+        let raw = u64::try_from(index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum index exceeds u64")))?;
+        if deletions.enum_vectors.contains(&raw) {
+            continue;
+        }
+        let owner = dependency_owner(
+            base,
+            EntityAddress::Enum(raw),
+            EntityKind::Enum,
+            &definition.name,
+        );
+        for field in definition
+            .variants
+            .iter()
+            .flat_map(|variant| &variant.fields)
+        {
+            collect_type_deletion_blockers(
+                &field.ty,
+                &owner,
+                "enum field type",
+                deletions,
+                &product_names,
+                &mut blockers,
+            )?;
+        }
+    }
+
+    blockers.sort_by(|left, right| {
+        left.requested
+            .cmp(&right.requested)
+            .then_with(|| match (left.owner.entity, right.owner.entity) {
+                (Some(left), Some(right)) => left.cmp(&right),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            })
+            .then_with(|| left.owner.kind.cmp(&right.owner.kind))
+            .then_with(|| left.owner.name.cmp(&right.owner.name))
+            .then_with(|| left.category.cmp(right.category))
+    });
+    blockers.dedup_by(|left, right| {
+        left.requested == right.requested
+            && left.owner.entity == right.owner.entity
+            && left.owner.kind == right.owner.kind
+            && left.owner.name == right.owner.name
+            && left.category == right.category
+    });
+    let Some(blocker) = blockers.first() else {
+        return Ok(());
+    };
+    let requested = base.workspace_entity(blocker.requested)?;
+    let dependent_identity = blocker.owner.entity.map_or_else(
+        || "new entity without a published identity".to_owned(),
+        |entity| entity_diagnostic_label(&entity),
+    );
+    Err(WorkspaceError::InvalidTransaction(Arc::from(format!(
+        "cannot delete {} '{}' ({}) while surviving {} '{}' ({dependent_identity}) retains a {} dependency",
+        entity_kind_name(requested.kind),
+        requested.name,
+        entity_diagnostic_label(&requested.id),
+        entity_kind_name(blocker.owner.kind),
+        blocker.owner.name,
+        blocker.category,
+    ))))
+}
+
+fn dependency_owner(
+    base: &WorkspaceSnapshot,
+    address: EntityAddress,
+    kind: EntityKind,
+    name: &str,
+) -> DependencyOwner {
+    let entity = base.indexes.address_entities.get(&address).copied();
+    let (kind, name) = entity
+        .and_then(|entity| base.indexes.entity_lookup.get(&entity).copied())
+        .and_then(|index| base.indexes.entities.get(index))
+        .map_or_else(
+            || (kind, Arc::from(name)),
+            |header| (header.kind, Arc::clone(&header.name)),
+        );
+    DependencyOwner { entity, kind, name }
+}
+
+fn dependency_owner_is_deleted(deletions: &DeletionPlan, owner: &DependencyOwner) -> bool {
+    owner
+        .entity
+        .is_some_and(|entity| deletions.entities.contains(&entity))
+}
+
+fn collect_type_deletion_blockers(
+    root: &Type,
+    owner: &DependencyOwner,
+    category: &'static str,
+    deletions: &DeletionPlan,
+    product_names: &HashMap<&str, lkjscript_core::ProductId>,
+    blockers: &mut Vec<DependencyBlocker>,
+) -> Result<(), WorkspaceError> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("type dependency work allocation failed")))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Product(name) => {
+                if let Some(product) = product_names.get(name.as_str()) {
+                    if let Some(requested) = deletions.product_requests.get(product) {
+                        push_deletion_blocker(blockers, *requested, owner, category)?;
+                    }
+                }
+            }
+            Type::Enum { id, arguments, .. } => {
+                if let Some(requested) = deletions.enum_requests.get(id) {
+                    push_deletion_blocker(blockers, *requested, owner, category)?;
+                }
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("type dependency work allocation failed"))
+                })?;
+                pending.extend(arguments);
+            }
+            Type::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("type dependency work allocation failed"))
+                })?;
+                pending.push(inner);
+            }
+            Type::Fn { params, ret } => {
+                let additional = params.len().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("type dependency child count overflow"))
+                })?;
+                pending.try_reserve(additional).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("type dependency work allocation failed"))
+                })?;
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => {
+                pending.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("type dependency work allocation failed"))
+                })?;
+                pending.push(body);
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn collect_expression_deletion_blockers(
+    program: &SemanticProgram,
+    root: &Expr,
+    owner: &DependencyOwner,
+    deletions: &DeletionPlan,
+    product_names: &HashMap<&str, lkjscript_core::ProductId>,
+    blockers: &mut Vec<DependencyBlocker>,
+) -> Result<(), WorkspaceError> {
+    let mut pending = Vec::new();
+    pending.try_reserve(1).map_err(|_| {
+        WorkspaceError::Host(Arc::from("expression dependency work allocation failed"))
+    })?;
+    pending.push(root);
+    let mut match_plans = HashSet::new();
+    while let Some(expression) = pending.pop() {
+        collect_type_deletion_blockers(
+            &expression.ty,
+            owner,
+            "expression type",
+            deletions,
+            product_names,
+            blockers,
+        )?;
+        match &expression.kind {
+            ExprKind::Load(reference)
+            | ExprKind::Move {
+                binding: reference, ..
+            }
+            | ExprKind::Borrow {
+                binding: reference, ..
+            }
+            | ExprKind::BorrowBytes {
+                binding: reference, ..
+            } => collect_binding_deletion_blocker(
+                reference.binding,
+                owner,
+                "callable body reference",
+                deletions,
+                blockers,
+            )?,
+            ExprKind::Call {
+                callee,
+                instantiation,
+                ..
+            } => {
+                collect_binding_deletion_blocker(
+                    callee.binding,
+                    owner,
+                    "callable body reference",
+                    deletions,
+                    blockers,
+                )?;
+                if let Some(instantiation) = instantiation {
+                    for substitution in &instantiation.substitutions {
+                        collect_type_deletion_blockers(
+                            &substitution.ty,
+                            owner,
+                            "generic substitution type",
+                            deletions,
+                            product_names,
+                            blockers,
+                        )?;
+                    }
+                    for witness in &instantiation.witnesses {
+                        collect_type_deletion_blockers(
+                            &witness.ty,
+                            owner,
+                            "trait witness type",
+                            deletions,
+                            product_names,
+                            blockers,
+                        )?;
+                        if let crate::hir::TraitWitnessKind::Explicit(implementation) = witness.kind
+                        {
+                            if let Some(requested) =
+                                deletions.implementation_requests.get(&implementation)
+                            {
+                                push_deletion_blocker(
+                                    blockers,
+                                    *requested,
+                                    owner,
+                                    "explicit implementation witness",
+                                )?;
+                            }
+                        }
+                    }
+                }
+            }
+            ExprKind::Operation {
+                resolved_signature, ..
+            } => collect_type_deletion_blockers(
+                resolved_signature,
+                owner,
+                "resolved operation signature",
+                deletions,
+                product_names,
+                blockers,
+            )?,
+            ExprKind::SetLocal { target, .. } => collect_binding_deletion_blocker(
+                *target,
+                owner,
+                "callable body reference",
+                deletions,
+                blockers,
+            )?,
+            ExprKind::ProductValue { product, .. }
+            | ExprKind::ProductField { product, .. }
+            | ExprKind::WithProductField { product, .. } => {
+                if let Some(requested) = deletions.product_requests.get(product) {
+                    push_deletion_blocker(blockers, *requested, owner, "product expression")?;
+                }
+            }
+            ExprKind::EnumValue { enum_id, .. }
+            | ExprKind::EnumIsVariant { enum_id, .. }
+            | ExprKind::EnumField { enum_id, .. }
+            | ExprKind::EnumUnwrap { enum_id, .. } => {
+                if let Some(requested) = deletions.enum_requests.get(enum_id) {
+                    push_deletion_blocker(blockers, *requested, owner, "enum expression")?;
+                }
+            }
+            ExprKind::Match { plan, .. } | ExprKind::MatchUnreachable { plan }
+                if !match_plans.contains(plan) =>
+            {
+                match_plans.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match dependency set allocation failed"))
+                })?;
+                match_plans.insert(*plan);
+                collect_match_plan_deletion_blockers(
+                    program,
+                    *plan,
+                    owner,
+                    deletions,
+                    product_names,
+                    blockers,
+                )?;
+            }
+            ExprKind::Match { .. } | ExprKind::MatchUnreachable { .. } => {}
+            _ => {}
+        }
+        let mut allocation_failed = false;
+        crate::hir::for_each_expression_child(expression, &mut |child| {
+            if !allocation_failed && pending.try_reserve(1).is_err() {
+                allocation_failed = true;
+            }
+            if !allocation_failed {
+                pending.push(child);
+            }
+        });
+        if allocation_failed {
+            return Err(WorkspaceError::Host(Arc::from(
+                "expression dependency work allocation failed",
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn collect_match_plan_deletion_blockers(
+    program: &SemanticProgram,
+    id: crate::hir::MatchPlanId,
+    owner: &DependencyOwner,
+    deletions: &DeletionPlan,
+    product_names: &HashMap<&str, lkjscript_core::ProductId>,
+    blockers: &mut Vec<DependencyBlocker>,
+) -> Result<(), WorkspaceError> {
+    let plan = id
+        .index()
+        .and_then(|index| program.match_plans.get(index))
+        .filter(|plan| plan.id == id)
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("match plan identity is stale")))?;
+    collect_type_deletion_blockers(
+        &plan.scrutinee.ty,
+        owner,
+        "match scrutinee type",
+        deletions,
+        product_names,
+        blockers,
+    )?;
+    collect_type_deletion_blockers(
+        &plan.result_type,
+        owner,
+        "match result type",
+        deletions,
+        product_names,
+        blockers,
+    )?;
+    for arm in &plan.arms {
+        collect_type_deletion_blockers(
+            &arm.body_type,
+            owner,
+            "match arm type",
+            deletions,
+            product_names,
+            blockers,
+        )?;
+        collect_pattern_deletion_blockers(&arm.pattern, owner, deletions, product_names, blockers)?;
+    }
+    for test in &plan.tests {
+        if let crate::hir::MatchTestKind::Variant { enum_id, .. } = test.kind {
+            if let Some(requested) = deletions.enum_requests.get(&enum_id) {
+                push_deletion_blocker(blockers, *requested, owner, "match variant test")?;
+            }
+        }
+    }
+    for local in plan
+        .projections
+        .iter()
+        .map(|item| &item.local)
+        .chain(plan.bindings.iter().map(|item| &item.local))
+    {
+        collect_type_deletion_blockers(
+            &local.ty,
+            owner,
+            "match local type",
+            deletions,
+            product_names,
+            blockers,
+        )?;
+    }
+    Ok(())
+}
+
+fn collect_pattern_deletion_blockers(
+    root: &crate::hir::MatchPattern,
+    owner: &DependencyOwner,
+    deletions: &DeletionPlan,
+    product_names: &HashMap<&str, lkjscript_core::ProductId>,
+    blockers: &mut Vec<DependencyBlocker>,
+) -> Result<(), WorkspaceError> {
+    let mut pending = Vec::new();
+    pending.try_reserve(1).map_err(|_| {
+        WorkspaceError::Host(Arc::from("pattern dependency work allocation failed"))
+    })?;
+    pending.push(root);
+    while let Some(pattern) = pending.pop() {
+        let ty = pattern.ty();
+        collect_type_deletion_blockers(
+            &ty,
+            owner,
+            "match pattern type",
+            deletions,
+            product_names,
+            blockers,
+        )?;
+        match pattern {
+            crate::hir::MatchPattern::Variant {
+                enum_id, fields, ..
+            } => {
+                if let Some(requested) = deletions.enum_requests.get(enum_id) {
+                    push_deletion_blocker(blockers, *requested, owner, "enum match pattern")?;
+                }
+                pending.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("pattern dependency work allocation failed"))
+                })?;
+                for field in fields {
+                    if let Some(local) = &field.projection {
+                        collect_type_deletion_blockers(
+                            &local.ty,
+                            owner,
+                            "match projection type",
+                            deletions,
+                            product_names,
+                            blockers,
+                        )?;
+                    }
+                    pending.push(&field.pattern);
+                }
+            }
+            crate::hir::MatchPattern::Product {
+                product, fields, ..
+            } => {
+                if let Some(requested) = deletions.product_requests.get(product) {
+                    push_deletion_blocker(blockers, *requested, owner, "product match pattern")?;
+                }
+                pending.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("pattern dependency work allocation failed"))
+                })?;
+                for field in fields {
+                    if let Some(local) = &field.projection {
+                        collect_type_deletion_blockers(
+                            &local.ty,
+                            owner,
+                            "match projection type",
+                            deletions,
+                            product_names,
+                            blockers,
+                        )?;
+                    }
+                    pending.push(&field.pattern);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn collect_binding_deletion_blocker(
+    binding: crate::hir::BindingId,
+    owner: &DependencyOwner,
+    category: &'static str,
+    deletions: &DeletionPlan,
+    blockers: &mut Vec<DependencyBlocker>,
+) -> Result<(), WorkspaceError> {
+    if let Some(requested) = deletions.binding_requests.get(&binding) {
+        push_deletion_blocker(blockers, *requested, owner, category)?;
+    }
+    Ok(())
+}
+
+fn push_deletion_blocker(
+    blockers: &mut Vec<DependencyBlocker>,
+    requested: EntityId,
+    owner: &DependencyOwner,
+    category: &'static str,
+) -> Result<(), WorkspaceError> {
+    blockers
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("deletion blocker allocation failed")))?;
+    blockers.push(DependencyBlocker {
+        requested,
+        owner: owner.clone(),
+        category,
+    });
     Ok(())
 }
 
@@ -1120,88 +1878,105 @@ fn entity_diagnostic_label(entity: &EntityId) -> String {
     )
 }
 
-fn expression_references_any(
-    root: &Expr,
-    deleted: &HashSet<crate::hir::BindingId>,
-) -> Result<bool, WorkspaceError> {
-    let mut pending = Vec::new();
-    pending.try_reserve(1).map_err(|_| {
-        WorkspaceError::Host(Arc::from("deleted-reference traversal allocation failed"))
-    })?;
-    pending.push(root);
-    while let Some(expression) = pending.pop() {
-        let referenced = match &expression.kind {
-            ExprKind::Load(reference)
-            | ExprKind::Move {
-                binding: reference, ..
-            }
-            | ExprKind::Borrow {
-                binding: reference, ..
-            }
-            | ExprKind::BorrowBytes {
-                binding: reference, ..
-            }
-            | ExprKind::Call {
-                callee: reference, ..
-            } => Some(reference.binding),
-            ExprKind::SetLocal { target, .. } => Some(*target),
-            _ => None,
-        };
-        if referenced.is_some_and(|binding| deleted.contains(&binding)) {
-            return Ok(true);
-        }
-        let mut allocation_failed = false;
-        crate::hir::for_each_expression_child(expression, &mut |child| {
-            if allocation_failed {
-                return;
-            }
-            if pending.try_reserve(1).is_err() {
-                allocation_failed = true;
-            } else {
-                pending.push(child);
-            }
-        });
-        if allocation_failed {
-            return Err(WorkspaceError::Host(Arc::from(
-                "deleted-reference traversal allocation failed",
+fn remap_forced_entity_addresses(
+    compaction: &super::compaction::CompactionResult,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+) -> Result<(), WorkspaceError> {
+    let previous = std::mem::take(forced);
+    forced
+        .try_reserve(previous.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced relocation allocation failed")))?;
+    for (address, entity) in previous {
+        let relocated = remap_entity_address(compaction, address).ok_or_else(|| {
+            WorkspaceError::Validation(Arc::from("new semantic entity was removed by compaction"))
+        })?;
+        if forced.insert(relocated, entity).is_some() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "new semantic entities collide after compaction",
             )));
         }
     }
-    Ok(false)
+    Ok(())
 }
 
 fn remap_staged_addresses(
-    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    compaction: &super::compaction::CompactionResult,
     entities: &mut [NewEntity],
     holes: &mut [NewHole],
 ) -> Result<(), WorkspaceError> {
     for entity in entities {
-        entity.address = remap_entity_address(bindings, entity.address)?;
+        entity.address = remap_entity_address(compaction, entity.address).ok_or_else(|| {
+            WorkspaceError::Validation(Arc::from("staged entity address was removed"))
+        })?;
     }
     for hole in holes {
-        hole.address.root = remap_entity_address(bindings, hole.address.root)?;
+        hole.address.root =
+            remap_entity_address(compaction, hole.address.root).ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("staged hole owner was removed"))
+            })?;
     }
     Ok(())
 }
 
 fn remap_entity_address(
-    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    compaction: &super::compaction::CompactionResult,
     address: EntityAddress,
-) -> Result<EntityAddress, WorkspaceError> {
-    let EntityAddress::Binding(raw) = address else {
-        return Ok(address);
-    };
-    let old = crate::hir::BindingId::new(raw);
-    bindings
-        .get(&old)
-        .map(|binding| EntityAddress::Binding(binding.raw()))
-        .ok_or_else(|| WorkspaceError::Validation(Arc::from("staged binding address was removed")))
+) -> Option<EntityAddress> {
+    match address {
+        EntityAddress::Main => Some(EntityAddress::Main),
+        EntityAddress::Binding(raw) => compaction
+            .bindings
+            .get(&crate::hir::BindingId::new(raw))
+            .map(|binding| EntityAddress::Binding(binding.raw())),
+        EntityAddress::Product(raw) => compaction
+            .products
+            .get(&lkjscript_core::ProductId::new(raw))
+            .map(|product| EntityAddress::Product(product.raw())),
+        EntityAddress::ProductField { product, field } => compaction
+            .products
+            .get(&lkjscript_core::ProductId::new(product))
+            .map(|product| EntityAddress::ProductField {
+                product: product.raw(),
+                field,
+            }),
+        EntityAddress::Enum(raw) => compaction
+            .enum_vectors
+            .get(&raw)
+            .map(|enumeration| EntityAddress::Enum(*enumeration)),
+        EntityAddress::EnumVariant {
+            enumeration,
+            variant,
+        } => compaction
+            .enum_vectors
+            .get(&enumeration)
+            .map(|enumeration| EntityAddress::EnumVariant {
+                enumeration: *enumeration,
+                variant,
+            }),
+        EntityAddress::EnumField {
+            enumeration,
+            variant,
+            field,
+        } => compaction
+            .enum_vectors
+            .get(&enumeration)
+            .map(|enumeration| EntityAddress::EnumField {
+                enumeration: *enumeration,
+                variant,
+                field,
+            }),
+        EntityAddress::Trait(raw) => Some(EntityAddress::Trait(raw)),
+        EntityAddress::Implementation(raw) => compaction
+            .implementations
+            .get(&crate::hir::ImplId::new(raw))
+            .map(|implementation| EntityAddress::Implementation(implementation.raw())),
+    }
 }
 
 fn install_survivor_entity_relocations(
     base: &WorkspaceSnapshot,
     program: &SemanticProgram,
-    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    compaction: &super::compaction::CompactionResult,
     forced: &mut HashMap<EntityAddress, EntityId>,
 ) -> Result<(), WorkspaceError> {
     forced
@@ -1215,13 +1990,10 @@ fn install_survivor_entity_relocations(
         .iter()
         .zip(&base.indexes.entity_addresses)
     {
-        let relocated = match *address {
-            EntityAddress::Main if program.main.is_some() => Some(EntityAddress::Main),
-            EntityAddress::Main => None,
-            EntityAddress::Binding(raw) => bindings
-                .get(&crate::hir::BindingId::new(raw))
-                .map(|binding| EntityAddress::Binding(binding.raw())),
-            other => Some(other),
+        let relocated = if *address == EntityAddress::Main && program.main.is_none() {
+            None
+        } else {
+            remap_entity_address(compaction, *address)
         };
         let Some(relocated) = relocated else {
             continue;
@@ -4509,12 +5281,14 @@ fn rebuild_visible_dependencies(indexes: &mut SnapshotIndexes) -> Result<(), Wor
     let capacity = indexes
         .declaration_dependencies
         .len()
-        .checked_add(indexes.references.len())
+        .checked_add(indexes.dependencies.len())
+        .and_then(|count| count.checked_add(indexes.references.len()))
         .ok_or_else(|| WorkspaceError::Host(Arc::from("visible dependency count overflow")))?;
     dependencies
         .try_reserve(capacity)
         .map_err(|_| WorkspaceError::Host(Arc::from("visible dependency allocation failed")))?;
     dependencies.extend(indexes.declaration_dependencies.iter().copied());
+    dependencies.extend(indexes.dependencies.iter().copied());
 
     let mut enclosing = HashMap::new();
     enclosing
@@ -4630,38 +5404,7 @@ fn append_graph_diff(
             });
         }
     }
-    let mut sites = HashSet::new();
-    let reference_count = base
-        .indexes
-        .references
-        .len()
-        .checked_add(next.references.len())
-        .ok_or_else(|| WorkspaceError::Host(Arc::from("reference diff count overflow")))?;
-    sites
-        .try_reserve(reference_count)
-        .map_err(|_| WorkspaceError::Host(Arc::from("reference diff allocation failed")))?;
-    sites.extend(base.indexes.references.iter().map(|edge| edge.site));
-    sites.extend(next.references.iter().map(|edge| edge.site));
-    for site in sites {
-        let old = base
-            .indexes
-            .references
-            .iter()
-            .find(|edge| edge.site == site)
-            .map(|edge| edge.target);
-        let new = next
-            .references
-            .iter()
-            .find(|edge| edge.site == site)
-            .map(|edge| edge.target);
-        if old != new {
-            entries.push(SemanticDiffEntry::ReferenceRewired {
-                site,
-                old_target: old,
-                new_target: new,
-            });
-        }
-    }
+    append_reference_diff(&base.indexes.references, &next.references, entries)?;
     let mut call_sites = HashSet::new();
     let call_count = base
         .indexes
@@ -4697,22 +5440,151 @@ fn append_graph_diff(
     Ok(())
 }
 
-fn sort_diff_entries(entries: &mut [SemanticDiffEntry]) {
-    entries.sort_by_key(diff_key);
+fn append_reference_diff(
+    old: &[super::ReferenceEdge],
+    new: &[super::ReferenceEdge],
+    entries: &mut Vec<SemanticDiffEntry>,
+) -> Result<(), WorkspaceError> {
+    let mut old_index = 0_usize;
+    let mut new_index = 0_usize;
+    while old_index < old.len() || new_index < new.len() {
+        let site = match (old.get(old_index), new.get(new_index)) {
+            (Some(old), Some(new)) => old.site.min(new.site),
+            (Some(old), None) => old.site,
+            (None, Some(new)) => new.site,
+            (None, None) => break,
+        };
+        let old_start = old_index;
+        while old.get(old_index).is_some_and(|edge| edge.site == site) {
+            old_index += 1;
+        }
+        let new_start = new_index;
+        while new.get(new_index).is_some_and(|edge| edge.site == site) {
+            new_index += 1;
+        }
+        let old_group = &old[old_start..old_index];
+        let new_group = &new[new_start..new_index];
+        let mut removed = Vec::new();
+        let mut added = Vec::new();
+        removed
+            .try_reserve(old_group.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("reference removal allocation failed")))?;
+        added
+            .try_reserve(new_group.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("reference addition allocation failed")))?;
+        let mut old_target = 0_usize;
+        let mut new_target = 0_usize;
+        while old_target < old_group.len() || new_target < new_group.len() {
+            match (
+                old_group.get(old_target).map(|edge| edge.target),
+                new_group.get(new_target).map(|edge| edge.target),
+            ) {
+                (Some(left), Some(right)) if left == right => {
+                    old_target += 1;
+                    new_target += 1;
+                }
+                (Some(left), Some(right)) if left < right => {
+                    removed.push(left);
+                    old_target += 1;
+                }
+                (Some(_), Some(right)) => {
+                    added.push(right);
+                    new_target += 1;
+                }
+                (Some(left), None) => {
+                    removed.push(left);
+                    old_target += 1;
+                }
+                (None, Some(right)) => {
+                    added.push(right);
+                    new_target += 1;
+                }
+                (None, None) => break,
+            }
+        }
+        let changed = removed.len().max(added.len());
+        for index in 0..changed {
+            entries.push(SemanticDiffEntry::ReferenceRewired {
+                site,
+                old_target: removed.get(index).copied(),
+                new_target: added.get(index).copied(),
+            });
+        }
+    }
+    Ok(())
 }
 
-fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64) {
+fn sort_diff_entries(entries: &mut [SemanticDiffEntry]) {
+    entries.sort_unstable_by_key(diff_key);
+}
+
+fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
+    let optional_entity = |entity: Option<EntityId>| {
+        entity.map_or((u64::MAX, u64::MAX), |entity| {
+            (entity.slot(), entity.generation())
+        })
+    };
     match entry {
-        SemanticDiffEntry::EntityCreated { entity, .. } => (0, entity.slot(), entity.generation()),
-        SemanticDiffEntry::EntityRenamed { entity, .. } => (1, entity.slot(), entity.generation()),
-        SemanticDiffEntry::EntityDeleted { entity, .. } => (2, entity.slot(), entity.generation()),
-        SemanticDiffEntry::ExpressionReplaced { node, .. } => (3, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantCreated { node, .. } => (4, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantDeleted { node, .. } => (5, node.slot(), node.generation()),
-        SemanticDiffEntry::HoleIntroduced { hole } => (6, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleRefined { hole, .. } => (7, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleFilled { hole } => (8, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::ReferenceRewired { site, .. } => (9, site.slot(), site.generation()),
-        SemanticDiffEntry::CallRewired { site, .. } => (10, site.slot(), site.generation()),
+        SemanticDiffEntry::EntityCreated { entity, .. } => {
+            (0, entity.slot(), entity.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::EntityRenamed { entity, .. } => {
+            (1, entity.slot(), entity.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::EntityDeleted { entity, .. } => {
+            (2, entity.slot(), entity.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::ExpressionReplaced { node, .. } => {
+            (3, node.slot(), node.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::DescendantCreated { node, .. } => {
+            (4, node.slot(), node.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::DescendantDeleted { node, .. } => {
+            (5, node.slot(), node.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::HoleIntroduced { hole } => {
+            (6, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::HoleRefined { hole, .. } => {
+            (7, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::HoleFilled { hole } => {
+            (8, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::ReferenceRewired {
+            site,
+            old_target,
+            new_target,
+        } => {
+            let old = optional_entity(*old_target);
+            let new = optional_entity(*new_target);
+            (
+                9,
+                site.slot(),
+                site.generation(),
+                old.0,
+                old.1,
+                new.0,
+                new.1,
+            )
+        }
+        SemanticDiffEntry::CallRewired {
+            site,
+            old_callee,
+            new_callee,
+        } => {
+            let old = optional_entity(*old_callee);
+            let new = optional_entity(*new_callee);
+            (
+                10,
+                site.slot(),
+                site.generation(),
+                old.0,
+                old.1,
+                new.0,
+                new.1,
+            )
+        }
     }
 }

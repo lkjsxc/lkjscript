@@ -132,6 +132,17 @@ Retained deterministic counters, indexes, and assertions show:
   tests assert dense binding and retained-plan placement, compact per-root slots, and declaration-
   ordered dense places after removal or insertion before a survivor. The existing modest small-stack
   local/match tests execute the same compaction path on every staged transaction;
+- code structure and exact semantic assertions, rather than a latency claim or nominal-specific work
+  counter, show that nominal deletion builds each concrete product, enum-vector, and implementation
+  relocation map once. Final dependency validation builds one borrowed product-name lookup and
+  iteratively visits surviving stored types, expressions, and patterns; it does not rescan declarations
+  once per requested deletion or products once per type. Focused tests delete two earlier products and
+  enums, assert exact dense retained placement, preserve public entity/node and stable nominal/member/
+  layout identities, compile and execute surviving product and enum operations, and compare
+  order-reversed dependency-closed diffs. Imported fixtures exercise product patterns and a
+  two-product/two-implementation program: they compact surviving `ProductId`/`ImplId` values, remap an
+  explicit generic witness, execute unchanged, and invoke source loading and parsing zero times after
+  import;
 - one ignored locked-release fixture completes a 20,000-level nested-`if` draft (60,001 expression
   nodes), a second completes 20,000 lexical locals (40,001 expression nodes), and a third completes
   20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
@@ -154,6 +165,14 @@ cargo test --locked -p lkjscript-compiler \
   workspace::tests::source_free_byte_vector_borrow_then_move_executes_and_cleans_up -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_and_source_free_enum_payload_matches_converge -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_product_deletion_cascades_implementation_and_remaps_surviving_witness -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_product_pattern_and_value_survive_earlier_product_compaction -- --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact

@@ -148,6 +148,7 @@ fn build_entities(
         entity_lookup: HashMap::new(),
         node_lookup: HashMap::new(),
         node_children: HashMap::new(),
+        product_name_indices: HashMap::new(),
         enum_identity_indices: HashMap::new(),
         variant_identity_indices: HashMap::new(),
         address_entities: HashMap::new(),
@@ -191,7 +192,23 @@ fn build_entities(
 
     let mut products = Vec::new();
     reserve(&mut products, program.products.len(), "product entity map")?;
+    indexes
+        .product_name_indices
+        .try_reserve(program.products.len())
+        .map_err(|_| Error::host("product name index allocation failed"))?;
     for (product_index, product) in program.products.iter().enumerate() {
+        let mut product_name = String::new();
+        product_name
+            .try_reserve(product.name.len())
+            .map_err(|_| Error::host("product name copy allocation failed"))?;
+        product_name.push_str(&product.name);
+        if indexes
+            .product_name_indices
+            .insert(product_name, product_index)
+            .is_some()
+        {
+            return Err(Error::msg("product declaration name is duplicated"));
+        }
         let product_index = u64::try_from(product_index)
             .map_err(|_| Error::host("workspace product address exceeds u64"))?;
         let entity = push_entity(
@@ -537,7 +554,7 @@ fn add_entity_dependencies(
 }
 
 fn add_types_dependencies<'a>(
-    program: &SemanticProgram,
+    _program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
     owner: EntityId,
@@ -551,22 +568,12 @@ fn add_types_dependencies<'a>(
     while let Some(ty) = pending.pop() {
         match ty {
             Type::Product(name) => {
-                if let Some((index, _)) = program
-                    .products
-                    .iter()
-                    .enumerate()
-                    .find(|(_, product)| product.name == *name)
-                {
+                if let Some(index) = indexes.product_name_indices.get(name).copied() {
                     push_dependency(indexes, owner, maps.products[index].0)?;
                 }
             }
             Type::Enum { id, arguments, .. } => {
-                if let Some((index, _)) = program
-                    .enums
-                    .iter()
-                    .enumerate()
-                    .find(|(_, definition)| definition.id == *id)
-                {
+                if let Some(index) = maps.enum_indices.get(id).copied() {
                     if let Some((target, _)) = &maps.enums[index] {
                         push_dependency(indexes, owner, *target)?;
                     }
@@ -662,6 +669,13 @@ fn add_expression_relations(
     enclosing: EntityId,
     local_count: usize,
 ) -> Result<()> {
+    add_types_dependencies(
+        program,
+        maps,
+        indexes,
+        enclosing,
+        std::iter::once(&expression.ty),
+    )?;
     let mut reference = |binding: BindingId| -> Result<Option<EntityId>> {
         let Some(target) = binding_entity(maps, binding)? else {
             return Ok(None);
@@ -677,7 +691,11 @@ fn add_expression_relations(
         | ExprKind::BorrowBytes { binding, .. } => {
             reference(binding.binding)?;
         }
-        ExprKind::Call { callee, .. } => {
+        ExprKind::Call {
+            callee,
+            instantiation,
+            ..
+        } => {
             let target = reference(callee.binding)?
                 .ok_or_else(|| Error::msg("workspace call target is compiler-owned"))?;
             reserve(&mut indexes.calls, 1, "workspace call index")?;
@@ -686,6 +704,30 @@ fn add_expression_relations(
                 callee: target,
                 site: node,
             });
+            if let Some(instantiation) = instantiation {
+                add_types_dependencies(
+                    program,
+                    maps,
+                    indexes,
+                    enclosing,
+                    instantiation
+                        .substitutions
+                        .iter()
+                        .map(|item| &item.ty)
+                        .chain(instantiation.witnesses.iter().map(|item| &item.ty)),
+                )?;
+                for witness in &instantiation.witnesses {
+                    if let crate::hir::TraitWitnessKind::Explicit(implementation) = witness.kind {
+                        let target = maps
+                            .implementations
+                            .get(index_of(implementation.raw(), "implementation witness")?)
+                            .copied()
+                            .ok_or_else(|| Error::msg("implementation witness is stale"))?;
+                        push_reference(indexes, node, target)?;
+                        push_dependency(indexes, enclosing, target)?;
+                    }
+                }
+            }
         }
         ExprKind::Let { bindings, .. } => {
             for local in bindings {
@@ -703,6 +745,15 @@ fn add_expression_relations(
             }
             set_entity_owner(indexes, require_binding_entity(maps, *binding)?, enclosing)?;
         }
+        ExprKind::Operation {
+            resolved_signature, ..
+        } => add_types_dependencies(
+            program,
+            maps,
+            indexes,
+            enclosing,
+            std::iter::once(resolved_signature),
+        )?,
         ExprKind::SetLocal { target, slot, .. } => {
             if *slot >= local_count {
                 return Err(Error::msg("set-local slot exceeds owner local count"));
@@ -823,6 +874,17 @@ fn add_match_plan_relations(
         .get(index_of(id.raw(), "match plan")?)
         .filter(|item| item.id == id)
         .ok_or_else(|| Error::msg("match plan identity is stale"))?;
+    add_types_dependencies(
+        program,
+        maps,
+        indexes,
+        enclosing,
+        std::iter::once(&plan.scrutinee.ty)
+            .chain(std::iter::once(&plan.result_type))
+            .chain(plan.arms.iter().map(|arm| &arm.body_type))
+            .chain(plan.projections.iter().map(|item| &item.local.ty))
+            .chain(plan.bindings.iter().map(|item| &item.local.ty)),
+    )?;
     if let Some(entity) = binding_entity(maps, plan.scrutinee.binding)? {
         set_entity_owner(indexes, entity, enclosing)?;
     }
@@ -831,6 +893,14 @@ fn add_match_plan_relations(
         reserve(&mut patterns, 1, "workspace match pattern work stack")?;
         patterns.push(&arm.pattern);
         while let Some(pattern) = patterns.pop() {
+            let pattern_type = pattern.ty();
+            add_types_dependencies(
+                program,
+                maps,
+                indexes,
+                enclosing,
+                std::iter::once(&pattern_type),
+            )?;
             match pattern {
                 crate::hir::MatchPattern::Binding { local } => {
                     set_entity_owner(

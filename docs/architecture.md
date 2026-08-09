@@ -119,8 +119,10 @@ Arc<WorkspaceSnapshot> plus base revision
     -> namespace/generation/revision check
     -> clone SemanticProgram and identity allocator into staging
     -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
-    -> lower flat drafts, apply disjoint replacements, and prune callable roots against the final batch
-    -> compact/remap dense bindings, plans, places, and slots once; recompute partial effects/indexes
+    -> lower flat drafts, apply disjoint replacements, and validate the final deletion dependency closure
+    -> prune callable/nominal roots and compact/remap dense products, implementations, bindings,
+       plans, places, slots, and private enum-vector addresses once
+    -> recompute partial effects and indexes
     -> on completion derive HIR and validate ownership/matches/consistency
     -> reconcile explicit survivors, tombstones, blockers, diagnostics, and semantic diff
     -> publish one new Arc plus allocator state, or publish nothing
@@ -147,21 +149,37 @@ stable named payload binding. Match preparation allocates hidden scrutinee/proje
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
 Mutable-local construction, generic calls, and non-enum source-free pattern spaces remain explicit
-unsupported edits; no executable fallback exists. After all disjoint structural edits and callable
-removals describe the final staged state, one fallible iterative compaction pass removes unreachable
-bindings and match plans. It assigns retained `BindingId` and `MatchPlanId` values densely once,
+unsupported edits; no executable fallback exists. After all disjoint structural edits and final-state
+dependency validation, one fallible iterative compaction pass performs callable and nominal removals
+and removes unreachable bindings and match plans. It assigns retained `BindingId` and `MatchPlanId`
+values densely once,
 rewrites function/main headers, global layout, expression references and definitions, recursive
 match locals/plans, and rebuilds each callable's `PlaceId`, local slot, parameter-place vector, and
 `local_count`. Function-vector position remains private and memory/SSA function IDs are derived later.
 No second mutable IR, sparse dead-binding history, persistence layer, or incremental framework was
 added; `SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
 
-`DeleteEntity` first collects callable deletion intent for the whole batch. `main` and ordinary
-functions are pruned only after structural replacements, so removing a call and deleting its callee
-is one final-state transaction regardless of edit order. Surviving references reject with the
-blocking callable identified. Callable containment owns cascading removal of parameters, locals,
-payloads, nodes, holes, hidden match storage, plans, and layout participation. Unsupported direct
-contained or nominal deletion rejects before any staged semantic mutation.
+`DeleteEntity` first collects callable, product, and enum deletion intent for the whole batch.
+`main`, ordinary functions, and user nominals are pruned only after structural replacements and one
+iterative final-state dependency traversal. That traversal covers stored signatures and fields,
+expression and hole types, aggregate operations, match patterns/plans, generic substitutions and
+witnesses, and callable references. Removing a body dependency or deleting every independent owner
+in the same batch is therefore order-independent; a surviving dependent rejects with stable public
+identity and kind/name context.
+
+Callable containment owns parameters, locals, payloads, nodes, holes, hidden match storage, plans,
+and layout participation. Product containment owns fields and the narrow target-implementation
+lifecycle; enum containment owns variants and fields. Other dependents never cascade. One concrete
+compaction result rewrites `ProductId`, `ImplId`, `BindingId`, `MatchPlanId`, local places and slots,
+and every expression/pattern/witness occurrence. Enum vector positions relocate privately while
+stable enum, variant, field, and runtime-layout IDs remain unchanged. Reconciliation forces old
+public identities onto every surviving product/member, enum/member, implementation, binding, and
+structurally surviving node address. `Type::Product(String)` remains the active HIR type identity:
+complete and partial indexes validate globally unique product names, product rename is unsupported,
+same-batch same-name recreation cannot rebind a survivor, and immutable snapshots own separate HIR
+vectors. The existing stable product and field identities remain unchanged rather than adding a
+fourth product identity. Direct member, trait, and implementation deletion remains unsupported;
+delete-and-same-name-create is not implicit replacement.
 
 Introducing a typed hole physically replaces and drops its subtree, including owned local/match
 facts; filling preserves the hole/root ID. Missing-entry, missing-body, and typed-hole blockers are
@@ -315,10 +333,10 @@ per-node index work, and 20,000-level nested-expression, local, and semantic-mat
 execution protect the selected vertical. Formatting-only attachment changes preserve IDs and
 projection.
 
-**Target, not implemented:** later workspace expansion adds nominal/member deletion with nominal-ID
-compaction, one concrete public semantic movement operation only when ownership/order semantics are
-defined, mutable-local construction, generic calls and patterns, Boolean/integer/product pattern
-construction, unresolved references, ambiguities, conflicts, recovery nodes, richer declaration
-kinds, and finer analysis contexts without adding another mutable semantic AST. Persistence,
+**Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
+concrete public semantic movement operation only when ownership/order semantics are defined,
+mutable-local construction, generic calls and patterns, Boolean/integer/product pattern construction,
+unresolved references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
+analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
 scheduler, and broader platform work wait for evidence after real use of the local semantic model.

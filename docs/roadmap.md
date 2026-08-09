@@ -6,29 +6,25 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Add nominal declaration deletion with dependency-closed nominal-ID compaction.** Support product
-   and enum deletion only after types, fields, variants, layouts, match plans, implementations,
-   queries, projections, and stable survivor relocation can be rewritten in one atomic cutover. Do
-   not expose individual member deletion that can manufacture an orphan.
-
-## Next
-
 1. **Add generic semantic calls and type arguments.** Preserve structured nominal/type-parameter
    identity, exact instantiation, effects, ownership, diagnostics, and imported convergence without
    exposing compiler-dense IDs or rendering source.
-2. **Define one concrete public movement vertical.** Choose a present semantic owner/order use case
+
+## Next
+
+1. **Define one concrete public movement vertical.** Choose a present semantic owner/order use case
    before adding an operation; private identity-preserving compaction is complete but is not public
    movement. Do not add generic coordinates, paths, or tree-editing machinery.
-3. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
+2. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
    inspectable and editable, with truthful legal next actions and an explicit completeness blocker;
    never lower a fabricated executable fallback.
-4. **Measure full recomputation under real edit workloads.** Record edit/query latency, allocation,
+3. **Measure full recomputation under real edit workloads.** Record edit/query latency, allocation,
    retained memory, and invalidated work before deciding whether a narrow cache is justified. Add no
    query framework merely because full recomputation is currently simple.
-5. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
+4. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
-6. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
+5. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
    supports explicit limited policy, but there is no semantic wire service. Do not rebuild framing,
    text publication, or multi-tenant admission machinery speculatively.
 

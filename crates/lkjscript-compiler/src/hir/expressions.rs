@@ -488,6 +488,8 @@ impl Expr {
         local_slots: &HashMap<BindingId, usize>,
         local_places: &HashMap<BindingId, PlaceId>,
         match_plans: &HashMap<MatchPlanId, MatchPlanId>,
+        products: &HashMap<ProductId, ProductId>,
+        implementations: &HashMap<ImplId, ImplId>,
     ) -> lkjscript_core::Result<Self> {
         enum Work<'a> {
             Visit(&'a Expr),
@@ -524,6 +526,8 @@ impl Expr {
                         local_slots,
                         local_places,
                         match_plans,
+                        products,
+                        implementations,
                     )?;
                     completed.try_reserve(1).map_err(|_| {
                         lkjscript_core::Error::host("HIR remap result allocation failed")
@@ -619,6 +623,8 @@ fn remap_kind_dense_ids(
     local_slots: &HashMap<BindingId, usize>,
     local_places: &HashMap<BindingId, PlaceId>,
     match_plans: &HashMap<MatchPlanId, MatchPlanId>,
+    products: &HashMap<ProductId, ProductId>,
+    implementations: &HashMap<ImplId, ImplId>,
 ) -> lkjscript_core::Result<()> {
     let remap_binding = |binding: BindingId| {
         bindings
@@ -661,7 +667,28 @@ fn remap_kind_dense_ids(
                 .copied()
                 .ok_or_else(|| lkjscript_core::Error::msg("HIR place remap is incomplete"))?;
         }
-        ExprKind::Call { callee, .. } => remap_reference(callee)?,
+        ExprKind::Call {
+            callee,
+            instantiation,
+            ..
+        } => {
+            remap_reference(callee)?;
+            if let Some(instantiation) = instantiation {
+                for witness in &mut instantiation.witnesses {
+                    if let TraitWitnessKind::Explicit(implementation) = &mut witness.kind {
+                        *implementation =
+                            implementations
+                                .get(implementation)
+                                .copied()
+                                .ok_or_else(|| {
+                                    lkjscript_core::Error::msg(
+                                        "HIR implementation witness remap is incomplete",
+                                    )
+                                })?;
+                    }
+                }
+            }
+        }
         ExprKind::Let {
             bindings: locals, ..
         } => {
@@ -691,6 +718,14 @@ fn remap_kind_dense_ids(
                 .get(&old)
                 .copied()
                 .ok_or_else(|| lkjscript_core::Error::msg("HIR set-local remap is incomplete"))?;
+        }
+        ExprKind::ProductValue { product, .. }
+        | ExprKind::ProductField { product, .. }
+        | ExprKind::WithProductField { product, .. } => {
+            *product = products
+                .get(product)
+                .copied()
+                .ok_or_else(|| lkjscript_core::Error::msg("HIR product remap is incomplete"))?;
         }
         ExprKind::Match { plan, .. } | ExprKind::MatchUnreachable { plan } => {
             *plan = match_plans

@@ -280,6 +280,14 @@ pub(super) fn reconcile(
         edge.dependent = remap_entity(&entity_map, edge.dependent)?;
         edge.dependency = remap_entity(&entity_map, edge.dependency)?;
     }
+    next.references
+        .sort_unstable_by_key(|edge| (edge.site, edge.target));
+    next.calls
+        .sort_unstable_by_key(|edge| (edge.caller, edge.callee, edge.site));
+    next.dependencies
+        .sort_unstable_by_key(|edge| (edge.dependent, edge.dependency));
+    next.declaration_dependencies
+        .sort_unstable_by_key(|edge| (edge.dependent, edge.dependency));
     next.rebuild_maps()?;
     Ok(next)
 }

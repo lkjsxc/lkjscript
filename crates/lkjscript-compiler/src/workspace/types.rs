@@ -45,7 +45,7 @@ impl SemanticTypeView {
 }
 
 pub(super) fn view(
-    program: &SemanticProgram,
+    _program: &SemanticProgram,
     indexes: &SnapshotIndexes,
     ty: &crate::Type,
 ) -> Result<SemanticTypeView, WorkspaceError> {
@@ -59,10 +59,10 @@ pub(super) fn view(
         crate::Type::ByteSlice => Some(SemanticTypeRef::ByteSlice),
         crate::Type::ByteSliceMut => Some(SemanticTypeRef::ByteSliceMut),
         crate::Type::Product(name) => {
-            let index = program
-                .products
-                .iter()
-                .position(|product| product.name == *name)
+            let index = indexes
+                .product_name_indices
+                .get(name)
+                .copied()
                 .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product type")))?;
             let raw = u64::try_from(index)
                 .map_err(|_| WorkspaceError::Host(Arc::from("product type index exceeds u64")))?;
@@ -73,10 +73,10 @@ pub(super) fn view(
                 .map(SemanticTypeRef::Product)
         }
         crate::Type::Enum { id, arguments, .. } => {
-            let index = program
-                .enums
-                .iter()
-                .position(|definition| definition.id == *id)
+            let index = indexes
+                .enum_identity_indices
+                .get(id)
+                .copied()
                 .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum type")))?;
             let raw = u64::try_from(index)
                 .map_err(|_| WorkspaceError::Host(Arc::from("enum type index exceeds u64")))?;

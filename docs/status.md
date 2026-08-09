@@ -212,13 +212,22 @@ match plans, rewrites dense binding/plan references, and rebuilds per-callable p
 local counts before canonical validation. Removed local and payload identities tombstone; unaffected
 entities, nodes, and holes retain identity across private relocation.
 
-`DeleteEntity` supports `main` and ordinary imported or source-free non-builtin functions. Deletion
-owns the callable's parameters, locals, payload bindings, nodes, holes, hidden match descendants,
-plans, and function-layout participation. A retained final call/reference rejects, while a batch that
-removes the dependency and deletes the function publishes once independent of edit order. Deleting
-`main` yields the canonical `MissingEntryPoint` incomplete state; recreation uses normal generation
-advancement. Direct parameter/local/payload/nominal/member/trait/implementation deletion and public
-movement are not implemented.
+`DeleteEntity` supports `main`, ordinary imported or source-free non-builtin functions, and
+user-defined products and enums. Callable deletion owns parameters, locals, payload bindings, nodes,
+holes, hidden match descendants, plans, and function-layout participation. Product deletion owns its
+fields and explicit implementations targeting that product; enum deletion owns its variants and
+fields. Direct contained-member, trait, and implementation deletion remains unsupported.
+
+Deletion dependencies are checked against the final staged semantic state rather than base indexes
+or edit order. Surviving signature, field, expression, hole, generic-witness, and match dependencies
+reject deterministically; explicitly deleting their independent owners or structurally removing body
+uses in the same batch succeeds. One compaction boundary rewrites dense product, implementation,
+binding, plan, slot, and place IDs, relocates private enum/product/implementation vector addresses,
+and preserves survivor public entity and node identities. Stable product/member semantic identities
+and enum/variant/field/layout identities are not compacted. Deleted identities tombstone, old
+snapshots remain valid, later same-name recreation receives fresh generations, and same-batch
+same-name recreation is rejected. Deleting `main` still yields `MissingEntryPoint`. Public movement
+is not implemented.
 
 Completeness blockers distinguish missing entry point, missing body with declaration/hole/type, and
 typed hole with hole/type/owner/context. Incomplete snapshots remain fully queryable and projectable.
@@ -277,10 +286,10 @@ replacement exists pending a measured consumer.
   enum-variant, field, and payload-binding patterns over non-generic enum scrutinees; Boolean,
   integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
-  ownership evidence uses the strongest supported copy-safe payload geometry. Callable deletion and
-  local/payload removal are implemented; nominal/member deletion, explicit public movement,
-  mutable-local construction, generic calls, unresolved names, ambiguities, conflicts, and recovery
-  states remain.
+  ownership evidence uses the strongest supported copy-safe payload geometry. Callable and whole
+  nominal deletion plus owned local/member removal are implemented; direct nominal-member mutation,
+  explicit public movement, mutable-local construction, generic calls, unresolved names,
+  ambiguities, conflicts, and recovery states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
 - Owned runtime structural values and source-free nested-expression, lexical-local, and nested

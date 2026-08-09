@@ -41,14 +41,25 @@ constructors. The canonical usefulness/exhaustiveness checker and complete stage
 checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals,
 generic calls/patterns, and non-enum source-free pattern spaces are not fabricated.
 
-Transactions also delete `main` or an ordinary non-builtin function, rename supported bindings,
-replace expressions, and introduce/refine/fill typed holes. Callable deletion cascades through the
-declaration's parameters, locals, payload bindings, body nodes, holes, hidden match storage, match
-plans, and compiler layout participation. A function deletion rejects while any final staged
-callable still references it; removing or rewiring every dependency in the same batch succeeds
-regardless of whether the delete edit appears before or after the structural edit. Direct deletion
-of contained bindings, nominal declarations or members, traits, implementations, and fixed compiler
-context remains unsupported.
+Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
+declarations; they also rename supported bindings, replace expressions, and introduce/refine/fill
+typed holes. Callable deletion cascades through the declaration's parameters, locals, payload
+bindings, body nodes, holes, hidden match storage, match plans, and compiler layout participation.
+Product deletion owns its fields and narrowly owns explicit trait implementations whose target is
+that product. Enum deletion owns its variants and their fields. Direct member, trait, or
+implementation deletion and fixed compiler-context deletion remain unsupported.
+
+All deletion intent is collected before order-sensitive editing. Final staged signatures, field
+types, expression types and aggregate operations, holes, generic substitutions and witnesses, and
+match patterns/plans decide whether an independent dependency survives. A surviving dependency
+rejects with the requested declaration and a deterministic surviving dependent; deleting every
+dependent declaration or structurally removing every body dependency in the same batch succeeds
+regardless of edit order. Product and implementation IDs and private product/enum/implementation
+vector addresses compact once; every survivor reference is explicitly remapped while stable public
+entity/node identities and stable nominal/member/layout identities remain unchanged. Semantic diffs
+report every changed edge at aggregate sites that reference a declaration and multiple owned members;
+private relocation alone emits no rewire. Deletion and same-name creation in one transaction is
+invalid; a later recreation receives fresh public identities and generations.
 
 Replacement and hole introduction may remove `let`, mutable-local, and semantic-match subtrees.
 The targeted root retains its identity, and unaffected ancestors/siblings retain theirs; rebuilt
@@ -96,8 +107,8 @@ The former syntax-shaped editing service, source-node protocol identities, hidde
 stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
-General unresolved references, ambiguities, conflicts, recovery nodes, nominal/member deletion,
-public semantic movement, mutable-local construction, generic-call/pattern construction,
+General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
+mutation, public semantic movement, mutable-local construction, generic-call/pattern construction,
 Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
 incremental recomputation remain gaps. Ownership/reference-bearing nominal fields are also outside
 the current source-free declaration surface, so current payload-match ownership coverage uses the
@@ -160,8 +171,9 @@ A transaction:
 
 1. names a base revision and operation preconditions;
 2. validates operation shape and all referenced identities before publication;
-3. supports batching and validates callable deletion dependencies against the final staged
-   call/reference graph;
+3. supports batching and validates callable and nominal deletion dependencies against the final
+   staged semantic graph, including stored types, aggregate operations, patterns, holes, and generic
+   witnesses;
 4. applies containment-owned cascading removal without manufacturing an orphan;
 5. stages the complete change without mutating the published snapshot;
 6. preserves the old snapshot and allocator on validation failure, cancellation, allocation failure,
@@ -172,8 +184,12 @@ A transaction:
    and invalidation information.
 
 Delete-and-create replacement of the same declaration remains a contradictory batch; recreation is a
-later transaction and follows ordinary tombstone/generation allocation. A text patch may be imported
-into a transaction but is not the foundational edit representation.
+later transaction and follows ordinary tombstone/generation allocation. Product deletion cascades
+only its owned fields and target implementations; enum deletion cascades only its owned variants and
+fields. Independent callables and other nominals must be explicitly deleted or edited, never silently
+removed as transitive dependents. Private dense relocation is not semantic movement and does not
+produce survivor deletion/creation diff entries. A text patch may be imported into a transaction but
+is not the foundational edit representation.
 
 ## 5. Queries
 

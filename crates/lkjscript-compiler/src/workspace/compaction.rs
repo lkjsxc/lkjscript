@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use lkjscript_core::{Error, Result};
 
 use crate::hir::{
-    BindingId, BindingKind, Expr, ExprKind, MatchLocal, MatchPattern, MatchPlan, MatchPlanId,
-    PlaceId,
+    BindingId, BindingKind, Expr, ExprKind, ImplId, MatchLocal, MatchPattern, MatchPlan,
+    MatchPlanId, PlaceId, ProductId,
 };
 
 use super::program::SemanticProgram;
@@ -21,12 +21,119 @@ struct Locations {
     local_count: usize,
 }
 
-/// Compact all compiler-dense semantic identities after a staged structural edit.
+/// Concrete relocation facts for the private dense identity spaces compacted by
+/// one staged semantic transaction.
+pub(super) struct CompactionResult {
+    pub bindings: HashMap<BindingId, BindingId>,
+    pub products: HashMap<ProductId, ProductId>,
+    pub implementations: HashMap<ImplId, ImplId>,
+    pub enum_vectors: HashMap<u64, u64>,
+}
+
+/// Compact all compiler-dense semantic identities after staged structural and
+/// declaration deletion.
 ///
-/// The returned map describes old binding placement to new binding placement and
-/// is consumed by workspace identity reconciliation. Downstream compiler IR is
-/// derived only after this pass.
-pub(super) fn compact(program: &mut SemanticProgram) -> Result<HashMap<BindingId, BindingId>> {
+/// Stable nominal identities remain inside their retained declarations. The
+/// returned concrete maps are consumed by expression/pattern rewriting and
+/// workspace identity reconciliation. Downstream compiler IR is derived only
+/// after this pass.
+pub(super) fn compact(
+    program: &mut SemanticProgram,
+    deleted_products: &HashSet<ProductId>,
+    deleted_enum_vectors: &HashSet<u64>,
+) -> Result<CompactionResult> {
+    let old_products = std::mem::take(&mut program.products);
+    let mut products = Vec::new();
+    products
+        .try_reserve(old_products.len().saturating_sub(deleted_products.len()))
+        .map_err(|_| Error::host("product compaction allocation failed"))?;
+    let mut product_map = HashMap::new();
+    product_map
+        .try_reserve(products.capacity())
+        .map_err(|_| Error::host("product remap allocation failed"))?;
+    let mut removed_products = 0_usize;
+    for mut product in old_products {
+        if deleted_products.contains(&product.id) {
+            removed_products = removed_products
+                .checked_add(1)
+                .ok_or_else(|| Error::host("deleted product count overflow"))?;
+            continue;
+        }
+        let raw = u64::try_from(products.len())
+            .map_err(|_| Error::host("product identity exceeds u64"))?;
+        let new = ProductId::new(raw);
+        if product_map.insert(product.id, new).is_some() {
+            return Err(Error::msg("product identity is duplicated"));
+        }
+        product.id = new;
+        products.push(product);
+    }
+    if removed_products != deleted_products.len() {
+        return Err(Error::msg("product deletion set contains a stale identity"));
+    }
+
+    let old_enums = std::mem::take(&mut program.enums);
+    let mut enums = Vec::new();
+    enums
+        .try_reserve(old_enums.len().saturating_sub(deleted_enum_vectors.len()))
+        .map_err(|_| Error::host("enum compaction allocation failed"))?;
+    let mut enum_vectors = HashMap::new();
+    enum_vectors
+        .try_reserve(enums.capacity())
+        .map_err(|_| Error::host("enum vector remap allocation failed"))?;
+    let mut removed_enums = 0_usize;
+    for (old_index, definition) in old_enums.into_iter().enumerate() {
+        let old = u64::try_from(old_index)
+            .map_err(|_| Error::host("enum vector identity exceeds u64"))?;
+        if deleted_enum_vectors.contains(&old) {
+            removed_enums = removed_enums
+                .checked_add(1)
+                .ok_or_else(|| Error::host("deleted enum count overflow"))?;
+            continue;
+        }
+        let new = u64::try_from(enums.len())
+            .map_err(|_| Error::host("enum vector identity exceeds u64"))?;
+        if enum_vectors.insert(old, new).is_some() {
+            return Err(Error::msg("enum vector identity is duplicated"));
+        }
+        enums.push(definition);
+    }
+    if removed_enums != deleted_enum_vectors.len() {
+        return Err(Error::msg("enum deletion set contains a stale identity"));
+    }
+
+    let old_implementations = std::mem::take(&mut program.implementations);
+    let mut implementations = Vec::new();
+    implementations
+        .try_reserve(old_implementations.len())
+        .map_err(|_| Error::host("implementation compaction allocation failed"))?;
+    let mut implementation_map = HashMap::new();
+    implementation_map
+        .try_reserve(old_implementations.len())
+        .map_err(|_| Error::host("implementation remap allocation failed"))?;
+    for mut implementation in old_implementations {
+        let Some(product) = product_map.get(&implementation.product).copied() else {
+            if deleted_products.contains(&implementation.product) {
+                continue;
+            }
+            return Err(Error::msg(
+                "surviving implementation product remap is incomplete",
+            ));
+        };
+        let raw = u64::try_from(implementations.len())
+            .map_err(|_| Error::host("implementation identity exceeds u64"))?;
+        let new = ImplId::new(raw);
+        if implementation_map.insert(implementation.id, new).is_some() {
+            return Err(Error::msg("implementation identity is duplicated"));
+        }
+        implementation.id = new;
+        implementation.product = product;
+        implementations.push(implementation);
+    }
+
+    program.products = products;
+    program.enums = enums;
+    program.implementations = implementations;
     let mut plan_roots = HashMap::new();
     plan_roots
         .try_reserve(program.match_plans.len())
@@ -170,6 +277,7 @@ pub(super) fn compact(program: &mut SemanticProgram) -> Result<HashMap<BindingId
                 .get(&old)
                 .ok_or_else(|| Error::msg("match-plan remap is incomplete"))?,
             &binding_map,
+            &product_map,
             root_locations,
         )?);
     }
@@ -183,6 +291,8 @@ pub(super) fn compact(program: &mut SemanticProgram) -> Result<HashMap<BindingId
             &root_locations.slots,
             &root_locations.places,
             &plan_map,
+            &product_map,
+            &implementation_map,
         )?;
         main.param_places = main
             .params
@@ -210,6 +320,8 @@ pub(super) fn compact(program: &mut SemanticProgram) -> Result<HashMap<BindingId
             &root_locations.slots,
             &root_locations.places,
             &plan_map,
+            &product_map,
+            &implementation_map,
         )?;
         function.param_places = function
             .params
@@ -234,7 +346,12 @@ pub(super) fn compact(program: &mut SemanticProgram) -> Result<HashMap<BindingId
 
     program.bindings = bindings;
     program.match_plans = match_plans;
-    Ok(binding_map)
+    Ok(CompactionResult {
+        bindings: binding_map,
+        products: product_map,
+        implementations: implementation_map,
+        enum_vectors,
+    })
 }
 
 fn collect_plan_roots(
@@ -678,6 +795,7 @@ fn remap_plan(
     plan: &MatchPlan,
     id: MatchPlanId,
     bindings: &HashMap<BindingId, BindingId>,
+    products: &HashMap<ProductId, ProductId>,
     locations: &Locations,
 ) -> Result<MatchPlan> {
     let mut arms = Vec::new();
@@ -690,6 +808,7 @@ fn remap_plan(
                 bindings,
                 &locations.slots,
                 &locations.places,
+                products,
             )?,
             body_type: arm.body_type.clone(),
         });

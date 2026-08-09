@@ -74,6 +74,7 @@ impl MatchPattern {
         bindings: &HashMap<BindingId, BindingId>,
         local_slots: &HashMap<BindingId, usize>,
         local_places: &HashMap<BindingId, PlaceId>,
+        products: &HashMap<ProductId, ProductId>,
     ) -> lkjscript_core::Result<Self> {
         enum Work<'a> {
             Visit(&'a MatchPattern),
@@ -214,7 +215,9 @@ impl MatchPattern {
                     }
                     completed.push(MatchPattern::Product {
                         ty: ty.clone(),
-                        product,
+                        product: products.get(&product).copied().ok_or_else(|| {
+                            lkjscript_core::Error::msg("match product remap is incomplete")
+                        })?,
                         fields: remapped_fields,
                     });
                 }

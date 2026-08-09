@@ -7,15 +7,51 @@ use crate::hir::{
     Operation, Origin, Program, SourceId, Type,
 };
 
+struct DeclarationIndexes<'a> {
+    products_by_name: HashMap<&'a str, usize>,
+    enums_by_id: HashMap<crate::hir::EnumId, usize>,
+}
+
+impl<'a> DeclarationIndexes<'a> {
+    fn build(program: &'a Program) -> Result<Self> {
+        let mut products_by_name = HashMap::new();
+        products_by_name
+            .try_reserve(program.products.len())
+            .map_err(|_| Error::host("HIR product name index allocation failed"))?;
+        for (index, product) in program.products.iter().enumerate() {
+            if products_by_name
+                .insert(product.name.as_str(), index)
+                .is_some()
+            {
+                return Err(Error::msg("HIR product declaration name is duplicated"));
+            }
+        }
+        let mut enums_by_id = HashMap::new();
+        enums_by_id
+            .try_reserve(program.enums.len())
+            .map_err(|_| Error::host("HIR enum identity index allocation failed"))?;
+        for (index, definition) in program.enums.iter().enumerate() {
+            if enums_by_id.insert(definition.id, index).is_some() {
+                return Err(Error::msg("HIR enum identity is duplicated"));
+            }
+        }
+        Ok(Self {
+            products_by_name,
+            enums_by_id,
+        })
+    }
+}
+
 pub(super) fn program(program: &Program) -> Result<()> {
+    let declarations = DeclarationIndexes::build(program)?;
     validate_sources(program)?;
-    validate_bindings(program)?;
-    validate_declarations(program)?;
-    validate_main(program)?;
+    validate_bindings(program, &declarations)?;
+    validate_declarations(program, &declarations)?;
+    validate_main(program, &declarations)?;
     validate_functions(program)?;
     validate_global_layout(program)?;
-    validate_match_plans(program)?;
-    validate_expressions(program)?;
+    validate_match_plans(program, &declarations)?;
+    validate_expressions(program, &declarations)?;
     Ok(())
 }
 
@@ -33,14 +69,14 @@ fn validate_sources(program: &Program) -> Result<()> {
     Ok(())
 }
 
-fn validate_bindings(program: &Program) -> Result<()> {
+fn validate_bindings(program: &Program, declarations: &DeclarationIndexes) -> Result<()> {
     for (index, binding) in program.bindings.iter().enumerate() {
         require_dense(binding.id.raw(), index, "HIR binding")?;
         if binding.name.is_empty() {
             return Err(Error::msg("HIR binding has an empty name"));
         }
         validate_origin(program, binding.origin)?;
-        validate_type(program, &binding.ty)?;
+        validate_type(program, declarations, &binding.ty)?;
         match (&binding.kind, binding.origin) {
             (BindingKind::BuiltinOperation(_), Origin::Builtin) => {}
             (BindingKind::BuiltinOperation(_), Origin::Source(_) | Origin::Semantic) => {
@@ -55,22 +91,43 @@ fn validate_bindings(program: &Program) -> Result<()> {
     Ok(())
 }
 
-fn validate_declarations(program: &Program) -> Result<()> {
+fn validate_declarations(program: &Program, declarations: &DeclarationIndexes) -> Result<()> {
+    let mut product_identities = HashSet::new();
+    product_identities
+        .try_reserve(program.products.len())
+        .map_err(|_| Error::host("HIR product identity allocation failed"))?;
+    let product_field_count = program
+        .products
+        .iter()
+        .try_fold(0_usize, |count, product| {
+            count.checked_add(product.fields.len())
+        })
+        .ok_or_else(|| Error::host("HIR product field identity count overflow"))?;
+    let mut product_field_identities = HashSet::new();
+    product_field_identities
+        .try_reserve(product_field_count)
+        .map_err(|_| Error::host("HIR product field identity allocation failed"))?;
     for (index, product) in program.products.iter().enumerate() {
         require_dense(product.id.raw(), index, "HIR product")?;
         validate_origin(program, product.origin)?;
         if product.origin == Origin::Builtin {
             return Err(Error::msg("user product has a builtin origin"));
         }
-        if product.identity == [0; 32] || product.name.is_empty() {
+        if product.identity == [0; 32]
+            || !product_identities.insert(product.identity)
+            || product.name.is_empty()
+        {
             return Err(Error::msg("HIR product identity or name is invalid"));
         }
         for (field_index, field) in product.fields.iter().enumerate() {
             require_dense(field.source_order, field_index, "HIR product field")?;
-            if field.identity == [0; 32] || field.name.is_empty() {
+            if field.identity == [0; 32]
+                || !product_field_identities.insert(field.identity)
+                || field.name.is_empty()
+            {
                 return Err(Error::msg("HIR product field identity or name is invalid"));
             }
-            validate_type(program, &field.ty)?;
+            validate_type(program, declarations, &field.ty)?;
         }
     }
 
@@ -106,7 +163,7 @@ fn validate_declarations(program: &Program) -> Result<()> {
                 if !field.id.is_resolved() || !fields.insert(field.id) || field.name.is_empty() {
                     return Err(Error::msg("HIR enum field identity or name is invalid"));
                 }
-                validate_type(program, &field.ty)?;
+                validate_type(program, declarations, &field.ty)?;
             }
         }
     }
@@ -142,7 +199,7 @@ fn validate_declarations(program: &Program) -> Result<()> {
     Ok(())
 }
 
-fn validate_main(program: &Program) -> Result<()> {
+fn validate_main(program: &Program, declarations: &DeclarationIndexes) -> Result<()> {
     validate_program_origin(program, program.main.origin)?;
     if program.main.arity != program.main.params.len()
         || program.main.params.len() != program.main.param_places.len()
@@ -150,7 +207,7 @@ fn validate_main(program: &Program) -> Result<()> {
     {
         return Err(Error::msg("HIR main signature lengths are inconsistent"));
     }
-    validate_type(program, &program.main.return_type)?;
+    validate_type(program, declarations, &program.main.return_type)?;
     for (parameter, expected) in program.main.params.iter().zip(&program.main.param_types) {
         let binding = require_binding(program, *parameter, "HIR main parameter")?;
         if binding.kind != BindingKind::Parameter
@@ -159,7 +216,7 @@ fn validate_main(program: &Program) -> Result<()> {
         {
             return Err(Error::msg("HIR main parameter signature is stale"));
         }
-        validate_type(program, expected)?;
+        validate_type(program, declarations, expected)?;
     }
     if Type::join_control(&program.main.body.ty, &program.main.return_type)
         != Some(program.main.return_type.clone())
@@ -250,7 +307,7 @@ fn validate_global_layout(program: &Program) -> Result<()> {
     Ok(())
 }
 
-fn validate_match_plans(program: &Program) -> Result<()> {
+fn validate_match_plans(program: &Program, declarations: &DeclarationIndexes) -> Result<()> {
     for (index, plan) in program.match_plans.iter().enumerate() {
         require_dense(plan.id.raw(), index, "HIR match plan")?;
         validate_program_origin(program, plan.origin)?;
@@ -261,20 +318,27 @@ fn validate_match_plans(program: &Program) -> Result<()> {
         }
         validate_match_local(
             program,
+            declarations,
             plan.origin,
             &plan.scrutinee,
             BindingKind::MatchTemporary,
         )?;
-        validate_type(program, &plan.result_type)?;
+        validate_type(program, declarations, &plan.result_type)?;
         for (arm_index, arm) in plan.arms.iter().enumerate() {
             require_dense(arm.id, arm_index, "HIR match arm")?;
-            validate_type(program, &arm.body_type)?;
+            validate_type(program, declarations, &arm.body_type)?;
             if Type::join_control(&arm.body_type, &plan.result_type)
                 != Some(plan.result_type.clone())
             {
                 return Err(Error::msg("HIR match arm result type is stale"));
             }
-            validate_pattern(program, plan.origin, &arm.pattern, &plan.scrutinee.ty)?;
+            validate_pattern(
+                program,
+                declarations,
+                plan.origin,
+                &arm.pattern,
+                &plan.scrutinee.ty,
+            )?;
         }
         let expected_edges = plan
             .arms
@@ -305,6 +369,7 @@ fn validate_match_plans(program: &Program) -> Result<()> {
 
 fn validate_pattern(
     program: &Program,
+    declarations: &DeclarationIndexes,
     origin: Origin,
     root: &MatchPattern,
     expected: &Type,
@@ -319,9 +384,15 @@ fn validate_pattern(
             return Err(Error::msg("HIR match pattern type is stale"));
         }
         match pattern {
-            MatchPattern::Wildcard { ty } => validate_type(program, ty)?,
+            MatchPattern::Wildcard { ty } => validate_type(program, declarations, ty)?,
             MatchPattern::Binding { local } => {
-                validate_match_local(program, origin, local, BindingKind::ImmutableLocal)?;
+                validate_match_local(
+                    program,
+                    declarations,
+                    origin,
+                    local,
+                    BindingKind::ImmutableLocal,
+                )?;
             }
             MatchPattern::Bool(_) if expected == Type::Bool => {}
             MatchPattern::I64(_) if expected == Type::I64 => {}
@@ -338,10 +409,10 @@ fn validate_pattern(
                 if id != enum_id {
                     return Err(Error::msg("HIR match pattern enum identity is stale"));
                 }
-                let definition = program
-                    .enums
-                    .iter()
-                    .find(|definition| definition.id == *enum_id)
+                let definition = declarations
+                    .enums_by_id
+                    .get(enum_id)
+                    .and_then(|index| program.enums.get(*index))
                     .ok_or_else(|| Error::msg("HIR match pattern has a stale enum identity"))?;
                 if definition.layout.identity != *layout {
                     return Err(Error::msg("HIR match pattern has a stale enum layout"));
@@ -384,6 +455,7 @@ fn validate_pattern(
                         {
                             validate_match_local(
                                 program,
+                                declarations,
                                 origin,
                                 local,
                                 BindingKind::MatchTemporary,
@@ -429,6 +501,7 @@ fn validate_pattern(
                         {
                             validate_match_local(
                                 program,
+                                declarations,
                                 origin,
                                 local,
                                 BindingKind::MatchTemporary,
@@ -451,6 +524,7 @@ fn validate_pattern(
 
 fn validate_match_local(
     program: &Program,
+    declarations: &DeclarationIndexes,
     origin: Origin,
     local: &crate::hir::MatchLocal,
     kind: BindingKind,
@@ -459,10 +533,10 @@ fn validate_match_local(
     if binding.kind != kind || binding.origin != origin || binding.ty != local.ty {
         return Err(Error::msg("HIR match local signature or origin is stale"));
     }
-    validate_type(program, &local.ty)
+    validate_type(program, declarations, &local.ty)
 }
 
-fn validate_expressions(program: &Program) -> Result<()> {
+fn validate_expressions(program: &Program, declarations: &DeclarationIndexes) -> Result<()> {
     let mut unreachable_counts = Vec::new();
     unreachable_counts
         .try_reserve(program.match_plans.len())
@@ -470,6 +544,7 @@ fn validate_expressions(program: &Program) -> Result<()> {
     unreachable_counts.resize(program.match_plans.len(), (0_u64, 0_u64));
     validate_expression_root(
         program,
+        declarations,
         &program.main.body,
         program.main.local_count,
         &program.main.return_type,
@@ -481,6 +556,7 @@ fn validate_expressions(program: &Program) -> Result<()> {
             .ok_or_else(|| Error::msg("HIR function binding has no function signature"))?;
         validate_expression_root(
             program,
+            declarations,
             &function.body,
             function.local_count,
             return_type,
@@ -500,6 +576,7 @@ fn validate_expressions(program: &Program) -> Result<()> {
 
 fn validate_expression_root(
     program: &Program,
+    declarations: &DeclarationIndexes,
     root: &Expr,
     local_count: usize,
     return_type: &Type,
@@ -515,9 +592,10 @@ fn validate_expression_root(
         if !expression.effects.is_known() {
             return Err(Error::msg("complete HIR expression has unknown effects"));
         }
-        validate_type(program, &expression.ty)?;
+        validate_type(program, declarations, &expression.ty)?;
         validate_expression_kind(
             program,
+            declarations,
             expression,
             local_count,
             return_type,
@@ -530,6 +608,7 @@ fn validate_expression_root(
 
 fn validate_expression_kind(
     program: &Program,
+    declarations: &DeclarationIndexes,
     expression: &Expr,
     local_count: usize,
     return_type: &Type,
@@ -569,6 +648,7 @@ fn validate_expression_kind(
             }
             validate_call_signature(
                 program,
+                declarations,
                 &binding.ty,
                 args,
                 instantiation.as_ref(),
@@ -727,7 +807,14 @@ fn validate_expression_kind(
             layout,
             fields,
         } => {
-            validate_enum_use(program, *enum_id, *variant, *layout, fields.len())?;
+            validate_enum_use(
+                program,
+                declarations,
+                *enum_id,
+                *variant,
+                *layout,
+                fields.len(),
+            )?;
             validate_enum_type(&expression.ty, *enum_id)?;
         }
         ExprKind::EnumIsVariant {
@@ -736,7 +823,7 @@ fn validate_expression_kind(
             layout,
             value,
         } => {
-            validate_enum_use(program, *enum_id, *variant, *layout, 0)?;
+            validate_enum_use(program, declarations, *enum_id, *variant, *layout, 0)?;
             validate_enum_type(&value.ty, *enum_id)?;
             if expression.ty != Type::Bool {
                 return Err(Error::msg("HIR enum test result type is stale"));
@@ -759,7 +846,8 @@ fn validate_expression_kind(
             value,
             ..
         } => {
-            let selected = validate_enum_use(program, *enum_id, *variant, *layout, 0)?;
+            let selected =
+                validate_enum_use(program, declarations, *enum_id, *variant, *layout, 0)?;
             validate_enum_type(&value.ty, *enum_id)?;
             let selected_field = selected
                 .fields
@@ -823,6 +911,7 @@ fn validate_expression_kind(
 
 fn validate_call_signature(
     program: &Program,
+    declarations: &DeclarationIndexes,
     signature: &Type,
     arguments: &[Expr],
     instantiation: Option<&crate::hir::GenericInstantiation>,
@@ -839,7 +928,7 @@ fn validate_call_signature(
             .try_reserve(instantiation.substitutions.len())
             .map_err(|_| Error::host("HIR call substitution allocation failed"))?;
         for item in &instantiation.substitutions {
-            validate_type(program, &item.ty)?;
+            validate_type(program, declarations, &item.ty)?;
             if substitutions
                 .insert(item.parameter.clone(), item.ty.clone())
                 .is_some()
@@ -853,13 +942,39 @@ fn validate_call_signature(
                 program.traits.len(),
                 "HIR call trait witness",
             )?;
-            validate_type(program, &witness.ty)?;
+            validate_type(program, declarations, &witness.ty)?;
             if let crate::hir::TraitWitnessKind::Explicit(implementation) = &witness.kind {
-                require_index(
-                    implementation.raw(),
-                    program.implementations.len(),
-                    "HIR call implementation witness",
-                )?;
+                let selected = program
+                    .implementations
+                    .get(index_of(
+                        implementation.raw(),
+                        "HIR call implementation witness",
+                    )?)
+                    .filter(|selected| selected.id == *implementation)
+                    .ok_or_else(|| Error::msg("HIR call implementation witness is stale"))?;
+                if selected.trait_id != witness.trait_id {
+                    return Err(Error::msg(
+                        "HIR call implementation witness targets the wrong trait",
+                    ));
+                }
+                let Type::Product(product_name) = &witness.ty else {
+                    return Err(Error::msg(
+                        "HIR explicit implementation witness has a non-product type",
+                    ));
+                };
+                let product = program
+                    .products
+                    .get(index_of(
+                        selected.product.raw(),
+                        "HIR call implementation product",
+                    )?)
+                    .filter(|product| product.id == selected.product)
+                    .ok_or_else(|| Error::msg("HIR call implementation product is stale"))?;
+                if product.name != *product_name {
+                    return Err(Error::msg(
+                        "HIR call implementation witness targets the wrong product",
+                    ));
+                }
             }
         }
     }
@@ -938,17 +1053,18 @@ fn validate_enum_type(ty: &Type, expected: crate::hir::EnumId) -> Result<()> {
     Ok(())
 }
 
-fn validate_enum_use(
-    program: &Program,
+fn validate_enum_use<'a>(
+    program: &'a Program,
+    declarations: &DeclarationIndexes,
     id: crate::hir::EnumId,
     variant: crate::hir::VariantId,
     layout: crate::hir::RuntimeLayoutId,
     field_count: usize,
-) -> Result<&crate::hir::EnumVariant> {
-    let definition = program
-        .enums
-        .iter()
-        .find(|item| item.id == id)
+) -> Result<&'a crate::hir::EnumVariant> {
+    let definition = declarations
+        .enums_by_id
+        .get(&id)
+        .and_then(|index| program.enums.get(*index))
         .ok_or_else(|| Error::msg("HIR enum identity is stale"))?;
     if definition.layout.identity != layout {
         return Err(Error::msg("HIR enum layout identity is stale"));
@@ -1057,7 +1173,7 @@ fn child_count(kind: &ExprKind) -> Result<usize> {
     }
 }
 
-fn validate_type(program: &Program, root: &Type) -> Result<()> {
+fn validate_type(program: &Program, declarations: &DeclarationIndexes, root: &Type) -> Result<()> {
     let mut pending = Vec::new();
     pending
         .try_reserve(1)
@@ -1066,7 +1182,7 @@ fn validate_type(program: &Program, root: &Type) -> Result<()> {
     while let Some(ty) = pending.pop() {
         match ty {
             Type::Product(name) => {
-                if !program.products.iter().any(|product| product.name == *name) {
+                if !declarations.products_by_name.contains_key(name.as_str()) {
                     return Err(Error::msg("HIR type references an unknown product"));
                 }
             }
@@ -1075,10 +1191,10 @@ fn validate_type(program: &Program, root: &Type) -> Result<()> {
                 name,
                 arguments,
             } => {
-                let definition = program
-                    .enums
-                    .iter()
-                    .find(|definition| definition.id == *id)
+                let definition = declarations
+                    .enums_by_id
+                    .get(id)
+                    .and_then(|index| program.enums.get(*index))
                     .ok_or_else(|| Error::msg("HIR type references an unknown enum"))?;
                 if definition.name != *name || definition.type_parameters.len() != arguments.len() {
                     return Err(Error::msg("HIR enum type identity or arity is stale"));

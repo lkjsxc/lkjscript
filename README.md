@@ -34,8 +34,11 @@ non-recursive drafts. Implemented drafts include immutable lexical locals, selec
 built-in operations, byte-vector move/borrow, product/enum construction and observation, and
 source-free exhaustive enum payload matches. Match arms use flat `PatternDraft` trees; named payload
 bindings receive stable workspace entities while compiler-only scrutinee/projection storage remains
-hidden. The complete immutable `WorkspaceSnapshot` derives compiler HIR directly, without rendering
-or parsing source. Imported and programmatically constructed programs use the same canonical match
+hidden. Transactions can delete callables and whole user product/enum declarations atomically;
+owned members and target implementations cascade, independent surviving dependents block, private
+dense identities compact, and public survivor identities remain stable. The complete immutable
+`WorkspaceSnapshot` derives compiler HIR directly, without rendering or parsing source. Imported and
+programmatically constructed programs use the same canonical match
 checker/lowering, semantic authority, query/index model, completeness gate, ownership checker, and
 compiler boundary.
 
