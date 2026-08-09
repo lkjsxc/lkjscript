@@ -119,6 +119,98 @@ pub(super) fn flatten_plan(
     Ok((tests, projections, bindings))
 }
 
+pub(super) fn build_plan(
+    id: MatchPlanId,
+    origin: Origin,
+    scrutinee: MatchLocal,
+    arms: Vec<PlannedMatchArm>,
+    enums: &[EnumDefinition],
+    products: &[ProductDefinition],
+) -> Result<MatchPlan> {
+    if arms.is_empty() {
+        return Err(Error::msg("match arms must not be empty"));
+    }
+    let mut result_type = Type::Never;
+    for arm in &arms {
+        result_type = Type::join_control(&result_type, &arm.body_type).ok_or_else(|| {
+            Error::msg(format!(
+                "reachable match arm types must be exactly equal: {} vs {}",
+                result_type, arm.body_type
+            ))
+        })?;
+    }
+    check_usefulness(&arms, &scrutinee.ty, enums, products)?;
+    let (tests, projections, bindings) = flatten_plan(&arms)?;
+    let edge_capacity = arms
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| Error::host("match edge count overflow"))?;
+    let mut edges = Vec::new();
+    edges
+        .try_reserve(edge_capacity)
+        .map_err(|_| Error::host("match edge allocation failed"))?;
+    for index in 1..arms.len() {
+        edges.push(MatchEdgeTarget::Arm(
+            u64::try_from(index).map_err(|_| Error::msg("match arm index exceeds u64"))?,
+        ));
+    }
+    edges.extend([MatchEdgeTarget::Default, MatchEdgeTarget::Unreachable]);
+    Ok(MatchPlan {
+        id,
+        origin,
+        scrutinee,
+        result_type,
+        arms,
+        tests,
+        projections,
+        bindings,
+        edges,
+        exhaustive: true,
+        witness: None,
+    })
+}
+
+fn check_usefulness(
+    arms: &[PlannedMatchArm],
+    scrutinee: &Type,
+    enums: &[EnumDefinition],
+    products: &[ProductDefinition],
+) -> Result<()> {
+    let mut matrix = Vec::new();
+    matrix
+        .try_reserve(arms.len())
+        .map_err(|_| Error::host("match usefulness input matrix allocation failed"))?;
+    let mut usefulness = super::usefulness::Usefulness::new(enums, products)?;
+    for arm in arms {
+        let candidate = [&arm.pattern];
+        if usefulness
+            .useful(&matrix, &candidate, std::slice::from_ref(scrutinee))?
+            .is_none()
+        {
+            return Err(Error::msg(format!(
+                "useless or subsumed match arm {}",
+                arm.id
+            )));
+        }
+        matrix.push(&arm.pattern);
+    }
+    let wildcard = MatchPattern::Wildcard {
+        ty: scrutinee.clone(),
+    };
+    if let Some(witness) =
+        usefulness.useful(&matrix, &[&wildcard], std::slice::from_ref(scrutinee))?
+    {
+        let root = *witness
+            .first()
+            .ok_or_else(|| Error::msg("match usefulness returned an empty witness"))?;
+        let rendered = usefulness.render_witness(root)?;
+        return Err(Error::msg(format!(
+            "nonexhaustive match; canonical typed witness: {rendered}",
+        )));
+    }
+    Ok(())
+}
+
 fn clone_path(path: &[u64]) -> Result<Vec<u64>> {
     let mut output = Vec::new();
     reserve(&mut output, path.len(), "match plan path copy")?;

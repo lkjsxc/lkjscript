@@ -118,6 +118,12 @@ fn collect_direct_callees_inner(
             collect_direct_callees(then_branch, binding_to_function, callees);
             collect_direct_callees(else_branch, binding_to_function, callees);
         }
+        ExprKind::Match {
+            scrutinee, arms, ..
+        } => {
+            collect_direct_callees(scrutinee, binding_to_function, callees);
+            collect_direct_callees_slice(arms, binding_to_function, callees);
+        }
         ExprKind::Let { bindings, body } => {
             for binding in bindings {
                 collect_direct_callees(&binding.value, binding_to_function, callees);

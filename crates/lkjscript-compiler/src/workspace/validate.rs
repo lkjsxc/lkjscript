@@ -253,13 +253,18 @@ fn validate_global_layout(program: &Program) -> Result<()> {
 fn validate_match_plans(program: &Program) -> Result<()> {
     for (index, plan) in program.match_plans.iter().enumerate() {
         require_dense(plan.id.raw(), index, "HIR match plan")?;
-        validate_source(program, plan.origin)?;
+        validate_program_origin(program, plan.origin)?;
         if plan.arms.is_empty() || !plan.exhaustive || plan.witness.is_some() {
             return Err(Error::msg(
                 "HIR complete match plan has stale completeness facts",
             ));
         }
-        validate_match_local(program, plan.origin, &plan.scrutinee)?;
+        validate_match_local(
+            program,
+            plan.origin,
+            &plan.scrutinee,
+            BindingKind::MatchTemporary,
+        )?;
         validate_type(program, &plan.result_type)?;
         for (arm_index, arm) in plan.arms.iter().enumerate() {
             require_dense(arm.id, arm_index, "HIR match arm")?;
@@ -300,7 +305,7 @@ fn validate_match_plans(program: &Program) -> Result<()> {
 
 fn validate_pattern(
     program: &Program,
-    origin: SourceId,
+    origin: Origin,
     root: &MatchPattern,
     expected: &Type,
 ) -> Result<()> {
@@ -315,16 +320,24 @@ fn validate_pattern(
         }
         match pattern {
             MatchPattern::Wildcard { ty } => validate_type(program, ty)?,
-            MatchPattern::Binding { local } => validate_match_local(program, origin, local)?,
+            MatchPattern::Binding { local } => {
+                validate_match_local(program, origin, local, BindingKind::ImmutableLocal)?;
+            }
             MatchPattern::Bool(_) if expected == Type::Bool => {}
             MatchPattern::I64(_) if expected == Type::I64 => {}
             MatchPattern::Variant {
+                ty,
                 enum_id,
                 variant,
                 layout,
                 fields,
-                ..
             } => {
+                let Type::Enum { id, arguments, .. } = ty else {
+                    return Err(Error::msg("HIR variant pattern lost its enum type"));
+                };
+                if id != enum_id {
+                    return Err(Error::msg("HIR match pattern enum identity is stale"));
+                }
                 let definition = program
                     .enums
                     .iter()
@@ -341,6 +354,20 @@ fn validate_pattern(
                 if fields.len() != selected.fields.len() {
                     return Err(Error::msg("HIR match pattern has stale variant fields"));
                 }
+                if definition.type_parameters.len() != arguments.len() {
+                    return Err(Error::msg("HIR match enum arguments are stale"));
+                }
+                let mut substitutions = HashMap::new();
+                substitutions
+                    .try_reserve(definition.type_parameters.len())
+                    .map_err(|_| Error::host("HIR match substitution allocation failed"))?;
+                substitutions.extend(
+                    definition
+                        .type_parameters
+                        .iter()
+                        .cloned()
+                        .zip(arguments.iter().cloned()),
+                );
                 pending
                     .try_reserve(fields.len())
                     .map_err(|_| Error::host("HIR match pattern work allocation failed"))?;
@@ -348,18 +375,41 @@ fn validate_pattern(
                     if field.name != declared.name || field.field_index != declared.source_order {
                         return Err(Error::msg("HIR match field identity is stale"));
                     }
-                    if let Some(local) = &field.projection {
-                        validate_match_local(program, origin, local)?;
+                    let field_type = declared.ty.subst(&substitutions);
+                    match (&field.projection, &field.pattern) {
+                        (None, MatchPattern::Wildcard { .. }) => {}
+                        (Some(local), pattern)
+                            if !matches!(pattern, MatchPattern::Wildcard { .. })
+                                && local.ty == field_type =>
+                        {
+                            validate_match_local(
+                                program,
+                                origin,
+                                local,
+                                BindingKind::MatchTemporary,
+                            )?;
+                        }
+                        _ => {
+                            return Err(Error::msg(
+                                "HIR match wildcard/projection metadata is stale",
+                            ))
+                        }
                     }
-                    pending.push((&field.pattern, field.pattern.ty()));
+                    pending.push((&field.pattern, field_type));
                 }
             }
             MatchPattern::Product {
-                product, fields, ..
+                ty,
+                product,
+                fields,
             } => {
+                let Type::Product(name) = ty else {
+                    return Err(Error::msg("HIR product pattern lost its product type"));
+                };
                 let definition = program
                     .products
                     .get(index_of(product.raw(), "HIR match product")?)
+                    .filter(|definition| definition.id == *product && definition.name == *name)
                     .ok_or_else(|| Error::msg("HIR match pattern has a stale product identity"))?;
                 if fields.len() != definition.fields.len() {
                     return Err(Error::msg("HIR match pattern has stale product fields"));
@@ -371,10 +421,26 @@ fn validate_pattern(
                     if field.name != declared.name || field.field_index != declared.source_order {
                         return Err(Error::msg("HIR match field identity is stale"));
                     }
-                    if let Some(local) = &field.projection {
-                        validate_match_local(program, origin, local)?;
+                    match (&field.projection, &field.pattern) {
+                        (None, MatchPattern::Wildcard { .. }) => {}
+                        (Some(local), pattern)
+                            if !matches!(pattern, MatchPattern::Wildcard { .. })
+                                && local.ty == declared.ty =>
+                        {
+                            validate_match_local(
+                                program,
+                                origin,
+                                local,
+                                BindingKind::MatchTemporary,
+                            )?;
+                        }
+                        _ => {
+                            return Err(Error::msg(
+                                "HIR match wildcard/projection metadata is stale",
+                            ))
+                        }
                     }
-                    pending.push((&field.pattern, field.pattern.ty()));
+                    pending.push((&field.pattern, declared.ty.clone()));
                 }
             }
             _ => return Err(Error::msg("HIR match literal type is stale")),
@@ -385,14 +451,12 @@ fn validate_pattern(
 
 fn validate_match_local(
     program: &Program,
-    origin: SourceId,
+    origin: Origin,
     local: &crate::hir::MatchLocal,
+    kind: BindingKind,
 ) -> Result<()> {
     let binding = require_binding(program, local.binding, "HIR match local")?;
-    if binding.kind != BindingKind::ImmutableLocal
-        || binding.origin != Origin::Source(origin)
-        || binding.ty != local.ty
-    {
+    if binding.kind != kind || binding.origin != origin || binding.ty != local.ty {
         return Err(Error::msg("HIR match local signature or origin is stale"));
     }
     validate_type(program, &local.ty)
@@ -403,11 +467,10 @@ fn validate_expressions(program: &Program) -> Result<()> {
     unreachable_counts
         .try_reserve(program.match_plans.len())
         .map_err(|_| Error::host("HIR match marker consistency allocation failed"))?;
-    unreachable_counts.resize(program.match_plans.len(), 0_u64);
+    unreachable_counts.resize(program.match_plans.len(), (0_u64, 0_u64));
     validate_expression_root(
         program,
         &program.main.body,
-        program.main.origin,
         program.main.local_count,
         &program.main.return_type,
         &mut unreachable_counts,
@@ -419,15 +482,17 @@ fn validate_expressions(program: &Program) -> Result<()> {
         validate_expression_root(
             program,
             &function.body,
-            function.origin,
             function.local_count,
             return_type,
             &mut unreachable_counts,
         )?;
     }
-    if unreachable_counts.iter().any(|count| *count != 1) {
+    if unreachable_counts
+        .iter()
+        .any(|(semantic, lowered)| semantic.checked_add(*lowered) != Some(1))
+    {
         return Err(Error::msg(
-            "HIR match plan has missing or duplicate unreachable provenance",
+            "HIR match plan has missing or duplicate semantic/lowered provenance",
         ));
     }
     Ok(())
@@ -436,10 +501,9 @@ fn validate_expressions(program: &Program) -> Result<()> {
 fn validate_expression_root(
     program: &Program,
     root: &Expr,
-    origin: Origin,
     local_count: usize,
     return_type: &Type,
-    unreachable_counts: &mut [u64],
+    unreachable_counts: &mut [(u64, u64)],
 ) -> Result<()> {
     let mut pending = Vec::new();
     pending
@@ -455,7 +519,6 @@ fn validate_expression_root(
         validate_expression_kind(
             program,
             expression,
-            origin,
             local_count,
             return_type,
             unreachable_counts,
@@ -468,10 +531,9 @@ fn validate_expression_root(
 fn validate_expression_kind(
     program: &Program,
     expression: &Expr,
-    origin: Origin,
     local_count: usize,
     return_type: &Type,
-    unreachable_counts: &mut [u64],
+    unreachable_counts: &mut [(u64, u64)],
 ) -> Result<()> {
     match &expression.kind {
         ExprKind::Hole => return Err(Error::msg("complete HIR contains a hole")),
@@ -579,7 +641,7 @@ fn validate_expression_kind(
                     program,
                     local.binding,
                     local.slot,
-                    origin,
+                    Some(expression.origin),
                     local_count,
                     &local.value.ty,
                 )?;
@@ -595,7 +657,14 @@ fn validate_expression_kind(
             body,
             ..
         } => {
-            validate_local_binding(program, *binding, *slot, origin, local_count, &initial.ty)?;
+            validate_local_binding(
+                program,
+                *binding,
+                *slot,
+                Some(expression.origin),
+                local_count,
+                &initial.ty,
+            )?;
             if Type::join_control(&body.ty, &expression.ty) != Some(expression.ty.clone()) {
                 return Err(Error::msg("HIR mutable-local body type is stale"));
             }
@@ -605,7 +674,7 @@ fn validate_expression_kind(
             slot,
             value,
         } => {
-            validate_local_binding(program, *target, *slot, origin, local_count, &value.ty)?;
+            validate_local_binding(program, *target, *slot, None, local_count, &value.ty)?;
             if expression.ty != Type::Unit {
                 return Err(Error::msg("HIR set-local result type is stale"));
             }
@@ -700,6 +769,33 @@ fn validate_expression_kind(
                 return Err(Error::msg("HIR enum field stable identity is stale"));
             }
         }
+        ExprKind::Match {
+            plan,
+            scrutinee,
+            arms,
+        } => {
+            let index = index_of(plan.raw(), "HIR match plan")?;
+            let planned = program
+                .match_plans
+                .get(index)
+                .filter(|item| item.id == *plan)
+                .ok_or_else(|| Error::msg("HIR semantic match plan identity is stale"))?;
+            if expression.origin != planned.origin
+                || expression.ty != planned.result_type
+                || scrutinee.ty != planned.scrutinee.ty
+                || arms.len() != planned.arms.len()
+                || arms
+                    .iter()
+                    .zip(&planned.arms)
+                    .any(|(body, arm)| body.ty != arm.body_type)
+            {
+                return Err(Error::msg("HIR semantic match facts are stale"));
+            }
+            unreachable_counts[index].0 = unreachable_counts[index]
+                .0
+                .checked_add(1)
+                .ok_or_else(|| Error::msg("HIR semantic match marker count overflow"))?;
+        }
         ExprKind::MatchUnreachable { plan } => {
             let index = index_of(plan.raw(), "HIR match plan")?;
             let planned = program
@@ -707,10 +803,11 @@ fn validate_expression_kind(
                 .get(index)
                 .filter(|item| item.id == *plan)
                 .ok_or_else(|| Error::msg("HIR match marker plan identity is stale"))?;
-            if expression.ty != Type::Never || expression.origin != Origin::Source(planned.origin) {
+            if expression.ty != Type::Never || expression.origin != planned.origin {
                 return Err(Error::msg("HIR match marker type or origin is stale"));
             }
-            unreachable_counts[index] = unreachable_counts[index]
+            unreachable_counts[index].1 = unreachable_counts[index]
+                .1
                 .checked_add(1)
                 .ok_or_else(|| Error::msg("HIR match marker count overflow"))?;
         }
@@ -811,17 +908,20 @@ fn validate_local_binding(
     program: &Program,
     binding: BindingId,
     slot: usize,
-    origin: Origin,
+    origin: Option<Origin>,
     local_count: usize,
     value_type: &Type,
 ) -> Result<()> {
     let binding = require_binding(program, binding, "HIR local binding")?;
     if slot >= local_count
-        || binding.origin != origin
+        || origin.is_some_and(|origin| binding.origin != origin)
         || binding.ty != *value_type
         || !matches!(
             binding.kind,
-            BindingKind::ImmutableLocal | BindingKind::StaticBytesLocal | BindingKind::MutableLocal
+            BindingKind::ImmutableLocal
+                | BindingKind::MatchTemporary
+                | BindingKind::StaticBytesLocal
+                | BindingKind::MutableLocal
         )
     {
         return Err(Error::msg(

@@ -67,6 +67,59 @@ pub struct FunctionSignatureView {
     pub result: SemanticTypeView,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchView {
+    pub revision: RevisionId,
+    pub site: NodeId,
+    pub scrutinee: NodeId,
+    pub result: SemanticTypeView,
+    pub arms: Vec<MatchArmView>,
+    pub exhaustive: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchArmView {
+    pub id: u64,
+    pub pattern_root: u64,
+    pub patterns: Vec<MatchPatternNodeView>,
+    pub body: NodeId,
+    pub result: SemanticTypeView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchPatternNodeView {
+    /// Review-local dense pattern label; not a workspace edit identity.
+    pub id: u64,
+    pub ty: SemanticTypeView,
+    pub kind: MatchPatternKindView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum MatchPatternKindView {
+    Wildcard,
+    Binding {
+        binding: EntityId,
+    },
+    Bool(bool),
+    I64(i64),
+    EnumVariant {
+        enumeration: Option<EntityId>,
+        variant: Option<EntityId>,
+        fields: Vec<MatchPatternFieldView>,
+    },
+    Product {
+        product: EntityId,
+        fields: Vec<MatchPatternFieldView>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchPatternFieldView {
+    pub field: Option<EntityId>,
+    pub pattern: u64,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ConstructorStatus {
     Established,
@@ -228,6 +281,74 @@ impl WorkspaceSnapshot {
                 .as_ref()
                 .map(|ty| super::types::view(&self.program, &self.indexes, ty))
                 .transpose()?,
+        })
+    }
+
+    pub fn match_view(
+        &self,
+        revision: RevisionId,
+        site: NodeId,
+    ) -> Result<MatchView, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        let header = self.workspace_node(site)?;
+        if header.kind != super::NodeKind::Match {
+            return Err(WorkspaceError::WrongEntityKind {
+                operation: Arc::from("match query"),
+                expected: Arc::from("match node"),
+                actual: Arc::from(format!("{:?}", header.kind)),
+            });
+        }
+        let node_index = self
+            .indexes
+            .node_lookup
+            .get(&site)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match node")))?;
+        let plan_id = self
+            .indexes
+            .node_match_plans
+            .get(node_index)
+            .copied()
+            .flatten()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match plan index")))?;
+        let plan = self
+            .program
+            .match_plans
+            .get(host_index(plan_id.raw(), "match plan")?)
+            .filter(|item| item.id == plan_id)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match plan")))?;
+        let children = self
+            .indexes
+            .node_children
+            .get(&site)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        if children.len() != plan.arms.len() + 1 {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "match node children are inconsistent with its plan",
+            )));
+        }
+        let scrutinee = children[0];
+        let mut arms = Vec::new();
+        arms.try_reserve(plan.arms.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("match view allocation failed")))?;
+        for (index, arm) in plan.arms.iter().enumerate() {
+            let (patterns, pattern_root) = pattern_view(self, &arm.pattern)?;
+            arms.push(MatchArmView {
+                id: arm.id,
+                pattern_root,
+                patterns,
+                body: children[index + 1],
+                result: super::types::view(&self.program, &self.indexes, &arm.body_type)?,
+            });
+        }
+        Ok(MatchView {
+            revision,
+            site,
+            scrutinee,
+            result: super::types::view(&self.program, &self.indexes, &plan.result_type)?,
+            arms,
+            exhaustive: plan.exhaustive,
         })
     }
 
@@ -552,6 +673,289 @@ impl WorkspaceSnapshot {
             .node(self.namespace, id)
             .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("node")))
     }
+}
+
+fn pattern_view(
+    snapshot: &WorkspaceSnapshot,
+    root: &crate::hir::MatchPattern,
+) -> Result<(Vec<MatchPatternNodeView>, u64), WorkspaceError> {
+    enum Work<'a> {
+        Visit(&'a crate::hir::MatchPattern),
+        Variant {
+            pattern: &'a crate::hir::MatchPattern,
+            enumeration: crate::hir::EnumId,
+            variant: crate::hir::VariantId,
+            fields: &'a [crate::hir::MatchFieldPattern],
+        },
+        Product {
+            pattern: &'a crate::hir::MatchPattern,
+            product: lkjscript_core::ProductId,
+            fields: &'a [crate::hir::MatchFieldPattern],
+        },
+    }
+    let mut work = Vec::new();
+    work.try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match pattern view allocation failed")))?;
+    work.push(Work::Visit(root));
+    let mut completed = Vec::new();
+    let mut output = Vec::new();
+    while let Some(item) = work.pop() {
+        match item {
+            Work::Visit(pattern) => match pattern {
+                crate::hir::MatchPattern::Variant {
+                    enum_id,
+                    variant,
+                    fields,
+                    ..
+                } => {
+                    work.try_reserve(fields.len().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("match pattern work overflow"))
+                    })?)
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("match pattern work allocation failed"))
+                    })?;
+                    work.push(Work::Variant {
+                        pattern,
+                        enumeration: *enum_id,
+                        variant: *variant,
+                        fields,
+                    });
+                    work.extend(fields.iter().rev().map(|field| Work::Visit(&field.pattern)));
+                }
+                crate::hir::MatchPattern::Product {
+                    product, fields, ..
+                } => {
+                    work.try_reserve(fields.len().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("match pattern work overflow"))
+                    })?)
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from("match pattern work allocation failed"))
+                    })?;
+                    work.push(Work::Product {
+                        pattern,
+                        product: *product,
+                        fields,
+                    });
+                    work.extend(fields.iter().rev().map(|field| Work::Visit(&field.pattern)));
+                }
+                crate::hir::MatchPattern::Wildcard { .. }
+                | crate::hir::MatchPattern::Binding { .. }
+                | crate::hir::MatchPattern::Bool(_)
+                | crate::hir::MatchPattern::I64(_) => {
+                    let kind = match pattern {
+                        crate::hir::MatchPattern::Wildcard { .. } => MatchPatternKindView::Wildcard,
+                        crate::hir::MatchPattern::Binding { local } => {
+                            let binding = snapshot
+                                .indexes
+                                .address_entities
+                                .get(&super::model::EntityAddress::Binding(local.binding.raw()))
+                                .copied()
+                                .ok_or_else(|| {
+                                    WorkspaceError::StaleIdentity(Arc::from(
+                                        "match pattern binding",
+                                    ))
+                                })?;
+                            MatchPatternKindView::Binding { binding }
+                        }
+                        crate::hir::MatchPattern::Bool(value) => MatchPatternKindView::Bool(*value),
+                        crate::hir::MatchPattern::I64(value) => MatchPatternKindView::I64(*value),
+                        _ => unreachable!("aggregate patterns handled above"),
+                    };
+                    push_pattern_view(snapshot, pattern, kind, &mut output, &mut completed)?;
+                }
+            },
+            Work::Variant {
+                pattern,
+                enumeration,
+                variant,
+                fields,
+            } => {
+                let children = take_pattern_results(&mut completed, fields.len())?;
+                let (enumeration_entity, variant_entity, field_entities) =
+                    enum_pattern_entities(snapshot, enumeration, variant, fields)?;
+                let mut field_views = Vec::new();
+                field_views.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match field view allocation failed"))
+                })?;
+                for (field, (entity, child)) in
+                    fields.iter().zip(field_entities.into_iter().zip(children))
+                {
+                    let _ = field;
+                    field_views.push(MatchPatternFieldView {
+                        field: entity,
+                        pattern: child,
+                    });
+                }
+                push_pattern_view(
+                    snapshot,
+                    pattern,
+                    MatchPatternKindView::EnumVariant {
+                        enumeration: enumeration_entity,
+                        variant: variant_entity,
+                        fields: field_views,
+                    },
+                    &mut output,
+                    &mut completed,
+                )?;
+            }
+            Work::Product {
+                pattern,
+                product,
+                fields,
+            } => {
+                let children = take_pattern_results(&mut completed, fields.len())?;
+                let raw = product.raw();
+                let product_entity = snapshot
+                    .indexes
+                    .address_entities
+                    .get(&super::model::EntityAddress::Product(raw))
+                    .copied()
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match product")))?;
+                let mut field_views = Vec::new();
+                field_views.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match field view allocation failed"))
+                })?;
+                for (field, child) in fields.iter().zip(children) {
+                    let entity = snapshot
+                        .indexes
+                        .address_entities
+                        .get(&super::model::EntityAddress::ProductField {
+                            product: raw,
+                            field: field.field_index,
+                        })
+                        .copied();
+                    field_views.push(MatchPatternFieldView {
+                        field: entity,
+                        pattern: child,
+                    });
+                }
+                push_pattern_view(
+                    snapshot,
+                    pattern,
+                    MatchPatternKindView::Product {
+                        product: product_entity,
+                        fields: field_views,
+                    },
+                    &mut output,
+                    &mut completed,
+                )?;
+            }
+        }
+    }
+    let root = completed
+        .pop()
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("match pattern root is missing")))?;
+    if completed.is_empty() {
+        Ok((output, root))
+    } else {
+        Err(WorkspaceError::Validation(Arc::from(
+            "match pattern view left disconnected results",
+        )))
+    }
+}
+
+fn push_pattern_view(
+    snapshot: &WorkspaceSnapshot,
+    pattern: &crate::hir::MatchPattern,
+    kind: MatchPatternKindView,
+    output: &mut Vec<MatchPatternNodeView>,
+    completed: &mut Vec<u64>,
+) -> Result<(), WorkspaceError> {
+    let id = u64::try_from(output.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match pattern label exceeds u64")))?;
+    output
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match pattern view allocation failed")))?;
+    output.push(MatchPatternNodeView {
+        id,
+        ty: super::types::view(&snapshot.program, &snapshot.indexes, &pattern.ty())?,
+        kind,
+    });
+    completed
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match pattern result allocation failed")))?;
+    completed.push(id);
+    Ok(())
+}
+
+fn take_pattern_results(
+    completed: &mut Vec<u64>,
+    count: usize,
+) -> Result<Vec<u64>, WorkspaceError> {
+    let start = completed.len().checked_sub(count).ok_or_else(|| {
+        WorkspaceError::Validation(Arc::from("match pattern child results are missing"))
+    })?;
+    let mut children = Vec::new();
+    children
+        .try_reserve(count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match child result allocation failed")))?;
+    children.extend_from_slice(&completed[start..]);
+    completed.truncate(start);
+    Ok(children)
+}
+
+type MatchEnumEntities = (Option<EntityId>, Option<EntityId>, Vec<Option<EntityId>>);
+
+fn enum_pattern_entities(
+    snapshot: &WorkspaceSnapshot,
+    enumeration: crate::hir::EnumId,
+    variant: crate::hir::VariantId,
+    fields: &[crate::hir::MatchFieldPattern],
+) -> Result<MatchEnumEntities, WorkspaceError> {
+    let enum_index = snapshot
+        .indexes
+        .enum_identity_indices
+        .get(&enumeration)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match enum")))?;
+    let (variant_enum_index, variant_index) = snapshot
+        .indexes
+        .variant_identity_indices
+        .get(&(enumeration, variant))
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match enum variant")))?;
+    if variant_enum_index != enum_index {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "match variant query index is inconsistent",
+        )));
+    }
+    let enumeration = u64::try_from(enum_index)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match enum index exceeds u64")))?;
+    let variant = u64::try_from(variant_index)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match variant index exceeds u64")))?;
+    let enumeration_entity = snapshot
+        .indexes
+        .address_entities
+        .get(&super::model::EntityAddress::Enum(enumeration))
+        .copied();
+    let variant_entity = snapshot
+        .indexes
+        .address_entities
+        .get(&super::model::EntityAddress::EnumVariant {
+            enumeration,
+            variant,
+        })
+        .copied();
+    let mut field_entities = Vec::new();
+    field_entities
+        .try_reserve(fields.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match field allocation failed")))?;
+    field_entities.extend(fields.iter().map(|field| {
+        snapshot
+            .indexes
+            .address_entities
+            .get(&super::model::EntityAddress::EnumField {
+                enumeration,
+                variant,
+                field: field.field_index,
+            })
+            .copied()
+    }));
+    Ok((enumeration_entity, variant_entity, field_entities))
+}
+
+fn host_index(raw: u64, subject: &str) -> Result<usize, WorkspaceError> {
+    usize::try_from(raw).map_err(|_| WorkspaceError::StaleIdentity(Arc::from(subject.to_owned())))
 }
 
 fn page<T: Clone>(

@@ -10,6 +10,9 @@ impl MatchPlanId {
     pub const fn raw(self) -> u64 {
         self.0
     }
+    pub(crate) fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -335,7 +338,7 @@ pub struct PlannedMatchArm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchPlan {
     pub(crate) id: MatchPlanId,
-    pub(crate) origin: SourceId,
+    pub(crate) origin: Origin,
     pub(crate) scrutinee: MatchLocal,
     pub(crate) result_type: Type,
     pub(crate) arms: Vec<PlannedMatchArm>,

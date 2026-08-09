@@ -187,12 +187,14 @@ pub(in crate::codegen) fn compile_function(
     instruction_links
         .try_reserve_exact(instruction_count)
         .map_err(|_| Error::host("bytecode instruction-link reservation failed"))?;
+    let nonowned_structural_values = collect_nonowned_structural_values(function);
     let mut emitter = Emitter {
         chunk,
         globals,
         function,
         slots,
         local_metadata: metadata,
+        nonowned_structural_values,
         code_base,
         proto,
         block_offsets,

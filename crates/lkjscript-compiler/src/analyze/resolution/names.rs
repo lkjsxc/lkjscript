@@ -5,6 +5,7 @@ impl Resolver<'_> {
         let storage = match self.analyzer.binding(binding)?.kind {
             BindingKind::Parameter
             | BindingKind::ImmutableLocal
+            | BindingKind::MatchTemporary
             | BindingKind::StaticBytesLocal
             | BindingKind::MutableLocal => {
                 BindingStorage::Local(self.local_slots.get(&binding).copied().ok_or_else(|| {
@@ -81,6 +82,9 @@ impl Resolver<'_> {
             | ExprKind::I64FromF64Exact(value)
             | ExprKind::I64FromF64Trunc(value) => value.effects.union(EffectSet::ALLOCATES),
             ExprKind::Do(expressions) => fold_effects(expressions),
+            ExprKind::Match {
+                scrutinee, arms, ..
+            } => scrutinee.effects.union(fold_effects(arms)),
             ExprKind::If {
                 condition,
                 then_branch,

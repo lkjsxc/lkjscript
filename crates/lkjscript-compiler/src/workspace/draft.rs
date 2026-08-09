@@ -15,6 +15,20 @@ impl DraftNodeId {
     }
 }
 
+/// Dense identity into one flat match-pattern draft. It is never a workspace identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DraftPatternNodeId(u64);
+
+impl DraftPatternNodeId {
+    pub const fn new(index: u64) -> Self {
+        Self(index)
+    }
+
+    pub(super) fn index(self) -> Option<usize> {
+        usize::try_from(self.0).ok()
+    }
+}
+
 /// Identity of one immutable local inside a single [`ExpressionDraft`].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DraftBindingId(u64);
@@ -49,6 +63,66 @@ pub struct LocalDraft {
 pub struct DraftFieldValue {
     pub field: EntityId,
     pub value: DraftNodeId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DraftPatternField {
+    pub field: EntityId,
+    pub pattern: DraftPatternNodeId,
+}
+
+/// One flat non-recursive pattern tree owned by a match arm.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PatternDraft {
+    pub nodes: Vec<DraftPatternNode>,
+    pub root: DraftPatternNodeId,
+}
+
+impl PatternDraft {
+    pub fn new(nodes: Vec<DraftPatternNode>, root: DraftPatternNodeId) -> Self {
+        Self { nodes, root }
+    }
+
+    pub fn wildcard() -> Self {
+        Self::new(vec![DraftPatternNode::Wildcard], DraftPatternNodeId::new(0))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum DraftPatternNode {
+    Wildcard,
+    Binding {
+        binding: DraftBindingId,
+        name: String,
+    },
+    EnumVariant {
+        variant: EntityId,
+        fields: Vec<DraftPatternField>,
+    },
+}
+
+impl DraftPatternNode {
+    pub(super) fn child_count(&self) -> usize {
+        match self {
+            Self::EnumVariant { fields, .. } => fields.len(),
+            Self::Wildcard | Self::Binding { .. } => 0,
+        }
+    }
+
+    pub(super) fn for_each_child(&self, mut visit: impl FnMut(DraftPatternNodeId)) {
+        if let Self::EnumVariant { fields, .. } = self {
+            for field in fields {
+                visit(field.pattern);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchArmDraft {
+    pub pattern: PatternDraft,
+    pub body: DraftNodeId,
 }
 
 /// A non-recursive proposed expression graph. Child IDs refer to entries in `nodes`.
@@ -124,6 +198,10 @@ pub enum DraftNode {
         variant: EntityId,
         value: DraftNodeId,
     },
+    Match {
+        scrutinee: DraftNodeId,
+        arms: Vec<MatchArmDraft>,
+    },
 }
 
 impl DraftNode {
@@ -138,6 +216,7 @@ impl DraftNode {
                 Some(fields.len())
             }
             Self::ProductField { .. } | Self::EnumIsVariant { .. } => Some(1),
+            Self::Match { arms, .. } => arms.len().checked_add(1),
             _ => Some(0),
         }
     }
@@ -170,6 +249,12 @@ impl DraftNode {
                 }
             }
             Self::ProductField { value, .. } | Self::EnumIsVariant { value, .. } => visit(*value),
+            Self::Match { scrutinee, arms } => {
+                visit(*scrutinee);
+                for arm in arms {
+                    visit(arm.body);
+                }
+            }
             _ => {}
         }
     }

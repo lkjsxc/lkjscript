@@ -103,7 +103,7 @@ impl SemanticProgram {
                 body: function.body.try_clone()?,
             });
         }
-        Ok(hir::Program {
+        let mut complete = hir::Program {
             sources: clone_values(sources, "source provenance")?,
             bindings: clone_values(&self.bindings, "bindings")?,
             products: clone_values(&self.products, "products")?,
@@ -123,7 +123,10 @@ impl SemanticProgram {
                 body: main.body.try_clone()?,
             },
             global_layout: clone_values(&self.global_layout, "global layout")?,
-        })
+        };
+        crate::analyze::lower_semantic_matches(&mut complete)?;
+        crate::effects::infer(&mut complete);
+        Ok(complete)
     }
 }
 

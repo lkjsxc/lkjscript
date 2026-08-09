@@ -75,6 +75,14 @@ pub(crate) fn for_each_expression_child<'a>(
                 action(child);
             }
         }
+        ExprKind::Match {
+            scrutinee, arms, ..
+        } => {
+            action(scrutinee);
+            for arm in arms {
+                action(arm);
+            }
+        }
         ExprKind::F64FromI64Exact(value)
         | ExprKind::F64FromI64Rounded(value)
         | ExprKind::I64FromF64Exact(value)
@@ -322,6 +330,11 @@ fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
             value: Box::new(children.remove(0)),
             trap: trap.clone(),
         },
+        ExprKind::Match { plan, .. } => ExprKind::Match {
+            plan: *plan,
+            scrutinee: Box::new(children.remove(0)),
+            arms: children,
+        },
         ExprKind::MatchUnreachable { plan } => ExprKind::MatchUnreachable { plan: *plan },
         ExprKind::QuoteSymbol(value) => ExprKind::QuoteSymbol(value.clone()),
     }
@@ -396,6 +409,75 @@ impl Expr {
         completed
             .pop()
             .ok_or_else(|| lkjscript_core::Error::msg("HIR clone omitted its root"))
+    }
+
+    pub(crate) fn try_lower_semantic_matches(
+        &self,
+        lower: &mut impl FnMut(MatchPlanId, Expr, Vec<Expr>) -> lkjscript_core::Result<Expr>,
+    ) -> lkjscript_core::Result<Self> {
+        enum Work<'a> {
+            Visit(&'a Expr),
+            Finish(&'a Expr, usize),
+        }
+
+        let mut work = Vec::new();
+        work.try_reserve(1)
+            .map_err(|_| lkjscript_core::Error::host("match derivation work allocation failed"))?;
+        work.push(Work::Visit(self));
+        let mut completed = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(expression) => {
+                    let children = expression_children(expression);
+                    let additional = children.len().checked_add(1).ok_or_else(|| {
+                        lkjscript_core::Error::host("match derivation child count overflow")
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        lkjscript_core::Error::host("match derivation work allocation failed")
+                    })?;
+                    work.push(Work::Finish(expression, children.len()));
+                    work.extend(children.into_iter().rev().map(Work::Visit));
+                }
+                Work::Finish(expression, child_count) => {
+                    let split = completed.len().checked_sub(child_count).ok_or_else(|| {
+                        lkjscript_core::Error::msg("match derivation completion order is invalid")
+                    })?;
+                    let mut children = completed.split_off(split);
+                    let transformed = match &expression.kind {
+                        ExprKind::Match { plan, .. } => {
+                            let scrutinee = if children.is_empty() {
+                                return Err(lkjscript_core::Error::msg(
+                                    "semantic match omitted its scrutinee",
+                                ));
+                            } else {
+                                children.remove(0)
+                            };
+                            lower(*plan, scrutinee, children)?
+                        }
+                        _ => Self {
+                            ty: expression.ty.clone(),
+                            effects: expression.effects,
+                            origin: expression.origin,
+                            kind: clone_kind(&expression.kind, children),
+                        },
+                    };
+                    completed.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host("match derivation result allocation failed")
+                    })?;
+                    completed.push(transformed);
+                }
+            }
+        }
+        let result = completed
+            .pop()
+            .ok_or_else(|| lkjscript_core::Error::msg("match derivation omitted its root"))?;
+        if completed.is_empty() {
+            Ok(result)
+        } else {
+            Err(lkjscript_core::Error::msg(
+                "match derivation left disconnected results",
+            ))
+        }
     }
 
     pub(crate) fn try_replaced_preorder(
@@ -521,6 +603,14 @@ fn take_children(expression: &mut Expr, pending: &mut Vec<Expr>) {
         } => {
             pending.push(*value);
             pending.push(*replacement);
+        }
+        ExprKind::Match {
+            scrutinee,
+            mut arms,
+            ..
+        } => {
+            pending.push(*scrutinee);
+            pending.append(&mut arms);
         }
         ExprKind::Hole
         | ExprKind::LitI64(_)
@@ -679,6 +769,13 @@ pub enum ExprKind {
         layout: RuntimeLayoutId,
         value: Box<Expr>,
         trap: String,
+    },
+    /// Syntax-independent semantic match authority. Complete compiler HIR
+    /// derives and removes this node before ownership and lowering.
+    Match {
+        plan: MatchPlanId,
+        scrutinee: Box<Expr>,
+        arms: Vec<Expr>,
     },
     MatchUnreachable {
         plan: MatchPlanId,

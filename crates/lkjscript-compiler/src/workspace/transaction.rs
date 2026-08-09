@@ -6,14 +6,30 @@ use crate::hir::{
     Type,
 };
 
+#[cfg(test)]
+thread_local! {
+    static PATTERN_LOWERING_NODE_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_pattern_lowering_node_visits() {
+    PATTERN_LOWERING_NODE_VISITS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn pattern_lowering_node_visits() -> u64 {
+    PATTERN_LOWERING_NODE_VISITS.with(std::cell::Cell::get)
+}
+
 use super::identity::{self, IdentityAllocator};
 use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
 use super::program::SemanticProgram;
 use super::{
     CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftBindingId, DraftBindingRef,
-    DraftFieldValue, DraftNode, DraftNodeId, EntityId, EntityKind, ExpressionDraft, HoleId,
-    HoleKind, HoleState, NodeId, NodeKind, ProgramState, RevisionId, SemanticChild, SemanticOwner,
-    SemanticTypeRef, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    DraftFieldValue, DraftNode, DraftNodeId, DraftPatternNode, DraftPatternNodeId, EntityId,
+    EntityKind, ExpressionDraft, HoleId, HoleKind, HoleState, NodeId, NodeKind, PatternDraft,
+    ProgramState, RevisionId, SemanticChild, SemanticOwner, SemanticTypeRef, WorkspaceError,
+    WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -652,16 +668,18 @@ fn stage(
                     .position(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 let record = holes[index].clone();
-                let lowered = lower_draft(
-                    base,
-                    &mut program,
-                    &draft,
-                    &record.state.expected_type,
-                    Origin::Semantic,
-                    &record.state.visible_entities,
-                    record.address.root,
-                    &mut lowering,
-                )?;
+                let lowered = crate::stack::grow(|| {
+                    lower_draft(
+                        base,
+                        &mut program,
+                        &draft,
+                        &record.state.expected_type,
+                        Origin::Semantic,
+                        &record.state.visible_entities,
+                        record.address.root,
+                        &mut lowering,
+                    )
+                })?;
                 new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
                     target: hole.0,
@@ -696,8 +714,6 @@ fn stage(
         crate::ownership::check(&complete).map_err(WorkspaceError::from_core)?;
         crate::analyze::verify_match_plans(&complete).map_err(WorkspaceError::from_core)?;
         super::validate::program(&complete).map_err(WorkspaceError::from_core)?;
-        let (complete_program, _) = SemanticProgram::from_hir(complete);
-        program = complete_program;
     }
 
     let canonical =
@@ -1585,6 +1601,31 @@ fn visible_entities_in(
                         work.push(ScopeWork::Add(*binding));
                         work.push(ScopeWork::Visit(initial));
                     }
+                    ExprKind::Match {
+                        plan,
+                        scrutinee,
+                        arms,
+                    } => {
+                        let plan = program
+                            .match_plans
+                            .get(host_index(plan.raw(), "match plan")?)
+                            .filter(|item| item.id == *plan)
+                            .ok_or_else(|| {
+                                WorkspaceError::StaleIdentity(Arc::from("match plan"))
+                            })?;
+                        if arms.len() != plan.arms.len() {
+                            return Err(WorkspaceError::Validation(Arc::from(
+                                "semantic match arm count is stale",
+                            )));
+                        }
+                        for (body, arm) in arms.iter().zip(&plan.arms).rev() {
+                            let bindings = match_pattern_bindings(&arm.pattern)?;
+                            work.push(ScopeWork::Remove(bindings.clone()));
+                            work.push(ScopeWork::Visit(body));
+                            work.extend(bindings.into_iter().rev().map(ScopeWork::Add));
+                        }
+                        work.push(ScopeWork::Visit(scrutinee));
+                    }
                     _ => {
                         let mut children = Vec::new();
                         crate::hir::for_each_expression_child(expression, &mut |child| {
@@ -1597,6 +1638,36 @@ fn visible_entities_in(
         }
     }
     Err(WorkspaceError::StaleIdentity(Arc::from("node preorder")))
+}
+
+fn match_pattern_bindings(
+    pattern: &crate::hir::MatchPattern,
+) -> Result<Vec<crate::hir::BindingId>, WorkspaceError> {
+    let mut result = Vec::new();
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match scope work allocation failed")))?;
+    pending.push(pattern);
+    while let Some(pattern) = pending.pop() {
+        match pattern {
+            crate::hir::MatchPattern::Binding { local } => {
+                result.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match scope binding allocation failed"))
+                })?;
+                result.push(local.binding);
+            }
+            crate::hir::MatchPattern::Variant { fields, .. }
+            | crate::hir::MatchPattern::Product { fields, .. } => {
+                pending.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match scope work allocation failed"))
+                })?;
+                pending.extend(fields.iter().map(|field| &field.pattern));
+            }
+            _ => {}
+        }
+    }
+    Ok(result)
 }
 
 fn root_owner(
@@ -1648,7 +1719,9 @@ fn subtree_defines_local(root: &Expr) -> bool {
             ExprKind::Let { bindings, .. } if !bindings.is_empty()
         ) || matches!(
             &expression.kind,
-            ExprKind::MutableLocal { .. } | ExprKind::MatchUnreachable { .. }
+            ExprKind::MutableLocal { .. }
+                | ExprKind::Match { .. }
+                | ExprKind::MatchUnreachable { .. }
         ) {
             return true;
         }
@@ -1690,6 +1763,22 @@ fn replace_expression(
 struct LoweredDraft {
     expression: Expr,
     entities: Vec<NewEntity>,
+}
+
+struct PreparedMatch {
+    scrutinee: crate::hir::MatchLocal,
+    arms: Vec<PreparedMatchArm>,
+}
+
+struct PreparedMatchArm {
+    pattern: crate::hir::MatchPattern,
+    bindings: Vec<DraftBindingId>,
+}
+
+enum DraftLoweringAction {
+    BeginMatch(usize),
+    BeginArm { node: usize, arm: usize },
+    Lower(usize),
 }
 
 #[derive(Clone)]
@@ -1788,6 +1877,28 @@ impl LoweringState {
                             })?);
                         }
                     }
+                    ExprKind::Match { plan, .. } => {
+                        let plan = program
+                            .match_plans
+                            .get(host_index(plan.raw(), "match plan")?)
+                            .filter(|item| item.id == *plan)
+                            .ok_or_else(|| {
+                                WorkspaceError::StaleIdentity(Arc::from("match plan"))
+                            })?;
+                        next = next.max(plan.scrutinee.place.raw().checked_add(1).ok_or_else(
+                            || WorkspaceError::Host(Arc::from("place identity exhausted")),
+                        )?);
+                        for local in plan
+                            .projections
+                            .iter()
+                            .map(|projection| &projection.local)
+                            .chain(plan.bindings.iter().map(|binding| &binding.local))
+                        {
+                            next = next.max(local.place.raw().checked_add(1).ok_or_else(|| {
+                                WorkspaceError::Host(Arc::from("place identity exhausted"))
+                            })?);
+                        }
+                    }
                     _ => {}
                 }
                 crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
@@ -1827,7 +1938,7 @@ fn lower_draft(
     lowering: &mut LoweringState,
 ) -> Result<LoweredDraft, WorkspaceError> {
     validate_draft_shape(draft)?;
-    let order = draft_postorder(draft)?;
+    let order = draft_lowering_actions(draft)?;
     let mut definition_events = draft_definition_events(draft)?;
     validate_draft_binding_scopes(draft)?;
     let mut visible_set = HashSet::new();
@@ -1849,8 +1960,116 @@ fn lower_draft(
         .try_reserve(definition_events.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("draft local entity allocation failed")))?;
     let mut next_slot = root_local_count(program, root)?;
+    let mut prepared_matches = HashMap::new();
 
-    for node_index in order {
+    for action in order {
+        let node_index = match action {
+            DraftLoweringAction::BeginMatch(node_index) => {
+                let DraftNode::Match { scrutinee, arms } =
+                    draft.nodes.get(node_index).ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from("draft match identity is stale"))
+                    })?
+                else {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft match preparation targets a non-match node",
+                    )));
+                };
+                if arms.is_empty() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "match arms must not be empty",
+                    )));
+                }
+                let scrutinee_type = scrutinee
+                    .index()
+                    .and_then(|index| completed.get(index))
+                    .and_then(Option::as_ref)
+                    .map(|expression| expression.ty.clone())
+                    .ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from(
+                            "match scrutinee was not lowered before its patterns",
+                        ))
+                    })?;
+                if !matches!(scrutinee_type, Type::Enum { .. }) {
+                    return Err(WorkspaceError::unsupported(
+                        "match",
+                        "the source-free pattern surface currently supports enum scrutinees",
+                    ));
+                }
+                let scrutinee = allocate_workspace_match_local(
+                    program,
+                    root,
+                    lowering,
+                    &mut next_slot,
+                    format!("$match{}", program.bindings.len()),
+                    scrutinee_type,
+                    BindingKind::MatchTemporary,
+                    origin,
+                )?;
+                let mut prepared_arms = Vec::new();
+                prepared_arms.try_reserve(arms.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("prepared match arm allocation failed"))
+                })?;
+                if prepared_matches
+                    .insert(
+                        node_index,
+                        PreparedMatch {
+                            scrutinee,
+                            arms: prepared_arms,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft match was prepared more than once",
+                    )));
+                }
+                continue;
+            }
+            DraftLoweringAction::BeginArm { node, arm } => {
+                let DraftNode::Match { arms, .. } = draft.nodes.get(node).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft match identity is stale"))
+                })?
+                else {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft arm preparation targets a non-match node",
+                    )));
+                };
+                let arm_draft = arms.get(arm).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft match arm identity is stale"))
+                })?;
+                let scrutinee_type = prepared_matches
+                    .get(&node)
+                    .map(|prepared: &PreparedMatch| prepared.scrutinee.ty.clone())
+                    .ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from(
+                            "draft match arm was prepared before its scrutinee",
+                        ))
+                    })?;
+                let (pattern, bindings) = lower_pattern_draft(
+                    snapshot,
+                    program,
+                    &arm_draft.pattern,
+                    &scrutinee_type,
+                    origin,
+                    root,
+                    lowering,
+                    &mut next_slot,
+                    &mut locals,
+                    &mut entities,
+                )?;
+                let prepared = prepared_matches.get_mut(&node).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("prepared draft match is missing"))
+                })?;
+                if prepared.arms.len() != arm {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft match arms were not prepared in semantic order",
+                    )));
+                }
+                prepared.arms.push(PreparedMatchArm { pattern, bindings });
+                continue;
+            }
+            DraftLoweringAction::Lower(node_index) => node_index,
+        };
         let node = draft.nodes.get(node_index).ok_or_else(|| {
             WorkspaceError::InvalidDraft(Arc::from("draft lowering order is stale"))
         })?;
@@ -2106,6 +2325,16 @@ fn lower_draft(
             DraftNode::EnumIsVariant { variant, value } => {
                 lower_enum_is_variant(snapshot, program, *variant, *value, &mut completed, origin)?
             }
+            DraftNode::Match { scrutinee, arms } => lower_prepared_match(
+                program,
+                node_index,
+                *scrutinee,
+                arms,
+                origin,
+                &mut completed,
+                &mut prepared_matches,
+                &mut locals,
+            )?,
         };
         let slot = completed.get_mut(node_index).ok_or_else(|| {
             WorkspaceError::InvalidDraft(Arc::from("draft lowering slot is stale"))
@@ -2179,7 +2408,7 @@ fn lower_draft(
             }
         }
     }
-    if !definition_events.is_empty() || !locals.is_empty() {
+    if !definition_events.is_empty() || !locals.is_empty() || !prepared_matches.is_empty() {
         return Err(WorkspaceError::InvalidDraft(Arc::from(
             "draft binding scope did not close deterministically",
         )));
@@ -2196,6 +2425,499 @@ fn lower_draft(
         expression: root_expression,
         entities,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_prepared_match(
+    program: &mut SemanticProgram,
+    node_index: usize,
+    scrutinee: DraftNodeId,
+    arms: &[super::MatchArmDraft],
+    origin: Origin,
+    completed: &mut [Option<Expr>],
+    prepared_matches: &mut HashMap<usize, PreparedMatch>,
+    locals: &mut HashMap<DraftBindingId, ResolvedDraftBinding>,
+) -> Result<Expr, WorkspaceError> {
+    let prepared = prepared_matches
+        .remove(&node_index)
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft match was not prepared")))?;
+    if prepared.arms.len() != arms.len() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "draft match arm preparation is incomplete",
+        )));
+    }
+    let scrutinee_value = take_draft_child(completed, scrutinee)?;
+    let mut bodies = Vec::new();
+    bodies
+        .try_reserve(arms.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match body allocation failed")))?;
+    let mut planned = Vec::new();
+    planned
+        .try_reserve(arms.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("planned match arm allocation failed")))?;
+    for (index, (arm, prepared_arm)) in arms.iter().zip(prepared.arms).enumerate() {
+        let body = take_draft_child(completed, arm.body)?;
+        let id = u64::try_from(index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("match arm identity exceeds u64")))?;
+        planned.push(crate::hir::PlannedMatchArm {
+            id,
+            pattern: prepared_arm.pattern,
+            body_type: body.ty.clone(),
+        });
+        for binding in prepared_arm.bindings {
+            locals.remove(&binding);
+        }
+        bodies.push(body);
+    }
+    let plan_id = crate::hir::MatchPlanId::new(
+        u64::try_from(program.match_plans.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("match plan identity exceeds u64")))?,
+    );
+    let plan = crate::analyze::build_match_plan(
+        plan_id,
+        origin,
+        prepared.scrutinee,
+        planned,
+        &program.enums,
+        &program.products,
+    )
+    .map_err(match_build_error)?;
+    let ty = plan.result_type.clone();
+    let effects = scrutinee_value.effects.union(
+        bodies
+            .iter()
+            .fold(EffectSet::PURE, |effects, body| effects.union(body.effects)),
+    );
+    program
+        .match_plans
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match plan allocation failed")))?;
+    program.match_plans.push(plan);
+    Ok(Expr {
+        ty,
+        effects,
+        origin,
+        kind: ExprKind::Match {
+            plan: plan_id,
+            scrutinee: Box::new(scrutinee_value),
+            arms: bodies,
+        },
+    })
+}
+
+struct ResolvedPatternVariant {
+    ty: Type,
+    enum_id: crate::hir::EnumId,
+    variant: crate::hir::VariantId,
+    layout: crate::hir::RuntimeLayoutId,
+    fields: Vec<ResolvedPatternField>,
+}
+
+struct ResolvedPatternField {
+    name: String,
+    field_index: u64,
+    ty: Type,
+    projection: Option<crate::hir::MatchLocal>,
+    pattern: DraftPatternNodeId,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_pattern_draft(
+    snapshot: &WorkspaceSnapshot,
+    program: &mut SemanticProgram,
+    draft: &PatternDraft,
+    expected: &Type,
+    origin: Origin,
+    root: EntityAddress,
+    lowering: &mut LoweringState,
+    next_slot: &mut usize,
+    locals: &mut HashMap<DraftBindingId, ResolvedDraftBinding>,
+    entities: &mut Vec<NewEntity>,
+) -> Result<(crate::hir::MatchPattern, Vec<DraftBindingId>), WorkspaceError> {
+    validate_pattern_shape(draft)?;
+    let mut expected_types = Vec::new();
+    expected_types
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern type allocation failed")))?;
+    expected_types.resize_with(draft.nodes.len(), || None);
+    let root_index = draft.root.index().ok_or_else(|| {
+        WorkspaceError::InvalidDraft(Arc::from("pattern root exceeds host index"))
+    })?;
+    expected_types[root_index] = Some(expected.clone());
+    let mut variants = Vec::new();
+    variants
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern metadata allocation failed")))?;
+    variants.resize_with(draft.nodes.len(), || None);
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern type work allocation failed")))?;
+    pending.push(draft.root);
+    while let Some(id) = pending.pop() {
+        let index = id.index().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern node exceeds host index"))
+        })?;
+        let node = draft.nodes.get(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern node identity is stale"))
+        })?;
+        let ty = expected_types
+            .get(index)
+            .and_then(Option::as_ref)
+            .cloned()
+            .ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("pattern node has no expected type"))
+            })?;
+        let DraftPatternNode::EnumVariant { variant, fields } = node else {
+            continue;
+        };
+        let header = snapshot.workspace_entity(*variant)?;
+        if header.kind != EntityKind::EnumVariant {
+            return Err(wrong_kind(
+                "enum match pattern",
+                "enum variant",
+                header.kind,
+            ));
+        }
+        let EntityAddress::EnumVariant {
+            enumeration,
+            variant: variant_index,
+        } = entity_address(snapshot, *variant)?
+        else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
+        };
+        let definition = program
+            .enums
+            .get(host_index(enumeration, "enum")?)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+        if !definition.type_parameters.is_empty() {
+            return Err(WorkspaceError::unsupported(
+                "match-pattern",
+                "generic enum match authoring is not implemented",
+            ));
+        }
+        let expected_enum = Type::Enum {
+            id: definition.id,
+            name: definition.name.clone(),
+            arguments: Vec::new(),
+        };
+        require_type(&ty, &expected_enum)?;
+        let selected = definition
+            .variants
+            .get(host_index(variant_index, "enum variant")?)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+        if fields.len() != selected.fields.len() {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "enum pattern must provide exactly one nested pattern per field",
+            )));
+        }
+        let mut ordered = Vec::new();
+        ordered
+            .try_reserve(selected.fields.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum pattern field allocation failed")))?;
+        ordered.resize_with(selected.fields.len(), || None);
+        for field in fields {
+            let field_header = snapshot.workspace_entity(field.field)?;
+            if field_header.kind != EntityKind::EnumField {
+                return Err(wrong_kind(
+                    "enum match pattern field",
+                    "enum field",
+                    field_header.kind,
+                ));
+            }
+            let EntityAddress::EnumField {
+                enumeration: field_enum,
+                variant: field_variant,
+                field: field_index,
+            } = entity_address(snapshot, field.field)?
+            else {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("enum field")));
+            };
+            if field_enum != enumeration || field_variant != variant_index {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "enum pattern field belongs to a different variant",
+                )));
+            }
+            let declared = selected
+                .fields
+                .get(host_index(field_index, "enum field")?)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+            let slot = ordered
+                .get_mut(host_index(field_index, "enum field")?)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+            if slot.replace(field.pattern).is_some() {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "enum pattern field is duplicated",
+                )));
+            }
+            let child = field.pattern.index().ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+            })?;
+            let expected_slot = expected_types.get_mut(child).ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("pattern child identity is stale"))
+            })?;
+            if expected_slot.replace(declared.ty.clone()).is_some() {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "pattern child receives more than one expected type",
+                )));
+            }
+            pending.push(field.pattern);
+        }
+        let ordered = ordered
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("enum pattern field is missing"))
+            })?;
+        let mut resolved_fields = Vec::new();
+        resolved_fields
+            .try_reserve(selected.fields.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("resolved pattern field allocation failed"))
+            })?;
+        for (declared, pattern) in selected.fields.iter().zip(ordered) {
+            resolved_fields.push(ResolvedPatternField {
+                name: declared.name.clone(),
+                field_index: declared.source_order,
+                ty: declared.ty.clone(),
+                projection: None,
+                pattern,
+            });
+        }
+        let enum_id = definition.id;
+        let selected_id = selected.id;
+        let layout = definition.layout.identity;
+        for field in &mut resolved_fields {
+            let child = field.pattern.index().ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+            })?;
+            if !matches!(draft.nodes.get(child), Some(DraftPatternNode::Wildcard)) {
+                let name = format!("$match{}", program.bindings.len());
+                field.projection = Some(allocate_workspace_match_local(
+                    program,
+                    root,
+                    lowering,
+                    next_slot,
+                    name,
+                    field.ty.clone(),
+                    BindingKind::MatchTemporary,
+                    origin,
+                )?);
+            }
+        }
+        variants[index] = Some(ResolvedPatternVariant {
+            ty,
+            enum_id,
+            variant: selected_id,
+            layout,
+            fields: resolved_fields,
+        });
+    }
+
+    let order = pattern_postorder(draft)?;
+    let mut completed = Vec::new();
+    completed
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern lowering allocation failed")))?;
+    completed.resize_with(draft.nodes.len(), || None);
+    let mut bindings = Vec::new();
+    bindings
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern binding allocation failed")))?;
+    for index in order {
+        #[cfg(test)]
+        PATTERN_LOWERING_NODE_VISITS.with(|count| {
+            count.set(count.get().saturating_add(1));
+        });
+        let ty = expected_types[index].clone().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern node has no expected type"))
+        })?;
+        let lowered = match &draft.nodes[index] {
+            DraftPatternNode::Wildcard => crate::hir::MatchPattern::Wildcard { ty },
+            DraftPatternNode::Binding { binding, name } => {
+                let local = allocate_workspace_match_local(
+                    program,
+                    root,
+                    lowering,
+                    next_slot,
+                    name.clone(),
+                    ty.clone(),
+                    BindingKind::ImmutableLocal,
+                    origin,
+                )?;
+                let info = ResolvedDraftBinding {
+                    binding: local.binding,
+                    slot: local.slot,
+                    place: local.place,
+                    ty,
+                    static_bytes: false,
+                };
+                if locals.insert(*binding, info).is_some() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "pattern binding handle is defined more than once",
+                    )));
+                }
+                entities.push(NewEntity {
+                    address: EntityAddress::Binding(local.binding.raw()),
+                    kind: EntityKind::ImmutableLocal,
+                    name: Arc::from(name.as_str()),
+                });
+                bindings.push(*binding);
+                crate::hir::MatchPattern::Binding { local }
+            }
+            DraftPatternNode::EnumVariant { .. } => {
+                let variant = variants[index].take().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("enum pattern metadata is missing"))
+                })?;
+                let mut fields = Vec::new();
+                fields.try_reserve(variant.fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match pattern field allocation failed"))
+                })?;
+                for field in variant.fields {
+                    let child = field.pattern.index().ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+                    })?;
+                    let pattern =
+                        completed
+                            .get_mut(child)
+                            .and_then(Option::take)
+                            .ok_or_else(|| {
+                                WorkspaceError::InvalidDraft(Arc::from(
+                                    "pattern child is stale or reused",
+                                ))
+                            })?;
+                    let projection = field.projection;
+                    if projection.is_none()
+                        != matches!(pattern, crate::hir::MatchPattern::Wildcard { .. })
+                    {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "pattern projection metadata is stale",
+                        )));
+                    }
+                    fields.push(crate::hir::MatchFieldPattern {
+                        name: field.name,
+                        field_index: field.field_index,
+                        projection,
+                        pattern,
+                    });
+                }
+                crate::hir::MatchPattern::Variant {
+                    ty: variant.ty,
+                    enum_id: variant.enum_id,
+                    variant: variant.variant,
+                    layout: variant.layout,
+                    fields,
+                }
+            }
+        };
+        let slot = completed.get_mut(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern lowering slot is stale"))
+        })?;
+        if slot.replace(lowered).is_some() {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "pattern node was lowered more than once",
+            )));
+        }
+    }
+    let root = completed
+        .get_mut(root_index)
+        .and_then(Option::take)
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("pattern root is unavailable")))?;
+    Ok((root, bindings))
+}
+
+fn pattern_postorder(draft: &PatternDraft) -> Result<Vec<usize>, WorkspaceError> {
+    enum Work {
+        Visit(DraftPatternNodeId),
+        Finish(usize),
+    }
+    let mut work = Vec::new();
+    work.try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern order allocation failed")))?;
+    work.push(Work::Visit(draft.root));
+    let mut order = Vec::new();
+    order
+        .try_reserve(draft.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern order allocation failed")))?;
+    while let Some(item) = work.pop() {
+        match item {
+            Work::Finish(index) => order.push(index),
+            Work::Visit(id) => {
+                let index = id.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("pattern node exceeds host index"))
+                })?;
+                let node = draft.nodes.get(index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("pattern node identity is stale"))
+                })?;
+                let additional = node.child_count().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("pattern order work overflow"))
+                })?;
+                work.try_reserve(additional).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("pattern order work allocation failed"))
+                })?;
+                work.push(Work::Finish(index));
+                let mut children = Vec::new();
+                children.try_reserve(node.child_count()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("pattern child allocation failed"))
+                })?;
+                node.for_each_child(|child| children.push(child));
+                work.extend(children.into_iter().rev().map(Work::Visit));
+            }
+        }
+    }
+    if order.len() == draft.nodes.len() {
+        Ok(order)
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(
+            "pattern traversal did not cover every node",
+        )))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn allocate_workspace_match_local(
+    program: &mut SemanticProgram,
+    root: EntityAddress,
+    lowering: &mut LoweringState,
+    next_slot: &mut usize,
+    name: String,
+    ty: Type,
+    kind: BindingKind,
+    origin: Origin,
+) -> Result<crate::hir::MatchLocal, WorkspaceError> {
+    let raw = u64::try_from(program.bindings.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+    let binding = crate::hir::BindingId::new(raw);
+    let slot = *next_slot;
+    *next_slot = next_slot
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("match local slot count overflow")))?;
+    let place = lowering.place(program, root)?;
+    program
+        .bindings
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("match local allocation failed")))?;
+    program.bindings.push(Binding {
+        id: binding,
+        name,
+        kind,
+        ty: ty.clone(),
+        origin,
+    });
+    Ok(crate::hir::MatchLocal {
+        binding,
+        place,
+        slot,
+        ty,
+    })
+}
+
+fn match_build_error(error: lkjscript_core::Error) -> WorkspaceError {
+    if matches!(error.class(), lkjscript_core::ErrorClass::Host) {
+        WorkspaceError::from_core(error)
+    } else {
+        WorkspaceError::InvalidDraft(Arc::from(error.as_str()))
+    }
 }
 
 fn source_free_operation_supported(operation: crate::hir::Operation) -> bool {
@@ -2216,44 +2938,80 @@ fn draft_definition_events(
     let mut events = HashMap::new();
     let mut handles = HashSet::new();
     for node in &draft.nodes {
-        let DraftNode::Let { bindings, .. } = node else {
-            continue;
-        };
-        let mut names = HashSet::new();
-        names
-            .try_reserve(bindings.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("let name allocation failed")))?;
-        for binding in bindings {
-            if !lkjscript_contracts::is_identifier(&binding.name) {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "local name must be a non-empty semantic identifier",
-                )));
+        match node {
+            DraftNode::Let { bindings, .. } => {
+                let mut names = HashSet::new();
+                names
+                    .try_reserve(bindings.len())
+                    .map_err(|_| WorkspaceError::Host(Arc::from("let name allocation failed")))?;
+                for binding in bindings {
+                    if !lkjscript_contracts::is_identifier(&binding.name) {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "local name must be a non-empty semantic identifier",
+                        )));
+                    }
+                    if !names.insert(binding.name.as_str()) {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "local name is duplicated in one lexical scope",
+                        )));
+                    }
+                    if !handles.insert(binding.binding) {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "draft binding handle is defined more than once",
+                        )));
+                    }
+                    let initializer = binding.value.index().ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from(
+                            "local initializer exceeds host index",
+                        ))
+                    })?;
+                    events
+                        .entry(initializer)
+                        .or_insert_with(Vec::new)
+                        .push((binding.binding, binding.name.clone()));
+                }
             }
-            if !names.insert(binding.name.as_str()) {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "local name is duplicated in one lexical scope",
-                )));
+            DraftNode::Match { arms, .. } => {
+                for arm in arms {
+                    let mut names = HashSet::new();
+                    names.try_reserve(arm.pattern.nodes.len()).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("pattern binding name allocation failed"))
+                    })?;
+                    for pattern in &arm.pattern.nodes {
+                        let DraftPatternNode::Binding { binding, name } = pattern else {
+                            continue;
+                        };
+                        if !lkjscript_contracts::is_identifier(name) {
+                            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                                "pattern binding name must be a semantic identifier",
+                            )));
+                        }
+                        if !names.insert(name.as_str()) {
+                            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                                "pattern binding name is duplicated in one arm",
+                            )));
+                        }
+                        if !handles.insert(*binding) {
+                            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                                "draft binding handle is defined more than once",
+                            )));
+                        }
+                    }
+                }
             }
-            if !handles.insert(binding.binding) {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "draft binding handle is defined more than once",
-                )));
-            }
-            let initializer = binding.value.index().ok_or_else(|| {
-                WorkspaceError::InvalidDraft(Arc::from("local initializer exceeds host index"))
-            })?;
-            events
-                .entry(initializer)
-                .or_insert_with(Vec::new)
-                .push((binding.binding, binding.name.clone()));
+            _ => {}
         }
     }
     Ok(events)
 }
 
-fn draft_postorder(draft: &ExpressionDraft) -> Result<Vec<usize>, WorkspaceError> {
+fn draft_lowering_actions(
+    draft: &ExpressionDraft,
+) -> Result<Vec<DraftLoweringAction>, WorkspaceError> {
     enum Work {
         Visit(DraftNodeId),
+        BeginMatch(usize),
+        BeginArm { node: usize, arm: usize },
         Finish(usize),
     }
 
@@ -2262,12 +3020,29 @@ fn draft_postorder(draft: &ExpressionDraft) -> Result<Vec<usize>, WorkspaceError
         .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
     work.push(Work::Visit(draft.root));
     let mut order = Vec::new();
+    let action_capacity = draft
+        .nodes
+        .iter()
+        .try_fold(draft.nodes.len(), |count, node| {
+            if let DraftNode::Match { arms, .. } = node {
+                count
+                    .checked_add(arms.len())
+                    .and_then(|value| value.checked_add(1))
+                    .ok_or_else(|| WorkspaceError::Host(Arc::from("draft action count overflow")))
+            } else {
+                Ok(count)
+            }
+        })?;
     order
-        .try_reserve(draft.nodes.len())
+        .try_reserve(action_capacity)
         .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
     while let Some(item) = work.pop() {
         match item {
-            Work::Finish(index) => order.push(index),
+            Work::BeginMatch(index) => order.push(DraftLoweringAction::BeginMatch(index)),
+            Work::BeginArm { node, arm } => {
+                order.push(DraftLoweringAction::BeginArm { node, arm });
+            }
+            Work::Finish(index) => order.push(DraftLoweringAction::Lower(index)),
             Work::Visit(id) => {
                 let index = id.index().ok_or_else(|| {
                     WorkspaceError::InvalidDraft(Arc::from("draft node exceeds host index"))
@@ -2275,6 +3050,26 @@ fn draft_postorder(draft: &ExpressionDraft) -> Result<Vec<usize>, WorkspaceError
                 let node = draft.nodes.get(index).ok_or_else(|| {
                     WorkspaceError::InvalidDraft(Arc::from("draft node identity is stale"))
                 })?;
+                if let DraftNode::Match { scrutinee, arms } = node {
+                    let additional = arms
+                        .len()
+                        .checked_mul(2)
+                        .and_then(|count| count.checked_add(3))
+                        .ok_or_else(|| {
+                            WorkspaceError::Host(Arc::from("draft match order work overflow"))
+                        })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("draft order work allocation failed"))
+                    })?;
+                    work.push(Work::Finish(index));
+                    for (arm, value) in arms.iter().enumerate().rev() {
+                        work.push(Work::Visit(value.body));
+                        work.push(Work::BeginArm { node: index, arm });
+                    }
+                    work.push(Work::BeginMatch(index));
+                    work.push(Work::Visit(*scrutinee));
+                    continue;
+                }
                 let child_count = node
                     .child_count()
                     .ok_or_else(|| WorkspaceError::Host(Arc::from("draft child count overflow")))?;
@@ -2296,7 +3091,11 @@ fn draft_postorder(draft: &ExpressionDraft) -> Result<Vec<usize>, WorkspaceError
             }
         }
     }
-    if order.len() == draft.nodes.len() {
+    let lowered = order
+        .iter()
+        .filter(|action| matches!(action, DraftLoweringAction::Lower(_)))
+        .count();
+    if lowered == draft.nodes.len() {
         Ok(order)
     } else {
         Err(WorkspaceError::InvalidDraft(Arc::from(
@@ -2374,6 +3173,54 @@ fn validate_draft_binding_scopes(draft: &ExpressionDraft) -> Result<(), Workspac
                             work.push(ScopeWork::Add(binding.binding));
                             work.push(ScopeWork::Visit(binding.value));
                         }
+                    }
+                    DraftNode::Match { scrutinee, arms } => {
+                        let binding_count = arms.iter().try_fold(0_usize, |count, arm| {
+                            count
+                                .checked_add(
+                                    arm.pattern
+                                        .nodes
+                                        .iter()
+                                        .filter(|node| {
+                                            matches!(node, DraftPatternNode::Binding { .. })
+                                        })
+                                        .count(),
+                                )
+                                .ok_or_else(|| {
+                                    WorkspaceError::Host(Arc::from(
+                                        "match scope binding count overflow",
+                                    ))
+                                })
+                        })?;
+                        let additional = binding_count
+                            .checked_mul(2)
+                            .and_then(|count| count.checked_add(arms.len()))
+                            .and_then(|count| count.checked_add(1))
+                            .ok_or_else(|| {
+                                WorkspaceError::Host(Arc::from("match scope work overflow"))
+                            })?;
+                        work.try_reserve(additional).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("match scope work allocation failed"))
+                        })?;
+                        for arm in arms.iter().rev() {
+                            let mut bindings = Vec::new();
+                            bindings.try_reserve(arm.pattern.nodes.len()).map_err(|_| {
+                                WorkspaceError::Host(Arc::from(
+                                    "match scope binding allocation failed",
+                                ))
+                            })?;
+                            bindings.extend(arm.pattern.nodes.iter().filter_map(|node| {
+                                if let DraftPatternNode::Binding { binding, .. } = node {
+                                    Some(*binding)
+                                } else {
+                                    None
+                                }
+                            }));
+                            work.push(ScopeWork::Remove(bindings.clone()));
+                            work.push(ScopeWork::Visit(arm.body));
+                            work.extend(bindings.into_iter().rev().map(ScopeWork::Add));
+                        }
+                        work.push(ScopeWork::Visit(*scrutinee));
                     }
                     _ => {
                         let mut children = Vec::new();
@@ -2532,11 +3379,60 @@ fn binding_location(
                 slot,
                 ..
             } if *candidate == binding => return Ok((*slot, *place)),
+            ExprKind::Match { plan, .. } => {
+                let plan = program
+                    .match_plans
+                    .get(host_index(plan.raw(), "match plan")?)
+                    .filter(|item| item.id == *plan)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match plan")))?;
+                if let Some(local) = match_plan_local(plan, binding)? {
+                    return Ok((local.slot, local.place));
+                }
+            }
             _ => {}
         }
         crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
     }
     Err(WorkspaceError::StaleIdentity(Arc::from("local binding")))
+}
+
+fn match_plan_local(
+    plan: &crate::hir::MatchPlan,
+    binding: crate::hir::BindingId,
+) -> Result<Option<&crate::hir::MatchLocal>, WorkspaceError> {
+    if plan.scrutinee.binding == binding {
+        return Ok(Some(&plan.scrutinee));
+    }
+    let mut pending = Vec::new();
+    for arm in &plan.arms {
+        pending
+            .try_reserve(1)
+            .map_err(|_| WorkspaceError::Host(Arc::from("match local lookup allocation failed")))?;
+        pending.push(&arm.pattern);
+    }
+    while let Some(pattern) = pending.pop() {
+        match pattern {
+            crate::hir::MatchPattern::Binding { local } if local.binding == binding => {
+                return Ok(Some(local));
+            }
+            crate::hir::MatchPattern::Variant { fields, .. }
+            | crate::hir::MatchPattern::Product { fields, .. } => {
+                for field in fields {
+                    if let Some(local) = &field.projection {
+                        if local.binding == binding {
+                            return Ok(Some(local));
+                        }
+                    }
+                    pending.try_reserve(1).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("match local lookup allocation failed"))
+                    })?;
+                    pending.push(&field.pattern);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(None)
 }
 
 fn lower_product_value(
@@ -2838,6 +3734,18 @@ fn validate_draft_shape(draft: &ExpressionDraft) -> Result<(), WorkspaceError> {
             "expression draft is empty",
         )));
     }
+    for node in &draft.nodes {
+        if let DraftNode::Match { arms, .. } = node {
+            if arms.is_empty() {
+                return Err(WorkspaceError::InvalidDraft(Arc::from(
+                    "match arms must not be empty",
+                )));
+            }
+            for arm in arms {
+                validate_pattern_shape(&arm.pattern)?;
+            }
+        }
+    }
     let root = draft
         .root
         .index()
@@ -2914,6 +3822,85 @@ fn validate_draft_shape(draft: &ExpressionDraft) -> Result<(), WorkspaceError> {
         )));
     }
     Ok(())
+}
+
+fn validate_pattern_shape(pattern: &PatternDraft) -> Result<(), WorkspaceError> {
+    if pattern.nodes.is_empty() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "match pattern draft is empty",
+        )));
+    }
+    let root = pattern
+        .root
+        .index()
+        .filter(|index| *index < pattern.nodes.len())
+        .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("pattern root is stale")))?;
+    let mut parents = Vec::new();
+    parents
+        .try_reserve(pattern.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern shape allocation failed")))?;
+    parents.resize(pattern.nodes.len(), 0_u64);
+    for node in &pattern.nodes {
+        let mut failure = None;
+        node.for_each_child(|child| {
+            let Some(index) = child.index().filter(|index| *index < pattern.nodes.len()) else {
+                failure = Some("pattern child is stale");
+                return;
+            };
+            let Some(count) = parents[index].checked_add(1) else {
+                failure = Some("pattern parent count overflow");
+                return;
+            };
+            parents[index] = count;
+        });
+        if let Some(message) = failure {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(message)));
+        }
+    }
+    if parents[root] != 0
+        || parents
+            .iter()
+            .enumerate()
+            .any(|(index, count)| index != root && *count != 1)
+    {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "pattern draft must be one connected tree with no reused child",
+        )));
+    }
+    let mut reached = vec![false; pattern.nodes.len()];
+    let mut pending = vec![pattern.root];
+    let mut reached_count = 0_usize;
+    while let Some(id) = pending.pop() {
+        let index = id.index().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern traversal identity is stale"))
+        })?;
+        let visited = reached.get_mut(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern traversal identity is stale"))
+        })?;
+        if *visited {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "pattern draft contains a cycle or reused child",
+            )));
+        }
+        *visited = true;
+        reached_count = reached_count
+            .checked_add(1)
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("pattern reachability overflow")))?;
+        let node = pattern.nodes.get(index).ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern traversal identity is stale"))
+        })?;
+        pending.try_reserve(node.child_count()).map_err(|_| {
+            WorkspaceError::Host(Arc::from("pattern reachability allocation failed"))
+        })?;
+        node.for_each_child(|child| pending.push(child));
+    }
+    if reached_count == pattern.nodes.len() {
+        Ok(())
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(
+            "pattern draft contains nodes disconnected from its root",
+        )))
+    }
 }
 
 fn take_draft_child(

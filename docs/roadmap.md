@@ -6,31 +6,25 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Author enum payload observation and exhaustive matches source-free.** Add one dependency-closed
-   match vertical over the existing stable enum/variant/field identities: pattern construction,
-   payload binding scope and types, exhaustiveness/useless-arm diagnostics, ownership and cleanup,
-   holes and legal constructors, projection/diff, direct compilation/VM execution, imported
-   convergence, malformed-input atomicity, and deep stack evidence. Reuse the canonical HIR match
-   checker and do not create a second pattern/type/ownership authority.
-
-## Next
-
 1. **Add declaration deletion and movement coherently.** Define identity survival and local-binding
    removal/compaction so edits never orphan program-wide bindings; complete transaction, query,
    projection, dependency, compiler, and failure-atomic behavior in the same cutover.
-2. **Add generic semantic calls and type arguments.** Preserve structured nominal/type-parameter
+
+## Next
+
+1. **Add generic semantic calls and type arguments.** Preserve structured nominal/type-parameter
    identity, exact instantiation, effects, ownership, diagnostics, and imported convergence without
    exposing compiler-dense IDs or rendering source.
-3. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
+2. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
    inspectable and editable, with truthful legal next actions and an explicit completeness blocker;
    never lower a fabricated executable fallback.
-4. **Measure full recomputation under real edit workloads.** Record edit/query latency, allocation,
+3. **Measure full recomputation under real edit workloads.** Record edit/query latency, allocation,
    retained memory, and invalidated work before deciding whether a narrow cache is justified. Add no
    query framework merely because full recomputation is currently simple.
-5. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
+4. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
-6. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
+5. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
    supports explicit limited policy, but there is no semantic wire service. Do not rebuild framing,
    text publication, or multi-tenant admission machinery speculatively.
 

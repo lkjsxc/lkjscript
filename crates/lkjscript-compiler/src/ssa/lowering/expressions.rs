@@ -12,6 +12,11 @@ impl FunctionBuilder<'_> {
         };
         let value = match &expression.kind {
             ExprKind::Hole => return Err(Error::msg("complete HIR cannot contain a hole")),
+            ExprKind::Match { .. } => {
+                return Err(Error::msg(
+                    "semantic match reached SSA without canonical HIR derivation",
+                ));
+            }
             ExprKind::LitI64(value) => {
                 self.constant(SsaType::I64, Constant::I64(*value), expression.origin)?
             }

@@ -55,6 +55,9 @@ fn verifier_expression_children(expression: &hir::Expr) -> Vec<&hir::Expr> {
     use hir::ExprKind as Kind;
     match &expression.kind {
         Kind::Hole => Vec::new(),
+        Kind::Match { .. } => {
+            unreachable!("semantic matches must be lowered before memory verification")
+        }
         Kind::Call { args, .. }
         | Kind::Operation { args, .. }
         | Kind::Do(args)

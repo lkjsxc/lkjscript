@@ -1,4 +1,3 @@
-use super::usefulness::Usefulness;
 use crate::analyze::*;
 
 impl Resolver<'_> {
@@ -27,63 +26,33 @@ impl Resolver<'_> {
         let scrutinee = self.allocate_hidden_match_local(scrutinee_value.ty.clone())?;
         let arm_slot = self.next_slot;
         let (planned, bodies) = self.resolve_match_arms(arm_forms, &scrutinee, arm_slot)?;
-        let mut result_type = Type::Never;
-        for body in &bodies {
-            result_type = Type::join_control(&result_type, &body.ty).ok_or_else(|| {
-                self.error(format!(
-                    "reachable match arm types must be exactly equal: {} vs {}",
-                    result_type, body.ty
-                ))
-            })?;
-        }
-        self.check_usefulness(&planned, &scrutinee)?;
         let plan_id = MatchPlanId::new(
             u64::try_from(self.analyzer.match_plans.len())
                 .map_err(|_| self.error("match plan identity exceeds u64"))?,
         );
-        let (tests, projections, bindings) = super::plan::flatten_plan(&planned)?;
-        let edge_capacity = planned
-            .len()
-            .checked_add(1)
-            .ok_or_else(|| Error::host("match edge count overflow"))?;
-        let mut edges = Vec::new();
-        edges
-            .try_reserve(edge_capacity)
-            .map_err(|_| Error::host("match edge allocation failed"))?;
-        for index in 1..planned.len() {
-            edges.push(MatchEdgeTarget::Arm(
-                u64::try_from(index).map_err(|_| self.error("match arm index exceeds u64"))?,
-            ));
-        }
-        edges.extend([MatchEdgeTarget::Default, MatchEdgeTarget::Unreachable]);
-        let mut lowered =
-            self.expression(Type::Never, ExprKind::MatchUnreachable { plan: plan_id });
-        for (arm, body) in planned.iter().zip(bodies).rev() {
-            let value = self.match_load(&scrutinee);
-            let condition = self.match_condition(&arm.pattern, value.clone())?;
-            let success = self.match_success(&arm.pattern, value, body)?;
-            lowered = self.match_if(condition, success, lowered);
-        }
-        lowered = self.local_scope(&scrutinee, scrutinee_value, lowered);
+        let plan = super::plan::build_plan(
+            plan_id,
+            Origin::Source(self.origin),
+            scrutinee,
+            planned,
+            &self.analyzer.enums,
+            &self.analyzer.products,
+        )?;
+        let result_type = plan.result_type.clone();
         self.analyzer
             .match_plans
             .try_reserve(1)
             .map_err(|_| Error::host("match plan allocation failed"))?;
-        self.analyzer.match_plans.push(MatchPlan {
-            id: plan_id,
-            origin: self.origin,
-            scrutinee,
-            result_type,
-            arms: planned,
-            tests,
-            projections,
-            bindings,
-            edges,
-            exhaustive: true,
-            witness: None,
-        });
+        self.analyzer.match_plans.push(plan);
         self.next_slot = outer_slot;
-        Ok(lowered)
+        Ok(self.expression(
+            result_type,
+            ExprKind::Match {
+                plan: plan_id,
+                scrutinee: Box::new(scrutinee_value),
+                arms: bodies,
+            },
+        ))
     }
 
     fn resolve_match_arms(
@@ -126,38 +95,5 @@ impl Resolver<'_> {
             bodies.push(body);
         }
         Ok((planned, bodies))
-    }
-
-    fn check_usefulness(&self, planned: &[PlannedMatchArm], scrutinee: &MatchLocal) -> Result<()> {
-        let mut matrix = Vec::new();
-        matrix
-            .try_reserve(planned.len())
-            .map_err(|_| Error::host("match usefulness input matrix allocation failed"))?;
-        let mut usefulness = Usefulness::new(&self.analyzer.enums, &self.analyzer.products)?;
-        for arm in planned {
-            let candidate = [&arm.pattern];
-            if usefulness
-                .useful(&matrix, &candidate, std::slice::from_ref(&scrutinee.ty))?
-                .is_none()
-            {
-                return Err(self.error(format!("useless or subsumed match arm {}", arm.id)));
-            }
-            matrix.push(&arm.pattern);
-        }
-        let wildcard = MatchPattern::Wildcard {
-            ty: scrutinee.ty.clone(),
-        };
-        if let Some(witness) =
-            usefulness.useful(&matrix, &[&wildcard], std::slice::from_ref(&scrutinee.ty))?
-        {
-            let root = *witness
-                .first()
-                .ok_or_else(|| Error::msg("match usefulness returned an empty witness"))?;
-            let rendered = usefulness.render_witness(root)?;
-            return Err(self.error(format!(
-                "nonexhaustive match; canonical typed witness: {rendered}",
-            )));
-        }
-        Ok(())
     }
 }

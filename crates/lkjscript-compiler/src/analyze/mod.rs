@@ -65,7 +65,9 @@ pub(crate) fn analyze_program_without_effects(
         main,
         global_layout,
     };
-    crate::ownership::check(&program)?;
+    let mut complete = program.clone();
+    resolution::matching::lower_semantic_matches(&mut complete)?;
+    crate::ownership::check(&complete)?;
     Ok(program)
 }
 
@@ -100,6 +102,21 @@ use resolution::*;
 
 pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
     resolution::matching::verify_match_plans(program)
+}
+
+pub(crate) fn build_match_plan(
+    id: MatchPlanId,
+    origin: Origin,
+    scrutinee: MatchLocal,
+    arms: Vec<PlannedMatchArm>,
+    enums: &[EnumDefinition],
+    products: &[ProductDefinition],
+) -> Result<MatchPlan> {
+    resolution::matching::build_match_plan(id, origin, scrutinee, arms, enums, products)
+}
+
+pub(crate) fn lower_semantic_matches(program: &mut hir::Program) -> Result<()> {
+    resolution::matching::lower_semantic_matches(program)
 }
 
 pub(crate) fn is_reserved_semantic_name(name: &str) -> bool {

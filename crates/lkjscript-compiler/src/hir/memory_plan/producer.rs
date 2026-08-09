@@ -227,6 +227,9 @@ fn constant_value(kind: &ExprKind) -> Option<MemoryConstantValue> {
 fn expression_kind(kind: &ExprKind) -> MemoryExpressionKind {
     match kind {
         ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
+        ExprKind::Match { .. } => {
+            unreachable!("semantic matches must be lowered before memory planning")
+        }
         ExprKind::LitI64(value) => MemoryExpressionKind::I64Literal(*value),
         ExprKind::LitF64(value) => MemoryExpressionKind::F64Literal(value.to_bits()),
         ExprKind::LitBool(value) => MemoryExpressionKind::BoolLiteral(*value),

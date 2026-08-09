@@ -38,6 +38,7 @@ pub(crate) fn analyze_interface_program(source: &ValidatedSourceTree) -> Result<
         main,
         global_layout,
     };
+    resolution::matching::lower_semantic_matches(&mut program)?;
     crate::ownership::check(&program)?;
     crate::effects::infer(&mut program);
     Ok(program)

@@ -57,6 +57,7 @@ pub enum NodeKind {
     SetLocal,
     Product,
     Enum,
+    Match,
     MatchUnreachable,
     Symbol,
     Hole,
@@ -289,11 +290,16 @@ pub(super) struct SnapshotIndexes {
     pub node_addresses: Vec<NodeAddress>,
     pub node_keys: Vec<NodeKey>,
     pub node_fingerprints: Vec<[u8; 32]>,
+    pub node_match_plans: Vec<Option<crate::hir::MatchPlanId>>,
     pub node_actual_types: Vec<crate::Type>,
     pub node_expected_types: Vec<Option<crate::Type>>,
     pub entity_types: Vec<Option<crate::Type>>,
     pub entity_lookup: HashMap<EntityId, usize>,
     pub node_lookup: HashMap<NodeId, usize>,
+    pub node_children: HashMap<NodeId, Vec<NodeId>>,
+    pub enum_identity_indices: HashMap<crate::hir::EnumId, usize>,
+    pub variant_identity_indices:
+        HashMap<(crate::hir::EnumId, crate::hir::VariantId), (usize, usize)>,
     pub address_entities: HashMap<EntityAddress, EntityId>,
     pub address_nodes: HashMap<NodeAddress, NodeId>,
 }
@@ -302,6 +308,7 @@ impl SnapshotIndexes {
     pub(super) fn rebuild_maps(&mut self) -> Result<()> {
         self.entity_lookup.clear();
         self.node_lookup.clear();
+        self.node_children.clear();
         self.address_entities.clear();
         self.address_nodes.clear();
         self.entity_lookup
@@ -310,6 +317,9 @@ impl SnapshotIndexes {
         self.node_lookup
             .try_reserve(self.nodes.len())
             .map_err(|_| Error::host("workspace node lookup allocation failed"))?;
+        self.node_children
+            .try_reserve(self.nodes.len())
+            .map_err(|_| Error::host("workspace node-child allocation failed"))?;
         self.address_entities
             .try_reserve(self.entities.len())
             .map_err(|_| Error::host("workspace entity address allocation failed"))?;
@@ -325,6 +335,9 @@ impl SnapshotIndexes {
         for (index, (header, address)) in self.nodes.iter().zip(&self.node_addresses).enumerate() {
             self.node_lookup.insert(header.id, index);
             self.address_nodes.insert(*address, header.id);
+            if let SemanticOwner::Node(owner) = header.owner {
+                self.node_children.entry(owner).or_default().push(header.id);
+            }
         }
         Ok(())
     }

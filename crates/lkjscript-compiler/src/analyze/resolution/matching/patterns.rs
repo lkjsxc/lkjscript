@@ -53,7 +53,8 @@ impl Resolver<'_> {
         {
             return Err(self.error(format!("duplicate pattern binding {name}")));
         }
-        let local = self.allocate_match_local(name.clone(), expected.clone())?;
+        let local =
+            self.allocate_match_local(name.clone(), expected.clone(), BindingKind::ImmutableLocal)?;
         let Some(scope) = self.scopes.last_mut() else {
             return Err(Error::msg("missing match arm scope"));
         };
@@ -82,22 +83,24 @@ impl Resolver<'_> {
 
     pub(super) fn allocate_hidden_match_local(&mut self, ty: Type) -> Result<MatchLocal> {
         let name = format!("$match{}", self.analyzer.bindings.len());
-        self.allocate_match_local(name, ty)
+        self.allocate_match_local(name, ty, BindingKind::MatchTemporary)
     }
 
-    fn allocate_match_local(&mut self, name: String, ty: Type) -> Result<MatchLocal> {
+    fn allocate_match_local(
+        &mut self,
+        name: String,
+        ty: Type,
+        kind: BindingKind,
+    ) -> Result<MatchLocal> {
         let slot = self.next_slot;
         self.next_slot = self
             .next_slot
             .checked_add(1)
             .ok_or_else(|| self.error("match local slot count overflow"))?;
         self.max_slots = self.max_slots.max(self.next_slot);
-        let binding = self.analyzer.add_binding(
-            name,
-            BindingKind::ImmutableLocal,
-            ty.clone(),
-            Origin::Source(self.origin),
-        )?;
+        let binding =
+            self.analyzer
+                .add_binding(name, kind, ty.clone(), Origin::Source(self.origin))?;
         self.local_slots.insert(binding, slot);
         let place = self.allocate_place(binding)?;
         Ok(MatchLocal {

@@ -207,10 +207,6 @@ impl<'a> Producer<'a> {
         match &expression.kind {
             ExprKind::Let { bindings, body } => {
                 for (index, local) in bindings.iter().enumerate() {
-                    self.add_local_place(
-                        local,
-                        crate::memory_plan::source_origin(expression.origin),
-                    )?;
                     let binding = matches!(local.value.kind, ExprKind::Borrow { .. })
                         .then_some(local.binding);
                     self.walk_expr(
@@ -219,6 +215,10 @@ impl<'a> Producer<'a> {
                         index_u64(index)?,
                         MemoryEscape::Local,
                         binding,
+                    )?;
+                    self.add_local_place(
+                        local,
+                        crate::memory_plan::source_origin(expression.origin),
                     )?;
                 }
                 self.walk_expr(

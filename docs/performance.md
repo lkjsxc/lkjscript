@@ -95,34 +95,47 @@ this Phase 2 measurement. Existing runtime-selection evidence below is unchanged
 ## Source-free semantic-workspace vertical
 
 **Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
-source-free nominal declarations, lexical immutable locals, and byte-vector ownership could converge
-with imported semantics and compile directly without hidden source/HIR state, source loading,
-parsing, repeated enum-declaration scans during indexing, or recursion on expression/local depth. The
-equivalent workloads were the imported and transaction-created forms of:
+source-free nominal declarations, lexical immutable locals, byte-vector ownership, and exhaustive
+enum payload matches could converge with imported semantics and compile directly without hidden
+source/HIR authority, source loading, parsing, repeated enum-declaration/CFG scans, or recursion on
+expression, pattern, local, or match depth. The equivalent workloads were the imported and
+transaction-created forms of:
 
 - `identity(value: i64) -> i64` plus `main() -> identity(42)`;
 - a two-field product constructed, bound, and projected;
-- a two-variant enum constructed, bound, and tested; and
+- a two-variant enum constructed, bound, and tested;
+- a two-variant enum constructed and exhaustively matched, with one stable payload binding; and
 - a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed.
 
 Selection required equal normalized stable entity kinds/types, containment, references,
-dependencies, node kinds/types/effects, compiler outcomes, memory obligations, exact VM values or
-traps, and cleanup behavior. Product/enum names are normalized only in the test observation because
-imported names retain module qualification; nominal identity stays workspace-local and structured.
+dependencies, node kinds/types/effects, canonical match-plan shape, compiler outcomes, selected
+memory-obligation kinds, the main bytecode stream, exact VM values or traps, and cleanup behavior.
+Product/enum names are normalized
+only in the test observation because imported names retain module qualification; nominal identity
+stays workspace-local and structured. Match provenance is intentionally not equal: imported plans
+retain real source origin and source-free plans retain semantic origin.
 
 Retained deterministic counters, indexes, and assertions show:
 
 - selected source-free create/fill/compile paths invoke source loading and the parser zero times;
 - incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
-- scalar, product, enum, local, and ownership source-free/imported snapshots have equal selected
-  semantic observations and production outcomes;
+- scalar, product, enum, local, ownership, and exhaustive enum-payload-match source-free/imported
+  snapshots have equal selected semantic observations and production outcomes;
 - index construction performs exactly one root-address lookup per semantic node for retained nested
-  `if` geometries at depths 32, 64, and 128; enum, variant, and enum-field relation lookup uses
-  prebuilt identity maps rather than scanning declarations per expression;
+  `if` geometries at depths 32, 64, and 128 and for the nested-match fixture; enum, variant,
+  enum-field, and match relation lookup uses prebuilt identity maps rather than scanning declarations
+  per expression; the nested-match fixture also records exactly three pattern-lowering node visits
+  per two-arm match (one `Some` aggregate, its wildcard field, and one `None` aggregate);
 - one ignored locked-release fixture completes a 20,000-level nested-`if` draft (60,001 expression
-  nodes), while a second completes 20,000 lexical locals (40,001 expression nodes); each includes
-  staged lowering, semantic clone, identity reconciliation, complete-HIR/ownership derivation,
-  memory planning, SSA, bytecode, VM execution, and destruction on a 128 KiB worker stack; and
+  nodes), a second completes 20,000 lexical locals (40,001 expression nodes), and a third completes
+  20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
+  includes staged lowering, semantic clone, identity reconciliation, complete-HIR/ownership/match
+  derivation, memory planning, SSA, bytecode, VM execution, projection where selected, and destruction
+  on a 128 KiB worker stack;
+- bytecode emission derives nonowned structural values once per function by propagating predecessor
+  edges, replacing a whole-CFG scan for every emitted structural load/store; the generated match
+  fixture asserts exactly one collection per SSA function and one deterministic visit per CFG edge;
+  and
 - the small scalar test asserts one post-completeness lowering invocation, so incomplete revisions
   enter none and the selected complete revision enters the production compiler boundary once.
 
@@ -133,23 +146,31 @@ cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_nominal_local_and_ownership_programs_converge -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::source_free_byte_vector_borrow_then_move_executes_and_cleans_up -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_and_source_free_enum_payload_matches_converge -- --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_source_free_locals_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_level_source_free_enum_matches_compile_execute_and_drop_on_small_stack \
+  -- --ignored --exact --test-threads=1
 ```
 
-On the development host, one final sequential invocation reported 18.19 seconds for the nested test
-body and 1.10 seconds for the local test body after a 1 minute 9 second release rebuild. These single
+On the development host, earlier final sequential invocations reported 18.19 seconds for the nested
+`if` test body and 1.10 seconds for the local test body after a 1 minute 9 second release rebuild. The
+match cutover's final locked-release invocation reported 317.73 seconds for the 20,000-match test body
+after a 1 minute 12 second rebuild (`real` 6 minutes 30.241 seconds including Cargo); it is deliberately
+an ignored maximum-geometry correctness fixture, not a representative latency target. These single
 noisy samples are orientation, not product-latency claims or gates. No allocator count, peak RSS,
 retained memory, edit/query latency distribution, or representative application throughput was
 measured. Reverse or redesign the implementation if equivalent observations diverge, an incomplete
-path enters a compiler phase, lookup work ceases to track semantic work, either selected depth fails
-on the small stack, cleanup changes, or broader authorship requires two mutable semantic
-representations. Future measurements should extend these retained product operations rather than
-revive the deleted text publication or wire service.
+path enters a compiler phase, lookup work ceases to track semantic work, selected depth fails on the
+small stack, structural-local emission resumes repeated CFG scans, cleanup changes, or broader
+authorship requires two mutable semantic representations. Future measurements should extend these
+retained product operations rather than revive the deleted text publication or wire service.
 
 ## Owned structural-value stack and work correction
 

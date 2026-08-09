@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 pub(super) fn pattern(
     program: &hir::Program,
-    origin: SourceId,
+    origin: Origin,
     pattern: &MatchPattern,
     expected: &Type,
     locals: &mut BTreeSet<BindingId>,
@@ -14,7 +14,7 @@ pub(super) fn pattern(
 
 fn pattern_inner(
     program: &hir::Program,
-    origin: SourceId,
+    origin: Origin,
     pattern: &MatchPattern,
     expected: &Type,
     locals: &mut BTreeSet<BindingId>,
@@ -25,7 +25,14 @@ fn pattern_inner(
     }
     match pattern {
         MatchPattern::Wildcard { .. } => Ok(()),
-        MatchPattern::Binding { local: item } => local(program, origin, item, locals, places),
+        MatchPattern::Binding { local: item } => local(
+            program,
+            origin,
+            item,
+            BindingKind::ImmutableLocal,
+            locals,
+            places,
+        ),
         MatchPattern::Bool(_) if expected == &Type::Bool => Ok(()),
         MatchPattern::I64(_) if expected == &Type::I64 => Ok(()),
         MatchPattern::Variant {
@@ -73,7 +80,14 @@ fn pattern_inner(
                 match (&field.projection, &field.pattern) {
                     (None, MatchPattern::Wildcard { .. }) => {}
                     (Some(projection), pattern) if projection.ty == field_ty => {
-                        local(program, origin, projection, locals, places)?;
+                        local(
+                            program,
+                            origin,
+                            projection,
+                            BindingKind::MatchTemporary,
+                            locals,
+                            places,
+                        )?;
                         pattern_child(program, origin, pattern, &field_ty, locals, places)?;
                     }
                     _ => {
@@ -110,7 +124,14 @@ fn pattern_inner(
                 match (&field.projection, &field.pattern) {
                     (None, MatchPattern::Wildcard { .. }) => {}
                     (Some(projection), pattern) if projection.ty == declared.ty => {
-                        local(program, origin, projection, locals, places)?;
+                        local(
+                            program,
+                            origin,
+                            projection,
+                            BindingKind::MatchTemporary,
+                            locals,
+                            places,
+                        )?;
                         pattern_child(program, origin, pattern, &declared.ty, locals, places)?;
                     }
                     _ => {
@@ -128,7 +149,7 @@ fn pattern_inner(
 
 fn pattern_child(
     program: &hir::Program,
-    origin: SourceId,
+    origin: Origin,
     value: &MatchPattern,
     ty: &Type,
     locals: &mut BTreeSet<BindingId>,
@@ -139,18 +160,16 @@ fn pattern_child(
 
 pub(super) fn local(
     program: &hir::Program,
-    origin: SourceId,
+    origin: Origin,
     local: &MatchLocal,
+    kind: BindingKind,
     locals: &mut BTreeSet<BindingId>,
     places: &mut BTreeSet<PlaceId>,
 ) -> Result<()> {
     let binding = program
         .binding(local.binding)
         .ok_or_else(|| Error::msg("match plan local binding is stale"))?;
-    if binding.ty != local.ty
-        || binding.kind != BindingKind::ImmutableLocal
-        || binding.origin != Origin::Source(origin)
-    {
+    if binding.ty != local.ty || binding.kind != kind || binding.origin != origin {
         return Err(Error::msg("match plan local binding type/origin is stale"));
     }
     if !locals.insert(local.binding) || !places.insert(local.place) {

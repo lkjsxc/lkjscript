@@ -12,6 +12,8 @@ pub enum Origin {
 pub enum BindingKind {
     Parameter,
     ImmutableLocal,
+    /// Compiler-owned scrutinee or projection storage for match lowering.
+    MatchTemporary,
     StaticBytesLocal,
     MutableLocal,
     Function,

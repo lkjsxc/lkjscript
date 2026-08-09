@@ -52,6 +52,9 @@ mod structural;
 
 pub(in crate::codegen) use constants::*;
 pub(in crate::codegen) use control::*;
+pub(in crate::codegen) use emit_values::collect_nonowned_structural_values;
+#[cfg(test)]
+pub(crate) use emit_values::{nonowned_structural_work, reset_nonowned_structural_work};
 pub(in crate::codegen) use enums::*;
 pub(in crate::codegen) use interference::*;
 pub(in crate::codegen) use locals::*;

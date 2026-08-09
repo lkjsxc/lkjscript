@@ -142,11 +142,15 @@ fn build_entities(
         node_addresses: Vec::new(),
         node_keys: Vec::new(),
         node_fingerprints: Vec::new(),
+        node_match_plans: Vec::new(),
         node_actual_types: Vec::new(),
         node_expected_types: Vec::new(),
         entity_types: Vec::new(),
         entity_lookup: HashMap::new(),
         node_lookup: HashMap::new(),
+        node_children: HashMap::new(),
+        enum_identity_indices: HashMap::new(),
+        variant_identity_indices: HashMap::new(),
         address_entities: HashMap::new(),
         address_nodes: HashMap::new(),
     };
@@ -168,7 +172,10 @@ fn build_entities(
     let mut bindings = Vec::new();
     reserve(&mut bindings, program.bindings.len(), "binding entity map")?;
     for binding in &program.bindings {
-        let entity = if matches!(binding.kind, BindingKind::BuiltinOperation(_)) {
+        let entity = if matches!(
+            binding.kind,
+            BindingKind::BuiltinOperation(_) | BindingKind::MatchTemporary
+        ) {
             None
         } else {
             Some(push_entity(
@@ -232,6 +239,10 @@ fn build_entities(
     enum_indices
         .try_reserve(program.enums.len())
         .map_err(|_| Error::host("enum identity index allocation failed"))?;
+    indexes
+        .enum_identity_indices
+        .try_reserve(program.enums.len())
+        .map_err(|_| Error::host("workspace enum query index allocation failed"))?;
     let variant_count = program
         .enums
         .iter()
@@ -243,6 +254,10 @@ fn build_entities(
     variant_indices
         .try_reserve(variant_count)
         .map_err(|_| Error::host("enum variant identity index allocation failed"))?;
+    indexes
+        .variant_identity_indices
+        .try_reserve(variant_count)
+        .map_err(|_| Error::host("workspace variant query index allocation failed"))?;
     let field_count = program
         .enums
         .iter()
@@ -257,8 +272,14 @@ fn build_entities(
         .map_err(|_| Error::host("enum field identity index allocation failed"))?;
     for (enum_index, definition) in program.enums.iter().enumerate() {
         enum_indices.insert(definition.id, enum_index);
+        indexes
+            .enum_identity_indices
+            .insert(definition.id, enum_index);
         for (variant_index, variant) in definition.variants.iter().enumerate() {
             variant_indices.insert((definition.id, variant.id), variant_index);
+            indexes
+                .variant_identity_indices
+                .insert((definition.id, variant.id), (enum_index, variant_index));
             for (field_index, field) in variant.fields.iter().enumerate() {
                 enum_field_indices.insert((definition.id, variant.id, field.id), field_index);
             }
@@ -598,7 +619,13 @@ fn walk_root(
     });
     while let Some(item) = pending.pop() {
         let expression = item.expression;
-        let node = push_node(indexes, item.owner, expression, item.expected.as_ref())?;
+        let node = push_node(
+            program,
+            indexes,
+            item.owner,
+            expression,
+            item.expected.as_ref(),
+        )?;
         push_containment(indexes, item.owner, SemanticChild::Node(node))?;
         add_expression_relations(
             program,
@@ -672,11 +699,9 @@ fn add_expression_relations(
                 if local.slot >= local_count {
                     return Err(Error::msg("local binding slot exceeds owner local count"));
                 }
-                set_entity_owner(
-                    indexes,
-                    require_binding_entity(maps, local.binding)?,
-                    enclosing,
-                )?;
+                if let Some(entity) = binding_entity(maps, local.binding)? {
+                    set_entity_owner(indexes, entity, enclosing)?;
+                }
             }
         }
         ExprKind::MutableLocal { binding, slot, .. } => {
@@ -784,48 +809,103 @@ fn add_expression_relations(
                 }
             }
         }
-        ExprKind::MatchUnreachable { plan } => {
-            let plan = program
-                .match_plans
-                .get(index_of(plan.raw(), "match plan")?)
-                .ok_or_else(|| Error::msg("match plan identity is stale"))?;
-            set_entity_owner(
-                indexes,
-                require_binding_entity(maps, plan.scrutinee.binding)?,
-                enclosing,
-            )?;
-            for arm in &plan.arms {
-                let mut patterns = Vec::new();
-                reserve(&mut patterns, 1, "workspace match pattern work stack")?;
-                patterns.push(&arm.pattern);
-                while let Some(pattern) = patterns.pop() {
-                    match pattern {
-                        crate::hir::MatchPattern::Binding { local } => {
-                            set_entity_owner(
-                                indexes,
-                                require_binding_entity(maps, local.binding)?,
-                                enclosing,
-                            )?;
-                        }
-                        crate::hir::MatchPattern::Variant { fields, .. }
-                        | crate::hir::MatchPattern::Product { fields, .. } => {
-                            for field in fields {
-                                if let Some(local) = &field.projection {
-                                    set_entity_owner(
-                                        indexes,
-                                        require_binding_entity(maps, local.binding)?,
-                                        enclosing,
-                                    )?;
-                                }
-                                patterns.push(&field.pattern);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
+        ExprKind::Match { plan, .. } | ExprKind::MatchUnreachable { plan } => {
+            add_match_plan_relations(program, maps, indexes, node, enclosing, *plan)?;
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn add_match_plan_relations(
+    program: &SemanticProgram,
+    maps: &EntityMaps,
+    indexes: &mut SnapshotIndexes,
+    node: NodeId,
+    enclosing: EntityId,
+    id: crate::hir::MatchPlanId,
+) -> Result<()> {
+    let plan = program
+        .match_plans
+        .get(index_of(id.raw(), "match plan")?)
+        .filter(|item| item.id == id)
+        .ok_or_else(|| Error::msg("match plan identity is stale"))?;
+    if let Some(entity) = binding_entity(maps, plan.scrutinee.binding)? {
+        set_entity_owner(indexes, entity, enclosing)?;
+    }
+    for arm in &plan.arms {
+        let mut patterns = Vec::new();
+        reserve(&mut patterns, 1, "workspace match pattern work stack")?;
+        patterns.push(&arm.pattern);
+        while let Some(pattern) = patterns.pop() {
+            match pattern {
+                crate::hir::MatchPattern::Binding { local } => {
+                    set_entity_owner(
+                        indexes,
+                        require_binding_entity(maps, local.binding)?,
+                        enclosing,
+                    )?;
+                }
+                crate::hir::MatchPattern::Variant {
+                    enum_id,
+                    variant,
+                    fields,
+                    ..
+                } => {
+                    if let Some(enum_entity) = enum_entity(maps, *enum_id)? {
+                        let enum_index = enum_index(maps, *enum_id)?;
+                        let variant_index = enum_variant_index(maps, *enum_id, *variant)?;
+                        let (_, variants) = maps.enums[enum_index]
+                            .as_ref()
+                            .ok_or_else(|| Error::msg("user enum identity map is missing"))?;
+                        let (variant_entity, field_entities) = &variants[variant_index];
+                        push_reference(indexes, node, enum_entity)?;
+                        push_dependency(indexes, enclosing, enum_entity)?;
+                        push_reference(indexes, node, *variant_entity)?;
+                        push_dependency(indexes, enclosing, *variant_entity)?;
+                        for field in fields {
+                            let field_index = index_of(field.field_index, "match enum field")?;
+                            let field_entity = *field_entities
+                                .get(field_index)
+                                .ok_or_else(|| Error::msg("match enum field identity is stale"))?;
+                            push_reference(indexes, node, field_entity)?;
+                            push_dependency(indexes, enclosing, field_entity)?;
+                            if let Some(local) = &field.projection {
+                                if let Some(entity) = binding_entity(maps, local.binding)? {
+                                    set_entity_owner(indexes, entity, enclosing)?;
+                                }
+                            }
+                            patterns.push(&field.pattern);
+                        }
+                    }
+                }
+                crate::hir::MatchPattern::Product {
+                    product, fields, ..
+                } => {
+                    let product_entity = product_entity(maps, *product)?;
+                    push_reference(indexes, node, product_entity)?;
+                    push_dependency(indexes, enclosing, product_entity)?;
+                    let (_, field_entities) = maps
+                        .products
+                        .get(index_of(product.raw(), "match product")?)
+                        .ok_or_else(|| Error::msg("match product identity is stale"))?;
+                    for field in fields {
+                        let field_entity = *field_entities
+                            .get(index_of(field.field_index, "match product field")?)
+                            .ok_or_else(|| Error::msg("match product field identity is stale"))?;
+                        push_reference(indexes, node, field_entity)?;
+                        push_dependency(indexes, enclosing, field_entity)?;
+                        if let Some(local) = &field.projection {
+                            if let Some(entity) = binding_entity(maps, local.binding)? {
+                                set_entity_owner(indexes, entity, enclosing)?;
+                            }
+                        }
+                        patterns.push(&field.pattern);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
     Ok(())
 }
@@ -977,6 +1057,26 @@ fn expression_children<'a>(
             children.push((then_branch, Some(expression.ty.clone())));
             children.push((else_branch, Some(expression.ty.clone())));
         }
+        ExprKind::Match {
+            plan,
+            scrutinee,
+            arms,
+        } => {
+            let plan = program
+                .match_plans
+                .get(index_of(plan.raw(), "match plan")?)
+                .filter(|item| item.id == *plan)
+                .ok_or_else(|| Error::msg("semantic match plan identity is stale"))?;
+            let additional = arms
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| Error::host("workspace match child count overflow"))?;
+            reserve(&mut children, additional, "workspace match children")?;
+            children.push((scrutinee, Some(plan.scrutinee.ty.clone())));
+            for (body, arm) in arms.iter().zip(&plan.arms) {
+                children.push((body, Some(arm.body_type.clone())));
+            }
+        }
         ExprKind::Let { bindings, body } => {
             let additional = bindings
                 .len()
@@ -1084,6 +1184,7 @@ fn push_entity(
 }
 
 fn push_node(
+    program: &SemanticProgram,
     indexes: &mut SnapshotIndexes,
     owner: SemanticOwner,
     expression: &Expr,
@@ -1111,7 +1212,16 @@ fn push_node(
     )?;
     indexes
         .node_fingerprints
-        .push(expression_fingerprint(expression)?);
+        .push(expression_fingerprint(program, expression)?);
+    reserve(
+        &mut indexes.node_match_plans,
+        1,
+        "workspace match-plan node index",
+    )?;
+    indexes.node_match_plans.push(match &expression.kind {
+        ExprKind::Match { plan, .. } => Some(*plan),
+        _ => None,
+    });
     reserve(
         &mut indexes.node_actual_types,
         1,
@@ -1258,6 +1368,9 @@ fn binding_kind(kind: &BindingKind) -> EntityKind {
     match kind {
         BindingKind::Parameter => EntityKind::Parameter,
         BindingKind::ImmutableLocal => EntityKind::ImmutableLocal,
+        BindingKind::MatchTemporary => {
+            unreachable!("match temporaries have no public workspace entity")
+        }
         BindingKind::StaticBytesLocal => EntityKind::StaticBytesLocal,
         BindingKind::MutableLocal => EntityKind::MutableLocal,
         BindingKind::Function => EntityKind::Function,
@@ -1303,6 +1416,7 @@ fn node_kind(kind: &ExprKind) -> NodeKind {
         | ExprKind::EnumIsVariant { .. }
         | ExprKind::EnumField { .. }
         | ExprKind::EnumUnwrap { .. } => NodeKind::Enum,
+        ExprKind::Match { .. } => NodeKind::Match,
         ExprKind::MatchUnreachable { .. } => NodeKind::MatchUnreachable,
         ExprKind::QuoteSymbol(_) => NodeKind::Symbol,
     }
@@ -1311,6 +1425,9 @@ fn node_kind(kind: &ExprKind) -> NodeKind {
 fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
     if indexes.entity_addresses.len() != indexes.entities.len() {
         return Err(Error::msg("workspace entity address index is incomplete"));
+    }
+    if indexes.node_match_plans.len() != indexes.nodes.len() {
+        return Err(Error::msg("workspace match-plan node index is incomplete"));
     }
 
     reserve(
@@ -1378,7 +1495,151 @@ fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
     indexes.rebuild_maps()
 }
 
-fn expression_fingerprint(expression: &Expr) -> Result<[u8; 32]> {
+pub(super) fn match_plan_fingerprint(plan: &crate::hir::MatchPlan) -> Result<[u8; 32]> {
+    enum Work<'a> {
+        Pattern(&'a crate::hir::MatchPattern),
+        Field(&'a crate::hir::MatchFieldPattern),
+    }
+
+    let mut bytes = Vec::new();
+    reserve(&mut bytes, 128, "match plan fingerprint")?;
+    append_fingerprint_u64(&mut bytes, plan.id.raw(), "match plan identity")?;
+    append_fingerprint_u64(
+        &mut bytes,
+        u64::try_from(plan.arms.len())
+            .map_err(|_| Error::host("match fingerprint arm count exceeds u64"))?,
+        "match arm count",
+    )?;
+    reserve(&mut bytes, 1, "match exhaustiveness fingerprint")?;
+    bytes.push(u8::from(plan.exhaustive));
+    let mut work = Vec::new();
+    for arm in &plan.arms {
+        append_fingerprint_u64(&mut bytes, arm.id, "match arm identity")?;
+        append_fingerprint_bytes(
+            &mut bytes,
+            arm.body_type.to_string().as_bytes(),
+            "match arm type",
+        )?;
+        reserve(&mut work, 1, "match fingerprint work stack")?;
+        work.push(Work::Pattern(&arm.pattern));
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Pattern(pattern) => {
+                    append_fingerprint_bytes(
+                        &mut bytes,
+                        pattern.ty().to_string().as_bytes(),
+                        "match pattern type",
+                    )?;
+                    reserve(&mut bytes, 128, "match pattern fingerprint")?;
+                    match pattern {
+                        crate::hir::MatchPattern::Wildcard { .. } => bytes.push(0),
+                        crate::hir::MatchPattern::Binding { local } => {
+                            bytes.push(1);
+                            append_match_local_fingerprint(&mut bytes, local)?;
+                        }
+                        crate::hir::MatchPattern::Bool(value) => {
+                            bytes.extend_from_slice(&[2, u8::from(*value)]);
+                        }
+                        crate::hir::MatchPattern::I64(value) => {
+                            bytes.push(3);
+                            bytes.extend_from_slice(&value.to_be_bytes());
+                        }
+                        crate::hir::MatchPattern::Variant {
+                            enum_id,
+                            variant,
+                            layout,
+                            fields,
+                            ..
+                        } => {
+                            bytes.push(4);
+                            bytes.extend_from_slice(&enum_id.bytes());
+                            bytes.extend_from_slice(&variant.bytes());
+                            bytes.extend_from_slice(&layout.bytes());
+                            append_fingerprint_u64(
+                                &mut bytes,
+                                u64::try_from(fields.len()).map_err(|_| {
+                                    Error::host("match fingerprint field count exceeds u64")
+                                })?,
+                                "match field count",
+                            )?;
+                            reserve(&mut work, fields.len(), "match fingerprint work stack")?;
+                            work.extend(fields.iter().rev().map(Work::Field));
+                        }
+                        crate::hir::MatchPattern::Product {
+                            product, fields, ..
+                        } => {
+                            bytes.push(5);
+                            bytes.extend_from_slice(&product.raw().to_be_bytes());
+                            append_fingerprint_u64(
+                                &mut bytes,
+                                u64::try_from(fields.len()).map_err(|_| {
+                                    Error::host("match fingerprint field count exceeds u64")
+                                })?,
+                                "match field count",
+                            )?;
+                            reserve(&mut work, fields.len(), "match fingerprint work stack")?;
+                            work.extend(fields.iter().rev().map(Work::Field));
+                        }
+                    }
+                }
+                Work::Field(field) => {
+                    reserve(&mut bytes, 64, "match field fingerprint")?;
+                    bytes.push(6);
+                    append_fingerprint_bytes(
+                        &mut bytes,
+                        field.name.as_bytes(),
+                        "match field name",
+                    )?;
+                    append_fingerprint_u64(&mut bytes, field.field_index, "match field index")?;
+                    reserve(&mut bytes, 1, "match projection fingerprint")?;
+                    if let Some(projection) = &field.projection {
+                        bytes.push(1);
+                        append_match_local_fingerprint(&mut bytes, projection)?;
+                    } else {
+                        bytes.push(0);
+                    }
+                    reserve(&mut work, 1, "match fingerprint work stack")?;
+                    work.push(Work::Pattern(&field.pattern));
+                }
+            }
+        }
+    }
+    Ok(lkjscript_core::sha256(&bytes))
+}
+
+fn append_match_local_fingerprint(
+    bytes: &mut Vec<u8>,
+    local: &crate::hir::MatchLocal,
+) -> Result<()> {
+    append_fingerprint_u64(bytes, local.binding.raw(), "match binding identity")?;
+    append_fingerprint_u64(bytes, local.place.raw(), "match place identity")?;
+    append_fingerprint_u64(
+        bytes,
+        u64::try_from(local.slot).map_err(|_| Error::host("match fingerprint slot exceeds u64"))?,
+        "match local slot",
+    )?;
+    append_fingerprint_bytes(bytes, local.ty.to_string().as_bytes(), "match local type")
+}
+
+fn append_fingerprint_u64(bytes: &mut Vec<u8>, value: u64, context: &str) -> Result<()> {
+    reserve(bytes, std::mem::size_of::<u64>(), context)?;
+    bytes.extend_from_slice(&value.to_be_bytes());
+    Ok(())
+}
+
+fn append_fingerprint_bytes(bytes: &mut Vec<u8>, value: &[u8], context: &str) -> Result<()> {
+    append_fingerprint_u64(
+        bytes,
+        u64::try_from(value.len())
+            .map_err(|_| Error::host(format!("{context} length exceeds u64")))?,
+        context,
+    )?;
+    reserve(bytes, value.len(), context)?;
+    bytes.extend_from_slice(value);
+    Ok(())
+}
+
+fn expression_fingerprint(program: &SemanticProgram, expression: &Expr) -> Result<[u8; 32]> {
     let mut bytes = Vec::new();
     bytes
         .try_reserve(96)
@@ -1505,13 +1766,23 @@ fn expression_fingerprint(expression: &Expr) -> Result<[u8; 32]> {
             bytes.extend_from_slice(&field.bytes());
             35
         }
+        ExprKind::Match { plan, .. } => {
+            bytes.extend_from_slice(&plan.raw().to_be_bytes());
+            let plan = plan
+                .index()
+                .and_then(|index| program.match_plans.get(index))
+                .filter(|item| item.id == *plan)
+                .ok_or_else(|| Error::msg("workspace match fingerprint lost its plan"))?;
+            bytes.extend_from_slice(&match_plan_fingerprint(plan)?);
+            36
+        }
         ExprKind::MatchUnreachable { plan } => {
             bytes.extend_from_slice(&plan.raw().to_be_bytes());
-            36
+            37
         }
         ExprKind::QuoteSymbol(value) => {
             bytes.extend_from_slice(value.as_bytes());
-            37
+            38
         }
     };
     bytes.push(tag);

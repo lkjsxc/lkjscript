@@ -31,10 +31,13 @@ workspace library. Text and paths are importer conveniences, not program authori
 `Workspace::empty` creates a source-free incomplete program; revision-checked transactions can
 create non-generic products, enums, functions, and `main`, then fill real typed holes with flat
 non-recursive drafts. Implemented drafts include immutable lexical locals, selected canonical
-built-in operations, byte-vector move/borrow, and product/enum construction and observation. The
-complete immutable `WorkspaceSnapshot` derives compiler HIR directly, without rendering or parsing
-source. Imported and programmatically constructed programs use this same semantic authority,
-query/index model, completeness gate, ownership checker, and compiler boundary.
+built-in operations, byte-vector move/borrow, product/enum construction and observation, and
+source-free exhaustive enum payload matches. Match arms use flat `PatternDraft` trees; named payload
+bindings receive stable workspace entities while compiler-only scrutinee/projection storage remains
+hidden. The complete immutable `WorkspaceSnapshot` derives compiler HIR directly, without rendering
+or parsing source. Imported and programmatically constructed programs use the same canonical match
+checker/lowering, semantic authority, query/index model, completeness gate, ownership checker, and
+compiler boundary.
 
 The `.lkjscript` extension is the only fixed source-format property. The current line-oriented
 encoding is provisional and non-authoritative; no textual, binary, or compatibility promise follows

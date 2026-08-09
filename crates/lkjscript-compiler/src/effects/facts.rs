@@ -44,6 +44,9 @@ fn recompute_expr_inner(expression: &mut Expr, summaries: &[Option<EffectSet>]) 
             recompute_expr(value, summaries).union(EffectSet::ALLOCATES)
         }
         ExprKind::Do(expressions) => recompute_slice(expressions, summaries),
+        ExprKind::Match {
+            scrutinee, arms, ..
+        } => recompute_expr(scrutinee, summaries).union(recompute_slice(arms, summaries)),
         ExprKind::If {
             condition,
             then_branch,

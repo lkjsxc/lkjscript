@@ -22,6 +22,7 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
             program,
             plan.origin,
             &plan.scrutinee,
+            BindingKind::MatchTemporary,
             &mut locals,
             &mut places,
         )?;

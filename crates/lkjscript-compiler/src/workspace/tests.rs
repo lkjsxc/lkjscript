@@ -1718,6 +1718,227 @@ fn twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack() {
         .expect("small-stack edit completes");
 }
 
+fn deep_match_draft(
+    depth: usize,
+    some: EntityId,
+    none: EntityId,
+    value_field: EntityId,
+) -> ExpressionDraft {
+    assert!(depth > 0, "deep match geometry requires one match");
+    let some_pattern = || {
+        PatternDraft::new(
+            vec![
+                DraftPatternNode::Wildcard,
+                DraftPatternNode::EnumVariant {
+                    variant: some,
+                    fields: vec![DraftPatternField {
+                        field: value_field,
+                        pattern: DraftPatternNodeId::new(0),
+                    }],
+                },
+            ],
+            DraftPatternNodeId::new(1),
+        )
+    };
+    let none_pattern = || {
+        PatternDraft::new(
+            vec![DraftPatternNode::EnumVariant {
+                variant: none,
+                fields: Vec::new(),
+            }],
+            DraftPatternNodeId::new(0),
+        )
+    };
+    let mut nodes = Vec::new();
+    nodes
+        .try_reserve(
+            depth
+                .checked_mul(4)
+                .and_then(|count| count.checked_add(1))
+                .expect("match draft geometry"),
+        )
+        .expect("match draft allocation");
+    nodes.push(DraftNode::I64(1));
+    nodes.push(DraftNode::EnumValue {
+        variant: some,
+        fields: vec![DraftFieldValue {
+            field: value_field,
+            value: DraftNodeId::new(0),
+        }],
+    });
+    let mut scrutinee = DraftNodeId::new(1);
+    for level in 1..depth {
+        let payload = DraftNodeId::new(u64::try_from(nodes.len()).expect("payload id"));
+        nodes.push(DraftNode::I64(i64::try_from(level).expect("payload value")));
+        let some_value = DraftNodeId::new(u64::try_from(nodes.len()).expect("some value id"));
+        nodes.push(DraftNode::EnumValue {
+            variant: some,
+            fields: vec![DraftFieldValue {
+                field: value_field,
+                value: payload,
+            }],
+        });
+        let none_value = DraftNodeId::new(u64::try_from(nodes.len()).expect("none value id"));
+        nodes.push(DraftNode::EnumValue {
+            variant: none,
+            fields: Vec::new(),
+        });
+        let next = DraftNodeId::new(u64::try_from(nodes.len()).expect("match id"));
+        nodes.push(DraftNode::Match {
+            scrutinee,
+            arms: vec![
+                MatchArmDraft {
+                    pattern: some_pattern(),
+                    body: some_value,
+                },
+                MatchArmDraft {
+                    pattern: none_pattern(),
+                    body: none_value,
+                },
+            ],
+        });
+        scrutinee = next;
+    }
+    let one = DraftNodeId::new(u64::try_from(nodes.len()).expect("result id"));
+    nodes.push(DraftNode::I64(1));
+    let zero = DraftNodeId::new(u64::try_from(nodes.len()).expect("alternative id"));
+    nodes.push(DraftNode::I64(0));
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("root match id"));
+    nodes.push(DraftNode::Match {
+        scrutinee,
+        arms: vec![
+            MatchArmDraft {
+                pattern: some_pattern(),
+                body: one,
+            },
+            MatchArmDraft {
+                pattern: none_pattern(),
+                body: zero,
+            },
+        ],
+    });
+    ExpressionDraft::new(nodes, root)
+}
+
+fn run_source_free_deep_match(depth: usize, seed: u64) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("deep match workspace");
+    let (_choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create deep match main");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    super::index::reset_root_address_lookups();
+    super::transaction::reset_pattern_lowering_node_visits();
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: deep_match_draft(depth, some, none, value_field),
+            }],
+        })
+        .expect("fill deep match main");
+    assert_eq!(completed.snapshot.nodes().len(), depth * 4 + 1);
+    assert_eq!(completed.snapshot.program.match_plans.len(), depth);
+    assert_eq!(
+        super::transaction::pattern_lowering_node_visits(),
+        u64::try_from(depth * 3).expect("pattern visit count")
+    );
+    assert_eq!(
+        super::index::root_address_lookups(),
+        u64::try_from(depth * 4 + 1).expect("lookup count")
+    );
+    assert!(completed
+        .snapshot
+        .program
+        .match_plans
+        .iter()
+        .all(|plan| plan.tests.len() == 2
+            && plan.projections.is_empty()
+            && plan.bindings.is_empty()));
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("deep match site")
+        .id;
+    assert_eq!(
+        completed
+            .snapshot
+            .match_view(completed.snapshot.revision(), site)
+            .expect("deep match view")
+            .arms
+            .len(),
+        2
+    );
+    let projection = completed
+        .snapshot
+        .project(&[ProjectionSlice::Body(main), ProjectionSlice::Match(site)])
+        .expect("deep match projection");
+    assert_eq!(projection.matches("kind=match ").count(), depth);
+    crate::codegen::reset_nonowned_structural_work();
+    let executable = crate::compile_snapshot(&completed.snapshot).expect("compile deep match");
+    let ssa = executable.ssa().program();
+    let expected_edges = ssa
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .map(|block| match block.terminator {
+            lkjscript_ir::Terminator::Branch { .. } => 1_u64,
+            lkjscript_ir::Terminator::ConditionalBranch { .. } => 2,
+            lkjscript_ir::Terminator::Return(_)
+            | lkjscript_ir::Terminator::Trap { .. }
+            | lkjscript_ir::Terminator::Exit { .. }
+            | lkjscript_ir::Terminator::Outcome { .. } => 0,
+        })
+        .sum::<u64>();
+    assert_eq!(
+        crate::codegen::nonowned_structural_work(),
+        (
+            u64::try_from(ssa.functions.len()).expect("SSA function count"),
+            expected_edges,
+        )
+    );
+    assert!(matches!(
+        run_chunk(
+            executable.bytecode(),
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+        ),
+        ExecutionOutcome::Returned(value) if value.as_i64() == Some(1)
+    ));
+}
+
+#[test]
+fn modest_source_free_enum_match_depth_compiles_executes_and_drops_on_small_stack() {
+    std::thread::Builder::new()
+        .name("workspace-modest-source-free-match".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_source_free_deep_match(128, 84))
+        .expect("spawn small-stack match edit")
+        .join()
+        .expect("small-stack match edit completes");
+}
+
+#[test]
+#[ignore = "20k-level locked-release source-free enum-match small-stack stress geometry"]
+fn twenty_thousand_level_source_free_enum_matches_compile_execute_and_drop_on_small_stack() {
+    std::thread::Builder::new()
+        .name("workspace-deep-source-free-match".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_source_free_deep_match(20_000, 85))
+        .expect("spawn small-stack match edit")
+        .join()
+        .expect("small-stack match edit completes");
+}
+
 #[test]
 fn pagination_and_semantic_diff_are_deterministic() {
     let first = importer::import_source_with_namespace(
@@ -2554,6 +2775,1627 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
         .any(|edge| edge.target == value_field));
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_enum_payload_match_compiles_and_executes() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(80).expect("match workspace");
+    let (choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create match main");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let payload = DraftBindingId::new(0);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(payload)),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(1),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Binding {
+                                                binding: payload,
+                                                name: "value".to_owned(),
+                                            },
+                                            DraftPatternNode::EnumVariant {
+                                                variant: some,
+                                                fields: vec![DraftPatternField {
+                                                    field: value_field,
+                                                    pattern: DraftPatternNodeId::new(0),
+                                                }],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(1),
+                                    ),
+                                    body: DraftNodeId::new(2),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![DraftPatternNode::EnumVariant {
+                                            variant: none,
+                                            fields: Vec::new(),
+                                        }],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(3),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("fill main with exhaustive enum match");
+
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+    assert!(completed.snapshot.attachments().is_none());
+    let binding = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "value");
+    assert!(completed
+        .diff
+        .entries
+        .iter()
+        .any(|entry| matches!(entry, SemanticDiffEntry::EntityCreated { entity, .. } if *entity == binding)));
+    assert!(completed
+        .snapshot
+        .entities()
+        .iter()
+        .all(|entity| !entity.name.starts_with("$match")));
+    assert!(completed
+        .snapshot
+        .search_entities(
+            completed.snapshot.revision(),
+            "$match",
+            PageRequest::new(16).expect("search page"),
+            None,
+        )
+        .expect("hidden match search")
+        .items
+        .is_empty());
+    assert!(completed
+        .snapshot
+        .search_entities(
+            completed.snapshot.revision(),
+            "value",
+            PageRequest::new(16).expect("search page"),
+            None,
+        )
+        .expect("payload search")
+        .items
+        .iter()
+        .any(|entity| entity.id == binding));
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("semantic match node")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), site)
+        .expect("match view");
+    assert_eq!(
+        view,
+        completed
+            .snapshot
+            .match_view(completed.snapshot.revision(), site)
+            .expect("repeat match view")
+    );
+    assert!(matches!(
+        completed
+            .snapshot
+            .match_view(created.snapshot.revision(), site),
+        Err(WorkspaceError::StaleRevision)
+    ));
+    let literal = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Literal)
+        .expect("literal node")
+        .id;
+    assert!(matches!(
+        completed
+            .snapshot
+            .match_view(completed.snapshot.revision(), literal),
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(view.exhaustive);
+    assert_eq!(view.arms.len(), 2);
+    assert!(view.arms[0].patterns.iter().any(|pattern| {
+        matches!(pattern.kind, MatchPatternKindView::Binding { binding: found } if found == binding)
+    }));
+    for target in [choice, some, none, value_field, binding] {
+        assert!(completed
+            .snapshot
+            .references()
+            .iter()
+            .any(|edge| edge.target == target));
+    }
+    assert!(completed
+        .snapshot
+        .dependencies()
+        .iter()
+        .any(|edge| edge.dependent == main && edge.dependency == choice));
+    let projection = completed
+        .snapshot
+        .project(&[ProjectionSlice::Body(main), ProjectionSlice::Match(site)])
+        .expect("source-free match projection");
+    assert_eq!(
+        projection,
+        completed
+            .snapshot
+            .project(&[ProjectionSlice::Body(main), ProjectionSlice::Match(site)])
+            .expect("repeat source-free match projection")
+    );
+    assert!(projection.contains("kind=match"), "{projection}");
+    assert!(projection.contains("kind=enum-variant"), "{projection}");
+    assert!(projection.contains("kind=binding"), "{projection}");
+    assert!(!projection.contains("$match"), "{projection}");
+    assert_eq!(
+        completed.snapshot.program.match_plans[0].origin,
+        crate::hir::Origin::Semantic
+    );
+    let original_plan = &completed.snapshot.program.match_plans[0];
+    let original_fingerprint =
+        super::index::match_plan_fingerprint(original_plan).expect("match plan fingerprint");
+    let mut changed_pattern = original_plan.clone();
+    changed_pattern.arms[0].pattern = crate::hir::MatchPattern::Wildcard {
+        ty: changed_pattern.scrutinee.ty.clone(),
+    };
+    assert_ne!(
+        original_fingerprint,
+        super::index::match_plan_fingerprint(&changed_pattern)
+            .expect("changed match plan fingerprint")
+    );
+    let complete = completed
+        .snapshot
+        .validated_complete_hir()
+        .expect("derive complete HIR");
+    let mut enum_values = 0_usize;
+    let mut pending = vec![&complete.main.body];
+    while let Some(expression) = pending.pop() {
+        assert!(!matches!(
+            expression.kind,
+            crate::hir::ExprKind::Match { .. }
+        ));
+        enum_values += usize::from(matches!(
+            expression.kind,
+            crate::hir::ExprKind::EnumValue { .. }
+        ));
+        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+    }
+    assert_eq!(
+        enum_values, 1,
+        "the match scrutinee is lowered exactly once"
+    );
+    let mut stale_projection = complete.clone();
+    let crate::hir::MatchPattern::Variant { fields, .. } =
+        &mut stale_projection.match_plans[0].arms[0].pattern
+    else {
+        panic!("payload arm remains an enum pattern")
+    };
+    fields[0].projection = None;
+    let projection_error = super::validate::program(&stale_projection)
+        .expect_err("non-wildcard payload pattern requires projection metadata")
+        .to_string();
+    assert!(
+        projection_error.contains("wildcard/projection"),
+        "{projection_error}"
+    );
+    let mut stale_field_type = complete.clone();
+    let crate::hir::MatchPattern::Variant { fields, .. } =
+        &mut stale_field_type.match_plans[0].arms[0].pattern
+    else {
+        panic!("payload arm remains an enum pattern")
+    };
+    fields[0].projection = None;
+    fields[0].pattern = crate::hir::MatchPattern::Wildcard {
+        ty: crate::Type::Bool,
+    };
+    let field_type_error = super::validate::program(&stale_field_type)
+        .expect_err("nested payload pattern uses its declared field type")
+        .to_string();
+    assert!(
+        field_type_error.contains("pattern type"),
+        "{field_type_error}"
+    );
+    let mut builtin_origin = complete.clone();
+    builtin_origin.match_plans[0].origin = crate::hir::Origin::Builtin;
+    let builtin_error = crate::analyze::verify_match_plans(&builtin_origin)
+        .expect_err("ordinary match plans reject builtin provenance")
+        .to_string();
+    assert!(builtin_error.contains("origin"), "{builtin_error}");
+    let mut stale_origin = complete;
+    stale_origin.match_plans[0].origin =
+        crate::hir::Origin::Source(crate::hir::SourceId::new(u64::MAX));
+    let stale_error = super::validate::program(&stale_origin)
+        .expect_err("match plans reject stale source provenance")
+        .to_string();
+    assert!(
+        stale_error.contains("origin") || stale_error.contains("source"),
+        "{stale_error}"
+    );
+}
+
+#[test]
+fn source_free_enum_payload_match_has_semantic_memory_places_and_executes() {
+    let (workspace, ..) = source_free_choice_match(89);
+    let snapshot = workspace.current();
+    let executable = crate::compile_snapshot(&snapshot).expect("compile payload cleanup match");
+    let semantic_places = executable
+        .memory_plan()
+        .entries
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.subject,
+                crate::memory_plan::MemorySubject::Place { .. }
+            ) && entry.origin.source == crate::memory_plan::MemorySourceOrigin::Semantic
+        })
+        .count();
+    assert!(
+        semantic_places >= 3,
+        "scrutinee, projection, and payload places"
+    );
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
+}
+
+fn imported_choice_match_source() -> String {
+    concat!(
+        "enum/\nname/\nchoice\n/name\nvariants/\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
+        "type/\ni64\n/type\n/variant-field\n/fields\n/variant\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nchoice/\n/choice\n/type\nvariant/\nsome\n/variant\n",
+        "fields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nchoice/\n/choice\n/type\n",
+        "variant/\nsome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\n",
+        "binding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n",
+        "/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nchoice/\n/choice\n/type\nvariant/\nnone\n/variant\n",
+        "fields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
+    )
+    .to_owned()
+}
+
+fn source_free_choice_match(seed: u64) -> (Workspace, EntityId, EntityId, EntityId, EntityId) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("match workspace");
+    let (choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create match main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let payload = DraftBindingId::new(0);
+    workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(payload)),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(1),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Binding {
+                                                binding: payload,
+                                                name: "x".to_owned(),
+                                            },
+                                            DraftPatternNode::EnumVariant {
+                                                variant: some,
+                                                fields: vec![DraftPatternField {
+                                                    field: value_field,
+                                                    pattern: DraftPatternNodeId::new(0),
+                                                }],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(1),
+                                    ),
+                                    body: DraftNodeId::new(2),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![DraftPatternNode::EnumVariant {
+                                            variant: none,
+                                            fields: Vec::new(),
+                                        }],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(3),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("construct source-free match");
+    (workspace, choice, some, none, value_field)
+}
+
+fn choice_match_draft(some: EntityId, none: EntityId, value_field: EntityId) -> ExpressionDraft {
+    let payload = DraftBindingId::new(0);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "x".to_owned(),
+                                },
+                                DraftPatternNode::EnumVariant {
+                                    variant: some,
+                                    fields: vec![DraftPatternField {
+                                        field: value_field,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![DraftPatternNode::EnumVariant {
+                                variant: none,
+                                fields: Vec::new(),
+                            }],
+                            DraftPatternNodeId::new(0),
+                        ),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    )
+}
+
+fn choice_match_with_patterns(
+    some: EntityId,
+    value_field: EntityId,
+    patterns: Vec<PatternDraft>,
+) -> ExpressionDraft {
+    let mut nodes = Vec::new();
+    nodes.push(DraftNode::I64(42));
+    nodes.push(DraftNode::EnumValue {
+        variant: some,
+        fields: vec![DraftFieldValue {
+            field: value_field,
+            value: DraftNodeId::new(0),
+        }],
+    });
+    let mut arms = Vec::new();
+    for (index, pattern) in patterns.into_iter().enumerate() {
+        let body = DraftNodeId::new(u64::try_from(nodes.len()).expect("pattern-case body id"));
+        nodes.push(DraftNode::I64(
+            i64::try_from(index).expect("pattern-case body"),
+        ));
+        arms.push(MatchArmDraft { pattern, body });
+    }
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("pattern-case root id"));
+    nodes.push(DraftNode::Match {
+        scrutinee: DraftNodeId::new(1),
+        arms,
+    });
+    ExpressionDraft::new(nodes, root)
+}
+
+#[test]
+fn imported_and_source_free_enum_payload_matches_converge() {
+    let imported = import_source(
+        &imported_choice_match_source(),
+        "choice-match-convergence.lkjscript",
+    )
+    .expect("import payload match");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let (workspace, ..) = source_free_choice_match(81);
+    let source_free = workspace.current();
+    assert_eq!(
+        canonical_workspace_observation(&imported),
+        canonical_workspace_observation(&source_free)
+    );
+    assert_eq!(run_i64(&imported), 42);
+    assert_eq!(run_i64(&source_free), 42);
+    for snapshot in [&imported, &source_free] {
+        assert!(snapshot
+            .entities()
+            .iter()
+            .all(|entity| !entity.name.starts_with("$match")));
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+    assert!(matches!(
+        imported.program.match_plans[0].origin,
+        crate::hir::Origin::Source(_)
+    ));
+    assert_eq!(
+        source_free.program.match_plans[0].origin,
+        crate::hir::Origin::Semantic
+    );
+    let imported_executable = crate::compile_snapshot(&imported).expect("compile imported match");
+    let source_free_executable =
+        crate::compile_snapshot(&source_free).expect("compile source-free match");
+    let obligation_kinds = |program: &crate::ExecutableProgram| {
+        program
+            .memory_plan()
+            .obligations
+            .iter()
+            .map(|obligation| obligation.kind)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        obligation_kinds(&imported_executable),
+        obligation_kinds(&source_free_executable)
+    );
+    assert_eq!(
+        imported_executable.bytecode().main().code,
+        source_free_executable.bytecode().main().code
+    );
+}
+
+#[test]
+fn semantic_match_edit_inside_imported_main_keeps_mixed_origins_honest() {
+    let source = concat!(
+        "enum/\nname/\nchoice\n/name\nvariants/\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
+        "type/\ni64\n/type\n/variant-field\n/fields\n/variant\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n0\n/main\n",
+    );
+    let imported = import_source(source, "mixed-origin-match.lkjscript")
+        .expect("import source-backed match host");
+    let imported_origin = imported
+        .program
+        .main
+        .as_ref()
+        .expect("imported main")
+        .origin;
+    assert!(matches!(imported_origin, crate::hir::Origin::Source(_)));
+    let find = |kind, name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == kind
+                    && entity
+                        .name
+                        .rsplit(':')
+                        .next()
+                        .is_some_and(|item| item == name)
+            })
+            .expect("imported match entity")
+            .id
+    };
+    let some = find(EntityKind::EnumVariant, "some");
+    let none = find(EntityKind::EnumVariant, "none");
+    let value_field = find(EntityKind::EnumField, "value");
+    let target = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Literal)
+        .expect("imported main body")
+        .id;
+    let mut workspace = Workspace::new(imported).expect("mixed-origin workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target,
+                goal: "replace imported body with semantic match".to_owned(),
+            }],
+        })
+        .expect("introduce imported body hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("imported hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: choice_match_draft(some, none, value_field),
+            }],
+        })
+        .expect("publish semantic match in imported main");
+    assert_eq!(
+        completed
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .origin,
+        imported_origin
+    );
+    assert_eq!(
+        completed.snapshot.program.match_plans[0].origin,
+        crate::hir::Origin::Semantic
+    );
+    assert_eq!(run_i64(&completed.snapshot), 42);
+}
+
+#[test]
+fn source_free_match_pattern_physical_order_does_not_change_semantics() {
+    let (control, ..) = source_free_choice_match(88);
+    let mut workspace = Workspace::empty_deterministic(88).expect("reordered match workspace");
+    let (_choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create reordered match main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let payload = DraftBindingId::new(0);
+    let reordered = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(payload)),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(1),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::EnumVariant {
+                                                variant: some,
+                                                fields: vec![DraftPatternField {
+                                                    field: value_field,
+                                                    pattern: DraftPatternNodeId::new(1),
+                                                }],
+                                            },
+                                            DraftPatternNode::Binding {
+                                                binding: payload,
+                                                name: "x".to_owned(),
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(2),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![DraftPatternNode::EnumVariant {
+                                            variant: none,
+                                            fields: Vec::new(),
+                                        }],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(3),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("construct physically reordered pattern");
+    assert_eq!(run_i64(&reordered.snapshot), 42);
+    assert_eq!(
+        canonical_workspace_observation(&reordered.snapshot),
+        canonical_workspace_observation(&control.current())
+    );
+    assert_eq!(
+        crate::compile_snapshot(&reordered.snapshot)
+            .expect("compile reordered match")
+            .bytecode()
+            .main()
+            .code,
+        crate::compile_snapshot(&control.current())
+            .expect("compile control match")
+            .bytecode()
+            .main()
+            .code
+    );
+}
+
+#[test]
+fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
+    let mut workspace = Workspace::empty_deterministic(83).expect("atomic match workspace");
+    let (_choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create atomic match main");
+    let before = created.snapshot;
+    let hole = before.holes().next().expect("main hole").id;
+    let some_pattern = || {
+        PatternDraft::new(
+            vec![
+                DraftPatternNode::Wildcard,
+                DraftPatternNode::EnumVariant {
+                    variant: some,
+                    fields: vec![DraftPatternField {
+                        field: value_field,
+                        pattern: DraftPatternNodeId::new(0),
+                    }],
+                },
+            ],
+            DraftPatternNodeId::new(1),
+        )
+    };
+    let none_pattern = || {
+        PatternDraft::new(
+            vec![DraftPatternNode::EnumVariant {
+                variant: none,
+                fields: Vec::new(),
+            }],
+            DraftPatternNodeId::new(0),
+        )
+    };
+    let nonexhaustive = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(1),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![MatchArmDraft {
+                    pattern: some_pattern(),
+                    body: DraftNodeId::new(2),
+                }],
+            },
+        ],
+        DraftNodeId::new(3),
+    );
+    let duplicate = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(1),
+            DraftNode::I64(2),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: some_pattern(),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: some_pattern(),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    );
+    let wildcard_then_arm = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(1),
+            DraftNode::I64(2),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::wildcard(),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: none_pattern(),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    );
+    let empty = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: Vec::new(),
+            },
+        ],
+        DraftNodeId::new(2),
+    );
+    let before_projection = before
+        .project(&[ProjectionSlice::Body(entity_named(
+            &before,
+            EntityKind::Main,
+            "main",
+        ))])
+        .expect("before projection");
+    for (draft, expected) in [
+        (nonexhaustive, "nonexhaustive match"),
+        (duplicate, "useless or subsumed match arm 1"),
+        (wildcard_then_arm, "useless or subsumed match arm 1"),
+        (empty, "match arms must not be empty"),
+    ] {
+        let failure = workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole { hole, draft }],
+        });
+        let message = failure.expect_err("invalid match must reject").to_string();
+        assert!(message.contains(expected), "{message}");
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+        assert_eq!(workspace.current().revision(), before.revision());
+        assert_eq!(
+            workspace
+                .current()
+                .project(&[ProjectionSlice::Body(entity_named(
+                    &before,
+                    EntityKind::Main,
+                    "main",
+                ))])
+                .expect("unchanged projection"),
+            before_projection
+        );
+    }
+    let retried = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: choice_match_draft(some, none, value_field),
+            }],
+        })
+        .expect("deterministic successful retry");
+    let (control, ..) = source_free_choice_match(83);
+    assert_eq!(retried.snapshot.entities(), control.current().entities());
+    assert_eq!(retried.snapshot.nodes(), control.current().nodes());
+}
+
+#[test]
+fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
+    let mut workspace = Workspace::empty_deterministic(86).expect("malformed match workspace");
+    let (choice, some, none, value_field) = create_choice(&mut workspace);
+    let alternate = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "alternate".to_owned(),
+                variants: vec![EnumVariantDraft {
+                    name: "alternate-variant".to_owned(),
+                    fields: vec![EnumFieldDraft {
+                        name: "alternate-field".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                }],
+            }],
+        })
+        .expect("create alternate enum");
+    let alternate_variant = entity_named(
+        &alternate.snapshot,
+        EntityKind::EnumVariant,
+        "alternate-variant",
+    );
+    let alternate_field = entity_named(
+        &alternate.snapshot,
+        EntityKind::EnumField,
+        "alternate-field",
+    );
+    let duo = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "duo".to_owned(),
+                variants: vec![EnumVariantDraft {
+                    name: "both".to_owned(),
+                    fields: vec![
+                        EnumFieldDraft {
+                            name: "left-value".to_owned(),
+                            ty: SemanticTypeRef::I64,
+                        },
+                        EnumFieldDraft {
+                            name: "right-value".to_owned(),
+                            ty: SemanticTypeRef::I64,
+                        },
+                    ],
+                }],
+            }],
+        })
+        .expect("create two-field enum");
+    let both = entity_named(&duo.snapshot, EntityKind::EnumVariant, "both");
+    let left = entity_named(&duo.snapshot, EntityKind::EnumField, "left-value");
+    let right = entity_named(&duo.snapshot, EntityKind::EnumField, "right-value");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create malformed match main");
+    let published = created.snapshot;
+    let hole = published.holes().next().expect("main hole").id;
+    let stale = EntityId::new(published.namespace(), u64::MAX, 1);
+    let mut foreign = Workspace::empty_deterministic(87).expect("foreign match workspace");
+    let (_foreign_choice, foreign_some, _foreign_none, foreign_field) = create_choice(&mut foreign);
+    let none_pattern = || {
+        PatternDraft::new(
+            vec![DraftPatternNode::EnumVariant {
+                variant: none,
+                fields: Vec::new(),
+            }],
+            DraftPatternNodeId::new(0),
+        )
+    };
+    let malformed = vec![
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: some,
+                        fields: vec![DraftPatternField {
+                            field: value_field,
+                            pattern: DraftPatternNodeId::new(0),
+                        }],
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![
+                        DraftPatternNode::Wildcard,
+                        DraftPatternNode::EnumVariant {
+                            variant: some,
+                            fields: vec![
+                                DraftPatternField {
+                                    field: value_field,
+                                    pattern: DraftPatternNodeId::new(0),
+                                },
+                                DraftPatternField {
+                                    field: value_field,
+                                    pattern: DraftPatternNodeId::new(0),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftPatternNodeId::new(1),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::Wildcard],
+                    DraftPatternNodeId::new(u64::MAX),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: some,
+                        fields: vec![DraftPatternField {
+                            field: value_field,
+                            pattern: DraftPatternNodeId::new(u64::MAX),
+                        }],
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: foreign_some,
+                        fields: vec![DraftPatternField {
+                            field: foreign_field,
+                            pattern: DraftPatternNodeId::new(0),
+                        }],
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: stale,
+                        fields: Vec::new(),
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: choice,
+                        fields: Vec::new(),
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![
+                        DraftPatternNode::Wildcard,
+                        DraftPatternNode::EnumVariant {
+                            variant: alternate_variant,
+                            fields: vec![DraftPatternField {
+                                field: alternate_field,
+                                pattern: DraftPatternNodeId::new(0),
+                            }],
+                        },
+                    ],
+                    DraftPatternNodeId::new(1),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![
+                        DraftPatternNode::Wildcard,
+                        DraftPatternNode::EnumVariant {
+                            variant: some,
+                            fields: vec![DraftPatternField {
+                                field: alternate_field,
+                                pattern: DraftPatternNodeId::new(0),
+                            }],
+                        },
+                    ],
+                    DraftPatternNodeId::new(1),
+                ),
+                none_pattern(),
+            ],
+        ),
+        choice_match_with_patterns(
+            some,
+            value_field,
+            vec![
+                PatternDraft::new(
+                    vec![DraftPatternNode::EnumVariant {
+                        variant: some,
+                        fields: Vec::new(),
+                    }],
+                    DraftPatternNodeId::new(0),
+                ),
+                none_pattern(),
+            ],
+        ),
+    ];
+    for draft in malformed {
+        let result = workspace.apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::FillHole { hole, draft }],
+        });
+        assert!(result.is_err(), "malformed pattern must reject");
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
+
+    let foreign_pattern = PatternDraft::new(
+        vec![
+            DraftPatternNode::Wildcard,
+            DraftPatternNode::EnumVariant {
+                variant: foreign_some,
+                fields: vec![DraftPatternField {
+                    field: foreign_field,
+                    pattern: DraftPatternNodeId::new(0),
+                }],
+            },
+        ],
+        DraftPatternNodeId::new(1),
+    );
+    let foreign_result = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: choice_match_with_patterns(
+                some,
+                value_field,
+                vec![foreign_pattern, none_pattern()],
+            ),
+        }],
+    });
+    assert!(matches!(
+        foreign_result,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+    let stale_result = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: choice_match_with_patterns(
+                some,
+                value_field,
+                vec![
+                    PatternDraft::new(
+                        vec![DraftPatternNode::EnumVariant {
+                            variant: stale,
+                            fields: Vec::new(),
+                        }],
+                        DraftPatternNodeId::new(0),
+                    ),
+                    none_pattern(),
+                ],
+            ),
+        }],
+    });
+    assert!(matches!(
+        stale_result,
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+    let wrong_kind_result = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: choice_match_with_patterns(
+                some,
+                value_field,
+                vec![
+                    PatternDraft::new(
+                        vec![DraftPatternNode::EnumVariant {
+                            variant: choice,
+                            fields: Vec::new(),
+                        }],
+                        DraftPatternNodeId::new(0),
+                    ),
+                    none_pattern(),
+                ],
+            ),
+        }],
+    });
+    assert!(matches!(
+        wrong_kind_result,
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let pattern_with_field = |field| {
+        PatternDraft::new(
+            vec![
+                DraftPatternNode::Wildcard,
+                DraftPatternNode::EnumVariant {
+                    variant: some,
+                    fields: vec![DraftPatternField {
+                        field,
+                        pattern: DraftPatternNodeId::new(0),
+                    }],
+                },
+            ],
+            DraftPatternNodeId::new(1),
+        )
+    };
+    for (field, expected) in [
+        (foreign_field, "foreign"),
+        (stale, "stale"),
+        (some, "wrong-kind"),
+    ] {
+        let result = workspace.apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: choice_match_with_patterns(
+                    some,
+                    value_field,
+                    vec![pattern_with_field(field), none_pattern()],
+                ),
+            }],
+        });
+        match expected {
+            "foreign" => assert!(matches!(result, Err(WorkspaceError::ForeignNamespace(_)))),
+            "stale" => assert!(matches!(result, Err(WorkspaceError::StaleIdentity(_)))),
+            "wrong-kind" => {
+                assert!(matches!(
+                    result,
+                    Err(WorkspaceError::WrongEntityKind { .. })
+                ))
+            }
+            _ => unreachable!("known malformed field case"),
+        }
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
+
+    let non_enum_match = ExpressionDraft::new(
+        vec![
+            DraftNode::Bool(true),
+            DraftNode::I64(1),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(0),
+                arms: vec![MatchArmDraft {
+                    pattern: PatternDraft::wildcard(),
+                    body: DraftNodeId::new(1),
+                }],
+            },
+        ],
+        DraftNodeId::new(2),
+    );
+    let non_enum_error = workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: non_enum_match,
+            }],
+        })
+        .expect_err("unsupported source-free pattern space must reject");
+    assert!(matches!(
+        non_enum_error,
+        WorkspaceError::UnsupportedEdit { operation, .. } if operation.as_ref() == "match"
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+
+    let payload = DraftBindingId::new(0);
+    let cross_arm = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(1),
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "payload".to_owned(),
+                                },
+                                DraftPatternNode::EnumVariant {
+                                    variant: some,
+                                    fields: vec![DraftPatternField {
+                                        field: value_field,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: none_pattern(),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    );
+    let incompatible_bodies = ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(1),
+            DraftNode::Bool(false),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::EnumVariant {
+                                    variant: some,
+                                    fields: vec![DraftPatternField {
+                                        field: value_field,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: none_pattern(),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    );
+    for draft in [cross_arm, incompatible_bodies] {
+        assert!(workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits: vec![Edit::FillHole { hole, draft }],
+            })
+            .is_err());
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
+
+    let malformed_duo_pattern =
+        |left_binding: (DraftBindingId, &str), right_binding: (DraftBindingId, &str)| {
+            PatternDraft::new(
+                vec![
+                    DraftPatternNode::Binding {
+                        binding: left_binding.0,
+                        name: left_binding.1.to_owned(),
+                    },
+                    DraftPatternNode::Binding {
+                        binding: right_binding.0,
+                        name: right_binding.1.to_owned(),
+                    },
+                    DraftPatternNode::EnumVariant {
+                        variant: both,
+                        fields: vec![
+                            DraftPatternField {
+                                field: left,
+                                pattern: DraftPatternNodeId::new(0),
+                            },
+                            DraftPatternField {
+                                field: right,
+                                pattern: DraftPatternNodeId::new(1),
+                            },
+                        ],
+                    },
+                ],
+                DraftPatternNodeId::new(2),
+            )
+        };
+    for pattern in [
+        malformed_duo_pattern(
+            (DraftBindingId::new(0), "left"),
+            (DraftBindingId::new(0), "right"),
+        ),
+        malformed_duo_pattern(
+            (DraftBindingId::new(0), "same"),
+            (DraftBindingId::new(1), "same"),
+        ),
+    ] {
+        let draft = ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::I64(2),
+                DraftNode::EnumValue {
+                    variant: both,
+                    fields: vec![
+                        DraftFieldValue {
+                            field: left,
+                            value: DraftNodeId::new(0),
+                        },
+                        DraftFieldValue {
+                            field: right,
+                            value: DraftNodeId::new(1),
+                        },
+                    ],
+                },
+                DraftNode::I64(0),
+                DraftNode::Match {
+                    scrutinee: DraftNodeId::new(2),
+                    arms: vec![MatchArmDraft {
+                        pattern,
+                        body: DraftNodeId::new(3),
+                    }],
+                },
+            ],
+            DraftNodeId::new(4),
+        );
+        assert!(workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits: vec![Edit::FillHole { hole, draft }],
+            })
+            .is_err());
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
+}
+
+#[test]
+fn match_arm_hole_context_contains_only_its_payload_bindings() {
+    let mut workspace = Workspace::empty_deterministic(82).expect("match hole workspace");
+    let (_choice, some, _none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create match main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let payload = DraftBindingId::new(0);
+    let fallback = DraftBindingId::new(1);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(payload)),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(1),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Binding {
+                                                binding: payload,
+                                                name: "payload".to_owned(),
+                                            },
+                                            DraftPatternNode::EnumVariant {
+                                                variant: some,
+                                                fields: vec![DraftPatternField {
+                                                    field: value_field,
+                                                    pattern: DraftPatternNodeId::new(0),
+                                                }],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(1),
+                                    ),
+                                    body: DraftNodeId::new(2),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![DraftPatternNode::Binding {
+                                            binding: fallback,
+                                            name: "fallback".to_owned(),
+                                        }],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(3),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("construct match with bindings in both arms");
+    let payload_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "payload");
+    let fallback_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "fallback");
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("match node")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), site)
+        .expect("match view");
+    let first_body = view.arms[0].body;
+    let second_body = view.arms[1].body;
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![
+                Edit::IntroduceHole {
+                    target: first_body,
+                    goal: "use the payload".to_owned(),
+                },
+                Edit::IntroduceHole {
+                    target: second_body,
+                    goal: "handle the remainder".to_owned(),
+                },
+            ],
+        })
+        .expect("introduce arm holes");
+    let first = introduced
+        .snapshot
+        .holes()
+        .find(|hole| hole.context == first_body)
+        .expect("first arm hole");
+    let second = introduced
+        .snapshot
+        .holes()
+        .find(|hole| hole.context == second_body)
+        .expect("second arm hole");
+    assert_eq!(first.visible_entities.as_ref(), &[payload_entity]);
+    assert_eq!(second.visible_entities.as_ref(), &[fallback_entity]);
+    let constructors = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            first.id,
+            PageRequest::new(16).expect("page"),
+            None,
+        )
+        .expect("arm constructors")
+        .items;
+    assert!(constructors.contains(&LegalConstructor::Load(payload_entity)));
+    assert!(!constructors.contains(&LegalConstructor::Load(fallback_entity)));
+    let first_hole = first.id;
+    let second_hole = second.id;
+    let refilled = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole: first_hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(payload_entity))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+                Edit::FillHole {
+                    hole: second_hole,
+                    draft: ExpressionDraft::scalar_i64(0),
+                },
+            ],
+        })
+        .expect("refill arm holes");
+    assert_eq!(run_i64(&refilled.snapshot), 42);
 }
 
 fn create_owned_workspace(seed: u64) -> (Workspace, EntityId, EntityId, HoleId, HoleId) {

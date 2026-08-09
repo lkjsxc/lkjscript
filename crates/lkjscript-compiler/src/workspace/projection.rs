@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{
-    CompletenessBlocker, EntityId, EntityKind, HoleId, NodeHeader, NodeId, NodeKind, ProgramState,
-    ReferenceEdge, SemanticOwner, WorkspaceError, WorkspaceSnapshot,
+    CompletenessBlocker, EntityId, EntityKind, HoleId, MatchPatternKindView, NodeHeader, NodeId,
+    NodeKind, ProgramState, ReferenceEdge, SemanticOwner, SemanticTypeRef, SemanticTypeView,
+    WorkspaceError, WorkspaceSnapshot,
 };
 
 /// One concise human-readable view selected from a workspace snapshot.
@@ -17,6 +18,7 @@ pub enum ProjectionSlice {
     Body(EntityId),
     Type(NodeId),
     References(EntityId),
+    Match(NodeId),
     Hole(HoleId),
 }
 
@@ -81,6 +83,7 @@ impl WorkspaceSnapshot {
                 ProjectionSlice::References(entity) => {
                     self.project_references(entity, &mut output)?;
                 }
+                ProjectionSlice::Match(node) => self.project_match(node, &mut output)?,
                 ProjectionSlice::Hole(hole) => self.project_hole(hole, &mut output)?,
             }
         }
@@ -215,6 +218,76 @@ impl WorkspaceSnapshot {
         Ok(())
     }
 
+    fn project_match(
+        &self,
+        node: NodeId,
+        output: &mut ProjectionOutput,
+    ) -> Result<(), WorkspaceError> {
+        let view = self.match_view(self.revision, node)?;
+        output.push("match ")?;
+        output.node_id(view.site)?;
+        output.push(" scrutinee=")?;
+        output.node_id(view.scrutinee)?;
+        output.push(" result=")?;
+        project_semantic_type(&view.result, output)?;
+        output.push(" exhaustive=")?;
+        output.push(if view.exhaustive { "true" } else { "false" })?;
+        output.push("\n")?;
+        for arm in view.arms {
+            output.push("  arm ")?;
+            output.decimal(arm.id)?;
+            output.push(" pattern=p")?;
+            output.decimal(arm.pattern_root)?;
+            output.push(" body=")?;
+            output.node_id(arm.body)?;
+            output.push(" result=")?;
+            project_semantic_type(&arm.result, output)?;
+            output.push("\n")?;
+            for pattern in arm.patterns {
+                output.push("    pattern p")?;
+                output.decimal(pattern.id)?;
+                output.push(" type=")?;
+                project_semantic_type(&pattern.ty, output)?;
+                match pattern.kind {
+                    MatchPatternKindView::Wildcard => output.push(" kind=wildcard")?,
+                    MatchPatternKindView::Binding { binding } => {
+                        let binding_header = self.workspace_entity(binding)?;
+                        output.push(" kind=binding binding=")?;
+                        output.entity_id(binding)?;
+                        output.push(" name=")?;
+                        output.quoted(&binding_header.name)?;
+                    }
+                    MatchPatternKindView::Bool(value) => {
+                        output.push(" kind=bool value=")?;
+                        output.push(if value { "true" } else { "false" })?;
+                    }
+                    MatchPatternKindView::I64(value) => {
+                        output.push(" kind=i64 value=")?;
+                        output.signed_decimal(value)?;
+                    }
+                    MatchPatternKindView::EnumVariant {
+                        enumeration,
+                        variant,
+                        fields,
+                    } => {
+                        output.push(" kind=enum-variant enum=")?;
+                        project_optional_entity(enumeration, output)?;
+                        output.push(" variant=")?;
+                        project_optional_entity(variant, output)?;
+                        project_pattern_fields(&fields, output)?;
+                    }
+                    MatchPatternKindView::Product { product, fields } => {
+                        output.push(" kind=product product=")?;
+                        output.entity_id(product)?;
+                        project_pattern_fields(&fields, output)?;
+                    }
+                }
+                output.push("\n")?;
+            }
+        }
+        Ok(())
+    }
+
     fn project_hole(
         &self,
         hole: HoleId,
@@ -257,6 +330,69 @@ impl WorkspaceSnapshot {
         self.holes
             .iter()
             .any(|record| record.state.id.node() == node)
+    }
+}
+
+fn project_pattern_fields(
+    fields: &[super::MatchPatternFieldView],
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    output.push(" fields=[")?;
+    for (index, field) in fields.iter().enumerate() {
+        if index != 0 {
+            output.push(",")?;
+        }
+        project_optional_entity(field.field, output)?;
+        output.push(":p")?;
+        output.decimal(field.pattern)?;
+    }
+    output.push("]")
+}
+
+fn project_optional_entity(
+    entity: Option<EntityId>,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    match entity {
+        Some(entity) => output.entity_id(entity),
+        None => output.push("builtin"),
+    }
+}
+
+fn project_semantic_type(
+    ty: &SemanticTypeView,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    match ty {
+        SemanticTypeView::Known(ty) => match ty {
+            SemanticTypeRef::Unit => output.push("unit"),
+            SemanticTypeRef::Bool => output.push("Bool"),
+            SemanticTypeRef::I64 => output.push("i64"),
+            SemanticTypeRef::F64 => output.push("f64"),
+            SemanticTypeRef::Bytes => output.push("bytes"),
+            SemanticTypeRef::ByteVector => output.push("byte-vector"),
+            SemanticTypeRef::ByteSlice => output.push("byte-slice"),
+            SemanticTypeRef::ByteSliceMut => output.push("byte-slice-mut"),
+            SemanticTypeRef::Product(entity) => {
+                output.push("product(")?;
+                output.entity_id(*entity)?;
+                output.push(")")
+            }
+            SemanticTypeRef::Enum(entity) => {
+                output.push("enum(")?;
+                output.entity_id(*entity)?;
+                output.push(")")
+            }
+        },
+        SemanticTypeView::Unsupported { display, nominal } => {
+            output.push("unsupported(")?;
+            output.quoted(display)?;
+            if let Some(entity) = nominal {
+                output.push(",nominal=")?;
+                output.entity_id(*entity)?;
+            }
+            output.push(")")
+        }
     }
 }
 
@@ -324,6 +460,7 @@ fn node_kind(kind: NodeKind) -> &'static str {
         NodeKind::SetLocal => "set-local",
         NodeKind::Product => "product",
         NodeKind::Enum => "enum",
+        NodeKind::Match => "match",
         NodeKind::MatchUnreachable => "match-unreachable",
         NodeKind::Symbol => "symbol",
         NodeKind::Hole => "hole",
@@ -379,6 +516,15 @@ impl ProjectionOutput {
         let digits = std::str::from_utf8(&bytes[start..])
             .map_err(|_| host("projection decimal encoding failed"))?;
         self.push(digits)
+    }
+
+    fn signed_decimal(&mut self, value: i64) -> Result<(), WorkspaceError> {
+        if value < 0 {
+            self.push("-")?;
+            self.decimal(value.unsigned_abs())
+        } else {
+            self.decimal(value as u64)
+        }
     }
 
     fn entity_id(&mut self, id: EntityId) -> Result<(), WorkspaceError> {

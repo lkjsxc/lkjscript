@@ -24,8 +24,8 @@ use std::sync::Arc;
 use lkjscript_core::{Error, Result};
 
 pub use draft::{
-    DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, ExpressionDraft,
-    LocalDraft,
+    DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternField,
+    DraftPatternNode, DraftPatternNodeId, ExpressionDraft, LocalDraft, MatchArmDraft, PatternDraft,
 };
 pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
 use identity::IdentityAllocator;
@@ -43,7 +43,8 @@ use program::SemanticProgram;
 pub use projection::ProjectionSlice;
 pub use query::{
     ConstructorStatus, Continuation, EntityPage, EntityTypeFacts, FunctionSignatureView,
-    LegalConstructor, NodeTypeFacts, PageRequest, QueryPage,
+    LegalConstructor, MatchArmView, MatchPatternFieldView, MatchPatternKindView,
+    MatchPatternNodeView, MatchView, NodeTypeFacts, PageRequest, QueryPage,
 };
 pub use transaction::{
     Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
