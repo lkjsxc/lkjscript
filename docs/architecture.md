@@ -46,14 +46,17 @@ Opaque public identities remain separate from dense compiler IDs. Tagged `Entity
 distinguish main, binding, product/field, enum/variant/field, trait, and implementation domains.
 `NodeAddress` adds root-local preorder only as a private reconstruction coordinate. The immutable
 snapshot carries the exact generation/free-list state, so reopening a snapshot cannot resurrect a
-tombstoned ID. Reconciliation preserves explicit edit/hole roots, unchanged addresses, and unique
-meaning-preserving descendants; logical child-ordinal paths relocate disjoint batch targets after an
-earlier subtree changes preorder size. Match-node reconciliation fingerprints canonical arm/pattern
-content as well as the dense plan identity, so a semantic pattern change cannot masquerade as an
-unchanged node. Deletions advance generations. Index construction builds one entity-to-address map
-and performs one lookup per node, then records containment, references, calls,
-dependencies, types, and diagnostics iteratively. Private enum, variant, and enum-field identity maps
-avoid repeated declaration scans while indexing aggregate references.
+tombstoned ID. After staged deletion compacts dense placement, reconciliation receives an explicit,
+one-to-one old-public-identity to new-private-address relocation for every surviving entity. A
+relocated survivor wins over the prior occupant of its new dense address; duplicate, missing,
+wrong-kind, stale, or colliding relocation fails before publication. Nodes outside removed/replaced
+subtrees and every structural target root are matched explicitly in one parent/child-ordinal pass.
+Descendants rebuilt by a replacement receive new identities even when content coincides; fingerprints
+never decide semantic continuity. Removed identities are tombstoned and generation advances before
+reuse. Index construction builds
+one entity-to-address map and performs one lookup per node, then records containment, references,
+calls, dependencies, types, and diagnostics iteratively. Private enum, variant, and enum-field
+identity maps avoid repeated declaration scans while indexing aggregate references.
 
 `compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
 phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
@@ -112,12 +115,14 @@ route available.
 
 ```text
 Arc<WorkspaceSnapshot> plus base revision
-    -> typed declaration/rename/expression/hole batch
-    -> namespace/generation/revision, declaration, shape, lexical scope, type, and disjointness preflight
+    -> typed declaration/delete/rename/expression/hole batch
+    -> namespace/generation/revision check
     -> clone SemanticProgram and identity allocator into staging
-    -> lower one flat draft into real semantic nodes; recompute partial effects and derived indexes
+    -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
+    -> lower flat drafts, apply disjoint replacements, and prune callable roots against the final batch
+    -> compact/remap dense bindings, plans, places, and slots once; recompute partial effects/indexes
     -> on completion derive HIR and validate ownership/matches/consistency
-    -> reconcile stable IDs, blockers, diagnostics, and semantic diff
+    -> reconcile explicit survivors, tombstones, blockers, diagnostics, and semantic diff
     -> publish one new Arc plus allocator state, or publish nothing
 ```
 
@@ -141,14 +146,27 @@ exhaustive enum matches. Implemented patterns are wildcard, non-generic enum var
 stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
-Mutable locals, generic calls, and non-enum source-free pattern spaces remain explicit unsupported
-edits; no executable fallback exists. Because published local bindings currently live in the
-program-wide HIR binding table, edits that would remove or hide their defining subtree reject rather
-than leave orphan bindings or introduce compaction machinery.
+Mutable-local construction, generic calls, and non-enum source-free pattern spaces remain explicit
+unsupported edits; no executable fallback exists. After all disjoint structural edits and callable
+removals describe the final staged state, one fallible iterative compaction pass removes unreachable
+bindings and match plans. It assigns retained `BindingId` and `MatchPlanId` values densely once,
+rewrites function/main headers, global layout, expression references and definitions, recursive
+match locals/plans, and rebuilds each callable's `PlaceId`, local slot, parameter-place vector, and
+`local_count`. Function-vector position remains private and memory/SSA function IDs are derived later.
+No second mutable IR, sparse dead-binding history, persistence layer, or incremental framework was
+added; `SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
 
-Introducing a typed hole physically replaces and drops its subtree; filling preserves the hole/root
-ID. Missing-entry, missing-body, and typed-hole blockers are structured and projected. Incomplete
-snapshots retain normal indexes and deterministic diagnostics but no compiler HIR.
+`DeleteEntity` first collects callable deletion intent for the whole batch. `main` and ordinary
+functions are pruned only after structural replacements, so removing a call and deleting its callee
+is one final-state transaction regardless of edit order. Surviving references reject with the
+blocking callable identified. Callable containment owns cascading removal of parameters, locals,
+payloads, nodes, holes, hidden match storage, plans, and layout participation. Unsupported direct
+contained or nominal deletion rejects before any staged semantic mutation.
+
+Introducing a typed hole physically replaces and drops its subtree, including owned local/match
+facts; filling preserves the hole/root ID. Missing-entry, missing-body, and typed-hole blockers are
+structured and projected. Incomplete snapshots retain normal indexes and deterministic diagnostics
+but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
 calls, diagnostics, and legal constructors. Definition, structured entity/function/node type, hole
@@ -297,9 +315,10 @@ per-node index work, and 20,000-level nested-expression, local, and semantic-mat
 execution protect the selected vertical. Formatting-only attachment changes preserve IDs and
 projection.
 
-**Target, not implemented:** later workspace expansion adds declaration deletion and movement,
-mutable locals, generic calls and patterns, Boolean/integer/product pattern construction, unresolved
-references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer analysis
-contexts without adding another mutable semantic AST. Persistence, collaboration, a measured wire
-consumer, incremental recomputation, daemon, database service, scheduler, and broader platform work
-wait for evidence after real use of the local semantic model.
+**Target, not implemented:** later workspace expansion adds nominal/member deletion with nominal-ID
+compaction, one concrete public semantic movement operation only when ownership/order semantics are
+defined, mutable-local construction, generic calls and patterns, Boolean/integer/product pattern
+construction, unresolved references, ambiguities, conflicts, recovery nodes, richer declaration
+kinds, and finer analysis contexts without adding another mutable semantic AST. Persistence,
+collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
+scheduler, and broader platform work wait for evidence after real use of the local semantic model.

@@ -41,16 +41,29 @@ constructors. The canonical usefulness/exhaustiveness checker and complete stage
 checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals,
 generic calls/patterns, and non-enum source-free pattern spaces are not fabricated.
 
-Transactions also rename supported bindings, replace expressions, and introduce/refine/fill typed
-holes. They reject invalid, duplicate, or reserved declarations and members; foreign, stale, or
-wrong-kind identity; stale revision; disconnected, cyclic, reused-child, forward-binding, cross-arm,
-or out-of-scope expression/pattern drafts; duplicate pattern handles/names/fields; overlapping
-subtree edits; type/arity/field/variant mismatch; empty, nonexhaustive, or useless match arms; and
-ownership failure before publication. A structural edit that would orphan a globally indexed local
-is rejected.
-Failure preserves the exact published `Arc`, revision, tombstones, future allocation, diagnostics,
-and projection. Success publishes one revision and returns created entity, member, local, and hole
-IDs through the semantic diff.
+Transactions also delete `main` or an ordinary non-builtin function, rename supported bindings,
+replace expressions, and introduce/refine/fill typed holes. Callable deletion cascades through the
+declaration's parameters, locals, payload bindings, body nodes, holes, hidden match storage, match
+plans, and compiler layout participation. A function deletion rejects while any final staged
+callable still references it; removing or rewiring every dependency in the same batch succeeds
+regardless of whether the delete edit appears before or after the structural edit. Direct deletion
+of contained bindings, nominal declarations or members, traits, implementations, and fixed compiler
+context remains unsupported.
+
+Replacement and hole introduction may remove `let`, mutable-local, and semantic-match subtrees.
+The targeted root retains its identity, and unaffected ancestors/siblings retain theirs; rebuilt
+replacement descendants receive new identities even when their content coincides. Bindings and plans
+owned only by the removed subtree are compacted out of semantic state; no removed expression or dead
+binding remains behind a hole. Transactions reject invalid, duplicate, or
+reserved declarations and members; foreign, stale, or wrong-kind identity; stale revision;
+disconnected, cyclic, reused-child, forward-binding, cross-arm, or out-of-scope expression/pattern
+drafts; duplicate pattern handles/names/fields; overlapping or delete-owned structural edits;
+duplicate deletion; rename-plus-delete; retained callable dependency; type/arity/field/variant
+mismatch; empty, nonexhaustive, or useless match arms; and ownership failure before publication.
+Failure preserves the exact published `Arc`, revision, allocator generations/free lists, future
+allocation, diagnostics, and projection. Success publishes one revision and returns created and
+deleted entities, member/local identities, holes, descendant changes, and graph rewiring through the
+semantic diff.
 
 Structured blockers currently cover missing entry point, missing declaration/entry body, and typed
 expression hole. Every blocker is revision-labelled through the snapshot or
@@ -83,8 +96,8 @@ The former syntax-shaped editing service, source-node protocol identities, hidde
 stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
-General unresolved references, ambiguities, conflicts, recovery nodes, declaration
-deletion/movement, mutable-local construction, generic-call/pattern construction,
+General unresolved references, ambiguities, conflicts, recovery nodes, nominal/member deletion,
+public semantic movement, mutable-local construction, generic-call/pattern construction,
 Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
 incremental recomputation remain gaps. Ownership/reference-bearing nominal fields are also outside
 the current source-free declaration surface, so current payload-match ownership coverage uses the
@@ -114,7 +127,8 @@ gate.
 
 **Target.** Mutable entities, bindings, and semantic nodes have opaque logical identities distinct
 from snapshot-local dense indexes. Identity survives, where meaning permits, rename, movement,
-formatting, file regrouping, projection changes, and unrelated edits.
+formatting, file regrouping, projection changes, unrelated edits, and private binding/function/plan
+compaction. Compaction relocation is an implementation event, not a public move operation.
 
 Names, paths, spans, formatting, and source order are attributes unless the language explicitly
 makes an ordering semantic. An identity carries or is checked against a workspace namespace,
@@ -146,14 +160,20 @@ A transaction:
 
 1. names a base revision and operation preconditions;
 2. validates operation shape and all referenced identities before publication;
-3. supports batching;
-4. stages the complete change without mutating the published snapshot;
-5. preserves the old snapshot on validation failure, cancellation, allocation failure, I/O failure,
-   or resource-policy exhaustion;
-6. publishes exactly one new revision on success; and
-7. returns a semantic diff, deterministic diagnostics, and invalidation information.
+3. supports batching and validates callable deletion dependencies against the final staged
+   call/reference graph;
+4. applies containment-owned cascading removal without manufacturing an orphan;
+5. stages the complete change without mutating the published snapshot;
+6. preserves the old snapshot and allocator on validation failure, cancellation, allocation failure,
+   I/O failure, or resource-policy exhaustion;
+7. tombstones every removed public identity, increments the generation before slot reuse, and leaves
+   old snapshots queryable; and
+8. publishes exactly one new revision on success with a semantic diff, deterministic diagnostics,
+   and invalidation information.
 
-A text patch may be imported into a transaction but is not the foundational edit representation.
+Delete-and-create replacement of the same declaration remains a contradictory batch; recreation is a
+later transaction and follows ordinary tombstone/generation allocation. A text patch may be imported
+into a transaction but is not the foundational edit representation.
 
 ## 5. Queries
 

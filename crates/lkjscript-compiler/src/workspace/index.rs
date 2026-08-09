@@ -141,7 +141,6 @@ fn build_entities(
         entity_addresses: Vec::new(),
         node_addresses: Vec::new(),
         node_keys: Vec::new(),
-        node_fingerprints: Vec::new(),
         node_match_plans: Vec::new(),
         node_actual_types: Vec::new(),
         node_expected_types: Vec::new(),
@@ -619,13 +618,7 @@ fn walk_root(
     });
     while let Some(item) = pending.pop() {
         let expression = item.expression;
-        let node = push_node(
-            program,
-            indexes,
-            item.owner,
-            expression,
-            item.expected.as_ref(),
-        )?;
+        let node = push_node(indexes, item.owner, expression, item.expected.as_ref())?;
         push_containment(indexes, item.owner, SemanticChild::Node(node))?;
         add_expression_relations(
             program,
@@ -1184,7 +1177,6 @@ fn push_entity(
 }
 
 fn push_node(
-    program: &SemanticProgram,
     indexes: &mut SnapshotIndexes,
     owner: SemanticOwner,
     expression: &Expr,
@@ -1205,14 +1197,6 @@ fn push_node(
         actual_type: Arc::from(expression.ty.to_string()),
         expected_type: expected.map(|ty| Arc::from(ty.to_string())),
     });
-    reserve(
-        &mut indexes.node_fingerprints,
-        1,
-        "workspace node fingerprint index",
-    )?;
-    indexes
-        .node_fingerprints
-        .push(expression_fingerprint(program, expression)?);
     reserve(
         &mut indexes.node_match_plans,
         1,
@@ -1493,300 +1477,6 @@ fn finish_private_indexes(indexes: &mut SnapshotIndexes) -> Result<()> {
             .ok_or_else(|| Error::host("workspace root preorder exceeds u64"))?;
     }
     indexes.rebuild_maps()
-}
-
-pub(super) fn match_plan_fingerprint(plan: &crate::hir::MatchPlan) -> Result<[u8; 32]> {
-    enum Work<'a> {
-        Pattern(&'a crate::hir::MatchPattern),
-        Field(&'a crate::hir::MatchFieldPattern),
-    }
-
-    let mut bytes = Vec::new();
-    reserve(&mut bytes, 128, "match plan fingerprint")?;
-    append_fingerprint_u64(&mut bytes, plan.id.raw(), "match plan identity")?;
-    append_fingerprint_u64(
-        &mut bytes,
-        u64::try_from(plan.arms.len())
-            .map_err(|_| Error::host("match fingerprint arm count exceeds u64"))?,
-        "match arm count",
-    )?;
-    reserve(&mut bytes, 1, "match exhaustiveness fingerprint")?;
-    bytes.push(u8::from(plan.exhaustive));
-    let mut work = Vec::new();
-    for arm in &plan.arms {
-        append_fingerprint_u64(&mut bytes, arm.id, "match arm identity")?;
-        append_fingerprint_bytes(
-            &mut bytes,
-            arm.body_type.to_string().as_bytes(),
-            "match arm type",
-        )?;
-        reserve(&mut work, 1, "match fingerprint work stack")?;
-        work.push(Work::Pattern(&arm.pattern));
-        while let Some(item) = work.pop() {
-            match item {
-                Work::Pattern(pattern) => {
-                    append_fingerprint_bytes(
-                        &mut bytes,
-                        pattern.ty().to_string().as_bytes(),
-                        "match pattern type",
-                    )?;
-                    reserve(&mut bytes, 128, "match pattern fingerprint")?;
-                    match pattern {
-                        crate::hir::MatchPattern::Wildcard { .. } => bytes.push(0),
-                        crate::hir::MatchPattern::Binding { local } => {
-                            bytes.push(1);
-                            append_match_local_fingerprint(&mut bytes, local)?;
-                        }
-                        crate::hir::MatchPattern::Bool(value) => {
-                            bytes.extend_from_slice(&[2, u8::from(*value)]);
-                        }
-                        crate::hir::MatchPattern::I64(value) => {
-                            bytes.push(3);
-                            bytes.extend_from_slice(&value.to_be_bytes());
-                        }
-                        crate::hir::MatchPattern::Variant {
-                            enum_id,
-                            variant,
-                            layout,
-                            fields,
-                            ..
-                        } => {
-                            bytes.push(4);
-                            bytes.extend_from_slice(&enum_id.bytes());
-                            bytes.extend_from_slice(&variant.bytes());
-                            bytes.extend_from_slice(&layout.bytes());
-                            append_fingerprint_u64(
-                                &mut bytes,
-                                u64::try_from(fields.len()).map_err(|_| {
-                                    Error::host("match fingerprint field count exceeds u64")
-                                })?,
-                                "match field count",
-                            )?;
-                            reserve(&mut work, fields.len(), "match fingerprint work stack")?;
-                            work.extend(fields.iter().rev().map(Work::Field));
-                        }
-                        crate::hir::MatchPattern::Product {
-                            product, fields, ..
-                        } => {
-                            bytes.push(5);
-                            bytes.extend_from_slice(&product.raw().to_be_bytes());
-                            append_fingerprint_u64(
-                                &mut bytes,
-                                u64::try_from(fields.len()).map_err(|_| {
-                                    Error::host("match fingerprint field count exceeds u64")
-                                })?,
-                                "match field count",
-                            )?;
-                            reserve(&mut work, fields.len(), "match fingerprint work stack")?;
-                            work.extend(fields.iter().rev().map(Work::Field));
-                        }
-                    }
-                }
-                Work::Field(field) => {
-                    reserve(&mut bytes, 64, "match field fingerprint")?;
-                    bytes.push(6);
-                    append_fingerprint_bytes(
-                        &mut bytes,
-                        field.name.as_bytes(),
-                        "match field name",
-                    )?;
-                    append_fingerprint_u64(&mut bytes, field.field_index, "match field index")?;
-                    reserve(&mut bytes, 1, "match projection fingerprint")?;
-                    if let Some(projection) = &field.projection {
-                        bytes.push(1);
-                        append_match_local_fingerprint(&mut bytes, projection)?;
-                    } else {
-                        bytes.push(0);
-                    }
-                    reserve(&mut work, 1, "match fingerprint work stack")?;
-                    work.push(Work::Pattern(&field.pattern));
-                }
-            }
-        }
-    }
-    Ok(lkjscript_core::sha256(&bytes))
-}
-
-fn append_match_local_fingerprint(
-    bytes: &mut Vec<u8>,
-    local: &crate::hir::MatchLocal,
-) -> Result<()> {
-    append_fingerprint_u64(bytes, local.binding.raw(), "match binding identity")?;
-    append_fingerprint_u64(bytes, local.place.raw(), "match place identity")?;
-    append_fingerprint_u64(
-        bytes,
-        u64::try_from(local.slot).map_err(|_| Error::host("match fingerprint slot exceeds u64"))?,
-        "match local slot",
-    )?;
-    append_fingerprint_bytes(bytes, local.ty.to_string().as_bytes(), "match local type")
-}
-
-fn append_fingerprint_u64(bytes: &mut Vec<u8>, value: u64, context: &str) -> Result<()> {
-    reserve(bytes, std::mem::size_of::<u64>(), context)?;
-    bytes.extend_from_slice(&value.to_be_bytes());
-    Ok(())
-}
-
-fn append_fingerprint_bytes(bytes: &mut Vec<u8>, value: &[u8], context: &str) -> Result<()> {
-    append_fingerprint_u64(
-        bytes,
-        u64::try_from(value.len())
-            .map_err(|_| Error::host(format!("{context} length exceeds u64")))?,
-        context,
-    )?;
-    reserve(bytes, value.len(), context)?;
-    bytes.extend_from_slice(value);
-    Ok(())
-}
-
-fn expression_fingerprint(program: &SemanticProgram, expression: &Expr) -> Result<[u8; 32]> {
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve(96)
-        .map_err(|_| Error::host("workspace expression fingerprint allocation failed"))?;
-    bytes.extend_from_slice(expression.ty.to_string().as_bytes());
-    bytes.extend_from_slice(&expression.effects.bits().to_be_bytes());
-    let tag = match &expression.kind {
-        ExprKind::Hole => 255,
-        ExprKind::LitI64(value) => {
-            bytes.extend_from_slice(&value.to_be_bytes());
-            0
-        }
-        ExprKind::LitF64(value) => {
-            bytes.extend_from_slice(&value.to_bits().to_be_bytes());
-            1
-        }
-        ExprKind::LitBool(value) => {
-            bytes.push(u8::from(*value));
-            2
-        }
-        ExprKind::LitUnit => 3,
-        ExprKind::EmptyList => 4,
-        ExprKind::LitStr(value) => {
-            bytes.extend_from_slice(value.as_bytes());
-            5
-        }
-        ExprKind::LitBytes(value) => {
-            bytes.extend_from_slice(value);
-            6
-        }
-        ExprKind::Load(value) => {
-            bytes.extend_from_slice(&value.binding.raw().to_be_bytes());
-            7
-        }
-        ExprKind::Move { binding, .. } => {
-            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
-            8
-        }
-        ExprKind::Borrow { binding, .. } => {
-            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
-            9
-        }
-        ExprKind::BorrowBytes { binding, .. } => {
-            bytes.extend_from_slice(&binding.binding.raw().to_be_bytes());
-            10
-        }
-        ExprKind::Call { callee, .. } => {
-            bytes.extend_from_slice(&callee.binding.raw().to_be_bytes());
-            11
-        }
-        ExprKind::Operation { operation, .. } => {
-            bytes.extend_from_slice(&operation.identity().as_u16().to_be_bytes());
-            12
-        }
-        ExprKind::F64FromI64Exact(_) => 13,
-        ExprKind::F64FromI64Rounded(_) => 14,
-        ExprKind::I64FromF64Exact(_) => 15,
-        ExprKind::I64FromF64Trunc(_) => 16,
-        ExprKind::Do(_) => 17,
-        ExprKind::If { .. } => 18,
-        ExprKind::While { .. } => 19,
-        ExprKind::Loop { .. } => 20,
-        ExprKind::Return { .. } => 21,
-        ExprKind::Break { .. } => 22,
-        ExprKind::Continue { .. } => 23,
-        ExprKind::Trap { .. } => 24,
-        ExprKind::Exit { .. } => 25,
-        ExprKind::Let { .. } => 26,
-        ExprKind::MutableLocal { binding, .. } => {
-            bytes.extend_from_slice(&binding.raw().to_be_bytes());
-            27
-        }
-        ExprKind::SetLocal { target, .. } => {
-            bytes.extend_from_slice(&target.raw().to_be_bytes());
-            28
-        }
-        ExprKind::ProductValue { product, .. } => {
-            bytes.extend_from_slice(&product.raw().to_be_bytes());
-            29
-        }
-        ExprKind::ProductField { product, field, .. } => {
-            bytes.extend_from_slice(&product.raw().to_be_bytes());
-            bytes.extend_from_slice(&field.to_be_bytes());
-            30
-        }
-        ExprKind::WithProductField { product, field, .. } => {
-            bytes.extend_from_slice(&product.raw().to_be_bytes());
-            bytes.extend_from_slice(&field.to_be_bytes());
-            31
-        }
-        ExprKind::EnumValue {
-            enum_id, variant, ..
-        } => {
-            bytes.extend_from_slice(&enum_id.bytes());
-            bytes.extend_from_slice(&variant.bytes());
-            32
-        }
-        ExprKind::EnumIsVariant {
-            enum_id, variant, ..
-        } => {
-            bytes.extend_from_slice(&enum_id.bytes());
-            bytes.extend_from_slice(&variant.bytes());
-            33
-        }
-        ExprKind::EnumField {
-            enum_id,
-            variant,
-            field,
-            ..
-        } => {
-            bytes.extend_from_slice(&enum_id.bytes());
-            bytes.extend_from_slice(&variant.bytes());
-            bytes.extend_from_slice(&field.bytes());
-            34
-        }
-        ExprKind::EnumUnwrap {
-            enum_id,
-            variant,
-            field,
-            ..
-        } => {
-            bytes.extend_from_slice(&enum_id.bytes());
-            bytes.extend_from_slice(&variant.bytes());
-            bytes.extend_from_slice(&field.bytes());
-            35
-        }
-        ExprKind::Match { plan, .. } => {
-            bytes.extend_from_slice(&plan.raw().to_be_bytes());
-            let plan = plan
-                .index()
-                .and_then(|index| program.match_plans.get(index))
-                .filter(|item| item.id == *plan)
-                .ok_or_else(|| Error::msg("workspace match fingerprint lost its plan"))?;
-            bytes.extend_from_slice(&match_plan_fingerprint(plan)?);
-            36
-        }
-        ExprKind::MatchUnreachable { plan } => {
-            bytes.extend_from_slice(&plan.raw().to_be_bytes());
-            37
-        }
-        ExprKind::QuoteSymbol(value) => {
-            bytes.extend_from_slice(value.as_bytes());
-            38
-        }
-    };
-    bytes.push(tag);
-    Ok(lkjscript_core::sha256(&bytes))
 }
 
 fn index_of(raw: u64, kind: &str) -> Result<usize> {

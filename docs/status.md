@@ -190,23 +190,35 @@ immutable-local entities. Compiler-only scrutinee and field-projection locals ha
 binding kind and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
 foreign/stale/wrong-kind pattern identities, forward or cross-arm binding uses, field coverage/type
-failures, empty/nonexhaustive/useless arms, incompatible arm results, and edits that would orphan
-published local entities reject. Mutable locals, generic calls, non-enum source-free pattern spaces,
-and executable placeholders remain absent.
+failures, empty/nonexhaustive/useless arms, incompatible arm results, and contradictory overlapping
+or deletion-owned edits reject. Mutable-local construction, generic calls, non-enum source-free
+pattern spaces, and executable placeholders remain absent. Imported mutable-local subtrees can be
+removed through ordinary replacement because the lifecycle remap covers their existing HIR form.
 
 The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, and durable
 semantic `Match` nodes linked to canonical match plans. Missing body and typed-hole metadata describe
 hole leaves; no prior expression survives introduction. Match arm/body relationships remain directly
-queryable; scrutinee and arm-body nodes use the ordinary targeted edit/hole operations, while a whole
-match replacement rejects when it would orphan published payload bindings. Complete-HIR derivation iteratively replaces each
-semantic match with the existing canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory,
+queryable, and scrutinee, arm-body, or whole-match nodes use the ordinary targeted edit/hole
+operations. Complete-HIR derivation iteratively replaces each semantic match with the existing
+canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory,
 SSA, bytecode, and VM layers never accept an unlowered semantic match. Effects use an explicit
 unknown fact while holes remain and are recomputed after every transaction. Shape, lexical scope,
 type, usefulness, and exhaustiveness preflight lower once into staged semantic state; canonical
 complete-HIR ownership validation decides move/borrow legality and cleanup before publication.
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
-future IDs. Structural edits that remove a local-defining subtree are currently rejected rather than
-retaining orphan bindings or adding a second mutable local authority.
+future IDs. Replacement and hole introduction now remove local-defining `let`, imported mutable
+local, and semantic-match subtrees. One iterative staged compaction prunes unreachable bindings and
+match plans, rewrites dense binding/plan references, and rebuilds per-callable places, slots, and
+local counts before canonical validation. Removed local and payload identities tombstone; unaffected
+entities, nodes, and holes retain identity across private relocation.
+
+`DeleteEntity` supports `main` and ordinary imported or source-free non-builtin functions. Deletion
+owns the callable's parameters, locals, payload bindings, nodes, holes, hidden match descendants,
+plans, and function-layout participation. A retained final call/reference rejects, while a batch that
+removes the dependency and deletes the function publishes once independent of edit order. Deleting
+`main` yields the canonical `MissingEntryPoint` incomplete state; recreation uses normal generation
+advancement. Direct parameter/local/payload/nominal/member/trait/implementation deletion and public
+movement are not implemented.
 
 Completeness blockers distinguish missing entry point, missing body with declaration/hole/type, and
 typed hole with hole/type/owner/context. Incomplete snapshots remain fully queryable and projectable.
@@ -265,9 +277,10 @@ replacement exists pending a measured consumer.
   enum-variant, field, and payload-binding patterns over non-generic enum scrutinees; Boolean,
   integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
-  ownership evidence uses the strongest supported copy-safe payload geometry. Declaration
-  deletion/movement, mutable locals, generic calls, unresolved names, ambiguities, conflicts, and
-  recovery states remain.
+  ownership evidence uses the strongest supported copy-safe payload geometry. Callable deletion and
+  local/payload removal are implemented; nominal/member deletion, explicit public movement,
+  mutable-local construction, generic calls, unresolved names, ambiguities, conflicts, and recovery
+  states remain.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
 - Owned runtime structural values and source-free nested-expression, lexical-local, and nested

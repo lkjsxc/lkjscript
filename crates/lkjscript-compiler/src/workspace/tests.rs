@@ -755,6 +755,621 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
 }
 
 #[test]
+fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
+    let mut workspace = Workspace::empty_deterministic(33).expect("deletion workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "f".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "f-value".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                    return_type: SemanticTypeRef::I64,
+                },
+                Edit::CreateFunction {
+                    name: "g".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "g-value".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                    return_type: SemanticTypeRef::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticTypeRef::I64,
+                },
+            ],
+        })
+        .expect("create call chain");
+    let f = entity_named(&created.snapshot, EntityKind::Function, "f");
+    let g = entity_named(&created.snapshot, EntityKind::Function, "g");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let f_parameter = entity_named(&created.snapshot, EntityKind::Parameter, "f-value");
+    let g_parameter = entity_named(&created.snapshot, EntityKind::Parameter, "g-value");
+    let hole_for = |owner| {
+        created
+            .snapshot
+            .holes()
+            .find(|hole| hole.owner == owner)
+            .expect("callable hole")
+            .id
+    };
+    workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole_for(f),
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Load(DraftBindingRef::Entity(f_parameter)),
+                        DraftNode::Load(DraftBindingRef::Local(DraftBindingId::new(0))),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: DraftBindingId::new(0),
+                                name: "f-local".to_owned(),
+                                value: DraftNodeId::new(0),
+                            }],
+                            body: DraftNodeId::new(1),
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("fill f");
+    workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole_for(g),
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Load(DraftBindingRef::Entity(g_parameter)),
+                        DraftNode::Call {
+                            callee: f,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("fill g");
+    let complete = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole_for(main),
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: g,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("fill main");
+    assert_eq!(run_i64(&complete.snapshot), 42);
+    let g_root = complete
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(g))
+        .expect("g root")
+        .id;
+    let main_call = complete
+        .snapshot
+        .calls()
+        .iter()
+        .find(|edge| edge.caller == main)
+        .expect("main call")
+        .site;
+    let f_local = entity_named(&complete.snapshot, EntityKind::ImmutableLocal, "f-local");
+    let f_nodes: Vec<_> = complete
+        .snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node.owner == SemanticOwner::Entity(f))
+        .map(|node| node.id)
+        .collect();
+    let f_root = *f_nodes.first().expect("f root");
+    let before = workspace.current();
+
+    let retained_dependency = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::DeleteEntity { entity: f }],
+    });
+    assert!(matches!(
+        retained_dependency,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let duplicate = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::DeleteEntity { entity: f },
+            Edit::DeleteEntity { entity: f },
+        ],
+    });
+    assert!(matches!(
+        duplicate,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let wrong_kind = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::DeleteEntity {
+            entity: g_parameter,
+        }],
+    });
+    assert!(matches!(
+        wrong_kind,
+        Err(WorkspaceError::UnsupportedEdit { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let rename_and_delete = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::RenameEntity {
+                entity: f,
+                new_name: "renamed-f".to_owned(),
+            },
+            Edit::DeleteEntity { entity: f },
+        ],
+    });
+    assert!(matches!(
+        rename_and_delete,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let delete_and_descendant_edit = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::DeleteEntity { entity: f },
+            Edit::ReplaceExpression {
+                target: f_root,
+                draft: ExpressionDraft::scalar_i64(1),
+            },
+        ],
+    });
+    assert!(matches!(
+        delete_and_descendant_edit,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let stale_f = EntityId::new(
+        before.namespace(),
+        f.slot(),
+        f.generation().checked_add(1).expect("stale generation"),
+    );
+    assert!(matches!(
+        workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::DeleteEntity { entity: stale_f }],
+        }),
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    let foreign = Workspace::empty_deterministic(137)
+        .expect("foreign workspace")
+        .current();
+    let foreign_entity = EntityId::new(foreign.namespace(), 0, 1);
+    assert!(matches!(
+        workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: foreign_entity,
+            }],
+        }),
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let newly_reintroduced = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::DeleteEntity { entity: f },
+            Edit::ReplaceExpression {
+                target: g_root,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Load(DraftBindingRef::Entity(g_parameter)),
+                        DraftNode::Call {
+                            callee: f,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            },
+        ],
+    });
+    assert!(matches!(
+        newly_reintroduced,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: f },
+                Edit::ReplaceExpression {
+                    target: g_root,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(g_parameter))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+            ],
+        })
+        .expect("remove call and delete f atomically");
+    assert_eq!(
+        deleted
+            .snapshot
+            .definition(deleted.snapshot.revision(), g)
+            .expect("g")
+            .id,
+        g
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .definition(deleted.snapshot.revision(), main)
+            .expect("main")
+            .id,
+        main
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .definition(deleted.snapshot.revision(), g_parameter)
+            .expect("g parameter")
+            .id,
+        g_parameter
+    );
+    assert_eq!(
+        deleted.snapshot.node(g_root).expect("stable g root").id,
+        g_root
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .node(main_call)
+            .expect("stable main call")
+            .id,
+        main_call
+    );
+    assert!(deleted.snapshot.entity(f).is_err());
+    assert!(deleted.snapshot.entity(f_parameter).is_err());
+    assert!(deleted.snapshot.entity(f_local).is_err());
+    for node in f_nodes {
+        assert!(deleted.snapshot.node(node).is_err());
+    }
+    assert_eq!(
+        before.entity(f).expect("old function remains queryable").id,
+        f
+    );
+    assert_eq!(run_i64(&before), 42);
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    for (index, binding) in deleted.snapshot.program.bindings.iter().enumerate() {
+        assert_eq!(
+            binding.id.raw(),
+            u64::try_from(index).expect("binding index")
+        );
+    }
+    assert!(deleted.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == f
+    )));
+    assert!(deleted.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == f_parameter
+    )));
+
+    let with_h = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "h".to_owned(),
+                parameters: vec![ParameterDraft {
+                    name: "h-value".to_owned(),
+                    ty: SemanticTypeRef::I64,
+                }],
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("reuse callable tombstones");
+    let h = entity_named(&with_h.snapshot, EntityKind::Function, "h");
+    let h_parameter = entity_named(&with_h.snapshot, EntityKind::Parameter, "h-value");
+    let removed_ids = [f, f_parameter, f_local];
+    assert!([h, h_parameter].into_iter().any(|created| {
+        removed_ids.iter().any(|removed| {
+            created.slot() == removed.slot() && created.generation() != removed.generation()
+        })
+    }));
+    let h_hole = with_h
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == h)
+        .expect("h hole")
+        .id;
+    let without_h = workspace
+        .apply(Transaction {
+            base_revision: with_h.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: h }],
+        })
+        .expect("delete callable with active hole");
+    assert!(without_h.snapshot.entity(h).is_err());
+    assert!(without_h.snapshot.node(h_hole.node()).is_err());
+    assert!(without_h.snapshot.holes().all(|hole| hole.owner != h));
+    assert!(without_h.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::DescendantDeleted {
+            node,
+            kind: NodeKind::Hole,
+            ..
+        } if *node == h_hole.node()
+    )));
+
+    let without_main = workspace
+        .apply(Transaction {
+            base_revision: without_h.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: main }],
+        })
+        .expect("delete main");
+    assert_eq!(without_main.snapshot.state(), ProgramState::Incomplete);
+    assert_eq!(
+        without_main.snapshot.completeness_blockers(),
+        &[CompletenessBlocker::MissingEntryPoint]
+    );
+    assert!(without_main.snapshot.entity(main).is_err());
+    assert!(without_main.snapshot.node(main_call).is_err());
+    assert!(without_main.snapshot.program.main.is_none());
+    assert_eq!(without_main.snapshot.diagnostics().len(), 1);
+    assert_eq!(
+        without_main.snapshot.diagnostics()[0].code.as_ref(),
+        "workspace.missing-entry-point"
+    );
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: without_main.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("recreate main");
+    let new_main = entity_named(&recreated.snapshot, EntityKind::Main, "main");
+    assert_eq!(new_main.slot(), main.slot());
+    assert_ne!(new_main.generation(), main.generation());
+}
+
+#[test]
+fn callable_compaction_preserves_a_later_function_hole_and_old_snapshot() {
+    let mut workspace = Workspace::empty_deterministic(142).expect("hole relocation workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "remove".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "removed-parameter".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                    return_type: SemanticTypeRef::I64,
+                },
+                Edit::CreateFunction {
+                    name: "retain".to_owned(),
+                    parameters: vec![ParameterDraft {
+                        name: "retained-parameter".to_owned(),
+                        ty: SemanticTypeRef::I64,
+                    }],
+                    return_type: SemanticTypeRef::I64,
+                },
+            ],
+        })
+        .expect("create incomplete functions");
+    let removed = entity_named(&created.snapshot, EntityKind::Function, "remove");
+    let retained = entity_named(&created.snapshot, EntityKind::Function, "retain");
+    let retained_parameter = entity_named(
+        &created.snapshot,
+        EntityKind::Parameter,
+        "retained-parameter",
+    );
+    let removed_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == removed)
+        .expect("removed hole")
+        .id;
+    let retained_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == retained)
+        .expect("retained hole")
+        .id;
+    let old = created.snapshot;
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::DeleteEntity { entity: removed }],
+        })
+        .expect("delete earlier incomplete function");
+    assert!(deleted.snapshot.entity(removed).is_err());
+    assert!(deleted.snapshot.node(removed_hole.node()).is_err());
+    assert_eq!(
+        deleted.snapshot.entity(retained).expect("retained").id,
+        retained
+    );
+    assert_eq!(
+        deleted
+            .snapshot
+            .entity(retained_parameter)
+            .expect("retained parameter")
+            .id,
+        retained_parameter
+    );
+    let hole = deleted
+        .snapshot
+        .hole_context(deleted.snapshot.revision(), retained_hole)
+        .expect("retained hole context");
+    assert_eq!(hole.id, retained_hole);
+    assert_eq!(hole.owner, retained);
+    assert!(hole.visible_entities.contains(&retained_parameter));
+    assert_eq!(old.entity(removed).expect("old function").id, removed);
+    assert_eq!(
+        old.hole_context(old.revision(), removed_hole)
+            .expect("old hole")
+            .id,
+        removed_hole
+    );
+}
+
+#[test]
+fn imported_function_deletion_is_parser_free_and_uses_the_same_lifecycle() {
+    let snapshot = importer::import_source_with_namespace(
+        FUNCTION_PROGRAM,
+        "workspace-delete-imported.lkjscript",
+        WorkspaceNamespace::deterministic(134),
+    )
+    .expect("import function program");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("imported function")
+        .id;
+    let main = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("imported main")
+        .id;
+    let main_root = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("main root")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("imported workspace");
+    crate::source::reset_parser_invocation_count();
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: function },
+                Edit::ReplaceExpression {
+                    target: main_root,
+                    draft: ExpressionDraft::scalar_i64(42),
+                },
+            ],
+        })
+        .expect("delete imported function without source");
+    assert!(deleted.snapshot.entity(function).is_err());
+    assert_eq!(run_i64(&deleted.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+
+    let (
+        mut source_free,
+        source_free_function,
+        parameter,
+        source_free_main,
+        function_hole,
+        main_hole,
+    ) = create_source_free_declarations(139);
+    let source_free_complete = fill_source_free_identity(
+        &mut source_free,
+        source_free_function,
+        parameter,
+        function_hole,
+        main_hole,
+    );
+    let source_free_root = source_free_complete
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(source_free_main))
+        .expect("source-free main root")
+        .id;
+    let source_free_deleted = source_free
+        .apply(Transaction {
+            base_revision: source_free_complete.revision(),
+            edits: vec![
+                Edit::ReplaceExpression {
+                    target: source_free_root,
+                    draft: ExpressionDraft::scalar_i64(42),
+                },
+                Edit::DeleteEntity {
+                    entity: source_free_function,
+                },
+            ],
+        })
+        .expect("delete source-free function");
+    assert_eq!(
+        canonical_workspace_observation(&deleted.snapshot),
+        canonical_workspace_observation(&source_free_deleted.snapshot)
+    );
+    assert_eq!(run_i64(&source_free_deleted.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+}
+
+#[test]
+fn imported_mutable_local_subtree_removal_compacts_without_reparsing() {
+    let source = concat!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n1\nx\n/var\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "workspace-remove-mutable.lkjscript",
+        WorkspaceNamespace::deterministic(136),
+    )
+    .expect("import mutable local");
+    let local = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::MutableLocal)
+        .expect("mutable local")
+        .id;
+    let node = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::MutableLocal)
+        .expect("mutable-local node")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("mutable workspace");
+    crate::source::reset_parser_invocation_count();
+    let replaced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: node,
+                draft: ExpressionDraft::scalar_i64(9),
+            }],
+        })
+        .expect("remove mutable local");
+    assert!(replaced.snapshot.entity(local).is_err());
+    assert_eq!(replaced.snapshot.node(node).expect("stable root").id, node);
+    assert_eq!(
+        replaced
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .local_count,
+        0
+    );
+    assert_eq!(run_i64(&replaced.snapshot), 9);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+}
+
+#[test]
 fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() {
     let mut function_first = Workspace::empty_deterministic(34).expect("function-first workspace");
     let function_created = function_first
@@ -1544,7 +2159,7 @@ fn disjoint_batch_edits_preserve_roots_when_earlier_subtrees_change_size() {
 }
 
 #[test]
-fn unchanged_descendant_ids_follow_branch_reordering_and_removed_ids_are_stale() {
+fn replacement_descendants_do_not_inherit_identity_from_fingerprints() {
     let snapshot = importer::import_source_with_namespace(
         CONDITIONAL,
         "workspace-reorder.lkjscript",
@@ -1579,9 +2194,15 @@ fn unchanged_descendant_ids_follow_branch_reordering_and_removed_ids_are_stale()
             }],
         })
         .expect("reorder branches");
-    assert_eq!(edited.snapshot.nodes()[2].id, old_two);
-    assert_eq!(edited.snapshot.nodes()[3].id, old_one);
+    assert!(edited.snapshot.node(old_one).is_err());
+    assert!(edited.snapshot.node(old_two).is_err());
     assert_eq!(edited.snapshot.node(root).expect("root").id, root);
+    assert!(edited
+        .snapshot
+        .nodes()
+        .iter()
+        .skip(1)
+        .all(|node| node.id != old_one && node.id != old_two));
 
     let holed = workspace
         .apply(Transaction {
@@ -2963,18 +3584,6 @@ fn source_free_enum_payload_match_compiles_and_executes() {
         completed.snapshot.program.match_plans[0].origin,
         crate::hir::Origin::Semantic
     );
-    let original_plan = &completed.snapshot.program.match_plans[0];
-    let original_fingerprint =
-        super::index::match_plan_fingerprint(original_plan).expect("match plan fingerprint");
-    let mut changed_pattern = original_plan.clone();
-    changed_pattern.arms[0].pattern = crate::hir::MatchPattern::Wildcard {
-        ty: changed_pattern.scrutinee.ty.clone(),
-    };
-    assert_ne!(
-        original_fingerprint,
-        super::index::match_plan_fingerprint(&changed_pattern)
-            .expect("changed match plan fingerprint")
-    );
     let complete = completed
         .snapshot
         .validated_complete_hir()
@@ -3164,6 +3773,93 @@ fn source_free_choice_match(seed: u64) -> (Workspace, EntityId, EntityId, Entity
         })
         .expect("construct source-free match");
     (workspace, choice, some, none, value_field)
+}
+
+#[test]
+fn source_free_match_removal_prunes_payload_bindings_plans_and_holes_cleanly() {
+    let (mut replacement_workspace, ..) = source_free_choice_match(135);
+    let published = replacement_workspace.current();
+    let payload = entity_named(&published, EntityKind::ImmutableLocal, "x");
+    let match_node = published
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("match node")
+        .id;
+    let mut hole_workspace = Workspace::new((*published).clone()).expect("match hole workspace");
+
+    let replaced = replacement_workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: match_node,
+                draft: ExpressionDraft::scalar_i64(5),
+            }],
+        })
+        .expect("replace semantic match");
+    assert!(replaced.snapshot.entity(payload).is_err());
+    assert!(replaced.snapshot.program.match_plans.is_empty());
+    assert!(replaced.snapshot.program.bindings.is_empty());
+    assert_eq!(
+        replaced
+            .snapshot
+            .node(match_node)
+            .expect("stable match root")
+            .id,
+        match_node
+    );
+    assert!(replaced
+        .snapshot
+        .references()
+        .iter()
+        .all(|edge| edge.target != payload));
+    assert!(replaced
+        .snapshot
+        .dependencies()
+        .iter()
+        .all(|edge| edge.dependency != payload));
+    assert_eq!(run_i64(&replaced.snapshot), 5);
+
+    let introduced = hole_workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: match_node,
+                goal: "replace the complete match".to_owned(),
+            }],
+        })
+        .expect("hole semantic match");
+    assert!(introduced.snapshot.entity(payload).is_err());
+    assert!(introduced.snapshot.program.match_plans.is_empty());
+    assert!(introduced.snapshot.program.bindings.is_empty());
+    let match_hole = introduced.snapshot.holes().next().expect("match hole");
+    assert_eq!(match_hole.id.node(), match_node);
+    assert!(!match_hole.visible_entities.contains(&payload));
+    assert!(!introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            match_hole.id,
+            PageRequest::new(32).expect("page"),
+            None,
+        )
+        .expect("former-match constructors")
+        .items
+        .contains(&LegalConstructor::Load(payload)));
+    assert!(introduced
+        .snapshot
+        .match_view(introduced.snapshot.revision(), match_node)
+        .is_err());
+    let filled = hole_workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: HoleId(match_node),
+                draft: ExpressionDraft::scalar_i64(6),
+            }],
+        })
+        .expect("fill former match");
+    assert_eq!(run_i64(&filled.snapshot), 6);
 }
 
 fn choice_match_draft(some: EntityId, none: EntityId, value_field: EntityId) -> ExpressionDraft {
@@ -4541,6 +5237,38 @@ fn source_free_byte_vector_borrow_then_move_executes_and_cleans_up() {
     assert!(outcome.cleanup_failures().is_none());
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(6)));
     assert_eq!(crate::pipeline::lowering_invocations(), 1);
+
+    let owner = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "owner");
+    let main = entity_named(&completed.snapshot, EntityKind::Main, "main");
+    let root = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Let && node.owner == SemanticOwner::Entity(main))
+        .expect("owned local root")
+        .id;
+    let removed = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::scalar_i64(7),
+            }],
+        })
+        .expect("remove ownership-sensitive local subtree");
+    assert!(removed.snapshot.entity(owner).is_err());
+    let executable =
+        crate::compile_snapshot(&removed.snapshot).expect("compile after owned-local removal");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(7)));
+    assert_eq!(crate::pipeline::lowering_invocations(), 2);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
 
 #[test]
@@ -5291,6 +6019,13 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         })
         .expect("fill local body");
     let local_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "visible");
+    let let_node = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Let)
+        .expect("local let")
+        .id;
     let load = completed
         .snapshot
         .nodes()
@@ -5365,10 +6100,38 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .expect("outside constructors")
         .items
         .contains(&LegalConstructor::Load(local_entity)));
+
+    let nested_id = nested.id;
+    let published = introduced.snapshot;
+    for refine_first in [false, true] {
+        let refine = Edit::RefineHole {
+            hole: nested_id,
+            expected_type: None,
+            goal: "refine a soon-removed hole".to_owned(),
+        };
+        let replace = Edit::ReplaceExpression {
+            target: let_node,
+            draft: ExpressionDraft::scalar_i64(0),
+        };
+        let edits = if refine_first {
+            vec![refine, replace]
+        } else {
+            vec![replace, refine]
+        };
+        let failure = workspace.apply(Transaction {
+            base_revision: published.revision(),
+            edits,
+        });
+        assert!(matches!(
+            failure,
+            Err(WorkspaceError::InvalidTransaction(_))
+        ));
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
 }
 
 #[test]
-fn local_defining_subtrees_cannot_be_removed_or_hidden() {
+fn local_defining_subtrees_are_removed_compacted_and_tombstoned() {
     let mut workspace = Workspace::empty_deterministic(65).expect("local workspace");
     let created = workspace
         .apply(Transaction {
@@ -5392,7 +6155,7 @@ fn local_defining_subtrees_cannot_be_removed_or_hidden() {
                         DraftNode::Let {
                             bindings: vec![LocalDraft {
                                 binding: local,
-                                name: "retained".to_owned(),
+                                name: "removed".to_owned(),
                                 value: DraftNodeId::new(0),
                             }],
                             body: DraftNodeId::new(1),
@@ -5404,6 +6167,8 @@ fn local_defining_subtrees_cannot_be_removed_or_hidden() {
         })
         .expect("fill local main");
     let published = completed.snapshot;
+    let main = entity_named(&published, EntityKind::Main, "main");
+    let local_entity = entity_named(&published, EntityKind::ImmutableLocal, "removed");
     let let_node = published
         .nodes()
         .iter()
@@ -5416,47 +6181,401 @@ fn local_defining_subtrees_cannot_be_removed_or_hidden() {
         .find(|node| node.kind == NodeKind::Load)
         .expect("load node")
         .id;
-    let mut control = Workspace::new((*published).clone()).expect("control workspace");
+    let mut hole_workspace = Workspace::new((*published).clone()).expect("hole workspace");
 
-    for edit in [
-        Edit::ReplaceExpression {
-            target: let_node,
-            draft: ExpressionDraft::scalar_i64(0),
-        },
-        Edit::IntroduceHole {
-            target: let_node,
-            goal: "remove the local declaration".to_owned(),
-        },
-    ] {
-        let failure = workspace.apply(Transaction {
+    let replaced = workspace
+        .apply(Transaction {
             base_revision: published.revision(),
-            edits: vec![edit],
-        });
-        assert!(matches!(
-            failure,
-            Err(WorkspaceError::UnsupportedEdit { .. })
-        ));
-        assert!(Arc::ptr_eq(&published, &workspace.current()));
-    }
-
-    let apply_allowed = |workspace: &mut Workspace| {
-        workspace
-            .apply(Transaction {
-                base_revision: published.revision(),
-                edits: vec![Edit::IntroduceHole {
-                    target: load,
-                    goal: "edit inside the retained scope".to_owned(),
-                }],
-            })
-            .expect("edit a non-defining descendant")
-    };
-    let after_failures = apply_allowed(&mut workspace);
-    let clean_control = apply_allowed(&mut control);
-    assert_eq!(after_failures.diff, clean_control.diff);
+            edits: vec![Edit::ReplaceExpression {
+                target: let_node,
+                draft: ExpressionDraft::scalar_i64(0),
+            }],
+        })
+        .expect("replace local-defining subtree");
     assert_eq!(
-        after_failures.snapshot.entities(),
-        clean_control.snapshot.entities()
+        replaced.snapshot.node(let_node).expect("stable root").id,
+        let_node
     );
+    assert_eq!(
+        replaced
+            .snapshot
+            .definition(replaced.snapshot.revision(), main)
+            .expect("main")
+            .id,
+        main
+    );
+    assert!(replaced.snapshot.entity(local_entity).is_err());
+    assert!(replaced.snapshot.node(load).is_err());
+    assert!(replaced.snapshot.program.bindings.is_empty());
+    assert_eq!(
+        replaced
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .local_count,
+        0
+    );
+    assert!(replaced.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == local_entity
+    )));
+    assert_eq!(run_i64(&replaced.snapshot), 0);
+
+    let introduced = hole_workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: let_node,
+                goal: "replace the local declaration".to_owned(),
+            }],
+        })
+        .expect("hole local-defining subtree");
+    assert!(introduced.snapshot.entity(local_entity).is_err());
+    assert_eq!(
+        introduced
+            .snapshot
+            .holes()
+            .next()
+            .expect("typed hole")
+            .id
+            .node(),
+        let_node
+    );
+    assert!(matches!(
+        introduced
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .body
+            .kind,
+        crate::hir::ExprKind::Hole
+    ));
+    let filled = hole_workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: HoleId(let_node),
+                draft: ExpressionDraft::scalar_i64(11),
+            }],
+        })
+        .expect("fill compacted hole");
+    assert_eq!(run_i64(&filled.snapshot), 11);
+}
+
+#[test]
+fn surviving_lexical_local_keeps_identity_when_an_earlier_local_compacts() {
+    let mut workspace = Workspace::empty_deterministic(138).expect("local relocation workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let a = DraftBindingId::new(0);
+    let b = DraftBindingId::new(1);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(1),
+                        DraftNode::Load(DraftBindingRef::Local(a)),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: a,
+                                name: "a".to_owned(),
+                                value: DraftNodeId::new(0),
+                            }],
+                            body: DraftNodeId::new(1),
+                        },
+                        DraftNode::I64(2),
+                        DraftNode::Load(DraftBindingRef::Local(b)),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: b,
+                                name: "b".to_owned(),
+                                value: DraftNodeId::new(3),
+                            }],
+                            body: DraftNodeId::new(4),
+                        },
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(2), DraftNodeId::new(5)],
+                        },
+                    ],
+                    DraftNodeId::new(6),
+                ),
+            }],
+        })
+        .expect("create sibling locals");
+    let a_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "a");
+    let b_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "b");
+    let a_load = completed
+        .snapshot
+        .references()
+        .iter()
+        .find(|edge| edge.target == a_entity)
+        .expect("a load")
+        .site;
+    let a_let = match completed.snapshot.node(a_load).expect("a load").owner {
+        SemanticOwner::Node(owner) => owner,
+        SemanticOwner::Entity(_) => panic!("load must be owned by let"),
+    };
+    let b_load = completed
+        .snapshot
+        .references()
+        .iter()
+        .find(|edge| edge.target == b_entity)
+        .expect("b load")
+        .site;
+    let b_let = match completed.snapshot.node(b_load).expect("b load").owner {
+        SemanticOwner::Node(owner) => owner,
+        SemanticOwner::Entity(_) => panic!("load must be owned by let"),
+    };
+    assert_eq!(completed.snapshot.program.bindings[1].name, "b");
+
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: a_let,
+                draft: ExpressionDraft::scalar_i64(1),
+            }],
+        })
+        .expect("remove earlier local");
+    assert!(compacted.snapshot.entity(a_entity).is_err());
+    assert_eq!(
+        compacted.snapshot.entity(b_entity).expect("surviving b").id,
+        b_entity
+    );
+    assert_eq!(
+        compacted.snapshot.node(b_let).expect("surviving let").id,
+        b_let
+    );
+    assert_eq!(
+        compacted.snapshot.node(b_load).expect("surviving load").id,
+        b_load
+    );
+    assert_eq!(compacted.snapshot.program.bindings.len(), 1);
+    assert_eq!(compacted.snapshot.program.bindings[0].name, "b");
+    assert_eq!(compacted.snapshot.program.bindings[0].id.raw(), 0);
+    assert_eq!(
+        compacted
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .local_count,
+        1
+    );
+    assert_eq!(run_i64(&compacted.snapshot), 3);
+}
+
+#[test]
+fn inserting_a_local_before_a_survivor_rebuilds_places_in_evaluation_order() {
+    let mut workspace = Workspace::empty_deterministic(140).expect("place-order workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let outer = DraftBindingId::new(0);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(2),
+                        DraftNode::Load(DraftBindingRef::Local(outer)),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: outer,
+                                name: "outer".to_owned(),
+                                value: DraftNodeId::new(0),
+                            }],
+                            body: DraftNodeId::new(1),
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("create outer local");
+    let outer_entity = entity_named(&completed.snapshot, EntityKind::ImmutableLocal, "outer");
+    let outer_let = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Let)
+        .expect("outer let")
+        .id;
+    let outer_load = completed
+        .snapshot
+        .references()
+        .iter()
+        .find(|edge| edge.target == outer_entity)
+        .expect("outer load")
+        .site;
+    let initializer = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Literal && node.owner == SemanticOwner::Node(outer_let))
+        .expect("outer initializer")
+        .id;
+    let inner = DraftBindingId::new(0);
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: initializer,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(5),
+                        DraftNode::Load(DraftBindingRef::Local(inner)),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: inner,
+                                name: "inner".to_owned(),
+                                value: DraftNodeId::new(0),
+                            }],
+                            body: DraftNodeId::new(1),
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("insert inner local before existing definition");
+    assert_eq!(
+        edited.snapshot.entity(outer_entity).expect("outer").id,
+        outer_entity
+    );
+    assert_eq!(
+        edited.snapshot.node(outer_let).expect("outer let").id,
+        outer_let
+    );
+    assert_eq!(
+        edited.snapshot.node(outer_load).expect("outer load").id,
+        outer_load
+    );
+    let main = edited.snapshot.program.main.as_ref().expect("main");
+    let crate::hir::ExprKind::Let {
+        bindings: outer_bindings,
+        ..
+    } = &main.body.kind
+    else {
+        panic!("main must retain the outer let");
+    };
+    let crate::hir::ExprKind::Let {
+        bindings: inner_bindings,
+        ..
+    } = &outer_bindings[0].value.kind
+    else {
+        panic!("outer initializer must contain the inserted let");
+    };
+    assert_eq!(inner_bindings[0].place.raw(), 0);
+    assert_eq!(outer_bindings[0].place.raw(), 1);
+    assert_eq!(outer_bindings[0].slot, 0);
+    assert_eq!(inner_bindings[0].slot, 1);
+    assert_eq!(main.local_count, 2);
+    assert_eq!(run_i64(&edited.snapshot), 5);
+}
+
+#[test]
+fn removing_an_earlier_match_compacts_and_preserves_a_later_plan() {
+    let mut workspace = Workspace::empty_deterministic(141).expect("plan relocation workspace");
+    let (_choice, some, none, value_field) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticTypeRef::I64,
+            }],
+        })
+        .expect("create main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: deep_match_draft(2, some, none, value_field),
+            }],
+        })
+        .expect("create two semantic matches");
+    let mut sites = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| {
+            completed.snapshot.indexes.node_match_plans[index].map(|plan| (plan.raw(), node.id))
+        })
+        .collect::<Vec<_>>();
+    sites.sort_by_key(|(plan, _)| *plan);
+    let [(0, earlier), (1, later)] = sites.as_slice() else {
+        panic!("expected two densely ordered match sites: {sites:?}");
+    };
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: *earlier,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(9),
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("remove earlier match and compact retained plan");
+    assert_eq!(edited.snapshot.program.match_plans.len(), 1);
+    assert_eq!(edited.snapshot.program.match_plans[0].id.raw(), 0);
+    assert_eq!(
+        edited.snapshot.node(*later).expect("later match").id,
+        *later
+    );
+    assert_eq!(
+        edited
+            .snapshot
+            .match_view(edited.snapshot.revision(), *later)
+            .expect("retained match view")
+            .site,
+        *later
+    );
+    let later_index = edited.snapshot.indexes.node_lookup[later];
+    assert_eq!(
+        edited.snapshot.indexes.node_match_plans[later_index]
+            .expect("retained plan")
+            .raw(),
+        0
+    );
+    assert_eq!(run_i64(&edited.snapshot), 1);
 }
 
 #[test]
@@ -5676,7 +6795,37 @@ fn run_source_free_deep_locals(depth: usize, seed: u64) {
         run_i64(&completed.snapshot),
         i64::try_from(depth - 1).expect("result")
     );
+    let main = entity_named(&completed.snapshot, EntityKind::Main, "main");
+    let root = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("deep local root")
+        .id;
+    let removed = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::scalar_i64(42),
+            }],
+        })
+        .expect("remove deep locals");
+    assert!(removed.snapshot.program.bindings.is_empty());
+    assert_eq!(
+        removed
+            .snapshot
+            .program
+            .main
+            .as_ref()
+            .expect("main")
+            .local_count,
+        0
+    );
+    assert_eq!(run_i64(&removed.snapshot), 42);
     drop(completed);
+    drop(removed);
     drop(workspace);
 }
 

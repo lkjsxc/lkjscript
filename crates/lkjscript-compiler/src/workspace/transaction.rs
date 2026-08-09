@@ -81,6 +81,9 @@ pub enum Edit {
     CreateMain {
         return_type: SemanticTypeRef,
     },
+    DeleteEntity {
+        entity: EntityId,
+    },
     RenameEntity {
         entity: EntityId,
         new_name: String,
@@ -128,6 +131,11 @@ pub enum SemanticDiffEntry {
         entity: EntityId,
         old_name: Arc<str>,
         new_name: Arc<str>,
+    },
+    EntityDeleted {
+        entity: EntityId,
+        kind: EntityKind,
+        name: Arc<str>,
     },
     ExpressionReplaced {
         node: NodeId,
@@ -265,6 +273,13 @@ struct NewEntity {
     name: Arc<str>,
 }
 
+#[derive(Clone, Copy)]
+struct CallableDeletion {
+    entity: EntityId,
+    address: EntityAddress,
+    binding: Option<crate::hir::BindingId>,
+}
+
 fn stage(
     base: &WorkspaceSnapshot,
     transaction: Transaction,
@@ -273,11 +288,33 @@ fn stage(
     let revision = base.revision.next().map_err(WorkspaceError::from_core)?;
     let edit_count = transaction.edits.len();
     let mut program = try_clone_program(base.program.as_ref())?;
+    let deletions = preflight_callable_deletions(base, &program, &transaction.edits)?;
+    preflight_structural_edits(base, &transaction.edits)?;
+    let mut deleted_entities = HashSet::new();
+    let mut deleted_roots = HashSet::new();
+    let mut deleted_bindings = HashSet::new();
+    deleted_entities
+        .try_reserve(deletions.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("deleted entity set allocation failed")))?;
+    deleted_roots
+        .try_reserve(deletions.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("deleted root set allocation failed")))?;
+    deleted_bindings
+        .try_reserve(deletions.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("deleted binding set allocation failed")))?;
+    for deletion in &deletions {
+        deleted_entities.insert(deletion.entity);
+        deleted_roots.insert(deletion.address);
+        if let Some(binding) = deletion.binding {
+            deleted_bindings.insert(binding);
+        }
+    }
     let mut holes = Vec::new();
     holes
         .try_reserve(base.holes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("hole staging allocation failed")))?;
     holes.extend(base.holes.iter().cloned());
+    prune_replaced_subtree_holes(base, &mut holes, &transaction.edits)?;
     let mut structural = Vec::new();
     structural
         .try_reserve(edit_count)
@@ -298,10 +335,6 @@ fn stage(
     renamed
         .try_reserve(edit_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("rename preflight allocation failed")))?;
-    let mut structural_targets = Vec::new();
-    structural_targets
-        .try_reserve(edit_count)
-        .map_err(|_| WorkspaceError::Host(Arc::from("structural preflight allocation failed")))?;
     let mut forced_entities = HashMap::new();
     forced_entities
         .try_reserve(edit_count)
@@ -513,7 +546,13 @@ fn stage(
                     goal: Arc::from("provide the entry-point body"),
                 });
             }
+            Edit::DeleteEntity { .. } => {}
             Edit::RenameEntity { entity, new_name } => {
+                if deleted_entities.contains(&entity) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "an entity cannot be renamed and deleted in one transaction",
+                    )));
+                }
                 if !renamed.insert(entity) {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "entity is renamed more than once in one transaction",
@@ -551,14 +590,8 @@ fn stage(
                 });
             }
             Edit::ReplaceExpression { target, draft } => {
-                ensure_structural_nonoverlapping(base, &mut structural_targets, target)?;
                 let (address, _key, expected, visible) = edit_context(base, target)?;
-                if subtree_defines_local(expression_at(&program, address)?) {
-                    return Err(WorkspaceError::unsupported(
-                        "replace-expression",
-                        "local-defining subtrees cannot be removed before declaration deletion is implemented",
-                    ));
-                }
+                reject_deleted_root_edit(&deleted_roots, address.root)?;
                 let lowered = lower_draft(
                     base,
                     &mut program,
@@ -568,6 +601,7 @@ fn stage(
                     &visible,
                     address.root,
                     &mut lowering,
+                    &deleted_entities,
                 )?;
                 new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
@@ -577,19 +611,13 @@ fn stage(
                 });
             }
             Edit::IntroduceHole { target, goal } => {
-                ensure_structural_nonoverlapping(base, &mut structural_targets, target)?;
                 if goal.is_empty() {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "typed hole goal must not be empty",
                     )));
                 }
                 let (address, key, expected, visible) = edit_context(base, target)?;
-                if subtree_defines_local(expression_at(&program, address)?) {
-                    return Err(WorkspaceError::unsupported(
-                        "introduce-hole",
-                        "local-defining subtrees cannot be removed before declaration deletion is implemented",
-                    ));
-                }
+                reject_deleted_root_edit(&deleted_roots, address.root)?;
                 let owner = root_owner(base, address)?;
                 holes.push(HoleRecord {
                     state: HoleState {
@@ -635,6 +663,7 @@ fn stage(
                     .iter_mut()
                     .find(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
+                reject_deleted_root_edit(&deleted_roots, record.address.root)?;
                 if let Some(expected_type) = expected_type {
                     let expected_type =
                         resolve_semantic_type(base, &program, expected_type, "hole expectation")?;
@@ -659,7 +688,6 @@ fn stage(
                 });
             }
             Edit::FillHole { hole, draft } => {
-                ensure_structural_nonoverlapping(base, &mut structural_targets, hole.0)?;
                 if hole.0.namespace() != base.namespace {
                     return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
                 }
@@ -668,6 +696,7 @@ fn stage(
                     .position(|record| record.state.id == hole)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
                 let record = holes[index].clone();
+                reject_deleted_root_edit(&deleted_roots, record.address.root)?;
                 let lowered = crate::stack::grow(|| {
                     lower_draft(
                         base,
@@ -678,6 +707,7 @@ fn stage(
                         &record.state.visible_entities,
                         record.address.root,
                         &mut lowering,
+                        &deleted_entities,
                     )
                 })?;
                 new_entities.extend(lowered.entities);
@@ -703,6 +733,25 @@ fn stage(
         replace_expression(&mut program, action.address, &action.replacement)?;
     }
 
+    reject_surviving_deleted_references(base, &program, &deleted_roots, &deleted_bindings)?;
+    holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
+    new_holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
+    if deleted_roots.contains(&EntityAddress::Main) {
+        program.main = None;
+    }
+    program
+        .functions
+        .retain(|function| !deleted_bindings.contains(&function.binding));
+    program
+        .global_layout
+        .retain(|binding| !deleted_bindings.contains(binding));
+
+    let binding_map =
+        super::compaction::compact(&mut program).map_err(WorkspaceError::from_core)?;
+    remap_staged_addresses(&binding_map, &mut new_entities, &mut new_holes)?;
+    install_survivor_entity_relocations(base, &program, &binding_map, &mut forced_entities)?;
+    reserve_new_entity_identities(base, allocator, &mut forced_entities, &new_entities)?;
+
     let binding_count = program.bindings.len();
     let main_body = program.main.as_mut().map(|main| &mut main.body);
     crate::effects::infer_partial(binding_count, &mut program.functions, main_body);
@@ -718,36 +767,7 @@ fn stage(
 
     let canonical =
         super::index::build(&program, base.namespace).map_err(WorkspaceError::from_core)?;
-    let mut canonical_keys = HashMap::new();
-    canonical_keys
-        .try_reserve(canonical.nodes.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("canonical node key allocation failed")))?;
-    for (index, key) in canonical.node_keys.iter().copied().enumerate() {
-        if canonical_keys.insert(key, index).is_some() {
-            return Err(WorkspaceError::Validation(Arc::from(
-                "canonical node key is duplicated",
-            )));
-        }
-    }
-    let mut forced = HashMap::new();
-    let forced_count = structural
-        .len()
-        .checked_add(holes.len())
-        .ok_or_else(|| WorkspaceError::Host(Arc::from("forced identity count overflow")))?;
-    forced
-        .try_reserve(forced_count)
-        .map_err(|_| WorkspaceError::Host(Arc::from("forced identity allocation failed")))?;
-    for action in &structural {
-        let path = node_ordinal_path(&base.indexes, action.target, action.address.root)?;
-        let address =
-            node_address_at_path(&canonical, &canonical_keys, action.address.root, &path)?;
-        insert_forced_node(&mut forced, address, action.target)?;
-    }
-    for hole in &holes {
-        let path = node_ordinal_path(&base.indexes, hole.state.id.0, hole.address.root)?;
-        let address = node_address_at_path(&canonical, &canonical_keys, hole.address.root, &path)?;
-        insert_forced_node(&mut forced, address, hole.state.id.0)?;
-    }
+    let forced = force_surviving_nodes(base, &canonical, &forced_entities, &structural)?;
     let mut indexes = identity::reconcile(
         canonical,
         &base.indexes,
@@ -881,6 +901,430 @@ fn try_clone_values<T: Clone>(values: &[T], kind: &str) -> Result<Vec<T>, Worksp
     Ok(cloned)
 }
 
+fn preflight_callable_deletions(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    edits: &[Edit],
+) -> Result<Vec<CallableDeletion>, WorkspaceError> {
+    let mut result = Vec::new();
+    result
+        .try_reserve(edits.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("callable deletion allocation failed")))?;
+    let mut seen = HashSet::new();
+    seen.try_reserve(edits.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("callable deletion set allocation failed")))?;
+    for edit in edits {
+        let Edit::DeleteEntity { entity } = edit else {
+            continue;
+        };
+        let header = base.workspace_entity(*entity)?;
+        if !seen.insert(*entity) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "an entity is deleted more than once in one transaction",
+            )));
+        }
+        let index = base
+            .indexes
+            .entity_lookup
+            .get(entity)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
+        let address = *base
+            .indexes
+            .entity_addresses
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
+        let binding = match header.kind {
+            EntityKind::Main if address == EntityAddress::Main && program.main.is_some() => None,
+            EntityKind::Function => {
+                let EntityAddress::Binding(raw) = address else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("function")));
+                };
+                let binding = program
+                    .bindings
+                    .get(host_index(raw, "function")?)
+                    .filter(|binding| {
+                        binding.id.raw() == raw
+                            && binding.kind == BindingKind::Function
+                            && binding.origin != Origin::Builtin
+                    })
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+                Some(binding.id)
+            }
+            EntityKind::BuiltinOperation => {
+                return Err(WorkspaceError::unsupported(
+                    "delete-entity",
+                    "fixed compiler operations cannot be deleted",
+                ));
+            }
+            _ => {
+                return Err(WorkspaceError::unsupported(
+                    "delete-entity",
+                    "only main and ordinary function declarations can be deleted directly",
+                ));
+            }
+        };
+        result.push(CallableDeletion {
+            entity: *entity,
+            address,
+            binding,
+        });
+    }
+    if result
+        .iter()
+        .any(|item| item.address == EntityAddress::Main)
+        && edits
+            .iter()
+            .any(|edit| matches!(edit, Edit::CreateMain { .. }))
+    {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "main cannot be deleted and created in one transaction",
+        )));
+    }
+    Ok(result)
+}
+
+fn reject_deleted_root_edit(
+    deleted_roots: &HashSet<EntityAddress>,
+    root: EntityAddress,
+) -> Result<(), WorkspaceError> {
+    if deleted_roots.contains(&root) {
+        Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "a node or hole owned by a deleted declaration cannot be edited in the same transaction",
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn preflight_structural_edits(
+    base: &WorkspaceSnapshot,
+    edits: &[Edit],
+) -> Result<(), WorkspaceError> {
+    let mut targets = Vec::new();
+    targets
+        .try_reserve(edits.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("structural preflight allocation failed")))?;
+    for edit in edits {
+        let target = match edit {
+            Edit::ReplaceExpression { target, .. } | Edit::IntroduceHole { target, .. } => {
+                Some(*target)
+            }
+            Edit::FillHole { hole, .. } => Some(hole.0),
+            _ => None,
+        };
+        if let Some(target) = target {
+            ensure_structural_nonoverlapping(base, &mut targets, target)?;
+        }
+    }
+    for edit in edits {
+        let Edit::RefineHole { hole, .. } = edit else {
+            continue;
+        };
+        if hole.0.namespace() != base.namespace {
+            return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
+        }
+        if !base.holes.iter().any(|record| record.state.id == *hole) {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("hole")));
+        }
+        for target in &targets {
+            if *target == hole.0 || node_is_ancestor(base, *target, hole.0)? {
+                return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                    "a hole cannot be refined and structurally removed in one transaction",
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn prune_replaced_subtree_holes(
+    base: &WorkspaceSnapshot,
+    holes: &mut Vec<HoleRecord>,
+    edits: &[Edit],
+) -> Result<(), WorkspaceError> {
+    let mut roots = HashSet::new();
+    roots
+        .try_reserve(edits.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("hole-pruning root allocation failed")))?;
+    for edit in edits {
+        if let Edit::ReplaceExpression { target, .. } | Edit::IntroduceHole { target, .. } = edit {
+            roots.insert(*target);
+        }
+    }
+    if roots.is_empty() || holes.is_empty() {
+        return Ok(());
+    }
+    let mut removed = HashSet::new();
+    removed
+        .try_reserve(base.indexes.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("hole-pruning index allocation failed")))?;
+    for node in &base.indexes.nodes {
+        let is_removed = roots.contains(&node.id)
+            || matches!(node.owner, SemanticOwner::Node(parent) if removed.contains(&parent));
+        if is_removed {
+            removed.insert(node.id);
+        }
+    }
+    holes.retain(|hole| !removed.contains(&hole.state.id.0));
+    Ok(())
+}
+
+fn reject_surviving_deleted_references(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    deleted_roots: &HashSet<EntityAddress>,
+    deleted_bindings: &HashSet<crate::hir::BindingId>,
+) -> Result<(), WorkspaceError> {
+    if deleted_bindings.is_empty() {
+        return Ok(());
+    }
+    if let Some(main) = &program.main {
+        if !deleted_roots.contains(&EntityAddress::Main)
+            && expression_references_any(&main.body, deleted_bindings)?
+        {
+            let dependent = base
+                .indexes
+                .address_entities
+                .get(&EntityAddress::Main)
+                .map_or_else(|| "new main".to_owned(), entity_diagnostic_label);
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(format!(
+                "cannot delete function while surviving callable {dependent} still references it"
+            ))));
+        }
+    }
+    for function in &program.functions {
+        let root = EntityAddress::Binding(function.binding.raw());
+        if deleted_roots.contains(&root) {
+            continue;
+        }
+        if expression_references_any(&function.body, deleted_bindings)? {
+            let dependent = base
+                .indexes
+                .address_entities
+                .get(&root)
+                .map_or_else(|| "new function".to_owned(), entity_diagnostic_label);
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(format!(
+                "cannot delete function while surviving callable {dependent} still references it"
+            ))));
+        }
+    }
+    Ok(())
+}
+
+fn entity_diagnostic_label(entity: &EntityId) -> String {
+    format!(
+        "entity slot {} generation {}",
+        entity.slot(),
+        entity.generation()
+    )
+}
+
+fn expression_references_any(
+    root: &Expr,
+    deleted: &HashSet<crate::hir::BindingId>,
+) -> Result<bool, WorkspaceError> {
+    let mut pending = Vec::new();
+    pending.try_reserve(1).map_err(|_| {
+        WorkspaceError::Host(Arc::from("deleted-reference traversal allocation failed"))
+    })?;
+    pending.push(root);
+    while let Some(expression) = pending.pop() {
+        let referenced = match &expression.kind {
+            ExprKind::Load(reference)
+            | ExprKind::Move {
+                binding: reference, ..
+            }
+            | ExprKind::Borrow {
+                binding: reference, ..
+            }
+            | ExprKind::BorrowBytes {
+                binding: reference, ..
+            }
+            | ExprKind::Call {
+                callee: reference, ..
+            } => Some(reference.binding),
+            ExprKind::SetLocal { target, .. } => Some(*target),
+            _ => None,
+        };
+        if referenced.is_some_and(|binding| deleted.contains(&binding)) {
+            return Ok(true);
+        }
+        let mut allocation_failed = false;
+        crate::hir::for_each_expression_child(expression, &mut |child| {
+            if allocation_failed {
+                return;
+            }
+            if pending.try_reserve(1).is_err() {
+                allocation_failed = true;
+            } else {
+                pending.push(child);
+            }
+        });
+        if allocation_failed {
+            return Err(WorkspaceError::Host(Arc::from(
+                "deleted-reference traversal allocation failed",
+            )));
+        }
+    }
+    Ok(false)
+}
+
+fn remap_staged_addresses(
+    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    entities: &mut [NewEntity],
+    holes: &mut [NewHole],
+) -> Result<(), WorkspaceError> {
+    for entity in entities {
+        entity.address = remap_entity_address(bindings, entity.address)?;
+    }
+    for hole in holes {
+        hole.address.root = remap_entity_address(bindings, hole.address.root)?;
+    }
+    Ok(())
+}
+
+fn remap_entity_address(
+    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    address: EntityAddress,
+) -> Result<EntityAddress, WorkspaceError> {
+    let EntityAddress::Binding(raw) = address else {
+        return Ok(address);
+    };
+    let old = crate::hir::BindingId::new(raw);
+    bindings
+        .get(&old)
+        .map(|binding| EntityAddress::Binding(binding.raw()))
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("staged binding address was removed")))
+}
+
+fn install_survivor_entity_relocations(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    bindings: &HashMap<crate::hir::BindingId, crate::hir::BindingId>,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+) -> Result<(), WorkspaceError> {
+    forced
+        .try_reserve(base.indexes.entities.len())
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from("survivor entity relocation allocation failed"))
+        })?;
+    for (header, address) in base
+        .indexes
+        .entities
+        .iter()
+        .zip(&base.indexes.entity_addresses)
+    {
+        let relocated = match *address {
+            EntityAddress::Main if program.main.is_some() => Some(EntityAddress::Main),
+            EntityAddress::Main => None,
+            EntityAddress::Binding(raw) => bindings
+                .get(&crate::hir::BindingId::new(raw))
+                .map(|binding| EntityAddress::Binding(binding.raw())),
+            other => Some(other),
+        };
+        let Some(relocated) = relocated else {
+            continue;
+        };
+        match forced.entry(relocated) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(header.id);
+            }
+            std::collections::hash_map::Entry::Occupied(entry) if *entry.get() == header.id => {}
+            std::collections::hash_map::Entry::Occupied(_) => {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "surviving entities collide after dense compaction",
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reserve_new_entity_identities(
+    base: &WorkspaceSnapshot,
+    allocator: &mut IdentityAllocator,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+    entities: &[NewEntity],
+) -> Result<(), WorkspaceError> {
+    for entity in entities {
+        if let Some(existing) = forced.get(&entity.address).copied() {
+            if base.indexes.entity_lookup.contains_key(&existing) {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "new entity collides with a surviving semantic entity",
+                )));
+            }
+            continue;
+        }
+        reserve_forced_entity(allocator, forced, entity.address)?;
+    }
+    Ok(())
+}
+
+fn force_surviving_nodes(
+    base: &WorkspaceSnapshot,
+    canonical: &SnapshotIndexes,
+    forced_entities: &HashMap<EntityAddress, EntityId>,
+    structural: &[StructuralAction],
+) -> Result<HashMap<NodeAddress, NodeId>, WorkspaceError> {
+    let mut old_by_key = HashMap::new();
+    old_by_key
+        .try_reserve(base.indexes.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("old node key allocation failed")))?;
+    for (header, key) in base.indexes.nodes.iter().zip(&base.indexes.node_keys) {
+        if old_by_key.insert(*key, header.id).is_some() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "old node key is duplicated",
+            )));
+        }
+    }
+    let mut targets = HashSet::new();
+    targets
+        .try_reserve(structural.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("structural target allocation failed")))?;
+    targets.extend(structural.iter().map(|action| action.target));
+    let mut canonical_to_old = HashMap::new();
+    canonical_to_old
+        .try_reserve(canonical.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("node survivor allocation failed")))?;
+    let mut forced = HashMap::new();
+    forced
+        .try_reserve(base.indexes.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced node allocation failed")))?;
+    for index in 0..canonical.nodes.len() {
+        let header = &canonical.nodes[index];
+        let stable_owner = match header.owner {
+            SemanticOwner::Entity(entity) => canonical
+                .entity_lookup
+                .get(&entity)
+                .and_then(|entity_index| canonical.entity_addresses.get(*entity_index))
+                .and_then(|address| forced_entities.get(address))
+                .copied()
+                .map(SemanticOwner::Entity),
+            SemanticOwner::Node(parent) => canonical_to_old
+                .get(&parent)
+                .copied()
+                .flatten()
+                .map(SemanticOwner::Node),
+        };
+        let old = stable_owner.and_then(|owner| {
+            old_by_key
+                .get(&NodeKey {
+                    owner,
+                    ordinal: canonical.node_keys[index].ordinal,
+                })
+                .copied()
+        });
+        if let Some(old) = old {
+            insert_forced_node(&mut forced, canonical.node_addresses[index], old)?;
+            canonical_to_old.insert(header.id, (!targets.contains(&old)).then_some(old));
+        } else {
+            canonical_to_old.insert(header.id, None);
+        }
+    }
+    Ok(forced)
+}
+
 fn ensure_structural_nonoverlapping(
     snapshot: &WorkspaceSnapshot,
     targets: &mut Vec<NodeId>,
@@ -913,94 +1357,6 @@ fn node_is_ancestor(
             SemanticOwner::Node(parent) => node = parent,
         }
     }
-}
-
-fn node_ordinal_path(
-    indexes: &SnapshotIndexes,
-    target: NodeId,
-    root: EntityAddress,
-) -> Result<Vec<u64>, WorkspaceError> {
-    let expected_owner = indexes
-        .address_entities
-        .get(&root)
-        .copied()
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?;
-    let mut reversed = Vec::new();
-    let mut current = target;
-    loop {
-        if reversed.len() >= indexes.nodes.len() {
-            return Err(WorkspaceError::Validation(Arc::from(
-                "node ownership path contains a cycle",
-            )));
-        }
-        let index = indexes
-            .node_lookup
-            .get(&current)
-            .copied()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node path")))?;
-        let key = indexes
-            .node_keys
-            .get(index)
-            .copied()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node path")))?;
-        reversed
-            .try_reserve(1)
-            .map_err(|_| WorkspaceError::Host(Arc::from("node path allocation failed")))?;
-        reversed.push(key.ordinal);
-        match key.owner {
-            SemanticOwner::Entity(owner) if owner == expected_owner => break,
-            SemanticOwner::Entity(_) => {
-                return Err(WorkspaceError::Validation(Arc::from(
-                    "node path reaches a different root",
-                )));
-            }
-            SemanticOwner::Node(parent) => current = parent,
-        }
-    }
-    reversed.reverse();
-    Ok(reversed)
-}
-
-fn node_address_at_path(
-    indexes: &SnapshotIndexes,
-    keys: &HashMap<NodeKey, usize>,
-    root: EntityAddress,
-    path: &[u64],
-) -> Result<NodeAddress, WorkspaceError> {
-    let root_entity = indexes
-        .address_entities
-        .get(&root)
-        .copied()
-        .ok_or_else(|| WorkspaceError::Validation(Arc::from("canonical node root is missing")))?;
-    let mut owner = SemanticOwner::Entity(root_entity);
-    let mut address = None;
-    for ordinal in path {
-        let index = keys
-            .get(&NodeKey {
-                owner,
-                ordinal: *ordinal,
-            })
-            .copied()
-            .ok_or_else(|| {
-                WorkspaceError::Validation(Arc::from("edited node path was not published"))
-            })?;
-        let node = indexes
-            .nodes
-            .get(index)
-            .ok_or_else(|| WorkspaceError::Validation(Arc::from("canonical node is missing")))?
-            .id;
-        address = indexes.node_addresses.get(index).copied();
-        owner = SemanticOwner::Node(node);
-    }
-    let address = address.ok_or_else(|| {
-        WorkspaceError::Validation(Arc::from("edited node path is unexpectedly empty"))
-    })?;
-    if address.root != root {
-        return Err(WorkspaceError::Validation(Arc::from(
-            "edited node path changed roots",
-        )));
-    }
-    Ok(address)
 }
 
 fn insert_forced_node(
@@ -1711,25 +2067,6 @@ fn expression_root(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))
 }
 
-fn subtree_defines_local(root: &Expr) -> bool {
-    let mut pending = vec![root];
-    while let Some(expression) = pending.pop() {
-        if matches!(
-            &expression.kind,
-            ExprKind::Let { bindings, .. } if !bindings.is_empty()
-        ) || matches!(
-            &expression.kind,
-            ExprKind::MutableLocal { .. }
-                | ExprKind::Match { .. }
-                | ExprKind::MatchUnreachable { .. }
-        ) {
-            return true;
-        }
-        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
-    }
-    false
-}
-
 fn replace_expression(
     program: &mut SemanticProgram,
     address: NodeAddress,
@@ -1936,6 +2273,7 @@ fn lower_draft(
     visible: &[EntityId],
     root: EntityAddress,
     lowering: &mut LoweringState,
+    deleting_entities: &HashSet<EntityId>,
 ) -> Result<LoweredDraft, WorkspaceError> {
     validate_draft_shape(draft)?;
     let order = draft_lowering_actions(draft)?;
@@ -2171,6 +2509,11 @@ fn lower_draft(
             }
             DraftNode::Call { callee, arguments } => {
                 snapshot.workspace_entity(*callee)?;
+                if deleting_entities.contains(callee) {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "a newly lowered call cannot target a function deleted by the transaction",
+                    )));
+                }
                 if !visible_set.contains(callee) {
                     return Err(WorkspaceError::InvisibleEntity);
                 }
@@ -4232,9 +4575,10 @@ fn append_graph_diff(
 ) -> Result<(), WorkspaceError> {
     let possible_entries = base
         .indexes
-        .nodes
+        .entities
         .len()
-        .checked_add(next.nodes.len())
+        .checked_add(base.indexes.nodes.len())
+        .and_then(|count| count.checked_add(next.nodes.len()))
         .and_then(|count| count.checked_add(base.indexes.references.len()))
         .and_then(|count| count.checked_add(next.references.len()))
         .and_then(|count| count.checked_add(base.indexes.calls.len()))
@@ -4243,6 +4587,21 @@ fn append_graph_diff(
     entries
         .try_reserve(possible_entries)
         .map_err(|_| WorkspaceError::Host(Arc::from("semantic diff allocation failed")))?;
+    let mut new_entity_ids = HashSet::new();
+    new_entity_ids
+        .try_reserve(next.entities.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("new entity diff allocation failed")))?;
+    new_entity_ids.extend(next.entities.iter().map(|entity| entity.id));
+    for entity in &base.indexes.entities {
+        if !new_entity_ids.contains(&entity.id) {
+            entries.push(SemanticDiffEntry::EntityDeleted {
+                entity: entity.id,
+                kind: entity.kind,
+                name: Arc::clone(&entity.name),
+            });
+        }
+    }
+
     let mut old_ids = HashSet::new();
     old_ids
         .try_reserve(base.indexes.nodes.len())
@@ -4346,13 +4705,14 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64) {
     match entry {
         SemanticDiffEntry::EntityCreated { entity, .. } => (0, entity.slot(), entity.generation()),
         SemanticDiffEntry::EntityRenamed { entity, .. } => (1, entity.slot(), entity.generation()),
-        SemanticDiffEntry::ExpressionReplaced { node, .. } => (2, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantCreated { node, .. } => (3, node.slot(), node.generation()),
-        SemanticDiffEntry::DescendantDeleted { node, .. } => (4, node.slot(), node.generation()),
-        SemanticDiffEntry::HoleIntroduced { hole } => (5, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleRefined { hole, .. } => (6, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::HoleFilled { hole } => (7, hole.0.slot(), hole.0.generation()),
-        SemanticDiffEntry::ReferenceRewired { site, .. } => (8, site.slot(), site.generation()),
-        SemanticDiffEntry::CallRewired { site, .. } => (9, site.slot(), site.generation()),
+        SemanticDiffEntry::EntityDeleted { entity, .. } => (2, entity.slot(), entity.generation()),
+        SemanticDiffEntry::ExpressionReplaced { node, .. } => (3, node.slot(), node.generation()),
+        SemanticDiffEntry::DescendantCreated { node, .. } => (4, node.slot(), node.generation()),
+        SemanticDiffEntry::DescendantDeleted { node, .. } => (5, node.slot(), node.generation()),
+        SemanticDiffEntry::HoleIntroduced { hole } => (6, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::HoleRefined { hole, .. } => (7, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::HoleFilled { hole } => (8, hole.0.slot(), hole.0.generation()),
+        SemanticDiffEntry::ReferenceRewired { site, .. } => (9, site.slot(), site.generation()),
+        SemanticDiffEntry::CallRewired { site, .. } => (10, site.slot(), site.generation()),
     }
 }

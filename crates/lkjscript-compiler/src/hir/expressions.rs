@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 
 #[derive(Debug, PartialEq)]
@@ -480,6 +482,73 @@ impl Expr {
         }
     }
 
+    pub(crate) fn try_remap_dense_ids(
+        &self,
+        bindings: &HashMap<BindingId, BindingId>,
+        local_slots: &HashMap<BindingId, usize>,
+        local_places: &HashMap<BindingId, PlaceId>,
+        match_plans: &HashMap<MatchPlanId, MatchPlanId>,
+    ) -> lkjscript_core::Result<Self> {
+        enum Work<'a> {
+            Visit(&'a Expr),
+            Finish(&'a Expr, usize),
+        }
+
+        let mut work = Vec::new();
+        work.try_reserve(1)
+            .map_err(|_| lkjscript_core::Error::host("HIR remap work allocation failed"))?;
+        work.push(Work::Visit(self));
+        let mut completed = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(expression) => {
+                    let children = expression_children(expression);
+                    let additional = children.len().checked_add(1).ok_or_else(|| {
+                        lkjscript_core::Error::host("HIR remap child count overflow")
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        lkjscript_core::Error::host("HIR remap work allocation failed")
+                    })?;
+                    work.push(Work::Finish(expression, children.len()));
+                    work.extend(children.into_iter().rev().map(Work::Visit));
+                }
+                Work::Finish(expression, child_count) => {
+                    let split = completed.len().checked_sub(child_count).ok_or_else(|| {
+                        lkjscript_core::Error::msg("HIR remap completion order is invalid")
+                    })?;
+                    let children = completed.split_off(split);
+                    let mut kind = clone_kind(&expression.kind, children);
+                    remap_kind_dense_ids(
+                        &mut kind,
+                        bindings,
+                        local_slots,
+                        local_places,
+                        match_plans,
+                    )?;
+                    completed.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host("HIR remap result allocation failed")
+                    })?;
+                    completed.push(Self {
+                        ty: expression.ty.clone(),
+                        effects: expression.effects,
+                        origin: expression.origin,
+                        kind,
+                    });
+                }
+            }
+        }
+        let result = completed
+            .pop()
+            .ok_or_else(|| lkjscript_core::Error::msg("HIR remap omitted its root"))?;
+        if completed.is_empty() {
+            Ok(result)
+        } else {
+            Err(lkjscript_core::Error::msg(
+                "HIR remap left disconnected results",
+            ))
+        }
+    }
+
     pub(crate) fn try_replaced_preorder(
         &self,
         target: u64,
@@ -542,6 +611,96 @@ impl Expr {
         }
         Ok(found.then(|| completed.pop()).flatten())
     }
+}
+
+fn remap_kind_dense_ids(
+    kind: &mut ExprKind,
+    bindings: &HashMap<BindingId, BindingId>,
+    local_slots: &HashMap<BindingId, usize>,
+    local_places: &HashMap<BindingId, PlaceId>,
+    match_plans: &HashMap<MatchPlanId, MatchPlanId>,
+) -> lkjscript_core::Result<()> {
+    let remap_binding = |binding: BindingId| {
+        bindings
+            .get(&binding)
+            .copied()
+            .ok_or_else(|| lkjscript_core::Error::msg("HIR binding remap is incomplete"))
+    };
+    let remap_local = |binding: BindingId| {
+        let slot = local_slots
+            .get(&binding)
+            .copied()
+            .ok_or_else(|| lkjscript_core::Error::msg("HIR local slot remap is incomplete"))?;
+        let place = local_places
+            .get(&binding)
+            .copied()
+            .ok_or_else(|| lkjscript_core::Error::msg("HIR local place remap is incomplete"))?;
+        Ok((remap_binding(binding)?, slot, place))
+    };
+    let remap_reference = |reference: &mut BindingRef| -> lkjscript_core::Result<()> {
+        let old = reference.binding;
+        reference.binding = remap_binding(old)?;
+        if matches!(reference.storage, BindingStorage::Local(_)) {
+            reference.storage =
+                BindingStorage::Local(local_slots.get(&old).copied().ok_or_else(|| {
+                    lkjscript_core::Error::msg("HIR local reference remap is incomplete")
+                })?);
+        }
+        Ok(())
+    };
+
+    match kind {
+        ExprKind::Load(reference) => remap_reference(reference)?,
+        ExprKind::Move { place, binding }
+        | ExprKind::Borrow { place, binding, .. }
+        | ExprKind::BorrowBytes { place, binding, .. } => {
+            let old = binding.binding;
+            remap_reference(binding)?;
+            *place = local_places
+                .get(&old)
+                .copied()
+                .ok_or_else(|| lkjscript_core::Error::msg("HIR place remap is incomplete"))?;
+        }
+        ExprKind::Call { callee, .. } => remap_reference(callee)?,
+        ExprKind::Let {
+            bindings: locals, ..
+        } => {
+            for local in locals {
+                let old = local.binding;
+                let (binding, slot, place) = remap_local(old)?;
+                local.binding = binding;
+                local.slot = slot;
+                local.place = place;
+            }
+        }
+        ExprKind::MutableLocal {
+            binding,
+            place,
+            slot,
+            ..
+        } => {
+            let (new_binding, new_slot, new_place) = remap_local(*binding)?;
+            *binding = new_binding;
+            *slot = new_slot;
+            *place = new_place;
+        }
+        ExprKind::SetLocal { target, slot, .. } => {
+            let old = *target;
+            *target = remap_binding(old)?;
+            *slot = local_slots
+                .get(&old)
+                .copied()
+                .ok_or_else(|| lkjscript_core::Error::msg("HIR set-local remap is incomplete"))?;
+        }
+        ExprKind::Match { plan, .. } | ExprKind::MatchUnreachable { plan } => {
+            *plan = match_plans
+                .get(plan)
+                .copied()
+                .ok_or_else(|| lkjscript_core::Error::msg("HIR match-plan remap is incomplete"))?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 impl Drop for Expr {

@@ -79,6 +79,15 @@ impl IdentityAllocator {
         Ok(EntityId::new(self.namespace, slot, generation))
     }
 
+    fn entity_is_live(&self, id: EntityId) -> Result<bool> {
+        if id.namespace() != self.namespace || id.generation() == 0 {
+            return Ok(false);
+        }
+        let index = host_index(id.slot(), "entity")?;
+        Ok(self.entity_live.get(index).copied() == Some(true)
+            && self.entity_generations.get(index).copied() == Some(id.generation()))
+    }
+
     fn allocate_node(&mut self) -> Result<NodeId> {
         let (slot, generation) = allocate_slot(
             &mut self.node_generations,
@@ -132,26 +141,54 @@ pub(super) fn reconcile(
     consumed_forced_entities
         .try_reserve(forced_entities.len())
         .map_err(|_| Error::host("forced entity reconciliation allocation failed"))?;
+    let mut relocated_previous_entities = HashSet::new();
+    relocated_previous_entities
+        .try_reserve(forced_entities.len())
+        .map_err(|_| Error::host("entity relocation allocation failed"))?;
+    let mut forced_identity_uniqueness = HashSet::new();
+    forced_identity_uniqueness
+        .try_reserve(forced_entities.len())
+        .map_err(|_| Error::host("forced entity identity allocation failed"))?;
+    for id in forced_entities.values().copied() {
+        if !allocator.entity_is_live(id)? {
+            return Err(Error::msg("forced entity identity is stale or foreign"));
+        }
+        if !forced_identity_uniqueness.insert(id) {
+            return Err(Error::msg("forced entity identity is duplicated"));
+        }
+        if previous.entity_lookup.contains_key(&id) {
+            relocated_previous_entities.insert(id);
+        }
+    }
     for index in 0..next.entities.len() {
         let temporary = next.entities[index].id;
         let address = next.entity_addresses[index];
         let previous_id = previous.address_entities.get(&address).copied();
         let forced_id = forced_entities.get(&address).copied();
-        if previous_id.is_some() && forced_id.is_some() {
-            return Err(Error::msg(
-                "forced entity targets an existing semantic address",
-            ));
-        }
-        let stable = match (previous_id, forced_id) {
-            (Some(id), None) | (None, Some(id)) => id,
-            (None, None) => allocator.allocate_entity()?,
-            (Some(_), Some(_)) => unreachable!("forced entity conflict checked above"),
+        let stable = if let Some(id) = forced_id {
+            if let Some(previous_index) = previous.entity_lookup.get(&id).copied() {
+                let previous_kind = previous
+                    .entities
+                    .get(previous_index)
+                    .ok_or_else(|| Error::msg("relocated entity identity is stale"))?
+                    .kind;
+                if previous_kind != next.entities[index].kind {
+                    return Err(Error::msg("relocated entity kind changed"));
+                }
+            }
+            consumed_forced_entities.insert(address);
+            id
+        } else if let Some(id) = previous_id {
+            if relocated_previous_entities.contains(&id) {
+                allocator.allocate_entity()?
+            } else {
+                id
+            }
+        } else {
+            allocator.allocate_entity()?
         };
         if !used_entities.insert(stable) {
             return Err(Error::msg("workspace entity identity is duplicated"));
-        }
-        if forced_id.is_some() {
-            consumed_forced_entities.insert(address);
         }
         entity_map.insert(temporary, stable);
         next.entities[index].id = stable;
@@ -169,25 +206,6 @@ pub(super) fn reconcile(
             .owner
             .map(|owner| remap_entity(&entity_map, owner))
             .transpose()?;
-    }
-
-    let mut exact_previous = HashMap::new();
-    exact_previous
-        .try_reserve(previous.nodes.len())
-        .map_err(|_| Error::host("workspace exact node reconciliation allocation failed"))?;
-    let mut sibling_previous = HashMap::new();
-    sibling_previous
-        .try_reserve(previous.nodes.len())
-        .map_err(|_| Error::host("workspace moved node reconciliation allocation failed"))?;
-    for index in 0..previous.nodes.len() {
-        let id = previous.nodes[index].id;
-        let key = previous.node_keys[index];
-        let fingerprint = previous.node_fingerprints[index];
-        exact_previous.insert(key, (id, fingerprint));
-        sibling_previous
-            .entry((key.owner, fingerprint))
-            .and_modify(|candidate| *candidate = None)
-            .or_insert(Some(id));
     }
 
     let mut node_map = HashMap::new();
@@ -210,7 +228,6 @@ pub(super) fn reconcile(
             owner,
             ordinal: next.node_keys[index].ordinal,
         };
-        let fingerprint = next.node_fingerprints[index];
         let address = next.node_addresses[index];
         let stable = if let Some(id) = forced_nodes.get(&address).copied() {
             if previous.node_lookup.contains_key(&id) && !used_nodes.contains(&id) {
@@ -220,14 +237,7 @@ pub(super) fn reconcile(
                 return Err(Error::msg("forced workspace node identity is stale"));
             }
         } else {
-            choose_previous_node(
-                &exact_previous,
-                &sibling_previous,
-                key,
-                fingerprint,
-                &used_nodes,
-            )
-            .map_or_else(|| allocator.allocate_node(), Ok)?
+            allocator.allocate_node()?
         };
         used_nodes.insert(stable);
         node_map.insert(temporary, stable);
@@ -272,25 +282,6 @@ pub(super) fn reconcile(
     }
     next.rebuild_maps()?;
     Ok(next)
-}
-
-fn choose_previous_node(
-    exact: &HashMap<NodeKey, (NodeId, [u8; 32])>,
-    siblings: &HashMap<(SemanticOwner, [u8; 32]), Option<NodeId>>,
-    key: NodeKey,
-    fingerprint: [u8; 32],
-    used: &HashSet<NodeId>,
-) -> Option<NodeId> {
-    if let Some((id, old_fingerprint)) = exact.get(&key) {
-        if *old_fingerprint == fingerprint && !used.contains(id) {
-            return Some(*id);
-        }
-    }
-    siblings
-        .get(&(key.owner, fingerprint))
-        .copied()
-        .flatten()
-        .filter(|id| !used.contains(id))
 }
 
 fn remap_owner(

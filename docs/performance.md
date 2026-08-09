@@ -126,12 +126,18 @@ Retained deterministic counters, indexes, and assertions show:
   enum-field, and match relation lookup uses prebuilt identity maps rather than scanning declarations
   per expression; the nested-match fixture also records exactly three pattern-lowering node visits
   per two-arm match (one `Some` aggregate, its wildcard field, and one `None` aggregate);
+- callable/local deletion uses one retained-order binding/plan pass, one iterative expression/pattern
+  rewrite per surviving root, and one parent/child-ordinal survivor reconciliation pass; it does not
+  rescan the whole program for each binding and retains no dead binding or plan per edit. Focused
+  tests assert dense binding and retained-plan placement, compact per-root slots, and declaration-
+  ordered dense places after removal or insertion before a survivor. The existing modest small-stack
+  local/match tests execute the same compaction path on every staged transaction;
 - one ignored locked-release fixture completes a 20,000-level nested-`if` draft (60,001 expression
   nodes), a second completes 20,000 lexical locals (40,001 expression nodes), and a third completes
   20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
-  includes staged lowering, semantic clone, identity reconciliation, complete-HIR/ownership/match
-  derivation, memory planning, SSA, bytecode, VM execution, projection where selected, and destruction
-  on a 128 KiB worker stack;
+  includes staged lowering, semantic clone, dense lifecycle compaction, identity reconciliation,
+  complete-HIR/ownership/match derivation, memory planning, SSA, bytecode, VM execution, projection
+  where selected, and destruction on a 128 KiB worker stack;
 - bytecode emission derives nonowned structural values once per function by propagating predecessor
   edges, replacing a whole-CFG scan for every emitted structural load/store; the generated match
   fixture asserts exactly one collection per SSA function and one deterministic visit per CFG edge;
@@ -159,11 +165,13 @@ cargo test --locked --release -p lkjscript-compiler \
   -- --ignored --exact --test-threads=1
 ```
 
-On the development host, earlier final sequential invocations reported 18.19 seconds for the nested
-`if` test body and 1.10 seconds for the local test body after a 1 minute 9 second release rebuild. The
-match cutover's final locked-release invocation reported 317.73 seconds for the 20,000-match test body
-after a 1 minute 12 second rebuild (`real` 6 minutes 30.241 seconds including Cargo); it is deliberately
-an ignored maximum-geometry correctness fixture, not a representative latency target. These single
+On the development host, the binding-lifecycle cutover's final locked-release 20,000-local
+invocation, including removal and recompaction of all locals on a 128 KiB stack, reported 1.17 seconds
+for the test body after a 1 minute 12 second release rebuild. An earlier nested-`if` invocation
+reported 18.19 seconds. The binding-lifecycle cutover's final locked-release 20,000-match invocation
+reported 307.41 seconds for the test body with warm release artifacts (307.469 seconds process wall);
+it is deliberately an ignored maximum-geometry correctness fixture, not a representative latency
+target. These single
 noisy samples are orientation, not product-latency claims or gates. No allocator count, peak RSS,
 retained memory, edit/query latency distribution, or representative application throughput was
 measured. Reverse or redesign the implementation if equivalent observations diverge, an incomplete

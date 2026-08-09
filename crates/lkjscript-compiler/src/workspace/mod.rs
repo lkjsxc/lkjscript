@@ -4,6 +4,7 @@
 //! programmatically constructed programs share one partial-capable semantic
 //! authority; complete revisions derive compiler HIR without source text.
 
+mod compaction;
 mod draft;
 mod error;
 mod identity;

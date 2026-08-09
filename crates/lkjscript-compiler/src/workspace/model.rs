@@ -289,7 +289,6 @@ pub(super) struct SnapshotIndexes {
     pub entity_addresses: Vec<EntityAddress>,
     pub node_addresses: Vec<NodeAddress>,
     pub node_keys: Vec<NodeKey>,
-    pub node_fingerprints: Vec<[u8; 32]>,
     pub node_match_plans: Vec<Option<crate::hir::MatchPlanId>>,
     pub node_actual_types: Vec<crate::Type>,
     pub node_expected_types: Vec<Option<crate::Type>>,
