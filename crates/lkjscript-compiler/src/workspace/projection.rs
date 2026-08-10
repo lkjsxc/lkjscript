@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use super::{
     CompletenessBlocker, EntityId, EntityKind, HoleId, MatchPatternKindView, NodeHeader, NodeId,
-    NodeKind, ProgramState, ReferenceEdge, SemanticOwner, SemanticTypeRef, SemanticTypeView,
-    WorkspaceError, WorkspaceSnapshot,
+    NodeKind, ProgramState, ReferenceEdge, SemanticOwner, SemanticType, WorkspaceError,
+    WorkspaceSnapshot,
 };
 
 /// One concise human-readable view selected from a workspace snapshot.
@@ -18,6 +18,7 @@ pub enum ProjectionSlice {
     Body(EntityId),
     Type(NodeId),
     References(EntityId),
+    Call(NodeId),
     Match(NodeId),
     Hole(HoleId),
 }
@@ -53,7 +54,7 @@ impl WorkspaceSnapshot {
                     output.push(" hole=")?;
                     output.node_id(hole.node())?;
                     output.push(" expected=")?;
-                    output.quoted(&expected_type.to_string())?;
+                    project_semantic_type(expected_type, &mut output)?;
                     output.push("\n")?;
                 }
                 CompletenessBlocker::TypedHole {
@@ -65,7 +66,7 @@ impl WorkspaceSnapshot {
                     output.push("typed-hole hole=")?;
                     output.node_id(hole.node())?;
                     output.push(" expected=")?;
-                    output.quoted(&expected_type.to_string())?;
+                    project_semantic_type(expected_type, &mut output)?;
                     output.push(" owner=")?;
                     output.entity_id(*owner)?;
                     output.push(" context=")?;
@@ -83,6 +84,7 @@ impl WorkspaceSnapshot {
                 ProjectionSlice::References(entity) => {
                     self.project_references(entity, &mut output)?;
                 }
+                ProjectionSlice::Call(node) => self.project_call(node, &mut output)?,
                 ProjectionSlice::Match(node) => self.project_match(node, &mut output)?,
                 ProjectionSlice::Hole(hole) => self.project_hole(hole, &mut output)?,
             }
@@ -150,7 +152,8 @@ impl WorkspaceSnapshot {
                     .and_then(|value| value.checked_mul(2))
                     .ok_or_else(|| host("projection indentation overflow"))?,
             )?;
-            project_node_header(node, self.is_hole(node.id), output)?;
+            let facts = self.node_type(self.revision, node.id)?;
+            project_node_header(node, &facts, self.is_hole(node.id), output)?;
         }
         Ok(())
     }
@@ -161,13 +164,14 @@ impl WorkspaceSnapshot {
         output: &mut ProjectionOutput,
     ) -> Result<(), WorkspaceError> {
         let header = self.workspace_node(node)?;
+        let facts = self.node_type(self.revision, node)?;
         output.push("type ")?;
         output.node_id(header.id)?;
         output.push(" actual=")?;
-        output.quoted(&header.actual_type)?;
+        project_semantic_type(&facts.actual, output)?;
         output.push(" expected=")?;
-        match &header.expected_type {
-            Some(expected) => output.quoted(expected)?,
+        match &facts.expected {
+            Some(expected) => project_semantic_type(expected, output)?,
             None => output.push("-")?,
         }
         if self.is_hole(node) {
@@ -218,6 +222,69 @@ impl WorkspaceSnapshot {
         Ok(())
     }
 
+    fn project_call(
+        &self,
+        node: NodeId,
+        output: &mut ProjectionOutput,
+    ) -> Result<(), WorkspaceError> {
+        let call = self.call_instantiation(self.revision, node)?;
+        let callee = self.workspace_entity(call.callee)?;
+        let signature = self.function_signature(self.revision, call.callee)?;
+        output.push("call ")?;
+        output.node_id(call.site)?;
+        output.push(" callee=")?;
+        output.entity_id(call.callee)?;
+        output.push(" name=")?;
+        output.quoted(&callee.name)?;
+        output.push(" generic=")?;
+        output.push(if call.type_arguments.is_empty() {
+            "false"
+        } else {
+            "true"
+        })?;
+        output.push(" result=")?;
+        project_semantic_type(&call.result, output)?;
+        output.push(" effects=")?;
+        project_effects(call.effects, output)?;
+        output.push("\n")?;
+        for argument in &call.type_arguments {
+            let parameter = signature
+                .type_parameters
+                .iter()
+                .find(|parameter| parameter.id == argument.parameter)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call type parameter")))?;
+            output.push("  type-argument parameter=")?;
+            output.entity_id(argument.parameter)?;
+            output.push(" name=")?;
+            output.quoted(&parameter.name)?;
+            output.push(" type=")?;
+            project_semantic_type(&argument.argument, output)?;
+            output.push("\n")?;
+            for bound in &parameter.bounds {
+                output.push("    bound trait=")?;
+                project_trait(bound.trait_identity, output)?;
+                output.push("\n")?;
+            }
+        }
+        for witness in &call.witnesses {
+            output.push("  witness parameter=")?;
+            output.entity_id(witness.parameter)?;
+            output.push(" trait=")?;
+            project_trait(witness.trait_identity, output)?;
+            output.push(" type=")?;
+            project_semantic_type(&witness.ty, output)?;
+            match witness.kind {
+                super::TraitWitnessKindView::AutoTrait => output.push(" kind=auto")?,
+                super::TraitWitnessKindView::Explicit(implementation) => {
+                    output.push(" kind=explicit implementation=")?;
+                    output.entity_id(implementation)?;
+                }
+            }
+            output.push("\n")?;
+        }
+        Ok(())
+    }
+
     fn project_match(
         &self,
         node: NodeId,
@@ -233,11 +300,14 @@ impl WorkspaceSnapshot {
         output.push(" exhaustive=")?;
         output.push(if view.exhaustive { "true" } else { "false" })?;
         output.push("\n")?;
-        for arm in view.arms {
+        for (ordinal, arm) in view.arms.into_iter().enumerate() {
             output.push("  arm ")?;
-            output.decimal(arm.id)?;
+            output.decimal(
+                u64::try_from(ordinal)
+                    .map_err(|_| host("match arm projection ordinal exceeds u64"))?,
+            )?;
             output.push(" pattern=p")?;
-            output.decimal(arm.pattern_root)?;
+            output.decimal(arm.pattern_root.projection_ordinal())?;
             output.push(" body=")?;
             output.node_id(arm.body)?;
             output.push(" result=")?;
@@ -245,7 +315,7 @@ impl WorkspaceSnapshot {
             output.push("\n")?;
             for pattern in arm.patterns {
                 output.push("    pattern p")?;
-                output.decimal(pattern.id)?;
+                output.decimal(pattern.label.projection_ordinal())?;
                 output.push(" type=")?;
                 project_semantic_type(&pattern.ty, output)?;
                 match pattern.kind {
@@ -294,16 +364,11 @@ impl WorkspaceSnapshot {
         output: &mut ProjectionOutput,
     ) -> Result<(), WorkspaceError> {
         let state = self.hole_context(self.revision, hole)?;
-        let context = self.workspace_node(state.context)?;
+        self.workspace_node(state.context)?;
         output.push("hole ")?;
         output.node_id(state.id.node())?;
         output.push(" [HOLE] expected=")?;
-        output.quoted(
-            context
-                .expected_type
-                .as_deref()
-                .unwrap_or(context.actual_type.as_ref()),
-        )?;
+        project_semantic_type(&state.expected_type, output)?;
         output.push(" owner=")?;
         output.entity_id(state.owner)?;
         output.push(" context=")?;
@@ -344,7 +409,7 @@ fn project_pattern_fields(
         }
         project_optional_entity(field.field, output)?;
         output.push(":p")?;
-        output.decimal(field.pattern)?;
+        output.decimal(field.pattern.projection_ordinal())?;
     }
     output.push("]")
 }
@@ -359,45 +424,194 @@ fn project_optional_entity(
     }
 }
 
-fn project_semantic_type(
-    ty: &SemanticTypeView,
+fn project_trait(
+    identity: super::SemanticTrait,
     output: &mut ProjectionOutput,
 ) -> Result<(), WorkspaceError> {
-    match ty {
-        SemanticTypeView::Known(ty) => match ty {
-            SemanticTypeRef::Unit => output.push("unit"),
-            SemanticTypeRef::Bool => output.push("Bool"),
-            SemanticTypeRef::I64 => output.push("i64"),
-            SemanticTypeRef::F64 => output.push("f64"),
-            SemanticTypeRef::Bytes => output.push("bytes"),
-            SemanticTypeRef::ByteVector => output.push("byte-vector"),
-            SemanticTypeRef::ByteSlice => output.push("byte-slice"),
-            SemanticTypeRef::ByteSliceMut => output.push("byte-slice-mut"),
-            SemanticTypeRef::Product(entity) => {
-                output.push("product(")?;
-                output.entity_id(*entity)?;
-                output.push(")")
+    match identity {
+        super::SemanticTrait::Entity(entity) => output.entity_id(entity),
+        super::SemanticTrait::Builtin(kind) => output.push(match kind {
+            super::BuiltinTrait::Copy => "builtin:copy",
+            super::BuiltinTrait::Clone => "builtin:clone",
+            super::BuiltinTrait::Drop => "builtin:drop",
+            super::BuiltinTrait::Send => "builtin:send",
+            super::BuiltinTrait::Sync => "builtin:sync",
+        }),
+    }
+}
+
+fn project_effects(
+    effects: super::EffectSummary,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    output.push("[")?;
+    if effects.is_pure() {
+        output.push("pure")?;
+    } else {
+        let named = [
+            (super::EffectSummary::ALLOCATES, "allocates"),
+            (super::EffectSummary::READS_MEMORY, "reads-memory"),
+            (super::EffectSummary::WRITES_MEMORY, "writes-memory"),
+            (super::EffectSummary::MUTATES_LOCAL, "mutates-local"),
+            (super::EffectSummary::HOST_IO, "host-io"),
+            (super::EffectSummary::MAY_TRAP, "may-trap"),
+            (super::EffectSummary::MAY_EXIT, "may-exit"),
+            (super::EffectSummary::MAY_DIVERGE, "may-diverge"),
+            (super::EffectSummary::UNKNOWN, "unknown"),
+        ];
+        let mut first = true;
+        for (effect, name) in named {
+            if effects.contains(effect) {
+                if !first {
+                    output.push(",")?;
+                }
+                output.push(name)?;
+                first = false;
             }
-            SemanticTypeRef::Enum(entity) => {
-                output.push("enum(")?;
-                output.entity_id(*entity)?;
-                output.push(")")
-            }
-        },
-        SemanticTypeView::Unsupported { display, nominal } => {
-            output.push("unsupported(")?;
-            output.quoted(display)?;
-            if let Some(entity) = nominal {
-                output.push(",nominal=")?;
-                output.entity_id(*entity)?;
-            }
-            output.push(")")
         }
     }
+    output.push("]")
+}
+
+fn project_semantic_type(
+    ty: &SemanticType,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    enum Work<'a> {
+        Type(&'a SemanticType),
+        Text(&'static str),
+        Entity(EntityId),
+    }
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| host("semantic type projection allocation failed"))?;
+    pending.push(Work::Type(ty));
+    output.push("\"")?;
+    while let Some(item) = pending.pop() {
+        match item {
+            Work::Text(text) => output.push(text)?,
+            Work::Entity(entity) => {
+                output.decimal(entity.slot())?;
+                output.push(":")?;
+                output.decimal(entity.generation())?;
+            }
+            Work::Type(ty) => match ty {
+                SemanticType::Never => output.push("never")?,
+                SemanticType::Unit => output.push("unit")?,
+                SemanticType::Bool => output.push("bool")?,
+                SemanticType::I64 => output.push("i64")?,
+                SemanticType::F64 => output.push("f64")?,
+                SemanticType::String => output.push("string")?,
+                SemanticType::Bytes => output.push("bytes")?,
+                SemanticType::ByteVector => output.push("byte-vector")?,
+                SemanticType::ByteSlice => output.push("byte-slice")?,
+                SemanticType::ByteSliceMut => output.push("byte-slice-mut")?,
+                SemanticType::Path => output.push("path")?,
+                SemanticType::Capability(kind) => {
+                    output.push("capability ")?;
+                    output.push(kind.as_str())?;
+                }
+                SemanticType::Symbol => output.push("symbol")?,
+                SemanticType::Resource(kind) => output.push(kind.as_str())?,
+                SemanticType::Product(entity) => {
+                    output.push("product(")?;
+                    pending
+                        .try_reserve(2)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    pending.push(Work::Text(")"));
+                    pending.push(Work::Entity(*entity));
+                }
+                SemanticType::Enum {
+                    constructor,
+                    arguments,
+                } => {
+                    match constructor {
+                        super::SemanticEnum::Entity(entity) => {
+                            output.push("enum(")?;
+                            output.decimal(entity.slot())?;
+                            output.push(":")?;
+                            output.decimal(entity.generation())?;
+                            output.push(")")?;
+                        }
+                        super::SemanticEnum::Builtin(kind) => output.push(match kind {
+                            super::BuiltinEnum::Option => "option",
+                            super::BuiltinEnum::Result => "result",
+                            super::BuiltinEnum::NumericError => "numeric-error",
+                            super::BuiltinEnum::Utf8Error => "utf8-error",
+                            super::BuiltinEnum::SystemError => "system-error",
+                        })?,
+                    }
+                    let additional = arguments
+                        .len()
+                        .checked_mul(2)
+                        .ok_or_else(|| host("semantic type projection size overflow"))?;
+                    pending
+                        .try_reserve(additional)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    for argument in arguments.iter().rev() {
+                        pending.push(Work::Type(argument));
+                        pending.push(Work::Text(" "));
+                    }
+                }
+                SemanticType::TypeParameter(entity) => {
+                    output.push("type-parameter(")?;
+                    pending
+                        .try_reserve(2)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    pending.push(Work::Text(")"));
+                    pending.push(Work::Entity(*entity));
+                }
+                SemanticType::List(inner) => {
+                    output.push("list ")?;
+                    pending
+                        .try_reserve(1)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    pending.push(Work::Type(inner));
+                }
+                SemanticType::Function { parameters, result } => {
+                    output.push("fn inputs")?;
+                    let additional = parameters
+                        .len()
+                        .checked_mul(2)
+                        .and_then(|value| value.checked_add(2))
+                        .ok_or_else(|| host("semantic type projection size overflow"))?;
+                    pending
+                        .try_reserve(additional)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    pending.push(Work::Type(result));
+                    pending.push(Work::Text(" output "));
+                    for parameter in parameters.iter().rev() {
+                        pending.push(Work::Type(parameter));
+                        pending.push(Work::Text(" "));
+                    }
+                }
+                SemanticType::Forall { parameters, body } => {
+                    output.push("forall")?;
+                    let additional = parameters
+                        .len()
+                        .checked_mul(2)
+                        .and_then(|value| value.checked_add(2))
+                        .ok_or_else(|| host("semantic type projection size overflow"))?;
+                    pending
+                        .try_reserve(additional)
+                        .map_err(|_| host("semantic type projection allocation failed"))?;
+                    pending.push(Work::Type(body));
+                    pending.push(Work::Text(" "));
+                    for parameter in parameters.iter().rev() {
+                        pending.push(Work::Entity(*parameter));
+                        pending.push(Work::Text(" "));
+                    }
+                }
+            },
+        }
+    }
+    output.push("\"")
 }
 
 fn project_node_header(
     node: &NodeHeader,
+    facts: &super::NodeTypeFacts,
     hole: bool,
     output: &mut ProjectionOutput,
 ) -> Result<(), WorkspaceError> {
@@ -406,10 +620,10 @@ fn project_node_header(
     output.push(" kind=")?;
     output.push(node_kind(node.kind))?;
     output.push(" type=")?;
-    output.quoted(&node.actual_type)?;
+    project_semantic_type(&facts.actual, output)?;
     output.push(" expected=")?;
-    match &node.expected_type {
-        Some(expected) => output.quoted(expected)?,
+    match &facts.expected {
+        Some(expected) => project_semantic_type(expected, output)?,
         None => output.push("-")?,
     }
     if hole {
@@ -426,6 +640,7 @@ fn entity_kind(kind: EntityKind) -> &'static str {
         EntityKind::StaticBytesLocal => "static-bytes-local",
         EntityKind::MutableLocal => "mutable-local",
         EntityKind::Function => "function",
+        EntityKind::TypeParameter => "type-parameter",
         EntityKind::BuiltinOperation => "builtin-operation",
         EntityKind::Product => "product",
         EntityKind::ProductField => "product-field",

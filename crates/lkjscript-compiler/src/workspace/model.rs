@@ -23,6 +23,7 @@ pub enum EntityKind {
     StaticBytesLocal,
     MutableLocal,
     Function,
+    TypeParameter,
     BuiltinOperation,
     Product,
     ProductField,
@@ -88,8 +89,6 @@ pub struct NodeHeader {
     pub id: NodeId,
     pub kind: NodeKind,
     pub owner: SemanticOwner,
-    pub actual_type: Arc<str>,
-    pub expected_type: Option<Arc<str>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -148,8 +147,7 @@ impl HoleId {
 pub struct HoleState {
     pub id: HoleId,
     pub kind: HoleKind,
-    pub expected_type: crate::Type,
-    pub expected_semantic_type: super::SemanticTypeView,
+    pub expected_type: super::SemanticType,
     pub goal: Arc<str>,
     pub owner: EntityId,
     pub context: NodeId,
@@ -168,11 +166,11 @@ pub enum CompletenessBlocker {
     MissingBody {
         declaration: EntityId,
         hole: HoleId,
-        expected_type: crate::Type,
+        expected_type: super::SemanticType,
     },
     TypedHole {
         hole: HoleId,
-        expected_type: crate::Type,
+        expected_type: super::SemanticType,
         owner: EntityId,
         context: NodeId,
     },
@@ -182,12 +180,20 @@ pub enum CompletenessBlocker {
 pub(super) enum EntityAddress {
     Main,
     Binding(u64),
+    FunctionTypeParameter {
+        function: u64,
+        ordinal: u64,
+    },
     Product(u64),
     ProductField {
         product: u64,
         field: u64,
     },
     Enum(u64),
+    EnumTypeParameter {
+        enumeration: u64,
+        ordinal: u64,
+    },
     EnumVariant {
         enumeration: u64,
         variant: u64,
@@ -216,6 +222,7 @@ pub(super) struct NodeKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct HoleRecord {
     pub state: HoleState,
+    pub expected_internal: crate::Type,
     pub address: NodeAddress,
     pub key: NodeKey,
 }
@@ -290,6 +297,7 @@ pub(super) struct SnapshotIndexes {
     pub node_addresses: Vec<NodeAddress>,
     pub node_keys: Vec<NodeKey>,
     pub node_match_plans: Vec<Option<crate::hir::MatchPlanId>>,
+    pub node_enclosing_entities: Vec<EntityId>,
     pub node_actual_types: Vec<crate::Type>,
     pub node_expected_types: Vec<Option<crate::Type>>,
     pub entity_types: Vec<Option<crate::Type>>,
@@ -302,6 +310,7 @@ pub(super) struct SnapshotIndexes {
         HashMap<(crate::hir::EnumId, crate::hir::VariantId), (usize, usize)>,
     pub address_entities: HashMap<EntityAddress, EntityId>,
     pub address_nodes: HashMap<NodeAddress, NodeId>,
+    pub type_parameter_entities: HashMap<EntityId, HashMap<Arc<str>, EntityId>>,
 }
 
 impl SnapshotIndexes {
@@ -311,6 +320,7 @@ impl SnapshotIndexes {
         self.node_children.clear();
         self.address_entities.clear();
         self.address_nodes.clear();
+        self.type_parameter_entities.clear();
         self.entity_lookup
             .try_reserve(self.entities.len())
             .map_err(|_| Error::host("workspace entity lookup allocation failed"))?;
@@ -326,11 +336,31 @@ impl SnapshotIndexes {
         self.address_nodes
             .try_reserve(self.nodes.len())
             .map_err(|_| Error::host("workspace node address allocation failed"))?;
+        self.type_parameter_entities
+            .try_reserve(self.entities.len())
+            .map_err(|_| Error::host("workspace type-parameter lookup allocation failed"))?;
         for (index, (header, address)) in
             self.entities.iter().zip(&self.entity_addresses).enumerate()
         {
             self.entity_lookup.insert(header.id, index);
             self.address_entities.insert(*address, header.id);
+            if header.kind == EntityKind::TypeParameter {
+                let owner = header
+                    .owner
+                    .ok_or_else(|| Error::msg("workspace type parameter is missing its owner"))?;
+                let parameters = self.type_parameter_entities.entry(owner).or_default();
+                parameters.try_reserve(1).map_err(|_| {
+                    Error::host("workspace type-parameter lookup allocation failed")
+                })?;
+                if parameters
+                    .insert(Arc::clone(&header.name), header.id)
+                    .is_some()
+                {
+                    return Err(Error::msg(
+                        "workspace type parameter name is duplicated for its owner",
+                    ));
+                }
+            }
         }
         for (index, (header, address)) in self.nodes.iter().zip(&self.node_addresses).enumerate() {
             self.node_lookup.insert(header.id, index);

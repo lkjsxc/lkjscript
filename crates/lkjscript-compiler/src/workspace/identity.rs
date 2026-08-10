@@ -280,6 +280,9 @@ pub(super) fn reconcile(
         edge.dependent = remap_entity(&entity_map, edge.dependent)?;
         edge.dependency = remap_entity(&entity_map, edge.dependency)?;
     }
+    for enclosing in &mut next.node_enclosing_entities {
+        *enclosing = remap_entity(&entity_map, *enclosing)?;
+    }
     next.references
         .sort_unstable_by_key(|edge| (edge.site, edge.target));
     next.calls

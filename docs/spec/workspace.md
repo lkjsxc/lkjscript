@@ -24,30 +24,44 @@ paths and digests do not create logical identity.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
 creation covers non-generic products and enums with stable field/variant identities, non-generic
-functions, and one parameterless `main`; function and entry bodies begin as typed holes. Public type
-inputs use `SemanticTypeRef`, whose nominal cases carry stable workspace entity identities rather
-than product names, compiler enum IDs, layout IDs, or source identities.
+functions, and one parameterless `main`; function and entry bodies begin as typed holes. Imported
+generic function declarations expose type parameters as stable entities owned by the function.
+Public type inputs and query results use one exact recursive `SemanticType`, whose nominal and
+binder cases carry stable workspace identities rather than product names, compiler enum/trait IDs,
+layout IDs, binder strings, or source identities. Prelude enum constructors and core traits use
+explicit closed builtin identities. Clone, equality, hashing, debug/display, validation,
+conversion, projection, and destruction of public types do not recurse on native stack or impose a
+type-depth quota.
 
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
 semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
-operations, calls, conditionals, lexical immutable `let` bindings, copy-safe loads, byte-vector moves
-and shared borrows, product construction and field projection, enum construction and enum-variant
-testing, and ordered exhaustive matches over non-generic enum scrutinees. Pattern drafts cover
-wildcards, enum variants with exact stable field identities, and named payload bindings. Published
+operations, exact generic and non-generic calls, conditionals, lexical immutable `let` bindings,
+copy-safe loads, byte-vector moves and shared borrows, product construction and field projection,
+enum construction and enum-variant testing, and ordered exhaustive matches over non-generic enum
+scrutinees. A generic call supplies one structured type argument for every stable parameter entity;
+argument list order is non-semantic, while the published instantiation follows declaration order.
+The compiler validates substitution, value arguments, ownership/reference restrictions, and trait
+bounds and derives auto or explicit implementation witnesses. Source inference is an importer
+convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
+Pattern drafts cover wildcards, enum variants with exact stable field identities, and named payload
+bindings. Published
 lexical and payload bindings use stable entity identities; transaction-local binding handles are a
 separate checked identity domain and cannot escape the draft. Each arm has its own lexical binding
 scope. Compiler-hidden match scrutinee/projection locals are never workspace entities or legal
 constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
 checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals,
-generic calls/patterns, and non-enum source-free pattern spaces are not fabricated.
+generic pattern construction, source-free generic declaration authoring, forwarding an unresolved
+caller type parameter, ownership/reference-bearing generic instantiation, and non-enum source-free
+pattern spaces are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations; they also rename supported bindings, replace expressions, and introduce/refine/fill
-typed holes. Callable deletion cascades through the declaration's parameters, locals, payload
-bindings, body nodes, holes, hidden match storage, match plans, and compiler layout participation.
+typed holes. Callable deletion cascades through the declaration's type parameters, value
+parameters, locals, payload bindings, body nodes, holes, hidden match storage, match plans, and
+compiler layout participation.
 Product deletion owns its fields and narrowly owns explicit trait implementations whose target is
-that product. Enum deletion owns its variants and their fields. Direct member, trait, or
-implementation deletion and fixed compiler-context deletion remain unsupported.
+that product. Enum deletion owns its type parameters, variants, and their fields. Direct member,
+trait, or implementation deletion and fixed compiler-context deletion remain unsupported.
 
 All deletion intent is collected before order-sensitive editing. Final staged signatures, field
 types, expression types and aggregate operations, holes, generic substitutions and witnesses, and
@@ -74,7 +88,8 @@ mismatch; empty, nonexhaustive, or useless match arms; and ownership failure bef
 Failure preserves the exact published `Arc`, revision, allocator generations/free lists, future
 allocation, diagnostics, and projection. Success publishes one revision and returns created and
 deleted entities, member/local identities, holes, descendant changes, and graph rewiring through the
-semantic diff.
+semantic diff. A call-instantiation diff includes exact old/new substitutions, instantiated
+parameter/result types, witnesses, and effects, so a type-argument-only change remains reviewable.
 
 Structured blockers currently cover missing entry point, missing declaration/entry body, and typed
 expression hole. Every blocker is revision-labelled through the snapshot or
@@ -86,17 +101,21 @@ and source-free scalar, product, enum, lexical-local, borrow-then-move, and exha
 match fixtures have equal normalized entities/types, containment, references, dependencies, node
 kinds/types/effects, canonical match shape, selected memory-obligation kinds, the main bytecode
 stream, VM results or traps, and cleanup behavior. Imported match plans carry real source origin;
-source-free plans carry semantic origin;
-ordinary plans reject builtin or stale provenance.
+source-free plans carry semantic origin; ordinary plans reject builtin or stale provenance.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
-context, exact lexical and match-arm bindings, expected-type-filtered legal constructors, and
-structured match inspection. `MatchView` reports the stable match/scrutinee/body nodes, result type,
-exhaustiveness, ordered arms, and deterministic typed pattern nodes/fields with stable
-variant/field/payload-binding entities. Known nominal type views preserve stable entity identity;
-unsupported generic imported views remain explicit and retain a nominal identity when one exists.
-Move and borrow candidates are labelled as requiring canonical ownership validation rather than
+context, exact lexical and match-arm bindings, expected-type-filtered legal constructors,
+structured function signatures and call instantiations, and structured match inspection. Generic
+signature views report stable binder entities, bounds with stable or builtin trait identity, value
+parameters, and result types. Call views report canonical substitutions, instantiated parameter and
+result types, derived witnesses, and named machine-readable effect bits. `MatchView` reports the
+stable match/scrutinee/body nodes, result type, exhaustiveness, ordered arms, and deterministic typed
+pattern nodes/fields with stable variant/field/payload-binding entities. Its flat stack-safe
+pattern graph uses a distinct opaque response-local label solely for links within one arm; no raw
+compiler-dense pattern/arm ID is exposed or accepted as identity. Nominal and generic type views
+preserve stable semantic identity. Move and borrow candidates are labelled as requiring
+canonical ownership validation rather than
 claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
 storage are not advertised. Hole scope is recomputed after later declaration creation. Continuations
 bind namespace, revision, and query. A fallible iterative projection renders state, blockers,
@@ -108,11 +127,13 @@ stdio/session schemas, text journal/publication path, CLI routes, unsupported re
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
-mutation, public semantic movement, mutable-local construction, generic-call/pattern construction,
-Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
-incremental recomputation remain gaps. Ownership/reference-bearing nominal fields are also outside
-the current source-free declaration surface, so current payload-match ownership coverage uses the
-strongest supported copy-safe field geometry. Everything below continues to define the broader
+mutation, public semantic movement, mutable-local construction, source-free generic declaration and
+generic-pattern construction, Boolean/integer/product source-free patterns, source rendering,
+persistence, collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
+nominal fields are also outside the current source-free declaration surface, while generic
+ownership/reference instantiation is an explicit call restriction. Current payload-match ownership
+coverage uses the strongest supported copy-safe field geometry. Everything below continues to define
+the broader
 target contract.
 
 ## 1. Snapshot authority

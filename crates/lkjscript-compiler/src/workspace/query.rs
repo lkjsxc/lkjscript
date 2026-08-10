@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{
     CallEdge, DiagnosticHeader, EntityHeader, EntityId, EntityKind, HoleId, HoleState, NodeId,
-    ReferenceEdge, RevisionId, SemanticTypeView, WorkspaceError, WorkspaceSnapshot,
+    ReferenceEdge, RevisionId, SemanticType, WorkspaceError, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,25 +46,108 @@ pub type EntityPage = QueryPage<EntityHeader>;
 pub struct NodeTypeFacts {
     pub revision: RevisionId,
     pub node: NodeId,
-    pub actual: Arc<str>,
-    pub expected: Option<Arc<str>>,
-    pub actual_semantic: SemanticTypeView,
-    pub expected_semantic: Option<SemanticTypeView>,
+    pub actual: SemanticType,
+    pub expected: Option<SemanticType>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EntityTypeFacts {
     pub revision: RevisionId,
     pub entity: EntityId,
-    pub declared: Option<SemanticTypeView>,
+    pub declared: Option<SemanticType>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeParameterBoundView {
+    pub parameter: EntityId,
+    pub trait_identity: super::SemanticTrait,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeParameterView {
+    pub id: EntityId,
+    pub name: Arc<str>,
+    pub owner: EntityId,
+    pub bounds: Vec<TypeParameterBoundView>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValueParameterView {
+    pub entity: EntityId,
+    pub name: Arc<str>,
+    pub ty: SemanticType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionSignatureView {
     pub revision: RevisionId,
     pub function: EntityId,
-    pub parameters: Vec<SemanticTypeView>,
-    pub result: SemanticTypeView,
+    pub type_parameters: Vec<TypeParameterView>,
+    pub parameters: Vec<ValueParameterView>,
+    pub result: SemanticType,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EffectSummary(u16);
+
+impl EffectSummary {
+    pub const UNKNOWN: Self = Self(1 << 15);
+    pub const ALLOCATES: Self = Self(1 << 0);
+    pub const READS_MEMORY: Self = Self(1 << 1);
+    pub const WRITES_MEMORY: Self = Self(1 << 2);
+    pub const MUTATES_LOCAL: Self = Self(1 << 3);
+    pub const HOST_IO: Self = Self(1 << 4);
+    pub const MAY_TRAP: Self = Self(1 << 5);
+    pub const MAY_EXIT: Self = Self(1 << 6);
+    pub const MAY_DIVERGE: Self = Self(1 << 7);
+
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
+
+    pub const fn is_known(self) -> bool {
+        !self.contains(Self::UNKNOWN)
+    }
+
+    pub const fn is_pure(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn contains(self, effect: Self) -> bool {
+        self.0 & effect.0 == effect.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TraitWitnessKindView {
+    AutoTrait,
+    Explicit(EntityId),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TraitWitnessView {
+    pub parameter: EntityId,
+    pub trait_identity: super::SemanticTrait,
+    pub ty: SemanticType,
+    pub kind: TraitWitnessKindView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeArgumentView {
+    pub parameter: EntityId,
+    pub argument: SemanticType,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CallInstantiationView {
+    pub revision: RevisionId,
+    pub site: NodeId,
+    pub callee: EntityId,
+    pub type_arguments: Vec<TypeArgumentView>,
+    pub parameters: Vec<SemanticType>,
+    pub result: SemanticType,
+    pub witnesses: Vec<TraitWitnessView>,
+    pub effects: EffectSummary,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,25 +155,40 @@ pub struct MatchView {
     pub revision: RevisionId,
     pub site: NodeId,
     pub scrutinee: NodeId,
-    pub result: SemanticTypeView,
+    pub result: SemanticType,
     pub arms: Vec<MatchArmView>,
     pub exhaustive: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchArmView {
-    pub id: u64,
-    pub pattern_root: u64,
+    pub pattern_root: MatchPatternLabel,
     pub patterns: Vec<MatchPatternNodeView>,
     pub body: NodeId,
-    pub result: SemanticTypeView,
+    pub result: SemanticType,
+}
+
+/// Opaque cross-reference within one flat, stack-safe `MatchArmView` pattern graph.
+///
+/// A label is local to its returned arm view. It is not a workspace identity,
+/// compiler identity, transaction input, or stable reference across queries.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MatchPatternLabel(u64);
+
+impl MatchPatternLabel {
+    const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub(super) const fn projection_ordinal(self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchPatternNodeView {
-    /// Review-local dense pattern label; not a workspace edit identity.
-    pub id: u64,
-    pub ty: SemanticTypeView,
+    pub label: MatchPatternLabel,
+    pub ty: SemanticType,
     pub kind: MatchPatternKindView,
 }
 
@@ -117,7 +215,7 @@ pub enum MatchPatternKindView {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchPatternFieldView {
     pub field: Option<EntityId>,
-    pub pattern: u64,
+    pub pattern: MatchPatternLabel,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -254,7 +352,7 @@ impl WorkspaceSnapshot {
         node: NodeId,
     ) -> Result<NodeTypeFacts, WorkspaceError> {
         self.check_query_revision(revision)?;
-        let header = self.workspace_node(node)?;
+        self.workspace_node(node)?;
         let index = self
             .indexes
             .node_lookup
@@ -271,15 +369,19 @@ impl WorkspaceSnapshot {
             .node_expected_types
             .get(index)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node expectation")))?;
+        let context = self
+            .indexes
+            .node_enclosing_entities
+            .get(index)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node type context")))?;
         Ok(NodeTypeFacts {
             revision,
             node,
-            actual: Arc::clone(&header.actual_type),
-            expected: header.expected_type.clone(),
-            actual_semantic: super::types::view(&self.program, &self.indexes, actual)?,
-            expected_semantic: expected
+            actual: super::types::view(&self.program, &self.indexes, actual, Some(context))?,
+            expected: expected
                 .as_ref()
-                .map(|ty| super::types::view(&self.program, &self.indexes, ty))
+                .map(|ty| super::types::view(&self.program, &self.indexes, ty, Some(context)))
                 .transpose()?,
         })
     }
@@ -295,7 +397,7 @@ impl WorkspaceSnapshot {
             return Err(WorkspaceError::WrongEntityKind {
                 operation: Arc::from("match query"),
                 expected: Arc::from("match node"),
-                actual: Arc::from(format!("{:?}", header.kind)),
+                actual: super::error::SemanticKind::Node(header.kind),
             });
         }
         let node_index = self
@@ -304,6 +406,12 @@ impl WorkspaceSnapshot {
             .get(&site)
             .copied()
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match node")))?;
+        let context = self
+            .indexes
+            .node_enclosing_entities
+            .get(node_index)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match type context")))?;
         let plan_id = self
             .indexes
             .node_match_plans
@@ -333,20 +441,29 @@ impl WorkspaceSnapshot {
         arms.try_reserve(plan.arms.len())
             .map_err(|_| WorkspaceError::Host(Arc::from("match view allocation failed")))?;
         for (index, arm) in plan.arms.iter().enumerate() {
-            let (patterns, pattern_root) = pattern_view(self, &arm.pattern)?;
+            let (patterns, pattern_root) = pattern_view(self, &arm.pattern, context)?;
             arms.push(MatchArmView {
-                id: arm.id,
                 pattern_root,
                 patterns,
                 body: children[index + 1],
-                result: super::types::view(&self.program, &self.indexes, &arm.body_type)?,
+                result: super::types::view(
+                    &self.program,
+                    &self.indexes,
+                    &arm.body_type,
+                    Some(context),
+                )?,
             });
         }
         Ok(MatchView {
             revision,
             site,
             scrutinee,
-            result: super::types::view(&self.program, &self.indexes, &plan.result_type)?,
+            result: super::types::view(
+                &self.program,
+                &self.indexes,
+                &plan.result_type,
+                Some(context),
+            )?,
             arms,
             exhaustive: plan.exhaustive,
         })
@@ -359,6 +476,7 @@ impl WorkspaceSnapshot {
     ) -> Result<EntityTypeFacts, WorkspaceError> {
         self.check_query_revision(revision)?;
         self.workspace_entity(entity)?;
+        let context = type_context_for_entity(self, entity)?;
         let index = self
             .indexes
             .entity_lookup
@@ -371,7 +489,7 @@ impl WorkspaceSnapshot {
             .get(index)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity type")))?
             .as_ref()
-            .map(|ty| super::types::view(&self.program, &self.indexes, ty))
+            .map(|ty| super::types::view(&self.program, &self.indexes, ty, context))
             .transpose()?;
         Ok(EntityTypeFacts {
             revision,
@@ -387,59 +505,359 @@ impl WorkspaceSnapshot {
     ) -> Result<FunctionSignatureView, WorkspaceError> {
         self.check_query_revision(revision)?;
         let header = self.workspace_entity(function)?;
-        let (parameters, result) = if header.kind == EntityKind::Main {
-            let main = self
-                .program
-                .main
-                .as_ref()
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main")))?;
-            (&main.param_types, &main.return_type)
-        } else {
-            if header.kind != EntityKind::Function {
-                return Err(WorkspaceError::WrongEntityKind {
-                    operation: Arc::from("function signature query"),
-                    expected: Arc::from("function or main"),
-                    actual: Arc::from(format!("{:?}", header.kind)),
+        let (parameter_bindings, parameter_types, result, bounds, type_parameter_names) =
+            if header.kind == EntityKind::Main {
+                let main = self
+                    .program
+                    .main
+                    .as_ref()
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main")))?;
+                (
+                    &main.params,
+                    &main.param_types,
+                    &main.return_type,
+                    &[][..],
+                    &[][..],
+                )
+            } else {
+                if header.kind != EntityKind::Function {
+                    return Err(WorkspaceError::WrongEntityKind {
+                        operation: Arc::from("function signature query"),
+                        expected: Arc::from("function or main"),
+                        actual: super::error::SemanticKind::Entity(header.kind),
+                    });
+                }
+                let raw = binding_address(self, function)?;
+                let binding = self
+                    .program
+                    .bindings
+                    .get(host_index(raw, "function")?)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+                let (type_parameter_names, signature) = match &binding.ty {
+                    crate::Type::Forall { vars, body } => (vars.as_slice(), body.as_ref()),
+                    other => (&[][..], other),
+                };
+                let crate::Type::Fn { params, ret } = signature else {
+                    return Err(WorkspaceError::Validation(Arc::from(
+                        "function binding lost its function signature",
+                    )));
+                };
+                let definition = self
+                    .program
+                    .functions
+                    .iter()
+                    .find(|definition| definition.binding.raw() == raw)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+                (
+                    &definition.params,
+                    params,
+                    ret.as_ref(),
+                    definition.bounds.as_slice(),
+                    type_parameter_names,
+                )
+            };
+
+        let type_parameter_count = self
+            .indexes
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::TypeParameter && entity.owner == Some(function)
+            })
+            .count();
+        let mut type_parameter_headers = Vec::new();
+        type_parameter_headers
+            .try_reserve(type_parameter_count)
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("signature binder index allocation failed"))
+            })?;
+        for entity in &self.indexes.entities {
+            if entity.kind == EntityKind::TypeParameter && entity.owner == Some(function) {
+                type_parameter_headers.push(entity);
+            }
+        }
+        type_parameter_headers.sort_unstable_by_key(|entity| {
+            self.indexes
+                .entity_lookup
+                .get(&entity.id)
+                .and_then(|index| self.indexes.entity_addresses.get(*index))
+                .and_then(|address| match address {
+                    super::model::EntityAddress::FunctionTypeParameter { ordinal, .. }
+                    | super::model::EntityAddress::EnumTypeParameter { ordinal, .. } => {
+                        Some(*ordinal)
+                    }
+                    _ => None,
+                })
+                .unwrap_or(u64::MAX)
+        });
+        if type_parameter_headers.len() != type_parameter_names.len()
+            || type_parameter_headers
+                .iter()
+                .zip(type_parameter_names)
+                .any(|(header, name)| header.name.as_ref() != name.as_str())
+        {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "function type-parameter identities are not canonical",
+            )));
+        }
+        let mut type_parameters = Vec::new();
+        type_parameters
+            .try_reserve(type_parameter_headers.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("signature binder allocation failed")))?;
+        for parameter in type_parameter_headers {
+            let mut parameter_bounds = Vec::new();
+            parameter_bounds.try_reserve(bounds.len()).map_err(|_| {
+                WorkspaceError::Host(Arc::from("signature bound allocation failed"))
+            })?;
+            for bound in bounds
+                .iter()
+                .filter(|bound| bound.parameter == parameter.name.as_ref())
+            {
+                parameter_bounds.push(TypeParameterBoundView {
+                    parameter: parameter.id,
+                    trait_identity: super::types::semantic_trait(
+                        &self.program,
+                        &self.indexes,
+                        bound.trait_id,
+                    )?,
                 });
             }
-            let address = self
+            type_parameters.push(TypeParameterView {
+                id: parameter.id,
+                name: Arc::clone(&parameter.name),
+                owner: function,
+                bounds: parameter_bounds,
+            });
+        }
+
+        if parameter_bindings.len() != parameter_types.len() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "function value-parameter metadata is not canonical",
+            )));
+        }
+        let mut parameters = Vec::new();
+        parameters.try_reserve(parameter_types.len()).map_err(|_| {
+            WorkspaceError::Host(Arc::from("signature parameter allocation failed"))
+        })?;
+        for (binding, ty) in parameter_bindings.iter().zip(parameter_types) {
+            let entity = self
                 .indexes
-                .entity_lookup
-                .get(&function)
-                .and_then(|index| self.indexes.entity_addresses.get(*index))
+                .address_entities
+                .get(&super::model::EntityAddress::Binding(binding.raw()))
                 .copied()
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
-            let super::model::EntityAddress::Binding(raw) = address else {
-                return Err(WorkspaceError::StaleIdentity(Arc::from("function")));
-            };
-            let binding = self
-                .program
-                .bindings
-                .get(
-                    usize::try_from(raw)
-                        .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("function")))?,
-                )
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
-            let crate::Type::Fn { params, ret } = &binding.ty else {
-                return Err(WorkspaceError::unsupported(
-                    "function-signature",
-                    "generic signatures are explicit unsupported query results in this vertical",
-                ));
-            };
-            (params, ret.as_ref())
-        };
-        let mut parameter_views = Vec::new();
-        parameter_views
-            .try_reserve(parameters.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("signature view allocation failed")))?;
-        for parameter in parameters {
-            parameter_views.push(super::types::view(&self.program, &self.indexes, parameter)?);
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("value parameter")))?;
+            let value = self.workspace_entity(entity)?;
+            parameters.push(ValueParameterView {
+                entity,
+                name: Arc::clone(&value.name),
+                ty: super::types::view(&self.program, &self.indexes, ty, Some(function))?,
+            });
         }
         Ok(FunctionSignatureView {
             revision,
             function,
-            parameters: parameter_views,
-            result: super::types::view(&self.program, &self.indexes, result)?,
+            type_parameters,
+            parameters,
+            result: super::types::view(&self.program, &self.indexes, result, Some(function))?,
+        })
+    }
+
+    pub fn call_instantiation(
+        &self,
+        revision: RevisionId,
+        site: NodeId,
+    ) -> Result<CallInstantiationView, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        let header = self.workspace_node(site)?;
+        if header.kind != super::NodeKind::Call {
+            return Err(WorkspaceError::WrongEntityKind {
+                operation: Arc::from("call instantiation query"),
+                expected: Arc::from("call node"),
+                actual: super::error::SemanticKind::Node(header.kind),
+            });
+        }
+        let index = self
+            .indexes
+            .node_lookup
+            .get(&site)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call node")))?;
+        let address = *self
+            .indexes
+            .node_addresses
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call node address")))?;
+        let caller = *self
+            .indexes
+            .node_enclosing_entities
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call context")))?;
+        let expression = expression_at(self, address)?;
+        let crate::hir::ExprKind::Call {
+            callee: callee_ref,
+            instantiation,
+            ..
+        } = &expression.kind
+        else {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "call node does not contain a call expression",
+            )));
+        };
+        let callee = self
+            .indexes
+            .address_entities
+            .get(&super::model::EntityAddress::Binding(
+                callee_ref.binding.raw(),
+            ))
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call target")))?;
+        let binding = self
+            .program
+            .binding(callee_ref.binding)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call target")))?;
+        let definition = self
+            .program
+            .functions
+            .iter()
+            .find(|function| function.binding == callee_ref.binding)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("call target")))?;
+        let (variables, signature) = match &binding.ty {
+            crate::Type::Forall { vars, body } => (vars.as_slice(), body.as_ref()),
+            other => (&[][..], other),
+        };
+        let crate::Type::Fn { params, .. } = signature else {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "call target lost its function signature",
+            )));
+        };
+        if variables.is_empty() && instantiation.is_some() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "non-generic call contains instantiation metadata",
+            )));
+        }
+        if !variables.is_empty() && instantiation.is_none() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "generic call is missing instantiation metadata",
+            )));
+        }
+        let substitutions = instantiation
+            .as_ref()
+            .map(|value| value.substitutions.as_slice())
+            .unwrap_or_default();
+        if substitutions.len() != variables.len()
+            || substitutions
+                .iter()
+                .zip(variables)
+                .any(|(substitution, variable)| substitution.parameter != *variable)
+        {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "call substitutions are not canonical",
+            )));
+        }
+        let mut type_arguments = Vec::new();
+        type_arguments
+            .try_reserve(substitutions.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("call type-argument query allocation failed"))
+            })?;
+        for substitution in substitutions {
+            let parameter = self
+                .indexes
+                .type_parameter_entities
+                .get(&callee)
+                .and_then(|parameters| parameters.get(substitution.parameter.as_str()))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("type parameter")))?;
+            type_arguments.push(TypeArgumentView {
+                parameter,
+                argument: super::types::view(
+                    &self.program,
+                    &self.indexes,
+                    &substitution.ty,
+                    Some(caller),
+                )?,
+            });
+        }
+        let mut substitution_map = std::collections::HashMap::new();
+        substitution_map
+            .try_reserve(substitutions.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("call substitution map allocation failed"))
+            })?;
+        for substitution in substitutions {
+            substitution_map.insert(substitution.parameter.as_str(), &substitution.ty);
+        }
+        let mut parameters = Vec::new();
+        parameters.try_reserve(params.len()).map_err(|_| {
+            WorkspaceError::Host(Arc::from("call parameter query allocation failed"))
+        })?;
+        for parameter in params {
+            let instantiated = crate::generic_call::substitute_type(parameter, &substitution_map)
+                .map_err(generic_query_error)?;
+            parameters.push(super::types::view(
+                &self.program,
+                &self.indexes,
+                &instantiated,
+                Some(caller),
+            )?);
+        }
+        let witness_values = instantiation
+            .as_ref()
+            .map(|value| value.witnesses.as_slice())
+            .unwrap_or_default();
+        if witness_values.len() != definition.bounds.len() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "call witness metadata does not match declared bounds",
+            )));
+        }
+        let mut witnesses = Vec::new();
+        witnesses
+            .try_reserve(witness_values.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("call witness query allocation failed")))?;
+        for (bound, witness) in definition.bounds.iter().zip(witness_values) {
+            let parameter = self
+                .indexes
+                .type_parameter_entities
+                .get(&callee)
+                .and_then(|parameters| parameters.get(bound.parameter.as_str()))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("type parameter")))?;
+            let kind = match witness.kind {
+                crate::hir::TraitWitnessKind::AutoTrait => TraitWitnessKindView::AutoTrait,
+                crate::hir::TraitWitnessKind::Explicit(implementation) => {
+                    let entity = self
+                        .indexes
+                        .address_entities
+                        .get(&super::model::EntityAddress::Implementation(
+                            implementation.raw(),
+                        ))
+                        .copied()
+                        .ok_or_else(|| {
+                            WorkspaceError::StaleIdentity(Arc::from("implementation witness"))
+                        })?;
+                    TraitWitnessKindView::Explicit(entity)
+                }
+            };
+            witnesses.push(TraitWitnessView {
+                parameter,
+                trait_identity: super::types::semantic_trait(
+                    &self.program,
+                    &self.indexes,
+                    witness.trait_id,
+                )?,
+                ty: super::types::view(&self.program, &self.indexes, &witness.ty, Some(caller))?,
+                kind,
+            });
+        }
+        Ok(CallInstantiationView {
+            revision,
+            site,
+            callee,
+            type_arguments,
+            parameters,
+            result: super::types::view(&self.program, &self.indexes, &expression.ty, Some(caller))?,
+            witnesses,
+            effects: EffectSummary(expression.effects.bits()),
         })
     }
 
@@ -484,8 +902,14 @@ impl WorkspaceSnapshot {
         continuation: Option<&Continuation>,
     ) -> Result<QueryPage<LegalConstructor>, WorkspaceError> {
         let context = self.hole_context(revision, hole)?;
+        let expected_type = &self
+            .holes
+            .iter()
+            .find(|record| record.state.id == hole)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?
+            .expected_internal;
         let mut values = vec![LegalConstructor::If];
-        match &context.expected_type {
+        match expected_type {
             crate::Type::I64 => values.push(LegalConstructor::I64Literal),
             crate::Type::F64 => values.push(LegalConstructor::F64Literal),
             crate::Type::Bool => values.push(LegalConstructor::BoolLiteral),
@@ -519,15 +943,18 @@ impl WorkspaceSnapshot {
                 EntityKind::Parameter
                 | EntityKind::ImmutableLocal
                 | EntityKind::StaticBytesLocal => {
+                    let assignable =
+                        crate::generic_call::types_assignable(&binding.ty, expected_type)
+                            .map_err(generic_query_error)?;
                     if crate::ownership::draft_parameter_load_is_supported(&binding.ty)
-                        && crate::Type::unify_assignable(&binding.ty, &context.expected_type)
+                        && assignable
                     {
                         values.push(LegalConstructor::Load(entity));
                     }
                     if matches!(
                         binding.ty,
                         crate::Type::Bytes | crate::Type::ByteVector | crate::Type::Resource(_)
-                    ) && crate::Type::unify_assignable(&binding.ty, &context.expected_type)
+                    ) && assignable
                     {
                         values.push(LegalConstructor::Move {
                             binding: entity,
@@ -535,7 +962,7 @@ impl WorkspaceSnapshot {
                         });
                     }
                     if binding.ty == crate::Type::ByteVector
-                        && context.expected_type == crate::Type::ByteSlice
+                        && *expected_type == crate::Type::ByteSlice
                     {
                         values.push(LegalConstructor::BorrowShared {
                             binding: entity,
@@ -543,17 +970,25 @@ impl WorkspaceSnapshot {
                         });
                     }
                 }
-                EntityKind::Function => {
-                    if let crate::Type::Fn { ret, .. } = &binding.ty {
-                        if crate::Type::unify_assignable(ret, &context.expected_type) {
+                EntityKind::Function => match &binding.ty {
+                    crate::Type::Fn { ret, .. } => {
+                        if crate::generic_call::types_assignable(ret, expected_type)
+                            .map_err(generic_query_error)?
+                        {
                             values.push(LegalConstructor::Call(entity));
                         }
                     }
-                }
+                    crate::Type::Forall { body, .. }
+                        if matches!(body.as_ref(), crate::Type::Fn { .. }) =>
+                    {
+                        values.push(LegalConstructor::Call(entity));
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
-        match &context.expected_type {
+        match expected_type {
             crate::Type::Product(name) => {
                 if let Some((index, _)) = self
                     .program
@@ -675,10 +1110,71 @@ impl WorkspaceSnapshot {
     }
 }
 
+fn expression_at(
+    snapshot: &WorkspaceSnapshot,
+    address: super::model::NodeAddress,
+) -> Result<&crate::hir::Expr, WorkspaceError> {
+    let root = if address.root == super::model::EntityAddress::Main {
+        snapshot
+            .program
+            .main
+            .as_ref()
+            .map(|main| &main.body)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?
+    } else {
+        let super::model::EntityAddress::Binding(raw) = address.root else {
+            return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
+        };
+        snapshot
+            .program
+            .functions
+            .iter()
+            .find(|function| function.binding.raw() == raw)
+            .map(|function| &function.body)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?
+    };
+    root.try_at_preorder(address.preorder)
+        .map_err(WorkspaceError::from_core)?
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node address")))
+}
+
+fn binding_address(snapshot: &WorkspaceSnapshot, entity: EntityId) -> Result<u64, WorkspaceError> {
+    let address = snapshot
+        .indexes
+        .entity_lookup
+        .get(&entity)
+        .and_then(|index| snapshot.indexes.entity_addresses.get(*index))
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+    let super::model::EntityAddress::Binding(raw) = address else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("function")));
+    };
+    Ok(raw)
+}
+
+fn type_context_for_entity(
+    snapshot: &WorkspaceSnapshot,
+    entity: EntityId,
+) -> Result<Option<EntityId>, WorkspaceError> {
+    let mut current = Some(entity);
+    while let Some(id) = current {
+        let header = snapshot.workspace_entity(id)?;
+        if matches!(
+            header.kind,
+            EntityKind::Function | EntityKind::Main | EntityKind::Enum
+        ) {
+            return Ok(Some(id));
+        }
+        current = header.owner;
+    }
+    Ok(None)
+}
+
 fn pattern_view(
     snapshot: &WorkspaceSnapshot,
     root: &crate::hir::MatchPattern,
-) -> Result<(Vec<MatchPatternNodeView>, u64), WorkspaceError> {
+    context: EntityId,
+) -> Result<(Vec<MatchPatternNodeView>, MatchPatternLabel), WorkspaceError> {
     enum Work<'a> {
         Visit(&'a crate::hir::MatchPattern),
         Variant {
@@ -761,7 +1257,14 @@ fn pattern_view(
                         crate::hir::MatchPattern::I64(value) => MatchPatternKindView::I64(*value),
                         _ => unreachable!("aggregate patterns handled above"),
                     };
-                    push_pattern_view(snapshot, pattern, kind, &mut output, &mut completed)?;
+                    push_pattern_view(
+                        snapshot,
+                        pattern,
+                        kind,
+                        context,
+                        &mut output,
+                        &mut completed,
+                    )?;
                 }
             },
             Work::Variant {
@@ -794,6 +1297,7 @@ fn pattern_view(
                         variant: variant_entity,
                         fields: field_views,
                     },
+                    context,
                     &mut output,
                     &mut completed,
                 )?;
@@ -836,6 +1340,7 @@ fn pattern_view(
                         product: product_entity,
                         fields: field_views,
                     },
+                    context,
                     &mut output,
                     &mut completed,
                 )?;
@@ -858,30 +1363,37 @@ fn push_pattern_view(
     snapshot: &WorkspaceSnapshot,
     pattern: &crate::hir::MatchPattern,
     kind: MatchPatternKindView,
+    context: EntityId,
     output: &mut Vec<MatchPatternNodeView>,
-    completed: &mut Vec<u64>,
+    completed: &mut Vec<MatchPatternLabel>,
 ) -> Result<(), WorkspaceError> {
-    let id = u64::try_from(output.len())
+    let ordinal = u64::try_from(output.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("match pattern label exceeds u64")))?;
     output
         .try_reserve(1)
         .map_err(|_| WorkspaceError::Host(Arc::from("match pattern view allocation failed")))?;
+    let label = MatchPatternLabel::new(ordinal);
     output.push(MatchPatternNodeView {
-        id,
-        ty: super::types::view(&snapshot.program, &snapshot.indexes, &pattern.ty())?,
+        label,
+        ty: super::types::view(
+            &snapshot.program,
+            &snapshot.indexes,
+            &pattern.ty(),
+            Some(context),
+        )?,
         kind,
     });
     completed
         .try_reserve(1)
         .map_err(|_| WorkspaceError::Host(Arc::from("match pattern result allocation failed")))?;
-    completed.push(id);
+    completed.push(label);
     Ok(())
 }
 
 fn take_pattern_results(
-    completed: &mut Vec<u64>,
+    completed: &mut Vec<MatchPatternLabel>,
     count: usize,
-) -> Result<Vec<u64>, WorkspaceError> {
+) -> Result<Vec<MatchPatternLabel>, WorkspaceError> {
     let start = completed.len().checked_sub(count).ok_or_else(|| {
         WorkspaceError::Validation(Arc::from("match pattern child results are missing"))
     })?;
@@ -952,6 +1464,15 @@ fn enum_pattern_entities(
             .copied()
     }));
     Ok((enumeration_entity, variant_entity, field_entities))
+}
+
+fn generic_query_error(error: crate::generic_call::GenericCallError) -> WorkspaceError {
+    match error {
+        crate::generic_call::GenericCallError::Host(message) => {
+            WorkspaceError::Host(Arc::from(message))
+        }
+        other => WorkspaceError::Validation(Arc::from(other.to_string())),
+    }
 }
 
 fn host_index(raw: u64, subject: &str) -> Result<usize, WorkspaceError> {

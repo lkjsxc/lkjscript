@@ -132,9 +132,13 @@ Arc<WorkspaceSnapshot> plus base revision
 nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
 and publish the complete declaration atomically. `CreateFunction` creates a non-generic signature,
 stable parameter entities, and a real missing-body hole. `CreateMain` creates parameterless `main`
-with a real missing-body hole. Public `SemanticTypeRef` nominal inputs name product/enum entities;
-compiler-local nominal and layout IDs never cross this edit boundary. Creation ordering is
-independent: tagged addresses preserve a function when main is added later, and hole scope refreshes
+with a real missing-body hole. Imported generic function binders are reconciled as stable
+`TypeParameter` entities owned by the function. One public `SemanticType` represents exact scalar,
+capability/resource, nominal, builtin-enum, binder, list, function, and universal types; product,
+user-enum, and binder cases use stable entities, and compiler-local names, dense nominal/trait/layout
+IDs, and binder strings never cross this boundary. Public recursive type operations and conversion
+are iterative. Creation ordering is independent: tagged addresses preserve a function when main is
+added later, and hole scope refreshes
 when a declaration is added after main. Created declaration, member, parameter, local, and hole IDs
 are returned through the diff.
 
@@ -142,15 +146,20 @@ are returned through the diff.
 node order irrelevant while validation requires one connected tree with each child used exactly
 once. Draft-local immutable and pattern-binding handles have a separate transaction-scoped identity
 domain. Implemented expression constructors are scalar and byte literals, selected canonical
-built-in operations, non-generic calls, `if`, immutable `let`, copy-safe loads, byte-vector
-move/shared borrow, product construction/projection, enum construction/variant testing, and ordered
-exhaustive enum matches. Implemented patterns are wildcard, non-generic enum variant/field, and
+built-in operations, exact generic and non-generic calls, `if`, immutable `let`, copy-safe loads,
+byte-vector move/shared borrow, product construction/projection, enum construction/variant testing,
+and ordered exhaustive enum matches. Generic drafts key exact type arguments by stable binder
+entity; importer inference and semantic edits converge at one exact substitution, assignability, and
+bound resolver, which derives auto or explicit implementation witnesses.
+Implemented patterns are wildcard, non-generic enum variant/field, and
 stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
-Mutable-local construction, generic calls, and non-enum source-free pattern spaces remain explicit
-unsupported edits; no executable fallback exists. After all disjoint structural edits and final-state
-dependency validation, one fallible iterative compaction pass performs callable and nominal removals
+Mutable-local construction, source-free generic declaration authoring, generic patterns, unresolved
+binder forwarding, ownership/reference generic instantiation, and non-enum source-free pattern spaces
+remain explicit unsupported edits; no executable fallback exists. After all disjoint structural
+edits and final-state dependency validation, one fallible iterative compaction pass performs callable
+and nominal removals
 and removes unreachable bindings and match plans. It assigns retained `BindingId` and `MatchPlanId`
 values densely once,
 rewrites function/main headers, global layout, expression references and definitions, recursive
@@ -167,9 +176,10 @@ witnesses, and callable references. Removing a body dependency or deleting every
 in the same batch is therefore order-independent; a surviving dependent rejects with stable public
 identity and kind/name context.
 
-Callable containment owns parameters, locals, payloads, nodes, holes, hidden match storage, plans,
-and layout participation. Product containment owns fields and the narrow target-implementation
-lifecycle; enum containment owns variants and fields. Other dependents never cascade. One concrete
+Callable containment owns type parameters, value parameters, locals, payloads, nodes, holes, hidden
+match storage, plans, and layout participation. Product containment owns fields and the narrow target-
+implementation lifecycle; enum containment owns type parameters, variants, and fields. Other
+dependents never cascade. One concrete
 compaction result rewrites `ProductId`, `ImplId`, `BindingId`, `MatchPlanId`, local places and slots,
 and every expression/pattern/witness occurrence. Enum vector positions relocate privately while
 stable enum, variant, field, and runtime-layout IDs remain unchanged. Reconciliation forces old
@@ -187,13 +197,15 @@ structured and projected. Incomplete snapshots retain normal indexes and determi
 but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and legal constructors. Definition, structured entity/function/node type, hole
-context with exact lexical/arm visibility, and structured match inspection are direct identity
-queries. `MatchView` reports a stable match node, scrutinee node, result type, exhaustiveness,
-ordered arm/body nodes, and deterministic typed pattern nodes/fields referring to stable
-variant/field/binding entities. Parallel per-node plan facts and direct-child indexes make match
-lookup independent of expression-root size. Known nominal type views use stable entity IDs; an unsupported generic
-view is explicit and retains its nominal identity when available. Legal-constructor results
+calls, diagnostics, and legal constructors. Definition, structured entity/function/node type, exact
+generic signature/call instantiation, hole context with exact lexical/arm visibility, and structured
+match inspection are direct identity queries. Signature views expose stable binders and structured
+bounds; call views expose canonical substitutions, instantiated parameters/results, derived
+witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
+type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring
+to stable variant/field/binding entities. Parallel per-node plan facts and direct-child indexes make match
+lookup independent of expression-root size. Nominal and generic type views use stable semantic
+identities. Legal-constructor results
 distinguish established constructors from move/borrow candidates that still require canonical
 ownership validation, and do not expose hidden match temporaries or advertise generic enum
 construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
@@ -201,10 +213,11 @@ rename, replacement, created/deleted descendants and pattern bindings, hole tran
 reference/call rewiring; invalidation currently reports coarse truthful domains rather than
 incremental cache work.
 
-Selected entity, body, type, reference, hole, and match sections have one concise deterministic
-projection. It traverses body and pattern ownership iteratively, reports allocation failure, marks
-holes as `[HOLE]`, renders ordered arms and stable enum/field/binding identities, and requires no
-source attachments. Projection labels are review/debug spellings, never identity input.
+Selected entity, body, type, reference, call, hole, and match sections have one concise
+deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
+allocation failure, marks holes as `[HOLE]`, renders ordered arms, stable enum/field/binding
+identities, exact generic facts, and named effects, and requires no source attachments. Projection
+labels are review/debug spellings, never identity input.
 The former syntax-shaped service, dense source-node IDs, stdio/session schemas, text publication and
 journal machinery, CLI routes, and protocol contracts are deleted. No wire replacement exists
 without a measured consumer.
@@ -325,18 +338,20 @@ capability checking; they are not a replacement service sandbox.
 authority. Missing entry/body and real typed-hole nodes; non-generic product, enum, function, and
 entry creation; immutable lexical locals; selected byte-vector move/borrow and canonical operations;
 aggregate construction/observation; exhaustive non-generic enum payload matches with stable
-arm-local bindings; atomic batch edits; tombstone-stable identities; structured stable nominal and
-match views; deterministic queries/projections/diffs; one canonical complete-HIR match derivation;
-and direct execution are implemented. Source-loading/parser/compiler-phase counters, imported
-scalar, nominal, local, ownership, and match convergence, malformed/atomic retry tests, exact
-per-node index work, and 20,000-level nested-expression, local, and semantic-match small-stack release
-execution protect the selected vertical. Formatting-only attachment changes preserve IDs and
-projection.
+arm-local bindings; exact calls to imported generic functions with stable binders, structured types,
+shared resolution, and derived witnesses; atomic batch edits; tombstone-stable identities; structured
+stable nominal, generic, and match views; deterministic queries/projections/diffs; one canonical
+complete-HIR match derivation; and direct execution are implemented. Source-loading/parser/compiler-
+phase counters, imported scalar, nominal, local, ownership, match, and generic-call convergence,
+malformed/atomic retry tests, exact per-node index work, and 20,000-level nested-expression, local,
+semantic-match, and type-only small-stack release execution protect the selected vertical.
+Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
 concrete public semantic movement operation only when ownership/order semantics are defined,
-mutable-local construction, generic calls and patterns, Boolean/integer/product pattern construction,
-unresolved references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
+mutable-local construction, source-free generic declaration authoring, generic patterns,
+Boolean/integer/product pattern construction, generic ownership/reference instantiation, unresolved
+references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
 scheduler, and broader platform work wait for evidence after real use of the local semantic model.

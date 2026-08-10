@@ -30,11 +30,14 @@ The active product scope is local package compile/run plus the compiler's in-pro
 workspace library. Text and paths are importer conveniences, not program authority.
 `Workspace::empty` creates a source-free incomplete program; revision-checked transactions can
 create non-generic products, enums, functions, and `main`, then fill real typed holes with flat
-non-recursive drafts. Implemented drafts include immutable lexical locals, selected canonical
-built-in operations, byte-vector move/borrow, product/enum construction and observation, and
-source-free exhaustive enum payload matches. Match arms use flat `PatternDraft` trees; named payload
-bindings receive stable workspace entities while compiler-only scrutinee/projection storage remains
-hidden. Transactions can delete callables and whole user product/enum declarations atomically;
+non-recursive drafts. Imported generic declarations expose stable type-parameter entities, and drafts
+can construct exact generic calls with structured `SemanticType` arguments and compiler-derived trait
+witnesses; source inference and semantic edits share the same exact instantiation validator.
+Implemented drafts also include immutable lexical locals, selected canonical built-in operations,
+byte-vector move/borrow, product/enum construction and observation, and source-free exhaustive enum
+payload matches. Match arms use flat `PatternDraft` trees; named payload bindings receive stable
+workspace entities while compiler-only scrutinee/projection storage remains hidden. Transactions can
+delete callables and whole user product/enum declarations atomically;
 owned members and target implementations cascade, independent surviving dependents block, private
 dense identities compact, and public survivor identities remain stable. The complete immutable
 `WorkspaceSnapshot` derives compiler HIR directly, without rendering or parsing source. Imported and
@@ -49,7 +52,7 @@ from it.
 A minimal source-free authorship sequence is:
 
 ```rust
-use lkjscript_compiler::{Edit, ParameterDraft, SemanticTypeRef, Transaction, Workspace};
+use lkjscript_compiler::{Edit, ParameterDraft, SemanticType, Transaction, Workspace};
 
 let mut workspace = Workspace::empty().expect("empty semantic workspace");
 let revision = workspace.current().revision();
@@ -60,12 +63,12 @@ let created = workspace.apply(Transaction {
             name: "identity".into(),
             parameters: vec![ParameterDraft {
                 name: "value".into(),
-                ty: SemanticTypeRef::I64,
+                ty: SemanticType::I64,
             }],
-            return_type: SemanticTypeRef::I64,
+            return_type: SemanticType::I64,
         },
         Edit::CreateMain {
-            return_type: SemanticTypeRef::I64,
+            return_type: SemanticType::I64,
         },
     ],
 }).expect("atomic declaration creation");

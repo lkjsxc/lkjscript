@@ -36,8 +36,10 @@ type EnumEntityMap = Option<(EntityId, Vec<(EntityId, Vec<EntityId>)>)>;
 struct EntityMaps {
     main: Option<EntityId>,
     bindings: Vec<Option<EntityId>>,
+    function_type_parameters: Vec<Vec<EntityId>>,
     products: Vec<(EntityId, Vec<EntityId>)>,
     enums: Vec<EnumEntityMap>,
+    enum_type_parameters: Vec<Vec<EntityId>>,
     enum_indices: HashMap<crate::hir::EnumId, usize>,
     variant_indices: HashMap<(crate::hir::EnumId, crate::hir::VariantId), usize>,
     enum_field_indices: HashMap<
@@ -142,6 +144,7 @@ fn build_entities(
         node_addresses: Vec::new(),
         node_keys: Vec::new(),
         node_match_plans: Vec::new(),
+        node_enclosing_entities: Vec::new(),
         node_actual_types: Vec::new(),
         node_expected_types: Vec::new(),
         entity_types: Vec::new(),
@@ -153,6 +156,7 @@ fn build_entities(
         variant_identity_indices: HashMap::new(),
         address_entities: HashMap::new(),
         address_nodes: HashMap::new(),
+        type_parameter_entities: HashMap::new(),
     };
     let main = program
         .main
@@ -171,6 +175,12 @@ fn build_entities(
 
     let mut bindings = Vec::new();
     reserve(&mut bindings, program.bindings.len(), "binding entity map")?;
+    let mut function_type_parameters = Vec::new();
+    reserve(
+        &mut function_type_parameters,
+        program.bindings.len(),
+        "function type-parameter entity map",
+    )?;
     for binding in &program.bindings {
         let entity = if matches!(
             binding.kind,
@@ -187,7 +197,39 @@ fn build_entities(
                 None,
             )?)
         };
+        let mut type_parameters = Vec::new();
+        if let (Some(owner), BindingKind::Function, Type::Forall { vars, .. }) =
+            (entity, &binding.kind, &binding.ty)
+        {
+            reserve(
+                &mut type_parameters,
+                vars.len(),
+                "function type-parameter entity map",
+            )?;
+            for (ordinal, name) in vars.iter().enumerate() {
+                let ordinal = u64::try_from(ordinal)
+                    .map_err(|_| Error::host("function type-parameter ordinal exceeds u64"))?;
+                let parameter = push_entity(
+                    &mut indexes,
+                    namespace,
+                    EntityAddress::FunctionTypeParameter {
+                        function: binding.id.raw(),
+                        ordinal,
+                    },
+                    EntityKind::TypeParameter,
+                    name,
+                    Some(owner),
+                )?;
+                push_containment(
+                    &mut indexes,
+                    SemanticOwner::Entity(owner),
+                    SemanticChild::Entity(parameter),
+                )?;
+                type_parameters.push(parameter);
+            }
+        }
         bindings.push(entity);
+        function_type_parameters.push(type_parameters);
     }
 
     let mut products = Vec::new();
@@ -251,6 +293,12 @@ fn build_entities(
 
     let mut enums = Vec::new();
     reserve(&mut enums, program.enums.len(), "enum entity map")?;
+    let mut enum_type_parameters = Vec::new();
+    reserve(
+        &mut enum_type_parameters,
+        program.enums.len(),
+        "enum type-parameter entity map",
+    )?;
     let mut enum_indices = HashMap::new();
     enum_indices
         .try_reserve(program.enums.len())
@@ -302,6 +350,7 @@ fn build_entities(
         }
         if definition.origin == crate::hir::Origin::Builtin {
             enums.push(None);
+            enum_type_parameters.push(Vec::new());
             continue;
         }
         let enum_index = u64::try_from(enum_index)
@@ -314,6 +363,33 @@ fn build_entities(
             &definition.name,
             None,
         )?;
+        let mut type_parameters = Vec::new();
+        reserve(
+            &mut type_parameters,
+            definition.type_parameters.len(),
+            "enum type-parameter entity map",
+        )?;
+        for (ordinal, name) in definition.type_parameters.iter().enumerate() {
+            let ordinal = u64::try_from(ordinal)
+                .map_err(|_| Error::host("enum type-parameter ordinal exceeds u64"))?;
+            let parameter = push_entity(
+                &mut indexes,
+                namespace,
+                EntityAddress::EnumTypeParameter {
+                    enumeration: enum_index,
+                    ordinal,
+                },
+                EntityKind::TypeParameter,
+                name,
+                Some(entity),
+            )?;
+            push_containment(
+                &mut indexes,
+                SemanticOwner::Entity(entity),
+                SemanticChild::Entity(parameter),
+            )?;
+            type_parameters.push(parameter);
+        }
         let mut variants = Vec::new();
         reserve(
             &mut variants,
@@ -366,6 +442,7 @@ fn build_entities(
             variants.push((variant_entity, fields));
         }
         enums.push(Some((entity, variants)));
+        enum_type_parameters.push(type_parameters);
     }
 
     let mut traits = Vec::new();
@@ -423,8 +500,10 @@ fn build_entities(
         EntityMaps {
             main,
             bindings,
+            function_type_parameters,
             products,
             enums,
+            enum_type_parameters,
             enum_indices,
             variant_indices,
             enum_field_indices,
@@ -459,6 +538,11 @@ fn install_entity_types(
     for (index, binding) in program.bindings.iter().enumerate() {
         if let Some(entity) = maps.bindings[index] {
             set(entity, binding.ty.clone())?;
+            if let Type::Forall { vars, .. } = &binding.ty {
+                for (parameter, name) in maps.function_type_parameters[index].iter().zip(vars) {
+                    set(*parameter, Type::Param(name.clone()))?;
+                }
+            }
         }
     }
     for (index, product) in program.products.iter().enumerate() {
@@ -484,6 +568,12 @@ fn install_entity_types(
                 .collect(),
         };
         set(*entity, ty.clone())?;
+        for (parameter, name) in maps.enum_type_parameters[index]
+            .iter()
+            .zip(&definition.type_parameters)
+        {
+            set(*parameter, Type::Param(name.clone()))?;
+        }
         for (variant, (variant_entity, fields)) in definition.variants.iter().zip(variants) {
             set(*variant_entity, ty.clone())?;
             for (field, entity) in variant.fields.iter().zip(fields) {
@@ -513,6 +603,19 @@ fn add_entity_dependencies(
     for binding in &program.bindings {
         if let Some(owner) = binding_entity(maps, binding.id)? {
             add_types_dependencies(program, maps, indexes, owner, std::iter::once(&binding.ty))?;
+        }
+    }
+    for function in &program.functions {
+        let owner = require_binding_entity(maps, function.binding)?;
+        for bound in &function.bounds {
+            if let Some(trait_entity) = maps
+                .traits
+                .get(index_of(bound.trait_id.raw(), "function bound trait")?)
+                .copied()
+                .flatten()
+            {
+                push_dependency(indexes, owner, trait_entity)?;
+            }
         }
     }
     for (product_index, product) in program.products.iter().enumerate() {
@@ -625,7 +728,13 @@ fn walk_root(
     });
     while let Some(item) = pending.pop() {
         let expression = item.expression;
-        let node = push_node(indexes, item.owner, expression, item.expected.as_ref())?;
+        let node = push_node(
+            indexes,
+            item.owner,
+            item.enclosing,
+            expression,
+            item.expected.as_ref(),
+        )?;
         push_containment(indexes, item.owner, SemanticChild::Node(node))?;
         add_expression_relations(
             program,
@@ -717,6 +826,15 @@ fn add_expression_relations(
                         .chain(instantiation.witnesses.iter().map(|item| &item.ty)),
                 )?;
                 for witness in &instantiation.witnesses {
+                    if let Some(trait_entity) = maps
+                        .traits
+                        .get(index_of(witness.trait_id.raw(), "trait witness")?)
+                        .copied()
+                        .flatten()
+                    {
+                        push_reference(indexes, node, trait_entity)?;
+                        push_dependency(indexes, enclosing, trait_entity)?;
+                    }
                     if let crate::hir::TraitWitnessKind::Explicit(implementation) = witness.kind {
                         let target = maps
                             .implementations
@@ -1183,15 +1301,14 @@ fn signature_parameters(
     let Type::Fn { params, .. } = ty else {
         return Ok(None);
     };
-    let Some(instantiation) = instantiation else {
-        return Ok(Some(params.clone()));
-    };
     let mut substitutions = HashMap::new();
-    substitutions
-        .try_reserve(instantiation.substitutions.len())
-        .map_err(|_| Error::host("workspace type substitution allocation failed"))?;
-    for item in &instantiation.substitutions {
-        substitutions.insert(item.parameter.clone(), item.ty.clone());
+    if let Some(instantiation) = instantiation {
+        substitutions
+            .try_reserve(instantiation.substitutions.len())
+            .map_err(|_| Error::host("workspace type substitution allocation failed"))?;
+        for item in &instantiation.substitutions {
+            substitutions.insert(item.parameter.as_str(), &item.ty);
+        }
     }
     let mut resolved = Vec::new();
     reserve(
@@ -1200,7 +1317,14 @@ fn signature_parameters(
         "workspace resolved signature parameters",
     )?;
     for parameter in params {
-        resolved.push(parameter.subst(&substitutions));
+        resolved.push(
+            crate::generic_call::substitute_type(parameter, &substitutions).map_err(|error| {
+                match error {
+                    crate::generic_call::GenericCallError::Host(message) => Error::host(message),
+                    other => Error::msg(format!("workspace call substitution failed: {other}")),
+                }
+            })?,
+        );
     }
     Ok(Some(resolved))
 }
@@ -1249,6 +1373,7 @@ fn push_entity(
 fn push_node(
     indexes: &mut SnapshotIndexes,
     owner: SemanticOwner,
+    enclosing: EntityId,
     expression: &Expr,
     expected: Option<&Type>,
 ) -> Result<NodeId> {
@@ -1264,8 +1389,6 @@ fn push_node(
         id,
         kind: node_kind(&expression.kind),
         owner,
-        actual_type: Arc::from(expression.ty.to_string()),
-        expected_type: expected.map(|ty| Arc::from(ty.to_string())),
     });
     reserve(
         &mut indexes.node_match_plans,
@@ -1276,6 +1399,12 @@ fn push_node(
         ExprKind::Match { plan, .. } => Some(*plan),
         _ => None,
     });
+    reserve(
+        &mut indexes.node_enclosing_entities,
+        1,
+        "workspace node enclosing-entity index",
+    )?;
+    indexes.node_enclosing_entities.push(enclosing);
     reserve(
         &mut indexes.node_actual_types,
         1,

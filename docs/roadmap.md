@@ -6,9 +6,9 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Add generic semantic calls and type arguments.** Preserve structured nominal/type-parameter
-   identity, exact instantiation, effects, ownership, diagnostics, and imported convergence without
-   exposing compiler-dense IDs or rendering source.
+1. **Add source-free generic function declaration authoring.** Reuse the implemented stable binder
+   identities, exact bounds, structured types, and shared call resolver. Keep inference importer-only,
+   reject incomplete bounds honestly, and do not add a second trait solver or generic framework.
 
 ## Next
 

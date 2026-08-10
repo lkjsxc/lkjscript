@@ -95,17 +95,19 @@ this Phase 2 measurement. Existing runtime-selection evidence below is unchanged
 ## Source-free semantic-workspace vertical
 
 **Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
-source-free nominal declarations, lexical immutable locals, byte-vector ownership, and exhaustive
-enum payload matches could converge with imported semantics and compile directly without hidden
-source/HIR authority, source loading, parsing, repeated enum-declaration/CFG scans, or recursion on
-expression, pattern, local, or match depth. The equivalent workloads were the imported and
-transaction-created forms of:
+source-free nominal declarations, lexical immutable locals, byte-vector ownership, exhaustive enum
+payload matches, and explicit calls to imported generic functions could converge with imported
+semantics and compile directly without hidden source/HIR authority, source loading, parsing,
+repeated enum-declaration/CFG scans, or recursion on expression, pattern, local, match, or public type
+depth. The equivalent workloads were the imported and transaction-created forms of:
 
 - `identity(value: i64) -> i64` plus `main() -> identity(42)`;
 - a two-field product constructed, bound, and projected;
 - a two-variant enum constructed, bound, and tested;
 - a two-variant enum constructed and exhaustively matched, with one stable payload binding; and
-- a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed.
+- a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed; and
+- imported generic identity, repeated-bound, auto-witness, and explicit-implementation calls whose
+  semantic edits provide exact structured type arguments.
 
 Selection required equal normalized stable entity kinds/types, containment, references,
 dependencies, node kinds/types/effects, canonical match-plan shape, compiler outcomes, selected
@@ -119,8 +121,12 @@ Retained deterministic counters, indexes, and assertions show:
 
 - selected source-free create/fill/compile paths invoke source loading and the parser zero times;
 - incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
-- scalar, product, enum, local, ownership, and exhaustive enum-payload-match source-free/imported
-  snapshots have equal selected semantic observations and production outcomes;
+- scalar, product, enum, local, ownership, exhaustive enum-payload-match, and equivalent generic-call
+  source-free/imported paths have equal selected semantic observations and production outcomes;
+- explicit generic-call edits invoke source loading and parsing zero times, publish declaration-
+  ordered stable substitutions, derive the same auto or explicit witnesses as source import, expose
+  exact instantiated parameters/results/effects, and survive unrelated function/product/implementation
+  compaction without changing public binder or witness identity;
 - index construction performs exactly one root-address lookup per semantic node for retained nested
   `if` geometries at depths 32, 64, and 128 and for the nested-match fixture; enum, variant,
   enum-field, and match relation lookup uses prebuilt identity maps rather than scanning declarations
@@ -148,7 +154,10 @@ Retained deterministic counters, indexes, and assertions show:
   20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
   includes staged lowering, semantic clone, dense lifecycle compaction, identity reconciliation,
   complete-HIR/ownership/match derivation, memory planning, SSA, bytecode, VM execution, projection
-  where selected, and destruction on a 128 KiB worker stack;
+  where selected, and destruction on a 128 KiB worker stack; a separate type-only fixture exercises
+  public `SemanticType` construction, clone, equality, hashing, display, transaction validation and
+  conversion, query, projection, and destruction at 20,000 levels on that stack without duplicating
+  the full pipeline geometry;
 - bytecode emission derives nonowned structural values once per function by propagating predecessor
   edges, replacing a whole-CFG scan for every emitted structural load/store; the generated match
   fixture asserts exactly one collection per SSA function and one deterministic visit per CFG edge;
@@ -173,6 +182,15 @@ cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_product_deletion_cascades_implementation_and_remaps_surviving_witness -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_product_pattern_and_value_survive_earlier_product_compaction -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_generic_signature_and_explicit_workspace_call_are_exact_and_execute -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::generic_binder_identities_survive_compaction_and_follow_function_lifecycle -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::unsatisfied_bound_reports_the_exact_binder_when_traits_repeat -- --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_level_semantic_type_operations_are_stack_safe \
+  -- --ignored --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_source_free_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact

@@ -18,9 +18,18 @@ Imports identify modules and declarations exactly. Resolution is static and dete
 complete executable program must reject duplicate declarations, unresolved or ambiguous names,
 invalid imports, and dependency cycles that cannot be assigned the required static meaning.
 
-Functions have typed parameters and one result type. Calls are resolved before execution, including
-any generic or trait obligations. An implementation may specialize a call, but failure to specialize
-must use a generic correct path rather than make an otherwise valid program invalid.
+Functions have typed parameters and one result type. A generic function owns ordered semantic type
+parameters; every bound names one of those parameters and one exact trait. A resolved generic call
+contains exactly one type substitution for every parameter and a compiler-derived witness for every
+bound. Substitution is structural through parameter, result, enum, list, and function types; value
+arguments are checked against the instantiated parameters. Source inference may propose the exact
+substitutions, but binder names, inference variables, display strings, and caller-supplied witnesses
+are not call semantics. An unresolved type parameter cannot remain in an executable substitution.
+
+Calls are resolved before execution, including all generic and trait obligations. Source-imported
+and syntax-independent calls with equivalent exact substitutions use the same validation and have
+the same meaning. An implementation may specialize a call, but failure to specialize must use a
+complete generic correct path rather than make an otherwise valid program invalid.
 
 ## 2. Types and values
 

@@ -47,12 +47,12 @@ fn create_source_free_declarations(
                     name: "identity".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -129,6 +129,7 @@ fn fill_source_free_identity(
                         DraftNode::I64(42),
                         DraftNode::Call {
                             callee: function,
+                            type_arguments: Vec::new(),
                             arguments: vec![DraftNodeId::new(0)],
                         },
                     ],
@@ -228,12 +229,12 @@ fn source_free_construction_never_invokes_parser_and_executes() {
                     name: "identity".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -306,7 +307,7 @@ fn source_free_construction_never_invokes_parser_and_executes() {
         .snapshot
         .hole_context(created.snapshot.revision(), identity_hole)
         .expect("identity context");
-    assert_eq!(identity_context.expected_type, crate::Type::I64);
+    assert_eq!(identity_context.expected_type, SemanticType::I64);
     assert!(identity_context.visible_entities.contains(&parameter));
     assert!(identity_context.visible_entities.contains(&function));
     assert!(matches!(
@@ -352,6 +353,7 @@ fn source_free_construction_never_invokes_parser_and_executes() {
                         DraftNode::I64(42),
                         DraftNode::Call {
                             callee: function,
+                            type_arguments: Vec::new(),
                             arguments: vec![DraftNodeId::new(0)],
                         },
                     ],
@@ -405,6 +407,1066 @@ fn source_free_construction_never_invokes_parser_and_executes() {
 }
 
 #[test]
+fn imported_generic_signature_and_explicit_workspace_call_are_exact_and_execute() {
+    let source = concat!(
+        "def/\nname/\nidentity\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "identity/\n41\n/identity\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-explicit-call.lkjscript",
+        WorkspaceNamespace::deterministic(201),
+    )
+    .expect("import generic identity");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":identity"))
+        .expect("identity function")
+        .id;
+    let signature = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("generic signature");
+    assert_eq!(signature.type_parameters.len(), 1);
+    let parameter = signature.type_parameters[0].id;
+    assert_eq!(signature.type_parameters[0].owner, function);
+    assert_eq!(
+        signature.parameters[0].ty,
+        SemanticType::TypeParameter(parameter)
+    );
+    assert_eq!(signature.result, SemanticType::TypeParameter(parameter));
+    assert_eq!(
+        snapshot.entity(parameter).expect("type parameter").kind,
+        EntityKind::TypeParameter
+    );
+
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("imported call")
+        .id;
+    let imported_call = snapshot
+        .call_instantiation(snapshot.revision(), call)
+        .expect("imported instantiation");
+    assert_eq!(
+        imported_call.type_arguments,
+        vec![TypeArgumentView {
+            parameter,
+            argument: SemanticType::I64,
+        }]
+    );
+    assert_eq!(imported_call.result, SemanticType::I64);
+
+    let mut workspace = Workspace::new(snapshot).expect("generic workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(41),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::I64,
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("replace with explicit generic call");
+    assert_eq!(run_i64(&edited.snapshot), 41);
+    let exact = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call)
+        .expect("explicit instantiation");
+    assert_eq!(exact.revision, edited.snapshot.revision());
+    assert_ne!(exact.revision, imported_call.revision);
+    assert_eq!(exact.site, imported_call.site);
+    assert_eq!(exact.callee, imported_call.callee);
+    assert_eq!(exact.type_arguments, imported_call.type_arguments);
+    assert_eq!(exact.parameters, imported_call.parameters);
+    assert_eq!(exact.result, imported_call.result);
+    assert_eq!(exact.witnesses, imported_call.witnesses);
+    assert_eq!(exact.effects, imported_call.effects);
+    let projection = edited
+        .snapshot
+        .project(&[ProjectionSlice::Call(call)])
+        .expect("call projection");
+    assert_eq!(
+        projection,
+        edited
+            .snapshot
+            .project(&[ProjectionSlice::Call(call)])
+            .expect("deterministic call projection")
+    );
+    assert!(projection.contains("generic=true"), "{projection}");
+    assert!(projection.contains("type-argument"), "{projection}");
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn generic_calls_accept_nested_builtin_enum_types_without_source_round_trips() {
+    let source = concat!(
+        "def/\nname/\nidentity\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "def/\nname/\nwrapper\n/name\nfn/\nsig/\ninputs/\noption/\ni64\n/option\n/inputs\n",
+        "output/\noption/\ni64\n/option\n/output\n/sig\nparams/\nvalue\noption/\ni64\n/option\n/params\n",
+        "identity/\nvalue\n/identity\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\noption/\ni64\n/option\n/output\n/sig\n",
+        "wrapper/\nsome/\n1\n/some\n/wrapper\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-builtin-enum.lkjscript",
+        WorkspaceNamespace::deterministic(209),
+    )
+    .expect("import builtin generic call");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("identity function")
+        .id;
+    let parameter = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("identity signature")
+        .type_parameters[0]
+        .id;
+    let wrapper = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":wrapper"))
+        .expect("wrapper function")
+        .id;
+    let wrapper_parameter = snapshot
+        .function_signature(snapshot.revision(), wrapper)
+        .expect("wrapper signature")
+        .parameters[0]
+        .entity;
+    let call = snapshot
+        .calls()
+        .iter()
+        .find(|call| call.callee == function)
+        .expect("generic call")
+        .site;
+    let option_i64 = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+        arguments: vec![SemanticType::I64],
+    };
+    assert_eq!(
+        snapshot
+            .call_instantiation(snapshot.revision(), call)
+            .expect("imported option instantiation")
+            .type_arguments,
+        vec![TypeArgumentView {
+            parameter,
+            argument: option_i64.clone(),
+        }]
+    );
+
+    let mut workspace = Workspace::new(snapshot).expect("builtin generic workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let replaced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Load(DraftBindingRef::Entity(wrapper_parameter)),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: option_i64.clone(),
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("replace builtin generic call");
+    let exact = replaced
+        .snapshot
+        .call_instantiation(replaced.snapshot.revision(), call)
+        .expect("source-free option instantiation");
+    assert_eq!(exact.parameters, vec![option_i64.clone()]);
+    assert_eq!(exact.result, option_i64);
+    assert!(exact.effects.is_known());
+    assert!(exact.effects.is_pure());
+    let projection = replaced
+        .snapshot
+        .project(&[ProjectionSlice::Call(call)])
+        .expect("builtin call projection");
+    assert!(projection.contains("effects=[pure]"), "{projection}");
+    crate::compile_snapshot(&replaced.snapshot).expect("compile builtin generic call");
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn every_builtin_enum_identity_round_trips_in_nested_semantic_types() {
+    let option = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+        arguments: vec![SemanticType::List(Box::new(SemanticType::I64))],
+    };
+    let system_error = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::SystemError),
+        arguments: Vec::new(),
+    };
+    let result = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::Result),
+        arguments: vec![option, system_error.clone()],
+    };
+    let numeric_error = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::NumericError),
+        arguments: Vec::new(),
+    };
+    let utf8_error = SemanticType::Enum {
+        constructor: SemanticEnum::Builtin(BuiltinEnum::Utf8Error),
+        arguments: Vec::new(),
+    };
+    let expected = vec![result, numeric_error, utf8_error, system_error];
+    let mut workspace = Workspace::empty_deterministic(210).expect("builtin type workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "builtins".to_owned(),
+                parameters: expected
+                    .iter()
+                    .enumerate()
+                    .map(|(index, ty)| ParameterDraft {
+                        name: format!("value-{index}"),
+                        ty: ty.clone(),
+                    })
+                    .collect(),
+                return_type: SemanticType::Unit,
+            }],
+        })
+        .expect("create builtin signature");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "builtins");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("query builtin signature");
+    assert_eq!(
+        signature
+            .parameters
+            .iter()
+            .map(|parameter| parameter.ty.clone())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    created
+        .snapshot
+        .check_consistency()
+        .expect("validate builtin signature");
+}
+
+#[test]
+fn generic_call_effects_are_exact_machine_readable_and_projected_by_name() {
+    let source = concat!(
+        "def/\nname/\nchecked\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\ndivide/\n8\n2\n/divide\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "checked/\n1\n/checked\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-call-effects.lkjscript",
+        WorkspaceNamespace::deterministic(211),
+    )
+    .expect("import effectful generic call");
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call")
+        .id;
+    let exact = snapshot
+        .call_instantiation(snapshot.revision(), call)
+        .expect("effectful instantiation");
+    assert!(exact.effects.is_known());
+    assert!(!exact.effects.is_pure());
+    assert!(exact.effects.contains(EffectSummary::MAY_TRAP));
+    assert!(!exact.effects.contains(EffectSummary::HOST_IO));
+    let projection = snapshot
+        .project(&[ProjectionSlice::Call(call)])
+        .expect("effectful call projection");
+    assert!(projection.contains("effects=[may-trap]"), "{projection}");
+    assert_eq!(run_i64(&snapshot), 4);
+}
+
+#[test]
+fn explicit_generic_calls_derive_auto_witnesses_and_fail_atomically_when_unsatisfied() {
+    let source = concat!(
+        "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\none\n/name\n",
+        "fields/\n/fields\n/variant\n/variants\n/enum\n",
+        "def/\nname/\ncopy-value\n/name\nfn/\nforall/\nt\n/forall\n",
+        "bounds/\nbound/\nt\ncopy\n/bound\n/bounds\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "copy-value/\n1\n/copy-value\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-auto-witness.lkjscript",
+        WorkspaceNamespace::deterministic(203),
+    )
+    .expect("import Copy-bound call");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":copy-value"))
+        .expect("copy function")
+        .id;
+    let signature = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("copy signature");
+    let parameter = signature.type_parameters[0].id;
+    assert_eq!(
+        signature.type_parameters[0].bounds[0].trait_identity,
+        SemanticTrait::Builtin(BuiltinTrait::Copy)
+    );
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("copy call")
+        .id;
+    let queried = snapshot
+        .call_instantiation(snapshot.revision(), call)
+        .expect("copy instantiation");
+    assert_eq!(queried.witnesses.len(), 1);
+    assert_eq!(queried.witnesses[0].parameter, parameter);
+    assert_eq!(queried.witnesses[0].kind, TraitWitnessKindView::AutoTrait);
+
+    let enumeration = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":choice"))
+        .expect("choice enum")
+        .id;
+    let variant = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant && entity.owner == Some(enumeration))
+        .expect("choice variant")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("copy workspace");
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(2),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::I64,
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("publish explicit auto-witness call");
+    let edited_call = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call)
+        .expect("query edited auto witness");
+    assert_eq!(edited_call.witnesses, queried.witnesses);
+    assert_eq!(run_i64(&edited.snapshot), 2);
+    let before = workspace.current();
+    let error = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::EnumValue {
+                            variant,
+                            fields: Vec::new(),
+                        },
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::Enum {
+                                    constructor: SemanticEnum::Entity(enumeration),
+                                    arguments: Vec::new(),
+                                },
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect_err("user enum does not satisfy Copy");
+    assert!(matches!(
+        error,
+        WorkspaceError::UnsatisfiedTraitBound {
+            parameter: failed,
+            argument,
+            ..
+        } if failed.as_ref() == &parameter && matches!(argument.as_ref(), SemanticType::Enum { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(run_i64(&before), 2);
+}
+
+#[test]
+fn unsatisfied_bound_reports_the_exact_binder_when_traits_repeat() {
+    let source = concat!(
+        "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\none\n/name\n",
+        "fields/\n/fields\n/variant\n/variants\n/enum\n",
+        "def/\nname/\nfirst\n/name\nfn/\nforall/\nt\nu\n/forall\n",
+        "bounds/\nbound/\nt\ncopy\n/bound\nbound/\nu\ncopy\n/bound\n/bounds\n",
+        "sig/\ninputs/\nt\nu\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nleft\nt\nright\nu\n/params\nleft\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "first/\n1\n2\n/first\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-repeated-bound.lkjscript",
+        WorkspaceNamespace::deterministic(212),
+    )
+    .expect("import repeated-bound call");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("generic function")
+        .id;
+    let parameters = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("generic signature")
+        .type_parameters;
+    assert_eq!(parameters.len(), 2);
+    let enumeration = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum)
+        .expect("choice enum")
+        .id;
+    let variant = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant)
+        .expect("choice variant")
+        .id;
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("repeated-bound workspace");
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(3),
+                        DraftNode::I64(4),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![
+                                TypeArgumentDraft {
+                                    parameter: parameters[1].id,
+                                    argument: SemanticType::I64,
+                                },
+                                TypeArgumentDraft {
+                                    parameter: parameters[0].id,
+                                    argument: SemanticType::I64,
+                                },
+                            ],
+                            arguments: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("publish repeated auto-trait witnesses");
+    let exact = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call)
+        .expect("repeated witness call");
+    assert_eq!(
+        exact
+            .type_arguments
+            .iter()
+            .map(|argument| argument.parameter)
+            .collect::<Vec<_>>(),
+        vec![parameters[0].id, parameters[1].id]
+    );
+    assert_eq!(exact.witnesses.len(), 2);
+    assert!(exact
+        .witnesses
+        .iter()
+        .all(|witness| witness.kind == TraitWitnessKindView::AutoTrait));
+    assert_eq!(run_i64(&edited.snapshot), 3);
+    let before = workspace.current();
+    let error = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(1),
+                        DraftNode::EnumValue {
+                            variant,
+                            fields: Vec::new(),
+                        },
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![
+                                TypeArgumentDraft {
+                                    parameter: parameters[0].id,
+                                    argument: SemanticType::I64,
+                                },
+                                TypeArgumentDraft {
+                                    parameter: parameters[1].id,
+                                    argument: SemanticType::Enum {
+                                        constructor: SemanticEnum::Entity(enumeration),
+                                        arguments: Vec::new(),
+                                    },
+                                },
+                            ],
+                            arguments: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect_err("second Copy bound must fail");
+    assert!(matches!(
+        error,
+        WorkspaceError::UnsatisfiedTraitBound { parameter, .. }
+            if parameter.as_ref() == &parameters[1].id
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(run_i64(&before), 3);
+}
+
+#[test]
+fn hir_consistency_rejects_malformed_generic_binders_bounds_and_substitutions() {
+    let source = concat!(
+        "def/\nname/\ncopy-value\n/name\nfn/\nforall/\nt\n/forall\n",
+        "bounds/\nbound/\nt\ncopy\n/bound\n/bounds\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "copy-value/\n1\n/copy-value\n/main\n",
+    );
+    let snapshot =
+        import_source(source, "malformed-generic-hir.lkjscript").expect("import valid generic HIR");
+    let valid = snapshot.validated_complete_hir().expect("validated HIR");
+
+    let mut unknown_parameter = valid.clone();
+    unknown_parameter.functions[0].bounds[0].parameter = "missing".to_owned();
+    assert!(super::validate::program(&unknown_parameter)
+        .expect_err("bound parameter must be declared")
+        .to_string()
+        .contains("undeclared type parameter"));
+
+    let mut duplicate_bound = valid.clone();
+    let repeated_bound = duplicate_bound.functions[0].bounds[0].clone();
+    duplicate_bound.functions[0].bounds.push(repeated_bound);
+    assert!(super::validate::program(&duplicate_bound)
+        .expect_err("duplicate bound must reject")
+        .to_string()
+        .contains("duplicated"));
+
+    let mut stale_trait = valid.clone();
+    stale_trait.functions[0].bounds[0].trait_id = crate::hir::TraitId::new(u64::MAX);
+    assert!(super::validate::program(&stale_trait)
+        .expect_err("stale trait identity must reject")
+        .to_string()
+        .contains("trait bound identity is stale"));
+
+    let mut duplicate_binder = valid.clone();
+    let binding = duplicate_binder.functions[0]
+        .binding
+        .index()
+        .expect("binding index");
+    let crate::Type::Forall { vars, .. } = &mut duplicate_binder.bindings[binding].ty else {
+        panic!("generic function binding")
+    };
+    vars.push(vars[0].clone());
+    assert!(super::validate::program(&duplicate_binder)
+        .expect_err("duplicate binder must reject")
+        .to_string()
+        .contains("type parameter is duplicated"));
+
+    let mut forwarded = valid;
+    let crate::hir::ExprKind::Call {
+        instantiation: Some(instantiation),
+        ..
+    } = &mut forwarded.main.body.kind
+    else {
+        panic!("generic main call")
+    };
+    instantiation.substitutions[0].ty = crate::Type::Param("t".to_owned());
+    assert!(super::validate::program(&forwarded)
+        .expect_err("unresolved substitution must reject")
+        .to_string()
+        .contains("current transport route"));
+}
+
+#[test]
+fn type_argument_only_replacement_has_an_exact_semantic_diff() {
+    let source = concat!(
+        "def/\nname/\ndiscard\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\n7\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "discard/\n1\n/discard\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-call-diff.lkjscript",
+        WorkspaceNamespace::deterministic(202),
+    )
+    .expect("import generic discard");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":discard"))
+        .expect("discard function")
+        .id;
+    let parameter = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("discard signature")
+        .type_parameters[0]
+        .id;
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("discard call")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("discard workspace");
+    let changed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::Bool,
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("change only generic instantiation semantics");
+    assert_eq!(run_i64(&changed.snapshot), 7);
+    let entry = changed
+        .diff
+        .entries
+        .iter()
+        .find_map(|entry| match entry {
+            SemanticDiffEntry::CallInstantiationChanged { old, new, .. } => Some((old, new)),
+            _ => None,
+        })
+        .expect("call instantiation diff");
+    assert_eq!(entry.0.type_arguments[0].argument, SemanticType::I64);
+    assert_eq!(entry.1.type_arguments[0].argument, SemanticType::Bool);
+}
+
+#[test]
+fn generic_call_identity_and_substitution_failures_are_structured_and_atomic() {
+    let source = concat!(
+        "def/\nname/\nidentity\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "def/\nname/\nother\n/name\nfn/\nforall/\nu\n/forall\n",
+        "sig/\ninputs/\nu\n/inputs\noutput/\nu\n/output\n/sig\n",
+        "params/\nvalue\nu\n/params\nvalue\n/fn\n/def\n",
+        "def/\nname/\nplain\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\n",
+        "output/\ni64\n/output\n/sig\nparams/\nvalue\ni64\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "identity/\n1\n/identity\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-call-errors.lkjscript",
+        WorkspaceNamespace::deterministic(204),
+    )
+    .expect("import generic call fixture");
+    let function = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":identity"))
+        .expect("identity function")
+        .id;
+    let other = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":other"))
+        .expect("other function")
+        .id;
+    let plain = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":plain"))
+        .expect("plain function")
+        .id;
+    let parameter = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("identity signature")
+        .type_parameters[0]
+        .id;
+    let other_parameter = snapshot
+        .function_signature(snapshot.revision(), other)
+        .expect("other signature")
+        .type_parameters[0]
+        .id;
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call")
+        .id;
+    let foreign = importer::import_source_with_namespace(
+        source,
+        "foreign-generic-call-errors.lkjscript",
+        WorkspaceNamespace::deterministic(205),
+    )
+    .expect("import foreign fixture");
+    let foreign_parameter = foreign
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::TypeParameter)
+        .expect("foreign parameter")
+        .id;
+    let stale = EntityId::new(snapshot.namespace(), u64::MAX, 1);
+    let mut workspace = Workspace::new(snapshot).expect("generic error workspace");
+    let before = workspace.current();
+    {
+        let mut replace = |type_arguments: Vec<TypeArgumentDraft>, argument: DraftNode| {
+            workspace.apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![Edit::ReplaceExpression {
+                    target: call,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            argument,
+                            DraftNode::Call {
+                                callee: function,
+                                type_arguments,
+                                arguments: vec![DraftNodeId::new(0)],
+                            },
+                        ],
+                        DraftNodeId::new(1),
+                    ),
+                }],
+            })
+        };
+
+        assert!(matches!(
+            replace(Vec::new(), DraftNode::I64(1)),
+            Err(WorkspaceError::MissingTypeArgument { parameter: missing }) if missing == parameter
+        ));
+        assert!(matches!(
+            replace(
+                vec![
+                    TypeArgumentDraft {
+                        parameter,
+                        argument: SemanticType::I64,
+                    },
+                    TypeArgumentDraft {
+                        parameter,
+                        argument: SemanticType::I64,
+                    },
+                ],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::DuplicateTypeArgument { parameter: duplicate }) if duplicate == parameter
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter: other_parameter,
+                    argument: SemanticType::I64,
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::WrongTypeParameterOwner { parameter: failed, expected, .. })
+                if failed.as_ref() == &other_parameter && expected.as_ref() == &function
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter: foreign_parameter,
+                    argument: SemanticType::I64,
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::ForeignNamespace(_))
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter: function,
+                    argument: SemanticType::I64,
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::WrongEntityKind { .. })
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter: stale,
+                    argument: SemanticType::I64,
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::StaleIdentity(_))
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter,
+                    argument: SemanticType::Bool,
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::TypeMismatch { expected, actual })
+                if expected.as_ref() == &SemanticType::Bool && actual.as_ref() == &SemanticType::I64
+        ));
+        assert!(matches!(
+            replace(
+                vec![TypeArgumentDraft {
+                    parameter,
+                    argument: SemanticType::TypeParameter(parameter),
+                }],
+                DraftNode::I64(1),
+            ),
+            Err(WorkspaceError::WrongTypeParameterOwner { .. })
+        ));
+    }
+    assert!(matches!(
+        workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Call {
+                        callee: function,
+                        type_arguments: vec![TypeArgumentDraft {
+                            parameter,
+                            argument: SemanticType::I64,
+                        }],
+                        arguments: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        }),
+        Err(WorkspaceError::CallArity {
+            expected: 1,
+            actual: 0,
+            ..
+        })
+    ));
+    assert!(matches!(
+        workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(1),
+                        DraftNode::Call {
+                            callee: plain,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::I64,
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        }),
+        Err(WorkspaceError::UnexpectedTypeArgument)
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(run_i64(&before), 1);
+}
+
+#[test]
+fn generic_binder_identities_survive_compaction_and_follow_function_lifecycle() {
+    let source = concat!(
+        "def/\nname/\nremove\n/name\nfn/\nforall/\nt\n/forall\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "def/\nname/\nkeep\n/name\nfn/\nforall/\nu\n/forall\n",
+        "sig/\ninputs/\nu\n/inputs\noutput/\nu\n/output\n/sig\n",
+        "params/\nvalue\nu\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "keep/\n8\n/keep\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "generic-binder-lifecycle.lkjscript",
+        WorkspaceNamespace::deterministic(208),
+    )
+    .expect("import generic lifecycle fixture");
+    let named_function = |name: &str| {
+        snapshot
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::Function && entity.name.ends_with(&format!(":{name}"))
+            })
+            .expect("named generic function")
+            .id
+    };
+    let remove = named_function("remove");
+    let keep = named_function("keep");
+    let removed_parameter = snapshot
+        .function_signature(snapshot.revision(), remove)
+        .expect("removed signature")
+        .type_parameters[0]
+        .id;
+    let kept_parameter = snapshot
+        .function_signature(snapshot.revision(), keep)
+        .expect("kept signature")
+        .type_parameters[0]
+        .id;
+    let main = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("main")
+        .id;
+    let call = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("retained generic call")
+        .id;
+    let old = snapshot.clone();
+    let mut workspace = Workspace::new(snapshot).expect("generic lifecycle workspace");
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::DeleteEntity { entity: remove }],
+        })
+        .expect("delete earlier generic function");
+    assert!(compacted.snapshot.entity(remove).is_err());
+    assert!(compacted.snapshot.entity(removed_parameter).is_err());
+    assert_eq!(
+        compacted.snapshot.entity(keep).expect("kept function").id,
+        keep
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .entity(kept_parameter)
+            .expect("kept type parameter")
+            .id,
+        kept_parameter
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .function_signature(compacted.snapshot.revision(), keep)
+            .expect("compacted signature")
+            .type_parameters[0]
+            .id,
+        kept_parameter
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .call_instantiation(compacted.snapshot.revision(), call)
+            .expect("compacted instantiation")
+            .type_arguments[0]
+            .parameter,
+        kept_parameter
+    );
+    assert_eq!(run_i64(&compacted.snapshot), 8);
+    assert_eq!(run_i64(&old), 8);
+
+    let before_block = workspace.current();
+    assert!(workspace
+        .apply(Transaction {
+            base_revision: before_block.revision(),
+            edits: vec![Edit::DeleteEntity { entity: keep }],
+        })
+        .is_err());
+    assert!(Arc::ptr_eq(&before_block, &workspace.current()));
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: before_block.revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: keep },
+                Edit::DeleteEntity { entity: main },
+            ],
+        })
+        .expect("delete generic function with dependent entry point");
+    assert!(deleted.snapshot.entity(keep).is_err());
+    assert!(deleted.snapshot.entity(kept_parameter).is_err());
+    assert!(deleted.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == kept_parameter
+    )));
+    assert_eq!(
+        deleted.snapshot.completeness_blockers(),
+        &[CompletenessBlocker::MissingEntryPoint]
+    );
+    assert_eq!(run_i64(&old), 8);
+}
+
+#[test]
 fn imported_and_source_free_programs_converge_semantically() {
     let imported = import_source(FUNCTION_PROGRAM_42, "workspace-convergence.lkjscript")
         .expect("import equivalent program");
@@ -438,7 +1500,16 @@ fn imported_and_source_free_programs_converge_semantically() {
         let node_kinds = snapshot
             .nodes()
             .iter()
-            .map(|node| (node.kind, node.actual_type.to_string()))
+            .map(|node| {
+                (
+                    node.kind,
+                    snapshot
+                        .node_type(snapshot.revision(), node.id)
+                        .expect("node type")
+                        .actual
+                        .to_string(),
+                )
+            })
             .collect::<Vec<_>>();
         let function_signatures = snapshot
             .program
@@ -487,15 +1558,15 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                 name: "identity".to_owned(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             },
             Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             },
             Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             },
         ],
     });
@@ -520,12 +1591,12 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                     name: "identity".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -566,7 +1637,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         edits: vec![Edit::CreateFunction {
             name: "identity".to_owned(),
             parameters: Vec::new(),
-            return_type: SemanticTypeRef::I64,
+            return_type: SemanticType::I64,
         }],
     });
     assert!(matches!(
@@ -580,7 +1651,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         edits: vec![Edit::CreateFunction {
             name: "main".to_owned(),
             parameters: Vec::new(),
-            return_type: SemanticTypeRef::I64,
+            return_type: SemanticType::I64,
         }],
     });
     assert!(matches!(
@@ -595,9 +1666,9 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
             name: "borrowed".to_owned(),
             parameters: vec![ParameterDraft {
                 name: "value".to_owned(),
-                ty: SemanticTypeRef::ByteVector,
+                ty: SemanticType::ByteVector,
             }],
-            return_type: SemanticTypeRef::ByteSlice,
+            return_type: SemanticType::ByteSlice,
         }],
     });
     assert!(matches!(
@@ -613,14 +1684,14 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
             parameters: vec![
                 ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 },
                 ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 },
             ],
-            return_type: SemanticTypeRef::I64,
+            return_type: SemanticType::I64,
         }],
     });
     assert!(matches!(
@@ -649,13 +1720,14 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
             draft: ExpressionDraft::new(
                 vec![DraftNode::Call {
                     callee: function,
+                    type_arguments: Vec::new(),
                     arguments: Vec::new(),
                 }],
                 DraftNodeId::new(0),
             ),
         }],
     });
-    assert!(matches!(wrong_arity, Err(WorkspaceError::InvalidDraft(_))));
+    assert!(matches!(wrong_arity, Err(WorkspaceError::CallArity { .. })));
     assert!(Arc::ptr_eq(&published, &workspace.current()));
 
     let wrong_type = workspace.apply(Transaction {
@@ -667,6 +1739,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                     DraftNode::Bool(true),
                     DraftNode::Call {
                         callee: function,
+                        type_arguments: Vec::new(),
                         arguments: vec![DraftNodeId::new(0)],
                     },
                 ],
@@ -694,6 +1767,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                     DraftNode::I64(42),
                     DraftNode::Call {
                         callee: stale,
+                        type_arguments: Vec::new(),
                         arguments: vec![DraftNodeId::new(0)],
                     },
                 ],
@@ -717,6 +1791,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                     DraftNode::I64(42),
                     DraftNode::Call {
                         callee: foreign_id,
+                        type_arguments: Vec::new(),
                         arguments: vec![DraftNodeId::new(0)],
                     },
                 ],
@@ -777,20 +1852,20 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                     name: "f".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "f-value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateFunction {
                     name: "g".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "g-value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -841,6 +1916,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                         DraftNode::Load(DraftBindingRef::Entity(g_parameter)),
                         DraftNode::Call {
                             callee: f,
+                            type_arguments: Vec::new(),
                             arguments: vec![DraftNodeId::new(0)],
                         },
                     ],
@@ -859,6 +1935,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                         DraftNode::I64(42),
                         DraftNode::Call {
                             callee: g,
+                            type_arguments: Vec::new(),
                             arguments: vec![DraftNodeId::new(0)],
                         },
                     ],
@@ -992,6 +2069,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                         DraftNode::Load(DraftBindingRef::Entity(g_parameter)),
                         DraftNode::Call {
                             callee: f,
+                            type_arguments: Vec::new(),
                             arguments: vec![DraftNodeId::new(0)],
                         },
                     ],
@@ -1091,9 +2169,9 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                 name: "h".to_owned(),
                 parameters: vec![ParameterDraft {
                     name: "h-value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("reuse callable tombstones");
@@ -1152,7 +2230,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
         .apply(Transaction {
             base_revision: without_main.snapshot.revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("recreate main");
@@ -1172,17 +2250,17 @@ fn callable_compaction_preserves_a_later_function_hole_and_old_snapshot() {
                     name: "remove".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "removed-parameter".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateFunction {
                     name: "retain".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "retained-parameter".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -1391,9 +2469,9 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
                 name: "identity".to_owned(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create function before main");
@@ -1425,7 +2503,7 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
         .apply(Transaction {
             base_revision: function_created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main after function");
@@ -1459,7 +2537,7 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
         .apply(Transaction {
             base_revision: main_first.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main before function");
@@ -1477,9 +2555,9 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
                 name: "identity".to_owned(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create function after main");
@@ -1689,9 +2767,8 @@ fn atomic_rename_replace_queries_and_direct_compile_use_no_parser() {
         snapshot
             .node_type(snapshot.revision(), call.site)
             .expect("type")
-            .actual
-            .as_ref(),
-        "i64"
+            .actual,
+        SemanticType::I64
     );
     assert_eq!(
         snapshot
@@ -1718,6 +2795,7 @@ fn atomic_rename_replace_queries_and_direct_compile_use_no_parser() {
             DraftNode::I64(42),
             DraftNode::Call {
                 callee: function,
+                type_arguments: Vec::new(),
                 arguments: vec![DraftNodeId::new(0)],
             },
         ],
@@ -1877,7 +2955,7 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
         .snapshot
         .hole_context(introduced.snapshot.revision(), hole)
         .expect("hole context");
-    assert_eq!(context.expected_type, crate::Type::I64);
+    assert_eq!(context.expected_type, SemanticType::I64);
     let projection = introduced
         .snapshot
         .project(&[
@@ -1933,7 +3011,7 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
             base_revision: introduced.snapshot.revision(),
             edits: vec![Edit::RefineHole {
                 hole,
-                expected_type: Some(SemanticTypeRef::I64),
+                expected_type: Some(SemanticType::I64),
                 goal: "return nine".to_owned(),
             }],
         })
@@ -2051,7 +3129,14 @@ fn overlapping_structural_edits_and_reserved_function_rename_are_atomic() {
     let condition = before
         .nodes()
         .iter()
-        .find(|node| node.owner == SemanticOwner::Node(root) && node.actual_type.as_ref() == "bool")
+        .find(|node| {
+            node.owner == SemanticOwner::Node(root)
+                && before
+                    .node_type(before.revision(), node.id)
+                    .expect("condition type")
+                    .actual
+                    == SemanticType::Bool
+        })
         .expect("condition")
         .id;
     let before_projection = before.project(&[]).expect("projection");
@@ -2162,11 +3247,10 @@ fn disjoint_batch_edits_preserve_roots_when_earlier_subtrees_change_size() {
     assert_eq!(
         edited
             .snapshot
-            .node(alternative)
+            .node_type(edited.snapshot.revision(), alternative)
             .expect("alternative root preserved")
-            .actual_type
-            .as_ref(),
-        "i64"
+            .actual,
+        SemanticType::I64
     );
 }
 
@@ -2274,7 +3358,7 @@ fn run_source_free_deep(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main");
@@ -2306,7 +3390,7 @@ fn source_free_index_root_resolution_is_one_lookup_per_node() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 }],
             })
             .expect("create main");
@@ -2326,6 +3410,72 @@ fn source_free_index_root_resolution_is_one_lookup_per_node() {
             u64::try_from(completed.snapshot.nodes().len()).expect("node count fits u64")
         );
     }
+}
+
+fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
+    let mut ty = SemanticType::I64;
+    for _ in 0..depth {
+        ty = SemanticType::List(Box::new(ty));
+    }
+    let cloned = ty.clone();
+    assert_eq!(cloned, ty);
+    let display = cloned.to_string();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&cloned, &mut hasher);
+    let _hash = std::hash::Hasher::finish(&hasher);
+    assert!(display.ends_with("i64"));
+    assert_eq!(display.matches("list ").count(), depth);
+
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty type workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "deep-type".to_owned(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: ty.clone(),
+                }],
+                return_type: ty.clone(),
+            }],
+        })
+        .expect("publish deep semantic type");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "deep-type");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("query deep signature");
+    assert_eq!(signature.parameters[0].ty, ty);
+    assert_eq!(signature.result, ty);
+    created
+        .snapshot
+        .check_consistency()
+        .expect("validate deep semantic type");
+    let projection = created.snapshot.project(&[]).expect("project deep blocker");
+    assert_eq!(projection.matches("list ").count(), depth);
+}
+
+#[test]
+fn modest_semantic_type_operations_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-modest-semantic-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_semantic_type_boundary(256, 206))
+        .expect("spawn semantic type boundary")
+        .join()
+        .expect("semantic type boundary completes");
+}
+
+#[test]
+#[ignore = "20k-level type-only public boundary small-stack stress geometry"]
+fn twenty_thousand_level_semantic_type_operations_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-deep-semantic-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_semantic_type_boundary(20_000, 207))
+        .expect("spawn semantic type boundary")
+        .join()
+        .expect("semantic type boundary completes");
 }
 
 #[test]
@@ -2460,7 +3610,7 @@ fn run_source_free_deep_match(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create deep match main");
@@ -2640,11 +3790,11 @@ fn create_pair(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId) {
                 fields: vec![
                     ProductFieldDraft {
                         name: "left".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     },
                     ProductFieldDraft {
                         name: "right".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     },
                 ],
             }],
@@ -2668,7 +3818,7 @@ fn create_choice(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId, En
                         name: "some".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "value".to_owned(),
-                            ty: SemanticTypeRef::I64,
+                            ty: SemanticType::I64,
                         }],
                     },
                     EnumVariantDraft {
@@ -2700,25 +3850,25 @@ fn product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors()
                     name: "remove-first".to_owned(),
                     fields: vec![ProductFieldDraft {
                         name: "first-value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 },
                 Edit::CreateProduct {
                     name: "remove-middle".to_owned(),
                     fields: vec![ProductFieldDraft {
                         name: "middle-value".to_owned(),
-                        ty: SemanticTypeRef::Bool,
+                        ty: SemanticType::Bool,
                     }],
                 },
                 Edit::CreateProduct {
                     name: "keep".to_owned(),
                     fields: vec![ProductFieldDraft {
                         name: "kept-value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -2894,7 +4044,7 @@ fn product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors()
                 name: "remove-first".to_owned(),
                 fields: vec![ProductFieldDraft {
                     name: "recreated-value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
             }],
         })
@@ -2952,7 +4102,7 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
                         name: "removed-variant".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "removed-field".to_owned(),
-                            ty: SemanticTypeRef::I64,
+                            ty: SemanticType::I64,
                         }],
                     }],
                 },
@@ -2969,12 +4119,12 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
                         name: "kept-variant".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "kept-field".to_owned(),
-                            ty: SemanticTypeRef::Bool,
+                            ty: SemanticType::Bool,
                         }],
                     }],
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::Bool,
+                    return_type: SemanticType::Bool,
                 },
             ],
         })
@@ -3138,7 +4288,10 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
             .entity_type(deleted.snapshot.revision(), kept)
             .expect("retained enum type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::Enum(kept)))
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(kept),
+            arguments: Vec::new()
+        })
     );
     let recreated = workspace
         .apply(Transaction {
@@ -3168,7 +4321,7 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
                     name: "old-product".to_owned(),
                     fields: vec![ProductFieldDraft {
                         name: "old-product-field".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 },
                 Edit::CreateEnum {
@@ -3196,7 +4349,7 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
                 name: "new-product".to_owned(),
                 fields: vec![ProductFieldDraft {
                     name: "new-product-field".to_owned(),
-                    ty: SemanticTypeRef::Bool,
+                    ty: SemanticType::Bool,
                 }],
             },
             Edit::CreateEnum {
@@ -3205,7 +4358,7 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
                     name: "new-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "new-enum-field".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 }],
             },
@@ -3242,9 +4395,7 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
             .entity_type(first.snapshot.revision(), new_product)
             .expect("new product type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::Product(
-            new_product
-        )))
+        Some(SemanticType::Product(new_product))
     );
     assert_eq!(
         first
@@ -3252,7 +4403,10 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
             .entity_type(first.snapshot.revision(), new_enum)
             .expect("new enum type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::Enum(new_enum)))
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(new_enum),
+            arguments: Vec::new()
+        })
     );
 }
 
@@ -3346,7 +4500,10 @@ fn nominal_deletion_dependencies_use_the_final_staged_state_in_any_edit_order() 
         .apply(Transaction {
             base_revision: hole_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::Enum(hole_choice),
+                return_type: SemanticType::Enum {
+                    constructor: SemanticEnum::Entity(hole_choice),
+                    arguments: Vec::new(),
+                },
             }],
         })
         .expect("create enum-typed main hole");
@@ -3481,7 +4638,7 @@ fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_dele
                     name: "product-dependent".to_owned(),
                     fields: vec![ProductFieldDraft {
                         name: "product-reference".to_owned(),
-                        ty: SemanticTypeRef::Product(root),
+                        ty: SemanticType::Product(root),
                     }],
                 },
                 Edit::CreateEnum {
@@ -3490,7 +4647,7 @@ fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_dele
                         name: "holding".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "enum-reference".to_owned(),
-                            ty: SemanticTypeRef::Product(root),
+                            ty: SemanticType::Product(root),
                         }],
                     }],
                 },
@@ -3498,9 +4655,9 @@ fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_dele
                     name: "function-dependent".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "input".to_owned(),
-                        ty: SemanticTypeRef::Product(root),
+                        ty: SemanticType::Product(root),
                     }],
-                    return_type: SemanticTypeRef::Product(root),
+                    return_type: SemanticType::Product(root),
                 },
             ],
         })
@@ -3624,6 +4781,18 @@ fn imported_product_deletion_cascades_implementation_and_remaps_surviving_witnes
     let trait_entity = qualified(EntityKind::Trait, ":marked");
     let removed_impl = qualified(EntityKind::Implementation, ":remove");
     let kept_impl = qualified(EntityKind::Implementation, ":keep");
+    let function = qualified(EntityKind::Function, ":keep-marked");
+    let type_parameter = snapshot
+        .function_signature(snapshot.revision(), function)
+        .expect("generic marked signature")
+        .type_parameters[0]
+        .id;
+    let keep_field = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::ProductField && entity.owner == Some(keep))
+        .expect("keep product field")
+        .id;
     let call_node = snapshot
         .nodes()
         .iter()
@@ -3631,6 +4800,17 @@ fn imported_product_deletion_cascades_implementation_and_remaps_surviving_witnes
         .expect("generic call node")
         .id;
     let old = snapshot.clone();
+    let old_call = old
+        .call_instantiation(old.revision(), call_node)
+        .expect("public generic call witness");
+    assert_eq!(
+        old_call.type_arguments[0].argument,
+        SemanticType::Product(keep)
+    );
+    assert_eq!(
+        old_call.witnesses[0].kind,
+        TraitWitnessKindView::Explicit(kept_impl)
+    );
     let mut forged = old.validated_complete_hir().expect("complete imported HIR");
     let crate::hir::ExprKind::ProductField { value, .. } = &mut forged.main.body.kind else {
         panic!("main retains product projection")
@@ -3651,11 +4831,49 @@ fn imported_product_deletion_cascades_implementation_and_remaps_surviving_witnes
     let alias_error = super::validate::program(&forged)
         .expect_err("in-range witness for a different product must reject")
         .to_string();
-    assert!(alias_error.contains("wrong product"), "{alias_error}");
+    assert!(alias_error.contains("not canonical"), "{alias_error}");
 
     let mut workspace = Workspace::new(snapshot).expect("implemented product workspace");
     crate::source::reset_parser_invocation_count();
     crate::source::reset_source_load_invocation_count();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: call_node,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::ProductValue {
+                            product: keep,
+                            fields: vec![DraftFieldValue {
+                                field: keep_field,
+                                value: DraftNodeId::new(0),
+                            }],
+                        },
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter: type_parameter,
+                                argument: SemanticType::Product(keep),
+                            }],
+                            arguments: vec![DraftNodeId::new(1)],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("publish explicit implementation witness call");
+    assert_eq!(run_i64(&edited.snapshot), 42);
+    let edited_call = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call_node)
+        .expect("source-free explicit witness");
+    assert_eq!(edited_call.type_arguments, old_call.type_arguments);
+    assert_eq!(edited_call.parameters, old_call.parameters);
+    assert_eq!(edited_call.result, old_call.result);
+    assert_eq!(edited_call.witnesses, old_call.witnesses);
     let deleted = workspace
         .apply(Transaction {
             base_revision: workspace.current().revision(),
@@ -3700,6 +4918,15 @@ fn imported_product_deletion_cascades_implementation_and_remaps_surviving_witnes
         crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
     }
     assert_eq!(explicit.expect("explicit witness").raw(), 0);
+    let public_after = deleted
+        .snapshot
+        .call_instantiation(deleted.snapshot.revision(), call_node)
+        .expect("remapped public call witness");
+    assert_eq!(
+        public_after.witnesses[0].kind,
+        TraitWitnessKindView::Explicit(kept_impl)
+    );
+    assert_eq!(public_after.type_arguments, old_call.type_arguments);
     assert!(deleted.diff.entries.iter().any(|entry| matches!(
         entry,
         SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == removed_impl
@@ -3799,14 +5026,14 @@ fn source_free_nominal_declarations_publish_stable_children_types_and_dependenci
             .entity_type(pair_snapshot.revision(), pair)
             .expect("product type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::Product(pair)))
+        Some(SemanticType::Product(pair))
     );
     assert_eq!(
         pair_snapshot
             .entity_type(pair_snapshot.revision(), left)
             .expect("field type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::I64))
+        Some(SemanticType::I64)
     );
     assert!(pair_snapshot.containment().iter().any(|edge| {
         edge.owner == SemanticOwner::Entity(pair) && edge.child == SemanticChild::Entity(left)
@@ -3829,7 +5056,10 @@ fn source_free_nominal_declarations_publish_stable_children_types_and_dependenci
             .entity_type(declarations.revision(), choice)
             .expect("enum type")
             .declared,
-        Some(SemanticTypeView::Known(SemanticTypeRef::Enum(choice)))
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(choice),
+            arguments: Vec::new()
+        })
     );
     for child in [some, none] {
         assert!(declarations.containment().iter().any(|edge| {
@@ -3848,9 +5078,9 @@ fn source_free_nominal_declarations_publish_stable_children_types_and_dependenci
                 name: "keep-pair".to_owned(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::Product(pair),
+                    ty: SemanticType::Product(pair),
                 }],
-                return_type: SemanticTypeRef::Product(pair),
+                return_type: SemanticType::Product(pair),
             }],
         })
         .expect("create nominal function");
@@ -3859,14 +5089,9 @@ fn source_free_nominal_declarations_publish_stable_children_types_and_dependenci
         .snapshot
         .function_signature(function.snapshot.revision(), keep)
         .expect("structured nominal signature");
-    assert_eq!(
-        signature.parameters,
-        vec![SemanticTypeView::Known(SemanticTypeRef::Product(pair))]
-    );
-    assert_eq!(
-        signature.result,
-        SemanticTypeView::Known(SemanticTypeRef::Product(pair))
-    );
+    assert_eq!(signature.parameters.len(), 1);
+    assert_eq!(signature.parameters[0].ty, SemanticType::Product(pair));
+    assert_eq!(signature.result, SemanticType::Product(pair));
     assert!(function
         .snapshot
         .dependencies()
@@ -3907,11 +5132,11 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
             fields: vec![
                 ProductFieldDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 },
                 ProductFieldDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 },
             ],
         },
@@ -3923,7 +5148,7 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
             name: "owned".to_owned(),
             fields: vec![ProductFieldDraft {
                 name: "value".to_owned(),
-                ty: SemanticTypeRef::ByteVector,
+                ty: SemanticType::ByteVector,
             }],
         },
         Edit::CreateEnum {
@@ -3950,11 +5175,11 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
                 fields: vec![
                     EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     },
                     EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     },
                 ],
             }],
@@ -3965,7 +5190,7 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
                 name: "one".to_owned(),
                 fields: vec![EnumFieldDraft {
                     name: "value".to_owned(),
-                    ty: SemanticTypeRef::ByteSlice,
+                    ty: SemanticType::ByteSlice,
                 }],
             }],
         },
@@ -4008,7 +5233,7 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
             name: "foreign-field".to_owned(),
             fields: vec![ProductFieldDraft {
                 name: "value".to_owned(),
-                ty: SemanticTypeRef::Product(foreign_pair),
+                ty: SemanticType::Product(foreign_pair),
             }],
         }],
     });
@@ -4022,7 +5247,10 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
             name: "wrong-kind".to_owned(),
             fields: vec![ProductFieldDraft {
                 name: "value".to_owned(),
-                ty: SemanticTypeRef::Enum(local_pair),
+                ty: SemanticType::Enum {
+                    constructor: SemanticEnum::Entity(local_pair),
+                    arguments: Vec::new(),
+                },
             }],
         }],
     });
@@ -4039,7 +5267,7 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
             name: "stale-field".to_owned(),
             fields: vec![ProductFieldDraft {
                 name: "value".to_owned(),
-                ty: SemanticTypeRef::Product(stale),
+                ty: SemanticType::Product(stale),
             }],
         }],
     });
@@ -4058,7 +5286,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
                 name: "single".to_owned(),
                 fields: vec![ProductFieldDraft {
                     name: "other-product-field".to_owned(),
-                    ty: SemanticTypeRef::I64,
+                    ty: SemanticType::I64,
                 }],
             }],
         })
@@ -4078,7 +5306,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
                     name: "alternate-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "other-enum-field".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 }],
             }],
@@ -4093,7 +5321,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create nominal draft main");
@@ -4235,7 +5463,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::Product(pair),
+                return_type: SemanticType::Product(pair),
             }],
         })
         .expect("create product main");
@@ -4303,7 +5531,10 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .apply(Transaction {
             base_revision: enum_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::Enum(choice),
+                return_type: SemanticType::Enum {
+                    constructor: SemanticEnum::Entity(choice),
+                    arguments: Vec::new(),
+                },
             }],
         })
         .expect("create enum main");
@@ -4370,7 +5601,7 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create product main");
@@ -4445,7 +5676,7 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
         .apply(Transaction {
             base_revision: enum_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create enum main");
@@ -4522,7 +5753,7 @@ fn source_free_enum_payload_match_compiles_and_executes() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create match main");
@@ -4823,7 +6054,7 @@ fn source_free_choice_match(seed: u64) -> (Workspace, EntityId, EntityId, Entity
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create match main");
@@ -5206,7 +6437,7 @@ fn source_free_match_pattern_physical_order_does_not_change_semantics() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create reordered match main");
@@ -5296,7 +6527,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create atomic match main");
@@ -5480,7 +6711,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
                     name: "alternate-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "alternate-field".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 }],
             }],
@@ -5506,11 +6737,11 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
                     fields: vec![
                         EnumFieldDraft {
                             name: "left-value".to_owned(),
-                            ty: SemanticTypeRef::I64,
+                            ty: SemanticType::I64,
                         },
                         EnumFieldDraft {
                             name: "right-value".to_owned(),
-                            ty: SemanticTypeRef::I64,
+                            ty: SemanticType::I64,
                         },
                     ],
                 }],
@@ -5524,7 +6755,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create malformed match main");
@@ -6067,7 +7298,7 @@ fn match_arm_hole_context_contains_only_its_payload_bindings() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create match main");
@@ -6218,12 +7449,12 @@ fn create_owned_workspace(seed: u64) -> (Workspace, EntityId, EntityId, HoleId, 
                     name: "consume".to_owned(),
                     parameters: vec![ParameterDraft {
                         name: "bytes".to_owned(),
-                        ty: SemanticTypeRef::ByteVector,
+                        ty: SemanticType::ByteVector,
                     }],
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
                 Edit::CreateMain {
-                    return_type: SemanticTypeRef::I64,
+                    return_type: SemanticType::I64,
                 },
             ],
         })
@@ -6289,6 +7520,7 @@ fn valid_owned_main(function: EntityId) -> ExpressionDraft {
             DraftNode::Move(DraftBindingRef::Local(owner)),
             DraftNode::Call {
                 callee: function,
+                type_arguments: Vec::new(),
                 arguments: vec![DraftNodeId::new(4)],
             },
             DraftNode::Operation {
@@ -6470,7 +7702,7 @@ fn source_free_bounds_failure_unwinds_owned_local_without_cleanup_failure() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create trap main");
@@ -6726,7 +7958,7 @@ fn imported_nominal_local_and_ownership_programs_converge() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create product main");
@@ -6803,7 +8035,7 @@ fn imported_nominal_local_and_ownership_programs_converge() {
                     name: "some".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticTypeRef::I64,
+                        ty: SemanticType::I64,
                     }],
                 }],
             }],
@@ -6816,7 +8048,10 @@ fn imported_nominal_local_and_ownership_programs_converge() {
         .apply(Transaction {
             base_revision: enum_created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::Enum(choice),
+                return_type: SemanticType::Enum {
+                    constructor: SemanticEnum::Entity(choice),
+                    arguments: Vec::new(),
+                },
             }],
         })
         .expect("create enum main");
@@ -6917,6 +8152,8 @@ fn imported_nominal_local_and_ownership_programs_converge() {
 #[test]
 fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
     let source = concat!(
+        "enum/\nname/\nremove\n/name\nvariants/\nvariant/\nname/\none\n/name\n",
+        "fields/\n/fields\n/variant\n/variants\n/enum\n",
         "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
         "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
         "type/\nt\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
@@ -6927,6 +8164,12 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
     );
     let imported = import_source(source, "generic-hole.lkjscript").expect("import generic enum");
     let target = imported.nodes()[0].id;
+    let removed = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":remove"))
+        .expect("earlier enum")
+        .id;
     let mut workspace = Workspace::new(imported).expect("generic workspace");
     let introduced = workspace
         .apply(Transaction {
@@ -6942,21 +8185,58 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
         .snapshot
         .entities()
         .iter()
-        .find(|entity| entity.kind == EntityKind::Enum)
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":maybe"))
         .expect("generic enum entity")
         .id;
-    assert!(matches!(
-        hole.expected_semantic_type,
-        SemanticTypeView::Unsupported {
-            nominal: Some(identity),
-            ..
-        } if identity == enumeration
-    ));
-    assert!(introduced
+    let type_parameter = introduced
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
+        })
+        .expect("generic enum binder")
+        .id;
+    let expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64],
+    };
+    assert_eq!(hole.expected_type, expected);
+    let old = introduced.snapshot.clone();
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: removed }],
+        })
+        .expect("delete earlier enum");
+    assert_eq!(
+        compacted
+            .snapshot
+            .entity(enumeration)
+            .expect("generic enum survivor")
+            .id,
+        enumeration
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .entity(type_parameter)
+            .expect("generic enum binder survivor")
+            .id,
+        type_parameter
+    );
+    let compacted_hole = compacted.snapshot.holes().next().expect("compacted hole");
+    assert_eq!(compacted_hole.id, hole.id);
+    assert_eq!(compacted_hole.expected_type, expected);
+    assert_eq!(
+        old.entity(type_parameter).expect("old binder").id,
+        type_parameter
+    );
+    assert!(compacted
         .snapshot
         .legal_constructors(
-            introduced.snapshot.revision(),
-            hole.id,
+            compacted.snapshot.revision(),
+            compacted_hole.id,
             PageRequest::new(16).expect("page"),
             None,
         )
@@ -6964,6 +8244,30 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
         .items
         .iter()
         .all(|constructor| !matches!(constructor, LegalConstructor::EnumVariant(_))));
+    let main = compacted
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("generic enum main")
+        .id;
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: compacted.snapshot.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: enumeration,
+                },
+                Edit::DeleteEntity { entity: main },
+            ],
+        })
+        .expect("delete generic enum with its dependent entry point");
+    assert!(deleted.snapshot.entity(enumeration).is_err());
+    assert!(deleted.snapshot.entity(type_parameter).is_err());
+    assert_eq!(
+        old.entity(type_parameter).expect("old binder").id,
+        type_parameter
+    );
 }
 
 fn invalid_owned_main(function: EntityId, kind: &str) -> ExpressionDraft {
@@ -6979,6 +8283,7 @@ fn invalid_owned_main(function: EntityId, kind: &str) -> ExpressionDraft {
                 DraftNode::Load(DraftBindingRef::Local(owner)),
                 DraftNode::Call {
                     callee: function,
+                    type_arguments: Vec::new(),
                     arguments: vec![DraftNodeId::new(2)],
                 },
                 DraftNode::Let {
@@ -7002,11 +8307,13 @@ fn invalid_owned_main(function: EntityId, kind: &str) -> ExpressionDraft {
                 DraftNode::Move(DraftBindingRef::Local(owner)),
                 DraftNode::Call {
                     callee: function,
+                    type_arguments: Vec::new(),
                     arguments: vec![DraftNodeId::new(2)],
                 },
                 DraftNode::Move(DraftBindingRef::Local(owner)),
                 DraftNode::Call {
                     callee: function,
+                    type_arguments: Vec::new(),
                     arguments: vec![DraftNodeId::new(4)],
                 },
                 DraftNode::Operation {
@@ -7037,6 +8344,7 @@ fn invalid_owned_main(function: EntityId, kind: &str) -> ExpressionDraft {
                     DraftNode::Move(DraftBindingRef::Local(owner)),
                     DraftNode::Call {
                         callee: function,
+                        type_arguments: Vec::new(),
                         arguments: vec![DraftNodeId::new(3)],
                     },
                     DraftNode::Load(DraftBindingRef::Local(reference)),
@@ -7098,7 +8406,7 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create scope main");
@@ -7188,10 +8496,7 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .expect("outside hole");
     assert!(nested.visible_entities.contains(&local_entity));
     assert!(!outside.visible_entities.contains(&local_entity));
-    assert_eq!(
-        nested.expected_semantic_type,
-        SemanticTypeView::Known(SemanticTypeRef::I64)
-    );
+    assert_eq!(nested.expected_type, SemanticType::I64);
     assert!(introduced
         .snapshot
         .legal_constructors(
@@ -7251,7 +8556,7 @@ fn local_defining_subtrees_are_removed_compacted_and_tombstoned() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create local main");
@@ -7387,7 +8692,7 @@ fn surviving_lexical_local_keeps_identity_when_an_earlier_local_compacts() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main");
@@ -7502,7 +8807,7 @@ fn inserting_a_local_before_a_survivor_rebuilds_places_in_evaluation_order() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main");
@@ -7620,7 +8925,7 @@ fn removing_an_earlier_match_compacts_and_preserves_a_later_plan() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create main");
@@ -7699,7 +9004,7 @@ fn malformed_forward_and_out_of_scope_draft_bindings_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create scope main");
@@ -7798,7 +9103,7 @@ fn malformed_operation_and_node_drafts_are_atomic_and_retry_stable() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create draft main");
@@ -7891,7 +9196,7 @@ fn run_source_free_deep_locals(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
-                return_type: SemanticTypeRef::I64,
+                return_type: SemanticType::I64,
             }],
         })
         .expect("create deep local main");

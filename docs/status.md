@@ -173,17 +173,25 @@ function. Removed slots retain tombstone generations across snapshot cloning and
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
 and no attachments. `Transaction` adds non-generic `CreateProduct`, `CreateEnum`, `CreateFunction`,
 and `CreateMain` to rename, replacement, and hole operations. Products, enums, variants, fields,
-functions, parameters, locals, bodies, and holes receive opaque stable entities independent of
-compiler-dense nominal/layout identities. Public `SemanticTypeRef` inputs use those entities for
-nominal types. Invalid names, duplicate declarations/members, ownership-containing aggregate fields,
+functions, imported function type parameters, value parameters, locals, bodies, and holes receive
+opaque stable entities independent of compiler-dense nominal/layout identities. Public inputs and
+queries use one exact structured `SemanticType`; products, user enums, and type parameters carry
+stable entities, while all five prelude enums and all five core traits have explicit builtin
+identities. Its recursive operations and public/internal conversion are iterative and
+unrestricted by type depth.
+Invalid names, duplicate declarations/members, ownership-containing aggregate fields,
 foreign/stale/wrong-kind type identities, and allocation failure reject without consuming their
 reserved stable IDs.
 
 `ExpressionDraft` is a flat non-recursive tree with transaction-local lexical binding handles; its
 physical node order is irrelevant. It implements scalar and byte literals, selected canonical
-built-in operations, non-generic calls, conditionals, immutable lexical locals, copy-safe loads,
-byte-vector moves and shared borrows, product construction/projection, enum construction and variant
-tests, and exhaustive non-generic enum matches. Each ordered match arm owns a flat `PatternDraft`;
+built-in operations, exact generic and non-generic calls, conditionals, immutable lexical locals,
+copy-safe loads, byte-vector moves and shared borrows, product construction/projection, enum
+construction and variant tests, and exhaustive non-generic enum matches. Generic drafts identify
+binders by their stable type-parameter entities and provide exact structured type arguments; the
+same resolver validates importer-inferred and explicit substitutions, argument types,
+ownership/reference restrictions, and trait bounds, then derives auto or explicit implementation
+witnesses. Each ordered match arm owns a flat `PatternDraft`;
 wildcards, enum variants, fields, and named payload bindings lower through the canonical usefulness,
 exhaustiveness, match-plan, ownership, memory, SSA, and VM path. Payload bindings are stable public
 immutable-local entities. Compiler-only scrutinee and field-projection locals have an explicit hidden
@@ -191,8 +199,10 @@ binding kind and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
 foreign/stale/wrong-kind pattern identities, forward or cross-arm binding uses, field coverage/type
 failures, empty/nonexhaustive/useless arms, incompatible arm results, and contradictory overlapping
-or deletion-owned edits reject. Mutable-local construction, generic calls, non-enum source-free
-pattern spaces, and executable placeholders remain absent. Imported mutable-local subtrees can be
+or deletion-owned edits reject. Mutable-local construction, source-free generic declaration
+authoring, generic patterns, unresolved generic forwarding, ownership/reference generic
+instantiation, non-enum source-free pattern spaces, and executable placeholders remain absent.
+Imported mutable-local subtrees can be
 removed through ordinary replacement because the lifecycle remap covers their existing HIR form.
 
 The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, and durable
@@ -213,10 +223,11 @@ local counts before canonical validation. Removed local and payload identities t
 entities, nodes, and holes retain identity across private relocation.
 
 `DeleteEntity` supports `main`, ordinary imported or source-free non-builtin functions, and
-user-defined products and enums. Callable deletion owns parameters, locals, payload bindings, nodes,
-holes, hidden match descendants, plans, and function-layout participation. Product deletion owns its
-fields and explicit implementations targeting that product; enum deletion owns its variants and
-fields. Direct contained-member, trait, and implementation deletion remains unsupported.
+user-defined products and enums. Callable deletion owns type parameters, value parameters, locals,
+payload bindings, nodes, holes, hidden match descendants, plans, and function-layout participation.
+Product deletion owns its fields and explicit implementations targeting that product; enum deletion
+owns its type parameters, variants, and fields. Direct contained-member, trait, and implementation
+deletion remains unsupported.
 
 Deletion dependencies are checked against the final staged semantic state rather than base indexes
 or edit order. Surviving signature, field, expression, hole, generic-witness, and match dependencies
@@ -234,19 +245,21 @@ typed hole with hole/type/owner/context. Incomplete snapshots remain fully query
 `compile_snapshot` returns those revision-labelled blockers before deriving HIR or entering memory,
 SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
-and lowers directly. Selected source-free scalar, nominal aggregate, lexical-local, byte-vector
-borrow-then-move, and enum-payload-match paths enter source loading and parsing zero times, retain
-canonical memory-plan
-obligations, compile to validated bytecode, execute in the VM, and clean up on normal and trapped
+and lowers directly. Selected source-free scalar, nominal aggregate, lexical-local,
+byte-vector-borrow-then-move, enum-payload-match, and exact generic-call edits enter source loading
+and parsing zero times, retain canonical memory-plan obligations, compile to validated bytecode,
+execute in the VM, and clean up on normal and trapped
 paths. Canonical memory-plan origins explicitly tag source-backed and source-free cases; current
 package locks reflect that non-colliding encoding.
 
 Revision-labelled queries implement deterministic pagination, definitions/references, calls,
 structured entity/function/node types, diagnostics, hole context with exact lexical and arm-local
-visibility, expected-type-filtered legal constructors, and a structured `MatchView` containing the
-scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable enum/member identities,
-and payload-binding entities. Known nominal types carry stable entity IDs; unsupported generic views
-are explicit and preserve a nominal ID when available. Copy loads are advertised only for copy-safe
+visibility, expected-type-filtered legal constructors, exact generic signatures and call
+instantiations, and a structured `MatchView` containing the scrutinee, ordered arms, arm-body nodes,
+pattern types/kinds/fields, stable enum/member identities,
+and payload-binding entities. Generic views expose stable binders and trait identities, canonical
+substitutions, instantiated parameters/results, derived witnesses, and named effect flags without
+compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe
 values; affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported
 generic enum constructors are omitted. Hole visibility refreshes when declarations are added in a
 later revision. Projections render state and blockers before selected
@@ -259,14 +272,18 @@ The source/path importer privately owns loading, parsing, initial analysis, pack
 source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
 compiler operations/prelude/core traits are excluded from mutable program-entity queries, and HIR
 operations carry only canonical catalog operation identity/signature. Imported and source-free
-scalar, product, enum, lexical-local, borrow/move, and exhaustive enum-payload-match fixtures agree
-on normalized entities and structured types, containment, references/dependencies, node
-kinds/types/effects, selected memory-obligation kinds, the main bytecode stream, VM outcomes, traps,
-and cleanup.
+scalar, product, enum, lexical-local, borrow/move, exhaustive enum-payload-match, and generic-call
+fixtures agree on normalized entities and structured types, containment, references/dependencies,
+node kinds/types/effects, exact generic substitutions/witnesses, selected memory-obligation kinds,
+the main bytecode stream, VM outcomes, traps, and cleanup. Explicit generic call edits invoke source
+loading and parsing zero times.
 Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
 and compile a 20,000-level nested expression, 20,000 lexical locals, or 20,000 nested semantic enum
-matches, then project, execute, and destroy the complete path on a 128 KiB worker stack. Draft and
-pattern traversal/lowering, semantic match derivation, semantic clone, indexing/reconciliation,
+matches, then project, execute, and destroy the complete path on a 128 KiB worker stack. A separate
+type-only fixture performs public `SemanticType` construction, clone, equality, hashing, display,
+transaction validation/conversion, signature query, projection, and destruction at 20,000 levels on
+the same stack without duplicating the full compiler stress geometry. Draft and pattern
+traversal/lowering, semantic type/match derivation, semantic clone, indexing/reconciliation,
 projection, and canonical block ordering are iterative on these paths. Bytecode structural-local
 classification computes nonowned structural values once per function with linear predecessor-edge
 propagation rather than rescanning the CFG for every emitted value.
@@ -281,22 +298,23 @@ replacement exists pending a measured consumer.
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
   covers non-generic products, enums, functions, and parameterless `main`; expression construction
-  covers immutable locals, the selected byte-vector move/borrow vertical, and exhaustive
-  non-generic enum payload matches. The source-free pattern surface currently supports wildcard,
+  covers immutable locals, exact calls to imported generic functions, the selected byte-vector
+  move/borrow vertical, and exhaustive non-generic enum payload matches. Source-free generic
+  declaration authoring remains absent. The source-free pattern surface currently supports wildcard,
   enum-variant, field, and payload-binding patterns over non-generic enum scrutinees; Boolean,
   integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
   ownership evidence uses the strongest supported copy-safe payload geometry. Callable and whole
   nominal deletion plus owned local/member removal are implemented; direct nominal-member mutation,
-  explicit public movement, mutable-local construction, generic calls, unresolved names,
-  ambiguities, conflicts, and recovery states remain.
+  explicit public movement, mutable-local construction, unresolved names, ambiguities, conflicts,
+  and recovery states remain. Generic ownership/reference instantiation and forwarding a caller's
+  unresolved type parameter remain narrow explicit unsupported cases.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- Owned runtime structural values and source-free nested-expression, lexical-local, and nested
-  enum-match workspace/compiler paths have 20,000-level release evidence on a 128 KiB worker stack.
-  This does not prove every compiler form, type traversal, ownership failure, or general runtime
-  throughput
-  path stack-safe.
+- Owned runtime structural values and source-free nested-expression, lexical-local, nested
+  enum-match, and public semantic-type workspace paths have 20,000-level release evidence on a
+  128 KiB worker stack. This does not prove every compiler form, internal type traversal, ownership
+  failure, or general runtime throughput path stack-safe.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public
   runtime engine. Workspace `--all-features` verification compiles it for tests.
 - Compact native layouts, machine-code offsets, registers/opcodes, OS fields, SQLite fields, and host

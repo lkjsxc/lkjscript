@@ -12,6 +12,5 @@ mod model;
 mod names;
 mod products;
 mod substitutions;
-mod traits;
 
 pub(in crate::analyze) use derived_facts::*;

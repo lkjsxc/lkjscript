@@ -40,10 +40,6 @@ pub(in crate::analyze) fn contains_resource_type(ty: &Type) -> bool {
     visit_type(ty, |ty| matches!(ty, Type::Resource(_)))
 }
 
-pub(in crate::analyze) fn contains_reference_type(ty: &Type) -> bool {
-    visit_type(ty, |ty| matches!(ty, Type::ByteSlice | Type::ByteSliceMut))
-}
-
 fn visit_type(ty: &Type, mut predicate: impl FnMut(&Type) -> bool) -> bool {
     let mut pending = vec![ty];
     while let Some(ty) = pending.pop() {

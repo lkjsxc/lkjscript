@@ -2,20 +2,20 @@ use crate::operation::*;
 use lkjscript_contracts::{CapabilityKind, OperationOwnership, RuntimeLowering};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypedOperationRecord {
-    pub operation: Operation,
-    pub arity: usize,
-    pub type_scheme: Type,
-    pub effects: crate::hir::EffectSet,
-    pub ownership: OperationOwnership,
-    pub capability_requirements: Vec<CapabilityKind>,
-    pub may_trap: bool,
-    pub may_diverge: bool,
-    pub runtime_lowering: RuntimeLowering,
+pub(crate) struct TypedOperationRecord {
+    pub(crate) operation: Operation,
+    pub(crate) arity: usize,
+    pub(crate) type_scheme: Type,
+    pub(crate) effects: crate::hir::EffectSet,
+    pub(crate) ownership: OperationOwnership,
+    pub(crate) capability_requirements: Vec<CapabilityKind>,
+    pub(crate) may_trap: bool,
+    pub(crate) may_diverge: bool,
+    pub(crate) runtime_lowering: RuntimeLowering,
 }
 
 impl Operation {
-    pub fn record(self) -> TypedOperationRecord {
+    pub(crate) fn record(self) -> TypedOperationRecord {
         let semantics = lkjscript_contracts::operation_semantics_by_id(self.identity());
         TypedOperationRecord {
             operation: self,

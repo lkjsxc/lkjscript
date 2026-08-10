@@ -4,7 +4,7 @@ use crate::operation::instantiation::{
 use crate::operation::*;
 
 impl Operation {
-    pub fn resolve_types(self, arguments: &[Type]) -> Result<(Type, Type), String> {
+    pub(crate) fn resolve_types(self, arguments: &[Type]) -> Result<(Type, Type), String> {
         let record = self.record();
         let expected = record.arity;
         if arguments.len() != expected {

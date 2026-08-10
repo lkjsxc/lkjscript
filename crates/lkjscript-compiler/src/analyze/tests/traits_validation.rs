@@ -80,6 +80,13 @@ fn bounds_require_declared_parameters_known_traits_and_satisfied_facts() {
     assert!(analysis_error(&unsatisfied)
         .contains("ownership/reference generic instantiation is unavailable"));
 
+    let wrong_arity = format!(
+        "{}{}",
+        bounded_identity("copy-value", "copy"),
+        main_source("i64", "copy-value/\n/copy-value")
+    );
+    assert!(analysis_error(&wrong_arity).contains("copy-value: expected 1 args, got 0"));
+
     let first_class = format!(
         "{}{}",
         bounded_identity("copy-value", "copy"),
@@ -95,5 +102,5 @@ fn bounds_require_declared_parameters_known_traits_and_satisfied_facts() {
         forwarding,
         main_source("unit", "unit")
     );
-    assert!(analysis_error(&source).contains("generic context is unavailable"));
+    assert!(analysis_error(&source).contains("current transport route"));
 }

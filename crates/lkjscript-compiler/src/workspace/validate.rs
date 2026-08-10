@@ -9,6 +9,9 @@ use crate::hir::{
 
 struct DeclarationIndexes<'a> {
     products_by_name: HashMap<&'a str, usize>,
+    product_ids_by_name: HashMap<String, lkjscript_core::ProductId>,
+    implementation_index:
+        HashMap<(crate::hir::TraitId, lkjscript_core::ProductId), crate::hir::ImplId>,
     enums_by_id: HashMap<crate::hir::EnumId, usize>,
 }
 
@@ -26,6 +29,28 @@ impl<'a> DeclarationIndexes<'a> {
                 return Err(Error::msg("HIR product declaration name is duplicated"));
             }
         }
+        let mut product_ids_by_name = HashMap::new();
+        product_ids_by_name
+            .try_reserve(program.products.len())
+            .map_err(|_| Error::host("HIR product identity index allocation failed"))?;
+        for product in &program.products {
+            product_ids_by_name.insert(product.name.clone(), product.id);
+        }
+        let mut implementation_index = HashMap::new();
+        implementation_index
+            .try_reserve(program.implementations.len())
+            .map_err(|_| Error::host("HIR implementation index allocation failed"))?;
+        for implementation in &program.implementations {
+            if implementation_index
+                .insert(
+                    (implementation.trait_id, implementation.product),
+                    implementation.id,
+                )
+                .is_some()
+            {
+                return Err(Error::msg("HIR implementation facts overlap"));
+            }
+        }
         let mut enums_by_id = HashMap::new();
         enums_by_id
             .try_reserve(program.enums.len())
@@ -37,6 +62,8 @@ impl<'a> DeclarationIndexes<'a> {
         }
         Ok(Self {
             products_by_name,
+            product_ids_by_name,
+            implementation_index,
             enums_by_id,
         })
     }
@@ -247,6 +274,11 @@ fn validate_functions(program: &Program) -> Result<()> {
         {
             return Err(Error::msg("HIR function header is inconsistent"));
         }
+        let (variables, signature) = match &binding.ty {
+            Type::Forall { vars, body } => (vars.as_slice(), body.as_ref()),
+            other => (&[][..], other),
+        };
+        validate_function_type_parameters(variables, signature, &function.bounds)?;
         let (parameters, result) = function_signature(&binding.ty)
             .ok_or_else(|| Error::msg("HIR function binding has no function signature"))?;
         if parameters.len() != function.params.len()
@@ -270,11 +302,100 @@ fn validate_functions(program: &Program) -> Result<()> {
             let _ = place;
         }
         for bound in &function.bounds {
-            require_index(
-                bound.trait_id.raw(),
-                program.traits.len(),
-                "HIR trait bound",
-            )?;
+            let index = index_of(bound.trait_id.raw(), "HIR trait bound")?;
+            if program
+                .traits
+                .get(index)
+                .is_none_or(|definition| definition.id != bound.trait_id)
+            {
+                return Err(Error::msg("HIR trait bound identity is stale"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_function_type_parameters(
+    variables: &[String],
+    signature: &Type,
+    bounds: &[crate::hir::TraitBound],
+) -> Result<()> {
+    let mut declared = HashSet::new();
+    declared
+        .try_reserve(variables.len())
+        .map_err(|_| Error::host("HIR type-parameter set allocation failed"))?;
+    for variable in variables {
+        if !declared.insert(variable.as_str()) {
+            return Err(Error::msg("HIR function type parameter is duplicated"));
+        }
+    }
+    let mut used = HashSet::new();
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Error::host("HIR type-parameter work allocation failed"))?;
+    pending.push(signature);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Param(parameter) => {
+                if !declared.contains(parameter.as_str()) {
+                    return Err(Error::msg(
+                        "HIR function signature references an undeclared type parameter",
+                    ));
+                }
+                used.try_reserve(1)
+                    .map_err(|_| Error::host("HIR used type-parameter allocation failed"))?;
+                used.insert(parameter.as_str());
+            }
+            Type::Enum { arguments, .. } => {
+                pending
+                    .try_reserve(arguments.len())
+                    .map_err(|_| Error::host("HIR type-parameter work allocation failed"))?;
+                pending.extend(arguments);
+            }
+            Type::List(inner) => {
+                pending
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR type-parameter work allocation failed"))?;
+                pending.push(inner);
+            }
+            Type::Fn { params, ret } => {
+                let additional = params
+                    .len()
+                    .checked_add(1)
+                    .ok_or_else(|| Error::host("HIR type-parameter child count overflow"))?;
+                pending
+                    .try_reserve(additional)
+                    .map_err(|_| Error::host("HIR type-parameter work allocation failed"))?;
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { .. } => {
+                return Err(Error::msg(
+                    "HIR function signature contains an unsupported nested universal type",
+                ));
+            }
+            _ => {}
+        }
+    }
+    if variables
+        .iter()
+        .any(|variable| !used.contains(variable.as_str()))
+    {
+        return Err(Error::msg("HIR function type parameter is unused"));
+    }
+    let mut seen_bounds = HashSet::new();
+    seen_bounds
+        .try_reserve(bounds.len())
+        .map_err(|_| Error::host("HIR trait-bound set allocation failed"))?;
+    for bound in bounds {
+        if !declared.contains(bound.parameter.as_str()) {
+            return Err(Error::msg(
+                "HIR trait bound references an undeclared type parameter",
+            ));
+        }
+        if !seen_bounds.insert((bound.parameter.as_str(), bound.trait_id)) {
+            return Err(Error::msg("HIR trait bound is duplicated"));
         }
     }
     Ok(())
@@ -432,13 +553,9 @@ fn validate_pattern(
                 substitutions
                     .try_reserve(definition.type_parameters.len())
                     .map_err(|_| Error::host("HIR match substitution allocation failed"))?;
-                substitutions.extend(
-                    definition
-                        .type_parameters
-                        .iter()
-                        .cloned()
-                        .zip(arguments.iter().cloned()),
-                );
+                for (parameter, argument) in definition.type_parameters.iter().zip(arguments) {
+                    substitutions.insert(parameter.as_str(), argument);
+                }
                 pending
                     .try_reserve(fields.len())
                     .map_err(|_| Error::host("HIR match pattern work allocation failed"))?;
@@ -446,7 +563,7 @@ fn validate_pattern(
                     if field.name != declared.name || field.field_index != declared.source_order {
                         return Err(Error::msg("HIR match field identity is stale"));
                     }
-                    let field_type = declared.ty.subst(&substitutions);
+                    let field_type = substitute_hir_type(&declared.ty, &substitutions)?;
                     match (&field.projection, &field.pattern) {
                         (None, MatchPattern::Wildcard { .. }) => {}
                         (Some(local), pattern)
@@ -649,6 +766,7 @@ fn validate_expression_kind(
             validate_call_signature(
                 program,
                 declarations,
+                binding.id,
                 &binding.ty,
                 args,
                 instantiation.as_ref(),
@@ -909,83 +1027,67 @@ fn validate_expression_kind(
     Ok(())
 }
 
+fn substitute_hir_type(ty: &Type, substitutions: &HashMap<&str, &Type>) -> Result<Type> {
+    crate::generic_call::substitute_type(ty, substitutions).map_err(|error| match error {
+        crate::generic_call::GenericCallError::Host(message) => Error::host(message),
+        other => Error::msg(format!("HIR type substitution is invalid: {other}")),
+    })
+}
+
 fn validate_call_signature(
     program: &Program,
     declarations: &DeclarationIndexes,
+    callee: BindingId,
     signature: &Type,
     arguments: &[Expr],
     instantiation: Option<&crate::hir::GenericInstantiation>,
     result: &Type,
 ) -> Result<()> {
-    let (parameters, declared_result) = function_signature(signature)
-        .ok_or_else(|| Error::msg("HIR call target has no function signature"))?;
-    if parameters.len() != arguments.len() {
-        return Err(Error::msg("HIR call argument count is stale"));
-    }
-    let mut substitutions = HashMap::new();
+    let mut substitutions = Vec::new();
     if let Some(instantiation) = instantiation {
         substitutions
             .try_reserve(instantiation.substitutions.len())
             .map_err(|_| Error::host("HIR call substitution allocation failed"))?;
-        for item in &instantiation.substitutions {
-            validate_type(program, declarations, &item.ty)?;
-            if substitutions
-                .insert(item.parameter.clone(), item.ty.clone())
-                .is_some()
-            {
-                return Err(Error::msg("HIR call substitution is duplicated"));
-            }
-        }
-        for witness in &instantiation.witnesses {
-            require_index(
-                witness.trait_id.raw(),
-                program.traits.len(),
-                "HIR call trait witness",
-            )?;
-            validate_type(program, declarations, &witness.ty)?;
-            if let crate::hir::TraitWitnessKind::Explicit(implementation) = &witness.kind {
-                let selected = program
-                    .implementations
-                    .get(index_of(
-                        implementation.raw(),
-                        "HIR call implementation witness",
-                    )?)
-                    .filter(|selected| selected.id == *implementation)
-                    .ok_or_else(|| Error::msg("HIR call implementation witness is stale"))?;
-                if selected.trait_id != witness.trait_id {
-                    return Err(Error::msg(
-                        "HIR call implementation witness targets the wrong trait",
-                    ));
-                }
-                let Type::Product(product_name) = &witness.ty else {
-                    return Err(Error::msg(
-                        "HIR explicit implementation witness has a non-product type",
-                    ));
-                };
-                let product = program
-                    .products
-                    .get(index_of(
-                        selected.product.raw(),
-                        "HIR call implementation product",
-                    )?)
-                    .filter(|product| product.id == selected.product)
-                    .ok_or_else(|| Error::msg("HIR call implementation product is stale"))?;
-                if product.name != *product_name {
-                    return Err(Error::msg(
-                        "HIR call implementation witness targets the wrong product",
-                    ));
-                }
-            }
-        }
+        substitutions.extend(instantiation.substitutions.iter().cloned());
     }
-    for (parameter, argument) in parameters.iter().zip(arguments) {
-        let expected = parameter.subst(&substitutions);
-        if argument.ty != expected {
-            return Err(Error::msg("HIR call argument type is stale"));
-        }
+    for substitution in &substitutions {
+        validate_type(program, declarations, &substitution.ty)?;
     }
-    let expected_result = declared_result.subst(&substitutions);
-    if Type::join_control(result, &expected_result) != Some(expected_result) {
+    let bounds = program
+        .functions
+        .iter()
+        .find(|function| function.binding == callee)
+        .map(|function| function.bounds.as_slice())
+        .ok_or_else(|| Error::msg("HIR call target function is stale"))?;
+    let mut argument_types = Vec::new();
+    argument_types
+        .try_reserve(arguments.len())
+        .map_err(|_| Error::host("HIR call argument type allocation failed"))?;
+    argument_types.extend(arguments.iter().map(|argument| argument.ty.clone()));
+    let facts = crate::generic_call::GenericFacts {
+        traits: &program.traits,
+        products: &program.products,
+        implementations: &program.implementations,
+        product_names: &declarations.product_ids_by_name,
+        implementation_index: &declarations.implementation_index,
+    };
+    let exact = crate::generic_call::resolve_exact(
+        signature,
+        substitutions,
+        &argument_types,
+        bounds,
+        &facts,
+    )
+    .map_err(|error| match error {
+        crate::generic_call::GenericCallError::Host(message) => Error::host(message),
+        other => Error::msg(format!("HIR call instantiation is invalid: {other}")),
+    })?;
+    if exact.instantiation.as_ref() != instantiation {
+        return Err(Error::msg(
+            "HIR call instantiation metadata is not canonical",
+        ));
+    }
+    if Type::join_control(result, &exact.result) != Some(exact.result) {
         return Err(Error::msg("HIR call result type is stale"));
     }
     Ok(())

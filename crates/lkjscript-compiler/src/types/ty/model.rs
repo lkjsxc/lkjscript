@@ -1,7 +1,7 @@
 use super::*;
 use std::hash::{Hash, Hasher};
 
-pub enum Type {
+pub(crate) enum Type {
     /// Uninhabited, join-only control type. It is never lowered as a value.
     Never,
     Unit,

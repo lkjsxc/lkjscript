@@ -7,4 +7,4 @@ mod ty;
 pub use enum_ids::{EnumId, RuntimeLayoutId, VariantFieldId, VariantId};
 pub(crate) use prelude::*;
 pub(crate) use ty::parse_one;
-pub use ty::Type;
+pub(crate) use ty::Type;

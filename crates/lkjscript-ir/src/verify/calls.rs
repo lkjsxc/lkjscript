@@ -136,16 +136,12 @@ pub(crate) fn verify_call_compatibility(
     if instantiation.witnesses.len() != declared.bounds.len() {
         return fail("SSA generic call witness count does not match bounds");
     }
-    let mut seen = HashSet::new();
     for (bound, witness) in declared.bounds.iter().zip(&instantiation.witnesses) {
         let expected_type = substitutions
             .get(bound.parameter.as_str())
             .ok_or_else(|| IrError::new("SSA trait bound parameter was not inferred"))?;
         if witness.trait_id != bound.trait_id || &witness.ty != expected_type {
             return fail("SSA trait witness type or trait does not match its bound");
-        }
-        if !seen.insert((witness.trait_id, witness.ty.clone())) {
-            return fail("SSA generic call has duplicate trait witnesses");
         }
         verify_witness(program, witness)?;
     }

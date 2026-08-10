@@ -1,4 +1,4 @@
-use super::EntityId;
+use super::{EntityId, SemanticType};
 use crate::operation::Operation;
 
 /// Dense identity into one flat expression draft. It is never a workspace identity.
@@ -63,6 +63,12 @@ pub struct LocalDraft {
 pub struct DraftFieldValue {
     pub field: EntityId,
     pub value: DraftNodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeArgumentDraft {
+    pub parameter: EntityId,
+    pub argument: SemanticType,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,6 +173,7 @@ pub enum DraftNode {
     BorrowShared(DraftBindingRef),
     Call {
         callee: EntityId,
+        type_arguments: Vec<TypeArgumentDraft>,
         arguments: Vec<DraftNodeId>,
     },
     Operation {

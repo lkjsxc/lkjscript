@@ -4,6 +4,7 @@
 mod analyze;
 mod codegen;
 mod effects;
+mod generic_call;
 mod hir;
 #[path = "hir/memory_plan/mod.rs"]
 pub mod memory_plan;
@@ -35,21 +36,24 @@ pub use pipeline::{
     compile_path_with_metrics, compile_path_with_sources, compile_snapshot, compile_source,
     validate_source,
 };
-pub use types::Type;
+pub(crate) use types::Type;
 pub use workspace::{
-    import_path, import_path_with_metrics, import_source, CallEdge, CompileSnapshotError,
-    CompletenessBlocker, ConstructorStatus, Continuation, DependencyEdge, DiagnosticHeader,
-    DiagnosticSeverity, DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId,
-    DraftPatternField, DraftPatternNode, DraftPatternNodeId, Edit, EntityHeader, EntityId,
-    EntityKind, EntityPage, EntityTypeFacts, EnumFieldDraft, EnumVariantDraft, ExpressionDraft,
-    FunctionSignatureView, HoleId, HoleKind, HoleState, ImportMetrics, IncompleteSnapshotError,
-    InvalidatedDomain, LegalConstructor, LocalDraft, MatchArmDraft, MatchArmView,
-    MatchPatternFieldView, MatchPatternKindView, MatchPatternNodeView, MatchView, NodeHeader,
-    NodeId, NodeKind, NodeTypeFacts, PageRequest, ParameterDraft, PatternDraft,
-    PresentationAttachments, ProductFieldDraft, ProgramState, ProjectionSlice, QueryPage,
-    ReferenceEdge, RevisionId, SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticOwner,
-    SemanticTypeRef, SemanticTypeView, SourceAttachment, Transaction, TransactionOutcome,
-    Workspace, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    import_path, import_path_with_metrics, import_source, BuiltinEnum, BuiltinTrait, CallEdge,
+    CallInstantiationView, CompileSnapshotError, CompletenessBlocker, ConstructorStatus,
+    Continuation, DependencyEdge, DiagnosticHeader, DiagnosticSeverity, DraftBindingId,
+    DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternField, DraftPatternNode,
+    DraftPatternNodeId, Edit, EffectSummary, EntityHeader, EntityId, EntityKind, EntityPage,
+    EntityTypeFacts, EnumFieldDraft, EnumVariantDraft, ExpressionDraft, FunctionSignatureView,
+    HoleId, HoleKind, HoleState, ImportMetrics, IncompleteSnapshotError, InvalidatedDomain,
+    LegalConstructor, LocalDraft, MatchArmDraft, MatchArmView, MatchPatternFieldView,
+    MatchPatternKindView, MatchPatternLabel, MatchPatternNodeView, MatchView, NodeHeader, NodeId,
+    NodeKind, NodeTypeFacts, PageRequest, ParameterDraft, PatternDraft, PresentationAttachments,
+    ProductFieldDraft, ProgramState, ProjectionSlice, QueryPage, ReferenceEdge, RevisionId,
+    SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticEnum, SemanticKind, SemanticOwner,
+    SemanticTrait, SemanticType, SourceAttachment, TraitWitnessKindView, TraitWitnessView,
+    Transaction, TransactionOutcome, TypeArgumentDraft, TypeArgumentView, TypeParameterBoundView,
+    TypeParameterView, ValueParameterView, Workspace, WorkspaceError, WorkspaceNamespace,
+    WorkspaceSnapshot,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";

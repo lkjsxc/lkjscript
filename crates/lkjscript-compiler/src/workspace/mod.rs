@@ -27,8 +27,9 @@ use lkjscript_core::{Error, Result};
 pub use draft::{
     DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternField,
     DraftPatternNode, DraftPatternNodeId, ExpressionDraft, LocalDraft, MatchArmDraft, PatternDraft,
+    TypeArgumentDraft,
 };
-pub use error::{CompileSnapshotError, IncompleteSnapshotError, WorkspaceError};
+pub use error::{CompileSnapshotError, IncompleteSnapshotError, SemanticKind, WorkspaceError};
 use identity::IdentityAllocator;
 pub use ids::{EntityId, NodeId, RevisionId, WorkspaceNamespace};
 pub(crate) use importer::{import_package_path, import_package_path_with_metrics};
@@ -43,15 +44,17 @@ use model::{HoleRecord, SnapshotIndexes};
 use program::SemanticProgram;
 pub use projection::ProjectionSlice;
 pub use query::{
-    ConstructorStatus, Continuation, EntityPage, EntityTypeFacts, FunctionSignatureView,
-    LegalConstructor, MatchArmView, MatchPatternFieldView, MatchPatternKindView,
-    MatchPatternNodeView, MatchView, NodeTypeFacts, PageRequest, QueryPage,
+    CallInstantiationView, ConstructorStatus, Continuation, EffectSummary, EntityPage,
+    EntityTypeFacts, FunctionSignatureView, LegalConstructor, MatchArmView, MatchPatternFieldView,
+    MatchPatternKindView, MatchPatternLabel, MatchPatternNodeView, MatchView, NodeTypeFacts,
+    PageRequest, QueryPage, TraitWitnessKindView, TraitWitnessView, TypeArgumentView,
+    TypeParameterBoundView, TypeParameterView, ValueParameterView,
 };
 pub use transaction::{
     Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
     SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome, Workspace,
 };
-pub use types::{SemanticTypeRef, SemanticTypeView};
+pub use types::{BuiltinEnum, BuiltinTrait, SemanticEnum, SemanticTrait, SemanticType};
 
 #[derive(Clone)]
 enum CapturedCompilationProvenance {
@@ -242,6 +245,7 @@ impl WorkspaceSnapshot {
             return Err(Error::msg("workspace completeness state is stale"));
         }
         if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_enclosing_entities.len()
             || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
@@ -272,8 +276,7 @@ impl WorkspaceSnapshot {
             if self.indexes.nodes[index].kind != NodeKind::Hole
                 || self.indexes.node_addresses[index] != hole.address
                 || self.indexes.node_keys[index] != hole.key
-                || self.indexes.node_expected_types[index].as_ref()
-                    != Some(&hole.state.expected_type)
+                || self.indexes.node_expected_types[index].as_ref() != Some(&hole.expected_internal)
             {
                 return Err(Error::msg("workspace hole facts are inconsistent"));
             }
@@ -316,6 +319,7 @@ impl WorkspaceSnapshot {
             return Err(Error::msg("workspace snapshot is incomplete"));
         }
         if self.indexes.nodes.len() != self.indexes.node_addresses.len()
+            || self.indexes.nodes.len() != self.indexes.node_enclosing_entities.len()
             || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()

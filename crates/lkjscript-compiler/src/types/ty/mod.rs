@@ -10,8 +10,8 @@ mod display;
 mod model;
 mod parse;
 
-pub use model::*;
-pub use parse::parse_one;
+pub(crate) use model::*;
+pub(crate) use parse::parse_one;
 
 #[cfg(test)]
 mod tests;

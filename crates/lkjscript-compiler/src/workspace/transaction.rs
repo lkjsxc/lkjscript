@@ -28,26 +28,26 @@ use super::{
     CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftBindingId, DraftBindingRef,
     DraftFieldValue, DraftNode, DraftNodeId, DraftPatternNode, DraftPatternNodeId, EntityId,
     EntityKind, ExpressionDraft, HoleId, HoleKind, HoleState, NodeId, NodeKind, PatternDraft,
-    ProgramState, RevisionId, SemanticChild, SemanticOwner, SemanticTypeRef, WorkspaceError,
+    ProgramState, RevisionId, SemanticChild, SemanticOwner, SemanticType, WorkspaceError,
     WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParameterDraft {
     pub name: String,
-    pub ty: SemanticTypeRef,
+    pub ty: SemanticType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProductFieldDraft {
     pub name: String,
-    pub ty: SemanticTypeRef,
+    pub ty: SemanticType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnumFieldDraft {
     pub name: String,
-    pub ty: SemanticTypeRef,
+    pub ty: SemanticType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,10 +76,10 @@ pub enum Edit {
     CreateFunction {
         name: String,
         parameters: Vec<ParameterDraft>,
-        return_type: SemanticTypeRef,
+        return_type: SemanticType,
     },
     CreateMain {
-        return_type: SemanticTypeRef,
+        return_type: SemanticType,
     },
     DeleteEntity {
         entity: EntityId,
@@ -98,7 +98,7 @@ pub enum Edit {
     },
     RefineHole {
         hole: HoleId,
-        expected_type: Option<SemanticTypeRef>,
+        expected_type: Option<SemanticType>,
         goal: String,
     },
     FillHole {
@@ -172,6 +172,11 @@ pub enum SemanticDiffEntry {
         site: NodeId,
         old_callee: Option<EntityId>,
         new_callee: Option<EntityId>,
+    },
+    CallInstantiationChanged {
+        site: NodeId,
+        old: Box<super::CallInstantiationView>,
+        new: Box<super::CallInstantiationView>,
     },
 }
 
@@ -393,7 +398,7 @@ fn stage(
                     resolved_parameter_types.push(resolve_semantic_type(
                         base,
                         &program,
-                        parameter.ty,
+                        parameter.ty.clone(),
                         "function parameter",
                     )?);
                     if !parameter_names.insert(parameter.name.as_str()) {
@@ -563,6 +568,7 @@ fn stage(
                     header.kind,
                     EntityKind::Main
                         | EntityKind::BuiltinOperation
+                        | EntityKind::TypeParameter
                         | EntityKind::Product
                         | EntityKind::ProductField
                         | EntityKind::Enum
@@ -591,17 +597,19 @@ fn stage(
             Edit::ReplaceExpression { target, draft } => {
                 let (address, _key, expected, visible) = edit_context(base, target)?;
                 reject_deleted_root_edit(deleted_roots, address.root)?;
-                let lowered = lower_draft(
-                    base,
-                    &mut program,
-                    &draft,
-                    &expected,
-                    Origin::Semantic,
-                    &visible,
-                    address.root,
-                    &mut lowering,
-                    deleted_entities,
-                )?;
+                let lowered = crate::stack::grow(|| {
+                    lower_draft(
+                        base,
+                        &mut program,
+                        &draft,
+                        &expected,
+                        Origin::Semantic,
+                        &visible,
+                        address.root,
+                        &mut lowering,
+                        deleted_entities,
+                    )
+                })?;
                 new_entities.extend(lowered.entities);
                 structural.push(StructuralAction {
                     target,
@@ -622,17 +630,18 @@ fn stage(
                     state: HoleState {
                         id: HoleId(target),
                         kind: HoleKind::TypedExpression,
-                        expected_type: expected.clone(),
-                        expected_semantic_type: super::types::view(
+                        expected_type: super::types::view(
                             &base.program,
                             &base.indexes,
                             &expected,
+                            Some(owner),
                         )?,
                         goal: Arc::from(goal),
                         owner,
                         context: target,
                         visible_entities: visible.into(),
                     },
+                    expected_internal: expected.clone(),
                     address,
                     key,
                 });
@@ -666,10 +675,15 @@ fn stage(
                 if let Some(expected_type) = expected_type {
                     let expected_type =
                         resolve_semantic_type(base, &program, expected_type, "hole expectation")?;
-                    if expected_type != record.state.expected_type {
+                    if expected_type != record.expected_internal {
                         return Err(WorkspaceError::TypeMismatch {
-                            expected: Arc::from(record.state.expected_type.to_string()),
-                            actual: Arc::from(expected_type.to_string()),
+                            expected: Box::new(record.state.expected_type.clone()),
+                            actual: Box::new(super::types::view(
+                                &base.program,
+                                &base.indexes,
+                                &expected_type,
+                                Some(record.state.owner),
+                            )?),
                         });
                     }
                 }
@@ -701,7 +715,7 @@ fn stage(
                         base,
                         &mut program,
                         &draft,
-                        &record.state.expected_type,
+                        &record.expected_internal,
                         Origin::Semantic,
                         &record.state.visible_entities,
                         record.address.root,
@@ -814,13 +828,6 @@ fn stage(
     }
     append_structural_diff(base, &indexes, &structural, &mut entries)?;
     append_graph_diff(base, &indexes, &mut entries)?;
-    sort_diff_entries(&mut entries);
-
-    let diff = SemanticDiff {
-        base_revision: base.revision,
-        revision,
-        entries,
-    };
     let blockers = completeness_blockers(&program, &holes);
     let state = if blockers.is_empty() {
         ProgramState::Complete
@@ -839,6 +846,13 @@ fn stage(
         holes: holes.into(),
         blockers: blockers.into(),
         allocator: allocator.clone(),
+    };
+    append_call_instantiation_diff(base, &snapshot, &mut entries)?;
+    sort_diff_entries(&mut entries);
+    let diff = SemanticDiff {
+        base_revision: base.revision,
+        revision,
+        entries,
     };
     let invalidated = vec![
         InvalidatedDomain::SemanticIndexes,
@@ -1928,6 +1942,13 @@ fn remap_entity_address(
             .bindings
             .get(&crate::hir::BindingId::new(raw))
             .map(|binding| EntityAddress::Binding(binding.raw())),
+        EntityAddress::FunctionTypeParameter { function, ordinal } => compaction
+            .bindings
+            .get(&crate::hir::BindingId::new(function))
+            .map(|binding| EntityAddress::FunctionTypeParameter {
+                function: binding.raw(),
+                ordinal,
+            }),
         EntityAddress::Product(raw) => compaction
             .products
             .get(&lkjscript_core::ProductId::new(raw))
@@ -1943,6 +1964,16 @@ fn remap_entity_address(
             .enum_vectors
             .get(&raw)
             .map(|enumeration| EntityAddress::Enum(*enumeration)),
+        EntityAddress::EnumTypeParameter {
+            enumeration,
+            ordinal,
+        } => compaction
+            .enum_vectors
+            .get(&enumeration)
+            .map(|enumeration| EntityAddress::EnumTypeParameter {
+                enumeration: *enumeration,
+                ordinal,
+            }),
         EntityAddress::EnumVariant {
             enumeration,
             variant,
@@ -2431,59 +2462,10 @@ fn validate_declaration_name(name: &str) -> Result<(), WorkspaceError> {
 fn resolve_semantic_type(
     base: &WorkspaceSnapshot,
     program: &SemanticProgram,
-    ty: SemanticTypeRef,
+    ty: SemanticType,
     subject: &str,
 ) -> Result<Type, WorkspaceError> {
-    Ok(match ty {
-        SemanticTypeRef::Unit => Type::Unit,
-        SemanticTypeRef::Bool => Type::Bool,
-        SemanticTypeRef::I64 => Type::I64,
-        SemanticTypeRef::F64 => Type::F64,
-        SemanticTypeRef::Bytes => Type::Bytes,
-        SemanticTypeRef::ByteVector => Type::ByteVector,
-        SemanticTypeRef::ByteSlice => Type::ByteSlice,
-        SemanticTypeRef::ByteSliceMut => Type::ByteSliceMut,
-        SemanticTypeRef::Product(entity) => {
-            let header = base.workspace_entity(entity)?;
-            if header.kind != EntityKind::Product {
-                return Err(wrong_kind(subject, "product declaration", header.kind));
-            }
-            let address = entity_address(base, entity)?;
-            let EntityAddress::Product(raw) = address else {
-                return Err(WorkspaceError::StaleIdentity(Arc::from("product")));
-            };
-            let definition = program
-                .products
-                .get(host_index(raw, "product")?)
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
-            Type::Product(definition.name.clone())
-        }
-        SemanticTypeRef::Enum(entity) => {
-            let header = base.workspace_entity(entity)?;
-            if header.kind != EntityKind::Enum {
-                return Err(wrong_kind(subject, "enum declaration", header.kind));
-            }
-            let address = entity_address(base, entity)?;
-            let EntityAddress::Enum(raw) = address else {
-                return Err(WorkspaceError::StaleIdentity(Arc::from("enum")));
-            };
-            let definition = program
-                .enums
-                .get(host_index(raw, "enum")?)
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
-            if !definition.type_parameters.is_empty() {
-                return Err(WorkspaceError::unsupported(
-                    "construct-type",
-                    "generic enum authoring is not implemented",
-                ));
-            }
-            Type::Enum {
-                id: definition.id,
-                name: definition.name.clone(),
-                arguments: Vec::new(),
-            }
-        }
-    })
+    super::types::resolve(base, program, &ty, None, false, false, subject)
 }
 
 fn reject_reference_result(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
@@ -2667,7 +2649,10 @@ fn visible_entities_in(
         .map_err(|_| WorkspaceError::Host(Arc::from("visible entity allocation failed")))?;
     for entity in &indexes.entities {
         if entity.kind == EntityKind::Function
-            || (entity.kind == EntityKind::Parameter && entity.owner == Some(owner))
+            || (matches!(
+                entity.kind,
+                EntityKind::Parameter | EntityKind::TypeParameter
+            ) && entity.owner == Some(owner))
         {
             visible.push(entity.id);
         }
@@ -2901,6 +2886,9 @@ struct ResolvedDraftBinding {
 
 struct LoweringState {
     root_places: HashMap<EntityAddress, u64>,
+    product_names: HashMap<String, lkjscript_core::ProductId>,
+    implementation_index:
+        HashMap<(crate::hir::TraitId, lkjscript_core::ProductId), crate::hir::ImplId>,
     next_loan: u64,
 }
 
@@ -2932,8 +2920,38 @@ impl LoweringState {
                 crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
             }
         }
+        let mut product_names = HashMap::new();
+        product_names
+            .try_reserve(program.products.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("generic product index allocation failed"))
+            })?;
+        for product in &program.products {
+            product_names.insert(product.name.clone(), product.id);
+        }
+        let mut implementation_index = HashMap::new();
+        implementation_index
+            .try_reserve(program.implementations.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("generic implementation index allocation failed"))
+            })?;
+        for implementation in &program.implementations {
+            if implementation_index
+                .insert(
+                    (implementation.trait_id, implementation.product),
+                    implementation.id,
+                )
+                .is_some()
+            {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "generic implementation index contains overlapping facts",
+                )));
+            }
+        }
         Ok(Self {
             root_places: HashMap::new(),
+            product_names,
+            implementation_index,
             next_loan,
         })
     }
@@ -3259,9 +3277,22 @@ fn lower_draft(
                     &locals,
                 )?;
                 if resolved.ty != Type::ByteVector {
+                    let owner = snapshot
+                        .indexes
+                        .address_entities
+                        .get(&root)
+                        .copied()
+                        .ok_or_else(|| {
+                            WorkspaceError::StaleIdentity(Arc::from("callable owner"))
+                        })?;
                     return Err(WorkspaceError::TypeMismatch {
-                        expected: Arc::from(Type::ByteVector.to_string()),
-                        actual: Arc::from(resolved.ty.to_string()),
+                        expected: Box::new(SemanticType::ByteVector),
+                        actual: Box::new(super::types::view(
+                            &snapshot.program,
+                            &snapshot.indexes,
+                            &resolved.ty,
+                            Some(owner),
+                        )?),
                     });
                 }
                 Expr {
@@ -3279,8 +3310,12 @@ fn lower_draft(
                     },
                 }
             }
-            DraftNode::Call { callee, arguments } => {
-                snapshot.workspace_entity(*callee)?;
+            DraftNode::Call {
+                callee,
+                type_arguments,
+                arguments,
+            } => {
+                let callee_header = snapshot.workspace_entity(*callee)?;
                 if deleting_entities.contains(callee) {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
                         "a newly lowered call cannot target a function deleted by the transaction",
@@ -3289,24 +3324,139 @@ fn lower_draft(
                 if !visible_set.contains(callee) {
                     return Err(WorkspaceError::InvisibleEntity);
                 }
-                let (binding, parameters, result, summary) =
-                    callable_binding(snapshot, program, *callee)?;
-                if parameters.len() != arguments.len() {
+                if callee_header.kind != EntityKind::Function {
+                    return Err(wrong_kind("call", "function", callee_header.kind));
+                }
+                let caller = snapshot
+                    .indexes
+                    .address_entities
+                    .get(&root)
+                    .copied()
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("callable owner")))?;
+                let binding = binding_from_entity(snapshot, program, *callee)?;
+                let declaration = program
+                    .binding(binding)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+                let function = program
+                    .functions
+                    .iter()
+                    .find(|function| function.binding == binding)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
+                let variables = match &declaration.ty {
+                    Type::Forall { vars, .. } => vars.as_slice(),
+                    Type::Fn { .. } => &[][..],
+                    _ => return Err(wrong_kind("call", "function", callee_header.kind)),
+                };
+                if variables.is_empty() && !type_arguments.is_empty() {
+                    return Err(WorkspaceError::UnexpectedTypeArgument);
+                }
+                let mut supplied = HashMap::new();
+                supplied.try_reserve(type_arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("draft type-argument allocation failed"))
+                })?;
+                for argument in type_arguments {
+                    if argument.parameter.namespace() != snapshot.namespace {
+                        return Err(WorkspaceError::ForeignNamespace(Arc::from(
+                            "type parameter",
+                        )));
+                    }
+                    let parameter = snapshot
+                        .workspace_entity(argument.parameter)
+                        .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("type parameter")))?;
+                    if parameter.kind != EntityKind::TypeParameter {
+                        return Err(wrong_kind(
+                            "generic call type argument",
+                            "type parameter",
+                            parameter.kind,
+                        ));
+                    }
+                    if parameter.owner != Some(*callee) {
+                        return Err(WorkspaceError::WrongTypeParameterOwner {
+                            parameter: Box::new(argument.parameter),
+                            expected: Box::new(*callee),
+                            actual: parameter.owner.map(Box::new),
+                        });
+                    }
+                    let resolved = super::types::resolve(
+                        snapshot,
+                        program,
+                        &argument.argument,
+                        Some(caller),
+                        false,
+                        false,
+                        "generic type argument",
+                    )?;
+                    if supplied.insert(argument.parameter, resolved).is_some() {
+                        return Err(WorkspaceError::DuplicateTypeArgument {
+                            parameter: argument.parameter,
+                        });
+                    }
+                }
+                let mut substitutions = Vec::new();
+                substitutions.try_reserve(variables.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("generic substitution allocation failed"))
+                })?;
+                for variable in variables {
+                    let parameter = snapshot
+                        .indexes
+                        .type_parameter_entities
+                        .get(callee)
+                        .and_then(|parameters| parameters.get(variable.as_str()))
+                        .copied()
+                        .ok_or_else(|| {
+                            WorkspaceError::StaleIdentity(Arc::from("type parameter"))
+                        })?;
+                    let ty = supplied
+                        .remove(&parameter)
+                        .ok_or(WorkspaceError::MissingTypeArgument { parameter })?;
+                    substitutions.push(crate::hir::TypeSubstitution {
+                        parameter: variable.clone(),
+                        ty,
+                    });
+                }
+                if !supplied.is_empty() {
                     return Err(WorkspaceError::InvalidDraft(Arc::from(
-                        "draft call arity does not match callee signature",
+                        "generic call contains an undeclared type argument",
                     )));
                 }
                 let mut args = Vec::new();
+                let mut argument_types = Vec::new();
                 args.try_reserve(arguments.len()).map_err(|_| {
                     WorkspaceError::Host(Arc::from("draft argument allocation failed"))
                 })?;
-                let mut effects = summary;
-                for (argument, parameter) in arguments.iter().zip(&parameters) {
+                argument_types.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("draft argument type allocation failed"))
+                })?;
+                let mut effects = function.summary;
+                for argument in arguments {
                     let value = take_draft_child(&mut completed, *argument)?;
-                    require_type(&value.ty, parameter)?;
+                    argument_types.push(value.ty.clone());
                     effects = effects.union(value.effects);
                     args.push(value);
                 }
+                let facts = crate::generic_call::GenericFacts {
+                    traits: &program.traits,
+                    products: &program.products,
+                    implementations: &program.implementations,
+                    product_names: &lowering.product_names,
+                    implementation_index: &lowering.implementation_index,
+                };
+                let exact = crate::generic_call::resolve_exact(
+                    &declaration.ty,
+                    substitutions,
+                    &argument_types,
+                    &function.bounds,
+                    &facts,
+                )
+                .map_err(|error| {
+                    generic_workspace_error(snapshot, program, caller, *callee, error)
+                })?;
+                debug_assert_eq!(exact.parameters.len(), args.len());
+                let crate::generic_call::ExactCall {
+                    parameters: _,
+                    result,
+                    instantiation,
+                } = exact;
                 Expr {
                     ty: result,
                     effects,
@@ -3317,7 +3467,7 @@ fn lower_draft(
                             storage: BindingStorage::Function,
                         },
                         args,
-                        instantiation: None,
+                        instantiation,
                     },
                 }
             }
@@ -3534,7 +3684,28 @@ fn lower_draft(
         .and_then(|index| completed.get_mut(index))
         .and_then(Option::take)
         .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft root is unavailable")))?;
-    require_type(&root_expression.ty, expected)?;
+    if !Type::unify_assignable(&root_expression.ty, expected) {
+        let owner = snapshot
+            .indexes
+            .address_entities
+            .get(&root)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("callable owner")))?;
+        return Err(WorkspaceError::TypeMismatch {
+            expected: Box::new(super::types::view(
+                program,
+                &snapshot.indexes,
+                expected,
+                Some(owner),
+            )?),
+            actual: Box::new(super::types::view(
+                program,
+                &snapshot.indexes,
+                &root_expression.ty,
+                Some(owner),
+            )?),
+        });
+    }
     set_root_local_count(program, root, next_slot)?;
     Ok(LoweredDraft {
         expression: root_expression,
@@ -5028,37 +5199,6 @@ fn take_draft_child(
         .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft child is stale or reused")))
 }
 
-fn callable_binding(
-    snapshot: &WorkspaceSnapshot,
-    program: &SemanticProgram,
-    entity: EntityId,
-) -> Result<(crate::hir::BindingId, Vec<Type>, Type, EffectSet), WorkspaceError> {
-    let header = snapshot.workspace_entity(entity)?;
-    if header.kind != EntityKind::Function {
-        return Err(WorkspaceError::unsupported(
-            "call",
-            "initial draft calls support non-generic visible functions only",
-        ));
-    }
-    let binding = binding_from_entity(snapshot, program, entity)?;
-    let definition = program
-        .binding(binding)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
-    let Type::Fn { params, ret } = &definition.ty else {
-        return Err(WorkspaceError::unsupported(
-            "call",
-            "generic and non-function binding calls are not implemented",
-        ));
-    };
-    let summary = program
-        .functions
-        .iter()
-        .find(|function| function.binding == binding)
-        .map(|function| function.summary)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function")))?;
-    Ok((binding, params.clone(), ret.as_ref().clone(), summary))
-}
-
 fn entity_address(
     snapshot: &WorkspaceSnapshot,
     entity: EntityId,
@@ -5081,7 +5221,7 @@ fn wrong_kind(operation: &str, expected: &str, actual: EntityKind) -> WorkspaceE
     WorkspaceError::WrongEntityKind {
         operation: Arc::from(operation),
         expected: Arc::from(expected),
-        actual: Arc::from(entity_kind_name(actual)),
+        actual: super::error::SemanticKind::Entity(actual),
     }
 }
 
@@ -5093,6 +5233,7 @@ fn entity_kind_name(kind: EntityKind) -> &'static str {
         EntityKind::StaticBytesLocal => "static bytes local",
         EntityKind::MutableLocal => "mutable local",
         EntityKind::Function => "function",
+        EntityKind::TypeParameter => "type parameter",
         EntityKind::BuiltinOperation => "builtin operation",
         EntityKind::Product => "product",
         EntityKind::ProductField => "product field",
@@ -5129,14 +5270,94 @@ fn binding_from_entity(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("binding")))
 }
 
+fn generic_workspace_error(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    caller: EntityId,
+    callee: EntityId,
+    error: crate::generic_call::GenericCallError,
+) -> WorkspaceError {
+    match error {
+        crate::generic_call::GenericCallError::Arity { expected, actual } => {
+            WorkspaceError::CallArity {
+                callee: Box::new(callee),
+                expected,
+                actual,
+            }
+        }
+        crate::generic_call::GenericCallError::TypeMismatch {
+            expected, actual, ..
+        } => {
+            let expected = super::types::view(program, &snapshot.indexes, &expected, Some(caller));
+            let actual = super::types::view(program, &snapshot.indexes, &actual, Some(caller));
+            match (expected, actual) {
+                (Ok(expected), Ok(actual)) => WorkspaceError::TypeMismatch {
+                    expected: Box::new(expected),
+                    actual: Box::new(actual),
+                },
+                (Err(error), _) | (_, Err(error)) => error,
+            }
+        }
+        crate::generic_call::GenericCallError::UnexpectedSubstitutions => {
+            WorkspaceError::UnexpectedTypeArgument
+        }
+        crate::generic_call::GenericCallError::ForwardingUnsupported => {
+            WorkspaceError::GenericForwardingUnsupported
+        }
+        crate::generic_call::GenericCallError::UnsatisfiedTrait {
+            parameter,
+            trait_id,
+            ty,
+        } => {
+            let stable_parameter = snapshot
+                .indexes
+                .type_parameter_entities
+                .get(&callee)
+                .and_then(|parameters| parameters.get(parameter.as_str()))
+                .copied();
+            match (
+                stable_parameter,
+                super::types::semantic_trait(program, &snapshot.indexes, trait_id),
+                super::types::view(program, &snapshot.indexes, &ty, Some(caller)),
+            ) {
+                (Some(parameter), Ok(trait_identity), Ok(argument)) => {
+                    WorkspaceError::UnsatisfiedTraitBound {
+                        parameter: Box::new(parameter),
+                        trait_identity: Box::new(trait_identity),
+                        argument: Box::new(argument),
+                    }
+                }
+                _ => WorkspaceError::Validation(Arc::from(
+                    "generic bound failure could not be mapped to stable semantic identities",
+                )),
+            }
+        }
+        crate::generic_call::GenericCallError::OwnershipUnsupported => {
+            WorkspaceError::unsupported(
+                "generic-call",
+                "ownership/reference generic instantiation is unavailable in the initial ownership slice",
+            )
+        }
+        crate::generic_call::GenericCallError::ReferenceResultUnsupported => {
+            WorkspaceError::unsupported(
+                "generic-call",
+                "user-call results cannot be lexical references in the initial ownership slice",
+            )
+        }
+        crate::generic_call::GenericCallError::Host(message) => {
+            WorkspaceError::Host(Arc::from(message))
+        }
+        other => WorkspaceError::Validation(Arc::from(other.to_string())),
+    }
+}
+
 fn require_type(actual: &Type, expected: &Type) -> Result<(), WorkspaceError> {
     if Type::unify_assignable(actual, expected) {
         Ok(())
     } else {
-        Err(WorkspaceError::TypeMismatch {
-            expected: Arc::from(expected.to_string()),
-            actual: Arc::from(actual.to_string()),
-        })
+        Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+            "expression type mismatch: expected {expected}, got {actual}"
+        ))))
     }
 }
 
@@ -5160,8 +5381,12 @@ fn refresh_hole_addresses(
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole owner")))?;
         hole.state.context = hole.state.id.0;
         hole.state.visible_entities = visible_entities_in(program, indexes, hole.address)?.into();
-        hole.state.expected_semantic_type =
-            super::types::view(program, indexes, &hole.state.expected_type)?;
+        hole.state.expected_type = super::types::view(
+            program,
+            indexes,
+            &hole.expected_internal,
+            Some(hole.state.owner),
+        )?;
     }
     Ok(())
 }
@@ -5199,13 +5424,13 @@ fn install_new_holes(
             state: HoleState {
                 id: HoleId(node),
                 kind: hole.kind,
-                expected_semantic_type: super::types::view(program, indexes, &expected_type)?,
-                expected_type,
+                expected_type: super::types::view(program, indexes, &expected_type, Some(owner))?,
                 goal: Arc::clone(&hole.goal),
                 owner,
                 context: node,
                 visible_entities: visible.into(),
             },
+            expected_internal: expected_type,
             address: hole.address,
             key: indexes.node_keys[index],
         });
@@ -5514,6 +5739,45 @@ fn append_reference_diff(
     Ok(())
 }
 
+fn append_call_instantiation_diff(
+    old: &WorkspaceSnapshot,
+    new: &WorkspaceSnapshot,
+    entries: &mut Vec<SemanticDiffEntry>,
+) -> Result<(), WorkspaceError> {
+    for node in old
+        .indexes
+        .nodes
+        .iter()
+        .filter(|node| node.kind == NodeKind::Call)
+    {
+        let Some(new_index) = new.indexes.node_lookup.get(&node.id).copied() else {
+            continue;
+        };
+        if new.indexes.nodes[new_index].kind != NodeKind::Call {
+            continue;
+        }
+        let old_view = old.call_instantiation(old.revision, node.id)?;
+        let new_view = new.call_instantiation(new.revision, node.id)?;
+        let changed = old_view.callee != new_view.callee
+            || old_view.type_arguments != new_view.type_arguments
+            || old_view.parameters != new_view.parameters
+            || old_view.result != new_view.result
+            || old_view.witnesses != new_view.witnesses
+            || old_view.effects != new_view.effects;
+        if changed {
+            entries.try_reserve(1).map_err(|_| {
+                WorkspaceError::Host(Arc::from("call instantiation diff allocation failed"))
+            })?;
+            entries.push(SemanticDiffEntry::CallInstantiationChanged {
+                site: node.id,
+                old: Box::new(old_view),
+                new: Box::new(new_view),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn sort_diff_entries(entries: &mut [SemanticDiffEntry]) {
     entries.sort_unstable_by_key(diff_key);
 }
@@ -5585,6 +5849,9 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
                 new.0,
                 new.1,
             )
+        }
+        SemanticDiffEntry::CallInstantiationChanged { site, .. } => {
+            (11, site.slot(), site.generation(), 0, 0, 0, 0)
         }
     }
 }

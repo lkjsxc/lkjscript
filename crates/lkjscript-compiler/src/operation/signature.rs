@@ -5,7 +5,7 @@ use crate::operation::signature_variants::variant_signature;
 use crate::operation::*;
 
 impl Operation {
-    pub fn signature(self) -> Type {
+    pub(crate) fn signature(self) -> Type {
         match self {
             Self::Add
             | Self::Subtract
