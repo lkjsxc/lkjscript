@@ -54,12 +54,18 @@ operation's contract requires it.
 
 ## 3. Bindings and control
 
-Bindings are immutable unless mutation is explicitly part of their declaration. Evaluation order is
-deterministic where effects, movement, cleanup, failure, or control flow can observe it.
+Bindings are immutable unless mutation is explicitly part of their declaration. A mutable binding's
+initializer is evaluated before the binding becomes visible; assignment requires its exact declared
+type. Copy values may overwrite initialized mutable storage. Affine storage may be reinitialized only
+after its prior value has been moved or consumed by a typed operation with defined cleanup;
+assignment never hides an implicit affine release. Evaluation order is deterministic where effects,
+movement, cleanup, failure, or control flow can observe it.
 
 The language supports conditional selection, ordered blocks, loops, `while`, `break`, `continue`,
-early return, function calls, and exhaustive enum matching. Control must not read an uninitialized
-value, use an unavailable moved value, or enter an invalid control-flow state.
+early return, function calls, and exhaustive enum matching. An empty ordered block yields `unit`; a
+non-empty block yields its final value. `while` re-evaluates a Boolean condition before each ordered
+body iteration and yields `unit` when it terminates. Control must not read an uninitialized value, use
+an unavailable moved value, or enter an invalid control-flow state.
 
 ## 4. Effects and capabilities
 

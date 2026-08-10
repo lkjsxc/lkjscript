@@ -11,6 +11,27 @@ mod hash;
 mod truthful_effects;
 
 #[test]
+fn numeric_binary_operations_require_one_exact_operand_type() {
+    for operation in [
+        Operation::Add,
+        Operation::Subtract,
+        Operation::Multiply,
+        Operation::Divide,
+        Operation::Less,
+        Operation::LessEqual,
+        Operation::Greater,
+        Operation::GreaterEqual,
+    ] {
+        assert!(operation.resolve_types(&[Type::I64, Type::F64]).is_err());
+        assert!(operation.resolve_types(&[Type::F64, Type::I64]).is_err());
+    }
+    assert_eq!(
+        Operation::Less.resolve_types(&[Type::I64, Type::I64]),
+        Ok((function(vec![Type::I64, Type::I64], Type::Bool), Type::Bool))
+    );
+}
+
+#[test]
 fn compiler_operation_order_agrees_with_stable_registry_identities() {
     assert_eq!(Operation::ALL.len(), lkjscript_contracts::OPERATION_COUNT);
     for (index, operation) in Operation::ALL.iter().copied().enumerate() {

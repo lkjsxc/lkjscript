@@ -824,7 +824,8 @@ fn validate_expression_kind(
                 return Err(Error::msg("HIR conditional type facts are stale"));
             }
         }
-        ExprKind::While { condition, .. } if condition.ty == Type::Bool => {}
+        ExprKind::While { condition, .. }
+            if condition.ty == Type::Bool && expression.ty == Type::Unit => {}
         ExprKind::Loop { result_type, .. } if *result_type == expression.ty => {}
         ExprKind::Return { value }
             if Type::join_control(&value.ty, return_type) == Some(return_type.clone()) => {}
@@ -835,7 +836,7 @@ fn validate_expression_kind(
         ExprKind::Exit { code } if code.ty == Type::I64 && expression.ty == Type::Never => {}
         ExprKind::Let { bindings, body } => {
             for local in bindings {
-                validate_local_binding(
+                let binding = validate_local_binding(
                     program,
                     local.binding,
                     local.slot,
@@ -843,6 +844,14 @@ fn validate_expression_kind(
                     local_count,
                     &local.value.ty,
                 )?;
+                if !matches!(
+                    binding.kind,
+                    BindingKind::ImmutableLocal
+                        | BindingKind::MatchTemporary
+                        | BindingKind::StaticBytesLocal
+                ) {
+                    return Err(Error::msg("HIR let binding kind is stale"));
+                }
             }
             if Type::join_control(&body.ty, &expression.ty) != Some(expression.ty.clone()) {
                 return Err(Error::msg("HIR let body type is stale"));
@@ -855,7 +864,7 @@ fn validate_expression_kind(
             body,
             ..
         } => {
-            validate_local_binding(
+            let binding = validate_local_binding(
                 program,
                 *binding,
                 *slot,
@@ -863,6 +872,9 @@ fn validate_expression_kind(
                 local_count,
                 &initial.ty,
             )?;
+            if binding.kind != BindingKind::MutableLocal {
+                return Err(Error::msg("HIR mutable-local binding kind is stale"));
+            }
             if Type::join_control(&body.ty, &expression.ty) != Some(expression.ty.clone()) {
                 return Err(Error::msg("HIR mutable-local body type is stale"));
             }
@@ -872,7 +884,11 @@ fn validate_expression_kind(
             slot,
             value,
         } => {
-            validate_local_binding(program, *target, *slot, None, local_count, &value.ty)?;
+            let binding =
+                validate_local_binding(program, *target, *slot, None, local_count, &value.ty)?;
+            if binding.kind != BindingKind::MutableLocal {
+                return Err(Error::msg("HIR set-local target kind is stale"));
+            }
             if expression.ty != Type::Unit {
                 return Err(Error::msg("HIR set-local result type is stale"));
             }
@@ -1121,14 +1137,14 @@ fn validate_binding_reference<'a>(
     Ok(binding)
 }
 
-fn validate_local_binding(
-    program: &Program,
+fn validate_local_binding<'a>(
+    program: &'a Program,
     binding: BindingId,
     slot: usize,
     origin: Option<Origin>,
     local_count: usize,
     value_type: &Type,
-) -> Result<()> {
+) -> Result<&'a Binding> {
     let binding = require_binding(program, binding, "HIR local binding")?;
     if slot >= local_count
         || origin.is_some_and(|origin| binding.origin != origin)
@@ -1145,7 +1161,7 @@ fn validate_local_binding(
             "HIR local binding slot, type, or origin is stale",
         ));
     }
-    Ok(())
+    Ok(binding)
 }
 
 fn validate_enum_type(ty: &Type, expected: crate::hir::EnumId) -> Result<()> {

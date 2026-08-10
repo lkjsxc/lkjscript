@@ -9,6 +9,10 @@ use crate::hir::{
 #[cfg(test)]
 thread_local! {
     static PATTERN_LOWERING_NODE_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DRAFT_LOWERING_NODE_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DRAFT_SCOPE_NODE_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static BINDING_LOCATION_NODE_VISITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static STABLE_BINDING_LOOKUPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -19,6 +23,34 @@ pub(super) fn reset_pattern_lowering_node_visits() {
 #[cfg(test)]
 pub(super) fn pattern_lowering_node_visits() -> u64 {
     PATTERN_LOWERING_NODE_VISITS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(super) fn reset_draft_imperative_node_visits() {
+    DRAFT_LOWERING_NODE_VISITS.with(|count| count.set(0));
+    DRAFT_SCOPE_NODE_VISITS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn draft_imperative_node_visits() -> (u64, u64) {
+    (
+        DRAFT_LOWERING_NODE_VISITS.with(std::cell::Cell::get),
+        DRAFT_SCOPE_NODE_VISITS.with(std::cell::Cell::get),
+    )
+}
+
+#[cfg(test)]
+pub(super) fn reset_binding_location_work() {
+    BINDING_LOCATION_NODE_VISITS.with(|count| count.set(0));
+    STABLE_BINDING_LOOKUPS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn binding_location_work() -> (u64, u64) {
+    (
+        BINDING_LOCATION_NODE_VISITS.with(std::cell::Cell::get),
+        STABLE_BINDING_LOOKUPS.with(std::cell::Cell::get),
+    )
 }
 
 use super::identity::{self, IdentityAllocator};
@@ -3351,7 +3383,13 @@ struct ResolvedDraftBinding {
     slot: usize,
     place: crate::hir::PlaceId,
     ty: Type,
-    static_bytes: bool,
+    kind: BindingKind,
+}
+
+struct DraftDefinitionEvent {
+    binding: DraftBindingId,
+    name: String,
+    mutable_type: Option<SemanticType>,
 }
 
 struct LoweringState {
@@ -3360,11 +3398,13 @@ struct LoweringState {
     implementation_index:
         HashMap<(crate::hir::TraitId, lkjscript_core::ProductId), crate::hir::ImplId>,
     next_loan: u64,
+    next_loop: u64,
 }
 
 impl LoweringState {
     fn new(program: &SemanticProgram) -> Result<Self, WorkspaceError> {
         let mut next_loan = 0_u64;
+        let mut next_loop = 0_u64;
         let mut roots = Vec::new();
         roots
             .try_reserve(
@@ -3385,6 +3425,13 @@ impl LoweringState {
                 {
                     next_loan = next_loan.max(loan.raw().checked_add(1).ok_or_else(|| {
                         WorkspaceError::Host(Arc::from("loan identity exhausted"))
+                    })?);
+                }
+                if let ExprKind::While { loop_id, .. } | ExprKind::Loop { loop_id, .. } =
+                    &expression.kind
+                {
+                    next_loop = next_loop.max(loop_id.raw().checked_add(1).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("loop identity exhausted"))
                     })?);
                 }
                 crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
@@ -3423,6 +3470,7 @@ impl LoweringState {
             product_names,
             implementation_index,
             next_loan,
+            next_loop,
         })
     }
 
@@ -3521,6 +3569,15 @@ impl LoweringState {
             .ok_or_else(|| WorkspaceError::Host(Arc::from("loan identity exhausted")))?;
         Ok(loan)
     }
+
+    fn loop_id(&mut self) -> Result<crate::hir::LoopId, WorkspaceError> {
+        let loop_id = crate::hir::LoopId::new(self.next_loop);
+        self.next_loop = self
+            .next_loop
+            .checked_add(1)
+            .ok_or_else(|| WorkspaceError::Host(Arc::from("loop identity exhausted")))?;
+        Ok(loop_id)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3544,6 +3601,13 @@ fn lower_draft(
         .try_reserve(visible.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("draft visibility allocation failed")))?;
     visible_set.extend(visible.iter().copied());
+    let callable = snapshot
+        .indexes
+        .address_entities
+        .get(&root)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("callable owner")))?;
+    let published_locations = binding_locations(program, root)?;
     let mut completed: Vec<Option<Expr>> = Vec::new();
     completed
         .try_reserve(draft.nodes.len())
@@ -3685,10 +3749,10 @@ fn lower_draft(
                 let resolved = resolve_draft_binding(
                     snapshot,
                     program,
-                    root,
                     *reference,
                     &visible_set,
                     &locals,
+                    &published_locations,
                 )?;
                 if !crate::ownership::draft_parameter_load_is_supported(&resolved.ty) {
                     return Err(WorkspaceError::unsupported(
@@ -3710,10 +3774,10 @@ fn lower_draft(
                 let resolved = resolve_draft_binding(
                     snapshot,
                     program,
-                    root,
                     *reference,
                     &visible_set,
                     &locals,
+                    &published_locations,
                 )?;
                 if !matches!(
                     resolved.ty,
@@ -3741,10 +3805,10 @@ fn lower_draft(
                 let resolved = resolve_draft_binding(
                     snapshot,
                     program,
-                    root,
                     *reference,
                     &visible_set,
                     &locals,
+                    &published_locations,
                 )?;
                 if resolved.ty != Type::ByteVector {
                     let owner = snapshot
@@ -3792,7 +3856,7 @@ fn lower_draft(
                     )));
                 }
                 if !visible_set.contains(callee) {
-                    return Err(WorkspaceError::InvisibleEntity);
+                    return Err(invisible_entity("call", *callee));
                 }
                 if callee_header.kind != EntityKind::Function {
                     return Err(wrong_kind("call", "function", callee_header.kind));
@@ -3945,7 +4009,7 @@ fn lower_draft(
                 operation,
                 arguments,
             } => {
-                if !source_free_operation_supported(*operation) {
+                if !super::draft::SOURCE_FREE_OPERATIONS.contains(operation) {
                     return Err(WorkspaceError::unsupported(
                         "operation",
                         "this canonical operation is outside the selected source-free ownership surface",
@@ -4009,6 +4073,31 @@ fn lower_draft(
                     },
                 }
             }
+            DraftNode::Sequence(expressions) => {
+                let mut values = Vec::new();
+                values
+                    .try_reserve(expressions.len())
+                    .map_err(|_| WorkspaceError::Host(Arc::from("sequence allocation failed")))?;
+                let mut effects = EffectSet::PURE;
+                let mut ty = Type::Unit;
+                for expression in expressions {
+                    if ty == Type::Never {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "sequence contains an expression after a divergent expression",
+                        )));
+                    }
+                    let value = take_draft_child(&mut completed, *expression)?;
+                    ty = value.ty.clone();
+                    effects = effects.union(value.effects);
+                    values.push(value);
+                }
+                Expr {
+                    ty,
+                    effects,
+                    origin,
+                    kind: ExprKind::Do(values),
+                }
+            }
             DraftNode::Let { bindings, body } => {
                 let mut definitions = Vec::new();
                 definitions.try_reserve(bindings.len()).map_err(|_| {
@@ -4027,7 +4116,7 @@ fn lower_draft(
                     definitions.push(crate::hir::LocalDefinition {
                         binding: info.binding,
                         place: info.place,
-                        static_bytes: info.static_bytes,
+                        static_bytes: info.kind == BindingKind::StaticBytesLocal,
                         slot: info.slot,
                         value,
                     });
@@ -4045,6 +4134,94 @@ fn lower_draft(
                     kind: ExprKind::Let {
                         bindings: definitions,
                         body: Box::new(body),
+                    },
+                }
+            }
+            DraftNode::MutableLocal {
+                binding,
+                initial,
+                body,
+                ..
+            } => {
+                let initial = take_draft_child(&mut completed, *initial)?;
+                let info = locals.get(binding).cloned().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from(
+                        "draft mutable local was not established after its initializer",
+                    ))
+                })?;
+                require_type(&initial.ty, &info.ty)?;
+                let body = take_draft_child(&mut completed, *body)?;
+                let ty = body.ty.clone();
+                let effects = initial.effects.union(body.effects);
+                locals.remove(binding);
+                Expr {
+                    ty,
+                    effects,
+                    origin,
+                    kind: ExprKind::MutableLocal {
+                        binding: info.binding,
+                        place: info.place,
+                        slot: info.slot,
+                        initial: Box::new(initial),
+                        body: Box::new(body),
+                    },
+                }
+            }
+            DraftNode::SetLocal { target, value } => {
+                let target = resolve_assignment_target(
+                    snapshot,
+                    program,
+                    *target,
+                    &visible_set,
+                    &locals,
+                    &published_locations,
+                )?;
+                let value = take_draft_child(&mut completed, *value)?;
+                if value.ty == Type::Never {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "divergent value cannot fill a mutable local storage slot",
+                    )));
+                }
+                require_workspace_type(snapshot, program, callable, &value.ty, &target.ty)?;
+                Expr {
+                    ty: Type::Unit,
+                    effects: value.effects.union(EffectSet::MUTATES_LOCAL),
+                    origin,
+                    kind: ExprKind::SetLocal {
+                        target: target.binding,
+                        slot: target.slot,
+                        value: Box::new(value),
+                    },
+                }
+            }
+            DraftNode::While { condition, body } => {
+                let condition = take_draft_child(&mut completed, *condition)?;
+                require_workspace_type(snapshot, program, callable, &condition.ty, &Type::Bool)?;
+                let mut values = Vec::new();
+                values
+                    .try_reserve(body.len())
+                    .map_err(|_| WorkspaceError::Host(Arc::from("while body allocation failed")))?;
+                let mut effects = condition.effects.union(EffectSet::MAY_DIVERGE);
+                let mut previous = Type::Unit;
+                for expression in body {
+                    if previous == Type::Never {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "while body contains an expression after a divergent expression",
+                        )));
+                    }
+                    let value = take_draft_child(&mut completed, *expression)?;
+                    previous = value.ty.clone();
+                    effects = effects.union(value.effects);
+                    values.push(value);
+                }
+                Expr {
+                    ty: Type::Unit,
+                    effects,
+                    origin,
+                    kind: ExprKind::While {
+                        loop_id: lowering.loop_id()?,
+                        condition: Box::new(condition),
+                        body: values,
                     },
                 }
             }
@@ -4081,7 +4258,7 @@ fn lower_draft(
         }
 
         if let Some(events) = definition_events.remove(&node_index) {
-            for (binding, name) in events {
+            for event in events {
                 let initializer = completed
                     .get(node_index)
                     .and_then(Option::as_ref)
@@ -4093,21 +4270,51 @@ fn lower_draft(
                         "divergent expression cannot initialize a local",
                     )));
                 }
+                let (ty, kind, entity_kind) = if let Some(declared) = event.mutable_type.as_ref() {
+                    let ty = super::types::resolve(
+                        snapshot,
+                        program,
+                        declared,
+                        Some(callable),
+                        false,
+                        false,
+                        "mutable local type",
+                    )?;
+                    if let Some(reason) = crate::ownership::mutable_local_storage_restriction(&ty) {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(reason)));
+                    }
+                    require_workspace_type(snapshot, program, callable, &initializer.ty, &ty)?;
+                    (ty, BindingKind::MutableLocal, EntityKind::MutableLocal)
+                } else {
+                    let static_bytes = matches!(initializer.kind, ExprKind::LitBytes(_))
+                        || matches!(
+                            initializer.kind,
+                            ExprKind::Load(reference)
+                                if program.binding(reference.binding).is_some_and(|item| item.kind == BindingKind::StaticBytesLocal)
+                        );
+                    (
+                        initializer.ty.clone(),
+                        if static_bytes {
+                            BindingKind::StaticBytesLocal
+                        } else {
+                            BindingKind::ImmutableLocal
+                        },
+                        if static_bytes {
+                            EntityKind::StaticBytesLocal
+                        } else {
+                            EntityKind::ImmutableLocal
+                        },
+                    )
+                };
                 let raw = u64::try_from(program.bindings.len())
                     .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
                 let hir_binding = crate::hir::BindingId::new(raw);
-                let static_bytes = matches!(initializer.kind, ExprKind::LitBytes(_))
-                    || matches!(
-                        initializer.kind,
-                        ExprKind::Load(reference)
-                            if program.binding(reference.binding).is_some_and(|item| item.kind == BindingKind::StaticBytesLocal)
-                    );
                 let info = ResolvedDraftBinding {
                     binding: hir_binding,
                     slot: next_slot,
                     place: lowering.place(program, root)?,
-                    ty: initializer.ty.clone(),
-                    static_bytes,
+                    ty: ty.clone(),
+                    kind: kind.clone(),
                 };
                 next_slot = next_slot
                     .checked_add(1)
@@ -4117,28 +4324,20 @@ fn lower_draft(
                 })?;
                 program.bindings.push(Binding {
                     id: hir_binding,
-                    name: name.clone(),
-                    kind: if static_bytes {
-                        BindingKind::StaticBytesLocal
-                    } else {
-                        BindingKind::ImmutableLocal
-                    },
-                    ty: info.ty.clone(),
+                    name: event.name.clone(),
+                    kind,
+                    ty,
                     origin,
                 });
-                if locals.insert(binding, info).is_some() {
+                if locals.insert(event.binding, info).is_some() {
                     return Err(WorkspaceError::InvalidDraft(Arc::from(
                         "draft binding handle is defined more than once",
                     )));
                 }
                 entities.push(NewEntity {
                     address: EntityAddress::Binding(raw),
-                    kind: if static_bytes {
-                        EntityKind::StaticBytesLocal
-                    } else {
-                        EntityKind::ImmutableLocal
-                    },
-                    name: Arc::from(name),
+                    kind: entity_kind,
+                    name: Arc::from(event.name),
                 });
             }
         }
@@ -4506,7 +4705,7 @@ fn lower_pattern_draft(
                     slot: local.slot,
                     place: local.place,
                     ty,
-                    static_bytes: false,
+                    kind: BindingKind::ImmutableLocal,
                 };
                 if locals.insert(*binding, info).is_some() {
                     return Err(WorkspaceError::InvalidDraft(Arc::from(
@@ -4676,21 +4875,9 @@ fn match_build_error(error: lkjscript_core::Error) -> WorkspaceError {
     }
 }
 
-fn source_free_operation_supported(operation: crate::hir::Operation) -> bool {
-    matches!(
-        operation,
-        crate::hir::Operation::Add
-            | crate::hir::Operation::ByteVectorNew
-            | crate::hir::Operation::ByteSliceLength
-            | crate::hir::Operation::ByteSliceByteAt
-            | crate::hir::Operation::BytesLength
-            | crate::hir::Operation::ThawBytes
-    )
-}
-
 fn draft_definition_events(
     draft: &ExpressionDraft,
-) -> Result<HashMap<usize, Vec<(DraftBindingId, String)>>, WorkspaceError> {
+) -> Result<HashMap<usize, Vec<DraftDefinitionEvent>>, WorkspaceError> {
     let mut events = HashMap::new();
     let mut handles = HashSet::new();
     for node in &draft.nodes {
@@ -4724,8 +4911,43 @@ fn draft_definition_events(
                     events
                         .entry(initializer)
                         .or_insert_with(Vec::new)
-                        .push((binding.binding, binding.name.clone()));
+                        .push(DraftDefinitionEvent {
+                            binding: binding.binding,
+                            name: binding.name.clone(),
+                            mutable_type: None,
+                        });
                 }
+            }
+            DraftNode::MutableLocal {
+                binding,
+                name,
+                ty,
+                initial,
+                ..
+            } => {
+                if !lkjscript_contracts::is_identifier(name) {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "mutable local name must be a non-empty semantic identifier",
+                    )));
+                }
+                if !handles.insert(*binding) {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft binding handle is defined more than once",
+                    )));
+                }
+                let initializer = initial.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from(
+                        "mutable local initializer exceeds host index",
+                    ))
+                })?;
+                events
+                    .entry(initializer)
+                    .or_insert_with(Vec::new)
+                    .push(DraftDefinitionEvent {
+                        binding: *binding,
+                        name: name.clone(),
+                        mutable_type: Some(ty.clone()),
+                    });
             }
             DraftNode::Match { arms, .. } => {
                 for arm in arms {
@@ -4800,6 +5022,10 @@ fn draft_lowering_actions(
             }
             Work::Finish(index) => order.push(DraftLoweringAction::Lower(index)),
             Work::Visit(id) => {
+                #[cfg(test)]
+                DRAFT_LOWERING_NODE_VISITS.with(|count| {
+                    count.set(count.get().saturating_add(1));
+                });
                 let index = id.index().ok_or_else(|| {
                     WorkspaceError::InvalidDraft(Arc::from("draft node exceeds host index"))
                 })?;
@@ -4888,6 +5114,10 @@ fn validate_draft_binding_scopes(draft: &ExpressionDraft) -> Result<(), Workspac
                 }
             }
             ScopeWork::Visit(id) => {
+                #[cfg(test)]
+                DRAFT_SCOPE_NODE_VISITS.with(|count| {
+                    count.set(count.get().saturating_add(1));
+                });
                 let index = id.index().ok_or_else(|| {
                     WorkspaceError::InvalidDraft(Arc::from("draft node exceeds host index"))
                 })?;
@@ -4904,6 +5134,35 @@ fn validate_draft_binding_scopes(draft: &ExpressionDraft) -> Result<(), Workspac
                                 binding.raw()
                             ))));
                         }
+                    }
+                    DraftNode::SetLocal {
+                        target: DraftBindingRef::Local(binding),
+                        value,
+                    } => {
+                        if !active.contains(binding) {
+                            return Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+                                "draft binding handle {} is forward or out of lexical scope",
+                                binding.raw()
+                            ))));
+                        }
+                        work.try_reserve(1).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("draft scope work allocation failed"))
+                        })?;
+                        work.push(ScopeWork::Visit(*value));
+                    }
+                    DraftNode::MutableLocal {
+                        binding,
+                        initial,
+                        body,
+                        ..
+                    } => {
+                        work.try_reserve(4).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("draft scope work allocation failed"))
+                        })?;
+                        work.push(ScopeWork::Remove(vec![*binding]));
+                        work.push(ScopeWork::Visit(*body));
+                        work.push(ScopeWork::Add(*binding));
+                        work.push(ScopeWork::Visit(*initial));
                     }
                     DraftNode::Let { bindings, body } => {
                         let mut removed = Vec::new();
@@ -5046,13 +5305,47 @@ fn set_root_local_count(
     Ok(())
 }
 
-fn resolve_draft_binding(
+fn resolve_assignment_target(
     snapshot: &WorkspaceSnapshot,
     program: &SemanticProgram,
-    root: EntityAddress,
     reference: DraftBindingRef,
     visible: &HashSet<EntityId>,
     locals: &HashMap<DraftBindingId, ResolvedDraftBinding>,
+    published_locations: &HashMap<crate::hir::BindingId, (usize, crate::hir::PlaceId)>,
+) -> Result<ResolvedDraftBinding, WorkspaceError> {
+    if let DraftBindingRef::Entity(entity) = reference {
+        let header = snapshot.workspace_entity(entity)?;
+        if !visible.contains(&entity) {
+            return Err(invisible_entity("set-local", entity));
+        }
+        if header.kind != EntityKind::MutableLocal {
+            return Err(wrong_kind("set-local", "mutable local", header.kind));
+        }
+    }
+    let resolved = resolve_draft_binding(
+        snapshot,
+        program,
+        reference,
+        visible,
+        locals,
+        published_locations,
+    )?;
+    if resolved.kind == BindingKind::MutableLocal {
+        Ok(resolved)
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(
+            "set-local target is not a visible mutable local",
+        )))
+    }
+}
+
+fn resolve_draft_binding(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    reference: DraftBindingRef,
+    visible: &HashSet<EntityId>,
+    locals: &HashMap<DraftBindingId, ResolvedDraftBinding>,
+    published_locations: &HashMap<crate::hir::BindingId, (usize, crate::hir::PlaceId)>,
 ) -> Result<ResolvedDraftBinding, WorkspaceError> {
     match reference {
         DraftBindingRef::Local(binding) => locals.get(&binding).cloned().ok_or_else(|| {
@@ -5062,22 +5355,30 @@ fn resolve_draft_binding(
             )))
         }),
         DraftBindingRef::Entity(entity) => {
+            #[cfg(test)]
+            STABLE_BINDING_LOOKUPS.with(|count| count.set(count.get().saturating_add(1)));
             let header = snapshot.workspace_entity(entity)?;
             if !visible.contains(&entity) {
-                return Err(WorkspaceError::InvisibleEntity);
+                return Err(invisible_entity("binding reference", entity));
             }
             if !matches!(
                 header.kind,
-                EntityKind::Parameter | EntityKind::ImmutableLocal | EntityKind::StaticBytesLocal
+                EntityKind::Parameter
+                    | EntityKind::ImmutableLocal
+                    | EntityKind::StaticBytesLocal
+                    | EntityKind::MutableLocal
             ) {
                 return Err(wrong_kind(
                     "binding reference",
-                    "parameter or immutable local",
+                    "parameter or local",
                     header.kind,
                 ));
             }
             let binding = binding_from_entity(snapshot, program, entity)?;
-            let (slot, place) = binding_location(program, root, binding)?;
+            let (slot, place) = published_locations
+                .get(&binding)
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("local binding")))?;
             let definition = program
                 .binding(binding)
                 .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("binding")))?;
@@ -5086,23 +5387,27 @@ fn resolve_draft_binding(
                 slot,
                 place,
                 ty: definition.ty.clone(),
-                static_bytes: definition.kind == BindingKind::StaticBytesLocal,
+                kind: definition.kind.clone(),
             })
         }
     }
 }
 
-fn binding_location(
+fn binding_locations(
     program: &SemanticProgram,
     root: EntityAddress,
-    binding: crate::hir::BindingId,
-) -> Result<(usize, crate::hir::PlaceId), WorkspaceError> {
-    let (params, places, expression) = if root == EntityAddress::Main {
+) -> Result<HashMap<crate::hir::BindingId, (usize, crate::hir::PlaceId)>, WorkspaceError> {
+    let (params, places, expression, local_count) = if root == EntityAddress::Main {
         let main = program
             .main
             .as_ref()
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?;
-        (&main.params, &main.param_places, &main.body)
+        (
+            &main.params,
+            &main.param_places,
+            &main.body,
+            main.local_count,
+        )
     } else {
         let EntityAddress::Binding(raw) = root else {
             return Err(WorkspaceError::StaleIdentity(Arc::from("expression root")));
@@ -5112,83 +5417,116 @@ fn binding_location(
             .iter()
             .find(|function| function.binding.raw() == raw)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?;
-        (&function.params, &function.param_places, &function.body)
+        (
+            &function.params,
+            &function.param_places,
+            &function.body,
+            function.local_count,
+        )
     };
-    if let Some(index) = params.iter().position(|candidate| *candidate == binding) {
-        let place = places
-            .get(index)
-            .copied()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("parameter place")))?;
-        return Ok((index, place));
+    if params.len() != places.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "callable parameter places are inconsistent",
+        )));
     }
-    let mut pending = vec![expression];
+    let mut locations = HashMap::new();
+    locations
+        .try_reserve(local_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding location allocation failed")))?;
+    for (slot, (binding, place)) in params.iter().zip(places).enumerate() {
+        record_binding_location(&mut locations, *binding, slot, *place)?;
+    }
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding location work allocation failed")))?;
+    pending.push(expression);
     while let Some(expression) = pending.pop() {
+        #[cfg(test)]
+        BINDING_LOCATION_NODE_VISITS.with(|count| count.set(count.get().saturating_add(1)));
         match &expression.kind {
             ExprKind::Let { bindings, .. } => {
-                if let Some(local) = bindings.iter().find(|local| local.binding == binding) {
-                    return Ok((local.slot, local.place));
+                for local in bindings {
+                    record_binding_location(
+                        &mut locations,
+                        local.binding,
+                        local.slot,
+                        local.place,
+                    )?;
                 }
             }
             ExprKind::MutableLocal {
-                binding: candidate,
+                binding,
                 place,
                 slot,
                 ..
-            } if *candidate == binding => return Ok((*slot, *place)),
+            } => record_binding_location(&mut locations, *binding, *slot, *place)?,
             ExprKind::Match { plan, .. } => {
                 let plan = program
                     .match_plans
                     .get(host_index(plan.raw(), "match plan")?)
                     .filter(|item| item.id == *plan)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match plan")))?;
-                if let Some(local) = match_plan_local(plan, binding)? {
-                    return Ok((local.slot, local.place));
-                }
+                record_binding_location(
+                    &mut locations,
+                    plan.scrutinee.binding,
+                    plan.scrutinee.slot,
+                    plan.scrutinee.place,
+                )?;
+                record_pattern_locations(&mut locations, &plan.arms)?;
             }
             _ => {}
         }
         crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
     }
-    Err(WorkspaceError::StaleIdentity(Arc::from("local binding")))
+    Ok(locations)
 }
 
-fn match_plan_local(
-    plan: &crate::hir::MatchPlan,
-    binding: crate::hir::BindingId,
-) -> Result<Option<&crate::hir::MatchLocal>, WorkspaceError> {
-    if plan.scrutinee.binding == binding {
-        return Ok(Some(&plan.scrutinee));
-    }
+fn record_pattern_locations(
+    locations: &mut HashMap<crate::hir::BindingId, (usize, crate::hir::PlaceId)>,
+    arms: &[crate::hir::PlannedMatchArm],
+) -> Result<(), WorkspaceError> {
     let mut pending = Vec::new();
-    for arm in &plan.arms {
-        pending
-            .try_reserve(1)
-            .map_err(|_| WorkspaceError::Host(Arc::from("match local lookup allocation failed")))?;
-        pending.push(&arm.pattern);
-    }
+    pending
+        .try_reserve(arms.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match location work allocation failed")))?;
+    pending.extend(arms.iter().map(|arm| &arm.pattern));
     while let Some(pattern) = pending.pop() {
         match pattern {
-            crate::hir::MatchPattern::Binding { local } if local.binding == binding => {
-                return Ok(Some(local));
+            crate::hir::MatchPattern::Binding { local } => {
+                record_binding_location(locations, local.binding, local.slot, local.place)?;
             }
             crate::hir::MatchPattern::Variant { fields, .. }
             | crate::hir::MatchPattern::Product { fields, .. } => {
+                pending.try_reserve(fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("match location work allocation failed"))
+                })?;
                 for field in fields {
                     if let Some(local) = &field.projection {
-                        if local.binding == binding {
-                            return Ok(Some(local));
-                        }
+                        record_binding_location(locations, local.binding, local.slot, local.place)?;
                     }
-                    pending.try_reserve(1).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("match local lookup allocation failed"))
-                    })?;
                     pending.push(&field.pattern);
                 }
             }
             _ => {}
         }
     }
-    Ok(None)
+    Ok(())
+}
+
+fn record_binding_location(
+    locations: &mut HashMap<crate::hir::BindingId, (usize, crate::hir::PlaceId)>,
+    binding: crate::hir::BindingId,
+    slot: usize,
+    place: crate::hir::PlaceId,
+) -> Result<(), WorkspaceError> {
+    if locations.insert(binding, (slot, place)).is_some() {
+        Err(WorkspaceError::Validation(Arc::from(
+            "callable binding location is defined more than once",
+        )))
+    } else {
+        Ok(())
+    }
 }
 
 fn lower_product_value(
@@ -5687,6 +6025,14 @@ fn host_index(raw: u64, subject: &str) -> Result<usize, WorkspaceError> {
     usize::try_from(raw).map_err(|_| WorkspaceError::StaleIdentity(Arc::from(subject.to_owned())))
 }
 
+fn invisible_entity(operation: &str, entity: EntityId) -> WorkspaceError {
+    WorkspaceError::InvisibleEntity {
+        operation: Arc::from(operation),
+        entity: Box::new(entity),
+        reason: Arc::from("entity is outside lexical visibility at the edited expression"),
+    }
+}
+
 fn wrong_kind(operation: &str, expected: &str, actual: EntityKind) -> WorkspaceError {
     WorkspaceError::WrongEntityKind {
         operation: Arc::from(operation),
@@ -5829,6 +6175,32 @@ fn require_type(actual: &Type, expected: &Type) -> Result<(), WorkspaceError> {
             "expression type mismatch: expected {expected}, got {actual}"
         ))))
     }
+}
+
+fn require_workspace_type(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    context: EntityId,
+    actual: &Type,
+    expected: &Type,
+) -> Result<(), WorkspaceError> {
+    if actual == expected {
+        return Ok(());
+    }
+    Err(WorkspaceError::TypeMismatch {
+        expected: Box::new(super::types::view(
+            program,
+            &snapshot.indexes,
+            expected,
+            Some(context),
+        )?),
+        actual: Box::new(super::types::view(
+            program,
+            &snapshot.indexes,
+            actual,
+            Some(context),
+        )?),
+    })
 }
 
 fn refresh_hole_addresses(

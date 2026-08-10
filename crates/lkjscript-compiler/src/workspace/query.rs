@@ -51,6 +51,17 @@ pub struct NodeTypeFacts {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NodeSemanticFacts {
+    pub revision: RevisionId,
+    pub node: NodeId,
+    pub kind: super::NodeKind,
+    pub actual: SemanticType,
+    pub expected: Option<SemanticType>,
+    pub operation: Option<crate::operation::Operation>,
+    pub effects: EffectSummary,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EntityTypeFacts {
     pub revision: RevisionId,
     pub entity: EntityId,
@@ -231,6 +242,7 @@ pub enum LegalConstructor {
     F64Literal,
     BoolLiteral,
     UnitLiteral,
+    Operation(crate::operation::Operation),
     Load(EntityId),
     Move {
         binding: EntityId,
@@ -244,6 +256,10 @@ pub enum LegalConstructor {
     Product(EntityId),
     EnumVariant(EntityId),
     If,
+    Sequence,
+    MutableLocal,
+    SetLocal(EntityId),
+    While,
 }
 
 impl WorkspaceSnapshot {
@@ -383,6 +399,41 @@ impl WorkspaceSnapshot {
                 .as_ref()
                 .map(|ty| super::types::view(&self.program, &self.indexes, ty, Some(context)))
                 .transpose()?,
+        })
+    }
+
+    pub fn node_semantics(
+        &self,
+        revision: RevisionId,
+        node: NodeId,
+    ) -> Result<NodeSemanticFacts, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        let header = self.workspace_node(node)?;
+        let index = self
+            .indexes
+            .node_lookup
+            .get(&node)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node semantics")))?;
+        let operation = *self
+            .indexes
+            .node_operations
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node operation")))?;
+        let effects = *self
+            .indexes
+            .node_effects
+            .get(index)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node effects")))?;
+        let types = self.node_type(revision, node)?;
+        Ok(NodeSemanticFacts {
+            revision,
+            node,
+            kind: header.kind,
+            actual: types.actual,
+            expected: types.expected,
+            operation,
+            effects: EffectSummary(effects.bits()),
         })
     }
 
@@ -908,13 +959,25 @@ impl WorkspaceSnapshot {
             .find(|record| record.state.id == hole)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?
             .expected_internal;
-        let mut values = vec![LegalConstructor::If];
+        let mut values = vec![
+            LegalConstructor::If,
+            LegalConstructor::Sequence,
+            LegalConstructor::MutableLocal,
+        ];
+        if *expected_type == crate::Type::Unit {
+            values.push(LegalConstructor::While);
+        }
         match expected_type {
             crate::Type::I64 => values.push(LegalConstructor::I64Literal),
             crate::Type::F64 => values.push(LegalConstructor::F64Literal),
             crate::Type::Bool => values.push(LegalConstructor::BoolLiteral),
             crate::Type::Unit => values.push(LegalConstructor::UnitLiteral),
             _ => {}
+        }
+        for operation in super::draft::SOURCE_FREE_OPERATIONS.iter().copied() {
+            if operation_matches_expected(operation, expected_type) {
+                values.push(LegalConstructor::Operation(operation));
+            }
         }
         values
             .try_reserve(context.visible_entities.len())
@@ -942,7 +1005,8 @@ impl WorkspaceSnapshot {
             match header.kind {
                 EntityKind::Parameter
                 | EntityKind::ImmutableLocal
-                | EntityKind::StaticBytesLocal => {
+                | EntityKind::StaticBytesLocal
+                | EntityKind::MutableLocal => {
                     let assignable =
                         crate::generic_call::types_assignable(&binding.ty, expected_type)
                             .map_err(generic_query_error)?;
@@ -968,6 +1032,11 @@ impl WorkspaceSnapshot {
                             binding: entity,
                             status: ConstructorStatus::RequiresOwnershipValidation,
                         });
+                    }
+                    if header.kind == EntityKind::MutableLocal
+                        && *expected_type == crate::Type::Unit
+                    {
+                        values.push(LegalConstructor::SetLocal(entity));
                     }
                 }
                 EntityKind::Function => match &binding.ty {
@@ -1464,6 +1533,23 @@ fn enum_pattern_entities(
             .copied()
     }));
     Ok((enumeration_entity, variant_entity, field_entities))
+}
+
+fn operation_matches_expected(
+    operation: crate::operation::Operation,
+    expected: &crate::Type,
+) -> bool {
+    match operation {
+        crate::operation::Operation::Add => matches!(expected, crate::Type::I64 | crate::Type::F64),
+        crate::operation::Operation::Less => *expected == crate::Type::Bool,
+        crate::operation::Operation::ByteVectorNew | crate::operation::Operation::ThawBytes => {
+            *expected == crate::Type::ByteVector
+        }
+        crate::operation::Operation::ByteSliceLength
+        | crate::operation::Operation::ByteSliceByteAt
+        | crate::operation::Operation::BytesLength => *expected == crate::Type::I64,
+        _ => false,
+    }
 }
 
 fn generic_query_error(error: crate::generic_call::GenericCallError) -> WorkspaceError {

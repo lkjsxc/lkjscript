@@ -48,6 +48,9 @@ impl FunctionBuilder<'_> {
             )));
         }
         if owned_place.is_some() {
+            if !self.env.contains_key(&target) {
+                self.end_owned_place(target, origin)?;
+            }
             self.initialize_owned_place(target, value, origin)?;
         }
         self.env.insert(target, value);

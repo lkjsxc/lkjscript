@@ -6,24 +6,27 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Define one concrete public movement vertical.** Choose a present semantic owner/order use case
-   before adding an operation; private identity-preserving compaction is complete but is not public
-   movement. Do not add generic coordinates, paths, or tree-editing machinery.
+1. **Add one source-free early-return vertical.** The retained
+   `crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript` program is the current consumer:
+   direct return construction would remove its remaining source-free control blocker while reusing
+   existing return typing, cleanup, and exactly-once ownership paths. Keep the draft flat, stop before
+   unrelated `break`/`continue`, and change course if focused convergence shows a lower-layer defect.
 
 ## Next
 
-1. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
+1. **Measure full recomputation under representative imperative edits and queries.** Source-free
+   mutable counted loops now complete an ordinary stateful construction/execution workflow; measure
+   edit/query latency, allocations, retained memory, and invalidated work before choosing any
+   incremental mechanism. Keep full recomputation if the evidence does not justify more machinery.
+2. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
    inspectable and editable, with truthful legal next actions and an explicit completeness blocker;
    never lower a fabricated executable fallback.
-2. **Measure full recomputation under real edit workloads.** Record edit/query latency, allocation,
-   retained memory, and invalidated work before deciding whether a narrow cache is justified. Add no
-   query framework merely because full recomputation is currently simple.
-3. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
+3. **Define one concrete public movement vertical only when a present owner/order use case exists.**
+   Private identity-preserving compaction is complete but is not public movement. Do not add generic
+   coordinates, paths, or tree-editing machinery for symmetry.
+4. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
-4. **Define untrusted request policy only when an untrusted product exists.** Reusable execution
-   supports explicit limited policy, but there is no semantic wire service. Do not rebuild framing,
-   text publication, or multi-tenant admission machinery speculatively.
 
 ## Later
 

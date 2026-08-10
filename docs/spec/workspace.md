@@ -39,23 +39,32 @@ type models do not recurse on native stack or impose a type-depth quota.
 
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
 semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
-operations, exact generic and non-generic calls, conditionals, lexical immutable `let` bindings,
-copy-safe loads, byte-vector moves and shared borrows, product construction and field projection,
-enum construction and enum-variant testing, and ordered exhaustive matches over non-generic enum
-scrutinees. A generic call supplies one structured type argument for every stable parameter entity;
-argument list order is non-semantic, while the published instantiation follows declaration order.
+operations, exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
+`let` bindings, explicitly typed mutable locals, assignment, `while`, copy-safe loads, byte-vector
+moves and shared borrows, product construction and field projection, enum construction and
+enum-variant testing, and ordered exhaustive matches over non-generic enum scrutinees. A sequence
+evaluates its children in listed order; an empty sequence yields `unit`, and a non-empty sequence
+yields its final child's value. `while` requires a Boolean condition, evaluates its body children in
+listed order, yields `unit`, and carries the canonical divergence effect. A generic call supplies one
+structured type argument for every stable parameter entity; argument list order is non-semantic,
+while the published instantiation follows declaration order.
 The compiler validates substitution, value arguments, ownership/reference restrictions, and trait
 bounds and derives auto or explicit implementation witnesses. Source inference is an importer
 convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
 Pattern drafts cover wildcards, enum variants with exact stable field identities, and named payload
-bindings. Published
-lexical and payload bindings use stable entity identities; transaction-local binding handles are a
+bindings. Published lexical and payload bindings use stable entity identities; transaction-local
+binding handles are a
 separate checked identity domain and cannot escape the draft. Each arm has its own lexical binding
-scope. Compiler-hidden match scrutinee/projection locals are never workspace entities or legal
-constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
-checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals, generic pattern construction, forwarding an unresolved caller type parameter,
-ownership/reference-bearing generic instantiation, and non-enum source-free pattern spaces are not
-fabricated.
+scope. Mutable initializers are outside the declared binding's scope; the body is inside it. Mutable
+storage uses the canonical source/HIR restrictions, assignment requires one visible mutable-local
+kind and an exact non-`never` value type, and `while` uses a private checked loop identity. Affine
+storage can be reinitialized only after its prior value has been moved or canonically consumed; live
+affine overwrite is rejected and both successful and failed paths use canonical cleanup. Compiler-
+hidden match scrutinee/projection locals are never workspace entities or legal constructors. The
+canonical usefulness/exhaustiveness checker and complete staged HIR ownership checker remain
+authoritative for match validity, move/borrow legality, and cleanup. Generic pattern construction,
+forwarding an unresolved caller type parameter, ownership/reference-bearing generic instantiation,
+and non-enum source-free pattern spaces are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations; they also rename supported bindings, replace expressions, and introduce/refine/fill
@@ -100,17 +109,21 @@ expression hole. Every blocker is revision-labelled through the snapshot or
 planning, SSA, bytecode lowering, or execution. A complete revision derives one ephemeral
 source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
 parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
-and source-free scalar, product, enum, lexical-local, borrow-then-move, and exhaustive enum-payload
-match fixtures have equal normalized entities/types, containment, references, dependencies, node
+and source-free scalar, product, enum, lexical-local, mutable counted-loop, borrow-then-move, and
+exhaustive enum-payload match fixtures have equal normalized entities/types, containment, references,
+dependencies, node
 kinds/types/effects, canonical match shape, selected memory-obligation kinds, the main bytecode
 stream, VM results or traps, and cleanup behavior. Imported match plans carry real source origin;
 source-free plans carry semantic origin; ordinary plans reject builtin or stale provenance.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
-context, exact lexical and match-arm bindings, expected-type-filtered legal constructors,
-structured function signatures and call instantiations, and structured match inspection. Generic
-signature views report stable binder entities, bounds with stable or builtin trait identity, value
+context, exact lexical and match-arm bindings, expected-type-filtered legal constructors (including
+selected canonical operation identities), structured function signatures and call instantiations,
+node semantics, and structured match inspection. Node semantics report stable node identity and kind,
+actual/expected type, canonical built-in operation identity when present, and named effect bits.
+Generic signature views report stable binder entities, bounds with stable or builtin trait identity,
+value
 parameters, and result types. Call views report canonical substitutions, instantiated parameter and
 result types, derived witnesses, and named machine-readable effect bits. `MatchView` reports the
 stable match/scrutinee/body nodes, result type, exhaustiveness, ordered arms, and deterministic typed
@@ -121,17 +134,19 @@ preserve stable semantic identity. Move and borrow candidates are labelled as re
 canonical ownership validation rather than
 claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
 storage are not advertised. Hole scope is recomputed after later declaration creation. Continuations
-bind namespace, revision, and query. A fallible iterative projection renders state, blockers,
-selected entity/body/type/reference/hole/match sections, local and aggregate structure, ordered arms,
-patterns, and explicit holes without source attachments. Projection labels never construct identity.
+bind namespace, revision, and query. Public containment edges are emitted in semantic child order,
+including sequence and loop evaluation order. A fallible iterative projection renders state,
+blockers, selected entity/body/type/reference/hole/match sections, declared entity types, local and
+aggregate structure, operation identities, named node effects, ordered arms, patterns, and explicit
+holes without source attachments. Projection labels never construct identity.
 
 The former syntax-shaped editing service, source-node protocol identities, hidden-body hole overlay,
 stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
-mutation, public semantic movement, mutable-local construction, generic-pattern construction,
-Boolean/integer/product source-free patterns, source rendering,
+mutation, public semantic movement, source-free `return`/`break`/`continue`, generic-pattern
+construction, Boolean/integer/product source-free patterns, source rendering,
 persistence, collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Current payload-match ownership

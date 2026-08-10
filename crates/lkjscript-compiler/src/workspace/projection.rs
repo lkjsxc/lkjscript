@@ -109,6 +109,12 @@ impl WorkspaceSnapshot {
             Some(owner) => output.entity_id(owner)?,
             None => output.push("-")?,
         }
+        let type_facts = self.entity_type(self.revision, entity)?;
+        output.push(" type=")?;
+        match &type_facts.declared {
+            Some(ty) => project_semantic_type(ty, output)?,
+            None => output.push("-")?,
+        }
         output.push("\n")?;
         if header.kind == EntityKind::Function {
             let signature = self.function_signature(self.revision, entity)?;
@@ -180,7 +186,7 @@ impl WorkspaceSnapshot {
                     .and_then(|value| value.checked_mul(2))
                     .ok_or_else(|| host("projection indentation overflow"))?,
             )?;
-            let facts = self.node_type(self.revision, node.id)?;
+            let facts = self.node_semantics(self.revision, node.id)?;
             project_node_header(node, &facts, self.is_hole(node.id), output)?;
         }
         Ok(())
@@ -192,7 +198,7 @@ impl WorkspaceSnapshot {
         output: &mut ProjectionOutput,
     ) -> Result<(), WorkspaceError> {
         let header = self.workspace_node(node)?;
-        let facts = self.node_type(self.revision, node)?;
+        let facts = self.node_semantics(self.revision, node)?;
         output.push("type ")?;
         output.node_id(header.id)?;
         output.push(" actual=")?;
@@ -202,6 +208,10 @@ impl WorkspaceSnapshot {
             Some(expected) => project_semantic_type(expected, output)?,
             None => output.push("-")?,
         }
+        output.push(" operation=")?;
+        project_operation(facts.operation, output)?;
+        output.push(" effects=")?;
+        project_effects(facts.effects, output)?;
         if self.is_hole(node) {
             output.push(" [HOLE]")?;
         }
@@ -639,7 +649,7 @@ fn project_semantic_type(
 
 fn project_node_header(
     node: &NodeHeader,
-    facts: &super::NodeTypeFacts,
+    facts: &super::NodeSemanticFacts,
     hole: bool,
     output: &mut ProjectionOutput,
 ) -> Result<(), WorkspaceError> {
@@ -654,10 +664,24 @@ fn project_node_header(
         Some(expected) => project_semantic_type(expected, output)?,
         None => output.push("-")?,
     }
+    output.push(" operation=")?;
+    project_operation(facts.operation, output)?;
+    output.push(" effects=")?;
+    project_effects(facts.effects, output)?;
     if hole {
         output.push(" [HOLE]")?;
     }
     output.push("\n")
+}
+
+fn project_operation(
+    operation: Option<crate::operation::Operation>,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    match operation {
+        Some(operation) => output.push(operation.name()),
+        None => output.push("-"),
+    }
 }
 
 fn entity_kind(kind: EntityKind) -> &'static str {

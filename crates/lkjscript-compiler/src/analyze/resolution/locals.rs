@@ -20,18 +20,8 @@ impl Resolver<'_> {
         }
         let declared_type = parse_type_form(type_args)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
-        if declared_type.contains_never() {
-            return Err(self.error(format!("var {name}: never is not a storage-slot type")));
-        }
-        if contains_resource_type(&declared_type) && !matches!(declared_type, Type::Resource(_)) {
-            return Err(self.error(format!(
-                "var {name}: resource-bearing aggregates cannot be stored"
-            )));
-        }
-        if matches!(declared_type, Type::ByteSlice | Type::ByteSliceMut) {
-            return Err(self.error(format!(
-                "var {name}: lexical references may only be inferred let bindings or parameters"
-            )));
+        if let Some(reason) = crate::ownership::mutable_local_storage_restriction(&declared_type) {
+            return Err(self.error(format!("var {name}: {reason}")));
         }
         self.analyzer
             .validate_product_type(&declared_type)

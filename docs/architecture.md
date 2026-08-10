@@ -92,16 +92,18 @@ HIR ownership uses one iterative per-function liveness plan. The plan assigns ea
 half-open traversal range and indexes direct lexical uses sparsely by binding; ownership checking
 queries only future uses in the current range and expires affected loans at semantic operations and
 joins. It does not materialize a suffix-use set per expression or recurse on user depth. Memory-plan
-production walks each immutable-local initializer before publishing that local's place, matching
-evaluation order and the resolver's dense `PlaceId` allocation even when a match is nested in a later
-scrutinee.
+production walks each immutable- or mutable-local initializer before publishing that local's place,
+matching lexical evaluation order and the resolver's dense `PlaceId` allocation even when a match is
+nested in a later scrutinee.
 
 SSA bytecode lowering gathers local type, storage class, and producer kind in one per-function map.
 It also computes nonowned structural values once from block parameters and predecessor edges, then
 reuses that set for every load/store decision; emission does not rescan the whole CFG per structural
 value. Interference coloring and value emission share the derived maps. The slot map remains
 authoritative for every emitted operand and cleanup action; `FunctionProto.locals` is its checked
-highest physical color plus one, not the number of SSA values.
+highest physical color plus one, not the number of SSA values. Affine mutable reinitialization ends
+the moved or dropped ownership epoch before emitting the next place initialization, so validator and
+VM cleanup state follow the same ownership transition.
 
 The validated VM treats sorted failure-cleanup ranges as an execution index. Unwind performs a
 binary half-open lookup. Each active frame stores one cursor for the common sequential path; it
@@ -154,19 +156,25 @@ Created declaration, binder, member, parameter, local, and hole IDs are returned
 
 `ExpressionDraft` and `PatternDraft` are flat and non-recursive; iterative traversal makes physical
 node order irrelevant while validation requires one connected tree with each child used exactly
-once. Draft-local immutable and pattern-binding handles have a separate transaction-scoped identity
+once. Draft-local binding and pattern-binding handles have a separate transaction-scoped identity
 domain. Implemented expression constructors are scalar and byte literals, selected canonical
-built-in operations, exact generic and non-generic calls, `if`, immutable `let`, copy-safe loads,
-byte-vector move/shared borrow, product construction/projection, enum construction/variant testing,
-and ordered exhaustive enum matches. Generic drafts key exact type arguments by stable binder
-entity; importer inference and semantic edits converge at one exact substitution, assignability, and
-bound resolver, which derives auto or explicit implementation witnesses.
+built-in operations, exact generic and non-generic calls, `if`, ordered sequence, immutable `let`,
+explicitly typed mutable locals, assignment, `while`, copy-safe loads, byte-vector move/shared
+borrow, product construction/projection, enum construction/variant testing, and ordered exhaustive
+enum matches. Generic drafts key exact type arguments by stable binder entity; importer inference
+and semantic edits converge at one exact substitution, assignability, and bound resolver, which
+derives auto or explicit implementation witnesses.
 Implemented patterns are wildcard, non-generic enum variant/field, and
 stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
-Mutable-local construction, generic patterns, unresolved binder forwarding, ownership/reference
-generic instantiation, and non-enum source-free pattern spaces remain explicit unsupported edits; no
+Mutable declaration activation occurs after its initializer and before its body. Resolved draft
+bindings retain exact HIR binding kind, so assignment admits only visible mutable locals. Before
+lowering a draft, one iterative callable scan indexes retained parameter/local places; every stable
+binding use then performs one map lookup instead of rescanning the expression root. One checked scan
+of retained HIR initializes private loop allocation; draft node positions never become loop or
+public identities. Generic patterns, unresolved binder forwarding, ownership/reference generic
+instantiation, and non-enum source-free pattern spaces remain explicit unsupported edits; no
 executable fallback exists. After all disjoint structural
 edits and final-state dependency validation, one fallible iterative compaction pass performs callable
 and nominal removals
@@ -207,15 +215,17 @@ structured and projected. Incomplete snapshots retain normal indexes and determi
 but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and legal constructors. Definition, structured entity/function/node type, exact
-generic signature/call instantiation, hole context with exact lexical/arm visibility, and structured
-match inspection are direct identity queries. Signature views expose stable binders and structured
-bounds; call views expose canonical substitutions, instantiated parameters/results, derived
-witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
+calls, diagnostics, and expected-type-filtered legal constructors, including selected canonical
+operation identities. Definition, structured entity/function/node type, exact generic signature/call
+instantiation, hole context with exact lexical/arm visibility, node semantics, and structured match
+inspection are direct identity queries. Node semantics expose canonical operation identity and exact
+named effects alongside node kind and actual/expected type. Signature views expose stable binders and
+structured bounds; call views expose canonical substitutions, instantiated parameters/results,
+derived witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
 type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring
-to stable variant/field/binding entities. Parallel per-node plan facts and direct-child indexes make match
-lookup independent of expression-root size. Nominal and generic type views use stable semantic
-identities. Legal-constructor results
+to stable variant/field/binding entities. Parallel per-node plan, operation, effect, and direct-child
+indexes keep node and match inspection independent of expression-root size. Nominal and generic type
+views use stable semantic identities. Legal-constructor results
 distinguish established constructors from move/borrow candidates that still require canonical
 ownership validation, and do not expose hidden match temporaries or advertise generic enum
 construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
@@ -225,8 +235,9 @@ incremental cache work.
 
 Selected entity, body, type, reference, call, hole, and match sections have one concise
 deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
-allocation failure, marks holes as `[HOLE]`, renders ordered arms, stable enum/field/binding
-identities, exact generic facts, and named effects, and requires no source attachments. Projection
+allocation failure, marks holes as `[HOLE]`, and renders declared entity types, canonical operation
+identities, ordered containment, stable enum/field/binding identities, exact generic facts, and named
+node/call effects without source attachments. Projection
 labels are review/debug spellings, never identity input.
 The former syntax-shaped service, dense source-node IDs, stdio/session schemas, text publication and
 journal machinery, CLI routes, and protocol contracts are deleted. No wire replacement exists
@@ -351,11 +362,12 @@ capability checking; they are not a replacement service sandbox.
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
 authority. Missing entry/body and real typed-hole nodes; non-generic product and enum creation;
-generic and non-generic function plus entry creation; immutable lexical locals; selected byte-vector
-move/borrow and canonical operations; aggregate construction/observation; exhaustive non-generic enum
-payload matches with stable arm-local bindings; exact calls to imported or source-free generic
-functions with stable binders, structured types, shared resolution, and derived witnesses; atomic
-batch edits; tombstone-stable identities; structured
+generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
+sequence, assignment, and `while`; selected byte-vector move/borrow and canonical operations;
+aggregate construction/observation; exhaustive non-generic enum payload matches with stable arm-local
+bindings; exact calls to imported or source-free generic functions with stable binders, structured
+types, shared resolution, and derived witnesses; atomic batch edits; tombstone-stable identities;
+structured
 stable nominal, generic, and match views; deterministic queries/projections/diffs; one canonical
 complete-HIR match derivation; and direct execution are implemented. Source-loading/parser/compiler-
 phase counters, imported scalar, nominal, local, ownership, match, generic-declaration, and generic-
@@ -366,8 +378,8 @@ Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
 concrete public semantic movement operation only when ownership/order semantics are defined,
-mutable-local construction, generic patterns, Boolean/integer/product pattern construction, generic
-ownership/reference instantiation, unresolved
+source-free `return`/`break`/`continue`, generic patterns, Boolean/integer/product pattern
+construction, generic ownership/reference instantiation, unresolved
 references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,

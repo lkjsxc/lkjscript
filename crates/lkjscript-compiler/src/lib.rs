@@ -51,14 +51,14 @@ pub use workspace::{
     ExpressionDraft, FunctionSignatureView, HoleId, HoleKind, HoleState, ImportMetrics,
     IncompleteSnapshotError, InvalidatedDomain, LegalConstructor, LocalDraft, MatchArmDraft,
     MatchArmView, MatchPatternFieldView, MatchPatternKindView, MatchPatternLabel,
-    MatchPatternNodeView, MatchView, NodeHeader, NodeId, NodeKind, NodeTypeFacts, PageRequest,
-    ParameterDraft, PatternDraft, PresentationAttachments, ProductFieldDraft, ProgramState,
-    ProjectionSlice, QueryPage, ReferenceEdge, RevisionId, SemanticChild, SemanticDiff,
-    SemanticDiffEntry, SemanticEnum, SemanticKind, SemanticOwner, SemanticTrait, SemanticType,
-    SourceAttachment, TraitWitnessKindView, TraitWitnessView, Transaction, TransactionOutcome,
-    TypeArgumentDraft, TypeArgumentView, TypeParameterBoundView, TypeParameterDraft,
-    TypeParameterView, ValueParameterView, Workspace, WorkspaceError, WorkspaceNamespace,
-    WorkspaceSnapshot,
+    MatchPatternNodeView, MatchView, NodeHeader, NodeId, NodeKind, NodeSemanticFacts,
+    NodeTypeFacts, PageRequest, ParameterDraft, PatternDraft, PresentationAttachments,
+    ProductFieldDraft, ProgramState, ProjectionSlice, QueryPage, ReferenceEdge, RevisionId,
+    SemanticChild, SemanticDiff, SemanticDiffEntry, SemanticEnum, SemanticKind, SemanticOwner,
+    SemanticTrait, SemanticType, SourceAttachment, TraitWitnessKindView, TraitWitnessView,
+    Transaction, TransactionOutcome, TypeArgumentDraft, TypeArgumentView, TypeParameterBoundView,
+    TypeParameterDraft, TypeParameterView, ValueParameterView, Workspace, WorkspaceError,
+    WorkspaceNamespace, WorkspaceSnapshot,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";

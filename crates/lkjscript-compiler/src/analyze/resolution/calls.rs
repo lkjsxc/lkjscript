@@ -84,23 +84,6 @@ impl Resolver<'_> {
                 .iter()
                 .map(|argument| argument.ty.clone())
                 .collect();
-            if matches!(
-                operation,
-                Operation::Add
-                    | Operation::Subtract
-                    | Operation::Multiply
-                    | Operation::Divide
-                    | Operation::Less
-                    | Operation::LessEqual
-                    | Operation::Greater
-                    | Operation::GreaterEqual
-            ) && argument_types[0] != argument_types[1]
-            {
-                return Err(self.error(format!(
-                    "{}: numeric operands must have one exact type",
-                    operation.name()
-                )));
-            }
             let (resolved_signature, ty) = operation
                 .resolve_types(&argument_types)
                 .map_err(|message| self.error(message))?;

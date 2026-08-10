@@ -147,6 +147,8 @@ fn build_entities(
         node_enclosing_entities: Vec::new(),
         node_actual_types: Vec::new(),
         node_expected_types: Vec::new(),
+        node_operations: Vec::new(),
+        node_effects: Vec::new(),
         entity_types: Vec::new(),
         entity_lookup: HashMap::new(),
         node_lookup: HashMap::new(),
@@ -1417,6 +1419,17 @@ fn push_node(
         "workspace typed expectation index",
     )?;
     indexes.node_expected_types.push(expected.cloned());
+    reserve(
+        &mut indexes.node_operations,
+        1,
+        "workspace node operation index",
+    )?;
+    indexes.node_operations.push(match &expression.kind {
+        ExprKind::Operation { operation, .. } => Some(*operation),
+        _ => None,
+    });
+    reserve(&mut indexes.node_effects, 1, "workspace node effect index")?;
+    indexes.node_effects.push(expression.effects);
     Ok(id)
 }
 

@@ -38,11 +38,12 @@ flat non-recursive drafts. Function creation uses declaration-local binder handl
 publication assigns stable type-parameter entities. Drafts construct exact generic calls with
 structured `SemanticType` arguments and compiler-derived trait witnesses; source inference and
 semantic edits share the same exact instantiation validator.
-Implemented drafts also include immutable lexical locals, selected canonical built-in operations,
-byte-vector move/borrow, product/enum construction and observation, and source-free exhaustive enum
-payload matches. Match arms use flat `PatternDraft` trees; named payload bindings receive stable
-workspace entities while compiler-only scrutinee/projection storage remains hidden. Transactions can
-delete callables and whole user product/enum declarations atomically;
+Implemented drafts also include immutable and mutable lexical locals, ordered sequence, assignment,
+`while`, selected canonical built-in operations, byte-vector move/borrow, product/enum construction
+and observation, and source-free exhaustive enum payload matches. Match arms use flat `PatternDraft`
+trees; named payload bindings receive stable workspace entities while compiler-only scrutinee and
+projection storage remains hidden. Transactions can delete callables and whole user product/enum
+declarations atomically;
 owned members and target implementations cascade, independent surviving dependents block, private
 dense identities compact, and public survivor identities remain stable. The complete immutable
 `WorkspaceSnapshot` derives compiler HIR directly, without rendering or parsing source. Imported and

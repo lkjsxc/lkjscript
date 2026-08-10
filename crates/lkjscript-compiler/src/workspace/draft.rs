@@ -6,6 +6,16 @@ use lkjscript_contracts::{CapabilityKind, ResourceKind};
 use super::{EntityId, SemanticEnum, SemanticType, WorkspaceError};
 use crate::operation::Operation;
 
+pub(super) const SOURCE_FREE_OPERATIONS: &[Operation] = &[
+    Operation::Add,
+    Operation::Less,
+    Operation::ByteVectorNew,
+    Operation::ByteSliceLength,
+    Operation::ByteSliceByteAt,
+    Operation::BytesLength,
+    Operation::ThawBytes,
+];
+
 /// Dense identity into one flat expression draft. It is never a workspace identity.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DraftNodeId(u64);
@@ -34,7 +44,7 @@ impl DraftPatternNodeId {
     }
 }
 
-/// Identity of one immutable local inside a single [`ExpressionDraft`].
+/// Identity of one local binding inside a single [`ExpressionDraft`].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DraftBindingId(u64);
 
@@ -53,7 +63,7 @@ impl DraftBindingId {
 pub enum DraftBindingRef {
     /// A stable parameter or local already published in this workspace.
     Entity(EntityId),
-    /// A transaction-local immutable binding in this draft.
+    /// A transaction-local binding in this draft.
     Local(DraftBindingId),
 }
 
@@ -650,9 +660,25 @@ pub enum DraftNode {
         then_branch: DraftNodeId,
         else_branch: DraftNodeId,
     },
+    Sequence(Vec<DraftNodeId>),
     Let {
         bindings: Vec<LocalDraft>,
         body: DraftNodeId,
+    },
+    MutableLocal {
+        binding: DraftBindingId,
+        name: String,
+        ty: SemanticType,
+        initial: DraftNodeId,
+        body: DraftNodeId,
+    },
+    SetLocal {
+        target: DraftBindingRef,
+        value: DraftNodeId,
+    },
+    While {
+        condition: DraftNodeId,
+        body: Vec<DraftNodeId>,
     },
     ProductValue {
         product: EntityId,
@@ -683,7 +709,11 @@ impl DraftNode {
                 Some(arguments.len())
             }
             Self::If { .. } => Some(3),
+            Self::Sequence(expressions) => Some(expressions.len()),
             Self::Let { bindings, .. } => bindings.len().checked_add(1),
+            Self::MutableLocal { .. } => Some(2),
+            Self::SetLocal { .. } => Some(1),
+            Self::While { body, .. } => body.len().checked_add(1),
             Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
                 Some(fields.len())
             }
@@ -709,11 +739,27 @@ impl DraftNode {
                 visit(*then_branch);
                 visit(*else_branch);
             }
+            Self::Sequence(expressions) => {
+                for expression in expressions {
+                    visit(*expression);
+                }
+            }
             Self::Let { bindings, body } => {
                 for binding in bindings {
                     visit(binding.value);
                 }
                 visit(*body);
+            }
+            Self::MutableLocal { initial, body, .. } => {
+                visit(*initial);
+                visit(*body);
+            }
+            Self::SetLocal { value, .. } => visit(*value),
+            Self::While { condition, body } => {
+                visit(*condition);
+                for expression in body {
+                    visit(*expression);
+                }
             }
             Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
                 for field in fields {

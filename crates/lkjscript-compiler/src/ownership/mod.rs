@@ -45,6 +45,36 @@ pub(crate) fn draft_parameter_load_is_supported(ty: &Type) -> bool {
     !is_owned(ty) && !is_affine_resource(ty)
 }
 
+/// Returns the canonical reason why a type cannot occupy mutable local storage.
+pub(crate) fn mutable_local_storage_restriction(ty: &Type) -> Option<&'static str> {
+    if ty.contains_never() {
+        return Some("never is not a storage-slot type");
+    }
+    if matches!(ty, Type::ByteSlice | Type::ByteSliceMut) {
+        return Some("lexical references cannot occupy mutable local storage");
+    }
+    let mut pending = vec![ty];
+    let mut contains_resource = false;
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Resource(_) => contains_resource = true,
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::List(inner) => pending.push(inner),
+            Type::Fn { params, ret } => {
+                pending.extend(params);
+                pending.push(ret);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
+        }
+    }
+    if contains_resource && !matches!(ty, Type::Resource(_)) {
+        Some("resource-bearing aggregates cannot occupy mutable local storage")
+    } else {
+        None
+    }
+}
+
 fn check_function(program: &Program, function: &Function) -> Result<()> {
     let plan = OwnershipPlan::build(
         program,

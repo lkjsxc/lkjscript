@@ -200,11 +200,15 @@ reserved stable IDs.
 
 `ExpressionDraft` is a flat non-recursive tree with transaction-local lexical binding handles; its
 physical node order is irrelevant. It implements scalar and byte literals, selected canonical
-built-in operations, exact generic and non-generic calls, conditionals, immutable lexical locals,
-copy-safe loads, byte-vector moves and shared borrows, product construction/projection, enum
-construction and variant tests, and exhaustive non-generic enum matches. Generic drafts identify
-binders by their stable type-parameter entities and provide exact structured type arguments; the
-same resolver validates importer-inferred and explicit substitutions, argument types,
+built-in operations (including exact-type numeric `less-than`), exact generic and non-generic calls,
+conditionals, ordered sequences, immutable lexical locals, explicitly typed mutable locals,
+assignment, `while`, copy-safe loads, byte-vector moves and shared borrows, product
+construction/projection, enum construction and variant tests, and exhaustive non-generic enum
+matches. Empty sequence is pure `unit`; non-empty sequence yields its last value. Mutable
+initializers activate their binding only for the body, affine live overwrite is rejected, and affine
+reinitialization after move/drop follows the canonical place-end/init and cleanup route. Generic
+drafts identify binders by their stable type-parameter entities and provide exact structured type
+arguments; the same resolver validates importer-inferred and explicit substitutions, argument types,
 ownership/reference restrictions, and trait bounds, then derives auto or explicit implementation
 witnesses. Each ordered match arm owns a flat `PatternDraft`;
 wildcards, enum variants, fields, and named payload bindings lower through the canonical usefulness,
@@ -214,28 +218,30 @@ binding kind and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
 unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
 foreign/stale/wrong-kind type and trait identities, forward or cross-arm binding uses, field
-coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm results, and contradictory
-overlapping or deletion-owned edits reject. Mutable-local construction, generic patterns, unresolved
-generic forwarding, ownership/reference generic instantiation, non-enum source-free pattern spaces,
-and executable placeholders remain absent.
-Imported mutable-local subtrees can be
-removed through ordinary replacement because the lifecycle remap covers their existing HIR form.
+coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm results, invalid mutable
+storage/kinds/types/scopes, non-Boolean loops, unreachable sequence/loop body entries, and
+contradictory overlapping or deletion-owned edits reject. Source-free `return`/`break`/`continue`,
+generic patterns, unresolved generic forwarding, ownership/reference generic instantiation,
+non-enum source-free pattern spaces, and executable placeholders remain absent. Imported and
+source-free mutable-local subtrees share stable identity, lexical visibility, ordinary replacement,
+tombstoning, and compaction lifecycle behavior.
 
 The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, and durable
 semantic `Match` nodes linked to canonical match plans. Missing body and typed-hole metadata describe
 hole leaves; no prior expression survives introduction. Match arm/body relationships remain directly
 queryable, and scrutinee, arm-body, or whole-match nodes use the ordinary targeted edit/hole
 operations. Complete-HIR derivation iteratively replaces each semantic match with the existing
-canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory,
-SSA, bytecode, and VM layers never accept an unlowered semantic match. Effects use an explicit
+canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory, SSA, bytecode, and VM layers never
+accept an unlowered semantic match. Effects use an explicit
 unknown fact while holes remain and are recomputed after every transaction. Shape, lexical scope,
 type, usefulness, and exhaustiveness preflight lower once into staged semantic state; canonical
 complete-HIR ownership validation decides move/borrow legality and cleanup before publication.
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
 future IDs. Replacement and hole introduction now remove local-defining `let`, imported mutable
-local, and semantic-match subtrees. One iterative staged compaction prunes unreachable bindings and
-match plans, rewrites dense binding/plan references, and rebuilds per-callable places, slots, and
-local counts before canonical validation. Removed local and payload identities tombstone; unaffected
+local, and semantic-match subtrees. One iterative staged compaction visits mutable initializers
+before activating their bindings, prunes unreachable bindings and match plans, rewrites dense
+binding/plan references, and rebuilds per-callable places, slots, and local counts before canonical
+validation. Removed local and payload identities tombstone; unaffected
 entities, nodes, and holes retain identity across private relocation.
 
 `DeleteEntity` supports `main`, ordinary imported or source-free non-builtin functions, and
@@ -261,43 +267,49 @@ typed hole with hole/type/owner/context. Incomplete snapshots remain fully query
 `compile_snapshot` returns those revision-labelled blockers before deriving HIR or entering memory,
 SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
-and lowers directly. Selected source-free scalar, nominal aggregate, lexical-local,
-byte-vector-borrow-then-move, enum-payload-match, and exact generic-call edits enter source loading
-and parsing zero times, retain canonical memory-plan obligations, compile to validated bytecode,
-execute in the VM, and clean up on normal and trapped
-paths. Canonical memory-plan origins explicitly tag source-backed and source-free cases; current
-package locks reflect that non-colliding encoding.
+and lowers directly. Selected source-free scalar, nominal aggregate, immutable/mutable lexical-local,
+counted-loop, byte-vector-borrow-then-move, enum-payload-match, and exact generic-call edits enter
+source loading and parsing zero times, retain canonical memory-plan obligations, compile to validated
+bytecode, execute in the VM, and clean up on normal and trapped paths. Canonical memory-plan origins
+explicitly tag source-backed and source-free cases; current package locks reflect that non-colliding
+encoding.
 
 Revision-labelled queries implement deterministic pagination, definitions/references, calls,
 structured entity/function/node types, diagnostics, hole context with exact lexical and arm-local
-visibility, expected-type-filtered legal constructors, exact generic signatures and call
-instantiations, and a structured `MatchView` containing the scrutinee, ordered arms, arm-body nodes,
-pattern types/kinds/fields, stable enum/member identities,
-and payload-binding entities. Generic views expose stable binders and trait identities, canonical
-substitutions, instantiated parameters/results, derived witnesses, and named effect flags without
-compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe
-values; affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported
+visibility, expected-type-filtered legal constructors including selected canonical operations,
+exact generic signatures and call instantiations, node semantics, and a structured `MatchView`
+containing the scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable enum/member
+identities, and payload-binding entities. Node semantics expose kind, actual/expected type, canonical
+operation identity, and named effect flags. Generic views expose stable binders and trait identities,
+canonical substitutions, instantiated parameters/results, derived witnesses, and named effect flags
+without compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe values; affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported
 generic enum constructors are omitted. Hole visibility refreshes when declarations are added in a
 later revision. Projections render state and blockers before selected
-entity/body/type/reference/hole/match sections, including arm and pattern structure, use stable
-review-local labels, and require no source attachment. Index root-address resolution performs one map
-lookup per semantic node, while enum, variant, enum-field, and match-plan relation indexing uses
-private identity maps rather than repeated declaration scans.
+entity/body/type/reference/hole/match sections, including declared entity types, operation
+identities, node effects, and arm/pattern structure, use stable review-local labels, and require no
+source attachment. Containment remains in semantic child/evaluation order. Index root-address
+resolution performs one map lookup per semantic node, while enum, variant, enum-field, and match-plan
+relation indexing uses private identity maps rather than repeated declaration scans. Draft lowering
+builds one callable binding-location map, so each stable assignment/load target is one lookup rather
+than one full body scan.
 
 The source/path importer privately owns loading, parsing, initial analysis, package validation, and
 source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
 compiler operations/prelude/core traits are excluded from mutable program-entity queries, and HIR
 operations carry only canonical catalog operation identity/signature. Imported and source-free
-scalar, product, enum, lexical-local, borrow/move, and exhaustive enum-payload-match fixtures agree
-on normalized entities and structured types, containment, references/dependencies, node
-kinds/types/effects, selected memory-obligation kinds, the main bytecode stream, VM outcomes, traps,
-and cleanup. Equivalent imported and source-free generic identity declarations agree on structured
-binders, bounds, exact substitutions, instantiated types, witnesses, effects, normalized function
-and main bytecode, and VM result. Generic declaration and call edits invoke source loading and parsing
+scalar, product, enum, lexical-local, counted-loop, borrow/move, and exhaustive enum-payload-match
+fixtures agree on normalized entities and structured types, ordered containment,
+references/dependencies, node kinds/types/operation identities/effects, selected memory-obligation
+kinds, the main bytecode stream, VM outcomes, traps, and cleanup. The counted-loop source fixture is
+retained at `crates/lkjscript-app/tests/fixtures/imperative-counted-loop.lkjscript`. Equivalent
+imported and source-free generic identity declarations agree on structured binders, bounds, exact
+substitutions, instantiated types, witnesses, effects, normalized function and main bytecode, and VM
+result. Generic declaration and call edits invoke source loading and parsing
 zero times.
 Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
-and compile a 20,000-level nested expression, 20,000 lexical locals, or 20,000 nested semantic enum
-matches, then project, execute, and destroy the complete path on a 128 KiB worker stack. Separate
+and compile a 20,000-level nested expression, 20,000 alternating immutable/mutable lexical locals,
+or 20,000 nested semantic enum matches, then project, execute, and destroy the complete path on a
+128 KiB worker stack. Separate
 type-only fixtures perform public `SemanticType` construction, clone, equality, hashing, display,
 transaction validation/conversion, query, projection, and destruction and creation-only
 `DeclarationType` construction, clone, equality, debug, local-binder resolution, stable publication,
@@ -327,8 +339,9 @@ the retained run and host-capability smoke paths with that built binary.
   concise projection is review/debug output, not a complete source renderer. Declaration creation
   covers non-generic products and enums, generic and non-generic functions, and parameterless
   `main`; expression construction
-  covers immutable locals, exact calls to imported or source-free generic functions, the selected
-  byte-vector move/borrow vertical, and exhaustive non-generic enum payload matches. Source-free
+  covers immutable and mutable locals, ordered sequence, assignment, `while`, exact calls to
+  imported or source-free generic functions, the selected byte-vector move/borrow vertical, and
+  exhaustive non-generic enum payload matches. Source-free
   generic function declaration authoring supports ordered binders, exact builtin or stable trait
   bounds, nested binder-bearing signatures, stable lifecycle, and direct compilation/execution. The
   source-free pattern surface currently supports wildcard,
@@ -337,13 +350,14 @@ the retained run and host-capability smoke paths with that built binary.
   declaration fields still reject ownership/reference types, so current source-free payload-match
   ownership evidence uses the strongest supported copy-safe payload geometry. Callable and whole
   nominal deletion plus owned local/member removal are implemented; direct nominal-member mutation,
-  explicit public movement, mutable-local construction, unresolved names, ambiguities, conflicts,
-  and recovery states remain. Generic ownership/reference instantiation and forwarding a caller's
+  explicit public movement, unresolved names, ambiguities, conflicts, and recovery states remain.
+  Generic ownership/reference instantiation and forwarding a caller's
   unresolved type parameter remain narrow explicit unsupported cases.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
-- Owned runtime structural values and source-free nested-expression, lexical-local, nested
-  enum-match, and public semantic-type workspace paths have 20,000-level release evidence on a
+- Owned runtime structural values and source-free nested-expression, alternating immutable/mutable
+  lexical-local, nested enum-match, and public semantic-type workspace paths have 20,000-level release
+  evidence on a
   128 KiB worker stack. This does not prove every compiler form, internal type traversal, ownership
   failure, or general runtime throughput path stack-safe.
 - The SSA evaluator is an explicit test oracle behind `lkjscript-ir/test-oracle`; it is not a public

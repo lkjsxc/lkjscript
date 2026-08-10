@@ -75,7 +75,11 @@ pub enum WorkspaceError {
         argument: Box<SemanticType>,
     },
     GenericForwardingUnsupported,
-    InvisibleEntity,
+    InvisibleEntity {
+        operation: Arc<str>,
+        entity: Box<EntityId>,
+        reason: Arc<str>,
+    },
     WrongEntityKind {
         operation: Arc<str>,
         expected: Arc<str>,
@@ -194,9 +198,14 @@ impl fmt::Display for WorkspaceError {
             Self::GenericForwardingUnsupported => formatter.write_str(
                 "forwarding a caller type parameter through a generic call is unavailable in the current transport route",
             ),
-            Self::InvisibleEntity => {
-                formatter.write_str("draft entity is not visible from the edited expression")
-            }
+            Self::InvisibleEntity {
+                operation,
+                entity,
+                reason,
+            } => write!(
+                formatter,
+                "{operation} cannot use invisible entity {entity:?}: {reason}"
+            ),
             Self::WrongEntityKind {
                 operation,
                 expected,

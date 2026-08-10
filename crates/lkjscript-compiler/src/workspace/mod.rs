@@ -46,9 +46,9 @@ pub use projection::ProjectionSlice;
 pub use query::{
     CallInstantiationView, ConstructorStatus, Continuation, EffectSummary, EntityPage,
     EntityTypeFacts, FunctionSignatureView, LegalConstructor, MatchArmView, MatchPatternFieldView,
-    MatchPatternKindView, MatchPatternLabel, MatchPatternNodeView, MatchView, NodeTypeFacts,
-    PageRequest, QueryPage, TraitWitnessKindView, TraitWitnessView, TypeArgumentView,
-    TypeParameterBoundView, TypeParameterView, ValueParameterView,
+    MatchPatternKindView, MatchPatternLabel, MatchPatternNodeView, MatchView, NodeSemanticFacts,
+    NodeTypeFacts, PageRequest, QueryPage, TraitWitnessKindView, TraitWitnessView,
+    TypeArgumentView, TypeParameterBoundView, TypeParameterView, ValueParameterView,
 };
 pub use transaction::{
     Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
@@ -249,6 +249,8 @@ impl WorkspaceSnapshot {
             || self.indexes.nodes.len() != self.indexes.node_enclosing_entities.len()
             || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
+            || self.indexes.nodes.len() != self.indexes.node_operations.len()
+            || self.indexes.nodes.len() != self.indexes.node_effects.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
             || self.indexes.entities.len() != self.indexes.entity_types.len()
         {
@@ -323,6 +325,8 @@ impl WorkspaceSnapshot {
             || self.indexes.nodes.len() != self.indexes.node_enclosing_entities.len()
             || self.indexes.nodes.len() != self.indexes.node_actual_types.len()
             || self.indexes.nodes.len() != self.indexes.node_expected_types.len()
+            || self.indexes.nodes.len() != self.indexes.node_operations.len()
+            || self.indexes.nodes.len() != self.indexes.node_effects.len()
             || self.indexes.entities.len() != self.indexes.entity_addresses.len()
             || self.indexes.entities.len() != self.indexes.entity_types.len()
         {

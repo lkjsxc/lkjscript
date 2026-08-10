@@ -598,12 +598,12 @@ fn collect_expression_locations(
                     work.try_reserve(3)
                         .map_err(|_| Error::host("local location traversal allocation failed"))?;
                     work.push(LocationWork::Visit(body));
-                    work.push(LocationWork::Visit(initial));
                     work.push(LocationWork::Define(LocationFact {
                         binding: *binding,
                         slot: *slot,
                         place: *place,
                     }));
+                    work.push(LocationWork::Visit(initial));
                 }
                 ExprKind::Match {
                     plan: id,

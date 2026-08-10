@@ -16,23 +16,20 @@ impl Operation {
         }
         let result = match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => {
-                let mut saw_f64 = false;
-                for argument in arguments {
-                    match argument {
-                        Type::I64 => {}
-                        Type::F64 => saw_f64 = true,
-                        other => {
-                            return Err(format!(
-                                "{}: expected i64 or f64, got {other}",
-                                self.name()
-                            ));
-                        }
-                    }
+                let left = &arguments[0];
+                let right = &arguments[1];
+                if left != right {
+                    return Err(format!(
+                        "{}: numeric operands must have one exact type, got {left} and {right}",
+                        self.name()
+                    ));
                 }
-                if saw_f64 {
-                    Type::F64
-                } else {
-                    Type::I64
+                match left {
+                    Type::I64 => Type::I64,
+                    Type::F64 => Type::F64,
+                    other => {
+                        return Err(format!("{}: expected i64 or f64, got {other}", self.name()));
+                    }
                 }
             }
             Self::EqualValue => {
@@ -96,14 +93,19 @@ impl Operation {
             Self::Less | Self::LessEqual | Self::Greater | Self::GreaterEqual => {
                 let left = &arguments[0];
                 let right = &arguments[1];
-                if both_numeric(left, right) {
-                    Type::Bool
-                } else {
+                if left != right {
+                    return Err(format!(
+                        "{}: numeric operands must have one exact type, got {left} and {right}",
+                        self.name()
+                    ));
+                }
+                if !both_numeric(left, right) {
                     return Err(format!(
                         "{}: expected numeric operands, got {left} and {right}",
                         self.name()
                     ));
                 }
+                Type::Bool
             }
             Self::DropResource
             | Self::SysReadByte

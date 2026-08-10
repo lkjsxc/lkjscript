@@ -310,6 +310,8 @@ pub(super) struct SnapshotIndexes {
     pub node_enclosing_entities: Vec<EntityId>,
     pub node_actual_types: Vec<crate::Type>,
     pub node_expected_types: Vec<Option<crate::Type>>,
+    pub node_operations: Vec<Option<crate::operation::Operation>>,
+    pub node_effects: Vec<crate::hir::EffectSet>,
     pub entity_types: Vec<Option<crate::Type>>,
     pub entity_lookup: HashMap<EntityId, usize>,
     pub node_lookup: HashMap<NodeId, usize>,

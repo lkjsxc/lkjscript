@@ -142,17 +142,20 @@ this Phase 2 measurement. Existing runtime-selection evidence below is unchanged
 ## Source-free semantic-workspace vertical
 
 **Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
-source-free nominal declarations, generic function declarations, lexical immutable locals,
-byte-vector ownership, exhaustive enum payload matches, and exact generic calls could converge with
-imported semantics and compile directly without hidden source/HIR authority, source loading, parsing,
+source-free nominal declarations, generic function declarations, immutable and mutable lexical
+locals, ordered imperative control, byte-vector ownership, exhaustive enum payload matches, and
+exact generic calls could converge with imported semantics and compile directly without hidden
+source/HIR authority, source loading, parsing,
 repeated enum-declaration/CFG scans, or recursion on expression, pattern, local, match, or public type
 depth. The equivalent workloads were the imported and transaction-created forms of:
 
 - `identity(value: i64) -> i64` plus `main() -> identity(42)`;
 - a two-field product constructed, bound, and projected;
 - a two-variant enum constructed, bound, and tested;
-- a two-variant enum constructed and exhaustively matched, with one stable payload binding; and
-- a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed; and
+- a two-variant enum constructed and exhaustively matched, with one stable payload binding;
+- a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed;
+- a mutable `i64` counted from 0 to 100 by ordered sequence, assignment, `while`, and canonical
+  `less-than`; and
 - imported and source-free generic identity declarations and calls, including exact ordered binders,
   builtin bounds, nested binder-bearing types, auto witnesses, and exact structured type arguments;
   and imported repeated-bound and explicit-implementation calls.
@@ -160,8 +163,8 @@ depth. The equivalent workloads were the imported and transaction-created forms 
 Selection required equal normalized stable entity kinds/types, containment, references,
 dependencies, node kinds/types/effects, canonical match-plan shape, compiler outcomes, selected
 memory-obligation kinds, the main bytecode stream, exact VM values or traps, and cleanup behavior.
-Product/enum names are normalized
-only in the test observation because imported names retain module qualification; nominal identity
+Product/enum names are normalized only in the test observation because imported names retain module
+qualification; nominal identity
 stays workspace-local and structured. Match provenance is intentionally not equal: imported plans
 retain real source origin and source-free plans retain semantic origin.
 
@@ -169,8 +172,10 @@ Retained deterministic counters, indexes, and assertions show:
 
 - selected source-free create/fill/compile paths invoke source loading and the parser zero times;
 - incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
-- scalar, product, enum, local, ownership, exhaustive enum-payload-match, and equivalent generic-call
-  source-free/imported paths have equal selected semantic observations and production outcomes;
+- scalar, product, enum, immutable/mutable local, counted-loop, ownership, exhaustive
+  enum-payload-match, and equivalent generic-call source-free/imported paths have equal selected
+  semantic observations and production outcomes; the counted-loop path returns exactly 100 with zero
+  source-load/parser invocations;
 - generic declaration and call edits invoke source loading and parsing zero times; source-free
   declarations allocate stable binder entities in declaration order, publish exact bounds and nested
   binder types, derive the same auto witnesses as source import, expose exact instantiated
@@ -181,7 +186,11 @@ Retained deterministic counters, indexes, and assertions show:
   `if` geometries at depths 32, 64, and 128 and for the nested-match fixture; enum, variant,
   enum-field, and match relation lookup uses prebuilt identity maps rather than scanning declarations
   per expression; the nested-match fixture also records exactly three pattern-lowering node visits
-  per two-arm match (one `Some` aggregate, its wildcard field, and one `None` aggregate);
+  per two-arm match (one `Some` aggregate, its wildcard field, and one `None` aggregate); a generated
+  1,028-node wide sequence with 512 assignments records exactly one lowering-order visit and one
+  scope visit per draft node and compiles/executes on a 128 KiB worker stack; separate fresh 1-use
+  and 2,001-use stable-target drafts record the same one-time callable location-scan count, while
+  exact map lookups grow from 2 to 2,001 rather than rescanning the retained body per use;
 - callable/local deletion uses one retained-order binding/plan pass, one iterative expression/pattern
   rewrite per surviving root, and one parent/child-ordinal survivor reconciliation pass; it does not
   rescan the whole program for each binding and retains no dead binding or plan per edit. Focused
@@ -199,11 +208,15 @@ Retained deterministic counters, indexes, and assertions show:
   two-product/two-implementation program: they compact surviving `ProductId`/`ImplId` values, remap an
   explicit generic witness, execute unchanged, and invoke source loading and parsing zero times after
   import;
+- an affine mutable-local regression rejects live overwrite atomically, then moves and releases the
+  old byte vector, reinitializes the ended place, moves and releases the replacement, returns `4`,
+  and completes VM teardown without retained owners or loans;
 - one ignored locked-release fixture completes a 20,000-level nested-`if` draft (60,001 expression
-  nodes), a second completes 20,000 lexical locals (40,001 expression nodes), and a third completes
-  20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
-  includes staged lowering, semantic clone, dense lifecycle compaction, identity reconciliation,
-  complete-HIR/ownership/match derivation, memory planning, SSA, bytecode, VM execution, projection
+  nodes), a second completes 20,000 alternating immutable/mutable lexical locals (40,001 expression
+  nodes), and a third completes 20,000 nested semantic enum matches (80,001 expression nodes and
+  20,000 canonical plans); each includes staged lowering, semantic clone, dense lifecycle compaction,
+  identity reconciliation, complete-HIR/ownership/match derivation, memory planning, SSA, bytecode,
+  VM execution, projection
   where selected, and destruction on a 128 KiB worker stack; separate type-only fixtures exercise
   published `SemanticType` construction, clone, equality, hashing, display, transaction validation,
   conversion, query, projection, and destruction and creation-only `DeclarationType` construction,
@@ -219,6 +232,14 @@ Retained deterministic counters, indexes, and assertions show:
 Reproduce the focused convergence and locked-release stack fixtures with:
 
 ```sh
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_imperative_counted_loop_executes_and_matches_imported_semantics -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::wide_imperative_draft_visits_each_node_once_on_a_small_stack -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::wide_stable_assignment_targets_use_one_callable_location_scan -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::affine_mutable_reinitialization_moves_and_cleans_up_exactly_once -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_nominal_local_and_ownership_programs_converge -- --exact
 cargo test --locked -p lkjscript-compiler \
@@ -266,9 +287,10 @@ cargo test --locked --release -p lkjscript-compiler \
   -- --ignored --exact --test-threads=1
 ```
 
-On the development host, the binding-lifecycle cutover's final locked-release 20,000-local
-invocation, including removal and recompaction of all locals on a 128 KiB stack, reported 1.17 seconds
-for the test body after a 1 minute 12 second release rebuild. An earlier nested-`if` invocation
+On the development host, the imperative-control cutover's locked-release 20,000-local invocation,
+now alternating immutable and mutable declarations and including removal/recompaction of every local
+on a 128 KiB stack, reported 1.18 seconds for the test body after a 1 minute 21 second release
+rebuild. An earlier nested-`if` invocation
 reported 18.19 seconds. The binding-lifecycle cutover's final locked-release 20,000-match invocation
 reported 307.41 seconds for the test body with warm release artifacts (307.469 seconds process wall);
 it is deliberately an ignored maximum-geometry correctness fixture, not a representative latency

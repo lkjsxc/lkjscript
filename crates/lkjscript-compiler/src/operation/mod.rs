@@ -5,7 +5,7 @@ use crate::types::Type;
 /// A built-in operation after name resolution.
 ///
 /// Backends consume this identity rather than comparing source spellings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum Operation {
     Add,
