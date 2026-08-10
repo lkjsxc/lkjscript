@@ -4,7 +4,8 @@ use std::sync::Arc;
 use lkjscript_core::Error;
 
 use super::{
-    CompletenessBlocker, EntityId, EntityKind, NodeKind, RevisionId, SemanticTrait, SemanticType,
+    CompletenessBlocker, DraftTypeParameterId, EntityId, EntityKind, NodeKind, RevisionId,
+    SemanticTrait, SemanticType,
 };
 
 /// Structured kind carried by wrong-kind workspace failures.
@@ -30,6 +31,23 @@ pub enum WorkspaceError {
     InvalidSemanticType {
         position: Arc<str>,
         reason: Arc<str>,
+    },
+    UnknownDraftTypeParameter {
+        parameter: DraftTypeParameterId,
+    },
+    DuplicateDraftTypeParameter {
+        parameter: DraftTypeParameterId,
+    },
+    DuplicateTypeParameterName {
+        first: DraftTypeParameterId,
+        duplicate: DraftTypeParameterId,
+    },
+    DuplicateTypeParameterBound {
+        parameter: DraftTypeParameterId,
+        trait_identity: SemanticTrait,
+    },
+    UnusedDraftTypeParameter {
+        parameter: DraftTypeParameterId,
     },
     MissingTypeArgument {
         parameter: EntityId,
@@ -116,6 +134,27 @@ impl fmt::Display for WorkspaceError {
             Self::InvalidSemanticType { position, reason } => {
                 write!(formatter, "invalid semantic type for {position}: {reason}")
             }
+            Self::UnknownDraftTypeParameter { parameter } => {
+                write!(formatter, "declaration type references unknown {parameter:?}")
+            }
+            Self::DuplicateDraftTypeParameter { parameter } => {
+                write!(formatter, "function declaration repeats {parameter:?}")
+            }
+            Self::DuplicateTypeParameterName { first, duplicate } => write!(
+                formatter,
+                "function declaration gives {first:?} and {duplicate:?} the same name"
+            ),
+            Self::DuplicateTypeParameterBound {
+                parameter,
+                trait_identity,
+            } => write!(
+                formatter,
+                "function declaration repeats bound {trait_identity:?} for {parameter:?}"
+            ),
+            Self::UnusedDraftTypeParameter { parameter } => write!(
+                formatter,
+                "function declaration does not use {parameter:?} in its signature"
+            ),
             Self::MissingTypeArgument { parameter } => {
                 write!(formatter, "generic call is missing type argument for {parameter:?}")
             }

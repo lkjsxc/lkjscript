@@ -45,11 +45,12 @@ fn create_source_free_declarations(
             edits: vec![
                 Edit::CreateFunction {
                     name: "identity".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
                     return_type: SemanticType::I64,
@@ -227,11 +228,12 @@ fn source_free_construction_never_invokes_parser_and_executes() {
             edits: vec![
                 Edit::CreateFunction {
                     name: "identity".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
                     return_type: SemanticType::I64,
@@ -404,6 +406,996 @@ fn source_free_construction_never_invokes_parser_and_executes() {
     assert_eq!(crate::pipeline::lowering_invocations(), 1);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_generic_function_creation_is_exact_and_executes_without_source_work() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    crate::pipeline::reset_lowering_invocations();
+    let mut workspace = Workspace::empty_deterministic(200).expect("empty workspace");
+    let binder = DraftTypeParameterId::new(7);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: binder,
+                        name: "t".to_owned(),
+                        bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(binder),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(binder),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create source-free generic identity");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "identity");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("generic signature");
+    assert_eq!(signature.type_parameters.len(), 1);
+    let parameter = signature.type_parameters[0].id;
+    assert_eq!(signature.type_parameters[0].owner, function);
+    assert_eq!(signature.type_parameters[0].name.as_ref(), "t");
+    assert_eq!(
+        signature.type_parameters[0].bounds,
+        [TypeParameterBoundView {
+            parameter,
+            trait_identity: SemanticTrait::Builtin(BuiltinTrait::Copy),
+        }]
+    );
+    assert_eq!(signature.parameters.len(), 1);
+    assert_eq!(
+        signature.parameters[0].ty,
+        SemanticType::TypeParameter(parameter)
+    );
+    assert_eq!(signature.result, SemanticType::TypeParameter(parameter));
+    let value = signature.parameters[0].entity;
+    let function_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("generic body hole");
+    assert_eq!(
+        function_hole.expected_type,
+        SemanticType::TypeParameter(parameter)
+    );
+    assert!(function_hole.visible_entities.contains(&parameter));
+    let function_hole_id = function_hole.id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main body hole")
+        .id;
+    assert!(matches!(
+        crate::compile_snapshot(&created.snapshot),
+        Err(crate::CompileSnapshotError::Incomplete(_))
+    ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+    for expected in [function, parameter, value, main] {
+        assert!(created.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityCreated { entity, .. } if *entity == expected
+        )));
+    }
+    let projection = created
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(function),
+            ProjectionSlice::Body(function),
+        ])
+        .expect("generic declaration projection");
+    assert!(projection.contains("type-parameter"));
+    assert!(projection.contains("bound trait=builtin:copy"));
+    assert!(projection.contains("type-parameter("));
+
+    let body = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: function_hole_id,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Load(DraftBindingRef::Entity(value))],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        })
+        .expect("fill generic identity body");
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: body.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter,
+                                argument: SemanticType::I64,
+                            }],
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("call source-free generic identity");
+    let call = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call")
+        .id;
+    let view = completed
+        .snapshot
+        .call_instantiation(completed.snapshot.revision(), call)
+        .expect("generic call view");
+    assert_eq!(
+        view.type_arguments,
+        [TypeArgumentView {
+            parameter,
+            argument: SemanticType::I64,
+        }]
+    );
+    assert_eq!(view.parameters, [SemanticType::I64]);
+    assert_eq!(view.result, SemanticType::I64);
+    assert_eq!(view.witnesses.len(), 1);
+    assert_eq!(view.witnesses[0].parameter, parameter);
+    assert_eq!(
+        view.witnesses[0].trait_identity,
+        SemanticTrait::Builtin(BuiltinTrait::Copy)
+    );
+    assert_eq!(view.witnesses[0].kind, TraitWitnessKindView::AutoTrait);
+    assert!(view.effects.is_known());
+    assert!(view.effects.is_pure());
+    assert!(completed
+        .snapshot
+        .calls()
+        .iter()
+        .any(|edge| edge.caller == main && edge.callee == function && edge.site == call));
+    assert!(completed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == value));
+    assert!(completed
+        .snapshot
+        .dependencies()
+        .iter()
+        .any(|edge| edge.dependent == main && edge.dependency == function));
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(crate::pipeline::lowering_invocations(), 1);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_generic_declaration_preserves_binder_and_bound_order_in_nested_types() {
+    let mut workspace = Workspace::empty_deterministic(199).expect("empty workspace");
+    let nominal = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "context".to_owned(),
+                fields: vec![ProductFieldDraft {
+                    name: "value".to_owned(),
+                    ty: SemanticType::I64,
+                }],
+            }],
+        })
+        .expect("create stable nominal context");
+    let product = entity_named(&nominal.snapshot, EntityKind::Product, "context");
+    let first = DraftTypeParameterId::new(9);
+    let second = DraftTypeParameterId::new(2);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: nominal.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "nested".to_owned(),
+                type_parameters: vec![
+                    TypeParameterDraft {
+                        id: first,
+                        name: "first".to_owned(),
+                        bounds: vec![
+                            SemanticTrait::Builtin(BuiltinTrait::Copy),
+                            SemanticTrait::Builtin(BuiltinTrait::Send),
+                        ],
+                    },
+                    TypeParameterDraft {
+                        id: second,
+                        name: "second".to_owned(),
+                        bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Sync)],
+                    },
+                ],
+                parameters: vec![
+                    ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::Enum {
+                            constructor: SemanticEnum::Builtin(BuiltinEnum::Result),
+                            arguments: vec![
+                                DeclarationType::List(Box::new(
+                                    DeclarationType::DraftTypeParameter(first),
+                                )),
+                                DeclarationType::Enum {
+                                    constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                                    arguments: vec![DeclarationType::DraftTypeParameter(second)],
+                                },
+                            ],
+                        },
+                    },
+                    ParameterDraft {
+                        name: "context".to_owned(),
+                        ty: DeclarationType::Product(product),
+                    },
+                ],
+                return_type: DeclarationType::Function {
+                    parameters: vec![DeclarationType::DraftTypeParameter(second)],
+                    result: Box::new(DeclarationType::DraftTypeParameter(first)),
+                },
+            }],
+        })
+        .expect("create nested generic declaration");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "nested");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("nested signature");
+    assert_eq!(
+        signature
+            .type_parameters
+            .iter()
+            .map(|parameter| parameter.name.as_ref())
+            .collect::<Vec<_>>(),
+        ["first", "second"]
+    );
+    let first = signature.type_parameters[0].id;
+    let second = signature.type_parameters[1].id;
+    assert_eq!(
+        signature.type_parameters[0]
+            .bounds
+            .iter()
+            .map(|bound| bound.trait_identity)
+            .collect::<Vec<_>>(),
+        [
+            SemanticTrait::Builtin(BuiltinTrait::Copy),
+            SemanticTrait::Builtin(BuiltinTrait::Send),
+        ]
+    );
+    assert_eq!(
+        signature.type_parameters[1].bounds[0].trait_identity,
+        SemanticTrait::Builtin(BuiltinTrait::Sync)
+    );
+    assert_eq!(
+        signature.parameters[0].ty,
+        SemanticType::Enum {
+            constructor: SemanticEnum::Builtin(BuiltinEnum::Result),
+            arguments: vec![
+                SemanticType::List(Box::new(SemanticType::TypeParameter(first))),
+                SemanticType::Enum {
+                    constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                    arguments: vec![SemanticType::TypeParameter(second)],
+                },
+            ],
+        }
+    );
+    assert_eq!(signature.parameters[1].ty, SemanticType::Product(product));
+    assert_eq!(
+        signature.result,
+        SemanticType::Function {
+            parameters: vec![SemanticType::TypeParameter(second)],
+            result: Box::new(SemanticType::TypeParameter(first)),
+        }
+    );
+    assert!(created
+        .snapshot
+        .dependencies()
+        .iter()
+        .any(|edge| edge.dependent == function && edge.dependency == product));
+}
+
+#[test]
+fn malformed_generic_declarations_are_structured_atomic_and_retry_stable() {
+    let seed = 198;
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty workspace");
+    let before = workspace.current();
+    let projection = before.project(&[]).expect("empty projection");
+    let duplicate = DraftTypeParameterId::new(0);
+    let failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "identity".to_owned(),
+            type_parameters: vec![
+                TypeParameterDraft {
+                    id: duplicate,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                },
+                TypeParameterDraft {
+                    id: duplicate,
+                    name: "u".to_owned(),
+                    bounds: Vec::new(),
+                },
+            ],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(duplicate),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(duplicate),
+        }],
+    });
+    assert_eq!(
+        failure.expect_err("duplicate draft binder rejects"),
+        WorkspaceError::DuplicateDraftTypeParameter {
+            parameter: duplicate,
+        }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(workspace.current().revision(), before.revision());
+    assert_eq!(workspace.current().diagnostics(), before.diagnostics());
+    assert_eq!(
+        workspace.current().project(&[]).expect("projection"),
+        projection
+    );
+
+    let declared = DraftTypeParameterId::new(1);
+    let unknown = DraftTypeParameterId::new(2);
+    let failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "identity".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: declared,
+                name: "t".to_owned(),
+                bounds: Vec::new(),
+            }],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(unknown),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(declared),
+        }],
+    });
+    assert_eq!(
+        failure.expect_err("unknown draft binder rejects"),
+        WorkspaceError::UnknownDraftTypeParameter { parameter: unknown }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let same_name = DraftTypeParameterId::new(3);
+    let duplicate_name = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "duplicate-name".to_owned(),
+            type_parameters: vec![
+                TypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                },
+                TypeParameterDraft {
+                    id: same_name,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                },
+            ],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(declared),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(same_name),
+        }],
+    });
+    assert_eq!(
+        duplicate_name.expect_err("duplicate binder name rejects"),
+        WorkspaceError::DuplicateTypeParameterName {
+            first: declared,
+            duplicate: same_name,
+        }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let unused = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "unused".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: declared,
+                name: "t".to_owned(),
+                bounds: Vec::new(),
+            }],
+            parameters: Vec::new(),
+            return_type: DeclarationType::Unit,
+        }],
+    });
+    assert_eq!(
+        unused.expect_err("unused binder rejects"),
+        WorkspaceError::UnusedDraftTypeParameter {
+            parameter: declared,
+        }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    for invalid in [
+        Edit::CreateFunction {
+            name: "invalid-binder".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: declared,
+                name: String::new(),
+                bounds: Vec::new(),
+            }],
+            parameters: Vec::new(),
+            return_type: DeclarationType::DraftTypeParameter(declared),
+        },
+        Edit::CreateFunction {
+            name: "invalid-value".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: declared,
+                name: "t".to_owned(),
+                bounds: Vec::new(),
+            }],
+            parameters: vec![ParameterDraft {
+                name: String::new(),
+                ty: DeclarationType::DraftTypeParameter(declared),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(declared),
+        },
+    ] {
+        let invalid_name = workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![invalid],
+        });
+        assert!(matches!(
+            invalid_name,
+            Err(WorkspaceError::InvalidTransaction(_))
+        ));
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+    }
+
+    let corrected = Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "identity".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: declared,
+                name: "t".to_owned(),
+                bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+            }],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(declared),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(declared),
+        }],
+    };
+    let retry = workspace.apply(corrected.clone()).expect("corrected retry");
+    let mut control = Workspace::empty_deterministic(seed).expect("control workspace");
+    let control = control.apply(corrected).expect("control creation");
+    assert_eq!(retry.snapshot.entities(), control.snapshot.entities());
+    assert_eq!(retry.snapshot.nodes(), control.snapshot.nodes());
+    assert_eq!(
+        retry.snapshot.holes().collect::<Vec<_>>(),
+        control.snapshot.holes().collect::<Vec<_>>()
+    );
+
+    let published = workspace.current();
+    let conflict = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "identity".to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::Unit,
+        }],
+    });
+    assert!(matches!(
+        conflict,
+        Err(WorkspaceError::InvalidTransaction(_))
+    ));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+}
+
+#[test]
+fn generic_declaration_trait_identities_fail_closed_before_publication() {
+    let mut workspace = Workspace::empty_deterministic(192).expect("empty workspace");
+    let main_created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create wrong-kind identity");
+    let main = entity_named(&main_created.snapshot, EntityKind::Main, "main");
+    let before = workspace.current();
+    let parameter = DraftTypeParameterId::new(0);
+    let bounded = |bound| Edit::CreateFunction {
+        name: "bounded".to_owned(),
+        type_parameters: vec![TypeParameterDraft {
+            id: parameter,
+            name: "t".to_owned(),
+            bounds: vec![bound],
+        }],
+        parameters: vec![ParameterDraft {
+            name: "value".to_owned(),
+            ty: DeclarationType::DraftTypeParameter(parameter),
+        }],
+        return_type: DeclarationType::DraftTypeParameter(parameter),
+    };
+    let wrong_kind = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![bounded(SemanticTrait::Entity(main))],
+    });
+    assert!(matches!(
+        wrong_kind,
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let foreign_workspace = Workspace::empty_deterministic(191).expect("foreign workspace");
+    let foreign = foreign_workspace.current().namespace();
+    let foreign_entity = EntityId::new(foreign, main.slot(), main.generation());
+    let foreign_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![bounded(SemanticTrait::Entity(foreign_entity))],
+    });
+    assert!(matches!(
+        foreign_failure,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let stale_entity = EntityId::new(
+        main.namespace(),
+        main.slot(),
+        main.generation().checked_add(1).expect("stale generation"),
+    );
+    let stale_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![bounded(SemanticTrait::Entity(stale_entity))],
+    });
+    assert!(matches!(
+        stale_failure,
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let duplicate = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "bounded".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: parameter,
+                name: "t".to_owned(),
+                bounds: vec![
+                    SemanticTrait::Builtin(BuiltinTrait::Copy),
+                    SemanticTrait::Builtin(BuiltinTrait::Copy),
+                ],
+            }],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(parameter),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(parameter),
+        }],
+    });
+    assert_eq!(
+        duplicate.expect_err("duplicate bound rejects"),
+        WorkspaceError::DuplicateTypeParameterBound {
+            parameter,
+            trait_identity: SemanticTrait::Builtin(BuiltinTrait::Copy),
+        }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let unsupported = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![bounded(SemanticTrait::Builtin(BuiltinTrait::Clone))],
+    });
+    assert!(matches!(
+        unsupported,
+        Err(WorkspaceError::UnsupportedEdit { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+}
+
+#[test]
+fn generic_declaration_type_identities_and_shapes_fail_closed_atomically() {
+    let mut workspace = Workspace::empty_deterministic(189).expect("empty workspace");
+    let draft = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "owner".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: draft,
+                        name: "t".to_owned(),
+                        bounds: Vec::new(),
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(draft),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(draft),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create stable identities");
+    let owner = entity_named(&created.snapshot, EntityKind::Function, "owner");
+    let stable_parameter = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), owner)
+        .expect("owner signature")
+        .type_parameters[0]
+        .id;
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let before = workspace.current();
+    let declaration = |name: &str, parameter_type, return_type| Edit::CreateFunction {
+        name: name.to_owned(),
+        type_parameters: Vec::new(),
+        parameters: vec![ParameterDraft {
+            name: "value".to_owned(),
+            ty: parameter_type,
+        }],
+        return_type,
+    };
+
+    let wrong_owner = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "wrong-owner",
+            DeclarationType::TypeParameter(stable_parameter),
+            DeclarationType::Unit,
+        )],
+    });
+    assert!(matches!(
+        wrong_owner,
+        Err(WorkspaceError::WrongTypeParameterOwner {
+            parameter,
+            actual: Some(actual),
+            ..
+        }) if parameter.as_ref() == &stable_parameter && actual.as_ref() == &owner
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let wrong_kind = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "wrong-kind",
+            DeclarationType::TypeParameter(main),
+            DeclarationType::Unit,
+        )],
+    });
+    assert!(matches!(
+        wrong_kind,
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let stale = EntityId::new(
+        main.namespace(),
+        main.slot(),
+        main.generation().checked_add(1).expect("stale generation"),
+    );
+    let stale_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "stale-type",
+            DeclarationType::TypeParameter(stale),
+            DeclarationType::Unit,
+        )],
+    });
+    assert!(matches!(
+        stale_failure,
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let foreign_namespace = Workspace::empty_deterministic(188)
+        .expect("foreign workspace")
+        .current()
+        .namespace();
+    let foreign = EntityId::new(foreign_namespace, main.slot(), main.generation());
+    let foreign_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "foreign-type",
+            DeclarationType::TypeParameter(foreign),
+            DeclarationType::Unit,
+        )],
+    });
+    assert!(matches!(
+        foreign_failure,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let invalid_arity = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "bad-arity",
+            DeclarationType::Enum {
+                constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                arguments: Vec::new(),
+            },
+            DeclarationType::Unit,
+        )],
+    });
+    assert!(matches!(
+        invalid_arity,
+        Err(WorkspaceError::InvalidSemanticType { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let reference_result = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![declaration(
+            "reference-result",
+            DeclarationType::Unit,
+            DeclarationType::ByteSlice,
+        )],
+    });
+    assert!(matches!(
+        reference_result,
+        Err(WorkspaceError::UnsupportedEdit { operation, .. })
+            if operation.as_ref() == "create-declaration"
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+}
+
+#[test]
+fn source_free_generic_declaration_uses_imported_trait_and_explicit_implementation() {
+    let source = concat!(
+        "trait/\nname/\nmarked\n/name\n/trait\n",
+        "product/\nname/\nkeep\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
+        "impl/\ntrait/\nmarked\n/trait\nfor/\nproduct\nkeep\n/for\n/impl\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n0\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "source-free-explicit-bound.lkjscript",
+        WorkspaceNamespace::deterministic(190),
+    )
+    .expect("import explicit implementation context");
+    let named = |kind, suffix: &str| {
+        snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.ends_with(suffix))
+            .unwrap_or_else(|| panic!("missing {kind:?} ending in {suffix}"))
+            .id
+    };
+    let product = named(EntityKind::Product, ":keep");
+    let field = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::ProductField && entity.owner == Some(product))
+        .expect("product field")
+        .id;
+    let trait_entity = named(EntityKind::Trait, ":marked");
+    let implementation = named(EntityKind::Implementation, ":keep");
+    let main = named(EntityKind::Main, "main");
+    let main_root = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("main root")
+        .id;
+    let mut workspace = Workspace::new(snapshot).expect("workspace");
+    let draft_parameter = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "source-marked".to_owned(),
+                type_parameters: vec![TypeParameterDraft {
+                    id: draft_parameter,
+                    name: "t".to_owned(),
+                    bounds: vec![SemanticTrait::Entity(trait_entity)],
+                }],
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::DraftTypeParameter(draft_parameter),
+                }],
+                return_type: DeclarationType::DraftTypeParameter(draft_parameter),
+            }],
+        })
+        .expect("create source-free explicitly bounded function");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "source-marked");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("source-free explicit signature");
+    let type_parameter = signature.type_parameters[0].id;
+    let value_parameter = signature.parameters[0].entity;
+    assert_eq!(
+        signature.type_parameters[0].bounds[0].trait_identity,
+        SemanticTrait::Entity(trait_entity)
+    );
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("source-free body hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(value_parameter))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+                Edit::ReplaceExpression {
+                    target: main_root,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(42),
+                            DraftNode::ProductValue {
+                                product,
+                                fields: vec![DraftFieldValue {
+                                    field,
+                                    value: DraftNodeId::new(0),
+                                }],
+                            },
+                            DraftNode::Call {
+                                callee: function,
+                                type_arguments: vec![TypeArgumentDraft {
+                                    parameter: type_parameter,
+                                    argument: SemanticType::Product(product),
+                                }],
+                                arguments: vec![DraftNodeId::new(1)],
+                            },
+                            DraftNode::ProductField {
+                                field,
+                                value: DraftNodeId::new(2),
+                            },
+                        ],
+                        DraftNodeId::new(3),
+                    ),
+                },
+            ],
+        })
+        .expect("call source-free explicit-bound function");
+    let call = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("source-free explicit call")
+        .id;
+    let view = completed
+        .snapshot
+        .call_instantiation(completed.snapshot.revision(), call)
+        .expect("explicit witness view");
+    assert_eq!(view.witnesses[0].parameter, type_parameter);
+    assert_eq!(
+        view.witnesses[0].trait_identity,
+        SemanticTrait::Entity(trait_entity)
+    );
+    assert_eq!(
+        view.witnesses[0].kind,
+        TraitWitnessKindView::Explicit(implementation)
+    );
+    assert_eq!(run_i64(&completed.snapshot), 42);
+}
+
+#[test]
+fn source_free_bound_rejection_names_the_created_binder_and_is_atomic() {
+    let mut workspace = Workspace::empty_deterministic(197).expect("empty workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let declarations = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateEnum {
+                    name: "choice".to_owned(),
+                    variants: vec![EnumVariantDraft {
+                        name: "only".to_owned(),
+                        fields: Vec::new(),
+                    }],
+                },
+                Edit::CreateFunction {
+                    name: "copy-value".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: binder,
+                        name: "t".to_owned(),
+                        bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(binder),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(binder),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create bounded declaration");
+    let function = entity_named(&declarations.snapshot, EntityKind::Function, "copy-value");
+    let parameter = declarations
+        .snapshot
+        .function_signature(declarations.snapshot.revision(), function)
+        .expect("bounded signature")
+        .type_parameters[0]
+        .id;
+    let enumeration = entity_named(&declarations.snapshot, EntityKind::Enum, "choice");
+    let variant = declarations
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant && entity.owner == Some(enumeration))
+        .expect("enum variant")
+        .id;
+    let main = entity_named(&declarations.snapshot, EntityKind::Main, "main");
+    let hole = declarations
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+    let before = workspace.current();
+    let failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::EnumValue {
+                        variant,
+                        fields: Vec::new(),
+                    },
+                    DraftNode::Call {
+                        callee: function,
+                        type_arguments: vec![TypeArgumentDraft {
+                            parameter,
+                            argument: SemanticType::Enum {
+                                constructor: SemanticEnum::Entity(enumeration),
+                                arguments: Vec::new(),
+                            },
+                        }],
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(
+        failure,
+        Err(WorkspaceError::UnsatisfiedTraitBound {
+            parameter: failed,
+            trait_identity,
+            ..
+        }) if *failed == parameter
+            && *trait_identity == SemanticTrait::Builtin(BuiltinTrait::Copy)
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
 }
 
 #[test]
@@ -650,15 +1642,16 @@ fn every_builtin_enum_identity_round_trips_in_nested_semantic_types() {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateFunction {
                 name: "builtins".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: expected
                     .iter()
                     .enumerate()
                     .map(|(index, ty)| ParameterDraft {
                         name: format!("value-{index}"),
-                        ty: ty.clone(),
+                        ty: DeclarationType::try_from(ty).expect("declaration type"),
                     })
                     .collect(),
-                return_type: SemanticType::Unit,
+                return_type: DeclarationType::Unit,
             }],
         })
         .expect("create builtin signature");
@@ -1467,6 +2460,208 @@ fn generic_binder_identities_survive_compaction_and_follow_function_lifecycle() 
 }
 
 #[test]
+fn source_free_generic_binders_survive_rename_compaction_and_follow_deletion() {
+    let mut workspace = Workspace::empty_deterministic(209).expect("empty workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "remove".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
+                    name: "keep".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: binder,
+                        name: "t".to_owned(),
+                        bounds: Vec::new(),
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(binder),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(binder),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create lifecycle declarations");
+    let remove = entity_named(&created.snapshot, EntityKind::Function, "remove");
+    let keep = entity_named(&created.snapshot, EntityKind::Function, "keep");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), keep)
+        .expect("generic signature");
+    let type_parameter = signature.type_parameters[0].id;
+    let value = signature.parameters[0].entity;
+    let hole_for = |owner| {
+        created
+            .snapshot
+            .holes()
+            .find(|hole| hole.owner == owner)
+            .expect("owned hole")
+            .id
+    };
+    let remove_hole = hole_for(remove);
+    let keep_hole = hole_for(keep);
+    let main_hole = hole_for(main);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole: remove_hole,
+                    draft: ExpressionDraft::scalar_i64(0),
+                },
+                Edit::FillHole {
+                    hole: keep_hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(value))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+                Edit::FillHole {
+                    hole: main_hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(42),
+                            DraftNode::Call {
+                                callee: keep,
+                                type_arguments: vec![TypeArgumentDraft {
+                                    parameter: type_parameter,
+                                    argument: SemanticType::I64,
+                                }],
+                                arguments: vec![DraftNodeId::new(0)],
+                            },
+                        ],
+                        DraftNodeId::new(1),
+                    ),
+                },
+            ],
+        })
+        .expect("complete lifecycle fixture");
+    let call = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("generic call")
+        .id;
+    assert_eq!(run_i64(&completed.snapshot), 42);
+
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: keep,
+                new_name: "kept".to_owned(),
+            }],
+        })
+        .expect("rename generic function");
+    assert_eq!(
+        renamed
+            .snapshot
+            .function_signature(renamed.snapshot.revision(), keep)
+            .expect("renamed signature")
+            .type_parameters[0]
+            .id,
+        type_parameter
+    );
+    assert_eq!(run_i64(&renamed.snapshot), 42);
+
+    let old = renamed.snapshot.clone();
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: renamed.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: remove }],
+        })
+        .expect("compact earlier function");
+    assert_eq!(
+        compacted.snapshot.entity(keep).expect("kept function").id,
+        keep
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .entity(type_parameter)
+            .expect("kept binder")
+            .id,
+        type_parameter
+    );
+    assert_eq!(
+        compacted
+            .snapshot
+            .call_instantiation(compacted.snapshot.revision(), call)
+            .expect("kept call")
+            .type_arguments[0]
+            .parameter,
+        type_parameter
+    );
+    assert_eq!(run_i64(&compacted.snapshot), 42);
+
+    let before_failure = workspace.current();
+    assert!(workspace
+        .apply(Transaction {
+            base_revision: before_failure.revision(),
+            edits: vec![Edit::DeleteEntity { entity: keep }],
+        })
+        .is_err());
+    assert!(Arc::ptr_eq(&before_failure, &workspace.current()));
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: before_failure.revision(),
+            edits: vec![
+                Edit::DeleteEntity { entity: main },
+                Edit::DeleteEntity { entity: keep },
+            ],
+        })
+        .expect("delete dependency-closed generic function");
+    assert!(deleted.snapshot.entity(type_parameter).is_err());
+    assert_eq!(
+        old.function_signature(old.revision(), keep)
+            .expect("old generic signature")
+            .type_parameters[0]
+            .id,
+        type_parameter
+    );
+
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "kept".to_owned(),
+                type_parameters: vec![TypeParameterDraft {
+                    id: binder,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                }],
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::DraftTypeParameter(binder),
+                }],
+                return_type: DeclarationType::DraftTypeParameter(binder),
+            }],
+        })
+        .expect("recreate generic function");
+    let recreated_function = entity_named(&recreated.snapshot, EntityKind::Function, "kept");
+    let recreated_parameter = recreated
+        .snapshot
+        .function_signature(recreated.snapshot.revision(), recreated_function)
+        .expect("recreated signature")
+        .type_parameters[0]
+        .id;
+    assert_ne!(recreated_function, keep);
+    assert_ne!(recreated_parameter, type_parameter);
+}
+
+#[test]
 fn imported_and_source_free_programs_converge_semantically() {
     let imported = import_source(FUNCTION_PROGRAM_42, "workspace-convergence.lkjscript")
         .expect("import equivalent program");
@@ -1546,6 +2741,188 @@ fn imported_and_source_free_programs_converge_semantically() {
 }
 
 #[test]
+fn imported_and_source_free_generic_declarations_converge_through_bytecode_and_vm() {
+    let source = concat!(
+        "def/\nname/\nidentity\n/name\nfn/\nforall/\nt\n/forall\n",
+        "bounds/\nbound/\nt\ncopy\n/bound\n/bounds\n",
+        "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "identity/\n42\n/identity\n/main\n",
+    );
+    let imported = importer::import_source_with_namespace(
+        source,
+        "generic-declaration-convergence.lkjscript",
+        WorkspaceNamespace::deterministic(196),
+    )
+    .expect("import generic declaration");
+
+    let mut workspace = Workspace::empty_deterministic(195).expect("empty workspace");
+    let draft_parameter = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: draft_parameter,
+                        name: "t".to_owned(),
+                        bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(draft_parameter),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(draft_parameter),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create generic declaration");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "identity");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("source-free signature");
+    let type_parameter = signature.type_parameters[0].id;
+    let value = signature.parameters[0].entity;
+    let function_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("function hole")
+        .id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+    let complete = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole: function_hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(value))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+                Edit::FillHole {
+                    hole: main_hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(42),
+                            DraftNode::Call {
+                                callee: function,
+                                type_arguments: vec![TypeArgumentDraft {
+                                    parameter: type_parameter,
+                                    argument: SemanticType::I64,
+                                }],
+                                arguments: vec![DraftNodeId::new(0)],
+                            },
+                        ],
+                        DraftNodeId::new(1),
+                    ),
+                },
+            ],
+        })
+        .expect("complete source-free generic program");
+
+    let imported_function = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":identity"))
+        .expect("imported identity")
+        .id;
+    let imported_signature = imported
+        .function_signature(imported.revision(), imported_function)
+        .expect("imported signature");
+    assert_eq!(
+        imported_signature.type_parameters.len(),
+        signature.type_parameters.len()
+    );
+    assert_eq!(
+        imported_signature.type_parameters[0].name,
+        signature.type_parameters[0].name
+    );
+    assert_eq!(
+        imported_signature.type_parameters[0].bounds[0].trait_identity,
+        signature.type_parameters[0].bounds[0].trait_identity
+    );
+    assert!(matches!(
+        imported_signature.parameters[0].ty,
+        SemanticType::TypeParameter(id) if id == imported_signature.type_parameters[0].id
+    ));
+    assert!(matches!(
+        signature.parameters[0].ty,
+        SemanticType::TypeParameter(id) if id == type_parameter
+    ));
+
+    let imported_call = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("imported call")
+        .id;
+    let source_free_call = complete
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Call)
+        .expect("source-free call")
+        .id;
+    let imported_view = imported
+        .call_instantiation(imported.revision(), imported_call)
+        .expect("imported call view");
+    let source_free_view = complete
+        .snapshot
+        .call_instantiation(complete.snapshot.revision(), source_free_call)
+        .expect("source-free call view");
+    assert_eq!(
+        imported_view.type_arguments[0].argument,
+        source_free_view.type_arguments[0].argument
+    );
+    assert_eq!(imported_view.parameters, source_free_view.parameters);
+    assert_eq!(imported_view.result, source_free_view.result);
+    assert_eq!(
+        imported_view.witnesses[0].trait_identity,
+        source_free_view.witnesses[0].trait_identity
+    );
+    assert_eq!(
+        imported_view.witnesses[0].kind,
+        source_free_view.witnesses[0].kind
+    );
+    assert_eq!(imported_view.effects, source_free_view.effects);
+    assert_eq!(imported.calls().len(), complete.snapshot.calls().len());
+    assert_eq!(
+        imported.dependencies().len(),
+        complete.snapshot.dependencies().len()
+    );
+
+    let imported_executable = crate::compile_snapshot(&imported).expect("compile imported generic");
+    let source_free_executable =
+        crate::compile_snapshot(&complete.snapshot).expect("compile source-free generic");
+    assert_eq!(
+        imported_executable.bytecode().main().code,
+        source_free_executable.bytecode().main().code
+    );
+    assert_eq!(imported_executable.bytecode().protos().len(), 1);
+    assert_eq!(source_free_executable.bytecode().protos().len(), 1);
+    assert_eq!(
+        imported_executable.bytecode().protos()[0].code,
+        source_free_executable.bytecode().protos()[0].code
+    );
+    assert_eq!(run_i64(&imported), 42);
+    assert_eq!(run_i64(&complete.snapshot), 42);
+}
+
+#[test]
 fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() {
     crate::source::reset_parser_invocation_count();
     let mut workspace = Workspace::empty_deterministic(32).expect("empty workspace");
@@ -1556,11 +2933,12 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         edits: vec![
             Edit::CreateFunction {
                 name: "identity".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 }],
-                return_type: SemanticType::I64,
+                return_type: DeclarationType::I64,
             },
             Edit::CreateMain {
                 return_type: SemanticType::I64,
@@ -1589,11 +2967,12 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
             edits: vec![
                 Edit::CreateFunction {
                     name: "identity".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
                     return_type: SemanticType::I64,
@@ -1636,8 +3015,9 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         base_revision: published.revision(),
         edits: vec![Edit::CreateFunction {
             name: "identity".to_owned(),
+            type_parameters: Vec::new(),
             parameters: Vec::new(),
-            return_type: SemanticType::I64,
+            return_type: DeclarationType::I64,
         }],
     });
     assert!(matches!(
@@ -1650,8 +3030,9 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         base_revision: published.revision(),
         edits: vec![Edit::CreateFunction {
             name: "main".to_owned(),
+            type_parameters: Vec::new(),
             parameters: Vec::new(),
-            return_type: SemanticType::I64,
+            return_type: DeclarationType::I64,
         }],
     });
     assert!(matches!(
@@ -1664,11 +3045,12 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         base_revision: published.revision(),
         edits: vec![Edit::CreateFunction {
             name: "borrowed".to_owned(),
+            type_parameters: Vec::new(),
             parameters: vec![ParameterDraft {
                 name: "value".to_owned(),
-                ty: SemanticType::ByteVector,
+                ty: DeclarationType::ByteVector,
             }],
-            return_type: SemanticType::ByteSlice,
+            return_type: DeclarationType::ByteSlice,
         }],
     });
     assert!(matches!(
@@ -1681,17 +3063,18 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
         base_revision: published.revision(),
         edits: vec![Edit::CreateFunction {
             name: "other".to_owned(),
+            type_parameters: Vec::new(),
             parameters: vec![
                 ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 },
                 ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 },
             ],
-            return_type: SemanticType::I64,
+            return_type: DeclarationType::I64,
         }],
     });
     assert!(matches!(
@@ -1850,19 +3233,21 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
             edits: vec![
                 Edit::CreateFunction {
                     name: "f".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "f-value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateFunction {
                     name: "g".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "g-value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
                     return_type: SemanticType::I64,
@@ -2167,11 +3552,12 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
             base_revision: deleted.snapshot.revision(),
             edits: vec![Edit::CreateFunction {
                 name: "h".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "h-value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 }],
-                return_type: SemanticType::I64,
+                return_type: DeclarationType::I64,
             }],
         })
         .expect("reuse callable tombstones");
@@ -2248,19 +3634,21 @@ fn callable_compaction_preserves_a_later_function_hole_and_old_snapshot() {
             edits: vec![
                 Edit::CreateFunction {
                     name: "remove".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "removed-parameter".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateFunction {
                     name: "retain".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "retained-parameter".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
             ],
         })
@@ -2467,11 +3855,12 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
             base_revision: function_first.current().revision(),
             edits: vec![Edit::CreateFunction {
                 name: "identity".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 }],
-                return_type: SemanticType::I64,
+                return_type: DeclarationType::I64,
             }],
         })
         .expect("create function before main");
@@ -2553,11 +3942,12 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
             base_revision: main_created.snapshot.revision(),
             edits: vec![Edit::CreateFunction {
                 name: "identity".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::I64,
+                    ty: DeclarationType::I64,
                 }],
-                return_type: SemanticType::I64,
+                return_type: DeclarationType::I64,
             }],
         })
         .expect("create function after main");
@@ -3432,11 +4822,12 @@ fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateFunction {
                 name: "deep-type".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: ty.clone(),
+                    ty: DeclarationType::try_from(&ty).expect("declaration type"),
                 }],
-                return_type: ty.clone(),
+                return_type: DeclarationType::try_from(&ty).expect("declaration type"),
             }],
         })
         .expect("publish deep semantic type");
@@ -3453,6 +4844,82 @@ fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
         .expect("validate deep semantic type");
     let projection = created.snapshot.project(&[]).expect("project deep blocker");
     assert_eq!(projection.matches("list ").count(), depth);
+}
+
+fn run_deep_generic_declaration_type_boundary(depth: usize, seed: u64) {
+    let parameter = DraftTypeParameterId::new(0);
+    let mut ty = DeclarationType::DraftTypeParameter(parameter);
+    for _ in 0..depth {
+        ty = DeclarationType::List(Box::new(ty));
+    }
+    let cloned = ty.clone();
+    assert_eq!(cloned, ty);
+    let debug = format!("{cloned:?}");
+    assert_eq!(debug.matches("list ").count(), depth);
+
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty generic type workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "deep-generic".to_owned(),
+                type_parameters: vec![TypeParameterDraft {
+                    id: parameter,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                }],
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: cloned,
+                }],
+                return_type: ty,
+            }],
+        })
+        .expect("publish deep generic declaration type");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "deep-generic");
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), function)
+        .expect("query deep generic signature");
+    let stable_parameter = signature.type_parameters[0].id;
+    let mut expected = SemanticType::TypeParameter(stable_parameter);
+    for _ in 0..depth {
+        expected = SemanticType::List(Box::new(expected));
+    }
+    assert_eq!(signature.parameters[0].ty, expected);
+    assert_eq!(signature.result, expected);
+    let projection = created
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(function),
+            ProjectionSlice::Body(function),
+        ])
+        .expect("project deep generic declaration");
+    assert!(projection.contains("type-parameter"));
+    assert!(projection.matches("list ").count() >= depth);
+}
+
+#[test]
+fn modest_generic_declaration_types_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-modest-generic-declaration-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_generic_declaration_type_boundary(256, 194))
+        .expect("spawn generic declaration type boundary")
+        .join()
+        .expect("generic declaration type boundary completes");
+}
+
+#[test]
+#[ignore = "20k-level generic declaration type small-stack stress geometry"]
+fn twenty_thousand_level_generic_declaration_types_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-deep-generic-declaration-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_generic_declaration_type_boundary(20_000, 193))
+        .expect("spawn deep generic declaration type boundary")
+        .join()
+        .expect("deep generic declaration type boundary completes");
 }
 
 #[test]
@@ -4653,11 +6120,12 @@ fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_dele
                 },
                 Edit::CreateFunction {
                     name: "function-dependent".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "input".to_owned(),
-                        ty: SemanticType::Product(root),
+                        ty: DeclarationType::Product(root),
                     }],
-                    return_type: SemanticType::Product(root),
+                    return_type: DeclarationType::Product(root),
                 },
             ],
         })
@@ -5076,11 +6544,12 @@ fn source_free_nominal_declarations_publish_stable_children_types_and_dependenci
             base_revision: declarations.revision(),
             edits: vec![Edit::CreateFunction {
                 name: "keep-pair".to_owned(),
+                type_parameters: Vec::new(),
                 parameters: vec![ParameterDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::Product(pair),
+                    ty: DeclarationType::Product(pair),
                 }],
-                return_type: SemanticType::Product(pair),
+                return_type: DeclarationType::Product(pair),
             }],
         })
         .expect("create nominal function");
@@ -7447,11 +8916,12 @@ fn create_owned_workspace(seed: u64) -> (Workspace, EntityId, EntityId, HoleId, 
             edits: vec![
                 Edit::CreateFunction {
                     name: "consume".to_owned(),
+                    type_parameters: Vec::new(),
                     parameters: vec![ParameterDraft {
                         name: "bytes".to_owned(),
-                        ty: SemanticType::ByteVector,
+                        ty: DeclarationType::ByteVector,
                     }],
-                    return_type: SemanticType::I64,
+                    return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
                     return_type: SemanticType::I64,

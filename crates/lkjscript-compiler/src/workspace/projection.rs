@@ -109,7 +109,35 @@ impl WorkspaceSnapshot {
             Some(owner) => output.entity_id(owner)?,
             None => output.push("-")?,
         }
-        output.push("\n")
+        output.push("\n")?;
+        if header.kind == EntityKind::Function {
+            let signature = self.function_signature(self.revision, entity)?;
+            for parameter in &signature.type_parameters {
+                output.push("  type-parameter ")?;
+                output.entity_id(parameter.id)?;
+                output.push(" name=")?;
+                output.quoted(&parameter.name)?;
+                output.push("\n")?;
+                for bound in &parameter.bounds {
+                    output.push("    bound trait=")?;
+                    project_trait(bound.trait_identity, output)?;
+                    output.push("\n")?;
+                }
+            }
+            for parameter in &signature.parameters {
+                output.push("  value-parameter ")?;
+                output.entity_id(parameter.entity)?;
+                output.push(" name=")?;
+                output.quoted(&parameter.name)?;
+                output.push(" type=")?;
+                project_semantic_type(&parameter.ty, output)?;
+                output.push("\n")?;
+            }
+            output.push("  result type=")?;
+            project_semantic_type(&signature.result, output)?;
+            output.push("\n")?;
+        }
+        Ok(())
     }
 
     fn project_body(

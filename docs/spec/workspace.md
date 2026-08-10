@@ -23,15 +23,19 @@ is retained behind a hole. Source-free expressions have an honest semantic origi
 paths and digests do not create logical identity.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
-creation covers non-generic products and enums with stable field/variant identities, non-generic
-functions, and one parameterless `main`; function and entry bodies begin as typed holes. Imported
-generic function declarations expose type parameters as stable entities owned by the function.
-Public type inputs and query results use one exact recursive `SemanticType`, whose nominal and
-binder cases carry stable workspace identities rather than product names, compiler enum/trait IDs,
-layout IDs, binder strings, or source identities. Prelude enum constructors and core traits use
-explicit closed builtin identities. Clone, equality, hashing, debug/display, validation,
-conversion, projection, and destruction of public types do not recurse on native stack or impose a
-type-depth quota.
+creation covers non-generic products and enums, generic and non-generic functions, and one
+parameterless `main`; function and entry bodies begin as typed holes. One generalized function
+creation operation accepts zero or more ordered type-parameter drafts. A declaration-local opaque
+binder handle may occur at arbitrary depth in the creation-only `DeclarationType`; it has only that
+edit's lifetime and never enters a snapshot, query, projection, or diff. Staging validates names,
+handles, exact trait identities, bounds, and types, then allocates stable function, binder, and value-
+parameter entities and lowers to the same canonical universal function and bound facts used by the
+source importer. Public published type inputs and query results use one exact recursive
+`SemanticType`, whose nominal and binder cases carry stable workspace identities rather than product
+names, compiler enum/trait IDs, layout IDs, binder strings, or source identities. Prelude enum
+constructors and core traits use explicit closed builtin identities. Recursive clone, equality,
+debug/display where supported, validation, conversion, projection, and destruction of both public
+type models do not recurse on native stack or impose a type-depth quota.
 
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
 semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
@@ -49,10 +53,9 @@ lexical and payload bindings use stable entity identities; transaction-local bin
 separate checked identity domain and cannot escape the draft. Each arm has its own lexical binding
 scope. Compiler-hidden match scrutinee/projection locals are never workspace entities or legal
 constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
-checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals,
-generic pattern construction, source-free generic declaration authoring, forwarding an unresolved
-caller type parameter, ownership/reference-bearing generic instantiation, and non-enum source-free
-pattern spaces are not fabricated.
+checker remain authoritative for match validity, move/borrow legality, and cleanup. Mutable locals, generic pattern construction, forwarding an unresolved caller type parameter,
+ownership/reference-bearing generic instantiation, and non-enum source-free pattern spaces are not
+fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations; they also rename supported bindings, replace expressions, and introduce/refine/fill
@@ -127,8 +130,8 @@ stdio/session schemas, text journal/publication path, CLI routes, unsupported re
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
-mutation, public semantic movement, mutable-local construction, source-free generic declaration and
-generic-pattern construction, Boolean/integer/product source-free patterns, source rendering,
+mutation, public semantic movement, mutable-local construction, generic-pattern construction,
+Boolean/integer/product source-free patterns, source rendering,
 persistence, collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Current payload-match ownership

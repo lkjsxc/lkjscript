@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -670,6 +671,29 @@ pub(super) fn resolve(
     allow_forall: bool,
     subject: &str,
 ) -> Result<crate::Type, WorkspaceError> {
+    resolve_with_staged_type_parameters(
+        snapshot,
+        program,
+        ty,
+        context,
+        &HashMap::new(),
+        allow_never,
+        allow_forall,
+        subject,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn resolve_with_staged_type_parameters(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    ty: &SemanticType,
+    context: Option<EntityId>,
+    staged_type_parameters: &HashMap<EntityId, String>,
+    allow_never: bool,
+    allow_forall: bool,
+    subject: &str,
+) -> Result<crate::Type, WorkspaceError> {
     enum Work<'a> {
         Visit(&'a SemanticType),
         Enum(crate::hir::EnumId, String, usize),
@@ -778,6 +802,13 @@ pub(super) fn resolve(
                     work.extend(arguments.iter().rev().map(Work::Visit));
                 }
                 SemanticType::TypeParameter(entity) => {
+                    if let Some(name) = staged_type_parameters.get(entity) {
+                        completed.push(crate::Type::Param(clone_type_name(
+                            name,
+                            "staged type-parameter name",
+                        )?));
+                        continue;
+                    }
                     let header = semantic_entity(snapshot, *entity, "type parameter")?;
                     if header.kind != EntityKind::TypeParameter {
                         return Err(wrong_kind(subject, "type parameter", header.kind));

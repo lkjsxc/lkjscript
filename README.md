@@ -29,10 +29,11 @@ production dependencies do not enable it.
 The active product scope is local package compile/run plus the compiler's in-process semantic
 workspace library. Text and paths are importer conveniences, not program authority.
 `Workspace::empty` creates a source-free incomplete program; revision-checked transactions can
-create non-generic products, enums, functions, and `main`, then fill real typed holes with flat
-non-recursive drafts. Imported generic declarations expose stable type-parameter entities, and drafts
-can construct exact generic calls with structured `SemanticType` arguments and compiler-derived trait
-witnesses; source inference and semantic edits share the same exact instantiation validator.
+create products, enums, generic or non-generic functions, and `main`, then fill real typed holes with
+flat non-recursive drafts. Function creation uses declaration-local binder handles only until atomic
+publication assigns stable type-parameter entities. Drafts construct exact generic calls with
+structured `SemanticType` arguments and compiler-derived trait witnesses; source inference and
+semantic edits share the same exact instantiation validator.
 Implemented drafts also include immutable lexical locals, selected canonical built-in operations,
 byte-vector move/borrow, product/enum construction and observation, and source-free exhaustive enum
 payload matches. Match arms use flat `PatternDraft` trees; named payload bindings receive stable
@@ -52,33 +53,43 @@ from it.
 A minimal source-free authorship sequence is:
 
 ```rust
-use lkjscript_compiler::{Edit, ParameterDraft, SemanticType, Transaction, Workspace};
+use lkjscript_compiler::{
+    BuiltinTrait, DeclarationType, DraftTypeParameterId, Edit, ParameterDraft,
+    SemanticTrait, SemanticType, Transaction, TypeParameterDraft, Workspace,
+};
 
 let mut workspace = Workspace::empty().expect("empty semantic workspace");
 let revision = workspace.current().revision();
+let parameter = DraftTypeParameterId::new(0);
 let created = workspace.apply(Transaction {
     base_revision: revision,
     edits: vec![
         Edit::CreateFunction {
             name: "identity".into(),
+            type_parameters: vec![TypeParameterDraft {
+                id: parameter,
+                name: "t".into(),
+                bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+            }],
             parameters: vec![ParameterDraft {
                 name: "value".into(),
-                ty: SemanticType::I64,
+                ty: DeclarationType::DraftTypeParameter(parameter),
             }],
-            return_type: SemanticType::I64,
+            return_type: DeclarationType::DraftTypeParameter(parameter),
         },
         Edit::CreateMain {
             return_type: SemanticType::I64,
         },
     ],
-}).expect("atomic declaration creation");
+}).expect("atomic generic declaration creation");
 assert!(!created.snapshot.completeness_blockers().is_empty());
 ```
 
-The public transaction diff returns the created entity and body-hole identities; subsequent
-`FillHole` transactions complete `identity(value) = value` and `main() = identity(42)`. The focused
-compiler test executes that source-free snapshot through the production bytecode/VM route and
-returns `42` with zero source-loading and parser invocations.
+The public transaction diff returns the function, stable type-parameter, value-parameter, and
+body-hole identities; the declaration-local handle does not escape publication. Subsequent
+`FillHole` transactions complete `identity<T>(value) = value` and an exact `main() = identity<i64>(42)`
+call. The focused compiler test executes that source-free snapshot through the production bytecode/VM
+route and returns `42` with zero source-loading and parser invocations.
 
 The workspace has one application binary, `lkjscript`; there is no semantic wire service pending a
 measured consumer. Daemon, process-cell, session, scheduler, resource-topology, service-database,

@@ -25,9 +25,9 @@ use std::sync::Arc;
 use lkjscript_core::{Error, Result};
 
 pub use draft::{
-    DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternField,
-    DraftPatternNode, DraftPatternNodeId, ExpressionDraft, LocalDraft, MatchArmDraft, PatternDraft,
-    TypeArgumentDraft,
+    DeclarationType, DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId,
+    DraftPatternField, DraftPatternNode, DraftPatternNodeId, DraftTypeParameterId, ExpressionDraft,
+    LocalDraft, MatchArmDraft, PatternDraft, TypeArgumentDraft,
 };
 pub use error::{CompileSnapshotError, IncompleteSnapshotError, SemanticKind, WorkspaceError};
 use identity::IdentityAllocator;
@@ -52,7 +52,8 @@ pub use query::{
 };
 pub use transaction::{
     Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
-    SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome, Workspace,
+    SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome, TypeParameterDraft,
+    Workspace,
 };
 pub use types::{BuiltinEnum, BuiltinTrait, SemanticEnum, SemanticTrait, SemanticType};
 
@@ -211,7 +212,7 @@ impl WorkspaceSnapshot {
     }
 
     fn empty(namespace: WorkspaceNamespace) -> Result<Self> {
-        let program = SemanticProgram::empty();
+        let program = SemanticProgram::empty()?;
         let mut indexes = index::build(&program, namespace)?;
         indexes.diagnostics.push(DiagnosticHeader {
             code: Arc::from("workspace.missing-entry-point"),

@@ -25,17 +25,24 @@ use super::identity::{self, IdentityAllocator};
 use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
 use super::program::SemanticProgram;
 use super::{
-    CompletenessBlocker, DiagnosticHeader, DiagnosticSeverity, DraftBindingId, DraftBindingRef,
-    DraftFieldValue, DraftNode, DraftNodeId, DraftPatternNode, DraftPatternNodeId, EntityId,
-    EntityKind, ExpressionDraft, HoleId, HoleKind, HoleState, NodeId, NodeKind, PatternDraft,
-    ProgramState, RevisionId, SemanticChild, SemanticOwner, SemanticType, WorkspaceError,
-    WorkspaceNamespace, WorkspaceSnapshot,
+    CompletenessBlocker, DeclarationType, DiagnosticHeader, DiagnosticSeverity, DraftBindingId,
+    DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternNode, DraftPatternNodeId,
+    DraftTypeParameterId, EntityId, EntityKind, ExpressionDraft, HoleId, HoleKind, HoleState,
+    NodeId, NodeKind, PatternDraft, ProgramState, RevisionId, SemanticChild, SemanticOwner,
+    SemanticTrait, SemanticType, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
 };
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypeParameterDraft {
+    pub id: DraftTypeParameterId,
+    pub name: String,
+    pub bounds: Vec<SemanticTrait>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParameterDraft {
     pub name: String,
-    pub ty: SemanticType,
+    pub ty: DeclarationType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -75,8 +82,9 @@ pub enum Edit {
     },
     CreateFunction {
         name: String,
+        type_parameters: Vec<TypeParameterDraft>,
         parameters: Vec<ParameterDraft>,
-        return_type: SemanticType,
+        return_type: DeclarationType,
     },
     CreateMain {
         return_type: SemanticType,
@@ -371,141 +379,21 @@ fn stage(
             }
             Edit::CreateFunction {
                 name,
+                type_parameters,
                 parameters,
                 return_type,
-            } => {
-                validate_declaration_name(&name)?;
-                let return_type =
-                    resolve_semantic_type(base, &program, return_type, "function return")?;
-                reject_reference_result(&return_type, "function")?;
-                if declaration_name_exists(&program, &name) {
-                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                        "global declaration name already exists or is reserved",
-                    )));
-                }
-                let mut parameter_names = HashSet::new();
-                parameter_names.try_reserve(parameters.len()).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("parameter name allocation failed"))
-                })?;
-                let mut resolved_parameter_types = Vec::new();
-                resolved_parameter_types
-                    .try_reserve(parameters.len())
-                    .map_err(|_| {
-                        WorkspaceError::Host(Arc::from("parameter type allocation failed"))
-                    })?;
-                for parameter in &parameters {
-                    validate_name(&parameter.name)?;
-                    resolved_parameter_types.push(resolve_semantic_type(
-                        base,
-                        &program,
-                        parameter.ty.clone(),
-                        "function parameter",
-                    )?);
-                    if !parameter_names.insert(parameter.name.as_str()) {
-                        return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                            "function parameter name is duplicated",
-                        )));
-                    }
-                }
-                let created_binding_count = parameters.len().checked_add(1).ok_or_else(|| {
-                    WorkspaceError::Host(Arc::from("created binding count overflow"))
-                })?;
-                program
-                    .bindings
-                    .try_reserve(created_binding_count)
-                    .map_err(|_| WorkspaceError::Host(Arc::from("binding allocation failed")))?;
-                program
-                    .functions
-                    .try_reserve(1)
-                    .map_err(|_| WorkspaceError::Host(Arc::from("function allocation failed")))?;
-                program.global_layout.try_reserve(1).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("global layout allocation failed"))
-                })?;
-                new_entities
-                    .try_reserve(created_binding_count)
-                    .map_err(|_| {
-                        WorkspaceError::Host(Arc::from("created entity allocation failed"))
-                    })?;
-                new_holes.try_reserve(1).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("created hole allocation failed"))
-                })?;
-                let function_raw = u64::try_from(program.bindings.len())
-                    .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
-                let function_binding = crate::hir::BindingId::new(function_raw);
-                let parameter_types = resolved_parameter_types;
-                program.bindings.push(Binding {
-                    id: function_binding,
-                    name: name.clone(),
-                    kind: BindingKind::Function,
-                    ty: Type::Fn {
-                        params: parameter_types.clone(),
-                        ret: Box::new(return_type.clone()),
-                    },
-                    origin: Origin::Semantic,
-                });
-                let mut parameter_bindings = Vec::new();
-                let mut parameter_places = Vec::new();
-                parameter_bindings
-                    .try_reserve(parameters.len())
-                    .map_err(|_| {
-                        WorkspaceError::Host(Arc::from("parameter binding allocation failed"))
-                    })?;
-                parameter_places
-                    .try_reserve(parameters.len())
-                    .map_err(|_| {
-                        WorkspaceError::Host(Arc::from("parameter place allocation failed"))
-                    })?;
-                for (index, parameter) in parameters.into_iter().enumerate() {
-                    let raw = u64::try_from(program.bindings.len()).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("binding identity exceeds u64"))
-                    })?;
-                    let binding = crate::hir::BindingId::new(raw);
-                    program.bindings.push(Binding {
-                        id: binding,
-                        name: parameter.name.clone(),
-                        kind: BindingKind::Parameter,
-                        ty: parameter_types[index].clone(),
-                        origin: Origin::Semantic,
-                    });
-                    parameter_bindings.push(binding);
-                    parameter_places.push(PlaceId::new(u64::try_from(index).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("parameter place exceeds u64"))
-                    })?));
-                    new_entities.push(NewEntity {
-                        address: EntityAddress::Binding(raw),
-                        kind: EntityKind::Parameter,
-                        name: Arc::from(parameter.name),
-                    });
-                }
-                let root = EntityAddress::Binding(function_raw);
-                program.functions.push(crate::hir::Function {
-                    binding: function_binding,
-                    origin: Origin::Semantic,
-                    params: parameter_bindings,
-                    param_places: parameter_places,
-                    bounds: Vec::new(),
-                    arity: parameter_types.len(),
-                    local_count: parameter_types.len(),
-                    summary: EffectSet::UNKNOWN,
-                    body: Expr {
-                        ty: return_type.clone(),
-                        effects: EffectSet::UNKNOWN,
-                        origin: Origin::Semantic,
-                        kind: ExprKind::Hole,
-                    },
-                });
-                program.global_layout.push(function_binding);
-                new_entities.push(NewEntity {
-                    address: root,
-                    kind: EntityKind::Function,
-                    name: Arc::from(name),
-                });
-                new_holes.push(NewHole {
-                    address: NodeAddress { root, preorder: 0 },
-                    kind: HoleKind::MissingBody,
-                    goal: Arc::from("provide the function body"),
-                });
-            }
+            } => create_function(
+                base,
+                &mut program,
+                allocator,
+                &mut forced_entities,
+                &mut new_entities,
+                &mut new_holes,
+                name,
+                type_parameters,
+                parameters,
+                return_type,
+            )?,
             Edit::CreateMain { return_type } => {
                 let return_type =
                     resolve_semantic_type(base, &program, return_type, "main return")?;
@@ -2176,6 +2064,588 @@ fn insert_forced_node(
         std::collections::hash_map::Entry::Occupied(_) => Err(WorkspaceError::Validation(
             Arc::from("distinct edited nodes resolved to one canonical path"),
         )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_function(
+    base: &WorkspaceSnapshot,
+    program: &mut SemanticProgram,
+    allocator: &mut IdentityAllocator,
+    forced: &mut HashMap<EntityAddress, EntityId>,
+    created: &mut Vec<NewEntity>,
+    holes: &mut Vec<NewHole>,
+    name: String,
+    type_parameters: Vec<TypeParameterDraft>,
+    parameters: Vec<ParameterDraft>,
+    return_type: DeclarationType,
+) -> Result<(), WorkspaceError> {
+    validate_declaration_name(&name)?;
+    if declaration_name_exists(program, &name) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "global declaration name already exists or is reserved",
+        )));
+    }
+
+    let mut draft_parameters = HashMap::new();
+    draft_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter draft allocation failed")))?;
+    let mut type_parameter_names = HashMap::new();
+    type_parameter_names
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter name allocation failed")))?;
+    let mut resolved_bounds = Vec::new();
+    let bound_count = type_parameters
+        .iter()
+        .try_fold(0_usize, |count, parameter| {
+            count
+                .checked_add(parameter.bounds.len())
+                .ok_or_else(|| WorkspaceError::Host(Arc::from("function bound count overflow")))
+        })?;
+    resolved_bounds
+        .try_reserve(bound_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("function bound allocation failed")))?;
+    for parameter in &type_parameters {
+        validate_name(&parameter.name)?;
+        if crate::analyze::is_reserved_semantic_name(&parameter.name) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "function type-parameter name is reserved by the language",
+            )));
+        }
+        if draft_parameters
+            .insert(parameter.id, parameter.name.as_str())
+            .is_some()
+        {
+            return Err(WorkspaceError::DuplicateDraftTypeParameter {
+                parameter: parameter.id,
+            });
+        }
+        if let Some(first) = type_parameter_names.insert(parameter.name.as_str(), parameter.id) {
+            return Err(WorkspaceError::DuplicateTypeParameterName {
+                first,
+                duplicate: parameter.id,
+            });
+        }
+        let mut seen_bounds = HashSet::new();
+        seen_bounds
+            .try_reserve(parameter.bounds.len())
+            .map_err(|_| {
+                WorkspaceError::Host(Arc::from("type-parameter bound set allocation failed"))
+            })?;
+        for identity in &parameter.bounds {
+            let trait_id = resolve_bound_trait(base, program, *identity)?;
+            let definition = program
+                .traits
+                .get(host_index(trait_id.raw(), "trait bound")?)
+                .filter(|definition| definition.id == trait_id)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("trait")))?;
+            if matches!(
+                definition.core,
+                Some(crate::hir::CoreTrait::Clone | crate::hir::CoreTrait::Drop)
+            ) {
+                return Err(WorkspaceError::unsupported(
+                    "create-function",
+                    "clone and drop require methods and are unavailable as marker bounds",
+                ));
+            }
+            if !seen_bounds.insert(trait_id) {
+                return Err(WorkspaceError::DuplicateTypeParameterBound {
+                    parameter: parameter.id,
+                    trait_identity: *identity,
+                });
+            }
+            resolved_bounds.push(crate::hir::TraitBound {
+                parameter: parameter.name.clone(),
+                trait_id,
+            });
+        }
+    }
+
+    let mut parameter_names = HashSet::new();
+    parameter_names
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter name allocation failed")))?;
+    for parameter in &parameters {
+        validate_name(&parameter.name)?;
+        if !parameter_names.insert(parameter.name.as_str()) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "function parameter name is duplicated",
+            )));
+        }
+    }
+
+    let mut used_parameters = HashSet::new();
+    used_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("used type-parameter allocation failed")))?;
+    for parameter in &parameters {
+        collect_declaration_type_parameters(
+            &parameter.ty,
+            &draft_parameters,
+            &mut used_parameters,
+        )?;
+    }
+    collect_declaration_type_parameters(&return_type, &draft_parameters, &mut used_parameters)?;
+    for parameter in &type_parameters {
+        if !used_parameters.contains(&parameter.id) {
+            return Err(WorkspaceError::UnusedDraftTypeParameter {
+                parameter: parameter.id,
+            });
+        }
+    }
+
+    let function_raw = u64::try_from(program.bindings.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+    let root = EntityAddress::Binding(function_raw);
+    let created_count = type_parameters
+        .len()
+        .checked_add(parameters.len())
+        .and_then(|count| count.checked_add(1))
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("created function entity count overflow")))?;
+    forced
+        .try_reserve(created_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced function entity allocation failed")))?;
+    created.try_reserve(created_count).map_err(|_| {
+        WorkspaceError::Host(Arc::from("created function entity allocation failed"))
+    })?;
+    holes
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("created hole allocation failed")))?;
+
+    let function_entity = reserve_forced_entity(allocator, forced, root)?;
+    created.push(NewEntity {
+        address: root,
+        kind: EntityKind::Function,
+        name: Arc::from(name.as_str()),
+    });
+    let mut staged_type_parameters = HashMap::new();
+    staged_type_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("staged type-parameter allocation failed")))?;
+    let mut draft_entities = HashMap::new();
+    draft_entities
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft binder allocation failed")))?;
+    let mut variables = Vec::new();
+    variables
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("function binder allocation failed")))?;
+    for (ordinal, parameter) in type_parameters.iter().enumerate() {
+        let ordinal = u64::try_from(ordinal)
+            .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter ordinal exceeds u64")))?;
+        let address = EntityAddress::FunctionTypeParameter {
+            function: function_raw,
+            ordinal,
+        };
+        let entity = reserve_forced_entity(allocator, forced, address)?;
+        staged_type_parameters.insert(entity, parameter.name.clone());
+        draft_entities.insert(parameter.id, entity);
+        variables.push(parameter.name.clone());
+        created.push(NewEntity {
+            address,
+            kind: EntityKind::TypeParameter,
+            name: Arc::from(parameter.name.as_str()),
+        });
+    }
+
+    let first_parameter_raw = function_raw
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("parameter binding identity overflow")))?;
+    for (index, parameter) in parameters.iter().enumerate() {
+        let raw = first_parameter_raw
+            .checked_add(u64::try_from(index).map_err(|_| {
+                WorkspaceError::Host(Arc::from("parameter binding index exceeds u64"))
+            })?)
+            .ok_or_else(|| {
+                WorkspaceError::Host(Arc::from("parameter binding identity overflow"))
+            })?;
+        let address = EntityAddress::Binding(raw);
+        reserve_forced_entity(allocator, forced, address)?;
+        created.push(NewEntity {
+            address,
+            kind: EntityKind::Parameter,
+            name: Arc::from(parameter.name.as_str()),
+        });
+    }
+
+    let mut resolved_parameter_types = Vec::new();
+    resolved_parameter_types
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter type allocation failed")))?;
+    for parameter in &parameters {
+        let semantic = declaration_type_to_semantic(&parameter.ty, &draft_entities)?;
+        resolved_parameter_types.push(super::types::resolve_with_staged_type_parameters(
+            base,
+            program,
+            &semantic,
+            Some(function_entity),
+            &staged_type_parameters,
+            false,
+            false,
+            "function parameter",
+        )?);
+    }
+    let semantic_return = declaration_type_to_semantic(&return_type, &draft_entities)?;
+    let resolved_return = super::types::resolve_with_staged_type_parameters(
+        base,
+        program,
+        &semantic_return,
+        Some(function_entity),
+        &staged_type_parameters,
+        false,
+        false,
+        "function return",
+    )?;
+    reject_reference_result(&resolved_return, "function")?;
+
+    let created_binding_count = parameters
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("created binding count overflow")))?;
+    program
+        .bindings
+        .try_reserve(created_binding_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding allocation failed")))?;
+    program
+        .functions
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("function allocation failed")))?;
+    program
+        .global_layout
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("global layout allocation failed")))?;
+
+    let function_binding = crate::hir::BindingId::new(function_raw);
+    let signature = Type::Fn {
+        params: resolved_parameter_types.clone(),
+        ret: Box::new(resolved_return.clone()),
+    };
+    program.bindings.push(Binding {
+        id: function_binding,
+        name,
+        kind: BindingKind::Function,
+        ty: if variables.is_empty() {
+            signature
+        } else {
+            Type::Forall {
+                vars: variables,
+                body: Box::new(signature),
+            }
+        },
+        origin: Origin::Semantic,
+    });
+
+    let mut parameter_bindings = Vec::new();
+    let mut parameter_places = Vec::new();
+    parameter_bindings
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter binding allocation failed")))?;
+    parameter_places
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter place allocation failed")))?;
+    for (index, parameter) in parameters.into_iter().enumerate() {
+        let raw = u64::try_from(program.bindings.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+        let binding = crate::hir::BindingId::new(raw);
+        program.bindings.push(Binding {
+            id: binding,
+            name: parameter.name,
+            kind: BindingKind::Parameter,
+            ty: resolved_parameter_types[index].clone(),
+            origin: Origin::Semantic,
+        });
+        parameter_bindings.push(binding);
+        parameter_places.push(PlaceId::new(u64::try_from(index).map_err(|_| {
+            WorkspaceError::Host(Arc::from("parameter place exceeds u64"))
+        })?));
+    }
+    program.functions.push(crate::hir::Function {
+        binding: function_binding,
+        origin: Origin::Semantic,
+        params: parameter_bindings,
+        param_places: parameter_places,
+        bounds: resolved_bounds,
+        arity: resolved_parameter_types.len(),
+        local_count: resolved_parameter_types.len(),
+        summary: EffectSet::UNKNOWN,
+        body: Expr {
+            ty: resolved_return,
+            effects: EffectSet::UNKNOWN,
+            origin: Origin::Semantic,
+            kind: ExprKind::Hole,
+        },
+    });
+    program.global_layout.push(function_binding);
+    holes.push(NewHole {
+        address: NodeAddress { root, preorder: 0 },
+        kind: HoleKind::MissingBody,
+        goal: Arc::from("provide the function body"),
+    });
+    Ok(())
+}
+
+fn collect_declaration_type_parameters<'a>(
+    root: &'a DeclarationType,
+    declared: &HashMap<DraftTypeParameterId, &'a str>,
+    used: &mut HashSet<DraftTypeParameterId>,
+) -> Result<(), WorkspaceError> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("declaration type work allocation failed")))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            DeclarationType::DraftTypeParameter(parameter) => {
+                if !declared.contains_key(parameter) {
+                    return Err(WorkspaceError::UnknownDraftTypeParameter {
+                        parameter: *parameter,
+                    });
+                }
+                used.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("used type-parameter allocation failed"))
+                })?;
+                used.insert(*parameter);
+            }
+            DeclarationType::Enum { arguments, .. } => {
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("declaration type work allocation failed"))
+                })?;
+                pending.extend(arguments);
+            }
+            DeclarationType::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("declaration type work allocation failed"))
+                })?;
+                pending.push(inner);
+            }
+            DeclarationType::Function { parameters, result } => {
+                let additional = parameters.len().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("declaration type child count overflow"))
+                })?;
+                pending.try_reserve(additional).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("declaration type work allocation failed"))
+                })?;
+                pending.push(result);
+                pending.extend(parameters);
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn declaration_type_to_semantic(
+    root: &DeclarationType,
+    draft_entities: &HashMap<DraftTypeParameterId, EntityId>,
+) -> Result<SemanticType, WorkspaceError> {
+    enum Work<'a> {
+        Visit(&'a DeclarationType),
+        Enum(super::SemanticEnum, usize),
+        List,
+        Function(usize),
+    }
+    let mut work = Vec::new();
+    work.try_reserve(1).map_err(|_| {
+        WorkspaceError::Host(Arc::from(
+            "declaration type conversion work allocation failed",
+        ))
+    })?;
+    work.push(Work::Visit(root));
+    let mut completed = Vec::new();
+    while let Some(item) = work.pop() {
+        match item {
+            Work::Visit(ty) => {
+                completed.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("declaration type conversion allocation failed"))
+                })?;
+                match ty {
+                    DeclarationType::Never => completed.push(SemanticType::Never),
+                    DeclarationType::Unit => completed.push(SemanticType::Unit),
+                    DeclarationType::Bool => completed.push(SemanticType::Bool),
+                    DeclarationType::I64 => completed.push(SemanticType::I64),
+                    DeclarationType::F64 => completed.push(SemanticType::F64),
+                    DeclarationType::String => completed.push(SemanticType::String),
+                    DeclarationType::Bytes => completed.push(SemanticType::Bytes),
+                    DeclarationType::ByteVector => completed.push(SemanticType::ByteVector),
+                    DeclarationType::ByteSlice => completed.push(SemanticType::ByteSlice),
+                    DeclarationType::ByteSliceMut => completed.push(SemanticType::ByteSliceMut),
+                    DeclarationType::Path => completed.push(SemanticType::Path),
+                    DeclarationType::Capability(kind) => {
+                        completed.push(SemanticType::Capability(*kind));
+                    }
+                    DeclarationType::Symbol => completed.push(SemanticType::Symbol),
+                    DeclarationType::Resource(kind) => {
+                        completed.push(SemanticType::Resource(*kind));
+                    }
+                    DeclarationType::Product(entity) => {
+                        completed.push(SemanticType::Product(*entity));
+                    }
+                    DeclarationType::Enum {
+                        constructor,
+                        arguments,
+                    } => {
+                        let additional = arguments.len().checked_add(1).ok_or_else(|| {
+                            WorkspaceError::Host(Arc::from("declaration enum child count overflow"))
+                        })?;
+                        work.try_reserve(additional).map_err(|_| {
+                            WorkspaceError::Host(Arc::from(
+                                "declaration type conversion work allocation failed",
+                            ))
+                        })?;
+                        work.push(Work::Enum(*constructor, arguments.len()));
+                        work.extend(arguments.iter().rev().map(Work::Visit));
+                    }
+                    DeclarationType::TypeParameter(entity) => {
+                        completed.push(SemanticType::TypeParameter(*entity));
+                    }
+                    DeclarationType::DraftTypeParameter(parameter) => {
+                        let entity = draft_entities.get(parameter).copied().ok_or(
+                            WorkspaceError::UnknownDraftTypeParameter {
+                                parameter: *parameter,
+                            },
+                        )?;
+                        completed.push(SemanticType::TypeParameter(entity));
+                    }
+                    DeclarationType::List(inner) => {
+                        work.try_reserve(2).map_err(|_| {
+                            WorkspaceError::Host(Arc::from(
+                                "declaration type conversion work allocation failed",
+                            ))
+                        })?;
+                        work.push(Work::List);
+                        work.push(Work::Visit(inner));
+                    }
+                    DeclarationType::Function { parameters, result } => {
+                        let additional = parameters.len().checked_add(2).ok_or_else(|| {
+                            WorkspaceError::Host(Arc::from(
+                                "declaration function child count overflow",
+                            ))
+                        })?;
+                        work.try_reserve(additional).map_err(|_| {
+                            WorkspaceError::Host(Arc::from(
+                                "declaration type conversion work allocation failed",
+                            ))
+                        })?;
+                        work.push(Work::Function(parameters.len()));
+                        work.push(Work::Visit(result));
+                        work.extend(parameters.iter().rev().map(Work::Visit));
+                    }
+                }
+            }
+            Work::Enum(constructor, count) => {
+                let split = completed.len().checked_sub(count).ok_or_else(|| {
+                    WorkspaceError::InvalidSemanticType {
+                        position: Arc::from("function declaration"),
+                        reason: Arc::from("enum type children are incomplete"),
+                    }
+                })?;
+                let arguments = completed.split_off(split);
+                completed.push(SemanticType::Enum {
+                    constructor,
+                    arguments,
+                });
+            }
+            Work::List => {
+                let inner = completed
+                    .pop()
+                    .ok_or_else(|| WorkspaceError::InvalidSemanticType {
+                        position: Arc::from("function declaration"),
+                        reason: Arc::from("list type child is incomplete"),
+                    })?;
+                completed.push(SemanticType::List(Box::new(inner)));
+            }
+            Work::Function(count) => {
+                let result =
+                    completed
+                        .pop()
+                        .ok_or_else(|| WorkspaceError::InvalidSemanticType {
+                            position: Arc::from("function declaration"),
+                            reason: Arc::from("function type result is incomplete"),
+                        })?;
+                let split = completed.len().checked_sub(count).ok_or_else(|| {
+                    WorkspaceError::InvalidSemanticType {
+                        position: Arc::from("function declaration"),
+                        reason: Arc::from("function type parameters are incomplete"),
+                    }
+                })?;
+                let parameters = completed.split_off(split);
+                completed.push(SemanticType::Function {
+                    parameters,
+                    result: Box::new(result),
+                });
+            }
+        }
+    }
+    let result = completed
+        .pop()
+        .ok_or_else(|| WorkspaceError::InvalidSemanticType {
+            position: Arc::from("function declaration"),
+            reason: Arc::from("declaration type omitted its root"),
+        })?;
+    if completed.is_empty() {
+        Ok(result)
+    } else {
+        Err(WorkspaceError::InvalidSemanticType {
+            position: Arc::from("function declaration"),
+            reason: Arc::from("declaration type left disconnected results"),
+        })
+    }
+}
+
+fn resolve_bound_trait(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    identity: SemanticTrait,
+) -> Result<crate::hir::TraitId, WorkspaceError> {
+    match identity {
+        SemanticTrait::Builtin(kind) => {
+            let core = match kind {
+                super::BuiltinTrait::Copy => crate::hir::CoreTrait::Copy,
+                super::BuiltinTrait::Clone => crate::hir::CoreTrait::Clone,
+                super::BuiltinTrait::Drop => crate::hir::CoreTrait::Drop,
+                super::BuiltinTrait::Send => crate::hir::CoreTrait::Send,
+                super::BuiltinTrait::Sync => crate::hir::CoreTrait::Sync,
+            };
+            program
+                .traits
+                .iter()
+                .find(|definition| definition.core == Some(core))
+                .map(|definition| definition.id)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("builtin trait")))
+        }
+        SemanticTrait::Entity(entity) => {
+            if entity.namespace() != base.namespace() {
+                return Err(WorkspaceError::ForeignNamespace(Arc::from("trait")));
+            }
+            let header = base
+                .workspace_entity(entity)
+                .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("trait")))?;
+            if header.kind != EntityKind::Trait {
+                return Err(wrong_kind(
+                    "function type-parameter bound",
+                    "trait",
+                    header.kind,
+                ));
+            }
+            let address = base
+                .indexes
+                .entity_lookup
+                .get(&entity)
+                .and_then(|index| base.indexes.entity_addresses.get(*index))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("trait")))?;
+            let EntityAddress::Trait(raw) = address else {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("trait")));
+            };
+            program
+                .traits
+                .get(host_index(raw, "trait")?)
+                .filter(|definition| definition.id.raw() == raw)
+                .map(|definition| definition.id)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("trait")))
+        }
     }
 }
 

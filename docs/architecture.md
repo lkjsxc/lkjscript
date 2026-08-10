@@ -130,17 +130,20 @@ Arc<WorkspaceSnapshot> plus base revision
 
 `CreateProduct` and `CreateEnum` reserve stable declaration/member entities first, derive private
 nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
-and publish the complete declaration atomically. `CreateFunction` creates a non-generic signature,
-stable parameter entities, and a real missing-body hole. `CreateMain` creates parameterless `main`
-with a real missing-body hole. Imported generic function binders are reconciled as stable
-`TypeParameter` entities owned by the function. One public `SemanticType` represents exact scalar,
-capability/resource, nominal, builtin-enum, binder, list, function, and universal types; product,
-user-enum, and binder cases use stable entities, and compiler-local names, dense nominal/trait/layout
-IDs, and binder strings never cross this boundary. Public recursive type operations and conversion
-are iterative. Creation ordering is independent: tagged addresses preserve a function when main is
-added later, and hole scope refreshes
-when a declaration is added after main. Created declaration, member, parameter, local, and hole IDs
-are returned through the diff.
+and publish the complete declaration atomically. One generalized `CreateFunction` accepts zero or
+more ordered type-parameter drafts. A declaration-local `DraftTypeParameterId` can occur at arbitrary
+depth in the creation-only `DeclarationType`; validation resolves it only within that edit. Staging
+allocates stable function, binder, and value-parameter identities in semantic order, maps the local
+handles to private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
+`Function::bounds` facts only when binders exist. It then creates a real result-typed missing-body
+hole with unknown effects. The local handles never enter the semantic program, indexes, query,
+projection, or diff. `CreateMain` creates parameterless `main` with a real missing-body hole.
+Imported and source-free generic binders are reconciled identically as stable `TypeParameter`
+entities owned by the function. Published types use `SemanticType`; both recursive type boundaries
+use stable nominal references, keep compiler-local names and dense IDs private, and implement their
+depth-sensitive operations iteratively. Creation ordering is independent: tagged addresses preserve
+a function when main is added later, and hole scope refreshes when a declaration is added after main.
+Created declaration, binder, member, parameter, local, and hole IDs are returned through the diff.
 
 `ExpressionDraft` and `PatternDraft` are flat and non-recursive; iterative traversal makes physical
 node order irrelevant while validation requires one connected tree with each child used exactly
@@ -155,9 +158,9 @@ Implemented patterns are wildcard, non-generic enum variant/field, and
 stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
-Mutable-local construction, source-free generic declaration authoring, generic patterns, unresolved
-binder forwarding, ownership/reference generic instantiation, and non-enum source-free pattern spaces
-remain explicit unsupported edits; no executable fallback exists. After all disjoint structural
+Mutable-local construction, generic patterns, unresolved binder forwarding, ownership/reference
+generic instantiation, and non-enum source-free pattern spaces remain explicit unsupported edits; no
+executable fallback exists. After all disjoint structural
 edits and final-state dependency validation, one fallible iterative compaction pass performs callable
 and nominal removals
 and removes unreachable bindings and match plans. It assigns retained `BindingId` and `MatchPlanId`
@@ -335,22 +338,24 @@ capability checking; they are not a replacement service sandbox.
 ## Target delta
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
-authority. Missing entry/body and real typed-hole nodes; non-generic product, enum, function, and
-entry creation; immutable lexical locals; selected byte-vector move/borrow and canonical operations;
-aggregate construction/observation; exhaustive non-generic enum payload matches with stable
-arm-local bindings; exact calls to imported generic functions with stable binders, structured types,
-shared resolution, and derived witnesses; atomic batch edits; tombstone-stable identities; structured
+authority. Missing entry/body and real typed-hole nodes; non-generic product and enum creation;
+generic and non-generic function plus entry creation; immutable lexical locals; selected byte-vector
+move/borrow and canonical operations; aggregate construction/observation; exhaustive non-generic enum
+payload matches with stable arm-local bindings; exact calls to imported or source-free generic
+functions with stable binders, structured types, shared resolution, and derived witnesses; atomic
+batch edits; tombstone-stable identities; structured
 stable nominal, generic, and match views; deterministic queries/projections/diffs; one canonical
 complete-HIR match derivation; and direct execution are implemented. Source-loading/parser/compiler-
-phase counters, imported scalar, nominal, local, ownership, match, and generic-call convergence,
-malformed/atomic retry tests, exact per-node index work, and 20,000-level nested-expression, local,
-semantic-match, and type-only small-stack release execution protect the selected vertical.
+phase counters, imported scalar, nominal, local, ownership, match, generic-declaration, and generic-
+call convergence, malformed/atomic retry tests, exact per-node index work, and 20,000-level nested-
+expression, local, semantic-match, published-type, and declaration-type small-stack release execution
+protect the selected vertical.
 Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
 concrete public semantic movement operation only when ownership/order semantics are defined,
-mutable-local construction, source-free generic declaration authoring, generic patterns,
-Boolean/integer/product pattern construction, generic ownership/reference instantiation, unresolved
+mutable-local construction, generic patterns, Boolean/integer/product pattern construction, generic
+ownership/reference instantiation, unresolved
 references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,

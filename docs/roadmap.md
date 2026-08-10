@@ -6,9 +6,11 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Add source-free generic function declaration authoring.** Reuse the implemented stable binder
-   identities, exact bounds, structured types, and shared call resolver. Keep inference importer-only,
-   reject incomplete bounds honestly, and do not add a second trait solver or generic framework.
+1. **Establish the smallest deterministic local agent development loop.** Start from the existing
+   one-shot CLI and tested examples so an agent can learn the supported language, check without
+   executing effects, inspect actionable structured diagnostics, run intentionally, and verify the
+   result. Keep identity scope honest across invocations. Do not add a daemon, persistence layer,
+   journal, session broker, database, broad wire protocol, or agent platform.
 
 ## Next
 

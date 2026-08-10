@@ -24,18 +24,20 @@ pub(super) struct SemanticProgram {
 }
 
 impl SemanticProgram {
-    pub(super) const fn empty() -> Self {
-        Self {
+    pub(super) fn empty() -> Result<Self> {
+        let mut traits = Vec::new();
+        install_core_trait_definitions(&mut traits)?;
+        Ok(Self {
             bindings: Vec::new(),
             products: Vec::new(),
             enums: Vec::new(),
-            traits: Vec::new(),
+            traits,
             implementations: Vec::new(),
             match_plans: Vec::new(),
             functions: Vec::new(),
             main: None,
             global_layout: Vec::new(),
-        }
+        })
     }
 
     pub(super) fn from_hir(program: hir::Program) -> (Self, Arc<[hir::Source]>) {
@@ -154,14 +156,17 @@ pub(super) fn install_core_traits_if_absent(program: &mut hir::Program) -> Resul
     if !program.traits.is_empty() {
         return Ok(());
     }
-    program
-        .traits
+    install_core_trait_definitions(&mut program.traits)
+}
+
+fn install_core_trait_definitions(traits: &mut Vec<hir::TraitDefinition>) -> Result<()> {
+    traits
         .try_reserve(hir::CoreTrait::ALL.len())
         .map_err(|_| Error::host("core trait metadata allocation failed"))?;
     for core in hir::CoreTrait::ALL {
-        let raw = u64::try_from(program.traits.len())
+        let raw = u64::try_from(traits.len())
             .map_err(|_| Error::host("core trait identity exceeds u64"))?;
-        program.traits.push(hir::TraitDefinition {
+        traits.push(hir::TraitDefinition {
             id: hir::TraitId::new(raw),
             name: core.name().to_owned(),
             origin: hir::Origin::Builtin,

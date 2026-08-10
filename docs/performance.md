@@ -95,9 +95,9 @@ this Phase 2 measurement. Existing runtime-selection evidence below is unchanged
 ## Source-free semantic-workspace vertical
 
 **Structural and stack-safety evidence, not a latency benchmark.** The hypothesis was that honest
-source-free nominal declarations, lexical immutable locals, byte-vector ownership, exhaustive enum
-payload matches, and explicit calls to imported generic functions could converge with imported
-semantics and compile directly without hidden source/HIR authority, source loading, parsing,
+source-free nominal declarations, generic function declarations, lexical immutable locals,
+byte-vector ownership, exhaustive enum payload matches, and exact generic calls could converge with
+imported semantics and compile directly without hidden source/HIR authority, source loading, parsing,
 repeated enum-declaration/CFG scans, or recursion on expression, pattern, local, match, or public type
 depth. The equivalent workloads were the imported and transaction-created forms of:
 
@@ -106,8 +106,9 @@ depth. The equivalent workloads were the imported and transaction-created forms 
 - a two-variant enum constructed, bound, and tested;
 - a two-variant enum constructed and exhaustively matched, with one stable payload binding; and
 - a byte vector thawed from bytes, shared-borrowed for a call, then moved and observed; and
-- imported generic identity, repeated-bound, auto-witness, and explicit-implementation calls whose
-  semantic edits provide exact structured type arguments.
+- imported and source-free generic identity declarations and calls, including exact ordered binders,
+  builtin bounds, nested binder-bearing types, auto witnesses, and exact structured type arguments;
+  and imported repeated-bound and explicit-implementation calls.
 
 Selection required equal normalized stable entity kinds/types, containment, references,
 dependencies, node kinds/types/effects, canonical match-plan shape, compiler outcomes, selected
@@ -123,10 +124,12 @@ Retained deterministic counters, indexes, and assertions show:
 - incomplete compilation visits zero memory-plan, SSA, and bytecode phases;
 - scalar, product, enum, local, ownership, exhaustive enum-payload-match, and equivalent generic-call
   source-free/imported paths have equal selected semantic observations and production outcomes;
-- explicit generic-call edits invoke source loading and parsing zero times, publish declaration-
-  ordered stable substitutions, derive the same auto or explicit witnesses as source import, expose
-  exact instantiated parameters/results/effects, and survive unrelated function/product/implementation
-  compaction without changing public binder or witness identity;
+- generic declaration and call edits invoke source loading and parsing zero times; source-free
+  declarations allocate stable binder entities in declaration order, publish exact bounds and nested
+  binder types, derive the same auto witnesses as source import, expose exact instantiated
+  parameters/results/effects, and survive rename, deletion, recreation, and unrelated
+  function/product/implementation compaction without changing surviving public binder or witness
+  identity;
 - index construction performs exactly one root-address lookup per semantic node for retained nested
   `if` geometries at depths 32, 64, and 128 and for the nested-match fixture; enum, variant,
   enum-field, and match relation lookup uses prebuilt identity maps rather than scanning declarations
@@ -154,10 +157,11 @@ Retained deterministic counters, indexes, and assertions show:
   20,000 nested semantic enum matches (80,001 expression nodes and 20,000 canonical plans); each
   includes staged lowering, semantic clone, dense lifecycle compaction, identity reconciliation,
   complete-HIR/ownership/match derivation, memory planning, SSA, bytecode, VM execution, projection
-  where selected, and destruction on a 128 KiB worker stack; a separate type-only fixture exercises
-  public `SemanticType` construction, clone, equality, hashing, display, transaction validation and
-  conversion, query, projection, and destruction at 20,000 levels on that stack without duplicating
-  the full pipeline geometry;
+  where selected, and destruction on a 128 KiB worker stack; separate type-only fixtures exercise
+  published `SemanticType` construction, clone, equality, hashing, display, transaction validation,
+  conversion, query, projection, and destruction and creation-only `DeclarationType` construction,
+  clone, equality, debug, local-binder resolution, stable publication, signature query, projection,
+  and destruction at 20,000 levels on that stack without duplicating the full pipeline geometry;
 - bytecode emission derives nonowned structural values once per function by propagating predecessor
   edges, replacing a whole-CFG scan for every emitted structural load/store; the generated match
   fixture asserts exactly one collection per SSA function and one deterministic visit per CFG edge;
@@ -183,11 +187,24 @@ cargo test --locked -p lkjscript-compiler \
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_product_pattern_and_value_survive_earlier_product_compaction -- --exact
 cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_generic_function_creation_is_exact_and_executes_without_source_work -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_and_source_free_generic_declarations_converge_through_bytecode_and_vm -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_generic_declaration_uses_imported_trait_and_explicit_implementation -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::malformed_generic_declarations_are_structured_atomic_and_retry_stable -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::source_free_generic_binders_survive_rename_compaction_and_follow_deletion -- --exact
+cargo test --locked -p lkjscript-compiler \
   workspace::tests::imported_generic_signature_and_explicit_workspace_call_are_exact_and_execute -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::generic_binder_identities_survive_compaction_and_follow_function_lifecycle -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::unsatisfied_bound_reports_the_exact_binder_when_traits_repeat -- --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_level_generic_declaration_types_are_stack_safe \
+  -- --ignored --exact
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_semantic_type_operations_are_stack_safe \
   -- --ignored --exact

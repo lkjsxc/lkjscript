@@ -171,14 +171,17 @@ entity addresses are independent of public ordering, so adding `main` does not r
 function. Removed slots retain tombstone generations across snapshot cloning and reopening.
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
-and no attachments. `Transaction` adds non-generic `CreateProduct`, `CreateEnum`, `CreateFunction`,
-and `CreateMain` to rename, replacement, and hole operations. Products, enums, variants, fields,
-functions, imported function type parameters, value parameters, locals, bodies, and holes receive
-opaque stable entities independent of compiler-dense nominal/layout identities. Public inputs and
-queries use one exact structured `SemanticType`; products, user enums, and type parameters carry
-stable entities, while all five prelude enums and all five core traits have explicit builtin
-identities. Its recursive operations and public/internal conversion are iterative and
-unrestricted by type depth.
+and no attachments. `Transaction` adds non-generic `CreateProduct` and `CreateEnum`, generalized
+generic-or-non-generic `CreateFunction`, and `CreateMain` to rename, replacement, and hole operations.
+Function creation uses one ordered declaration-local binder handle domain and a creation-only
+`DeclarationType`; staged validation allocates stable function, type-parameter, and value-parameter
+entities before canonical universal-signature construction. The local handles never enter published
+state. Products, enums, variants, fields, functions, function type parameters, value parameters,
+locals, bodies, and holes receive opaque stable entities independent of compiler-dense nominal/layout
+identities. Public published inputs and queries use one exact structured `SemanticType`; products,
+user enums, and type parameters carry stable entities, while all five prelude enums and all five core
+traits have explicit builtin identities. Recursive operations and public/internal conversion for
+both type boundaries are iterative and unrestricted by type depth.
 Invalid names, duplicate declarations/members, ownership-containing aggregate fields,
 foreign/stale/wrong-kind type identities, and allocation failure reject without consuming their
 reserved stable IDs.
@@ -197,11 +200,12 @@ exhaustiveness, match-plan, ownership, memory, SSA, and VM path. Payload binding
 immutable-local entities. Compiler-only scrutinee and field-projection locals have an explicit hidden
 binding kind and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
-foreign/stale/wrong-kind pattern identities, forward or cross-arm binding uses, field coverage/type
-failures, empty/nonexhaustive/useless arms, incompatible arm results, and contradictory overlapping
-or deletion-owned edits reject. Mutable-local construction, source-free generic declaration
-authoring, generic patterns, unresolved generic forwarding, ownership/reference generic
-instantiation, non-enum source-free pattern spaces, and executable placeholders remain absent.
+unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
+foreign/stale/wrong-kind type and trait identities, forward or cross-arm binding uses, field
+coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm results, and contradictory
+overlapping or deletion-owned edits reject. Mutable-local construction, generic patterns, unresolved
+generic forwarding, ownership/reference generic instantiation, non-enum source-free pattern spaces,
+and executable placeholders remain absent.
 Imported mutable-local subtrees can be
 removed through ordinary replacement because the lifecycle remap covers their existing HIR form.
 
@@ -272,17 +276,21 @@ The source/path importer privately owns loading, parsing, initial analysis, pack
 source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
 compiler operations/prelude/core traits are excluded from mutable program-entity queries, and HIR
 operations carry only canonical catalog operation identity/signature. Imported and source-free
-scalar, product, enum, lexical-local, borrow/move, exhaustive enum-payload-match, and generic-call
-fixtures agree on normalized entities and structured types, containment, references/dependencies,
-node kinds/types/effects, exact generic substitutions/witnesses, selected memory-obligation kinds,
-the main bytecode stream, VM outcomes, traps, and cleanup. Explicit generic call edits invoke source
-loading and parsing zero times.
+scalar, product, enum, lexical-local, borrow/move, and exhaustive enum-payload-match fixtures agree
+on normalized entities and structured types, containment, references/dependencies, node
+kinds/types/effects, selected memory-obligation kinds, the main bytecode stream, VM outcomes, traps,
+and cleanup. Equivalent imported and source-free generic identity declarations agree on structured
+binders, bounds, exact substitutions, instantiated types, witnesses, effects, normalized function
+and main bytecode, and VM result. Generic declaration and call edits invoke source loading and parsing
+zero times.
 Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
 and compile a 20,000-level nested expression, 20,000 lexical locals, or 20,000 nested semantic enum
-matches, then project, execute, and destroy the complete path on a 128 KiB worker stack. A separate
-type-only fixture performs public `SemanticType` construction, clone, equality, hashing, display,
-transaction validation/conversion, signature query, projection, and destruction at 20,000 levels on
-the same stack without duplicating the full compiler stress geometry. Draft and pattern
+matches, then project, execute, and destroy the complete path on a 128 KiB worker stack. Separate
+type-only fixtures perform public `SemanticType` construction, clone, equality, hashing, display,
+transaction validation/conversion, query, projection, and destruction and creation-only
+`DeclarationType` construction, clone, equality, debug, local-binder resolution, stable publication,
+signature query, projection, and destruction at 20,000 levels on the same stack without duplicating
+the full compiler stress geometry. Draft and pattern
 traversal/lowering, semantic type/match derivation, semantic clone, indexing/reconciliation,
 projection, and canonical block ordering are iterative on these paths. Bytecode structural-local
 classification computes nonowned structural values once per function with linear predecessor-edge
@@ -297,10 +305,13 @@ replacement exists pending a measured consumer.
 
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
-  covers non-generic products, enums, functions, and parameterless `main`; expression construction
-  covers immutable locals, exact calls to imported generic functions, the selected byte-vector
-  move/borrow vertical, and exhaustive non-generic enum payload matches. Source-free generic
-  declaration authoring remains absent. The source-free pattern surface currently supports wildcard,
+  covers non-generic products and enums, generic and non-generic functions, and parameterless
+  `main`; expression construction
+  covers immutable locals, exact calls to imported or source-free generic functions, the selected
+  byte-vector move/borrow vertical, and exhaustive non-generic enum payload matches. Source-free
+  generic function declaration authoring supports ordered binders, exact builtin or stable trait
+  bounds, nested binder-bearing signatures, stable lifecycle, and direct compilation/execution. The
+  source-free pattern surface currently supports wildcard,
   enum-variant, field, and payload-binding patterns over non-generic enum scrutinees; Boolean,
   integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
