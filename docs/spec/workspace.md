@@ -40,14 +40,18 @@ type models do not recurse on native stack or impose a type-depth quota.
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
 semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
 operations, exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
-`let` bindings, explicitly typed mutable locals, assignment, `while`, copy-safe loads, byte-vector
-moves and shared borrows, product construction and field projection, enum construction and
-enum-variant testing, and ordered exhaustive matches over non-generic enum scrutinees. A sequence
-evaluates its children in listed order; an empty sequence yields `unit`, and a non-empty sequence
-yields its final child's value. `while` requires a Boolean condition, evaluates its body children in
-listed order, yields `unit`, and carries the canonical divergence effect. A generic call supplies one
-structured type argument for every stable parameter entity; argument list order is non-semantic,
-while the published instantiation follows declaration order.
+`let` bindings, explicitly typed mutable locals, assignment, `while`, early `return`, copy-safe
+loads, byte-vector moves and shared borrows, product construction and field projection, enum
+construction and enum-variant testing, and ordered exhaustive matches over non-generic enum
+scrutinees. A sequence evaluates its children in listed order; an empty sequence yields `unit`, and
+a non-empty sequence yields its final child's value. `while` requires a Boolean condition, evaluates
+its body children in listed order, yields `unit`, and carries the canonical divergence effect. A
+return has one non-divergent value exactly equal to the owning callable's declared result type,
+yields `never`, preserves the value's effects, and exits through canonical ownership cleanup. An
+explicitly moved affine payload transfers to the caller rather than being dropped by the callee. It
+has no target identity: the draft's callable root supplies its lexical target. A generic call supplies
+one structured type argument for every stable parameter entity; argument list order is
+non-semantic, while the published instantiation follows declaration order.
 The compiler validates substitution, value arguments, ownership/reference restrictions, and trait
 bounds and derives auto or explicit implementation witnesses. Source inference is an importer
 convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
@@ -89,9 +93,11 @@ invalid; a later recreation receives fresh public identities and generations.
 
 Replacement and hole introduction may remove `let`, mutable-local, and semantic-match subtrees.
 The targeted root retains its identity, and unaffected ancestors/siblings retain theirs; rebuilt
-replacement descendants receive new identities even when their content coincides. Bindings and plans
-owned only by the removed subtree are compacted out of semantic state; no removed expression or dead
-binding remains behind a hole. Transactions reject invalid, duplicate, or
+replacement descendants receive new identities even when their content coincides. A control
+replacement iteratively recomputes derived sequence, conditional, local-body, and match result types
+through the affected callable root; semantic match arm/result facts are updated with that same final
+graph. Bindings and plans owned only by the removed subtree are compacted out of semantic state; no
+removed expression or dead binding remains behind a hole. Transactions reject invalid, duplicate, or
 reserved declarations and members; foreign, stale, or wrong-kind identity; stale revision;
 disconnected, cyclic, reused-child, forward-binding, cross-arm, or out-of-scope expression/pattern
 drafts; duplicate pattern handles/names/fields; overlapping or delete-owned structural edits;
@@ -109,18 +115,20 @@ expression hole. Every blocker is revision-labelled through the snapshot or
 planning, SSA, bytecode lowering, or execution. A complete revision derives one ephemeral
 source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
 parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
-and source-free scalar, product, enum, lexical-local, mutable counted-loop, borrow-then-move, and
-exhaustive enum-payload match fixtures have equal normalized entities/types, containment, references,
-dependencies, node
-kinds/types/effects, canonical match shape, selected memory-obligation kinds, the main bytecode
-stream, VM results or traps, and cleanup behavior. Imported match plans carry real source origin;
-source-free plans carry semantic origin; ordinary plans reject builtin or stale provenance.
+and source-free scalar, product, enum, lexical-local, mutable counted-loop, borrow-then-move,
+early-return ownership-control, and exhaustive enum-payload match fixtures have equal normalized
+entities/types, containment, references, dependencies, node kinds/types/effects, canonical match
+shape, selected memory-obligation kinds, the main bytecode stream, VM results or traps, and cleanup
+behavior. Imported match plans carry real source origin; source-free plans carry semantic origin;
+ordinary plans reject builtin or stale provenance.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
 context, exact lexical and match-arm bindings, expected-type-filtered legal constructors (including
-selected canonical operation identities), structured function signatures and call instantiations,
-node semantics, and structured match inspection. Node semantics report stable node identity and kind,
+early return and selected canonical operation identities), structured function signatures and call
+instantiations, node semantics, and structured match inspection. Return is advertised only where a
+`never` result is admissible; its payload expectation is the result in the owning callable's
+signature view, not the hole's local expected type. Node semantics report stable node identity and kind,
 actual/expected type, canonical built-in operation identity when present, and named effect bits.
 Generic signature views report stable binder entities, bounds with stable or builtin trait identity,
 value
@@ -145,9 +153,9 @@ stdio/session schemas, text journal/publication path, CLI routes, unsupported re
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
-mutation, public semantic movement, source-free `return`/`break`/`continue`, generic-pattern
-construction, Boolean/integer/product source-free patterns, source rendering,
-persistence, collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
+mutation, public semantic movement, source-free `break`/`continue`, generic-pattern construction,
+Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
+incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Current payload-match ownership
 coverage uses the strongest supported copy-safe field geometry. Everything below continues to define

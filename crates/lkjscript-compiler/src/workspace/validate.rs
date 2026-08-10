@@ -805,10 +805,14 @@ fn validate_expression_kind(
             validate_conversion(Operation::I64FromF64Trunc, value, expression)?;
         }
         ExprKind::Do(values) => {
+            validate_ordered_control_body(
+                values,
+                "HIR sequence contains an expression after a control terminator",
+            )?;
             let expected = values
                 .last()
                 .map_or_else(|| Type::Unit, |value| value.ty.clone());
-            if Type::join_control(&expected, &expression.ty) != Some(expression.ty.clone()) {
+            if expected != expression.ty {
                 return Err(Error::msg("HIR sequence result type is stale"));
             }
         }
@@ -824,11 +828,26 @@ fn validate_expression_kind(
                 return Err(Error::msg("HIR conditional type facts are stale"));
             }
         }
-        ExprKind::While { condition, .. }
-            if condition.ty == Type::Bool && expression.ty == Type::Unit => {}
-        ExprKind::Loop { result_type, .. } if *result_type == expression.ty => {}
+        ExprKind::While {
+            condition, body, ..
+        } if condition.ty == Type::Bool && expression.ty == Type::Unit => {
+            validate_ordered_control_body(
+                body,
+                "HIR while body contains an expression after a control terminator",
+            )?;
+        }
+        ExprKind::Loop {
+            result_type, body, ..
+        } if *result_type == expression.ty => {
+            validate_ordered_control_body(
+                body,
+                "HIR loop body contains an expression after a control terminator",
+            )?;
+        }
         ExprKind::Return { value }
-            if Type::join_control(&value.ty, return_type) == Some(return_type.clone()) => {}
+            if value.ty != Type::Never
+                && value.ty == *return_type
+                && expression.ty == Type::Never => {}
         ExprKind::Break { value, .. }
             if value.ty != Type::Never && expression.ty == Type::Never => {}
         ExprKind::Continue { .. } if expression.ty == Type::Never => {}
@@ -853,7 +872,7 @@ fn validate_expression_kind(
                     return Err(Error::msg("HIR let binding kind is stale"));
                 }
             }
-            if Type::join_control(&body.ty, &expression.ty) != Some(expression.ty.clone()) {
+            if body.ty != expression.ty {
                 return Err(Error::msg("HIR let body type is stale"));
             }
         }
@@ -875,7 +894,7 @@ fn validate_expression_kind(
             if binding.kind != BindingKind::MutableLocal {
                 return Err(Error::msg("HIR mutable-local binding kind is stale"));
             }
-            if Type::join_control(&body.ty, &expression.ty) != Some(expression.ty.clone()) {
+            if body.ty != expression.ty {
                 return Err(Error::msg("HIR mutable-local body type is stale"));
             }
         }
@@ -1344,6 +1363,18 @@ fn validate_type(program: &Program, declarations: &DeclarationIndexes, root: &Ty
         }
     }
     Ok(())
+}
+
+fn validate_ordered_control_body(body: &[Expr], message: &'static str) -> Result<()> {
+    if body
+        .iter()
+        .take(body.len().saturating_sub(1))
+        .any(|expression| expression.ty == Type::Never)
+    {
+        Err(Error::msg(message))
+    } else {
+        Ok(())
+    }
 }
 
 fn function_signature(ty: &Type) -> Option<(&[Type], &Type)> {

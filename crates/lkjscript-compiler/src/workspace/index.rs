@@ -747,8 +747,13 @@ fn walk_root(
             item.enclosing,
             item.local_count,
         )?;
-        let children =
-            expression_children(program, expression, item.return_type, item.local_count)?;
+        let children = expression_children(
+            program,
+            expression,
+            item.expected.as_ref(),
+            item.return_type,
+            item.local_count,
+        )?;
         reserve(
             &mut pending,
             children.len(),
@@ -1096,9 +1101,20 @@ fn add_match_plan_relations(
 fn expression_children<'a>(
     program: &SemanticProgram,
     expression: &'a Expr,
+    expected: Option<&Type>,
     return_type: &Type,
     _local_count: usize,
 ) -> Result<Vec<(&'a Expr, Option<Type>)>> {
+    let control_result = expected
+        .filter(|expected| **expected != Type::Never)
+        .cloned()
+        .unwrap_or_else(|| {
+            if expression.ty == Type::Never {
+                return_type.clone()
+            } else {
+                expression.ty.clone()
+            }
+        });
     let mut children = Vec::new();
     match &expression.kind {
         ExprKind::Call {
@@ -1141,7 +1157,7 @@ fn expression_children<'a>(
         ExprKind::Do(values) => {
             reserve(&mut children, values.len(), "workspace sequence children")?;
             for (index, value) in values.iter().enumerate() {
-                let expected = (index + 1 == values.len()).then(|| expression.ty.clone());
+                let expected = (index + 1 == values.len()).then(|| control_result.clone());
                 children.push((value, expected));
             }
         }
@@ -1237,8 +1253,8 @@ fn expression_children<'a>(
         } => {
             reserve(&mut children, 3, "workspace conditional children")?;
             children.push((condition, Some(Type::Bool)));
-            children.push((then_branch, Some(expression.ty.clone())));
-            children.push((else_branch, Some(expression.ty.clone())));
+            children.push((then_branch, Some(control_result.clone())));
+            children.push((else_branch, Some(control_result.clone())));
         }
         ExprKind::Match {
             plan,
@@ -1256,8 +1272,8 @@ fn expression_children<'a>(
                 .ok_or_else(|| Error::host("workspace match child count overflow"))?;
             reserve(&mut children, additional, "workspace match children")?;
             children.push((scrutinee, Some(plan.scrutinee.ty.clone())));
-            for (body, arm) in arms.iter().zip(&plan.arms) {
-                children.push((body, Some(arm.body_type.clone())));
+            for body in arms {
+                children.push((body, Some(control_result.clone())));
             }
         }
         ExprKind::Let { bindings, body } => {
@@ -1272,7 +1288,7 @@ fn expression_children<'a>(
                     program.binding(binding.binding).map(|item| item.ty.clone()),
                 ));
             }
-            children.push((body, Some(expression.ty.clone())));
+            children.push((body, Some(control_result.clone())));
         }
         ExprKind::MutableLocal {
             binding,
@@ -1285,7 +1301,7 @@ fn expression_children<'a>(
                 initial,
                 program.binding(*binding).map(|item| item.ty.clone()),
             ));
-            children.push((body, Some(expression.ty.clone())));
+            children.push((body, Some(control_result)));
         }
         _ => {}
     }

@@ -159,11 +159,14 @@ node order irrelevant while validation requires one connected tree with each chi
 once. Draft-local binding and pattern-binding handles have a separate transaction-scoped identity
 domain. Implemented expression constructors are scalar and byte literals, selected canonical
 built-in operations, exact generic and non-generic calls, `if`, ordered sequence, immutable `let`,
-explicitly typed mutable locals, assignment, `while`, copy-safe loads, byte-vector move/shared
-borrow, product construction/projection, enum construction/variant testing, and ordered exhaustive
-enum matches. Generic drafts key exact type arguments by stable binder entity; importer inference
-and semantic edits converge at one exact substitution, assignability, and bound resolver, which
-derives auto or explicit implementation witnesses.
+explicitly typed mutable locals, assignment, `while`, early `return`, copy-safe loads, byte-vector
+move/shared borrow, product construction/projection, enum construction/variant testing, and ordered
+exhaustive enum matches. Return lowering looks up the callable's canonical declared result once from
+the root, rejects divergent or non-exact values, and constructs the existing `never`-typed HIR
+return; it creates no target identity or workspace cleanup rule. Generic drafts key exact type
+arguments by stable binder entity; importer inference and semantic edits converge at one exact
+substitution, assignability, and bound resolver, which derives auto or explicit implementation
+witnesses.
 Implemented patterns are wildcard, non-generic enum variant/field, and
 stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
 public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
@@ -183,8 +186,12 @@ values densely once,
 rewrites function/main headers, global layout, expression references and definitions, recursive
 match locals/plans, and rebuilds each callable's `PlaceId`, local slot, parameter-place vector, and
 `local_count`. Function-vector position remains private and memory/SSA function IDs are derived later.
-No second mutable IR, sparse dead-binding history, persistence layer, or incremental framework was
-added; `SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
+Structural replacement rebuilds the affected root iteratively and recomputes only child-derived
+sequence, conditional, local-body, and semantic-match result types. When the program contains
+semantic match plans, one bounded pass over each affected root refreshes any existing plan's
+arm/result type facts; a program without match plans incurs no additional match scan. No second
+mutable IR, sparse dead-binding history, persistence layer, or incremental framework was added;
+`SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
 
 `DeleteEntity` first collects callable, product, and enum deletion intent for the whole batch.
 `main`, ordinary functions, and user nominals are pruned only after structural replacements and one
@@ -215,12 +222,12 @@ structured and projected. Incomplete snapshots retain normal indexes and determi
 but no compiler HIR.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and expected-type-filtered legal constructors, including selected canonical
-operation identities. Definition, structured entity/function/node type, exact generic signature/call
-instantiation, hole context with exact lexical/arm visibility, node semantics, and structured match
-inspection are direct identity queries. Node semantics expose canonical operation identity and exact
-named effects alongside node kind and actual/expected type. Signature views expose stable binders and
-structured bounds; call views expose canonical substitutions, instantiated parameters/results,
+calls, diagnostics, and expected- plus control-context-filtered legal constructors, including early
+return and selected canonical operation identities. Definition, structured entity/function/node type, exact
+generic signature/call instantiation, hole context with exact lexical/arm visibility, node semantics,
+and structured match inspection are direct identity queries. Node semantics expose canonical
+operation identity and exact named effects alongside node kind and actual/expected type. Signature
+views expose stable binders and structured bounds; call views expose canonical substitutions, instantiated parameters/results,
 derived witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
 type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring
 to stable variant/field/binding entities. Parallel per-node plan, operation, effect, and direct-child
@@ -363,24 +370,24 @@ capability checking; they are not a replacement service sandbox.
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
 authority. Missing entry/body and real typed-hole nodes; non-generic product and enum creation;
 generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
-sequence, assignment, and `while`; selected byte-vector move/borrow and canonical operations;
-aggregate construction/observation; exhaustive non-generic enum payload matches with stable arm-local
-bindings; exact calls to imported or source-free generic functions with stable binders, structured
-types, shared resolution, and derived witnesses; atomic batch edits; tombstone-stable identities;
-structured
-stable nominal, generic, and match views; deterministic queries/projections/diffs; one canonical
-complete-HIR match derivation; and direct execution are implemented. Source-loading/parser/compiler-
-phase counters, imported scalar, nominal, local, ownership, match, generic-declaration, and generic-
-call convergence, malformed/atomic retry tests, exact per-node index work, and 20,000-level nested-
-expression, local, semantic-match, published-type, and declaration-type small-stack release execution
-protect the selected vertical.
+sequence, assignment, `while`, and early `return`; selected byte-vector move/borrow and canonical
+operations; aggregate construction/observation; exhaustive non-generic enum payload matches with
+stable arm-local bindings; exact calls to imported or source-free generic functions with stable
+binders, structured types, shared resolution, and derived witnesses; atomic batch edits;
+tombstone-stable identities; structured stable nominal, generic, and match views; deterministic
+queries/projections/diffs; one canonical complete-HIR match derivation; and direct execution are
+implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
+ownership, early-return, match, generic-declaration, and generic-call convergence; malformed/atomic
+retry tests; exact per-node index work; and
+20,000-level nested-expression, local, semantic-match, published-type, and declaration-type
+small-stack release execution protect the selected vertical.
 Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
 concrete public semantic movement operation only when ownership/order semantics are defined,
-source-free `return`/`break`/`continue`, generic patterns, Boolean/integer/product pattern
-construction, generic ownership/reference instantiation, unresolved
-references, ambiguities, conflicts, recovery nodes, richer declaration kinds, and finer
+source-free `break`/`continue`, generic patterns, Boolean/integer/product pattern construction,
+generic ownership/reference instantiation, unresolved references, ambiguities, conflicts, recovery
+nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
 scheduler, and broader platform work wait for evidence after real use of the local semantic model.

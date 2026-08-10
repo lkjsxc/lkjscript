@@ -54,11 +54,33 @@ fn expression_children(expression: &Expr) -> Vec<&Expr> {
     children
 }
 
+fn try_expression_children<'a>(
+    expression: &'a Expr,
+    subject: &str,
+) -> lkjscript_core::Result<Vec<&'a Expr>> {
+    let mut count = Some(0_usize);
+    for_each_expression_child(expression, &mut |_| {
+        count = count.and_then(|count| count.checked_add(1));
+    });
+    let count = count
+        .ok_or_else(|| lkjscript_core::Error::host(format!("{subject} child count overflow")))?;
+    let mut children = Vec::new();
+    children
+        .try_reserve(count)
+        .map_err(|_| lkjscript_core::Error::host(format!("{subject} child allocation failed")))?;
+    for_each_expression_child(expression, &mut |child| children.push(child));
+    Ok(children)
+}
+
 pub(crate) fn for_each_expression_child<'a>(
     expression: &'a Expr,
     action: &mut impl FnMut(&'a Expr),
 ) {
-    match &expression.kind {
+    for_each_kind_child(&expression.kind, action);
+}
+
+fn for_each_kind_child<'a>(kind: &'a ExprKind, action: &mut impl FnMut(&'a Expr)) {
+    match kind {
         ExprKind::Call { args, .. }
         | ExprKind::Operation { args, .. }
         | ExprKind::Do(args)
@@ -342,6 +364,92 @@ fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
     }
 }
 
+fn reconstructed_type(expression: &Expr, kind: &ExprKind) -> lkjscript_core::Result<Type> {
+    validate_reconstructed_control(kind)?;
+    match kind {
+        ExprKind::Do(values) => Ok(values
+            .last()
+            .map_or_else(|| Type::Unit, |value| value.ty.clone())),
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => Type::join_control(&then_branch.ty, &else_branch.ty).ok_or_else(|| {
+            lkjscript_core::Error::msg("HIR replacement made if branches incompatible")
+        }),
+        ExprKind::Let { body, .. } | ExprKind::MutableLocal { body, .. } => Ok(body.ty.clone()),
+        ExprKind::Match { arms, .. } => {
+            let mut result = Type::Never;
+            for arm in arms {
+                result = Type::join_control(&result, &arm.ty).ok_or_else(|| {
+                    lkjscript_core::Error::msg(
+                        "HIR replacement made match arm result types incompatible",
+                    )
+                })?;
+            }
+            Ok(result)
+        }
+        _ => Ok(expression.ty.clone()),
+    }
+}
+
+fn divergent_child_is_admissible(kind: &ExprKind, ordinal: usize) -> bool {
+    match kind {
+        ExprKind::Do(values) | ExprKind::Loop { body: values, .. } => {
+            ordinal.checked_add(1) == Some(values.len())
+        }
+        ExprKind::While { body, .. } => ordinal > 0 && ordinal == body.len(),
+        ExprKind::If { .. } => matches!(ordinal, 1 | 2),
+        ExprKind::Let { bindings, .. } => ordinal == bindings.len(),
+        ExprKind::MutableLocal { .. } => ordinal == 1,
+        ExprKind::Match { arms, .. } => ordinal > 0 && ordinal <= arms.len(),
+        _ => false,
+    }
+}
+
+fn divergent_child_makes_parent_divergent(kind: &ExprKind, ordinal: usize) -> bool {
+    match kind {
+        ExprKind::Do(_) | ExprKind::Let { .. } | ExprKind::MutableLocal { .. } => true,
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => match ordinal {
+            1 => else_branch.ty == Type::Never,
+            2 => then_branch.ty == Type::Never,
+            _ => false,
+        },
+        ExprKind::Match { arms, .. } => arms
+            .iter()
+            .enumerate()
+            .all(|(index, arm)| index.checked_add(1) == Some(ordinal) || arm.ty == Type::Never),
+        ExprKind::While { .. } | ExprKind::Loop { .. } => false,
+        _ => false,
+    }
+}
+
+fn validate_reconstructed_control(kind: &ExprKind) -> lkjscript_core::Result<()> {
+    let mut ordinal = Some(0_usize);
+    let mut invalid = false;
+    for_each_kind_child(kind, &mut |child| {
+        let current = ordinal;
+        ordinal = ordinal.and_then(|value| value.checked_add(1));
+        invalid |= child.ty == Type::Never
+            && current.is_none_or(|value| !divergent_child_is_admissible(kind, value));
+    });
+    if ordinal.is_none() {
+        return Err(lkjscript_core::Error::host(
+            "HIR replacement child ordinal overflow",
+        ));
+    }
+    if invalid {
+        return Err(lkjscript_core::Error::msg(
+            "HIR replacement put divergent control where a value is required",
+        ));
+    }
+    Ok(())
+}
+
 impl Expr {
     pub(crate) fn try_at_preorder(&self, target: u64) -> lkjscript_core::Result<Option<&Self>> {
         let mut pending = Vec::new();
@@ -358,11 +466,84 @@ impl Expr {
                 return Ok(None);
             };
             ordinal = next;
-            let children = expression_children(expression);
+            let children = try_expression_children(expression, "HIR lookup")?;
             pending
                 .try_reserve(children.len())
                 .map_err(|_| lkjscript_core::Error::host("HIR lookup work allocation failed"))?;
             pending.extend(children.into_iter().rev());
+        }
+        Ok(None)
+    }
+
+    pub(crate) fn try_divergent_replacement_is_admissible(
+        &self,
+        target: u64,
+    ) -> lkjscript_core::Result<Option<bool>> {
+        enum Work<'a> {
+            Enter(&'a Expr, Option<usize>),
+            Exit,
+        }
+
+        let mut work = Vec::new();
+        work.try_reserve(1).map_err(|_| {
+            lkjscript_core::Error::host("HIR control-context work allocation failed")
+        })?;
+        work.push(Work::Enter(self, None));
+        let mut active: Vec<(&Expr, Option<usize>)> = Vec::new();
+        let mut preorder = 0_u64;
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Enter(expression, incoming_ordinal) => {
+                    let current = preorder;
+                    let Some(next) = preorder.checked_add(1) else {
+                        return Ok(None);
+                    };
+                    preorder = next;
+                    if current == target {
+                        let mut child_ordinal = incoming_ordinal;
+                        for (parent, parent_ordinal) in active.iter().rev() {
+                            let Some(ordinal) = child_ordinal else {
+                                return Ok(Some(true));
+                            };
+                            if !divergent_child_is_admissible(&parent.kind, ordinal) {
+                                return Ok(Some(false));
+                            }
+                            if !divergent_child_makes_parent_divergent(&parent.kind, ordinal) {
+                                return Ok(Some(true));
+                            }
+                            child_ordinal = *parent_ordinal;
+                        }
+                        return Ok(Some(true));
+                    }
+
+                    active.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host(
+                            "HIR control-context ancestry allocation failed",
+                        )
+                    })?;
+                    active.push((expression, incoming_ordinal));
+                    let children = try_expression_children(expression, "HIR control context")?;
+                    let additional = children.len().checked_add(1).ok_or_else(|| {
+                        lkjscript_core::Error::host("HIR control-context child count overflow")
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        lkjscript_core::Error::host("HIR control-context work allocation failed")
+                    })?;
+                    work.push(Work::Exit);
+                    work.extend(
+                        children
+                            .into_iter()
+                            .enumerate()
+                            .rev()
+                            .map(|(ordinal, child)| Work::Enter(child, Some(ordinal))),
+                    );
+                }
+                Work::Exit => {
+                    active.pop().ok_or_else(|| {
+                        lkjscript_core::Error::msg("HIR control-context ancestry is invalid")
+                    })?;
+                }
+            }
         }
         Ok(None)
     }
@@ -381,7 +562,7 @@ impl Expr {
         while let Some(item) = work.pop() {
             match item {
                 Work::Visit(expression) => {
-                    let children = expression_children(expression);
+                    let children = try_expression_children(expression, "HIR clone")?;
                     let additional = children.len().checked_add(1).ok_or_else(|| {
                         lkjscript_core::Error::host("HIR clone child count overflow")
                     })?;
@@ -430,7 +611,7 @@ impl Expr {
         while let Some(item) = work.pop() {
             match item {
                 Work::Visit(expression) => {
-                    let children = expression_children(expression);
+                    let children = try_expression_children(expression, "match derivation")?;
                     let additional = children.len().checked_add(1).ok_or_else(|| {
                         lkjscript_core::Error::host("match derivation child count overflow")
                     })?;
@@ -504,7 +685,7 @@ impl Expr {
         while let Some(item) = work.pop() {
             match item {
                 Work::Visit(expression) => {
-                    let children = expression_children(expression);
+                    let children = try_expression_children(expression, "HIR remap")?;
                     let additional = children.len().checked_add(1).ok_or_else(|| {
                         lkjscript_core::Error::host("HIR remap child count overflow")
                     })?;
@@ -586,7 +767,7 @@ impl Expr {
                         found = true;
                         continue;
                     }
-                    let children = expression_children(expression);
+                    let children = try_expression_children(expression, "HIR replacement")?;
                     let additional = children.len().checked_add(1).ok_or_else(|| {
                         lkjscript_core::Error::host("HIR replacement child count overflow")
                     })?;
@@ -601,14 +782,16 @@ impl Expr {
                         return Ok(None);
                     };
                     let children = completed.split_off(split);
+                    let kind = clone_kind(&expression.kind, children);
+                    let ty = reconstructed_type(expression, &kind)?;
                     completed.try_reserve(1).map_err(|_| {
                         lkjscript_core::Error::host("HIR replacement result allocation failed")
                     })?;
                     completed.push(Self {
-                        ty: expression.ty.clone(),
+                        ty,
                         effects: expression.effects,
                         origin: expression.origin,
-                        kind: clone_kind(&expression.kind, children),
+                        kind,
                     });
                 }
             }

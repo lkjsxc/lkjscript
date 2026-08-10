@@ -665,6 +665,9 @@ fn stage(
     for action in &structural {
         replace_expression(&mut program, action.address, &action.replacement)?;
     }
+    if !structural.is_empty() && !program.match_plans.is_empty() {
+        refresh_semantic_match_types(&mut program, &structural)?;
+    }
 
     reject_surviving_deleted_dependencies(base, &program, &deletions)?;
     holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
@@ -3356,6 +3359,88 @@ fn replace_expression(
     Ok(())
 }
 
+fn refresh_semantic_match_types(
+    program: &mut SemanticProgram,
+    structural: &[StructuralAction],
+) -> Result<(), WorkspaceError> {
+    struct Update {
+        plan: crate::hir::MatchPlanId,
+        result: Type,
+        arms: Vec<Type>,
+    }
+
+    let mut affected_roots = Vec::new();
+    affected_roots
+        .try_reserve(structural.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match root allocation failed")))?;
+    affected_roots.extend(structural.iter().map(|action| action.address.root));
+    affected_roots.sort_unstable();
+    affected_roots.dedup();
+
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(affected_roots.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match root allocation failed")))?;
+    for root in affected_roots {
+        pending.push(expression_root(program, root)?);
+    }
+    let mut updates = Vec::new();
+    while let Some(expression) = pending.pop() {
+        if let ExprKind::Match { plan, arms, .. } = &expression.kind {
+            let mut arm_types = Vec::new();
+            arm_types.try_reserve(arms.len()).map_err(|_| {
+                WorkspaceError::Host(Arc::from("match type update allocation failed"))
+            })?;
+            arm_types.extend(arms.iter().map(|arm| arm.ty.clone()));
+            updates.try_reserve(1).map_err(|_| {
+                WorkspaceError::Host(Arc::from("match type update allocation failed"))
+            })?;
+            updates.push(Update {
+                plan: *plan,
+                result: expression.ty.clone(),
+                arms: arm_types,
+            });
+        }
+        let mut child_count = Some(0_usize);
+        crate::hir::for_each_expression_child(expression, &mut |_| {
+            child_count = child_count.and_then(|count| count.checked_add(1));
+        });
+        let child_count = child_count.ok_or_else(|| {
+            WorkspaceError::Host(Arc::from("match type update child count overflow"))
+        })?;
+        pending.try_reserve(child_count).map_err(|_| {
+            WorkspaceError::Host(Arc::from("match type update work allocation failed"))
+        })?;
+        crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
+    }
+
+    let mut seen = HashSet::new();
+    seen.try_reserve(updates.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match type identity allocation failed")))?;
+    for update in updates {
+        if !seen.insert(update.plan) {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "semantic match plan is used by more than one expression",
+            )));
+        }
+        let planned = program
+            .match_plans
+            .get_mut(host_index(update.plan.raw(), "match plan")?)
+            .filter(|planned| planned.id == update.plan)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("match plan")))?;
+        if planned.arms.len() != update.arms.len() {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "semantic match plan arm count is stale",
+            )));
+        }
+        planned.result_type = update.result;
+        for (arm, ty) in planned.arms.iter_mut().zip(update.arms) {
+            arm.body_type = ty;
+        }
+    }
+    Ok(())
+}
+
 struct LoweredDraft {
     expression: Expr,
     entities: Vec<NewEntity>,
@@ -3580,6 +3665,36 @@ impl LoweringState {
     }
 }
 
+fn callable_return_type(
+    program: &SemanticProgram,
+    root: EntityAddress,
+) -> Result<&Type, WorkspaceError> {
+    if root == EntityAddress::Main {
+        return program
+            .main
+            .as_ref()
+            .map(|main| &main.return_type)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")));
+    }
+    let EntityAddress::Binding(raw) = root else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("callable root")));
+    };
+    let binding = program
+        .binding(crate::hir::BindingId::new(raw))
+        .filter(|binding| matches!(&binding.kind, BindingKind::Function))
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?;
+    let signature = match &binding.ty {
+        Type::Forall { body, .. } => body.as_ref(),
+        other => other,
+    };
+    let Type::Fn { ret, .. } = signature else {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "function root lost its callable signature",
+        )));
+    };
+    Ok(ret)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn lower_draft(
     snapshot: &WorkspaceSnapshot,
@@ -3607,6 +3722,9 @@ fn lower_draft(
         .get(&root)
         .copied()
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("callable owner")))?;
+    // A nested return is checked against its callable declaration, not the
+    // immediate sequence, branch, loop, or local-body expectation.
+    let declared_result_type = callable_return_type(program, root)?.clone();
     let published_locations = binding_locations(program, root)?;
     let mut completed: Vec<Option<Expr>> = Vec::new();
     completed
@@ -4225,6 +4343,30 @@ fn lower_draft(
                     },
                 }
             }
+            DraftNode::Return { value } => {
+                let value = take_draft_child(&mut completed, *value)?;
+                if value.ty == Type::Never {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "return value is already divergent",
+                    )));
+                }
+                require_workspace_type(
+                    snapshot,
+                    program,
+                    callable,
+                    &value.ty,
+                    &declared_result_type,
+                )?;
+                let effects = value.effects.union(EffectSet::MAY_DIVERGE);
+                Expr {
+                    ty: Type::Never,
+                    effects,
+                    origin,
+                    kind: ExprKind::Return {
+                        value: Box::new(value),
+                    },
+                }
+            }
             DraftNode::ProductValue { product, fields } => {
                 lower_product_value(snapshot, program, *product, fields, &mut completed, origin)?
             }
@@ -4353,7 +4495,7 @@ fn lower_draft(
         .and_then(|index| completed.get_mut(index))
         .and_then(Option::take)
         .ok_or_else(|| WorkspaceError::InvalidDraft(Arc::from("draft root is unavailable")))?;
-    if !Type::unify_assignable(&root_expression.ty, expected) {
+    if root_expression.ty != Type::Never && !Type::unify_assignable(&root_expression.ty, expected) {
         let owner = snapshot
             .indexes
             .address_entities

@@ -260,6 +260,7 @@ pub enum LegalConstructor {
     MutableLocal,
     SetLocal(EntityId),
     While,
+    Return,
 }
 
 impl WorkspaceSnapshot {
@@ -953,35 +954,45 @@ impl WorkspaceSnapshot {
         continuation: Option<&Continuation>,
     ) -> Result<QueryPage<LegalConstructor>, WorkspaceError> {
         let context = self.hole_context(revision, hole)?;
-        let expected_type = &self
+        let record = self
             .holes
             .iter()
             .find(|record| record.state.id == hole)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?
-            .expected_internal;
-        let mut values = vec![
-            LegalConstructor::If,
-            LegalConstructor::Sequence,
-            LegalConstructor::MutableLocal,
-        ];
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
+        let expected_type = &record.expected_internal;
+        let mut values = Vec::new();
+        push_legal_constructor(&mut values, LegalConstructor::If)?;
+        push_legal_constructor(&mut values, LegalConstructor::Sequence)?;
+        push_legal_constructor(&mut values, LegalConstructor::MutableLocal)?;
+        let callable_result = self.function_signature(revision, context.owner)?.result;
+        if callable_result != SemanticType::Never
+            && return_constructor_is_legal(self, record.address)?
+        {
+            push_legal_constructor(&mut values, LegalConstructor::Return)?;
+        }
         if *expected_type == crate::Type::Unit {
-            values.push(LegalConstructor::While);
+            push_legal_constructor(&mut values, LegalConstructor::While)?;
         }
         match expected_type {
-            crate::Type::I64 => values.push(LegalConstructor::I64Literal),
-            crate::Type::F64 => values.push(LegalConstructor::F64Literal),
-            crate::Type::Bool => values.push(LegalConstructor::BoolLiteral),
-            crate::Type::Unit => values.push(LegalConstructor::UnitLiteral),
+            crate::Type::I64 => {
+                push_legal_constructor(&mut values, LegalConstructor::I64Literal)?;
+            }
+            crate::Type::F64 => {
+                push_legal_constructor(&mut values, LegalConstructor::F64Literal)?;
+            }
+            crate::Type::Bool => {
+                push_legal_constructor(&mut values, LegalConstructor::BoolLiteral)?;
+            }
+            crate::Type::Unit => {
+                push_legal_constructor(&mut values, LegalConstructor::UnitLiteral)?;
+            }
             _ => {}
         }
         for operation in super::draft::SOURCE_FREE_OPERATIONS.iter().copied() {
             if operation_matches_expected(operation, expected_type) {
-                values.push(LegalConstructor::Operation(operation));
+                push_legal_constructor(&mut values, LegalConstructor::Operation(operation))?;
             }
         }
-        values
-            .try_reserve(context.visible_entities.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("legal constructor allocation failed")))?;
         for entity in context.visible_entities.iter().copied() {
             let header = self.workspace_entity(entity)?;
             let address = self
@@ -1013,30 +1024,36 @@ impl WorkspaceSnapshot {
                     if crate::ownership::draft_parameter_load_is_supported(&binding.ty)
                         && assignable
                     {
-                        values.push(LegalConstructor::Load(entity));
+                        push_legal_constructor(&mut values, LegalConstructor::Load(entity))?;
                     }
                     if matches!(
                         binding.ty,
                         crate::Type::Bytes | crate::Type::ByteVector | crate::Type::Resource(_)
                     ) && assignable
                     {
-                        values.push(LegalConstructor::Move {
-                            binding: entity,
-                            status: ConstructorStatus::RequiresOwnershipValidation,
-                        });
+                        push_legal_constructor(
+                            &mut values,
+                            LegalConstructor::Move {
+                                binding: entity,
+                                status: ConstructorStatus::RequiresOwnershipValidation,
+                            },
+                        )?;
                     }
                     if binding.ty == crate::Type::ByteVector
                         && *expected_type == crate::Type::ByteSlice
                     {
-                        values.push(LegalConstructor::BorrowShared {
-                            binding: entity,
-                            status: ConstructorStatus::RequiresOwnershipValidation,
-                        });
+                        push_legal_constructor(
+                            &mut values,
+                            LegalConstructor::BorrowShared {
+                                binding: entity,
+                                status: ConstructorStatus::RequiresOwnershipValidation,
+                            },
+                        )?;
                     }
                     if header.kind == EntityKind::MutableLocal
                         && *expected_type == crate::Type::Unit
                     {
-                        values.push(LegalConstructor::SetLocal(entity));
+                        push_legal_constructor(&mut values, LegalConstructor::SetLocal(entity))?;
                     }
                 }
                 EntityKind::Function => match &binding.ty {
@@ -1044,13 +1061,13 @@ impl WorkspaceSnapshot {
                         if crate::generic_call::types_assignable(ret, expected_type)
                             .map_err(generic_query_error)?
                         {
-                            values.push(LegalConstructor::Call(entity));
+                            push_legal_constructor(&mut values, LegalConstructor::Call(entity))?;
                         }
                     }
                     crate::Type::Forall { body, .. }
                         if matches!(body.as_ref(), crate::Type::Fn { .. }) =>
                     {
-                        values.push(LegalConstructor::Call(entity));
+                        push_legal_constructor(&mut values, LegalConstructor::Call(entity))?;
                     }
                     _ => {}
                 },
@@ -1075,7 +1092,7 @@ impl WorkspaceSnapshot {
                         .get(&super::model::EntityAddress::Product(raw))
                         .copied()
                     {
-                        values.push(LegalConstructor::Product(entity));
+                        push_legal_constructor(&mut values, LegalConstructor::Product(entity))?;
                     }
                 }
             }
@@ -1104,14 +1121,17 @@ impl WorkspaceSnapshot {
                             })
                             .copied()
                         {
-                            values.push(LegalConstructor::EnumVariant(entity));
+                            push_legal_constructor(
+                                &mut values,
+                                LegalConstructor::EnumVariant(entity),
+                            )?;
                         }
                     }
                 }
             }
             _ => {}
         }
-        values.sort();
+        values.sort_unstable();
         values.dedup();
         let query = id_query_key(b"legal-constructors", hole.0)?;
         page(self, query, request, continuation, &values)
@@ -1179,19 +1199,39 @@ impl WorkspaceSnapshot {
     }
 }
 
+fn return_constructor_is_legal(
+    snapshot: &WorkspaceSnapshot,
+    address: super::model::NodeAddress,
+) -> Result<bool, WorkspaceError> {
+    expression_root(snapshot, address.root)?
+        .try_divergent_replacement_is_admissible(address.preorder)
+        .map_err(WorkspaceError::from_core)?
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole address")))
+}
+
 fn expression_at(
     snapshot: &WorkspaceSnapshot,
     address: super::model::NodeAddress,
 ) -> Result<&crate::hir::Expr, WorkspaceError> {
-    let root = if address.root == super::model::EntityAddress::Main {
+    expression_root(snapshot, address.root)?
+        .try_at_preorder(address.preorder)
+        .map_err(WorkspaceError::from_core)?
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node address")))
+}
+
+fn expression_root(
+    snapshot: &WorkspaceSnapshot,
+    root: super::model::EntityAddress,
+) -> Result<&crate::hir::Expr, WorkspaceError> {
+    if root == super::model::EntityAddress::Main {
         snapshot
             .program
             .main
             .as_ref()
             .map(|main| &main.body)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))
     } else {
-        let super::model::EntityAddress::Binding(raw) = address.root else {
+        let super::model::EntityAddress::Binding(raw) = root else {
             return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
         };
         snapshot
@@ -1200,11 +1240,8 @@ fn expression_at(
             .iter()
             .find(|function| function.binding.raw() == raw)
             .map(|function| &function.body)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))?
-    };
-    root.try_at_preorder(address.preorder)
-        .map_err(WorkspaceError::from_core)?
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node address")))
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("function root")))
+    }
 }
 
 fn binding_address(snapshot: &WorkspaceSnapshot, entity: EntityId) -> Result<u64, WorkspaceError> {
@@ -1533,6 +1570,17 @@ fn enum_pattern_entities(
             .copied()
     }));
     Ok((enumeration_entity, variant_entity, field_entities))
+}
+
+fn push_legal_constructor(
+    values: &mut Vec<LegalConstructor>,
+    value: LegalConstructor,
+) -> Result<(), WorkspaceError> {
+    values
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("legal constructor allocation failed")))?;
+    values.push(value);
+    Ok(())
 }
 
 fn operation_matches_expected(

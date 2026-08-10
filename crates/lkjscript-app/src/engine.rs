@@ -95,7 +95,14 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use lkjscript_compiler::{compile_path, compile_source};
+    use lkjscript_compiler::{
+        compile_path, compile_snapshot, compile_source,
+        workspace::{
+            DraftBindingId, DraftBindingRef, DraftNode, DraftNodeId, Edit, ExpressionDraft,
+            LocalDraft, SemanticType, Transaction, Workspace,
+        },
+        Operation,
+    };
     use lkjscript_core::{ExecutionOutcome, LimitedExecutionPolicy, ResourceLimitKind};
 
     use super::*;
@@ -108,6 +115,57 @@ mod tests {
         scalar(&format!(
             "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n{expression}\n/main\n"
         ))
+    }
+
+    fn source_free_ownership_control() -> ExecutableProgram {
+        let mut workspace = Workspace::empty().expect("empty source-free workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create source-free main");
+        let hole = created.snapshot.holes().next().expect("main hole").id;
+        let owner = DraftBindingId::new(0);
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(2),
+                            DraftNode::Operation {
+                                operation: Operation::ByteVectorNew,
+                                arguments: vec![DraftNodeId::new(0)],
+                            },
+                            DraftNode::BorrowShared(DraftBindingRef::Local(owner)),
+                            DraftNode::Operation {
+                                operation: Operation::ByteSliceLength,
+                                arguments: vec![DraftNodeId::new(2)],
+                            },
+                            DraftNode::I64(7),
+                            DraftNode::Return {
+                                value: DraftNodeId::new(4),
+                            },
+                            DraftNode::Sequence(vec![DraftNodeId::new(3), DraftNodeId::new(5)]),
+                            DraftNode::Let {
+                                bindings: vec![LocalDraft {
+                                    binding: owner,
+                                    name: "b".to_owned(),
+                                    value: DraftNodeId::new(1),
+                                }],
+                                body: DraftNodeId::new(6),
+                            },
+                        ],
+                        DraftNodeId::new(7),
+                    ),
+                }],
+            })
+            .expect("construct source-free ownership-control");
+        compile_snapshot(&completed.snapshot).expect("compile source-free ownership-control")
     }
 
     fn direct_call_chain(functions: usize) -> ExecutableProgram {
@@ -255,6 +313,43 @@ mod tests {
             .stats
             .as_ref()
             .is_some_and(|stats| stats.resource_runtime_calls == 2));
+    }
+
+    #[test]
+    fn source_free_early_return_enters_native_and_cleans_unique_owner_once() {
+        let imported = scalar(include_str!(
+            "../tests/fixtures/ownership-control.lkjscript"
+        ));
+        let source_free = source_free_ownership_control();
+        let mut observations = Vec::new();
+        for program in [&imported, &source_free] {
+            let execution = execute(
+                program,
+                &ExecutionInputs::default(),
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+                false,
+            )
+            .expect("execute ownership-control through selected product path");
+            assert_eq!(execution.path, ExecutionPath::BaselineNative);
+            assert!(execution.native_entered);
+            assert_eq!(execution.vm_executions, 0);
+            assert!(execution.outcome.cleanup_failures().is_none());
+            assert!(matches!(
+                execution.outcome,
+                ExecutionOutcome::Returned(value) if value.as_i64() == Some(7)
+            ));
+            let unique = execution.stats.expect("native stats").native_unique;
+            assert_eq!(unique.allocations, 1);
+            assert_eq!(unique.drops, 1);
+            assert_eq!(unique.live_owners, 0);
+            assert_eq!(unique.live_loans, 0);
+            assert_eq!(unique.release_backlog, 0);
+            assert_eq!(unique.stale_or_forged_failures, 0);
+            assert_eq!(unique.teardown_failures, 0);
+            observations.push(unique);
+        }
+        assert_eq!(observations[0], observations[1]);
     }
 
     #[test]

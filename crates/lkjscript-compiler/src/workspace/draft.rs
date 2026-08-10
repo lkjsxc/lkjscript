@@ -680,6 +680,9 @@ pub enum DraftNode {
         condition: DraftNodeId,
         body: Vec<DraftNodeId>,
     },
+    Return {
+        value: DraftNodeId,
+    },
     ProductValue {
         product: EntityId,
         fields: Vec<DraftFieldValue>,
@@ -712,7 +715,7 @@ impl DraftNode {
             Self::Sequence(expressions) => Some(expressions.len()),
             Self::Let { bindings, .. } => bindings.len().checked_add(1),
             Self::MutableLocal { .. } => Some(2),
-            Self::SetLocal { .. } => Some(1),
+            Self::SetLocal { .. } | Self::Return { .. } => Some(1),
             Self::While { body, .. } => body.len().checked_add(1),
             Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
                 Some(fields.len())
@@ -754,7 +757,7 @@ impl DraftNode {
                 visit(*initial);
                 visit(*body);
             }
-            Self::SetLocal { value, .. } => visit(*value),
+            Self::SetLocal { value, .. } | Self::Return { value } => visit(*value),
             Self::While { condition, body } => {
                 visit(*condition);
                 for expression in body {

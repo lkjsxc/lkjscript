@@ -202,12 +202,15 @@ reserved stable IDs.
 physical node order is irrelevant. It implements scalar and byte literals, selected canonical
 built-in operations (including exact-type numeric `less-than`), exact generic and non-generic calls,
 conditionals, ordered sequences, immutable lexical locals, explicitly typed mutable locals,
-assignment, `while`, copy-safe loads, byte-vector moves and shared borrows, product
+assignment, `while`, early `return`, copy-safe loads, byte-vector moves and shared borrows, product
 construction/projection, enum construction and variant tests, and exhaustive non-generic enum
-matches. Empty sequence is pure `unit`; non-empty sequence yields its last value. Mutable
+matches. Empty sequence is pure `unit`; non-empty sequence yields its last value. A return value must
+be non-divergent and exactly match the owning callable's declared result type; the return node is
+`never`-typed, carries canonical divergence and child effects, and uses the existing HIR cleanup
+path. An explicitly moved affine result transfers to its caller and remains usable there. Mutable
 initializers activate their binding only for the body, affine live overwrite is rejected, and affine
-reinitialization after move/drop follows the canonical place-end/init and cleanup route. Generic
-drafts identify binders by their stable type-parameter entities and provide exact structured type
+reinitialization after move/drop follows the canonical place-end/init and cleanup route. Generic drafts identify binders by their stable type-parameter entities and provide
+exact structured type
 arguments; the same resolver validates importer-inferred and explicit substitutions, argument types,
 ownership/reference restrictions, and trait bounds, then derives auto or explicit implementation
 witnesses. Each ordered match arm owns a flat `PatternDraft`;
@@ -219,10 +222,12 @@ Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate hand
 unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
 foreign/stale/wrong-kind type and trait identities, forward or cross-arm binding uses, field
 coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm results, invalid mutable
-storage/kinds/types/scopes, non-Boolean loops, unreachable sequence/loop body entries, and
-contradictory overlapping or deletion-owned edits reject. Source-free `return`/`break`/`continue`,
-generic patterns, unresolved generic forwarding, ownership/reference generic instantiation,
-non-enum source-free pattern spaces, and executable placeholders remain absent. Imported and
+storage/kinds/types/scopes, non-Boolean loops, divergent return values, wrong callable return values,
+foreign/stale/deleted callees beneath returns, unreachable sequence/loop body entries, and
+contradictory overlapping or deletion-owned edits reject. Source-free `break`/`continue`, generic
+patterns, unresolved generic forwarding,
+ownership/reference generic instantiation, non-enum source-free pattern spaces, and executable
+placeholders remain absent. Imported and
 source-free mutable-local subtrees share stable identity, lexical visibility, ordinary replacement,
 tombstoning, and compaction lifecycle behavior.
 
@@ -237,8 +242,10 @@ unknown fact while holes remain and are recomputed after every transaction. Shap
 type, usefulness, and exhaustiveness preflight lower once into staged semantic state; canonical
 complete-HIR ownership validation decides move/borrow legality and cleanup before publication.
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
-future IDs. Replacement and hole introduction now remove local-defining `let`, imported mutable
-local, and semantic-match subtrees. One iterative staged compaction visits mutable initializers
+future IDs. Replacement and hole introduction remove local-defining `let`, imported mutable-local,
+and semantic-match subtrees. Return insertion recomputes derived sequence, conditional, local-body,
+and match result types through the affected callable and refreshes canonical match arm/result facts
+before validation. One iterative staged compaction visits mutable initializers
 before activating their bindings, prunes unreachable bindings and match plans, rewrites dense
 binding/plan references, and rebuilds per-callable places, slots, and local counts before canonical
 validation. Removed local and payload identities tombstone; unaffected
@@ -268,22 +275,26 @@ typed hole with hole/type/owner/context. Incomplete snapshots remain fully query
 SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
 and lowers directly. Selected source-free scalar, nominal aggregate, immutable/mutable lexical-local,
-counted-loop, byte-vector-borrow-then-move, enum-payload-match, and exact generic-call edits enter
-source loading and parsing zero times, retain canonical memory-plan obligations, compile to validated
-bytecode, execute in the VM, and clean up on normal and trapped paths. Canonical memory-plan origins
+counted-loop, early-return ownership-control, byte-vector-borrow-then-move, enum-payload-match, and
+exact generic-call edits enter source loading and parsing zero times, retain canonical memory-plan
+obligations, compile to validated bytecode, execute in the VM, and clean up on normal and trapped
+paths. The source-free ownership-control equivalent also enters the selected baseline-native path,
+returns `7`, allocates and drops one unique owner, and ends with no live owner, loan, release backlog,
+or teardown failure. Canonical memory-plan origins
 explicitly tag source-backed and source-free cases; current package locks reflect that non-colliding
 encoding.
 
 Revision-labelled queries implement deterministic pagination, definitions/references, calls,
 structured entity/function/node types, diagnostics, hole context with exact lexical and arm-local
-visibility, expected-type-filtered legal constructors including selected canonical operations,
-exact generic signatures and call instantiations, node semantics, and a structured `MatchView`
-containing the scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable enum/member
-identities, and payload-binding entities. Node semantics expose kind, actual/expected type, canonical
-operation identity, and named effect flags. Generic views expose stable binders and trait identities,
-canonical substitutions, instantiated parameters/results, derived witnesses, and named effect flags
-without compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe values; affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported
-generic enum constructors are omitted. Hole visibility refreshes when declarations are added in a
+visibility, expected- and control-context-filtered legal constructors including early return and
+selected canonical operations, exact generic signatures and call instantiations, node semantics, and
+a structured `MatchView` containing the scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable
+enum/member identities, and payload-binding entities. Node semantics expose kind, actual/expected
+type, canonical operation identity, and named effect flags. Generic views expose stable binders and
+trait identities, canonical substitutions, instantiated parameters/results, derived witnesses, and named effect flags
+without compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe values;
+affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported generic enum
+constructors are omitted. Hole visibility refreshes when declarations are added in a
 later revision. Projections render state and blockers before selected
 entity/body/type/reference/hole/match sections, including declared entity types, operation
 identities, node effects, and arm/pattern structure, use stable review-local labels, and require no
@@ -297,11 +308,12 @@ The source/path importer privately owns loading, parsing, initial analysis, pack
 source provenance capture, then moves all language forms into the same `SemanticProgram`. Fixed
 compiler operations/prelude/core traits are excluded from mutable program-entity queries, and HIR
 operations carry only canonical catalog operation identity/signature. Imported and source-free
-scalar, product, enum, lexical-local, counted-loop, borrow/move, and exhaustive enum-payload-match
-fixtures agree on normalized entities and structured types, ordered containment,
-references/dependencies, node kinds/types/operation identities/effects, selected memory-obligation
-kinds, the main bytecode stream, VM outcomes, traps, and cleanup. The counted-loop source fixture is
-retained at `crates/lkjscript-app/tests/fixtures/imperative-counted-loop.lkjscript`. Equivalent
+scalar, product, enum, lexical-local, counted-loop, borrow/move, early-return ownership-control, and
+exhaustive enum-payload-match fixtures agree on normalized entities and structured types, ordered
+containment, references/dependencies, node kinds/types/operation identities/effects, selected
+memory-obligation kinds, the main bytecode stream, VM outcomes, traps, and cleanup. The retained
+source fixtures are `crates/lkjscript-app/tests/fixtures/imperative-counted-loop.lkjscript` and
+`crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript`. Equivalent
 imported and source-free generic identity declarations agree on structured binders, bounds, exact
 substitutions, instantiated types, witnesses, effects, normalized function and main bytecode, and VM
 result. Generic declaration and call edits invoke source loading and parsing
@@ -338,15 +350,14 @@ the retained run and host-capability smoke paths with that built binary.
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
   covers non-generic products and enums, generic and non-generic functions, and parameterless
-  `main`; expression construction
-  covers immutable and mutable locals, ordered sequence, assignment, `while`, exact calls to
-  imported or source-free generic functions, the selected byte-vector move/borrow vertical, and
-  exhaustive non-generic enum payload matches. Source-free
-  generic function declaration authoring supports ordered binders, exact builtin or stable trait
-  bounds, nested binder-bearing signatures, stable lifecycle, and direct compilation/execution. The
-  source-free pattern surface currently supports wildcard,
-  enum-variant, field, and payload-binding patterns over non-generic enum scrutinees; Boolean,
-  integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
+  `main`; expression construction covers immutable and mutable locals, ordered sequence, assignment,
+  `while`, early `return`, exact calls to imported or source-free generic functions, the selected
+  byte-vector move/borrow vertical, and exhaustive non-generic enum payload matches. Source-free
+  `break` and `continue` remain absent. Source-free generic function declaration authoring supports
+  ordered binders, exact builtin or stable trait bounds, nested binder-bearing signatures, stable
+  lifecycle, and direct compilation/execution. The source-free pattern surface currently supports
+  wildcard, enum-variant, field, and payload-binding patterns over non-generic enum scrutinees;
+  Boolean, integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
   ownership evidence uses the strongest supported copy-safe payload geometry. Callable and whole
   nominal deletion plus owned local/member removal are implemented; direct nominal-member mutation,
