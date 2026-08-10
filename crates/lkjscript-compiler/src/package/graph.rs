@@ -2,13 +2,14 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use lkjscript_contracts::{sha256, ContractDigest};
-use lkjscript_core::{Error, Result};
+use lkjscript_core::{Error, Result as CoreResult};
 
 use super::analysis::ModuleAnalysis;
 use super::model::{
     Dependency, LockFile, LockedModule, LockedPackage, LockedSourceIdentity, LockedTargetMemory,
     Manifest,
 };
+use super::PackageResult;
 
 enum VisitState {
     Visiting,
@@ -27,11 +28,11 @@ struct PackageFrame {
     next_dependency: usize,
 }
 
-pub(super) fn build(root: &Path) -> Result<LockFile> {
+pub(super) fn build(root: &Path) -> PackageResult<LockFile> {
     build_with_root_manifest(root).map(|(lock, _)| lock)
 }
 
-pub(super) fn build_with_root_manifest(root: &Path) -> Result<(LockFile, Manifest)> {
+pub(super) fn build_with_root_manifest(root: &Path) -> PackageResult<(LockFile, Manifest)> {
     let canonical = root
         .canonicalize()
         .map_err(|error| Error::host(format!("canonicalize package root: {error}")))?;
@@ -80,11 +81,11 @@ pub(super) fn build_with_root_manifest(root: &Path) -> Result<(LockFile, Manifes
                 .canonicalize()
                 .map_err(|error| Error::host(format!("canonicalize local dependency: {error}")))?;
             if !canonical_dependency.starts_with(&canonical) {
-                return Err(Error::msg("local dependency escapes the root package"));
+                return Err(Error::msg("local dependency escapes the root package").into());
             }
             match states.get(&canonical_dependency) {
                 Some(VisitState::Visiting) => {
-                    return Err(Error::msg("local package dependency cycle"));
+                    return Err(Error::msg("local package dependency cycle").into());
                 }
                 Some(VisitState::Complete(hash)) => {
                     verify_dependency(&dependency, hash)?;
@@ -130,7 +131,7 @@ pub(super) fn build_with_root_manifest(root: &Path) -> Result<(LockFile, Manifes
             )
             .is_some()
         {
-            return Err(Error::msg("duplicate local package content identity"));
+            return Err(Error::msg("duplicate local package content identity").into());
         }
         packages.push(locked);
         let state = states
@@ -168,7 +169,7 @@ pub(super) fn build_with_root_manifest(root: &Path) -> Result<(LockFile, Manifes
     ))
 }
 
-fn prepare(canonical: PathBuf) -> Result<PackageFrame> {
+fn prepare(canonical: PathBuf) -> PackageResult<PackageFrame> {
     let (manifest, _) = super::manifest::load(&canonical)?;
     let (modules, analyses) = modules(&canonical, &manifest)?;
     let targets = super::target_memory::build(&manifest.targets, &analyses)?;
@@ -194,7 +195,7 @@ fn prepare(canonical: PathBuf) -> Result<PackageFrame> {
     })
 }
 
-fn finish(root: &Path, mut frame: PackageFrame) -> Result<LockedPackage> {
+fn finish(root: &Path, mut frame: PackageFrame) -> CoreResult<LockedPackage> {
     frame.dependencies.sort();
     let origin = frame
         .canonical
@@ -218,7 +219,7 @@ fn finish(root: &Path, mut frame: PackageFrame) -> Result<LockedPackage> {
     })
 }
 
-fn verify_dependency(dependency: &Dependency, received: &str) -> Result<()> {
+fn verify_dependency(dependency: &Dependency, received: &str) -> CoreResult<()> {
     if dependency.content_sha256 == received {
         Ok(())
     } else {
@@ -229,7 +230,7 @@ fn verify_dependency(dependency: &Dependency, received: &str) -> Result<()> {
     }
 }
 
-fn push_dependency(dependencies: &mut Vec<String>, hash: &str) -> Result<()> {
+fn push_dependency(dependencies: &mut Vec<String>, hash: &str) -> CoreResult<()> {
     dependencies
         .try_reserve(1)
         .map_err(|_| Error::host("locked dependency allocation failed"))?;
@@ -237,7 +238,7 @@ fn push_dependency(dependencies: &mut Vec<String>, hash: &str) -> Result<()> {
     Ok(())
 }
 
-fn clone_string(value: &str, label: &str) -> Result<String> {
+fn clone_string(value: &str, label: &str) -> CoreResult<String> {
     let mut output = String::new();
     output
         .try_reserve(value.len())
@@ -249,7 +250,7 @@ fn clone_string(value: &str, label: &str) -> Result<String> {
 fn modules(
     root: &Path,
     manifest: &Manifest,
-) -> Result<(Vec<LockedModule>, BTreeMap<String, ModuleAnalysis>)> {
+) -> PackageResult<(Vec<LockedModule>, BTreeMap<String, ModuleAnalysis>)> {
     let contract = super::contracts::expected(lkjscript_contracts::MODULE_INTERFACE)?;
     let mut locked = Vec::new();
     locked
@@ -305,7 +306,7 @@ fn modules(
     Ok((locked, analyses))
 }
 
-pub(super) fn package_memory_hash(modules: &[LockedModule]) -> Result<String> {
+pub(super) fn package_memory_hash(modules: &[LockedModule]) -> CoreResult<String> {
     let bytes = serde_json::to_vec(
         &modules
             .iter()
@@ -321,14 +322,14 @@ pub(super) fn package_hash(
     memory_hash: &str,
     modules: &[LockedModule],
     targets: &[super::model::LockedTargetMemory],
-) -> Result<String> {
+) -> CoreResult<String> {
     let contract = super::contracts::expected(lkjscript_contracts::PACKAGE_MANIFEST)?;
     let records = serde_json::to_vec(&(manifest_hash, memory_hash, modules, targets))
         .map_err(|error| Error::msg(format!("encode package identity: {error}")))?;
     framed_hash(b"lkjscript.package", &[&contract.as_bytes(), &records])
 }
 
-pub(super) fn framed_hash(domain: &[u8], fields: &[&[u8]]) -> Result<String> {
+pub(super) fn framed_hash(domain: &[u8], fields: &[&[u8]]) -> CoreResult<String> {
     let mut bytes = Vec::new();
     frame(&mut bytes, domain)?;
     for field in fields {
@@ -337,7 +338,7 @@ pub(super) fn framed_hash(domain: &[u8], fields: &[&[u8]]) -> Result<String> {
     Ok(hex(sha256(&bytes)))
 }
 
-fn frame(output: &mut Vec<u8>, value: &[u8]) -> Result<()> {
+fn frame(output: &mut Vec<u8>, value: &[u8]) -> CoreResult<()> {
     let length =
         u64::try_from(value.len()).map_err(|_| Error::msg("package identity field overflow"))?;
     output.extend_from_slice(&length.to_be_bytes());

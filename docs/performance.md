@@ -26,6 +26,53 @@ benchmarks.
 Noise-aware thresholds are required. A single developer-machine timing is orientation, not a hard
 regression gate.
 
+## Local agent-loop output boundary
+
+**Measured output-volume correction; timings are orientation only.** The hypothesis was that an
+effect-free product check, already-silent Rustfmt, and Cargo's other native quiet modes could remove
+irrelevant successful output without weakening package/compiler validation, selected
+targets/features, exit status, or failure
+detail. The reversal condition is any hidden nonzero status or diagnostic, divergent check/run
+compile semantics, or no material successful-output reduction. No wrapper, cache, daemon, or new
+command runner was added.
+
+One sample per cell was recorded at base `a4739a41cb816ba1e346b95c1af5015431ccf9be` before and in
+the dirty implementation tree after the cutover. Environment: `devbox`, Linux
+`7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available logical CPUs, 32 GiB RAM,
+`rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. CLI samples used the warm debug binary;
+the focused test was warm in both cells. The aggregate suite used warm dependency/debug artifacts,
+but the after release build rebuilt changed code, so its wall time is not comparable. Raw stdout,
+stderr, and JSON summaries remain ignored under `target/agent-loop-measurements/`.
+
+| Workload | Before stdout / stderr bytes (lines) | After stdout / stderr bytes (lines) | Status | Wall orientation |
+| --- | ---: | ---: | --- | ---: |
+| Product `check` of effectful hello | unavailable; command failure 0 / 34 (0 / 1) | 0 / 0 (0 / 0) | 1 before; 0 after | n/a / 1.005 s |
+| `package check` success | 41 / 0 (1 / 0) | 0 / 0 (0 / 0) | 0 / 0 | 1.000 / 1.011 s |
+| Focused CLI contract test, normal / `--quiet` | 163 / 158 (6 / 2) | 113 / 0 (5 / 0) | 0 / 0 | 0.035 / 0.036 s |
+| Four-command full host boundary | 75,781 / 3,548 (946 / 40) | 5,152 / 0 (190 / 0) | all four 0 / all four 0 | 171.979 / 240.514 s |
+| Malformed-source human failure | 0 / 162 (0 / 2) | 0 / 151 (0 / 2) | 1 / 1 | 0.010 / 0.010 s |
+
+The full boundary after the cutover was exactly:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --quiet --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --quiet --workspace --all-targets --all-features --locked
+cargo build --quiet --workspace --release --locked
+```
+
+Compared with the prior non-quiet presentation of the same semantic set, successful aggregate
+output fell from 79,329 to
+5,152 bytes (93.5%) and from 986 to 190 lines (80.7%) even though the after suite contains the new
+check tests. Rustfmt deliberately remains non-quiet because `--quiet --check` hides formatting
+diffs. The other native quiet modes still emit complete failures: a deliberate temporary
+`compile_error!("quiet failure evidence probe")` returned 101 with the source location, offending
+line, marker, and Cargo summary in 297 stderr bytes / 7 lines; its full log is retained in the raw
+measurement directory and the probe source was removed. The malformed program preserved
+`LKJ-SRC-UNMATCHED-MARKER`, logical path, primary range, message, and related range; machine mode
+returned one 445-byte JSON value on stdout, empty stderr, and status 1. Successful JSON check is one
+43-byte value. These are byte/line reductions, not provider tokenization or billing measurements.
+
 ## Pre-reset session baseline
 
 **Recorded historical baseline; not rerun after this documentation cutover.** The consolidation

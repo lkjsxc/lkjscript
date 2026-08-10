@@ -2,6 +2,7 @@ mod analysis;
 mod compilation;
 mod contracts;
 mod encoding;
+mod error;
 mod graph;
 mod interface;
 mod interface_function;
@@ -13,8 +14,9 @@ mod target_memory;
 
 use std::path::{Path, PathBuf};
 
-use lkjscript_core::{Error, Result};
+use lkjscript_core::{Error, Result as CoreResult};
 
+pub use error::{PackageError, PackageResult};
 pub use model::{
     Dependency, LockFile, LockedConstraintSupport, LockedMemoryConstraint,
     LockedMemoryParameterMode, LockedMemoryRequirement, LockedMemoryResultMode, LockedModule,
@@ -52,39 +54,37 @@ impl VerifiedCompilationPackage {
 }
 pub(crate) use compilation::{capture as capture_compilation, CapturedPackageCompilation};
 
-pub fn root(entry: &Path) -> Result<PathBuf> {
+pub fn root(entry: &Path) -> CoreResult<PathBuf> {
     manifest::find_root(entry)
 }
 
-pub fn load_manifest(entry: &Path) -> Result<(PathBuf, Manifest)> {
+pub fn load_manifest(entry: &Path) -> CoreResult<(PathBuf, Manifest)> {
     let root = root(entry)?;
     let (manifest, _) = manifest::load(&root)?;
     Ok((root, manifest))
 }
 
-pub fn create_lock(entry: &Path) -> Result<(PathBuf, Vec<u8>)> {
+pub fn create_lock(entry: &Path) -> PackageResult<(PathBuf, Vec<u8>)> {
     let root = root(entry)?;
     let lock = graph::build(&root)?;
     let bytes = encoding::encode(&lock)?;
     Ok((root.join(LOCK_FILE), bytes))
 }
 
-pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
+pub fn verify(entry: &Path) -> PackageResult<(PathBuf, Manifest)> {
     verify_with_lock(entry).map(|(root, manifest, _, _)| (root, manifest))
 }
 
-fn verify_with_lock(entry: &Path) -> Result<(PathBuf, Manifest, LockFile, Option<String>)> {
+fn verify_with_lock(entry: &Path) -> PackageResult<(PathBuf, Manifest, LockFile, Option<String>)> {
     let root = root(entry)?;
     let (current, manifest) = graph::build_with_root_manifest(&root)?;
     let (locked, locked_bytes) = encoding::read(&root)?;
     contracts::require(&locked.contract, lkjscript_contracts::PACKAGE_LOCK)?;
     if locked.contracts != contracts::all()? {
-        return Err(Error::msg("package lock contract set is stale"));
+        return Err(Error::msg("package lock contract set is stale").into());
     }
     if current != locked || encoding::encode(&current)? != locked_bytes {
-        return Err(Error::msg(
-            "package lock is stale; run `lkjscript package lock`",
-        ));
+        return Err(Error::msg("package lock is stale; run `lkjscript package lock`").into());
     }
     let entry_module = if entry.is_dir() {
         None
@@ -99,16 +99,16 @@ fn verify_with_lock(entry: &Path) -> Result<(PathBuf, Manifest, LockFile, Option
             .ok_or_else(|| Error::msg("package entry is not UTF-8"))?
             .replace('\\', "/");
         if manifest.modules.binary_search(&module).is_err() {
-            return Err(Error::msg(format!(
-                "entry module is not declared: {module}"
-            )));
+            return Err(Error::msg(format!("entry module is not declared: {module}")).into());
         }
         Some(module)
     };
     Ok((root, manifest, locked, entry_module))
 }
 
-pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<VerifiedCompilationPackage>> {
+pub(crate) fn verify_for_compilation(
+    entry: &Path,
+) -> PackageResult<Option<VerifiedCompilationPackage>> {
     let start = entry.parent().unwrap_or_else(|| Path::new("."));
     let mut current = start
         .canonicalize()
@@ -144,7 +144,7 @@ pub(crate) fn verify_for_compilation(entry: &Path) -> Result<Option<VerifiedComp
 pub(crate) fn verify_loaded_sources(
     verified: &VerifiedCompilationPackage,
     loaded: &crate::source::ValidatedSourceTree,
-) -> Result<()> {
+) -> PackageResult<()> {
     let root = verified.root();
     let package = verified
         .lock()
@@ -159,9 +159,7 @@ pub(crate) fn verify_loaded_sources(
         .find(|module| module.id == id)
         .ok_or_else(|| Error::msg(format!("compiled module is absent from package lock: {id}")))?;
     if module.source_closure.len() != loaded.files().len() {
-        return Err(Error::msg(
-            "compiled source closure differs from package lock",
-        ));
+        return Err(Error::msg("compiled source closure differs from package lock").into());
     }
     for source in loaded.files() {
         let id = source
@@ -179,9 +177,9 @@ pub(crate) fn verify_loaded_sources(
         let digest =
             lkjscript_contracts::ContractDigest::from_bytes(source.exact_source_sha256).to_hex();
         if locked.source_sha256 != digest {
-            return Err(Error::msg(format!(
-                "compiled source identity differs from lock: {id}"
-            )));
+            return Err(
+                Error::msg(format!("compiled source identity differs from lock: {id}")).into(),
+            );
         }
     }
     Ok(())
@@ -189,14 +187,14 @@ pub(crate) fn verify_loaded_sources(
 
 pub fn verify_content(
     entry: &Path,
-) -> Result<(PathBuf, Manifest, lkjscript_contracts::ContractDigest)> {
+) -> PackageResult<(PathBuf, Manifest, lkjscript_contracts::ContractDigest)> {
     let (root, manifest, locked, _) = verify_with_lock(entry)?;
     let identity = lkjscript_contracts::ContractDigest::from_hex(&locked.root)
         .ok_or_else(|| Error::msg("package lock root is not a full lowercase SHA-256"))?;
     Ok((root, manifest, identity))
 }
 
-pub fn target(entry: &Path, name: &str) -> Result<PathBuf> {
+pub fn target(entry: &Path, name: &str) -> PackageResult<PathBuf> {
     let (root, manifest) = verify(entry)?;
     let target = manifest
         .targets

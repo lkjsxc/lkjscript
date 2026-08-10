@@ -6,7 +6,7 @@ manifests remain the executable authority.
 
 ## User path
 
-The active product is local package compile/run plus an in-process semantic workspace API. The
+The active product is local package check/run plus an in-process semantic workspace API. The
 `.lkjscript` extension is fixed; the current line-oriented bytes are a provisional importer format,
 not a textuality or compatibility promise and not semantic authority. `Workspace::empty` creates a
 source-free revision with no entities, source/path/hash attachment, entry point, or body. Text and
@@ -18,8 +18,20 @@ nodes, diagnostics, and structured completeness blockers. Source-free and import
 revisions derive one ephemeral complete HIR at `compile_snapshot`; they never render or reparse
 source. The CLI's required-package compiler entry still verifies the root manifest, lock, selected
 module, source identities, target, and capability grants once. Every product compile API delegates
-to `compile_snapshot` before HIR memory planning, locked-package target validation, SSA lowering and
-verification, bytecode validation, and execution.
+to `compile_snapshot` before HIR memory planning, locked-package target validation, SSA lowering,
+verification, and bytecode validation.
+
+`lkjscript check <entry.lkjscript>` uses that required-package production path and discards the
+`ExecutableProgram` before any host environment, executable installation, native entry, or VM
+invocation exists. Human success writes zero bytes to both streams. `--json` writes one deterministic
+`lkjscript.check` document; fail-fast source errors preserve their existing code, severity, category,
+logical path, one-based line and Unicode-scalar column ranges, message, and ordered related ranges,
+Source `path` and `range` fields are omitted when the producer has no source location; package,
+incomplete, host, and later compiler failures likewise keep only facts their producer owns.
+`lkjscript package check` is also
+silent on success. `describe` now reports only the compiler identity and contract set derived from
+the contract producer; hand-maintained language, target, execution, and unsupported-capability lists
+are absent.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -300,6 +312,14 @@ The hidden-body hole overlay, test-only HIR construction surrogate, syntax-shape
 dense source-node identities, protocol/session schemas, text journal/publication path, CLI routing,
 unsupported draft placeholders, and unconsumed development semantic digest are deleted. No wire
 replacement exists pending a measured consumer.
+
+## Local verification
+
+The documented host and CI boundary runs already-silent Rustfmt plus quiet Clippy, workspace
+all-target all-feature tests, and a locked workspace release build. These forms suppress routine
+progress while retaining command status and diagnostics. The Docker verification uses the same Rust feature/target
+semantics, builds the workspace release once, checks hello without entering it, and then exercises
+the retained run and host-capability smoke paths with that built binary.
 
 ## Known gaps
 

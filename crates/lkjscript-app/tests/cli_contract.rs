@@ -3,6 +3,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+const CHECK_USAGE: &str = "usage: lkjscript check <file.lkjscript> [--json]";
+
 fn read_metrics(path: &std::path::Path) -> serde_json::Value {
     let line = std::fs::read_to_string(path).expect("read metrics output");
     let json = line
@@ -12,7 +14,7 @@ fn read_metrics(path: &std::path::Path) -> serde_json::Value {
 }
 
 #[test]
-fn help_cli_and_metrics_expose_one_product_execution_path() {
+fn help_describe_and_metrics_expose_current_product_truth() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
     let help = Command::new(binary)
         .arg("--help")
@@ -21,9 +23,12 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
     assert!(help.status.success());
     assert!(help.stderr.is_empty());
     let help = String::from_utf8(help.stdout).expect("help is UTF-8");
+    assert!(help.contains("check <file.lkjscript> [--json]"));
+    assert!(help.contains("compile a required package without entering the program"));
     assert!(help.contains("run <file.lkjscript> [--] [script-args...]"));
-    assert!(help.contains("one baseline-native attempt, then VM fallback before entry"));
+    assert!(help.contains("compile and intentionally execute the program"));
     assert!(help.contains("memory inventory [--json]"));
+    assert!(!help.contains("line-oriented language"));
     assert!(!help.contains("semantic"));
     assert!(!help.contains("runtime topology"));
     assert!(!help.contains("host-scheduler"));
@@ -44,11 +49,49 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
         .output()
         .expect("run JSON describe");
     assert!(description.status.success());
-    let description = String::from_utf8(description.stdout).expect("describe is UTF-8");
-    assert!(description.contains("\"execution_path\":\"baseline-native-with-vm-fallback\""));
-    assert!(!description.contains("\"engines\":"));
-    assert!(!description.contains("semantic_operations"));
-    assert!(!description.contains("platform_revision"));
+    assert!(description.stderr.is_empty());
+    let description: serde_json::Value =
+        serde_json::from_slice(&description.stdout).expect("describe is JSON");
+    assert_eq!(description["schema"].as_str(), Some("lkjscript.describe"));
+    assert_eq!(description["compiler"].as_str(), Some("lkjscript"));
+    let mut keys = description
+        .as_object()
+        .expect("describe is an object")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    assert_eq!(keys, ["compiler", "contract_digest", "contracts", "schema"]);
+    let contracts = description["contracts"]
+        .as_array()
+        .expect("describe contracts are an array");
+    assert_eq!(
+        contracts.len(),
+        lkjscript_contracts::current_contracts()
+            .expect("current contracts")
+            .iter()
+            .count()
+    );
+    assert!(contracts.iter().all(|contract| {
+        contract["name"].as_str().is_some()
+            && contract["digest"]
+                .as_str()
+                .is_some_and(|digest| digest.len() == 64)
+    }));
+    for removed in [
+        "target",
+        "language_forms",
+        "execution_path",
+        "unsupported",
+        "engines",
+        "semantic_operations",
+        "platform_revision",
+    ] {
+        assert!(
+            description.get(removed).is_none(),
+            "stale describe field remains: {removed}"
+        );
+    }
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/scalar-loop.lkjscript");
@@ -159,6 +202,297 @@ fn help_cli_and_metrics_expose_one_product_execution_path() {
 }
 
 #[test]
+fn check_is_quiet_deterministic_and_does_not_enter_effectful_programs() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let hello =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/examples/hello/main.lkjscript");
+
+    for metrics_enabled in [false, true] {
+        let mut command = Command::new(binary);
+        command.arg("check").arg(&hello);
+        if metrics_enabled {
+            command.env("LKJSCRIPT_METRICS", "1");
+        }
+        let checked = command.output().expect("check effectful hello program");
+        assert!(checked.status.success(), "stderr={:?}", checked.stderr);
+        assert!(checked.stdout.is_empty());
+        assert!(checked.stderr.is_empty());
+    }
+
+    let first = Command::new(binary)
+        .arg("check")
+        .arg(&hello)
+        .arg("--json")
+        .output()
+        .expect("check hello as JSON");
+    let second = Command::new(binary)
+        .arg("check")
+        .arg(&hello)
+        .arg("--json")
+        .output()
+        .expect("repeat JSON check");
+    assert!(first.status.success());
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.status, second.status);
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    let document: serde_json::Value =
+        serde_json::from_slice(&first.stdout).expect("check success is JSON");
+    assert_eq!(
+        document,
+        serde_json::json!({"schema": "lkjscript.check", "status": "ok"})
+    );
+
+    let run = Command::new(binary)
+        .arg("run")
+        .arg(&hello)
+        .output()
+        .expect("run effectful hello program");
+    assert!(run.status.success(), "stderr={:?}", run.stderr);
+    assert_eq!(run.stdout, b"3628800");
+    assert!(run.stderr.is_empty());
+
+    let runtime_failure =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/checked-failure.lkjscript");
+    let checked = Command::new(binary)
+        .arg("check")
+        .arg(&runtime_failure)
+        .output()
+        .expect("check runtime-failing program");
+    assert!(checked.status.success(), "stderr={:?}", checked.stderr);
+    assert!(checked.stdout.is_empty());
+    assert!(checked.stderr.is_empty());
+    let run = Command::new(binary)
+        .arg("run")
+        .arg(&runtime_failure)
+        .output()
+        .expect("run runtime-failing program");
+    assert!(!run.status.success());
+    assert!(run.stdout.is_empty());
+    assert!(String::from_utf8(run.stderr)
+        .expect("runtime failure is UTF-8")
+        .contains("division by zero"));
+}
+
+#[test]
+fn check_preserves_source_diagnostics_in_human_and_machine_results() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let root = std::env::temp_dir().join(format!(
+        "lkjscript-cli-invalid-source-{}-{}",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("cli")
+    ));
+    std::fs::create_dir_all(&root).expect("create invalid source fixture");
+    let entry = root.join("main.lkjscript");
+    std::fs::write(
+        &entry,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write initially valid source");
+    let contracts = lkjscript_contracts::current_contracts().expect("load current contracts");
+    let manifest_contract = contracts
+        .get(lkjscript_contracts::PACKAGE_MANIFEST)
+        .expect("package manifest contract")
+        .digest()
+        .to_hex();
+    std::fs::write(
+        root.join(lkjscript_compiler::package::MANIFEST_FILE),
+        format!(
+            concat!(
+                "{{\n  \"schema\": \"lkjscript.package\",\n",
+                "  \"contract\": \"{}\",\n  \"name\": \"invalid-source\",\n",
+                "  \"source_root\": \".\",\n  \"modules\": [\"main.lkjscript\"],\n",
+                "  \"public\": [\"main.lkjscript\"],\n  \"dependencies\": [],\n",
+                "  \"capabilities\": [],\n  \"targets\": [{{\"name\": \"main\", ",
+                "\"module\": \"main.lkjscript\"}}]\n}}\n"
+            ),
+            manifest_contract
+        ),
+    )
+    .expect("write invalid source fixture manifest");
+    let (lock_path, lock) =
+        lkjscript_compiler::package::create_lock(&entry).expect("create fixture lock");
+    std::fs::write(lock_path, lock).expect("write fixture lock");
+    std::fs::write(&entry, "main/\n/wrong\n").expect("make source malformed");
+
+    let human = Command::new(binary)
+        .arg("check")
+        .arg(&entry)
+        .output()
+        .expect("check malformed source");
+    assert!(!human.status.success());
+    assert!(human.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(human.stderr).expect("human diagnostic is UTF-8"),
+        concat!(
+            "main.lkjscript:2:1: error[LKJ-SRC-UNMATCHED-MARKER]: ",
+            "mismatched close marker /wrong; expected /main\n",
+            "  related main.lkjscript:1:1: opening marker main/\n"
+        )
+    );
+
+    let first = Command::new(binary)
+        .arg("check")
+        .arg(&entry)
+        .arg("--json")
+        .output()
+        .expect("check malformed source as JSON");
+    let second = Command::new(binary)
+        .arg("check")
+        .arg(&entry)
+        .arg("--json")
+        .output()
+        .expect("repeat malformed source JSON check");
+    std::fs::remove_dir_all(&root).expect("remove invalid source fixture");
+
+    assert!(!first.status.success());
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.status, second.status);
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    let document: serde_json::Value =
+        serde_json::from_slice(&first.stdout).expect("source failure is JSON");
+    assert_eq!(
+        document,
+        serde_json::json!({
+            "schema": "lkjscript.check",
+            "status": "error",
+            "failure": {
+                "phase": "source",
+                "code": "LKJ-SRC-UNMATCHED-MARKER",
+                "severity": "error",
+                "category": "source-syntax",
+                "message": "mismatched close marker /wrong; expected /main",
+                "path": "main.lkjscript",
+                "range": {
+                    "start": {"line": 2, "column": 1},
+                    "end": {"line": 2, "column": 7}
+                },
+                "related": [{
+                    "message": "opening marker main/",
+                    "path": "main.lkjscript",
+                    "range": {
+                        "start": {"line": 1, "column": 1},
+                        "end": {"line": 1, "column": 6}
+                    }
+                }]
+            }
+        })
+    );
+    assert!(document["failure"].get("class").is_none());
+    assert!(document["failure"].get("identity").is_none());
+}
+
+#[test]
+fn check_reports_package_and_usage_failures_without_fabricated_source_facts() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let locationless = Command::new(binary)
+        .args(["check", "not-source.txt", "--json"])
+        .output()
+        .expect("check a locationless source failure");
+    assert_eq!(locationless.status.code(), Some(1));
+    assert!(locationless.stderr.is_empty());
+    let locationless: serde_json::Value =
+        serde_json::from_slice(&locationless.stdout).expect("locationless failure is JSON");
+    assert_eq!(locationless["failure"]["phase"].as_str(), Some("source"));
+    assert_eq!(
+        locationless["failure"]["code"].as_str(),
+        Some("LKJ-SRC-LOAD")
+    );
+    assert_eq!(
+        locationless["failure"]["category"].as_str(),
+        Some("source-loading")
+    );
+    assert!(locationless["failure"].get("path").is_none());
+    assert!(locationless["failure"].get("range").is_none());
+
+    let missing_parent = std::env::temp_dir().join(format!(
+        "lkjscript-cli-missing-parent-{}-{}",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("cli")
+    ));
+    let host = Command::new(binary)
+        .arg("check")
+        .arg(missing_parent.join("main.lkjscript"))
+        .arg("--json")
+        .output()
+        .expect("check missing package parent");
+    assert_eq!(host.status.code(), Some(1));
+    assert!(host.stderr.is_empty());
+    let host: serde_json::Value =
+        serde_json::from_slice(&host.stdout).expect("host failure is JSON");
+    assert_eq!(host["failure"]["phase"].as_str(), Some("package"));
+    assert_eq!(host["failure"]["class"].as_str(), Some("host"));
+    assert!(host["failure"].get("path").is_none());
+
+    let undeclared =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/residual-compare.lkjscript");
+    let package = Command::new(binary)
+        .arg("check")
+        .arg(&undeclared)
+        .arg("--json")
+        .output()
+        .expect("check undeclared package module");
+    assert!(!package.status.success());
+    assert!(package.stderr.is_empty());
+    let package: serde_json::Value =
+        serde_json::from_slice(&package.stdout).expect("package failure is JSON");
+    assert_eq!(package["schema"].as_str(), Some("lkjscript.check"));
+    assert_eq!(package["status"].as_str(), Some("error"));
+    assert_eq!(package["failure"]["phase"].as_str(), Some("package"));
+    assert_eq!(package["failure"]["class"].as_str(), Some("error"));
+    assert!(package["failure"]["message"]
+        .as_str()
+        .is_some_and(|message| message.contains("entry module is not declared")));
+    for absent in ["code", "path", "range", "related"] {
+        assert!(package["failure"].get(absent).is_none());
+    }
+
+    let usage = format!("lkjscript: {CHECK_USAGE}\n");
+    for (arguments, expected) in [
+        (vec!["check"], usage.as_str()),
+        (vec!["check", "--json"], usage.as_str()),
+        (
+            vec!["check", "main.lkjscript", "script-argument"],
+            usage.as_str(),
+        ),
+        (
+            vec!["check", "main.lkjscript", "--json", "extra"],
+            usage.as_str(),
+        ),
+        (
+            vec!["check", "main.lkjscript", "--unknown"],
+            "lkjscript: unknown check option: --unknown\n",
+        ),
+    ] {
+        let output = Command::new(binary)
+            .args(&arguments)
+            .output()
+            .expect("run invalid check usage");
+        assert_eq!(output.status.code(), Some(1), "accepted {arguments:?}");
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("usage failure is UTF-8"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn package_check_success_is_quiet() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new(binary)
+        .args(["package", "check"])
+        .arg(root)
+        .output()
+        .expect("check repository package");
+    assert!(output.status.success(), "stderr={:?}", output.stderr);
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn package_capability_denial_prevents_host_effects() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
     let root = std::env::temp_dir().join(format!(
@@ -203,24 +537,57 @@ fn package_capability_denial_prevents_host_effects() {
         lkjscript_compiler::package::create_lock(&entry).expect("create capability fixture lock");
     std::fs::write(lock_path, lock).expect("write capability fixture lock");
 
-    let output = Command::new(binary)
-        .args([
-            "run",
-            entry.to_str().expect("UTF-8 capability fixture path"),
-        ])
+    let checked = Command::new(binary)
+        .arg("check")
+        .arg(&entry)
+        .output()
+        .expect("check denied capability fixture");
+    assert!(!checked.status.success());
+    assert!(
+        checked.stdout.is_empty(),
+        "check performed the denied stdout effect"
+    );
+    let check_stderr = String::from_utf8(checked.stderr).expect("check denial diagnostic is UTF-8");
+    assert!(
+        check_stderr.contains("package does not grant required stdio capability"),
+        "{check_stderr}"
+    );
+    assert!(!check_stderr.contains("should-not-run"));
+
+    let machine = Command::new(binary)
+        .arg("check")
+        .arg(&entry)
+        .arg("--json")
+        .output()
+        .expect("check denied capability fixture as JSON");
+    assert_eq!(machine.status.code(), Some(1));
+    assert!(machine.stderr.is_empty());
+    let machine: serde_json::Value =
+        serde_json::from_slice(&machine.stdout).expect("capability denial is JSON");
+    assert_eq!(machine["failure"]["phase"].as_str(), Some("package"));
+    assert_eq!(machine["failure"]["class"].as_str(), Some("error"));
+    assert_eq!(
+        machine["failure"]["message"].as_str(),
+        Some("package does not grant required stdio capability")
+    );
+    assert!(machine["failure"].get("path").is_none());
+
+    let run = Command::new(binary)
+        .arg("run")
+        .arg(&entry)
         .output()
         .expect("run denied capability fixture");
     std::fs::remove_dir_all(&root).expect("remove capability fixture");
 
-    assert!(!output.status.success());
+    assert!(!run.status.success());
     assert!(
-        output.stdout.is_empty(),
+        run.stdout.is_empty(),
         "denied program performed stdout effect"
     );
-    let stderr = String::from_utf8(output.stderr).expect("denial diagnostic is UTF-8");
+    let run_stderr = String::from_utf8(run.stderr).expect("denial diagnostic is UTF-8");
     assert!(
-        stderr.contains("package does not grant required stdio capability"),
-        "{stderr}"
+        run_stderr.contains("package does not grant required stdio capability"),
+        "{run_stderr}"
     );
 }
 

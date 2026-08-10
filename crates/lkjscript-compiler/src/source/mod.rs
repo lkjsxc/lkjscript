@@ -27,15 +27,16 @@ mod validate;
 
 #[cfg(test)]
 pub(crate) use api::validate_source_set_for_analysis;
-pub(crate) use api::{
-    ensure_source_path_for_compiler, load_with_metrics, validate_for_compiler, ValidatedSourceParts,
-};
 pub(crate) use api::{load, validate, ValidatedSourceTree};
-pub(crate) use diagnostics::{
-    DiagnosticCategory, SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
+pub(crate) use api::{load_with_metrics, ValidatedSourceParts};
+pub(crate) use diagnostics::SourceResult;
+pub use diagnostics::{
+    DiagnosticCategory, DiagnosticSeverity, RelatedSourceSpan, SourceDiagnostic, SourceOrigin,
+    SourcePosition, SourceSpan,
 };
 pub(crate) use identity::{enum_member_identity, product_field_identity};
 pub(crate) use identity::{DeclarationKey, DeclarationKind, DeclarationSummary};
+pub(crate) use load::ensure_source_path;
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;
 

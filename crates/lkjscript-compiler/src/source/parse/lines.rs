@@ -100,7 +100,16 @@ fn character_column(text: &str) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{line_span, Line};
+    use super::{line_span, source_lines, span_at, Line};
+
+    #[test]
+    fn source_columns_count_unicode_scalars_not_bytes() {
+        let lines = source_lines("éx\n");
+        let span = span_at(&lines, "é".len(), "éx".len());
+        assert_eq!(span.start().line(), 1);
+        assert_eq!(span.start().column(), 2);
+        assert_eq!(span.end().column(), 3);
+    }
 
     #[test]
     fn synthetic_positions_cross_the_former_u32_boundary_without_aliasing() {

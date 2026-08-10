@@ -176,6 +176,16 @@ pub enum CompletenessBlocker {
     },
 }
 
+impl CompletenessBlocker {
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::MissingEntryPoint => "missing-entry-point",
+            Self::MissingBody { .. } => "missing-body",
+            Self::TypedHole { .. } => "typed-hole",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(super) enum EntityAddress {
     Main,

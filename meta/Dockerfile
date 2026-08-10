@@ -16,7 +16,7 @@ COPY meta/Dockerfile meta/docker-compose.yml ./meta/
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-release,target=/src/target,sharing=locked \
-    cargo build --locked --release -p lkjscript-app --bin lkjscript \
+    cargo build --quiet --workspace --release --locked \
     && cp /src/target/release/lkjscript /tmp/lkjscript
 
 FROM build AS verified
@@ -27,9 +27,10 @@ RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/regis
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-verify,target=/src/target,sharing=locked \
     cargo fmt --all -- --check \
-    && cargo clippy --workspace --all-targets --all-features --locked -- -D warnings \
-    && cargo test --workspace --all-targets --locked \
-    && cargo build --locked --release -p lkjscript-app --bin lkjscript \
+    && cargo clippy --quiet --workspace --all-targets --all-features --locked -- -D warnings \
+    && cargo test --quiet --workspace --all-targets --all-features --locked \
+    && /tmp/lkjscript check src/examples/hello/main.lkjscript > /tmp/check.out \
+    && test ! -s /tmp/check.out \
     && /tmp/lkjscript run src/examples/hello/main.lkjscript | grep -q 3628800 \
     && /tmp/lkjscript run src/examples/mandel/main.lkjscript > /tmp/mandel.out \
     && test -s /tmp/mandel.out \

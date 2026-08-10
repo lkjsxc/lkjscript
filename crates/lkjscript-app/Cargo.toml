@@ -17,11 +17,12 @@ lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-jit = { path = "../lkjscript-jit" }
 lkjscript-vm = { path = "../lkjscript-vm" }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }
 lkjscript-native = { path = "../lkjscript-native" }
-serde_json.workspace = true
 
 [lints]
 workspace = true

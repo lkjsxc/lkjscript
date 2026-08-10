@@ -236,6 +236,7 @@ impl std::error::Error for IncompleteSnapshotError {}
 #[non_exhaustive]
 pub enum CompileSnapshotError {
     Incomplete(IncompleteSnapshotError),
+    Package(Error),
     Compiler(Error),
 }
 
@@ -243,7 +244,7 @@ impl CompileSnapshotError {
     pub(crate) fn into_core(self) -> Error {
         match self {
             Self::Incomplete(error) => Error::msg(error.to_string()),
-            Self::Compiler(error) => error,
+            Self::Package(error) | Self::Compiler(error) => error,
         }
     }
 }
@@ -258,7 +259,7 @@ impl fmt::Display for CompileSnapshotError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Incomplete(error) => error.fmt(formatter),
-            Self::Compiler(error) => error.fmt(formatter),
+            Self::Package(error) | Self::Compiler(error) => error.fmt(formatter),
         }
     }
 }

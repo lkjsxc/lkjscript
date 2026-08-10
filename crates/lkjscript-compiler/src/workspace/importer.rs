@@ -4,6 +4,8 @@ use std::time::Instant;
 
 use lkjscript_core::{Error, Result};
 
+use crate::{PackageCompileError, PackageCompileResult};
+
 use super::{
     CapturedCompilationProvenance, ImportMetrics, PresentationAttachments, SourceAttachment,
     WorkspaceNamespace, WorkspaceSnapshot,
@@ -14,17 +16,19 @@ pub fn import_path(path: &Path) -> Result<WorkspaceSnapshot> {
 }
 
 pub fn import_path_with_metrics(path: &Path) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
-    import_path_in_namespace(path, WorkspaceNamespace::fresh()?, false)
+    let namespace = WorkspaceNamespace::fresh()?;
+    import_path_in_namespace(path, namespace, false).map_err(PackageCompileError::into_core)
 }
 
-pub(crate) fn import_package_path(path: &Path) -> Result<WorkspaceSnapshot> {
+pub(crate) fn import_package_path(path: &Path) -> PackageCompileResult<WorkspaceSnapshot> {
     import_package_path_with_metrics(path).map(|(snapshot, _)| snapshot)
 }
 
 pub(crate) fn import_package_path_with_metrics(
     path: &Path,
-) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
-    import_path_in_namespace(path, WorkspaceNamespace::fresh()?, true)
+) -> PackageCompileResult<(WorkspaceSnapshot, ImportMetrics)> {
+    let namespace = WorkspaceNamespace::fresh().map_err(PackageCompileError::Compiler)?;
+    import_path_in_namespace(path, namespace, true)
 }
 
 pub fn import_source(source: &str, path: &str) -> Result<WorkspaceSnapshot> {
@@ -36,37 +40,38 @@ fn import_path_in_namespace(
     path: &Path,
     namespace: WorkspaceNamespace,
     package_required: bool,
-) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
-    crate::ensure_source_path(path)?;
+) -> PackageCompileResult<(WorkspaceSnapshot, ImportMetrics)> {
+    crate::source::ensure_source_path(path).map_err(PackageCompileError::Source)?;
     let package_started = Instant::now();
     let package = crate::package::verify_for_compilation(path)?;
     let mut package_validation = package_started.elapsed();
     if package_required && package.is_none() {
-        return Err(Error::msg(format!(
+        return Err(PackageCompileError::Package(Error::msg(format!(
             "no {} contains {}",
             crate::package::MANIFEST_FILE,
             path.display()
-        )));
+        ))));
     }
-    let (source_tree, loading) = crate::source::load_with_metrics(path)
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
+    let (source_tree, loading) =
+        crate::source::load_with_metrics(path).map_err(PackageCompileError::Source)?;
     if let Some(verified) = &package {
         let locked_sources_started = Instant::now();
         crate::package::verify_loaded_sources(verified, &source_tree)?;
         package_validation = package_validation.saturating_add(locked_sources_started.elapsed());
     }
-    let attachments = attachments(&source_tree)?;
+    let attachments = attachments(&source_tree).map_err(PackageCompileError::Compiler)?;
     let source_files = attachments.files().len();
     let projection = source_tree
         .module_scoped_projection()
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
+        .map_err(PackageCompileError::Source)?;
 
     let hir_started = Instant::now();
-    let mut hir = crate::analyze::analyze_program_without_effects(&projection)?;
+    let mut hir = crate::analyze::analyze_program_without_effects(&projection)
+        .map_err(PackageCompileError::Compiler)?;
     let hir_analysis = hir_started.elapsed();
     let effects_started = Instant::now();
     crate::effects::infer(&mut hir);
-    crate::analyze::verify_match_plans(&hir)?;
+    crate::analyze::verify_match_plans(&hir).map_err(PackageCompileError::Compiler)?;
     let effect_analysis = effects_started.elapsed();
 
     let provenance = match package {
@@ -78,7 +83,8 @@ fn import_path_in_namespace(
         }
         None => CapturedCompilationProvenance::Development,
     };
-    let snapshot = WorkspaceSnapshot::new(namespace, hir, provenance, Some(attachments))?;
+    let snapshot = WorkspaceSnapshot::new(namespace, hir, provenance, Some(attachments))
+        .map_err(PackageCompileError::Compiler)?;
     Ok((
         snapshot,
         ImportMetrics {
@@ -99,7 +105,8 @@ fn import_source_in_namespace(
 ) -> Result<(WorkspaceSnapshot, ImportMetrics)> {
     crate::ensure_source_path(Path::new(path))?;
     let parsing_started = Instant::now();
-    let source_tree = crate::source::validate_for_compiler(source, path)?;
+    let source_tree = crate::source::validate(source, path)
+        .map_err(crate::source::SourceDiagnostic::into_core)?;
     let parsing = parsing_started.elapsed();
     let attachments = attachments(&source_tree)?;
     let source_files = attachments.files().len();

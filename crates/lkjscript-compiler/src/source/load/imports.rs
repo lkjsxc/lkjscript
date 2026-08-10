@@ -4,7 +4,7 @@ use crate::source::{
     DiagnosticCategory, Expr, SourceDiagnostic, SourceOrigin, SourceResult, SourceSpan,
 };
 
-use super::containment::{ensure_source_path, source_origin};
+use super::containment::source_origin;
 use super::{LoadFrame, LoadState};
 
 pub(super) fn cycle_diagnostic(
@@ -13,20 +13,14 @@ pub(super) fn cycle_diagnostic(
     stack: &[LoadFrame],
     state: &LoadState<'_>,
 ) -> SourceResult<SourceDiagnostic> {
-    let (origin, span) = match reached_by {
-        Some(reached_by) => reached_by,
-        None => (
-            source_origin(canonical, state.package_root, state.installed_root)?,
-            SourceSpan::zero(),
-        ),
+    let message = format!("cyclic import involving {}", canonical.display());
+    let mut diagnostic = match reached_by {
+        Some((origin, span)) => loading_diagnostic(&origin, Some(span), message),
+        None => {
+            let origin = source_origin(canonical, state.package_root, state.installed_root)?;
+            loading_diagnostic(&origin, None, message)
+        }
     };
-    let mut diagnostic = SourceDiagnostic::new(
-        "LKJ-SRC-LOAD",
-        DiagnosticCategory::SourceLoading,
-        format!("cyclic import involving {}", canonical.display()),
-        origin,
-        span,
-    );
     if let Some(cycle_start) = stack.iter().position(|frame| frame.canonical == canonical) {
         for frame in &stack[cycle_start + 1..] {
             if let Some((edge_origin, edge_span)) = &frame.reached_by {
@@ -47,11 +41,20 @@ pub(super) fn resolve_import(
     package_root: &Path,
     installed_root: Option<&Path>,
     origin: &SourceOrigin,
+    span: SourceSpan,
 ) -> SourceResult<PathBuf> {
-    let candidate = resolve_import_with_root(spec, parent, package_root, installed_root, origin)?;
+    let candidate = resolve_import_with_root(
+        spec,
+        parent,
+        package_root,
+        installed_root,
+        origin,
+        Some(span),
+    )?;
     let canonical = candidate.canonicalize().map_err(|error| {
-        SourceDiagnostic::loading(
-            origin.clone(),
+        loading_diagnostic(
+            origin,
+            Some(span),
             format!(
                 "cannot open import {spec} ({}): {error}",
                 candidate.display()
@@ -60,8 +63,9 @@ pub(super) fn resolve_import(
     })?;
 
     let package_root = package_root.canonicalize().map_err(|error| {
-        SourceDiagnostic::loading(
-            origin.clone(),
+        loading_diagnostic(
+            origin,
+            Some(span),
             format!(
                 "canonicalize package root {}: {error}",
                 package_root.display()
@@ -71,8 +75,9 @@ pub(super) fn resolve_import(
     let inside_package = canonical.starts_with(&package_root);
     let inside_install = installed_root.is_some_and(|root| canonical.starts_with(root));
     if !inside_package && !inside_install {
-        return Err(SourceDiagnostic::loading(
-            origin.clone(),
+        return Err(loading_diagnostic(
+            origin,
+            Some(span),
             format!(
                 "import escapes package roots: {spec} -> {}",
                 canonical.display()
@@ -88,12 +93,27 @@ fn resolve_import_with_root(
     package_root: &Path,
     installed_root: Option<&Path>,
     origin: &SourceOrigin,
+    span: Option<SourceSpan>,
 ) -> SourceResult<PathBuf> {
     let spec_path = Path::new(spec);
-    ensure_source_path(spec_path)?;
+    if spec_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some(crate::SOURCE_EXTENSION)
+    {
+        return Err(loading_diagnostic(
+            origin,
+            span,
+            format!(
+                "source path must end in .{}: {spec_path:?}",
+                crate::SOURCE_EXTENSION
+            ),
+        ));
+    }
     if spec_path.is_absolute() {
-        return Err(SourceDiagnostic::loading(
-            origin.clone(),
+        return Err(loading_diagnostic(
+            origin,
+            span,
             format!("absolute import path banned ({spec})"),
         ));
     }
@@ -101,20 +121,39 @@ fn resolve_import_with_root(
         .components()
         .any(|component| matches!(component, Component::ParentDir))
     {
-        return Err(SourceDiagnostic::loading(
-            origin.clone(),
+        return Err(loading_diagnostic(
+            origin,
+            span,
             format!("import climb banned ({spec}); use a package-root path"),
         ));
     }
     if spec.starts_with('.') {
-        return Err(SourceDiagnostic::loading(
-            origin.clone(),
+        return Err(loading_diagnostic(
+            origin,
+            span,
             format!("import path must be an exact package-root module ID ({spec})"),
         ));
     }
     let _ = parent;
     let _ = installed_root;
     Ok(package_root.join(spec))
+}
+
+fn loading_diagnostic(
+    origin: &SourceOrigin,
+    span: Option<SourceSpan>,
+    message: impl Into<String>,
+) -> SourceDiagnostic {
+    match span {
+        Some(span) => SourceDiagnostic::new(
+            "LKJ-SRC-LOAD",
+            DiagnosticCategory::SourceLoading,
+            message,
+            origin.clone(),
+            span,
+        ),
+        None => SourceDiagnostic::loading(origin.clone(), message),
+    }
 }
 
 pub(super) fn import_path(args: &[Expr]) -> std::result::Result<&str, &'static str> {
@@ -142,5 +181,6 @@ pub(crate) fn resolve_for_test(
         package_root,
         installed_root,
         &SourceOrigin::in_memory("test.lkjscript"),
+        None,
     )
 }

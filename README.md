@@ -10,23 +10,27 @@ scale-safe compilation, and one measured production execution path.
 - the SQLite runtime library (`libsqlite3` on Linux);
 - Linux x86-64 for the currently tested native path.
 
-## Build and first run
+## Build, check, and run
 
 ```sh
 cargo build --locked -p lkjscript-app --bin lkjscript
-cargo run --locked -p lkjscript-app --bin lkjscript -- \
-  run src/examples/hello/main.lkjscript
+./target/debug/lkjscript check src/examples/hello/main.lkjscript
+./target/debug/lkjscript run src/examples/hello/main.lkjscript
 ```
 
-A successful run prints `3628800`. `run` has one product execution policy: it attempts one eligible
-baseline-native group before effects, otherwise executes the unchanged validated program in the VM.
+A successful `check` is silent. It validates the required package and uses the production compiler
+through validated bytecode, then drops the compiled result without entering the program. `run` is
+the intentional effectful operation; the example prints `3628800`. It attempts one eligible
+baseline-native group before effects, otherwise executing the unchanged validated program in the VM.
+Use `check <entry> --json` for one deterministic machine document. A represented invalid package or
+program still exits nonzero and keeps stderr empty; command misuse reports on stderr.
 The VM has no JIT dependency or native-transition state. There is no engine, threshold, or forced
 native CLI selection, and native entry is a commit point with no VM retry. The discarded
 optimizing runtime and forced execution helpers are deleted. The SSA evaluator is available
 only as the opt-in `lkjscript-ir/test-oracle` feature used by development and differential tests;
 production dependencies do not enable it.
 
-The active product scope is local package compile/run plus the compiler's in-process semantic
+The active product scope is local package check/run plus the compiler's in-process semantic
 workspace library. Text and paths are importer conveniences, not program authority.
 `Workspace::empty` creates a source-free incomplete program; revision-checked transactions can
 create products, enums, generic or non-generic functions, and `main`, then fill real typed holes with
@@ -101,13 +105,16 @@ and terminal operations.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-targets --all-features --locked
-cargo build --workspace --release --locked
+cargo clippy --quiet --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --quiet --workspace --all-targets --all-features --locked
+cargo build --quiet --workspace --release --locked
 ```
 
-The retained container verification builds only `--bin lkjscript` and runs hello, Mandelbrot, and
-all seven local shell smoke/check scripts, including the direct SQLite path:
+Rustfmt is already silent on success; the other native quiet forms remove routine Cargo progress
+while preserving failures. Use focused tests during iteration and reserve this full boundary for the
+final relevant state. The retained container
+verification builds the workspace release once, checks the effectful hello example without entering
+it, and runs hello, Mandelbrot, and all seven local shell smoke/check scripts, including SQLite:
 
 ```sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify

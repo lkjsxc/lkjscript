@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+#[cfg(test)]
 use lkjscript_core::Result;
 
-use crate::source::{
-    load as loader, parse, validate as authority, SourceDiagnostic, SourceOrigin, SourceResult,
-};
+#[cfg(test)]
+use crate::source::SourceDiagnostic;
+use crate::source::{load as loader, parse, validate as authority, SourceOrigin, SourceResult};
 
 use super::ValidatedSourceTree;
 
@@ -40,17 +41,6 @@ pub fn load(path: &Path) -> SourceResult<ValidatedSourceTree> {
 
 pub(crate) fn load_with_metrics(path: &Path) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
     loader::load_with_metrics(path)
-}
-
-pub(crate) fn validate_for_compiler(
-    source: &str,
-    logical_path: &str,
-) -> Result<ValidatedSourceTree> {
-    validate(source, logical_path).map_err(SourceDiagnostic::into_core)
-}
-
-pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
-    loader::ensure_source_path(path).map_err(SourceDiagnostic::into_core)
 }
 
 #[cfg(test)]

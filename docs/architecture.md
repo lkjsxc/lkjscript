@@ -17,7 +17,9 @@ Workspace::empty OR verified text/path import
     -> HIR memory planning and captured locked-target validation
     -> typed SSA lowering, verification, and iterative baseline normalization
     -> bytecode lowering and unrestricted trusted validation
-    -> one baseline-native group attempt, otherwise validated VM execution
+    -> ExecutableProgram
+        -> check: discard without constructing execution state
+        -> run: one baseline-native group attempt, otherwise validated VM execution
 ```
 
 Text and package files remain persistent importer inputs, not semantic authority or a post-import
@@ -60,8 +62,13 @@ identity maps avoid repeated declaration scans while indexing aggregate referenc
 
 `compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
 phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
-signatures, known effects, holes, match-plan/site correspondence, and index shape. During this
-ephemeral derivation, an iterative transform replaces semantic matches with the canonical
+signatures, known effects, holes, match-plan/site correspondence, and index shape. Required-package
+compilation carries one fail-fast typed sum through this boundary: source producers retain their
+structured diagnostic, package validation retains its broad classified error, incompleteness retains
+its blocker list, and later compiler phases retain the core error without fabricated source facts.
+The CLI projects that same value to human or JSON check output; neither renderer parses the other.
+During this ephemeral derivation, an iterative transform replaces semantic matches with the
+canonical
 scrutinee-`Let`, ordered `If`, guarded payload projection/binding, and terminal
 `MatchUnreachable` form. Downstream memory/SSA/codegen explicitly reject a surviving semantic match.
 Source origins lower to source metadata; semantic origins remain source-free semantic memory origins
@@ -226,6 +233,11 @@ journal machinery, CLI routes, and protocol contracts are deleted. No wire repla
 without a measured consumer.
 
 ## Current execution and local host flow
+
+`lkjscript check` stops after required-package production compilation and drops the resulting
+`ExecutableProgram`. Its module imports no engine/JIT/VM orchestration and constructs no
+`ExecutionInputs`, `HostEnvironment`, execution policy, executable mapping, or prepared invocation.
+Package/source file reads are compiler host I/O; program-declared effects remain unreachable.
 
 `lkjscript run` selects `ExecutionPolicy::Unrestricted` and exposes no engine selection. The app
 lowers the complete eligible group reachable from `main`, installs one baseline image, and prepares

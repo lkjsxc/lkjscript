@@ -34,7 +34,11 @@ pub use operation::Operation;
 pub use pipeline::{
     compile_package_path, compile_package_path_with_metrics, compile_path,
     compile_path_with_metrics, compile_path_with_sources, compile_snapshot, compile_source,
-    validate_source,
+    validate_source, PackageCompileError, PackageCompileResult,
+};
+pub use source::{
+    DiagnosticCategory as SourceDiagnosticCategory, DiagnosticSeverity as SourceDiagnosticSeverity,
+    RelatedSourceSpan, SourceDiagnostic, SourceOrigin, SourcePosition, SourceSpan,
 };
 pub(crate) use types::Type;
 pub use workspace::{
@@ -109,7 +113,7 @@ impl ExecutableProgram {
 }
 
 pub(crate) fn ensure_source_path(path: &Path) -> lkjscript_core::Result<()> {
-    source::ensure_source_path_for_compiler(path)
+    source::ensure_source_path(path).map_err(source::SourceDiagnostic::into_core)
 }
 
 #[cfg(test)]

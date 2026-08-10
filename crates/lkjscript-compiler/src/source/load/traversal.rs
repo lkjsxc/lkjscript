@@ -32,6 +32,7 @@ pub(super) fn load_files_depth_first(
                 state.package_root,
                 state.installed_root,
                 &origin,
+                pending.span,
             )?;
             state.metrics.source_loading = state
                 .metrics

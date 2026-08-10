@@ -1,6 +1,6 @@
 use lkjscript_core::{CapabilityKind, Error, Result};
 
-use super::{model::Target, LockedTargetMemory, VerifiedCompilationPackage};
+use super::{model::Target, LockedTargetMemory, PackageResult, VerifiedCompilationPackage};
 
 #[derive(Clone)]
 pub(crate) struct CapturedPackageCompilation {
@@ -11,7 +11,9 @@ pub(crate) struct CapturedPackageCompilation {
 /// Capture the locked target needed to validate a later in-process memory plan.
 /// Snapshot compilation never returns to the file system or reconstructs this
 /// boundary fact from presentation attachments.
-pub(crate) fn capture(verified: &VerifiedCompilationPackage) -> Result<CapturedPackageCompilation> {
+pub(crate) fn capture(
+    verified: &VerifiedCompilationPackage,
+) -> PackageResult<CapturedPackageCompilation> {
     let package = verified
         .lock()
         .packages

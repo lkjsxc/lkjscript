@@ -3,60 +3,84 @@ use std::fmt;
 use lkjscript_core::Error;
 
 use super::{DiagnosticCategory, DiagnosticSeverity, RelatedSourceSpan, SourceOrigin, SourceSpan};
+
 /// Structured source-foundation diagnostic rendered by compiler entry points.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceDiagnostic {
     code: &'static str,
     severity: DiagnosticSeverity,
-    #[cfg(test)]
     category: DiagnosticCategory,
     message: String,
     origin: Box<SourceOrigin>,
-    primary_span: Box<SourceSpan>,
+    primary_span: Option<Box<SourceSpan>>,
     related: Vec<RelatedSourceSpan>,
 }
 
 impl SourceDiagnostic {
-    #[cfg(test)]
     pub const fn code(&self) -> &'static str {
         self.code
     }
-    #[cfg(test)]
+
+    pub const fn severity(&self) -> DiagnosticSeverity {
+        self.severity
+    }
+
     pub const fn category(&self) -> DiagnosticCategory {
         self.category
     }
-    #[cfg(test)]
+
     pub fn message(&self) -> &str {
         &self.message
     }
-    #[cfg(test)]
-    pub fn primary_span(&self) -> SourceSpan {
-        *self.primary_span
+
+    pub fn origin(&self) -> Option<&SourceOrigin> {
+        self.primary_span.as_ref().map(|_| self.origin.as_ref())
     }
-    #[cfg(test)]
+
+    pub fn primary_span(&self) -> Option<SourceSpan> {
+        self.primary_span.as_deref().copied()
+    }
+
     pub fn related_spans(&self) -> &[RelatedSourceSpan] {
         &self.related
     }
     pub fn render_human(&self) -> String {
-        let start = self.primary_span.start();
-        let mut rendered = format!(
-            "{}:{}:{}: {}[{}]: {}",
-            self.origin.logical_path(),
-            start.line(),
-            start.column(),
-            self.severity.as_str(),
-            self.code,
-            self.message
+        let mut rendered = self.primary_span.as_deref().map_or_else(
+            || {
+                format!(
+                    "{}[{}]: {}",
+                    self.severity.as_str(),
+                    self.code,
+                    self.message
+                )
+            },
+            |span| {
+                let start = span.start();
+                format!(
+                    "{}:{}:{}: {}[{}]: {}",
+                    self.origin.logical_path(),
+                    start.line(),
+                    start.column(),
+                    self.severity.as_str(),
+                    self.code,
+                    self.message
+                )
+            },
         );
         for related in &self.related {
-            let start = related.span.start();
-            rendered.push_str(&format!(
-                "\n  related {}:{}:{}: {}",
-                related.origin.logical_path(),
-                start.line(),
-                start.column(),
-                related.label
-            ));
+            match related.span {
+                Some(span) => {
+                    let start = span.start();
+                    rendered.push_str(&format!(
+                        "\n  related {}:{}:{}: {}",
+                        related.origin.logical_path(),
+                        start.line(),
+                        start.column(),
+                        related.label
+                    ));
+                }
+                None => rendered.push_str(&format!("\n  related: {}", related.label)),
+            }
         }
         rendered
     }
@@ -67,16 +91,17 @@ impl SourceDiagnostic {
         origin: SourceOrigin,
         primary_span: SourceSpan,
     ) -> Self {
-        #[cfg(not(test))]
-        let _ = category;
         Self {
             code,
             severity: DiagnosticSeverity::Error,
-            #[cfg(test)]
             category,
             message: message.into(),
             origin: Box::new(origin),
-            primary_span: Box::new(primary_span),
+            primary_span: if primary_span.is_zero() {
+                None
+            } else {
+                Some(Box::new(primary_span))
+            },
             related: Vec::new(),
         }
     }
@@ -89,7 +114,7 @@ impl SourceDiagnostic {
         self.related.push(RelatedSourceSpan {
             label: label.into(),
             origin,
-            span,
+            span: (!span.is_zero()).then_some(span),
         });
         self
     }

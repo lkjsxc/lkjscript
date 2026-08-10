@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use lkjscript_compiler::compile_path;
+use lkjscript_compiler::compile_package_path;
 use lkjscript_core::{DecodedInstruction, FunctionProto, Op, ValidatedChunk};
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let file = request(args)?;
     let source = PathBuf::from(file);
-    lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
-    let program = compile_path(&source).map_err(|error| error.to_string())?;
+    let program = compile_package_path(&source).map_err(|error| error.to_string())?;
     disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)
 }

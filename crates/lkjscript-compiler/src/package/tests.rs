@@ -70,6 +70,30 @@ fn canonical_lock_detects_every_source_change() {
 }
 
 #[test]
+fn required_package_compile_preserves_structured_source_failure() {
+    let root = fixture("structured-source-failure");
+    let entry = root.join("main.lkjscript");
+    let (lock_path, lock) = create_lock(&entry).unwrap();
+    fs::write(lock_path, lock).unwrap();
+    fs::write(&entry, "main/\n/wrong\n").unwrap();
+
+    let error = crate::compile_package_path(&entry).unwrap_err();
+    assert!(matches!(&error, crate::PackageCompileError::Source(_)));
+    if let crate::PackageCompileError::Source(diagnostic) = error {
+        assert_eq!(diagnostic.code(), "LKJ-SRC-UNMATCHED-MARKER");
+        assert_eq!(
+            diagnostic.origin().unwrap().logical_path(),
+            "main.lkjscript"
+        );
+        let primary = diagnostic.primary_span().unwrap();
+        assert_eq!(primary.start().line(), 2);
+        assert_eq!(primary.start().column(), 1);
+        assert_eq!(diagnostic.related_spans().len(), 1);
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn graph_returns_the_manifest_that_produced_the_root_lock() {
     let root = fixture("bound-root-manifest");
     let (lock, captured) = graph::build_with_root_manifest(&root).unwrap();
@@ -230,8 +254,12 @@ fn locked_capability_grants_are_checked_during_compilation() {
     let (lock_path, lock) = create_lock(&root).unwrap();
     fs::write(&lock_path, lock).unwrap();
 
-    let error = crate::compile_package_path(&entry).unwrap_err().to_string();
-    assert_eq!(error, "package does not grant required stdio capability");
+    let error = crate::compile_package_path(&entry).unwrap_err();
+    assert!(matches!(&error, crate::PackageCompileError::Package(_)));
+    assert_eq!(
+        error.to_string(),
+        "package: package does not grant required stdio capability"
+    );
 
     let manifest_path = root.join(MANIFEST_FILE);
     let mut manifest: Manifest =

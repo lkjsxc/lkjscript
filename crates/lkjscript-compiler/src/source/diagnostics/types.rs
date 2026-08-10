@@ -33,7 +33,6 @@ impl SourceSpan {
         self.start
     }
 
-    #[cfg(test)]
     pub const fn end(self) -> SourcePosition {
         self.end
     }
@@ -41,6 +40,15 @@ impl SourceSpan {
     #[cfg(test)]
     pub const fn byte_range(self) -> std::ops::Range<u64> {
         self.start.byte..self.end.byte
+    }
+
+    pub(crate) const fn is_zero(self) -> bool {
+        self.start.byte == 0
+            && self.start.line == 1
+            && self.start.column == 1
+            && self.end.byte == 0
+            && self.end.line == 1
+            && self.end.column == 1
     }
 
     pub(crate) fn zero() -> Self {
@@ -103,7 +111,6 @@ pub enum DiagnosticCategory {
 }
 
 impl DiagnosticCategory {
-    #[cfg(test)]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::SourceSyntax => "source-syntax",
@@ -117,5 +124,19 @@ impl DiagnosticCategory {
 pub struct RelatedSourceSpan {
     pub(super) label: String,
     pub(super) origin: SourceOrigin,
-    pub(super) span: SourceSpan,
+    pub(super) span: Option<SourceSpan>,
+}
+
+impl RelatedSourceSpan {
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    pub fn origin(&self) -> Option<&SourceOrigin> {
+        self.span.as_ref().map(|_| &self.origin)
+    }
+
+    pub const fn span(&self) -> Option<SourceSpan> {
+        self.span
+    }
 }

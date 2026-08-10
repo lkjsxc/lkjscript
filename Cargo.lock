@@ -57,6 +57,7 @@ dependencies = [
  "lkjscript-jit",
  "lkjscript-native",
  "lkjscript-vm",
+ "serde",
  "serde_json",
 ]
 

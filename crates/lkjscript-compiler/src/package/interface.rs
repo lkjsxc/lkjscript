@@ -1,8 +1,9 @@
 use lkjscript_contracts::ContractDigest;
-use lkjscript_core::{Error, Result};
+use lkjscript_core::Error;
 
 use super::analysis::ModuleAnalysis;
 use super::model::PackageMemoryInterface;
+use super::PackageResult as Result;
 
 pub(super) struct ModuleInterface {
     pub(super) exports: Vec<String>,
@@ -24,8 +25,7 @@ pub(super) fn build(
         .find(|file| file.origin.logical_path() == analysis.logical_id)
         .ok_or_else(|| Error::msg(format!("module source is absent: {id}")))?;
     let exports = if public {
-        crate::source::module_public_names(file)
-            .map_err(crate::source::SourceDiagnostic::into_core)?
+        crate::source::module_public_names(file)?
             .into_iter()
             .collect()
     } else {

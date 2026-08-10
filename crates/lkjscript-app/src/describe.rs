@@ -1,30 +1,7 @@
 use std::process::ExitCode;
 
 use lkjscript_contracts::{current_contracts, ContractSet};
-
-const LANGUAGE_FORMS: &[&str] = &[
-    "generic-enum",
-    "exhaustive-match",
-    "never",
-    "return",
-    "loop",
-    "while",
-    "break",
-    "continue",
-    "explicit-numeric-conversions",
-    "generic-Option",
-    "generic-Result",
-    "typed-errors",
-    "typed-holes",
-];
-const EXECUTION_PATH: &str = "baseline-native-with-vm-fallback";
-const UNSUPPORTED: &[&str] = &[
-    "collector-free production runtime",
-    "non-Linux host acceptance",
-    "remote package registry",
-    "remote artifact cache",
-    "direct WebAssembly component execution",
-];
+use serde::Serialize;
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let json = match args {
@@ -34,7 +11,7 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
     };
     let contracts = current_contracts().map_err(|error| error.to_string())?;
     if json {
-        println!("{}", json_description(&contracts));
+        println!("{}", json_description(&contracts)?);
     } else {
         print_human(&contracts);
     }
@@ -43,7 +20,7 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
 
 fn print_human(contracts: &ContractSet) {
     println!("compiler: lkjscript");
-    println!("target: linux-x86-64");
+    println!("contract-set: {}", description_digest(contracts).to_hex());
     println!("contracts:");
     for contract in contracts.iter() {
         println!(
@@ -52,62 +29,24 @@ fn print_human(contracts: &ContractSet) {
             contract.digest()
         );
     }
-    println!("language-forms: {}", LANGUAGE_FORMS.join(", "));
-    println!("execution-path: {EXECUTION_PATH}");
-    println!("package-capabilities: local-content-addressed");
-    println!("unsupported: {}", UNSUPPORTED.join(", "));
 }
 
-fn json_description(contracts: &ContractSet) -> String {
-    let digest = description_digest(contracts);
-    let mut output = String::from("{\"schema\":\"lkjscript.describe\",");
-    push_string(&mut output, "contract_digest", &digest.to_hex());
-    output.push(',');
-    push_string(&mut output, "compiler", "lkjscript");
-    output.push(',');
-    push_string(&mut output, "target", "linux-x86-64");
-    output.push_str(",\"contracts\":[");
-    for (index, contract) in contracts.iter().enumerate() {
-        if index != 0 {
-            output.push(',');
-        }
-        output.push('{');
-        push_string(&mut output, "name", contract.descriptor().name.as_str());
-        output.push(',');
-        push_string(&mut output, "digest", &contract.digest().to_hex());
-        output.push('}');
-    }
-    output.push(']');
-    push_array(&mut output, "language_forms", LANGUAGE_FORMS);
-    output.push(',');
-    push_string(&mut output, "execution_path", EXECUTION_PATH);
-    push_array(&mut output, "unsupported", UNSUPPORTED);
-    output.push('}');
-    output
-}
-
-fn push_array(output: &mut String, name: &str, values: &[&str]) {
-    output.push(',');
-    output.push('"');
-    output.push_str(name);
-    output.push_str("\":[");
-    for (index, value) in values.iter().enumerate() {
-        if index != 0 {
-            output.push(',');
-        }
-        output.push('"');
-        output.push_str(value);
-        output.push('"');
-    }
-    output.push(']');
-}
-
-fn push_string(output: &mut String, name: &str, value: &str) {
-    output.push('"');
-    output.push_str(name);
-    output.push_str("\":\"");
-    output.push_str(value);
-    output.push('"');
+fn json_description(contracts: &ContractSet) -> Result<String, String> {
+    let contract_digest = description_digest(contracts).to_hex();
+    let contracts = contracts
+        .iter()
+        .map(|contract| ContractDescription {
+            name: contract.descriptor().name.as_str(),
+            digest: contract.digest().to_hex(),
+        })
+        .collect();
+    serde_json::to_string(&Description {
+        schema: "lkjscript.describe",
+        compiler: "lkjscript",
+        contract_digest,
+        contracts,
+    })
+    .map_err(|error| format!("encode lkjscript.describe result: {error}"))
 }
 
 fn description_digest(contracts: &ContractSet) -> lkjscript_contracts::ContractDigest {
@@ -120,22 +59,52 @@ fn description_digest(contracts: &ContractSet) -> lkjscript_contracts::ContractD
     lkjscript_contracts::ContractDigest::from_bytes(lkjscript_contracts::sha256(&bytes))
 }
 
+#[derive(Serialize)]
+struct Description<'a> {
+    schema: &'static str,
+    compiler: &'static str,
+    contract_digest: String,
+    contracts: Vec<ContractDescription<'a>>,
+}
+
+#[derive(Serialize)]
+struct ContractDescription<'a> {
+    name: &'a str,
+    digest: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn json_description_is_deterministic_and_has_full_digests() {
+    fn json_description_is_deterministic_and_contains_only_derived_contract_facts() {
         let result = current_contracts();
         assert!(result.is_ok());
         let contracts = result.unwrap_or_default();
         let first = json_description(&contracts);
-        assert_eq!(first, json_description(&contracts));
-        assert!(first.contains("\"schema\":\"lkjscript.describe\""));
-        assert!(!first.contains("platform_revision"));
-        assert!(first.contains("\"contract_digest\":\""));
-        assert!(contracts
-            .iter()
-            .all(|contract| first.contains(&contract.digest().to_hex())));
+        assert!(first.is_ok());
+        let first = first.unwrap_or_default();
+        assert_eq!(Ok(first.clone()), json_description(&contracts));
+        let decoded: serde_json::Value = serde_json::from_str(&first).unwrap_or_default();
+        assert_eq!(decoded["schema"].as_str(), Some("lkjscript.describe"));
+        assert_eq!(decoded["compiler"].as_str(), Some("lkjscript"));
+        assert_eq!(
+            decoded["contracts"].as_array().map(Vec::len),
+            Some(contracts.iter().count())
+        );
+        for removed in [
+            "target",
+            "language_forms",
+            "execution_path",
+            "unsupported",
+            "package_capabilities",
+            "platform_revision",
+        ] {
+            assert!(
+                decoded.get(removed).is_none(),
+                "stale field remains: {removed}"
+            );
+        }
     }
 }

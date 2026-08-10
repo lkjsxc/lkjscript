@@ -17,9 +17,8 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
             println!("locked {}", path.display());
         }
         "check" => {
-            let (path, _) = lkjscript_compiler::package::verify(Path::new(root))
+            lkjscript_compiler::package::verify(Path::new(root))
                 .map_err(|error| error.to_string())?;
-            println!("checked {}", path.display());
         }
         _ => return Err("package action must be lock or check".into()),
     }

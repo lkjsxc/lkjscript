@@ -1,4 +1,5 @@
 use super::*;
+use crate::source::{SourceDiagnostic, SourceSpan};
 
 #[test]
 fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
@@ -25,16 +26,60 @@ fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
 fn marker_diagnostics_have_stable_schema_spans_and_renderings() {
     let mismatched = validate("main/\n/wrong\n", "bad.lkjscript").expect_err("mismatch");
     assert_eq!(mismatched.code(), "LKJ-SRC-UNMATCHED-MARKER");
-    assert_eq!(mismatched.primary_span().start().line(), 2);
+    assert_eq!(
+        mismatched
+            .primary_span()
+            .expect("mismatch location")
+            .start()
+            .line(),
+        2
+    );
     assert_eq!(mismatched.related_spans().len(), 1);
     assert!(mismatched.render_human().contains("expected /main"));
     let unexpected = validate("/main\n", "bad.lkjscript").expect_err("unexpected close");
     assert_eq!(unexpected.code(), "LKJ-SRC-UNMATCHED-MARKER");
-    assert_eq!(unexpected.primary_span().byte_range(), 0..5);
+    assert_eq!(
+        unexpected
+            .primary_span()
+            .expect("unexpected close location")
+            .byte_range(),
+        0..5
+    );
 
     let unclosed = validate("main/\n", "bad.lkjscript").expect_err("unclosed open");
     assert_eq!(unclosed.code(), "LKJ-SRC-UNMATCHED-MARKER");
-    assert_eq!(unclosed.primary_span().start().line(), 1);
+    assert_eq!(
+        unclosed
+            .primary_span()
+            .expect("unclosed marker location")
+            .start()
+            .line(),
+        1
+    );
+}
+
+#[test]
+fn locationless_source_failures_do_not_fabricate_a_range() {
+    let diagnostic = SourceDiagnostic::loading(
+        SourceOrigin::in_memory("requested.lkjscript"),
+        "source loading failed",
+    )
+    .with_related(
+        "related source without a location",
+        SourceOrigin::in_memory("related.lkjscript"),
+        SourceSpan::zero(),
+    );
+    assert_eq!(diagnostic.origin(), None);
+    assert_eq!(diagnostic.primary_span(), None);
+    assert_eq!(diagnostic.related_spans()[0].origin(), None);
+    assert_eq!(diagnostic.related_spans()[0].span(), None);
+    assert_eq!(
+        diagnostic.render_human(),
+        concat!(
+            "error[LKJ-SRC-LOAD]: source loading failed\n",
+            "  related: related source without a location"
+        )
+    );
 }
 
 #[test]

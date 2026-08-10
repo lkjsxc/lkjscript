@@ -66,10 +66,47 @@ fn loader_cycle_diagnostic_retains_deterministic_related_import_spans() -> std::
     fs::write(&second, exact_import("main.lkjscript", "cycle"))?;
     let error = load(&root).expect_err("import cycle");
     assert_eq!(error.code(), "LKJ-SRC-LOAD");
-    assert_eq!(error.primary_span().start().line(), 2);
+    assert_eq!(
+        error
+            .primary_span()
+            .expect("cycle import location")
+            .start()
+            .line(),
+        2
+    );
     assert_eq!(error.related_spans().len(), 2);
     let rendered = error.render_human();
     assert_eq!(rendered.matches("earlier import in cycle").count(), 2);
+    Ok(())
+}
+
+#[test]
+fn missing_import_diagnostic_points_to_the_import_site() -> std::io::Result<()> {
+    let directory = TempDir::new("missing-import")?;
+    let root = directory.0.join("main.lkjscript");
+    fs::write(
+        &root,
+        format!(
+            "{}{}",
+            exact_import("missing.lkjscript", "missing"),
+            unit_main("unit")
+        ),
+    )?;
+
+    let error = load(&root).expect_err("missing import");
+    assert_eq!(error.code(), "LKJ-SRC-LOAD");
+    assert_eq!(
+        error.origin().expect("import source origin").logical_path(),
+        "main.lkjscript"
+    );
+    assert_eq!(
+        error
+            .primary_span()
+            .expect("import site location")
+            .start()
+            .line(),
+        2
+    );
     Ok(())
 }
 

@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use lkjscript_core::{Error, Result};
+use lkjscript_core::Error;
+
+use super::PackageResult as Result;
 
 pub(super) struct ModuleAnalysis {
     pub(super) logical_id: String,
@@ -11,8 +13,7 @@ pub(super) struct ModuleAnalysis {
 }
 
 pub(super) fn module(root: &Path, id: &str) -> Result<ModuleAnalysis> {
-    let source =
-        crate::source::load(&root.join(id)).map_err(crate::source::SourceDiagnostic::into_core)?;
+    let source = crate::source::load(&root.join(id))?;
     let root_file = source
         .files()
         .iter()
@@ -20,9 +21,7 @@ pub(super) fn module(root: &Path, id: &str) -> Result<ModuleAnalysis> {
         .ok_or_else(|| Error::msg(format!("loaded package module is absent: {id}")))?;
     let logical_id = root_file.origin.logical_path().into();
     let source_sha256 = root_file.exact_source_sha256;
-    let projection = source
-        .module_scoped_projection()
-        .map_err(crate::source::SourceDiagnostic::into_core)?;
+    let projection = source.module_scoped_projection()?;
     let hir = crate::analyze::analyze_interface_program(&projection)?;
     let memory_plan = crate::memory_plan::verify_hir_memory(&hir)?.plan().clone();
     Ok(ModuleAnalysis {
