@@ -502,6 +502,176 @@ pub(crate) struct ExpressionControlContext {
 }
 
 impl Expr {
+    pub(crate) fn try_child(&self, ordinal: usize) -> lkjscript_core::Result<&Expr> {
+        let mut next_ordinal = Some(0_usize);
+        let mut selected = None;
+        for_each_kind_child(&self.kind, &mut |child| {
+            if next_ordinal == Some(ordinal) {
+                selected = Some(child);
+            }
+            next_ordinal = next_ordinal.and_then(|value| value.checked_add(1));
+        });
+        if next_ordinal.is_none() {
+            return Err(lkjscript_core::Error::host(
+                "HIR child lookup ordinal overflow",
+            ));
+        }
+        selected.ok_or_else(|| lkjscript_core::Error::msg("HIR child lookup ordinal is stale"))
+    }
+
+    pub(crate) fn try_reconstructed_type_with_child(
+        &self,
+        ordinal: usize,
+        child_type: &Type,
+    ) -> lkjscript_core::Result<Type> {
+        self.try_child(ordinal)?;
+        if *child_type == Type::Never && !divergent_child_is_admissible(&self.kind, ordinal) {
+            return Err(lkjscript_core::Error::msg(
+                "HIR sequence movement put divergent control where a value is required",
+            ));
+        }
+        match &self.kind {
+            ExprKind::Do(values) => {
+                if ordinal.checked_add(1) == Some(values.len()) {
+                    Ok(child_type.clone())
+                } else {
+                    values
+                        .last()
+                        .map_or_else(|| Ok(Type::Unit), |value| Ok(value.ty.clone()))
+                }
+            }
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                let then_type = if ordinal == 1 {
+                    child_type
+                } else {
+                    &then_branch.ty
+                };
+                let else_type = if ordinal == 2 {
+                    child_type
+                } else {
+                    &else_branch.ty
+                };
+                Type::join_control(then_type, else_type).ok_or_else(|| {
+                    lkjscript_core::Error::msg(
+                        "HIR sequence movement made conditional branches incompatible",
+                    )
+                })
+            }
+            ExprKind::Let { bindings, .. } if ordinal == bindings.len() => Ok(child_type.clone()),
+            ExprKind::MutableLocal { .. } if ordinal == 1 => Ok(child_type.clone()),
+            ExprKind::Match { arms, .. } if ordinal > 0 => {
+                let mut result = Type::Never;
+                for (index, arm) in arms.iter().enumerate() {
+                    let arm_type = if index.checked_add(1) == Some(ordinal) {
+                        child_type
+                    } else {
+                        &arm.ty
+                    };
+                    result = Type::join_control(&result, arm_type).ok_or_else(|| {
+                        lkjscript_core::Error::msg(
+                            "HIR sequence movement made match arms incompatible",
+                        )
+                    })?;
+                }
+                Ok(result)
+            }
+            _ => Ok(self.ty.clone()),
+        }
+    }
+
+    pub(crate) fn try_child_mut(&mut self, ordinal: usize) -> lkjscript_core::Result<&mut Expr> {
+        let child = match &mut self.kind {
+            ExprKind::Call { args, .. }
+            | ExprKind::Operation { args, .. }
+            | ExprKind::Do(args)
+            | ExprKind::Loop { body: args, .. }
+            | ExprKind::ProductValue { fields: args, .. }
+            | ExprKind::EnumValue { fields: args, .. } => args.get_mut(ordinal),
+            ExprKind::While {
+                condition, body, ..
+            } => {
+                if ordinal == 0 {
+                    Some(condition.as_mut())
+                } else {
+                    ordinal.checked_sub(1).and_then(|index| body.get_mut(index))
+                }
+            }
+            ExprKind::Match {
+                scrutinee, arms, ..
+            } => {
+                if ordinal == 0 {
+                    Some(scrutinee.as_mut())
+                } else {
+                    ordinal.checked_sub(1).and_then(|index| arms.get_mut(index))
+                }
+            }
+            ExprKind::F64FromI64Exact(value)
+            | ExprKind::F64FromI64Rounded(value)
+            | ExprKind::I64FromF64Exact(value)
+            | ExprKind::I64FromF64Trunc(value)
+            | ExprKind::Return { value }
+            | ExprKind::Break { value, .. }
+            | ExprKind::Trap { value }
+            | ExprKind::Exit { code: value }
+            | ExprKind::SetLocal { value, .. }
+            | ExprKind::ProductField { value, .. }
+            | ExprKind::EnumIsVariant { value, .. }
+            | ExprKind::EnumField { value, .. }
+            | ExprKind::EnumUnwrap { value, .. } => (ordinal == 0).then_some(value.as_mut()),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => match ordinal {
+                0 => Some(condition.as_mut()),
+                1 => Some(then_branch.as_mut()),
+                2 => Some(else_branch.as_mut()),
+                _ => None,
+            },
+            ExprKind::Let { bindings, body } => {
+                let binding_count = bindings.len();
+                if ordinal < binding_count {
+                    Some(&mut bindings[ordinal].value)
+                } else if ordinal == binding_count {
+                    Some(body.as_mut())
+                } else {
+                    None
+                }
+            }
+            ExprKind::MutableLocal { initial, body, .. }
+            | ExprKind::WithProductField {
+                value: initial,
+                replacement: body,
+                ..
+            } => match ordinal {
+                0 => Some(initial.as_mut()),
+                1 => Some(body.as_mut()),
+                _ => None,
+            },
+            ExprKind::Hole
+            | ExprKind::UnresolvedValueReference { .. }
+            | ExprKind::LitI64(_)
+            | ExprKind::LitF64(_)
+            | ExprKind::LitBool(_)
+            | ExprKind::LitUnit
+            | ExprKind::EmptyList
+            | ExprKind::LitStr(_)
+            | ExprKind::LitBytes(_)
+            | ExprKind::Load(_)
+            | ExprKind::Move { .. }
+            | ExprKind::Borrow { .. }
+            | ExprKind::BorrowBytes { .. }
+            | ExprKind::Continue { .. }
+            | ExprKind::MatchUnreachable { .. }
+            | ExprKind::QuoteSymbol(_) => None,
+        };
+        child.ok_or_else(|| lkjscript_core::Error::msg("HIR sequence movement child path is stale"))
+    }
+
     pub(crate) fn try_at_preorder(&self, target: u64) -> lkjscript_core::Result<Option<&Self>> {
         let mut pending = Vec::new();
         pending

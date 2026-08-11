@@ -46,8 +46,11 @@ arms use flat `PatternDraft` trees; named payload bindings receive stable worksp
 compiler-only scrutinee and projection storage remains hidden. Transactions can delete callables and
 whole user product/enum declarations atomically; owned members and target implementations cascade,
 independent surviving dependents block, private
-dense identities compact, and public survivor identities remain stable. The complete immutable
-`WorkspaceSnapshot` derives compiler HIR directly, without rendering or parsing source. Imported and
+dense identities compact, and public survivor identities remain stable. A narrow
+`MoveSequenceChild` transaction changes one sequence's evaluation order by stable child and sibling
+identities while preserving every surviving subtree identity; it does not rebuild source or expose a
+path/index editing API. The complete immutable `WorkspaceSnapshot` derives compiler HIR directly,
+without rendering or parsing source. Imported and
 programmatically constructed programs use the same canonical match
 checker/lowering, semantic authority, query/index model, completeness gate, ownership checker, and
 compiler boundary.

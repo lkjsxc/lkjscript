@@ -308,8 +308,24 @@ binding, plan, slot, and place IDs, relocates private enum/product/implementatio
 and preserves survivor public entity and node identities. Stable product/member semantic identities
 and enum/variant/field/layout identities are not compacted. Deleted identities tombstone, old
 snapshots remain valid, later same-name recreation receives fresh generations, and same-batch
-same-name recreation is rejected. Deleting `main` still yields `MissingEntryPoint`. Public movement
-is not implemented.
+same-name recreation is rejected. Deleting `main` still yields `MissingEntryPoint`.
+
+`MoveSequenceChild` now reorders one live direct child inside one live semantic sequence by stable
+sequence, child, and optional sibling-anchor identities; `None` appends, removal precedes insertion,
+and semantic no-ops reject without publication. One transaction-local block permutation maps the
+sequence plus every moved or shifted child-subtree node to its new private address and composes with
+ordinary survivor/entity reconciliation, so ancestors, holes, unresolved references, and all other
+survivors retain identity through preorder or callable-root relocation without allocating or
+tombstoning public identities. The semantic diff reports one stable sequence/child movement with old
+and final `u64` ordinals and emits no replacement, descendant, reference, or call noise. Full type,
+effect, index, incomplete-context, and complete HIR ownership/cleanup validation remains canonical.
+One move may batch with unrelated rename, creation, or deletion work; multiple moves and structural
+edits in the same callable are rejected in this first vertical. Old snapshots preserve their old
+order. Containment and projection expose the new order, incomplete snapshots remain blocked before
+HIR derivation, and complete source-free or post-import snapshots compile directly. Focused
+source-free/imported final-order and bytecode/VM evidence agrees, source loading and parsing remain
+zero after the semantic edit, and eligible moved snapshots execute once through baseline native or
+the unchanged VM after a pre-entry decline. Cross-parent and broader movement remain absent.
 
 Completeness blockers distinguish missing entry point, missing body with declaration/hole/type,
 typed hole with hole/type/owner/context, and unresolved value reference with node/requested name/type/
@@ -445,7 +461,8 @@ build inputs.
   replacement, owner-deletion, compile-rejection, and execution behavior. Text import still fails
   fast on unresolved source names. Unresolved moves, borrows, calls, type names, nominal members,
   patterns, and imports; ambiguity, conflict, and parser recovery; direct nominal-member mutation;
-  and explicit public movement remain gaps. Generic ownership/reference instantiation and forwarding
+  and cross-parent, entity, declaration, match-arm, branch, loop-body, callable, and generic public
+  movement remain gaps. Generic ownership/reference instantiation and forwarding
   a caller's unresolved type parameter remain narrow explicit unsupported cases.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.

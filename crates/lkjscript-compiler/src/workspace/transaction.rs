@@ -206,6 +206,11 @@ pub enum Edit {
         target: NodeId,
         draft: ExpressionDraft,
     },
+    MoveSequenceChild {
+        sequence: NodeId,
+        child: NodeId,
+        before: Option<NodeId>,
+    },
     IntroduceHole {
         target: NodeId,
         goal: String,
@@ -263,6 +268,12 @@ pub enum SemanticDiffEntry {
         node: NodeId,
         old_kind: NodeKind,
         new_kind: NodeKind,
+    },
+    SequenceChildMoved {
+        sequence: NodeId,
+        child: NodeId,
+        old_ordinal: u64,
+        new_ordinal: u64,
     },
     DescendantCreated {
         parent: SemanticOwner,
@@ -395,6 +406,21 @@ struct StructuralAction {
     replacement: Expr,
 }
 
+struct SequenceMovement {
+    sequence: NodeId,
+    child: NodeId,
+    address: NodeAddress,
+    path: Vec<usize>,
+    old_children: Vec<NodeId>,
+    final_old_ordinals: Vec<usize>,
+    old_index: usize,
+    new_index: usize,
+    old_ordinal: u64,
+    new_ordinal: u64,
+    sequence_type: Type,
+    ancestor_types: Vec<Type>,
+}
+
 struct NewHole {
     address: NodeAddress,
     kind: HoleKind,
@@ -449,6 +475,7 @@ fn stage(
     if refinements_only {
         return stage_hole_refinements(base, revision, transaction.edits, allocator);
     }
+    let mut movement = preflight_sequence_movement(base, &transaction.edits)?;
     #[cfg(test)]
     let clone_started = std::time::Instant::now();
     let mut program = try_clone_program(base.program.as_ref())?;
@@ -467,7 +494,10 @@ fn stage(
     #[cfg(test)]
     let edit_staging_started = std::time::Instant::now();
     let deletions = preflight_deletions(base, &program, &transaction.edits)?;
-    preflight_structural_edits(base, &transaction.edits)?;
+    preflight_structural_edits(base, &transaction.edits, movement.as_ref())?;
+    if let Some(movement) = movement.as_ref() {
+        reject_deleted_root_edit(&deletions.callable_roots, movement.address.root)?;
+    }
     let deleted_entities = &deletions.entities;
     let deleted_roots = &deletions.callable_roots;
     let deleted_bindings = &deletions.callable_bindings;
@@ -678,6 +708,7 @@ fn stage(
                     replacement: lowered.expression,
                 });
             }
+            Edit::MoveSequenceChild { .. } => {}
             Edit::IntroduceHole { target, goal } => {
                 if goal.is_empty() {
                     return Err(WorkspaceError::InvalidTransaction(Arc::from(
@@ -866,8 +897,17 @@ fn stage(
     for action in &structural {
         replace_expression(&mut program, action.address, &action.replacement)?;
     }
-    if !structural.is_empty() && !program.match_plans.is_empty() {
-        refresh_semantic_match_types(&mut program, &structural)?;
+    if let Some(movement) = movement.as_ref() {
+        apply_sequence_movement(&mut program, movement)?;
+        entries.push(SemanticDiffEntry::SequenceChildMoved {
+            sequence: movement.sequence,
+            child: movement.child,
+            old_ordinal: movement.old_ordinal,
+            new_ordinal: movement.new_ordinal,
+        });
+    }
+    if (!structural.is_empty() || movement.is_some()) && !program.match_plans.is_empty() {
+        refresh_semantic_match_types(&mut program, &structural, movement.as_ref())?;
     }
 
     reject_surviving_deleted_dependencies(base, &program, &deletions)?;
@@ -912,6 +952,12 @@ fn stage(
     }
     remap_forced_entity_addresses(&compaction, &mut forced_entities)?;
     remap_staged_addresses(&compaction, &mut new_entities, &mut new_holes)?;
+    if let Some(movement) = movement.as_mut() {
+        movement.address.root = remap_entity_address(&compaction, movement.address.root)
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("moved sequence owner was removed"))
+            })?;
+    }
     install_survivor_entity_relocations(base, &program, &compaction, &mut forced_entities)?;
     reserve_new_entity_identities(base, allocator, &mut forced_entities, &new_entities)?;
 
@@ -965,7 +1011,13 @@ fn stage(
             0
         };
     });
-    let forced = force_surviving_nodes(base, &canonical, &forced_entities, &structural)?;
+    let forced = force_surviving_nodes(
+        base,
+        &canonical,
+        &forced_entities,
+        &structural,
+        movement.as_ref(),
+    )?;
     #[cfg(test)]
     let reconciliation_started = std::time::Instant::now();
     #[cfg(test)]
@@ -1561,9 +1613,288 @@ fn reject_deleted_root_edit(
     }
 }
 
+fn preflight_sequence_movement(
+    base: &WorkspaceSnapshot,
+    edits: &[Edit],
+) -> Result<Option<SequenceMovement>, WorkspaceError> {
+    let mut requested = None;
+    for edit in edits {
+        let Edit::MoveSequenceChild {
+            sequence,
+            child,
+            before,
+        } = edit
+        else {
+            continue;
+        };
+        if requested.replace((*sequence, *child, *before)).is_some() {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "a transaction may contain only one sequence movement",
+            )));
+        }
+    }
+    let Some((sequence, child, before)) = requested else {
+        return Ok(None);
+    };
+
+    let sequence_header = base.workspace_node(sequence)?;
+    if sequence_header.kind != NodeKind::Sequence {
+        return Err(WorkspaceError::WrongEntityKind {
+            operation: Arc::from("move-sequence-child"),
+            expected: Arc::from("sequence node"),
+            actual: SemanticKind::Node(sequence_header.kind),
+        });
+    }
+    let child_header = base.workspace_node(child)?;
+    if child_header.owner != SemanticOwner::Node(sequence) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "moved node is not a direct child of the selected sequence",
+        )));
+    }
+    if let Some(anchor) = before {
+        let anchor_header = base.workspace_node(anchor)?;
+        if anchor_header.owner != SemanticOwner::Node(sequence) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "movement anchor is not a direct child of the selected sequence",
+            )));
+        }
+        if anchor == child {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "a sequence child cannot be moved before itself",
+            )));
+        }
+    }
+
+    let indexed_children = base
+        .indexes
+        .node_children
+        .get(&sequence)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("sequence children")))?;
+    let mut old_children = Vec::new();
+    old_children
+        .try_reserve(indexed_children.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("sequence movement allocation failed")))?;
+    old_children.extend(indexed_children.iter().copied());
+    let old_index = old_children
+        .iter()
+        .position(|candidate| *candidate == child)
+        .ok_or_else(|| {
+            WorkspaceError::InvalidTransaction(Arc::from(
+                "moved node is not a direct child of the selected sequence",
+            ))
+        })?;
+    let anchor_index = before
+        .map(|anchor| {
+            old_children
+                .iter()
+                .position(|candidate| *candidate == anchor)
+                .ok_or_else(|| {
+                    WorkspaceError::InvalidTransaction(Arc::from(
+                        "movement anchor is not a direct child of the selected sequence",
+                    ))
+                })
+        })
+        .transpose()?;
+
+    let mut final_old_ordinals = Vec::new();
+    final_old_ordinals
+        .try_reserve(old_children.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("sequence order allocation failed")))?;
+    final_old_ordinals.extend(0..old_children.len());
+    final_old_ordinals.remove(old_index);
+    let new_index = if let Some(anchor_index) = anchor_index {
+        final_old_ordinals
+            .iter()
+            .position(|ordinal| *ordinal == anchor_index)
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("sequence movement anchor was removed"))
+            })?
+    } else {
+        final_old_ordinals.len()
+    };
+    final_old_ordinals.insert(new_index, old_index);
+    if final_old_ordinals.iter().copied().eq(0..old_children.len()) {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "sequence movement would not change semantic order",
+        )));
+    }
+
+    let sequence_index = base
+        .indexes
+        .node_lookup
+        .get(&sequence)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("sequence")))?;
+    let address = base.indexes.node_addresses[sequence_index];
+    let (ancestor_nodes, path) = movement_ancestry(base, sequence)?;
+    let root = expression_root(&base.program, address.root)?;
+    let mut current = root;
+    let mut ancestors = Vec::new();
+    ancestors
+        .try_reserve(path.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("sequence ancestry allocation failed")))?;
+    for (ordinal, expected_node) in path.iter().copied().zip(&ancestor_nodes) {
+        let child_expression = current
+            .try_child(ordinal)
+            .map_err(WorkspaceError::from_core)?;
+        ancestors.push((current, ordinal, *expected_node));
+        current = child_expression;
+    }
+    let ExprKind::Do(values) = &current.kind else {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "selected sequence identity does not resolve to sequence semantics",
+        )));
+    };
+    if values.len() != old_children.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "selected sequence child index is inconsistent",
+        )));
+    }
+    for (new_position, old_position) in final_old_ordinals.iter().copied().enumerate() {
+        let value = values.get(old_position).ok_or_else(|| {
+            WorkspaceError::Validation(Arc::from("sequence movement order is stale"))
+        })?;
+        if value.ty == Type::Never && new_position.checked_add(1) != Some(values.len()) {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "sequence movement leaves an expression after a divergent expression",
+            )));
+        }
+    }
+    let final_old_ordinal = *final_old_ordinals
+        .last()
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("sequence movement has no child")))?;
+    let sequence_type = values
+        .get(final_old_ordinal)
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("sequence result is stale")))?
+        .ty
+        .clone();
+
+    let mut propagated_node = sequence;
+    let mut propagated = sequence_type.clone();
+    let mut reversed_ancestor_types = Vec::new();
+    reversed_ancestor_types
+        .try_reserve(ancestors.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("sequence type allocation failed")))?;
+    for (ancestor, ordinal, node) in ancestors.into_iter().rev() {
+        if !movement_child_result_is_derived(ancestor, ordinal) {
+            require_movement_expected_type(base, propagated_node, &propagated)?;
+        }
+        propagated = ancestor
+            .try_reconstructed_type_with_child(ordinal, &propagated)
+            .map_err(WorkspaceError::from_core)?;
+        propagated_node = node;
+        reversed_ancestor_types.push(propagated.clone());
+    }
+    require_movement_expected_type(base, propagated_node, &propagated)?;
+    reversed_ancestor_types.reverse();
+
+    Ok(Some(SequenceMovement {
+        sequence,
+        child,
+        address,
+        path,
+        old_children,
+        final_old_ordinals,
+        old_index,
+        new_index,
+        old_ordinal: u64::try_from(old_index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("sequence ordinal exceeds u64")))?,
+        new_ordinal: u64::try_from(new_index)
+            .map_err(|_| WorkspaceError::Host(Arc::from("sequence ordinal exceeds u64")))?,
+        sequence_type,
+        ancestor_types: reversed_ancestor_types,
+    }))
+}
+
+fn movement_ancestry(
+    base: &WorkspaceSnapshot,
+    sequence: NodeId,
+) -> Result<(Vec<NodeId>, Vec<usize>), WorkspaceError> {
+    let mut reverse_ancestors = Vec::new();
+    let mut reverse_path = Vec::new();
+    let mut current = sequence;
+    loop {
+        let index = base
+            .indexes
+            .node_lookup
+            .get(&current)
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("sequence ancestry")))?;
+        match base.indexes.nodes[index].owner {
+            SemanticOwner::Entity(_) => break,
+            SemanticOwner::Node(parent) => {
+                reverse_ancestors.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("sequence ancestry allocation failed"))
+                })?;
+                reverse_path.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("sequence path allocation failed"))
+                })?;
+                reverse_ancestors.push(parent);
+                reverse_path.push(
+                    usize::try_from(base.indexes.node_keys[index].ordinal).map_err(|_| {
+                        WorkspaceError::Host(Arc::from(
+                            "sequence child ordinal is not host-addressable",
+                        ))
+                    })?,
+                );
+                current = parent;
+            }
+        }
+    }
+    reverse_ancestors.reverse();
+    reverse_path.reverse();
+    Ok((reverse_ancestors, reverse_path))
+}
+
+fn movement_child_result_is_derived(parent: &Expr, ordinal: usize) -> bool {
+    match &parent.kind {
+        ExprKind::Do(values) => ordinal.checked_add(1) == Some(values.len()),
+        ExprKind::If { .. } => matches!(ordinal, 1 | 2),
+        ExprKind::Let { bindings, .. } => ordinal == bindings.len(),
+        ExprKind::MutableLocal { .. } => ordinal == 1,
+        ExprKind::Match { .. } => ordinal > 0,
+        _ => false,
+    }
+}
+
+fn require_movement_expected_type(
+    base: &WorkspaceSnapshot,
+    node: NodeId,
+    actual: &Type,
+) -> Result<(), WorkspaceError> {
+    let index = base
+        .indexes
+        .node_lookup
+        .get(&node)
+        .copied()
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("movement type context")))?;
+    let Some(expected) = base.indexes.node_expected_types[index].as_ref() else {
+        return Ok(());
+    };
+    if Type::join_control(actual, expected) == Some(expected.clone()) {
+        return Ok(());
+    }
+    let owner = base.indexes.node_enclosing_entities[index];
+    Err(WorkspaceError::TypeMismatch {
+        expected: Box::new(super::types::view(
+            &base.program,
+            &base.indexes,
+            expected,
+            Some(owner),
+        )?),
+        actual: Box::new(super::types::view(
+            &base.program,
+            &base.indexes,
+            actual,
+            Some(owner),
+        )?),
+    })
+}
+
 fn preflight_structural_edits(
     base: &WorkspaceSnapshot,
     edits: &[Edit],
+    movement: Option<&SequenceMovement>,
 ) -> Result<(), WorkspaceError> {
     let mut targets = Vec::new();
     targets
@@ -1580,6 +1911,19 @@ fn preflight_structural_edits(
         };
         if let Some(target) = target {
             ensure_structural_nonoverlapping(base, &mut targets, target)?;
+            if let Some(movement) = movement {
+                let index = base
+                    .indexes
+                    .node_lookup
+                    .get(&target)
+                    .copied()
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node")))?;
+                if base.indexes.node_addresses[index].root == movement.address.root {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "sequence movement cannot be combined with a structural edit in the same callable",
+                    )));
+                }
+            }
         }
     }
     for edit in edits {
@@ -1589,8 +1933,15 @@ fn preflight_structural_edits(
         if hole.0.namespace() != base.namespace {
             return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
         }
-        if !base.holes.iter().any(|record| record.state.id == *hole) {
-            return Err(WorkspaceError::StaleIdentity(Arc::from("hole")));
+        let record = base
+            .holes
+            .iter()
+            .find(|record| record.state.id == *hole)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
+        if movement.is_some_and(|movement| movement.address.root == record.address.root) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "sequence movement cannot refine a hole in the same callable transaction",
+            )));
         }
         for target in &targets {
             if *target == hole.0 || node_is_ancestor(base, *target, hole.0)? {
@@ -2422,6 +2773,7 @@ fn force_surviving_nodes(
     canonical: &SnapshotIndexes,
     forced_entities: &HashMap<EntityAddress, EntityId>,
     structural: &[StructuralAction],
+    movement: Option<&SequenceMovement>,
 ) -> Result<HashMap<NodeAddress, NodeId>, WorkspaceError> {
     let mut old_by_key = HashMap::new();
     old_by_key
@@ -2447,6 +2799,9 @@ fn force_surviving_nodes(
     forced
         .try_reserve(base.indexes.nodes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("forced node allocation failed")))?;
+    if let Some(movement) = movement {
+        install_sequence_movement_node_relocations(base, canonical, movement, &mut forced)?;
+    }
     for index in 0..canonical.nodes.len() {
         let header = &canonical.nodes[index];
         let stable_owner = match header.owner {
@@ -2463,14 +2818,19 @@ fn force_surviving_nodes(
                 .flatten()
                 .map(SemanticOwner::Node),
         };
-        let old = stable_owner.and_then(|owner| {
-            old_by_key
-                .get(&NodeKey {
-                    owner,
-                    ordinal: canonical.node_keys[index].ordinal,
+        let old = forced
+            .get(&canonical.node_addresses[index])
+            .copied()
+            .or_else(|| {
+                stable_owner.and_then(|owner| {
+                    old_by_key
+                        .get(&NodeKey {
+                            owner,
+                            ordinal: canonical.node_keys[index].ordinal,
+                        })
+                        .copied()
                 })
-                .copied()
-        });
+            });
         if let Some(old) = old {
             insert_forced_node(&mut forced, canonical.node_addresses[index], old)?;
             canonical_to_old.insert(header.id, (!targets.contains(&old)).then_some(old));
@@ -2479,6 +2839,161 @@ fn force_surviving_nodes(
         }
     }
     Ok(forced)
+}
+
+fn install_sequence_movement_node_relocations(
+    base: &WorkspaceSnapshot,
+    canonical: &SnapshotIndexes,
+    movement: &SequenceMovement,
+    forced: &mut HashMap<NodeAddress, NodeId>,
+) -> Result<(), WorkspaceError> {
+    let canonical_sequence = canonical
+        .address_nodes
+        .get(&movement.address)
+        .copied()
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("moved sequence is missing")))?;
+    let canonical_sequence_index = canonical
+        .node_lookup
+        .get(&canonical_sequence)
+        .copied()
+        .ok_or_else(|| WorkspaceError::Validation(Arc::from("moved sequence index is missing")))?;
+    if canonical.nodes[canonical_sequence_index].kind != NodeKind::Sequence {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "moved sequence changed kind before identity reconciliation",
+        )));
+    }
+    insert_forced_node(forced, movement.address, movement.sequence)?;
+
+    if movement.final_old_ordinals.len() != movement.old_children.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "movement block permutation is incomplete",
+        )));
+    }
+    let mut seen_ordinals = Vec::new();
+    seen_ordinals
+        .try_reserve(movement.old_children.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("movement ordinal allocation failed")))?;
+    seen_ordinals.resize(movement.old_children.len(), false);
+    let initial_identity_capacity = movement
+        .old_children
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("movement identity count overflow")))?;
+    let mut mapped = HashSet::new();
+    mapped
+        .try_reserve(initial_identity_capacity)
+        .map_err(|_| WorkspaceError::Host(Arc::from("movement identity allocation failed")))?;
+    mapped.insert(movement.sequence);
+    let mut movement_node_count = 1_usize;
+    let mut preorder = movement
+        .address
+        .preorder
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("movement preorder overflow")))?;
+    for old_ordinal in &movement.final_old_ordinals {
+        let seen = seen_ordinals.get_mut(*old_ordinal).ok_or_else(|| {
+            WorkspaceError::Validation(Arc::from("movement block ordinal is stale"))
+        })?;
+        if std::mem::replace(seen, true) {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "movement block ordinal is duplicated",
+            )));
+        }
+        let child = movement
+            .old_children
+            .get(*old_ordinal)
+            .copied()
+            .ok_or_else(|| {
+                WorkspaceError::Validation(Arc::from("movement block child is stale"))
+            })?;
+        for old_node in movement_subtree_nodes(base, child)? {
+            mapped.try_reserve(1).map_err(|_| {
+                WorkspaceError::Host(Arc::from("movement identity allocation failed"))
+            })?;
+            if !mapped.insert(old_node) {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "movement continuity maps one node more than once",
+                )));
+            }
+            movement_node_count = movement_node_count
+                .checked_add(1)
+                .ok_or_else(|| WorkspaceError::Host(Arc::from("movement node count overflow")))?;
+            let address = NodeAddress {
+                root: movement.address.root,
+                preorder,
+            };
+            let temporary = canonical
+                .address_nodes
+                .get(&address)
+                .copied()
+                .ok_or_else(|| {
+                    WorkspaceError::Validation(Arc::from(
+                        "movement continuity destination is missing",
+                    ))
+                })?;
+            let temporary_index =
+                canonical
+                    .node_lookup
+                    .get(&temporary)
+                    .copied()
+                    .ok_or_else(|| {
+                        WorkspaceError::Validation(Arc::from(
+                            "movement continuity destination index is missing",
+                        ))
+                    })?;
+            if base.workspace_node(old_node)?.kind != canonical.nodes[temporary_index].kind {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "movement continuity changed a surviving node kind",
+                )));
+            }
+            insert_forced_node(forced, address, old_node)?;
+            preorder = preorder
+                .checked_add(1)
+                .ok_or_else(|| WorkspaceError::Host(Arc::from("movement preorder overflow")))?;
+        }
+    }
+    if seen_ordinals.iter().any(|seen| !seen) || mapped.len() != movement_node_count {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "movement continuity omitted a surviving node",
+        )));
+    }
+    let canonical_children = canonical
+        .node_children
+        .get(&canonical_sequence)
+        .ok_or_else(|| {
+            WorkspaceError::Validation(Arc::from("moved sequence children are missing"))
+        })?;
+    if canonical_children.len() != movement.old_children.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "moved sequence child count changed",
+        )));
+    }
+    Ok(())
+}
+
+fn movement_subtree_nodes(
+    base: &WorkspaceSnapshot,
+    root: NodeId,
+) -> Result<Vec<NodeId>, WorkspaceError> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("movement traversal allocation failed")))?;
+    pending.push(root);
+    let mut nodes = Vec::new();
+    while let Some(node) = pending.pop() {
+        nodes
+            .try_reserve(1)
+            .map_err(|_| WorkspaceError::Host(Arc::from("movement subtree allocation failed")))?;
+        nodes.push(node);
+        if let Some(children) = base.indexes.node_children.get(&node) {
+            pending.try_reserve(children.len()).map_err(|_| {
+                WorkspaceError::Host(Arc::from("movement traversal allocation failed"))
+            })?;
+            pending.extend(children.iter().rev().copied());
+        }
+    }
+    Ok(nodes)
 }
 
 fn ensure_structural_nonoverlapping(
@@ -3813,28 +4328,34 @@ fn expression_root(
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))
 }
 
+fn expression_root_mut(
+    program: &mut SemanticProgram,
+    address: EntityAddress,
+) -> Result<&mut Expr, WorkspaceError> {
+    if address == EntityAddress::Main {
+        return program
+            .main
+            .as_mut()
+            .map(|main| &mut main.body)
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")));
+    }
+    let EntityAddress::Binding(raw) = address else {
+        return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
+    };
+    program
+        .functions
+        .iter_mut()
+        .find(|function| function.binding.raw() == raw)
+        .map(|function| &mut function.body)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))
+}
+
 fn replace_expression(
     program: &mut SemanticProgram,
     address: NodeAddress,
     replacement: &Expr,
 ) -> Result<(), WorkspaceError> {
-    let root = if address.root == EntityAddress::Main {
-        &mut program
-            .main
-            .as_mut()
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("main root")))?
-            .body
-    } else {
-        let EntityAddress::Binding(raw) = address.root else {
-            return Err(WorkspaceError::StaleIdentity(Arc::from("node root")));
-        };
-        &mut program
-            .functions
-            .iter_mut()
-            .find(|function| function.binding.raw() == raw)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("node root")))?
-            .body
-    };
+    let root = expression_root_mut(program, address.root)?;
     let replaced = root
         .try_replaced_preorder(address.preorder, replacement)
         .map_err(WorkspaceError::from_core)?
@@ -3843,9 +4364,45 @@ fn replace_expression(
     Ok(())
 }
 
+fn apply_sequence_movement(
+    program: &mut SemanticProgram,
+    movement: &SequenceMovement,
+) -> Result<(), WorkspaceError> {
+    if movement.path.len() != movement.ancestor_types.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "sequence movement ancestry types are incomplete",
+        )));
+    }
+    let mut current = expression_root_mut(program, movement.address.root)?;
+    for (ordinal, ty) in movement.path.iter().copied().zip(&movement.ancestor_types) {
+        current.ty = ty.clone();
+        current = current
+            .try_child_mut(ordinal)
+            .map_err(WorkspaceError::from_core)?;
+    }
+    current.ty = movement.sequence_type.clone();
+    let ExprKind::Do(values) = &mut current.kind else {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "selected sequence changed kind during staging",
+        )));
+    };
+    if values.len() != movement.old_children.len()
+        || movement.old_index >= values.len()
+        || movement.new_index >= values.len()
+    {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "sequence movement order changed during staging",
+        )));
+    }
+    let child = values.remove(movement.old_index);
+    values.insert(movement.new_index, child);
+    Ok(())
+}
+
 fn refresh_semantic_match_types(
     program: &mut SemanticProgram,
     structural: &[StructuralAction],
+    movement: Option<&SequenceMovement>,
 ) -> Result<(), WorkspaceError> {
     struct Update {
         plan: crate::hir::MatchPlanId,
@@ -3854,10 +4411,17 @@ fn refresh_semantic_match_types(
     }
 
     let mut affected_roots = Vec::new();
+    let affected_count = structural
+        .len()
+        .checked_add(usize::from(movement.is_some()))
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("match root count overflow")))?;
     affected_roots
-        .try_reserve(structural.len())
+        .try_reserve(affected_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("match root allocation failed")))?;
     affected_roots.extend(structural.iter().map(|action| action.address.root));
+    if let Some(movement) = movement {
+        affected_roots.push(movement.address.root);
+    }
     affected_roots.sort_unstable();
     affected_roots.dedup();
 
@@ -7670,26 +8234,40 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
         SemanticDiffEntry::ExpressionReplaced { node, .. } => {
             (3, node.slot(), node.generation(), 0, 0, 0, 0)
         }
+        SemanticDiffEntry::SequenceChildMoved {
+            sequence,
+            child,
+            old_ordinal,
+            new_ordinal,
+        } => (
+            4,
+            sequence.slot(),
+            sequence.generation(),
+            child.slot(),
+            child.generation(),
+            *old_ordinal,
+            *new_ordinal,
+        ),
         SemanticDiffEntry::DescendantCreated { node, .. } => {
-            (4, node.slot(), node.generation(), 0, 0, 0, 0)
-        }
-        SemanticDiffEntry::DescendantDeleted { node, .. } => {
             (5, node.slot(), node.generation(), 0, 0, 0, 0)
         }
-        SemanticDiffEntry::HoleIntroduced { hole } => {
-            (6, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
+        SemanticDiffEntry::DescendantDeleted { node, .. } => {
+            (6, node.slot(), node.generation(), 0, 0, 0, 0)
         }
-        SemanticDiffEntry::HoleRefined { hole, .. } => {
+        SemanticDiffEntry::HoleIntroduced { hole } => {
             (7, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
         }
-        SemanticDiffEntry::HoleFilled { hole } => {
+        SemanticDiffEntry::HoleRefined { hole, .. } => {
             (8, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
         }
+        SemanticDiffEntry::HoleFilled { hole } => {
+            (9, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
+        }
         SemanticDiffEntry::UnresolvedValueReferenceIntroduced { reference } => {
-            (9, reference.0.slot(), reference.0.generation(), 0, 0, 0, 0)
+            (10, reference.0.slot(), reference.0.generation(), 0, 0, 0, 0)
         }
         SemanticDiffEntry::UnresolvedValueReferenceResolved { reference, target } => (
-            10,
+            11,
             reference.0.slot(),
             reference.0.generation(),
             target.slot(),
@@ -7705,7 +8283,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             let old = optional_entity(*old_target);
             let new = optional_entity(*new_target);
             (
-                11,
+                12,
                 site.slot(),
                 site.generation(),
                 old.0,
@@ -7722,7 +8300,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             let old = optional_entity(*old_callee);
             let new = optional_entity(*new_callee);
             (
-                12,
+                13,
                 site.slot(),
                 site.generation(),
                 old.0,
@@ -7732,7 +8310,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             )
         }
         SemanticDiffEntry::CallInstantiationChanged { site, .. } => {
-            (13, site.slot(), site.generation(), 0, 0, 0, 0)
+            (14, site.slot(), site.generation(), 0, 0, 0, 0)
         }
     }
 }

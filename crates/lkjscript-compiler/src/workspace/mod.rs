@@ -513,6 +513,8 @@ impl fmt::Debug for WorkspaceSnapshot {
 }
 
 #[cfg(test)]
+mod movement_tests;
+#[cfg(test)]
 mod recompute_measurement;
 #[cfg(test)]
 mod tests;

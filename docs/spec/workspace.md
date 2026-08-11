@@ -157,6 +157,43 @@ change; a refinement whose final goal equals the base goal reports no semantic c
 call-instantiation diff includes exact old/new substitutions, instantiated
 parameter/result types, witnesses, and effects, so a type-argument-only change remains reviewable.
 
+The first public semantic movement operation is
+`Edit::MoveSequenceChild { sequence, child, before }`. All three inputs are opaque stable node
+identities from the base revision. `sequence` must name a live semantic sequence, `child` must be one
+of its direct children, and `before`, when present, must name a distinct direct child of that same
+sequence. The child is removed first and then inserted immediately before the anchor; `None` appends
+it after all remaining children. A request that produces the base order, including appending the
+last child or moving a child before its existing successor, is rejected without publication. The
+first vertical accepts at most one movement per transaction and rejects a same-callable structural
+replacement, hole transition, or unresolved-reference transition in that batch; unrelated rename,
+creation, and deletion work remains atomic through the ordinary transaction route. Cross-sequence,
+cross-parent, cross-scope, match-arm, branch, loop-body, callable, entity, and declaration movement
+is not implemented.
+
+Movement permutes the existing semantic children without a replacement draft, source coordinate,
+render, parse, second subtree clone, or content match. Continuity comes only from the validated base
+identities and the explicit movement request; a transaction-local checked plan is discarded before
+publication. The sequence, moved subtree, shifted sibling subtrees, ancestors, nodes elsewhere,
+lexical and payload entities, holes, and unresolved references retain identity; a pure move allocates
+and tombstones no public identity. Missing, duplicate, wrong-kind, stale, or colliding continuity
+fails before publication. Old immutable snapshots retain their old order and remain independently
+queryable.
+
+The moved final child determines the sequence result type. Local ordered-control and ancestor-result
+facts are refreshed before staging mutates the cloned program; partial effects, indexes, expected
+child types, hole and unresolved context, diagnostics, and blockers are rebuilt through the ordinary
+full path. Complete final state must pass the canonical HIR ownership, loan, move, cleanup, loop
+control, match, and consistency checks before publication. Incomplete final state remains queryable
+and projectable but rejects compilation before HIR derivation. Failure preserves the exact prior
+`Arc`, allocator, diagnostics, blockers, continuations, provenance, and future identity allocation.
+The movement itself contributes exactly one `SemanticDiffEntry::SequenceChildMoved` for the
+requested child with the stable sequence and child IDs plus checked `u64` base and final semantic
+ordinals; private preorder
+changes do not emit replacement, descendant creation/deletion, reference/call rewiring, or shifted-
+sibling movement noise. Existing containment and selected projection expose the new evaluation
+order. Imported and source-free movement use the same operation after import and direct compilation
+performs no source load or parse.
+
 Structured blockers currently cover missing entry point, missing declaration/entry body, typed
 expression hole, and unresolved value reference. The unresolved diagnostic has stable code
 `workspace.unresolved-value-reference` and is attached to the unresolved node. Every blocker is
@@ -211,9 +248,9 @@ stdio/session schemas, text journal/publication path, CLI routes, unsupported re
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
-conflicts, parser recovery nodes, direct nominal-member mutation, public semantic movement,
-generic-pattern construction, Boolean/integer/product source-free patterns, source rendering,
-persistence, collaboration, and
+conflicts, parser recovery nodes, direct nominal-member mutation, cross-parent, entity, declaration,
+and generic semantic movement, generic-pattern construction, Boolean/integer/product source-free
+patterns, source rendering, persistence, collaboration, and
 incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Current payload-match ownership

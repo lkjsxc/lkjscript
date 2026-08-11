@@ -99,7 +99,8 @@ mod tests {
         compile_path, compile_snapshot, compile_source,
         workspace::{
             DraftBindingId, DraftBindingRef, DraftNode, DraftNodeId, Edit, ExpressionDraft,
-            LocalDraft, SemanticType, Transaction, Workspace,
+            LocalDraft, NodeKind, SemanticChild, SemanticOwner, SemanticType, Transaction,
+            Workspace,
         },
         Operation,
     };
@@ -319,6 +320,109 @@ mod tests {
         assert!(matches!(
             execution.outcome,
             ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        ));
+    }
+
+    #[test]
+    fn moved_sequence_order_executes_once_in_baseline_native() {
+        let mut workspace = Workspace::empty().expect("movement workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create movement main");
+        let hole = created.snapshot.holes().next().expect("movement hole").id;
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(1),
+                            DraftNode::I64(2),
+                            DraftNode::I64(3),
+                            DraftNode::Sequence(vec![
+                                DraftNodeId::new(0),
+                                DraftNodeId::new(1),
+                                DraftNodeId::new(2),
+                            ]),
+                        ],
+                        DraftNodeId::new(3),
+                    ),
+                }],
+            })
+            .expect("fill movement main");
+        let sequence = completed
+            .snapshot
+            .nodes()
+            .iter()
+            .find(|node| node.kind == NodeKind::Sequence)
+            .expect("sequence")
+            .id;
+        let children: Vec<_> = completed
+            .snapshot
+            .containment()
+            .iter()
+            .filter_map(|edge| match (edge.owner, edge.child) {
+                (SemanticOwner::Node(owner), SemanticChild::Node(child)) if owner == sequence => {
+                    Some(child)
+                }
+                _ => None,
+            })
+            .collect();
+        let moved = workspace
+            .apply(Transaction {
+                base_revision: completed.snapshot.revision(),
+                edits: vec![Edit::MoveSequenceChild {
+                    sequence,
+                    child: children[0],
+                    before: None,
+                }],
+            })
+            .expect("move first sequence child to end");
+
+        for (snapshot, expected) in [(&completed.snapshot, 3), (&moved.snapshot, 1)] {
+            let program = compile_snapshot(snapshot).expect("compile movement snapshot");
+            let execution = execute(
+                &program,
+                &ExecutionInputs::default(),
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+                false,
+            )
+            .expect("execute moved product path");
+            assert_eq!(execution.path, ExecutionPath::BaselineNative);
+            assert!(execution.native_entered);
+            assert_eq!(execution.vm_executions, 0);
+            assert!(matches!(
+                execution.outcome,
+                ExecutionOutcome::Returned(value) if value.as_i64() == Some(expected)
+            ));
+        }
+
+        let moved_program = compile_snapshot(&moved.snapshot).expect("compile moved VM fallback");
+        let decline = execute(
+            &moved_program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig {
+                retain_machine_code_diagnostics: true,
+                max_diagnostic_bytes: 0,
+                ..JitConfig::default()
+            },
+            false,
+        )
+        .expect("moved installation decline falls back");
+        assert_eq!(decline.path, ExecutionPath::VmFallback);
+        assert!(!decline.native_entered);
+        assert_eq!(decline.vm_executions, 1);
+        assert!(matches!(
+            decline.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(1)
         ));
     }
 

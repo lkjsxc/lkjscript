@@ -56,9 +56,12 @@ one-to-one old-public-identity to new-private-address relocation for every survi
 relocated survivor wins over the prior occupant of its new dense address; duplicate, missing,
 wrong-kind, stale, or colliding relocation fails before publication. Nodes outside removed/replaced
 subtrees and every structural target root are matched explicitly in one parent/child-ordinal pass.
-Descendants rebuilt by a replacement receive new identities even when content coincides; fingerprints
-never decide semantic continuity. Removed identities are tombstoned and generation advances before
-reuse. Index construction builds
+For same-sequence movement, one transaction-local permutation instead maps every old node in the
+sequence's complete direct-child blocks to its new private preorder after callable relocation; the
+sequence and all child blocks are forced one-to-one before ordinary reconciliation. The plan is not
+snapshot state or public history. Descendants rebuilt by a replacement receive new identities even
+when content coincides; fingerprints never decide semantic continuity. Removed identities are
+tombstoned and generation advances before reuse. Index construction builds
 one entity-to-address map and performs one lookup per node, then records containment, references,
 calls, dependencies, types, and diagnostics iteratively. Private enum, variant, and enum-field
 identity maps avoid repeated declaration scans while indexing aggregate references.
@@ -134,21 +137,23 @@ route available.
 
 ```text
 Arc<WorkspaceSnapshot> plus base revision
-    -> typed declaration/delete/rename/expression/hole/unresolved-reference batch
+    -> typed declaration/delete/rename/expression/movement/hole/unresolved-reference batch
     -> namespace/generation/revision check and staged identity-allocator clone
     -> when every nonempty edit is RefineHole:
          clone hole records and update any unresolved state response revision
          -> validate exact hole identity/type/goal and rebuild incomplete diagnostics
          -> share unchanged SemanticProgram, indexes, and blockers
     -> otherwise:
-         clone SemanticProgram
+         preflight one optional same-sequence child permutation against stable base identities
+         -> clone SemanticProgram
          -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
-         -> lower flat drafts, apply disjoint replacements, and validate final deletion closure
+         -> lower flat drafts, apply disjoint replacements, permute existing sequence children,
+            and validate final deletion closure
          -> prune callable/nominal roots and compact/remap dense products, implementations, bindings,
             plans, places, slots, and private enum-vector addresses once
          -> recompute partial effects and indexes
          -> on completion derive HIR and validate ownership/matches/consistency
-         -> reconcile explicit survivors, tombstones, blockers, diagnostics, and semantic diff
+         -> reconcile explicit movement/survivor mappings, tombstones, blockers, diagnostics, and diff
     -> publish one new Arc plus allocator state, or publish nothing
 ```
 
@@ -229,10 +234,25 @@ rewrites function/main headers, global layout, expression references and definit
 match locals/plans, and rebuilds each callable's `PlaceId`, local slot, parameter-place vector, and
 `local_count`. Function-vector position remains private and memory/SSA function IDs are derived later.
 Structural replacement rebuilds the affected root iteratively and recomputes only child-derived
-sequence, conditional, local-body, and semantic-match result types. When the program contains
-semantic match plans, one bounded pass over each affected root refreshes any existing plan's
-arm/result type facts; a program without match plans incurs no additional match scan. No second
-mutable IR, sparse dead-binding history, persistence layer, or incremental framework was added;
+sequence, conditional, local-body, and semantic-match result types. `MoveSequenceChild` is separate:
+it validates a live sequence, direct child, and distinct optional direct sibling anchor against the
+base revision, rejects a final-order no-op, and mutates only the existing staged `ExprKind::Do`
+vector. Removal precedes insertion and no anchor means append. The first vertical rejects more than
+one move and same-callable structural edits in one transaction rather than adding an edit planner.
+A checked child path propagates the changed final-child result through ancestors without recursively
+cloning the moved or shifted subtrees. After canonical index construction, the movement's complete
+old child blocks supply explicit stable-ID-to-new-address facts; kind, destination, identity, and
+collision checks fail before reconciliation. Dense deletion compaction may relocate the callable
+root first. Holes and unresolved records then refresh from retained IDs, while pure movement consumes
+no public slot and private preorders remain unobservable. Complete state passes the ordinary
+ownership, cleanup, match, and consistency boundary; incomplete state retains blockers and never
+constructs HIR. One `SequenceChildMoved` diff reports stable identities and semantic ordinals, while
+private relocation emits no replacement, descendant, or graph-rewire facts.
+
+When the program contains semantic match plans, one bounded pass over each affected root refreshes
+any existing plan's arm/result type facts; a program without match plans incurs no additional match
+scan. No generic movement framework, public path, second mutable IR, sparse dead-binding history,
+persistent movement history, persistence layer, or incremental framework was added;
 `SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
 
 `DeleteEntity` first collects callable, product, and enum deletion intent for the whole batch.
@@ -312,8 +332,9 @@ distinguish established constructors from move/borrow candidates that still requ
 ownership validation, and do not expose hidden match temporaries or advertise generic enum
 construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
 rename, replacement, created/deleted descendants and pattern bindings, hole and unresolved-reference
-transitions, and reference/call rewiring; invalidation currently reports the same conservative domains for
-metadata-only and semantic edits. There is no incremental cache work or consumer.
+transitions, same-sequence child movement, and reference/call rewiring; invalidation currently
+reports the same conservative domains for metadata-only and semantic edits. There is no incremental
+cache work or consumer.
 
 Selected entity, body, type, reference, call, hole, unresolved-reference, and match sections have one
 concise deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
@@ -451,8 +472,9 @@ sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` 
 early `return`; selected byte-vector move/borrow and canonical operations; aggregate
 construction/observation; exhaustive non-generic enum payload matches with
 stable arm-local bindings; exact calls to imported or source-free generic functions with stable
-binders, structured types, shared resolution, and derived witnesses; atomic batch edits;
-tombstone-stable identities; structured stable nominal, generic, and match views; deterministic
+binders, structured types, shared resolution, and derived witnesses; one identity-preserving direct-
+child reorder within one semantic sequence; atomic batch edits; tombstone-stable identities;
+structured stable nominal, generic, and match views; deterministic
 queries/projections/diffs; one canonical complete-HIR match derivation; and direct execution are
 implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
 ownership, early-return, match, generic-declaration, generic-call, and direct-versus-resolved copy-
@@ -467,9 +489,10 @@ work and timing support sharing unchanged semantic/index state only for exact me
 retaining full recomputation everywhere else.
 Formatting-only attachment changes preserve IDs and projection.
 
-**Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
-concrete public semantic movement operation only when ownership/order semantics are defined, generic
-patterns, Boolean/integer/product pattern construction, generic ownership/reference instantiation,
+**Target, not implemented:** later workspace expansion adds direct nominal-member mutation,
+cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
+only when another present owner/order consumer defines it; generic patterns, Boolean/integer/product
+pattern construction, generic ownership/reference instantiation,
 unresolved moves/borrows/calls/type names/members/patterns/
 imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,

@@ -6,15 +6,17 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Define one concrete public movement vertical only when a present owner/order use case exists.**
-   Private identity-preserving compaction is complete but is not public movement. Do not add generic
-   coordinates, paths, or tree-editing machinery for symmetry.
-
-## Next
-
 1. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
+
+## Next
+
+1. **Select one dependency-closed local semantic vertical from current evidence.** Prefer a
+   demonstrated defect, accepted specification gap, measured bottleneck, or present authoring
+   consumer after the representation reassessment. Broader movement still requires a concrete
+   owner/order use case; do not add generic coordinates, paths, or tree-editing machinery for
+   symmetry.
 
 ## Later
 
