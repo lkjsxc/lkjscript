@@ -55,6 +55,9 @@ fn verifier_expression_children(expression: &hir::Expr) -> Vec<&hir::Expr> {
     use hir::ExprKind as Kind;
     match &expression.kind {
         Kind::Hole => Vec::new(),
+        Kind::UnresolvedValueReference { .. } => {
+            unreachable!("complete HIR cannot contain an unresolved value reference")
+        }
         Kind::Match { .. } => {
             unreachable!("semantic matches must be lowered before memory verification")
         }

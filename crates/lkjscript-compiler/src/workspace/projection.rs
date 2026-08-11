@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use super::{
     CompletenessBlocker, EntityId, EntityKind, HoleId, MatchPatternKindView, NodeHeader, NodeId,
-    NodeKind, ProgramState, ReferenceEdge, SemanticOwner, SemanticType, WorkspaceError,
-    WorkspaceSnapshot,
+    NodeKind, ProgramState, ReferenceEdge, SemanticOwner, SemanticType, UnresolvedValueReferenceId,
+    WorkspaceError, WorkspaceSnapshot,
 };
 
 #[cfg(test)]
@@ -96,6 +96,7 @@ pub enum ProjectionSlice {
     Call(NodeId),
     Match(NodeId),
     Hole(HoleId),
+    UnresolvedValueReference(UnresolvedValueReferenceId),
 }
 
 impl WorkspaceSnapshot {
@@ -148,6 +149,25 @@ impl WorkspaceSnapshot {
                     output.node_id(*context)?;
                     output.push("\n")?;
                 }
+                CompletenessBlocker::UnresolvedValueReference {
+                    reference,
+                    requested_name,
+                    expected_type,
+                    owner,
+                    context,
+                } => {
+                    output.push("unresolved-value-reference reference=")?;
+                    output.node_id(reference.node())?;
+                    output.push(" requested=")?;
+                    output.quoted(requested_name)?;
+                    output.push(" expected=")?;
+                    project_semantic_type(expected_type, &mut output)?;
+                    output.push(" owner=")?;
+                    output.entity_id(*owner)?;
+                    output.push(" context=")?;
+                    output.node_id(*context)?;
+                    output.push("\n")?;
+                }
             }
         }
 
@@ -162,6 +182,9 @@ impl WorkspaceSnapshot {
                 ProjectionSlice::Call(node) => self.project_call(node, &mut output)?,
                 ProjectionSlice::Match(node) => self.project_match(node, &mut output)?,
                 ProjectionSlice::Hole(hole) => self.project_hole(hole, &mut output)?,
+                ProjectionSlice::UnresolvedValueReference(reference) => {
+                    self.project_unresolved_value_reference(reference, &mut output)?;
+                }
             }
         }
         Ok(output.finish())
@@ -270,7 +293,7 @@ impl WorkspaceSnapshot {
                     .ok_or_else(|| host("projection indentation overflow"))?,
             )?;
             let facts = self.node_semantics(self.revision, node.id)?;
-            project_node_header(node, &facts, self.is_hole(node.id), output)?;
+            project_node_header(node, &facts, output)?;
         }
         #[cfg(test)]
         record_projection_measurement(self.indexes.nodes.len(), emitted, 0, 0, 0, 0);
@@ -297,9 +320,7 @@ impl WorkspaceSnapshot {
         project_operation(facts.operation, output)?;
         output.push(" effects=")?;
         project_effects(facts.effects, output)?;
-        if self.is_hole(node) {
-            output.push(" [HOLE]")?;
-        }
+        project_incomplete_marker(header.kind, output)?;
         output.push("\n")
     }
 
@@ -339,9 +360,7 @@ impl WorkspaceSnapshot {
             output.node_id(site)?;
             output.push(" target=")?;
             output.entity_id(target)?;
-            if self.is_hole(site) {
-                output.push(" [HOLE]")?;
-            }
+            project_incomplete_marker(self.workspace_node(site)?.kind, output)?;
             output.push("\n")?;
         }
         Ok(())
@@ -518,10 +537,28 @@ impl WorkspaceSnapshot {
         output.push("]\n")
     }
 
-    fn is_hole(&self, node: NodeId) -> bool {
-        self.holes
-            .iter()
-            .any(|record| record.state.id.node() == node)
+    fn project_unresolved_value_reference(
+        &self,
+        reference: UnresolvedValueReferenceId,
+        output: &mut ProjectionOutput,
+    ) -> Result<(), WorkspaceError> {
+        let state = self.unresolved_value_reference(self.revision, reference)?;
+        output.push("unresolved-value-reference ")?;
+        output.node_id(state.id.node())?;
+        output.push(" [UNRESOLVED] intent=copy-load requested=")?;
+        output.quoted(&state.requested_name)?;
+        output.push(" expected=")?;
+        project_semantic_type(&state.expected_type, output)?;
+        output.push(" owner=")?;
+        output.entity_id(state.owner)?;
+        output.push(" context=")?;
+        output.node_id(state.context)?;
+        output.push(" visible-count=")?;
+        output.decimal(
+            u64::try_from(state.visible_entities.len())
+                .map_err(|_| host("unresolved visibility count exceeds u64"))?,
+        )?;
+        output.push("\n")
     }
 }
 
@@ -739,7 +776,6 @@ fn project_semantic_type(
 fn project_node_header(
     node: &NodeHeader,
     facts: &super::NodeSemanticFacts,
-    hole: bool,
     output: &mut ProjectionOutput,
 ) -> Result<(), WorkspaceError> {
     output.push("node ")?;
@@ -757,10 +793,19 @@ fn project_node_header(
     project_operation(facts.operation, output)?;
     output.push(" effects=")?;
     project_effects(facts.effects, output)?;
-    if hole {
-        output.push(" [HOLE]")?;
-    }
+    project_incomplete_marker(node.kind, output)?;
     output.push("\n")
+}
+
+fn project_incomplete_marker(
+    kind: NodeKind,
+    output: &mut ProjectionOutput,
+) -> Result<(), WorkspaceError> {
+    match kind {
+        NodeKind::Hole => output.push(" [HOLE]"),
+        NodeKind::UnresolvedValueReference => output.push(" [UNRESOLVED]"),
+        _ => Ok(()),
+    }
 }
 
 fn project_operation(
@@ -797,6 +842,7 @@ fn node_kind(kind: NodeKind) -> &'static str {
     match kind {
         NodeKind::Literal => "literal",
         NodeKind::Load => "load",
+        NodeKind::UnresolvedValueReference => "unresolved-value-reference",
         NodeKind::Move => "move",
         NodeKind::Borrow => "borrow",
         NodeKind::Call => "call",

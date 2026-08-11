@@ -14,7 +14,7 @@ path entry points import exactly once into the same partial-capable immutable `W
 
 Snapshots own one clone-safe `SemanticProgram`, optional imported diagnostic/presentation origins,
 opaque namespace/slot/generation IDs, allocator tombstones, derived indexes, type facts, real hole
-nodes, diagnostics, and structured completeness blockers. Source-free and imported complete
+and unresolved value-reference nodes, diagnostics, and structured completeness blockers. Source-free and imported complete
 revisions derive one ephemeral complete HIR at `compile_snapshot`; they never render or reparse
 source. The CLI's required-package compiler entry still verifies the root manifest, lock, selected
 module, source identities, target, and capability grants once. Every product compile API delegates
@@ -178,13 +178,15 @@ Their memory witness facts are named semantic-snapshot facts rather than process
 
 The compiler's public `workspace` module owns one syntax-independent in-memory authority. An
 in-process `Workspace` owns its current `Arc<WorkspaceSnapshot>` and stages the exact
-identity-allocator state. Public namespace/revision/entity/node/hole IDs are opaque. Tagged private
+identity-allocator state. Public namespace/revision/entity/node/hole/unresolved-reference IDs are
+opaque. Tagged private
 entity addresses are independent of public ordering, so adding `main` does not renumber an existing
 function. Removed slots retain tombstone generations across snapshot cloning and reopening.
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
 and no attachments. `Transaction` adds non-generic `CreateProduct` and `CreateEnum`, generalized
-generic-or-non-generic `CreateFunction`, and `CreateMain` to rename, replacement, and hole operations.
+generic-or-non-generic `CreateFunction`, and `CreateMain` to rename, replacement, hole operations,
+and unresolved copy-load value-reference introduction and resolution.
 Function creation uses one ordered declaration-local binder handle domain and a creation-only
 `DeclarationType`; staged validation allocates stable function, type-parameter, and value-parameter
 entities before canonical universal-signature construction. The local handles never enter published
@@ -231,14 +233,20 @@ placeholders remain absent. Imported and
 source-free mutable-local subtrees share stable identity, lexical visibility, ordinary replacement,
 tombstoning, and compaction lifecycle behavior.
 
-The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, and durable
-semantic `Match` nodes linked to canonical match plans. Missing body and typed-hole metadata describe
-hole leaves; no prior expression survives introduction. Match arm/body relationships remain directly
+The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, one explicit
+`UnresolvedValueReference` leaf, and durable semantic `Match` nodes linked to canonical match plans.
+The unresolved leaf is childless, carries only a validated requested-name hint, has known expected
+type and unknown effects, and contains no selected binding or executable fallback. Missing body and
+typed-hole metadata describe hole leaves; snapshot-side unresolved records derive revision, owner,
+context, type, and visible stable entities from the same semantic node. No prior expression survives
+introduction. Match arm/body relationships remain directly
 queryable, and scrutinee, arm-body, or whole-match nodes use the ordinary targeted edit/hole
 operations. Complete-HIR derivation iteratively replaces each semantic match with the existing
 canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory, SSA, bytecode, and VM layers never
-accept an unlowered semantic match. Effects use an explicit unknown fact while holes remain and are
-recomputed after every semantic-program-changing or mixed transaction. A nonempty transaction made
+accept an unlowered semantic match. Effects use an explicit unknown fact while holes or unresolved
+references remain and are recomputed after every semantic-program-changing or mixed transaction.
+`SemanticProgram::try_complete` independently rejects either incomplete leaf before deriving
+compiler HIR. A nonempty transaction made
 only of `RefineHole` operations validates the same namespace, identity, exact expected type, and
 nonempty goal through one narrow path; it stages the allocator and hole records, rebuilds the
 goal-bearing diagnostics, and shares the unchanged semantic program, indexes, and blockers.
@@ -248,15 +256,27 @@ facts beside holes/blockers rather than part of semantic index storage. Shape, l
 usefulness, and exhaustiveness preflight lower once into staged
 semantic state; canonical complete-HIR ownership validation decides move/borrow legality and cleanup
 before publication.
+Unresolved introduction accepts a typed body hole or ordinary typed expression, preserves its root
+node identity, removes the displaced subtree/record, and emits an explicit semantic diff. Resolution
+uses the ordinary one-node `DraftNode::Load` lowering path, so stable target identity, lexical
+visibility, value-binding kind, exact type, copy safety, and storage have one authority. It preserves
+the root identity, creates the normal reference edge, removes the unresolved blocker/diagnostic, and
+emits explicit resolution plus ordinary reference rewiring. Whole-program ownership validation runs
+in the same transaction when resolution makes the snapshot complete; if another incomplete node
+remains, the later completion edit runs it before publishing a complete revision.
+Requested spelling remains unchanged across candidate rename; current candidate names and exact
+case-sensitive name equality are revision-derived.
+
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
-future IDs. Replacement and hole introduction remove local-defining `let`, imported mutable-local,
-and semantic-match subtrees. Return insertion recomputes derived sequence, conditional, local-body,
+future IDs. Replacement, hole introduction, and unresolved-reference introduction remove local-
+defining `let`, imported mutable-local, and semantic-match subtrees. Return insertion recomputes derived sequence, conditional, local-body,
 and match result types through the affected callable and refreshes canonical match arm/result facts
 before validation. One iterative staged compaction visits mutable initializers
 before activating their bindings, prunes unreachable bindings and match plans, rewrites dense
 binding/plan references, and rebuilds per-callable places, slots, and local counts before canonical
-validation. Removed local and payload identities tombstone; unaffected
-entities, nodes, and holes retain identity across private relocation.
+validation. Removed local and payload identities tombstone; unaffected entities, nodes, holes, and unresolved
+references retain identity across private relocation. Ancestor or owner removal prunes contained
+unresolved records; old snapshots remain queryable.
 
 `DeleteEntity` supports `main`, ordinary imported or source-free non-builtin functions, and
 user-defined products and enums. Callable deletion owns type parameters, value parameters, locals,
@@ -276,8 +296,10 @@ snapshots remain valid, later same-name recreation receives fresh generations, a
 same-name recreation is rejected. Deleting `main` still yields `MissingEntryPoint`. Public movement
 is not implemented.
 
-Completeness blockers distinguish missing entry point, missing body with declaration/hole/type, and
-typed hole with hole/type/owner/context. Incomplete snapshots remain fully queryable and projectable.
+Completeness blockers distinguish missing entry point, missing body with declaration/hole/type,
+typed hole with hole/type/owner/context, and unresolved value reference with node/requested name/type/
+owner/context. The unresolved diagnostic code is `workspace.unresolved-value-reference`. Incomplete
+snapshots remain fully queryable and projectable.
 `compile_snapshot` returns those revision-labelled blockers before deriving HIR or entering memory,
 SSA, bytecode, or runtime phases. A complete snapshot derives one source-optional HIR, installs fixed
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
@@ -293,17 +315,21 @@ encoding.
 
 Revision-labelled queries implement deterministic pagination, definitions/references, calls,
 structured entity/function/node types, diagnostics, hole context with exact lexical and arm-local
-visibility, expected- and control-context-filtered legal constructors including early return and
-selected canonical operations, exact generic signatures and call instantiations, node semantics, and
+visibility, unresolved value-reference state, filtered copy-load candidates, expected- and control-
+context-filtered legal constructors including early return and selected canonical operations, exact
+generic signatures and call instantiations, node semantics, and
 a structured `MatchView` containing the scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable
 enum/member identities, and payload-binding entities. Node semantics expose kind, actual/expected
 type, canonical operation identity, and named effect flags. Generic views expose stable binders and
 trait identities, canonical substitutions, instantiated parameters/results, derived witnesses, and named effect flags
 without compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe values;
 affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported generic enum
-constructors are omitted. Hole visibility refreshes when declarations are added in a
-later revision. Projections render state and blockers before selected
-entity/body/type/reference/hole/match sections, including declared entity types, operation
+constructors are omitted. Unresolved candidates include stable entity, current name, kind, declared
+structured type, exact requested-name equality, and `RequiresCanonicalValidation`; exact-name
+matches sort first, then current name and stable identity. Continuations bind the unresolved node as
+part of the query identity. Hole and unresolved visibility refresh after semantic revisions.
+Projections render state and blockers before selected entity/body/type/reference/hole/unresolved-
+reference/match sections, including declared entity types, operation
 identities, node effects, and arm/pattern structure, use stable review-local labels, and require no
 source attachment. Containment remains in semantic child/evaluation order. Index root-address
 resolution performs one map lookup per semantic node, while enum, variant, enum-field, and match-plan
@@ -323,9 +349,14 @@ source fixtures are `crates/lkjscript-app/tests/fixtures/imperative-counted-loop
 `crates/lkjscript-app/tests/fixtures/ownership-control.lkjscript`. Equivalent
 imported and source-free generic identity declarations agree on structured binders, bounds, exact
 substitutions, instantiated types, witnesses, effects, normalized function and main bytecode, and VM
-result. Generic declaration and call edits invoke source loading and parsing
-zero times.
-Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
+result. Generic declaration and call edits invoke source loading and parsing zero times. A direct
+copy-load program and the equivalent unresolved-introduction/resolution program agree on stable
+entities/nodes, containment, references, calls, dependencies, types, effects, memory obligations,
+function/main bytecode, and VM result `42`; both source-loading and parser counters remain zero.
+Focused generated candidate pages cover 257 visible bindings without loss or duplication. The
+128-level fast fixture and ignored locked-release 20,000-level fixture on a 128 KiB worker stack each
+introduce, query, project, replace, compile, execute, and destroy an unresolved leaf at the deepest
+selected branch through the same iterative paths. Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
 and compile a 20,000-level nested expression, 20,000 alternating immutable/mutable lexical locals,
 or 20,000 nested semantic enum matches, then project, execute, and destroy the complete path on a
 128 KiB worker stack. Separate
@@ -377,11 +408,13 @@ the retained run and host-capability smoke paths with that built binary.
   wildcard, enum-variant, field, and payload-binding patterns over non-generic enum scrutinees;
   Boolean, integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
   declaration fields still reject ownership/reference types, so current source-free payload-match
-  ownership evidence uses the strongest supported copy-safe payload geometry. Callable and whole
-  nominal deletion plus owned local/member removal are implemented; direct nominal-member mutation,
-  explicit public movement, unresolved names, ambiguities, conflicts, and recovery states remain.
-  Generic ownership/reference instantiation and forwarding a caller's
-  unresolved type parameter remain narrow explicit unsupported cases.
+  ownership evidence uses the strongest supported copy-safe payload geometry. Source-free unresolved
+  copy-load value references now have complete introduction, inspection, candidate, resolution,
+  replacement, owner-deletion, compile-rejection, and execution behavior. Text import still fails
+  fast on unresolved source names. Unresolved moves, borrows, calls, type names, nominal members,
+  patterns, and imports; ambiguity, conflict, and parser recovery; direct nominal-member mutation;
+  and explicit public movement remain gaps. Generic ownership/reference instantiation and forwarding
+  a caller's unresolved type parameter remain narrow explicit unsupported cases.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
 - Owned runtime structural values and source-free nested-expression, alternating immutable/mutable

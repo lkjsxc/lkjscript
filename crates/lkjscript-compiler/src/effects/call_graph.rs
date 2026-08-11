@@ -67,6 +67,7 @@ fn collect_direct_callees_inner(
 ) {
     match &expression.kind {
         ExprKind::Hole
+        | ExprKind::UnresolvedValueReference { .. }
         | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)

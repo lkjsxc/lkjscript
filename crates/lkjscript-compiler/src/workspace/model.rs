@@ -39,6 +39,7 @@ pub enum EntityKind {
 pub enum NodeKind {
     Literal,
     Load,
+    UnresolvedValueReference,
     Move,
     Borrow,
     Call,
@@ -160,6 +161,35 @@ pub enum HoleKind {
     TypedExpression,
 }
 
+/// Stable identity of one unresolved value-reference expression.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct UnresolvedValueReferenceId(pub(crate) NodeId);
+
+impl UnresolvedValueReferenceId {
+    pub const fn node(self) -> NodeId {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum ValueReferenceIntent {
+    CopyLoad,
+}
+
+/// Structured source-free intent for a future copy-safe binding load.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnresolvedValueReferenceState {
+    pub revision: RevisionId,
+    pub id: UnresolvedValueReferenceId,
+    pub intent: ValueReferenceIntent,
+    pub requested_name: Arc<str>,
+    pub expected_type: super::SemanticType,
+    pub owner: EntityId,
+    pub context: NodeId,
+    pub visible_entities: Arc<[EntityId]>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CompletenessBlocker {
     MissingEntryPoint,
@@ -174,6 +204,13 @@ pub enum CompletenessBlocker {
         owner: EntityId,
         context: NodeId,
     },
+    UnresolvedValueReference {
+        reference: UnresolvedValueReferenceId,
+        requested_name: Arc<str>,
+        expected_type: super::SemanticType,
+        owner: EntityId,
+        context: NodeId,
+    },
 }
 
 impl CompletenessBlocker {
@@ -182,6 +219,7 @@ impl CompletenessBlocker {
             Self::MissingEntryPoint => "missing-entry-point",
             Self::MissingBody { .. } => "missing-body",
             Self::TypedHole { .. } => "typed-hole",
+            Self::UnresolvedValueReference { .. } => "unresolved-value-reference",
         }
     }
 }
@@ -232,6 +270,14 @@ pub(super) struct NodeKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct HoleRecord {
     pub state: HoleState,
+    pub expected_internal: crate::Type,
+    pub address: NodeAddress,
+    pub key: NodeKey,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct UnresolvedValueReferenceRecord {
+    pub state: UnresolvedValueReferenceState,
     pub expected_internal: crate::Type,
     pub address: NodeAddress,
     pub key: NodeKey,

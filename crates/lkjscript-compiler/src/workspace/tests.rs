@@ -1,5 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
+use std::collections::HashSet;
+
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
@@ -477,6 +479,1259 @@ fn source_free_construction_never_invokes_parser_and_executes() {
     assert_eq!(crate::pipeline::lowering_invocations(), 1);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn unresolved_value_reference_lifecycle_is_source_free_and_executes() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    crate::pipeline::reset_lowering_invocations();
+    let (mut workspace, function, parameter, _main, function_hole, main_hole) =
+        create_source_free_declarations(201);
+    let missing = workspace.current();
+    let root = function_hole.node();
+
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: missing.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: root,
+                requested_name: "value".to_owned(),
+            }],
+        })
+        .expect("introduce unresolved value reference");
+    assert_eq!(introduced.snapshot.state(), ProgramState::Incomplete);
+    introduced
+        .snapshot
+        .check_consistency()
+        .expect("consistent unresolved snapshot");
+    assert!(introduced
+        .snapshot
+        .holes()
+        .all(|hole| hole.id != function_hole));
+    assert_eq!(
+        introduced
+            .snapshot
+            .node(root)
+            .expect("unresolved node")
+            .kind,
+        NodeKind::UnresolvedValueReference
+    );
+    assert!(introduced.snapshot.references().is_empty());
+    let unresolved_expression = &introduced
+        .snapshot
+        .program
+        .functions
+        .iter()
+        .find(|candidate| candidate.binding.raw() == 0)
+        .expect("unresolved semantic function")
+        .body;
+    assert_eq!(unresolved_expression.origin, crate::hir::Origin::Semantic);
+    assert!(matches!(
+        &unresolved_expression.kind,
+        crate::hir::ExprKind::UnresolvedValueReference { requested_name }
+            if requested_name.as_ref() == "value"
+    ));
+    let mut child_count = 0;
+    crate::hir::for_each_expression_child(unresolved_expression, &mut |_| child_count += 1);
+    assert_eq!(child_count, 0);
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("unresolved reference")
+        .id;
+    assert_eq!(reference.node(), root);
+    let state = introduced
+        .snapshot
+        .unresolved_value_reference(introduced.snapshot.revision(), reference)
+        .expect("unresolved state");
+    assert_eq!(state.revision, introduced.snapshot.revision());
+    assert_eq!(state.requested_name.as_ref(), "value");
+    assert_eq!(state.expected_type, SemanticType::I64);
+    assert_eq!(state.owner, function);
+    assert_eq!(state.context, root);
+    assert_eq!(state.intent, ValueReferenceIntent::CopyLoad);
+    assert!(state.visible_entities.contains(&parameter));
+    let unresolved_semantics = introduced
+        .snapshot
+        .node_semantics(introduced.snapshot.revision(), root)
+        .expect("unresolved semantics");
+    assert_eq!(
+        unresolved_semantics.kind,
+        NodeKind::UnresolvedValueReference
+    );
+    assert_eq!(unresolved_semantics.actual, SemanticType::I64);
+    assert_eq!(unresolved_semantics.expected, Some(SemanticType::I64));
+    assert!(!unresolved_semantics.effects.is_known());
+    assert!(introduced.snapshot.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "workspace.unresolved-value-reference"
+            && diagnostic.subject == Some(SemanticChild::Node(root))
+            && diagnostic.message.contains("value")
+    }));
+    assert!(introduced
+        .snapshot
+        .completeness_blockers()
+        .iter()
+        .any(|blocker| matches!(
+            blocker,
+            CompletenessBlocker::UnresolvedValueReference {
+                reference: blocked,
+                requested_name,
+                expected_type: SemanticType::I64,
+                owner,
+                context,
+            } if *blocked == reference
+                && requested_name.as_ref() == "value"
+                && *owner == function
+                && *context == root
+        )));
+    let unresolved_projection = introduced
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(function),
+            ProjectionSlice::Type(root),
+            ProjectionSlice::UnresolvedValueReference(reference),
+        ])
+        .expect("project unresolved value reference");
+    assert!(unresolved_projection.contains(
+        "kind=unresolved-value-reference type=\"i64\" expected=\"i64\" operation=- effects=[unknown] [UNRESOLVED]"
+    ));
+    assert!(unresolved_projection
+        .contains("[UNRESOLVED] intent=copy-load requested=\"value\" expected=\"i64\""));
+    assert!(!unresolved_projection.contains("candidate"));
+    assert_eq!(
+        introduced
+            .snapshot
+            .without_attachments()
+            .project(&[
+                ProjectionSlice::Body(function),
+                ProjectionSlice::Type(root),
+                ProjectionSlice::UnresolvedValueReference(reference),
+            ])
+            .expect("attachment-free unresolved projection"),
+        unresolved_projection
+    );
+    assert!(introduced.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::UnresolvedValueReferenceIntroduced { reference: item }
+            if *item == reference
+    )));
+
+    let candidates = introduced
+        .snapshot
+        .unresolved_value_reference_candidates(
+            introduced.snapshot.revision(),
+            reference,
+            PageRequest::new(1).expect("candidate page"),
+            None,
+        )
+        .expect("value-reference candidates");
+    assert_eq!(candidates.revision, introduced.snapshot.revision());
+    assert_eq!(candidates.items.len(), 1);
+    assert_eq!(candidates.items[0].entity, parameter);
+    assert_eq!(candidates.items[0].name.as_ref(), "value");
+    assert_eq!(candidates.items[0].kind, EntityKind::Parameter);
+    assert_eq!(candidates.items[0].declared_type, SemanticType::I64);
+    assert!(candidates.items[0].exact_name_match);
+    assert_eq!(
+        candidates.items[0].status,
+        ValueReferenceCandidateStatus::RequiresCanonicalValidation
+    );
+    assert!(candidates.continuation.is_none());
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+    assert!(introduced
+        .snapshot
+        .program
+        .try_complete(&introduced.snapshot.source_origins)
+        .is_err());
+    let mut missing_record = (*introduced.snapshot).clone();
+    missing_record.unresolved_value_references = Arc::from([]);
+    assert!(missing_record.check_consistency().is_err());
+    let mut duplicate_record = (*introduced.snapshot).clone();
+    duplicate_record.unresolved_value_references = Arc::from([
+        introduced.snapshot.unresolved_value_references[0].clone(),
+        introduced.snapshot.unresolved_value_references[0].clone(),
+    ]);
+    assert!(duplicate_record.check_consistency().is_err());
+    let failure =
+        crate::compile_snapshot(&introduced.snapshot).expect_err("unresolved snapshot rejects");
+    assert!(matches!(
+        failure,
+        crate::CompileSnapshotError::Incomplete(ref error)
+            if error.blockers.iter().any(|blocker| matches!(
+                blocker,
+                CompletenessBlocker::UnresolvedValueReference { reference: blocked, .. }
+                    if *blocked == reference
+            ))
+    ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+
+    let old = Arc::clone(&introduced.snapshot);
+    let resolved = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: parameter,
+            }],
+        })
+        .expect("resolve value reference");
+    assert_eq!(resolved.snapshot.state(), ProgramState::Incomplete);
+    assert!(resolved
+        .snapshot
+        .completeness_blockers()
+        .iter()
+        .any(|blocker| matches!(blocker, CompletenessBlocker::MissingBody { hole, .. } if *hole == main_hole)));
+    assert_eq!(
+        resolved.snapshot.node(root).expect("resolved node").kind,
+        NodeKind::Load
+    );
+    let resolved_semantics = resolved
+        .snapshot
+        .node_semantics(resolved.snapshot.revision(), root)
+        .expect("resolved semantics");
+    assert!(resolved_semantics.effects.is_known());
+    assert!(resolved_semantics.effects.is_pure());
+    assert!(resolved
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .is_none());
+    assert!(resolved
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.site == root && edge.target == parameter));
+    assert!(!resolved
+        .snapshot
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| { diagnostic.code.as_ref() == "workspace.unresolved-value-reference" }));
+    assert!(resolved.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::UnresolvedValueReferenceResolved {
+            reference: item,
+            target,
+        } if *item == reference && *target == parameter
+    )));
+    assert!(resolved.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::ReferenceRewired {
+            site,
+            old_target: None,
+            new_target: Some(target),
+        } if *site == root && *target == parameter
+    )));
+    assert_eq!(
+        old.project(&[
+            ProjectionSlice::Body(function),
+            ProjectionSlice::Type(root),
+            ProjectionSlice::UnresolvedValueReference(reference),
+        ])
+        .expect("old unresolved projection"),
+        unresolved_projection
+    );
+    assert_eq!(
+        old.unresolved_value_reference(old.revision(), reference)
+            .expect("old unresolved state")
+            .requested_name
+            .as_ref(),
+        "value"
+    );
+
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: resolved.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: function,
+                            type_arguments: Vec::new(),
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("fill main after resolution");
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn hole_refinement_keeps_unresolved_value_reference_revision_consistent() {
+    let (mut workspace, _, _, _, function_hole, main_hole) = create_source_free_declarations(207);
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: function_hole.node(),
+                requested_name: "value".to_owned(),
+            }],
+        })
+        .expect("introduce reference before hole refinement");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("unresolved reference")
+        .id;
+    let refined = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::RefineHole {
+                hole: main_hole,
+                expected_type: Some(SemanticType::I64),
+                goal: "finish main".to_owned(),
+            }],
+        })
+        .expect("refine unrelated hole metadata");
+    assert!(Arc::ptr_eq(
+        &introduced.snapshot.program,
+        &refined.snapshot.program
+    ));
+    assert_eq!(
+        refined
+            .snapshot
+            .unresolved_value_reference(refined.snapshot.revision(), reference)
+            .expect("revision-updated unresolved state")
+            .revision,
+        refined.snapshot.revision()
+    );
+    refined
+        .snapshot
+        .check_consistency()
+        .expect("consistent mixed incomplete metadata");
+}
+
+#[test]
+fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revision_bound() {
+    let mut workspace = Workspace::empty_deterministic(202).expect("candidate workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "read".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![
+                        ParameterDraft {
+                            name: "requested".to_owned(),
+                            ty: DeclarationType::I64,
+                        },
+                        ParameterDraft {
+                            name: "zeta".to_owned(),
+                            ty: DeclarationType::I64,
+                        },
+                        ParameterDraft {
+                            name: "alpha".to_owned(),
+                            ty: DeclarationType::I64,
+                        },
+                        ParameterDraft {
+                            name: "beta".to_owned(),
+                            ty: DeclarationType::I64,
+                        },
+                        ParameterDraft {
+                            name: "flag".to_owned(),
+                            ty: DeclarationType::Bool,
+                        },
+                        ParameterDraft {
+                            name: "owned".to_owned(),
+                            ty: DeclarationType::ByteVector,
+                        },
+                    ],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
+                    name: "other".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![ParameterDraft {
+                        name: "other-value".to_owned(),
+                        ty: DeclarationType::I64,
+                    }],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create candidate declarations");
+    let read = entity_named(&created.snapshot, EntityKind::Function, "read");
+    let other = entity_named(&created.snapshot, EntityKind::Function, "other");
+    let requested = entity_named(&created.snapshot, EntityKind::Parameter, "requested");
+    let other_parameter = entity_named(&created.snapshot, EntityKind::Parameter, "other-value");
+    let flag = entity_named(&created.snapshot, EntityKind::Parameter, "flag");
+    let owned = entity_named(&created.snapshot, EntityKind::Parameter, "owned");
+    let read_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == read)
+        .expect("read hole")
+        .id;
+    let other_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == other)
+        .expect("other hole")
+        .id;
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![
+                Edit::IntroduceUnresolvedValueReference {
+                    target: read_hole.node(),
+                    requested_name: "requested".to_owned(),
+                },
+                Edit::IntroduceUnresolvedValueReference {
+                    target: other_hole.node(),
+                    requested_name: "other-value".to_owned(),
+                },
+            ],
+        })
+        .expect("introduce candidate references");
+    let read_reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .find(|state| state.owner == read)
+        .expect("read unresolved reference")
+        .id;
+    let other_reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .find(|state| state.owner == other)
+        .expect("other unresolved reference")
+        .id;
+    let mut duplicate_record = (*introduced.snapshot).clone();
+    let mut duplicate_records = duplicate_record
+        .unresolved_value_references
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    duplicate_records[1] = duplicate_records[0].clone();
+    duplicate_record.unresolved_value_references = duplicate_records.into();
+    assert!(duplicate_record.check_consistency().is_err());
+    let mut invalid_visibility = (*introduced.snapshot).clone();
+    let mut visibility_records = invalid_visibility
+        .unresolved_value_references
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    let read_record = visibility_records
+        .iter_mut()
+        .find(|record| record.state.owner == read)
+        .expect("read visibility record");
+    let mut visible = read_record.state.visible_entities.to_vec();
+    visible.push(other_parameter);
+    visible.sort_unstable();
+    visible.dedup();
+    read_record.state.visible_entities = visible.into();
+    invalid_visibility.unresolved_value_references = visibility_records.into();
+    assert!(invalid_visibility.check_consistency().is_err());
+    let request = PageRequest::new(2).expect("candidate page");
+    let first = introduced
+        .snapshot
+        .unresolved_value_reference_candidates(
+            introduced.snapshot.revision(),
+            read_reference,
+            request,
+            None,
+        )
+        .expect("first candidate page");
+    assert_eq!(first.items[0].entity, requested);
+    assert!(first.items[0].exact_name_match);
+    let first_cursor = first.continuation.clone().expect("candidate continuation");
+    assert!(matches!(
+        introduced.snapshot.unresolved_value_reference_candidates(
+            introduced.snapshot.revision(),
+            other_reference,
+            request,
+            Some(&first_cursor),
+        ),
+        Err(WorkspaceError::InvalidContinuation(_))
+    ));
+    let mut names = first
+        .items
+        .iter()
+        .map(|candidate| candidate.name.to_string())
+        .collect::<Vec<_>>();
+    let mut continuation = first.continuation;
+    while let Some(cursor) = continuation {
+        let page = introduced
+            .snapshot
+            .unresolved_value_reference_candidates(
+                introduced.snapshot.revision(),
+                read_reference,
+                request,
+                Some(&cursor),
+            )
+            .expect("next candidate page");
+        names.extend(
+            page.items
+                .iter()
+                .map(|candidate| candidate.name.to_string()),
+        );
+        continuation = page.continuation;
+    }
+    assert_eq!(names, ["requested", "alpha", "beta", "zeta"]);
+    assert_eq!(names.iter().collect::<HashSet<_>>().len(), names.len());
+    assert!(!introduced
+        .snapshot
+        .unresolved_value_reference_candidates(
+            introduced.snapshot.revision(),
+            read_reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("all candidates")
+        .items
+        .iter()
+        .any(|candidate| {
+            candidate.entity == flag
+                || candidate.entity == owned
+                || candidate.kind == EntityKind::Function
+        }));
+
+    let old = Arc::clone(&introduced.snapshot);
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: requested,
+                new_name: "renamed".to_owned(),
+            }],
+        })
+        .expect("rename candidate");
+    assert!(matches!(
+        renamed.snapshot.unresolved_value_reference_candidates(
+            renamed.snapshot.revision(),
+            read_reference,
+            request,
+            Some(&first_cursor),
+        ),
+        Err(WorkspaceError::InvalidContinuation(_))
+    ));
+    let state = renamed
+        .snapshot
+        .unresolved_value_reference(renamed.snapshot.revision(), read_reference)
+        .expect("renamed reference state");
+    assert_eq!(state.requested_name.as_ref(), "requested");
+    let renamed_candidates = renamed
+        .snapshot
+        .unresolved_value_reference_candidates(
+            renamed.snapshot.revision(),
+            read_reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("renamed candidates")
+        .items;
+    assert_eq!(
+        renamed_candidates
+            .iter()
+            .map(|candidate| candidate.name.as_ref())
+            .collect::<Vec<_>>(),
+        ["alpha", "beta", "renamed", "zeta"]
+    );
+    assert!(renamed_candidates
+        .iter()
+        .all(|candidate| !candidate.exact_name_match));
+    assert_eq!(
+        old.unresolved_value_reference_candidates(
+            old.revision(),
+            read_reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("old candidates")
+        .items[0]
+            .name
+            .as_ref(),
+        "requested"
+    );
+    let resolved = workspace
+        .apply(Transaction {
+            base_revision: renamed.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference: read_reference,
+                target: requested,
+            }],
+        })
+        .expect("resolve explicitly after candidate rename");
+    assert_eq!(
+        resolved
+            .snapshot
+            .node(read_reference.node())
+            .expect("renamed resolved load")
+            .kind,
+        NodeKind::Load
+    );
+}
+
+#[test]
+fn many_unresolved_value_reference_candidates_paginate_without_loss_or_duplicates() {
+    const COUNT: usize = 257;
+    let mut parameters = Vec::new();
+    parameters
+        .try_reserve(COUNT + 2)
+        .expect("parameter allocation");
+    for index in 0..COUNT {
+        parameters.push(ParameterDraft {
+            name: format!("binding{index:03}"),
+            ty: DeclarationType::I64,
+        });
+    }
+    parameters.push(ParameterDraft {
+        name: "incompatible".to_owned(),
+        ty: DeclarationType::Bool,
+    });
+    parameters.push(ParameterDraft {
+        name: "affine".to_owned(),
+        ty: DeclarationType::ByteVector,
+    });
+    let mut workspace = Workspace::empty_deterministic(206).expect("many-candidate workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "many".to_owned(),
+                type_parameters: Vec::new(),
+                parameters,
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("create many candidates");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("many-candidate hole")
+        .id;
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: hole.node(),
+                requested_name: "binding127".to_owned(),
+            }],
+        })
+        .expect("introduce many-candidate reference");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("many-candidate reference")
+        .id;
+    let collect = || {
+        let mut continuation = None;
+        let mut candidates = Vec::new();
+        loop {
+            let page = introduced
+                .snapshot
+                .unresolved_value_reference_candidates(
+                    introduced.snapshot.revision(),
+                    reference,
+                    PageRequest::new(17).expect("candidate page"),
+                    continuation.as_ref(),
+                )
+                .expect("candidate page");
+            candidates.extend(page.items);
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        candidates
+    };
+    let first = collect();
+    let second = collect();
+    assert_eq!(first, second);
+    assert_eq!(first.len(), COUNT);
+    assert_eq!(first[0].name.as_ref(), "binding127");
+    assert!(first[0].exact_name_match);
+    assert!(first[1..]
+        .windows(2)
+        .all(|pair| pair[0].name <= pair[1].name));
+    assert_eq!(
+        first
+            .iter()
+            .map(|candidate| candidate.entity)
+            .collect::<HashSet<_>>()
+            .len(),
+        COUNT
+    );
+}
+
+#[test]
+fn unresolved_value_reference_failures_are_atomic_and_retry_ids_are_stable() {
+    let mut workspace = Workspace::empty_deterministic(203).expect("atomic workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "record".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "field".to_owned(),
+                        ty: SemanticType::I64,
+                    }],
+                },
+                Edit::CreateFunction {
+                    name: "read".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![
+                        ParameterDraft {
+                            name: "value".to_owned(),
+                            ty: DeclarationType::I64,
+                        },
+                        ParameterDraft {
+                            name: "flag".to_owned(),
+                            ty: DeclarationType::Bool,
+                        },
+                        ParameterDraft {
+                            name: "owned".to_owned(),
+                            ty: DeclarationType::ByteVector,
+                        },
+                    ],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
+                    name: "unrelated".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![ParameterDraft {
+                        name: "other-value".to_owned(),
+                        ty: DeclarationType::I64,
+                    }],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create atomic declarations");
+    let read = entity_named(&created.snapshot, EntityKind::Function, "read");
+    let unrelated = entity_named(&created.snapshot, EntityKind::Function, "unrelated");
+    let value = entity_named(&created.snapshot, EntityKind::Parameter, "value");
+    let flag = entity_named(&created.snapshot, EntityKind::Parameter, "flag");
+    let owned = entity_named(&created.snapshot, EntityKind::Parameter, "owned");
+    let invisible = entity_named(&created.snapshot, EntityKind::Parameter, "other-value");
+    let field = entity_named(&created.snapshot, EntityKind::ProductField, "field");
+    let read_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == read)
+        .expect("read hole")
+        .id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| {
+            created
+                .snapshot
+                .entity(hole.owner)
+                .is_ok_and(|owner| owner.kind == EntityKind::Main)
+        })
+        .expect("main hole")
+        .id;
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: read_hole.node(),
+                requested_name: "value".to_owned(),
+            }],
+        })
+        .expect("introduce atomic reference");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("unresolved reference")
+        .id;
+    let foreign_snapshot =
+        import_source(SCALAR, "foreign-resolution.lkjscript").expect("foreign workspace");
+    let foreign = foreign_snapshot.entities()[0].id;
+    assert!(matches!(
+        introduced.snapshot.unresolved_value_reference(
+            introduced.snapshot.revision(),
+            UnresolvedValueReferenceId(foreign_snapshot.nodes()[0].id),
+        ),
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(matches!(
+        introduced.snapshot.unresolved_value_reference(
+            introduced.snapshot.revision(),
+            UnresolvedValueReferenceId(main_hole.node()),
+        ),
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(matches!(
+        introduced
+            .snapshot
+            .unresolved_value_reference(created.snapshot.revision(), reference),
+        Err(WorkspaceError::StaleRevision)
+    ));
+    let before = workspace.current();
+    let before_projection = before
+        .project(&[ProjectionSlice::UnresolvedValueReference(reference)])
+        .expect("atomic projection");
+    let before_candidates = before
+        .unresolved_value_reference_candidates(
+            before.revision(),
+            reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("atomic candidates");
+    let failures = vec![
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: foreign,
+        }],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: read,
+        }],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: field,
+        }],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: invisible,
+        }],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: flag,
+        }],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference,
+            target: owned,
+        }],
+        vec![
+            Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: value,
+            },
+            Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: value,
+            },
+        ],
+        vec![
+            Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: value,
+            },
+            Edit::DeleteEntity { entity: read },
+        ],
+        vec![Edit::ResolveUnresolvedValueReference {
+            reference: UnresolvedValueReferenceId(main_hole.node()),
+            target: value,
+        }],
+        vec![Edit::IntroduceUnresolvedValueReference {
+            target: main_hole.node(),
+            requested_name: String::new(),
+        }],
+        vec![Edit::IntroduceUnresolvedValueReference {
+            target: main_hole.node(),
+            requested_name: "not valid!".to_owned(),
+        }],
+    ];
+    for edits in failures {
+        assert!(workspace
+            .apply(Transaction {
+                base_revision: before.revision(),
+                edits,
+            })
+            .is_err());
+        let current = workspace.current();
+        assert!(Arc::ptr_eq(&before, &current));
+        assert_eq!(current.diagnostics(), before.diagnostics());
+        assert_eq!(
+            current
+                .unresolved_value_reference_candidates(
+                    current.revision(),
+                    reference,
+                    PageRequest::new(16).expect("candidate page"),
+                    None,
+                )
+                .expect("unchanged atomic candidates"),
+            before_candidates
+        );
+        assert_eq!(
+            current.completeness_blockers(),
+            before.completeness_blockers()
+        );
+        assert_eq!(
+            current
+                .project(&[ProjectionSlice::UnresolvedValueReference(reference)])
+                .expect("unchanged atomic projection"),
+            before_projection
+        );
+    }
+
+    let mut control = Workspace::new((*before).clone()).expect("retry control workspace");
+    let create_retry = || Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: "retry".to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        }],
+    };
+    let after_failures = workspace
+        .apply(create_retry())
+        .expect("create after failures");
+    let control_created = control.apply(create_retry()).expect("create control");
+    assert_eq!(after_failures.diff, control_created.diff);
+
+    let mut stale_target_workspace =
+        Workspace::new((*before).clone()).expect("stale target workspace");
+    let deleted = stale_target_workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::DeleteEntity { entity: unrelated }],
+        })
+        .expect("delete unrelated target");
+    let before_stale_target = stale_target_workspace.current();
+    assert!(matches!(
+        stale_target_workspace.apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: unrelated,
+            }],
+        }),
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(
+        &before_stale_target,
+        &stale_target_workspace.current()
+    ));
+
+    let mut resolved_workspace = Workspace::new((*before).clone()).expect("resolved workspace");
+    let resolved = resolved_workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: value,
+            }],
+        })
+        .expect("resolve for stale checks");
+    let resolved_before_failure = resolved_workspace.current();
+    assert!(matches!(
+        resolved_workspace.apply(Transaction {
+            base_revision: resolved.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: value,
+            }],
+        }),
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(
+        &resolved_before_failure,
+        &resolved_workspace.current()
+    ));
+    assert!(matches!(
+        resolved_workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: reference.node(),
+                draft: ExpressionDraft::scalar_i64(0),
+            }],
+        }),
+        Err(WorkspaceError::StaleRevision)
+    ));
+}
+
+#[test]
+fn resolved_value_reference_converges_with_direct_copy_load_authoring() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let (mut direct_workspace, direct_function, direct_parameter, _, direct_hole, direct_main_hole) =
+        create_source_free_declarations(204);
+    let direct = fill_source_free_identity(
+        &mut direct_workspace,
+        direct_function,
+        direct_parameter,
+        direct_hole,
+        direct_main_hole,
+    );
+
+    let (
+        mut resolved_workspace,
+        resolved_function,
+        resolved_parameter,
+        _,
+        resolved_hole,
+        resolved_main_hole,
+    ) = create_source_free_declarations(204);
+    let introduced = resolved_workspace
+        .apply(Transaction {
+            base_revision: resolved_workspace.current().revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: resolved_hole.node(),
+                requested_name: "value".to_owned(),
+            }],
+        })
+        .expect("introduce convergence reference");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("convergence reference")
+        .id;
+    let resolved_function_body = resolved_workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: resolved_parameter,
+            }],
+        })
+        .expect("resolve convergence reference");
+    let resolved = resolved_workspace
+        .apply(Transaction {
+            base_revision: resolved_function_body.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: resolved_main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Call {
+                            callee: resolved_function,
+                            type_arguments: Vec::new(),
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("complete resolved convergence program")
+        .snapshot;
+
+    assert_eq!(direct.entities(), resolved.entities());
+    assert_eq!(direct.nodes(), resolved.nodes());
+    assert_eq!(direct.containment(), resolved.containment());
+    assert_eq!(direct.references(), resolved.references());
+    assert_eq!(direct.calls(), resolved.calls());
+    assert_eq!(direct.dependencies(), resolved.dependencies());
+    for (direct_node, resolved_node) in direct.nodes().iter().zip(resolved.nodes()) {
+        assert_eq!(direct_node.id, resolved_node.id);
+        let left = direct
+            .node_semantics(direct.revision(), direct_node.id)
+            .expect("direct node semantics");
+        let right = resolved
+            .node_semantics(resolved.revision(), resolved_node.id)
+            .expect("resolved node semantics");
+        assert_eq!(left.kind, right.kind);
+        assert_eq!(left.actual, right.actual);
+        assert_eq!(left.expected, right.expected);
+        assert_eq!(left.operation, right.operation);
+        assert_eq!(left.effects, right.effects);
+    }
+    let direct_executable = crate::compile_snapshot(&direct).expect("compile direct load");
+    let resolved_executable = crate::compile_snapshot(&resolved).expect("compile resolved load");
+    assert_eq!(
+        direct_executable.memory_plan().obligations,
+        resolved_executable.memory_plan().obligations
+    );
+    assert_eq!(
+        direct_executable.bytecode().main().code,
+        resolved_executable.bytecode().main().code
+    );
+    assert_eq!(
+        direct_executable
+            .bytecode()
+            .protos()
+            .iter()
+            .map(|function| &function.code)
+            .collect::<Vec<_>>(),
+        resolved_executable
+            .bytecode()
+            .protos()
+            .iter()
+            .map(|function| &function.code)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(run_i64(&direct), 42);
+    assert_eq!(run_i64(&resolved), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn unresolved_value_reference_follows_replacement_rename_and_deletion_lifecycle() {
+    let mut workspace = Workspace::empty_deterministic(205).expect("lifecycle workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "read".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::I64,
+                    }],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
+                    name: "unrelated".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create lifecycle declarations");
+    let read = entity_named(&created.snapshot, EntityKind::Function, "read");
+    let unrelated = entity_named(&created.snapshot, EntityKind::Function, "unrelated");
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == read)
+        .expect("read hole")
+        .id;
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: hole.node(),
+                requested_name: "value".to_owned(),
+            }],
+        })
+        .expect("introduce lifecycle reference");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("lifecycle reference")
+        .id;
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: read,
+                new_name: "reader".to_owned(),
+            }],
+        })
+        .expect("rename unresolved owner");
+    let renamed_state = renamed
+        .snapshot
+        .unresolved_value_reference(renamed.snapshot.revision(), reference)
+        .expect("state after owner rename");
+    assert_eq!(renamed_state.id, reference);
+    assert_eq!(renamed_state.owner, read);
+    assert_eq!(renamed_state.requested_name.as_ref(), "value");
+    let preserved = workspace
+        .apply(Transaction {
+            base_revision: renamed.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: unrelated }],
+        })
+        .expect("delete unrelated function");
+    assert_eq!(
+        preserved
+            .snapshot
+            .unresolved_value_reference(preserved.snapshot.revision(), reference)
+            .expect("preserved unresolved reference")
+            .id,
+        reference
+    );
+    let old = Arc::clone(&preserved.snapshot);
+
+    let mut replacement_workspace = Workspace::new((*old).clone()).expect("replacement workspace");
+    let replaced = replacement_workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: reference.node(),
+                draft: ExpressionDraft::scalar_i64(7),
+            }],
+        })
+        .expect("replace unresolved reference");
+    assert_eq!(
+        replaced
+            .snapshot
+            .node(reference.node())
+            .expect("replacement root")
+            .kind,
+        NodeKind::Literal
+    );
+    assert!(replaced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .is_none());
+    assert!(matches!(
+        replaced
+            .snapshot
+            .unresolved_value_reference(replaced.snapshot.revision(), reference,),
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+
+    let mut hole_workspace = Workspace::new((*old).clone()).expect("hole workspace");
+    let holed = hole_workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: reference.node(),
+                goal: "replace unresolved intent".to_owned(),
+            }],
+        })
+        .expect("replace unresolved reference with hole");
+    assert!(holed
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .is_none());
+    assert_eq!(
+        holed
+            .snapshot
+            .holes()
+            .find(|hole| hole.id.node() == reference.node())
+            .expect("replacement hole")
+            .kind,
+        HoleKind::TypedExpression
+    );
+
+    let mut deletion_workspace = Workspace::new((*old).clone()).expect("deletion workspace");
+    let deleted = deletion_workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::DeleteEntity { entity: read }],
+        })
+        .expect("delete unresolved owner");
+    assert!(deleted.snapshot.entity(read).is_err());
+    assert!(deleted.snapshot.node(reference.node()).is_err());
+    assert!(deleted
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .is_none());
+    assert_eq!(
+        old.unresolved_value_reference(old.revision(), reference)
+            .expect("old unresolved state")
+            .requested_name
+            .as_ref(),
+        "value"
+    );
 }
 
 #[test]
@@ -7725,6 +8980,57 @@ fn run_source_free_deep(depth: usize, seed: u64) {
         .expect("query deep constructors")
         .items
         .contains(&LegalConstructor::Return));
+
+    let mut unresolved_workspace =
+        Workspace::new((*completed.snapshot).clone()).expect("deep unresolved workspace");
+    let unresolved = unresolved_workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: deepest_value,
+                requested_name: "missing".to_owned(),
+            }],
+        })
+        .expect("introduce deep unresolved reference");
+    let reference = unresolved
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("deep unresolved reference")
+        .id;
+    assert!(unresolved
+        .snapshot
+        .unresolved_value_reference_candidates(
+            unresolved.snapshot.revision(),
+            reference,
+            PageRequest::new(8).expect("deep candidate page"),
+            None,
+        )
+        .expect("deep candidate query")
+        .items
+        .is_empty());
+    let projection = unresolved
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(main),
+            ProjectionSlice::UnresolvedValueReference(reference),
+        ])
+        .expect("deep unresolved projection");
+    assert!(projection.contains("[UNRESOLVED] intent=copy-load"));
+    assert!(matches!(
+        crate::compile_snapshot(&unresolved.snapshot),
+        Err(crate::CompileSnapshotError::Incomplete(_))
+    ));
+    let replaced = unresolved_workspace
+        .apply(Transaction {
+            base_revision: unresolved.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: reference.node(),
+                draft: ExpressionDraft::scalar_i64(1),
+            }],
+        })
+        .expect("replace deep unresolved reference");
+    assert_eq!(run_i64(&replaced.snapshot), 1);
 }
 
 #[test]
@@ -13280,6 +14586,113 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .find(|node| node.kind == NodeKind::Literal && node.owner == SemanticOwner::Node(operation))
         .expect("outside scalar")
         .id;
+
+    let mut unresolved_workspace =
+        Workspace::new((*completed.snapshot).clone()).expect("unresolved scope workspace");
+    let unresolved = unresolved_workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![
+                Edit::IntroduceUnresolvedValueReference {
+                    target: load,
+                    requested_name: "visible".to_owned(),
+                },
+                Edit::IntroduceUnresolvedValueReference {
+                    target: outside,
+                    requested_name: "visible".to_owned(),
+                },
+            ],
+        })
+        .expect("introduce scoped unresolved references");
+    let nested_reference = unresolved
+        .snapshot
+        .unresolved_value_references()
+        .find(|state| state.context == load)
+        .expect("nested unresolved reference")
+        .id;
+    let outside_reference = unresolved
+        .snapshot
+        .unresolved_value_references()
+        .find(|state| state.context == outside)
+        .expect("outside unresolved reference")
+        .id;
+    assert_eq!(
+        unresolved
+            .snapshot
+            .unresolved_value_reference_candidates(
+                unresolved.snapshot.revision(),
+                nested_reference,
+                PageRequest::new(16).expect("candidate page"),
+                None,
+            )
+            .expect("nested candidates")
+            .items[0]
+            .entity,
+        local_entity
+    );
+    assert!(unresolved
+        .snapshot
+        .unresolved_value_reference_candidates(
+            unresolved.snapshot.revision(),
+            outside_reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("outside candidates")
+        .items
+        .is_empty());
+    let mut local_resolution_workspace =
+        Workspace::new((*unresolved.snapshot).clone()).expect("local resolution workspace");
+    let local_resolved = local_resolution_workspace
+        .apply(Transaction {
+            base_revision: unresolved.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference: nested_reference,
+                target: local_entity,
+            }],
+        })
+        .expect("resolve nested local candidate");
+    assert!(local_resolved
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| { edge.site == nested_reference.node() && edge.target == local_entity }));
+    let local_complete = local_resolution_workspace
+        .apply(Transaction {
+            base_revision: local_resolved.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: outside_reference.node(),
+                draft: ExpressionDraft::scalar_i64(0),
+            }],
+        })
+        .expect("complete nested local resolution");
+    assert_eq!(run_i64(&local_complete.snapshot), 7);
+
+    let pruned = unresolved_workspace
+        .apply(Transaction {
+            base_revision: unresolved.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: let_node,
+                draft: ExpressionDraft::scalar_i64(0),
+            }],
+        })
+        .expect("replace unresolved ancestor");
+    assert!(pruned.snapshot.node(nested_reference.node()).is_err());
+    assert!(matches!(
+        pruned
+            .snapshot
+            .unresolved_value_reference(pruned.snapshot.revision(), nested_reference,),
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert_eq!(
+        pruned
+            .snapshot
+            .unresolved_value_reference(pruned.snapshot.revision(), outside_reference)
+            .expect("sibling unresolved reference")
+            .id,
+        outside_reference
+    );
+
     let introduced = workspace
         .apply(Transaction {
             base_revision: completed.snapshot.revision(),

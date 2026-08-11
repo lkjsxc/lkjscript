@@ -6,9 +6,10 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
-   inspectable and editable, with truthful legal next actions and an explicit completeness blocker;
-   never lower a fabricated executable fallback.
+1. **Characterize one ambiguous value-reference choice from real unresolved-candidate use.** Preserve
+   a finite explicit choice only when deterministic scope and type filtering leave a concrete
+   authoring ambiguity. Keep it non-executable and independently designed; do not prebuild a generic
+   candidate-set or recovery framework.
 
 ## Next
 
@@ -21,10 +22,12 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Later
 
-1. Add persistence, crash recovery, collaboration, or distributed storage only after measurements of
+1. Add parser recovery only through a source-import recovery vertical; add explicit conflict state
+   only after a real merge or concurrent-writer consumer defines its lifecycle.
+2. Add persistence, crash recovery, collaboration, or distributed storage only after measurements of
    retained scale, concurrent writers, and recovery needs justify them.
-2. Add a daemon or warm semantic service only after the local semantic snapshot, transaction, query,
+3. Add a daemon or warm semantic service only after the local semantic snapshot, transaction, query,
    and direct compiler input are complete and measurements show a process boundary is worthwhile.
-3. Expand package, service, database, scheduler, network, GUI, web, game, and other platform products
+4. Expand package, service, database, scheduler, network, GUI, web, game, and other platform products
    through the semantic model, capability system, and selected production runtime. Do not restore
    the deleted Phase 2 components as compatibility layers.

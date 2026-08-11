@@ -1592,6 +1592,7 @@ fn binding_kind(kind: &BindingKind) -> EntityKind {
 fn node_kind(kind: &ExprKind) -> NodeKind {
     match kind {
         ExprKind::Hole => NodeKind::Hole,
+        ExprKind::UnresolvedValueReference { .. } => NodeKind::UnresolvedValueReference,
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)

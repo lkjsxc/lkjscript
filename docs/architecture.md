@@ -38,7 +38,10 @@ field projections, and stable payload bindings. Products, enums, matches, and bi
 `Source`, `Semantic`, or `Builtin` origin;
 source-free nominal/layout identities derive privately from staged stable entities rather than names,
 source hashes, or compiler-dense indexes. A hole is an actual leaf with an explicit unknown effect
-bit. Hole records own only kind/goal/type/context metadata; they never retain the removed subtree.
+bit. An unresolved value reference is a distinct childless semantic leaf carrying only a validated
+requested-name hint; its expected type lives on the expression and its effect is unknown. It contains
+no dense or stable target, executable load, or fallback. Hole and unresolved-reference records own
+only query/edit context derived from those leaves; they never retain the removed subtree.
 Fixed compiler operations, prelude enums, and core traits are excluded from mutable program-entity
 indexes. Expression operations use the canonical operation catalog directly rather than a fabricated
 editable operation binding. A source-free complete snapshot installs required fixed core metadata
@@ -62,7 +65,8 @@ identity maps avoid repeated declaration scans while indexing aggregate referenc
 
 `compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
 phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
-signatures, known effects, holes, match-plan/site correspondence, and index shape. Required-package
+signatures, known effects, holes, unresolved references, match-plan/site correspondence, and index
+shape. Required-package
 compilation carries one fail-fast typed sum through this boundary: source producers retain their
 structured diagnostic, package validation retains its broad classified error, incompleteness retains
 its blocker list, and later compiler phases retain the core error without fabricated source facts.
@@ -124,11 +128,11 @@ route available.
 
 ```text
 Arc<WorkspaceSnapshot> plus base revision
-    -> typed declaration/delete/rename/expression/hole batch
+    -> typed declaration/delete/rename/expression/hole/unresolved-reference batch
     -> namespace/generation/revision check and staged identity-allocator clone
     -> when every nonempty edit is RefineHole:
-         clone hole records
-         -> validate exact hole identity/type/goal and rebuild diagnostics
+         clone hole records and update any unresolved state response revision
+         -> validate exact hole identity/type/goal and rebuild incomplete diagnostics
          -> share unchanged SemanticProgram, indexes, and blockers
     -> otherwise:
          clone SemanticProgram
@@ -142,8 +146,8 @@ Arc<WorkspaceSnapshot> plus base revision
     -> publish one new Arc plus allocator state, or publish nothing
 ```
 
-Diagnostics are revision-selected derived facts stored beside hole records and completeness blockers,
-not inside semantic index storage. Their messages include the current hole goal. An all-`RefineHole`
+Diagnostics are revision-selected derived facts stored beside hole and unresolved-reference records
+and completeness blockers, not inside semantic index storage. Their messages include the current hole goal. An all-`RefineHole`
 transaction therefore rebuilds only those diagnostics after applying the canonical refinement checks;
 it does not clone or compact executable semantic state, infer effects, derive complete HIR, rebuild
 indexes, reconcile identities, or rediscover graph diffs. It preserves the old snapshot, stable hole
@@ -218,8 +222,8 @@ witnesses, and callable references. Removing a body dependency or deleting every
 in the same batch is therefore order-independent; a surviving dependent rejects with stable public
 identity and kind/name context.
 
-Callable containment owns type parameters, value parameters, locals, payloads, nodes, holes, hidden
-match storage, plans, and layout participation. Product containment owns fields and the narrow target-
+Callable containment owns type parameters, value parameters, locals, payloads, nodes, holes,
+unresolved references, hidden match storage, plans, and layout participation. Product containment owns fields and the narrow target-
 implementation lifecycle; enum containment owns type parameters, variants, and fields. Other
 dependents never cascade. One concrete
 compaction result rewrites `ProductId`, `ImplId`, `BindingId`, `MatchPlanId`, local places and slots,
@@ -234,15 +238,39 @@ fourth product identity. Direct member, trait, and implementation deletion remai
 delete-and-same-name-create is not implicit replacement.
 
 Introducing a typed hole physically replaces and drops its subtree, including owned local/match
-facts; filling preserves the hole/root ID. Missing-entry, missing-body, and typed-hole blockers are
-structured and projected. Incomplete snapshots retain normal indexes and deterministic diagnostics
-but no compiler HIR.
+facts; filling preserves the hole/root ID. Unresolved copy-load introduction accepts an existing
+typed expression or body hole, validates the requested identifier, preserves the target root ID,
+removes displaced descendants/records, and installs an unknown-effect
+`UnresolvedValueReference` leaf. Its snapshot record derives owner, context, visible scope, and
+public expected type after identity reconciliation. It creates no reference or candidate dependency.
+
+Resolution synthesizes the ordinary one-node `DraftNode::Load` proposal and sends it through the
+same lowering path as direct source-free authoring. That path owns stable target validation, exact
+lexical visibility, supported binding kind, type assignability, copy safety, and local storage
+lookup. Structural reconciliation preserves the unresolved root ID; index rebuild then creates the
+ordinary reference/dependency edge. The ordinary staged completeness rule runs whole-program
+ownership validation in this transaction only when resolution leaves no blocker; otherwise the later
+edit that reaches completeness runs it before publishing that complete revision. Explicit introduction and
+resolution diff entries sit beside the ordinary expression-kind and reference-rewiring entries.
+Ancestor replacement and callable deletion prune the record before compaction; unrelated private
+relocation refreshes its address from stable identity.
+
+Missing-entry, missing-body, typed-hole, and unresolved-value-reference blockers are structured and
+projected. Incomplete snapshots retain normal indexes and deterministic diagnostics but no compiler
+HIR. The completeness gate rejects before derivation, and `SemanticProgram::try_complete`, complete-
+HIR validation, memory planning, and SSA provide independent defense against a surviving unresolved
+leaf.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
 calls, diagnostics, and expected- plus control-context-filtered legal constructors, including early
 return and selected canonical operation identities. Definition, structured entity/function/node type, exact
-generic signature/call instantiation, hole context with exact lexical/arm visibility, node semantics,
-and structured match inspection are direct identity queries. Node semantics expose canonical
+generic signature/call instantiation, hole context with exact lexical/arm visibility, unresolved
+value-reference state/candidates, node semantics, and structured match inspection are direct identity
+queries. The unresolved state returns revision, stable node, fixed copy-load intent, requested name,
+expected type, owner, context, and visible stable entities. Its candidate query scans that visible set
+once, filters through the canonical type/copy preconditions, and returns stable entity/current name/
+kind/type/exact-name facts labelled `RequiresCanonicalValidation`. Exact matches precede current-name
+then stable-identity order; the query digest includes the unresolved node. Node semantics expose canonical
 operation identity and exact named effects alongside node kind and actual/expected type. Signature
 views expose stable binders and structured bounds; call views expose canonical substitutions, instantiated parameters/results,
 derived witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
@@ -253,15 +281,16 @@ views use stable semantic identities. Legal-constructor results
 distinguish established constructors from move/borrow candidates that still require canonical
 ownership validation, and do not expose hidden match temporaries or advertise generic enum
 construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
-rename, replacement, created/deleted descendants and pattern bindings, hole transitions, and
-reference/call rewiring; invalidation currently reports the same conservative domains for
+rename, replacement, created/deleted descendants and pattern bindings, hole and unresolved-reference
+transitions, and reference/call rewiring; invalidation currently reports the same conservative domains for
 metadata-only and semantic edits. There is no incremental cache work or consumer.
 
-Selected entity, body, type, reference, call, hole, and match sections have one concise
-deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
-allocation failure, marks holes as `[HOLE]`, and renders declared entity types, canonical operation
-identities, ordered containment, stable enum/field/binding identities, exact generic facts, and named
-node/call effects without source attachments. Projection
+Selected entity, body, type, reference, call, hole, unresolved-reference, and match sections have one
+concise deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
+allocation failure, marks holes as `[HOLE]` and unresolved nodes as `[UNRESOLVED]`, and renders
+declared entity types, canonical operation identities, ordered containment, stable enum/field/binding
+identities, exact generic facts, and named node/call effects without source attachments. The selected
+unresolved slice shows compact context and a visible count, not every candidate. Projection
 labels are review/debug spellings, never identity input.
 The former syntax-shaped service, dense source-node IDs, stdio/session schemas, text publication and
 journal machinery, CLI routes, and protocol contracts are deleted. No wire replacement exists
@@ -385,7 +414,8 @@ capability checking; they are not a replacement service sandbox.
 ## Target delta
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
-authority. Missing entry/body and real typed-hole nodes; non-generic product and enum creation;
+authority. Missing entry/body, real typed-hole nodes, and first-class unresolved copy-load value
+references; non-generic product and enum creation;
 generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
 sequence, assignment, `while`, and early `return`; selected byte-vector move/borrow and canonical
 operations; aggregate construction/observation; exhaustive non-generic enum payload matches with
@@ -394,8 +424,8 @@ binders, structured types, shared resolution, and derived witnesses; atomic batc
 tombstone-stable identities; structured stable nominal, generic, and match views; deterministic
 queries/projections/diffs; one canonical complete-HIR match derivation; and direct execution are
 implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
-ownership, early-return, match, generic-declaration, and generic-call convergence; malformed/atomic
-retry tests; exact per-node index work; and
+ownership, early-return, match, generic-declaration, generic-call, and direct-versus-resolved copy-
+load convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
 20,000-level nested-expression, local, semantic-match, published-type, and declaration-type
 small-stack release execution protect the selected vertical. A retained five-sample release harness
 measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match, exact-generic mixed,
@@ -408,8 +438,8 @@ Formatting-only attachment changes preserve IDs and projection.
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
 concrete public semantic movement operation only when ownership/order semantics are defined,
 source-free `break`/`continue`, generic patterns, Boolean/integer/product pattern construction,
-generic ownership/reference instantiation, unresolved references, ambiguities, conflicts, recovery
-nodes, richer declaration kinds, and finer
+generic ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
+imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
 scheduler, and broader platform work wait for evidence after real use of the local semantic model.

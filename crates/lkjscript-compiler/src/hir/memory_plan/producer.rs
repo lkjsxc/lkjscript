@@ -227,6 +227,9 @@ fn constant_value(kind: &ExprKind) -> Option<MemoryConstantValue> {
 fn expression_kind(kind: &ExprKind) -> MemoryExpressionKind {
     match kind {
         ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
+        ExprKind::UnresolvedValueReference { .. } => {
+            unreachable!("complete HIR cannot contain an unresolved value reference")
+        }
         ExprKind::Match { .. } => {
             unreachable!("semantic matches must be lowered before memory planning")
         }

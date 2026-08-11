@@ -6,7 +6,7 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
 
 fn recompute_expr_inner(expression: &mut Expr, summaries: &[Option<EffectSet>]) -> EffectSet {
     let effects = match &mut expression.kind {
-        ExprKind::Hole => EffectSet::UNKNOWN,
+        ExprKind::Hole | ExprKind::UnresolvedValueReference { .. } => EffectSet::UNKNOWN,
         ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)

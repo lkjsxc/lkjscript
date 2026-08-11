@@ -317,6 +317,9 @@ impl<'a> Producer<'a> {
         )?;
         match &expression.kind {
             ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
+            ExprKind::UnresolvedValueReference { .. } => {
+                unreachable!("complete HIR cannot contain an unresolved value reference")
+            }
             ExprKind::Match { .. } => {
                 unreachable!("semantic matches must be lowered before memory planning")
             }

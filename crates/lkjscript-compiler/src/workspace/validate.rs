@@ -733,6 +733,11 @@ fn validate_expression_kind(
 ) -> Result<()> {
     match &expression.kind {
         ExprKind::Hole => return Err(Error::msg("complete HIR contains a hole")),
+        ExprKind::UnresolvedValueReference { .. } => {
+            return Err(Error::msg(
+                "complete HIR contains an unresolved value reference",
+            ));
+        }
         ExprKind::LitI64(_) if expression.ty == Type::I64 => {}
         ExprKind::LitF64(_) if expression.ty == Type::F64 => {}
         ExprKind::LitBool(_) if expression.ty == Type::Bool => {}

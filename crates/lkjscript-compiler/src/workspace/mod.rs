@@ -19,6 +19,7 @@ mod transaction;
 mod types;
 mod validate;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -38,9 +39,10 @@ pub use model::{
     CallEdge, CompletenessBlocker, ContainmentEdge, DependencyEdge, DiagnosticHeader,
     DiagnosticSeverity, EntityHeader, EntityKind, HoleId, HoleKind, HoleState, ImportMetrics,
     NodeHeader, NodeKind, PresentationAttachments, ProgramState, ReferenceEdge, SemanticChild,
-    SemanticOwner, SourceAttachment,
+    SemanticOwner, SourceAttachment, UnresolvedValueReferenceId, UnresolvedValueReferenceState,
+    ValueReferenceIntent,
 };
-use model::{HoleRecord, SnapshotIndexes};
+use model::{HoleRecord, SnapshotIndexes, UnresolvedValueReferenceRecord};
 use program::SemanticProgram;
 pub use projection::ProjectionSlice;
 pub use query::{
@@ -49,6 +51,7 @@ pub use query::{
     MatchPatternKindView, MatchPatternLabel, MatchPatternNodeView, MatchView, NodeSemanticFacts,
     NodeTypeFacts, PageRequest, QueryPage, TraitWitnessKindView, TraitWitnessView,
     TypeArgumentView, TypeParameterBoundView, TypeParameterView, ValueParameterView,
+    ValueReferenceCandidate, ValueReferenceCandidateStatus,
 };
 pub use transaction::{
     Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
@@ -97,6 +100,7 @@ pub struct WorkspaceSnapshot {
     attachments: Option<Arc<PresentationAttachments>>,
     indexes: Arc<SnapshotIndexes>,
     holes: Arc<[HoleRecord]>,
+    unresolved_value_references: Arc<[UnresolvedValueReferenceRecord]>,
     diagnostics: Arc<[DiagnosticHeader]>,
     blockers: Arc<[CompletenessBlocker]>,
     allocator: IdentityAllocator,
@@ -130,6 +134,7 @@ impl WorkspaceSnapshot {
             attachments: None,
             indexes: Arc::clone(&self.indexes),
             holes: Arc::clone(&self.holes),
+            unresolved_value_references: Arc::clone(&self.unresolved_value_references),
             diagnostics: Arc::clone(&self.diagnostics),
             blockers: Arc::clone(&self.blockers),
             allocator: self.allocator.clone(),
@@ -166,6 +171,14 @@ impl WorkspaceSnapshot {
 
     pub fn holes(&self) -> impl ExactSizeIterator<Item = &HoleState> {
         self.holes.iter().map(|record| &record.state)
+    }
+
+    pub fn unresolved_value_references(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &UnresolvedValueReferenceState> {
+        self.unresolved_value_references
+            .iter()
+            .map(|record| &record.state)
     }
 
     pub fn completeness_blockers(&self) -> &[CompletenessBlocker] {
@@ -208,6 +221,7 @@ impl WorkspaceSnapshot {
             attachments: attachments.map(Arc::new),
             indexes: Arc::new(indexes),
             holes: Arc::from([]),
+            unresolved_value_references: Arc::from([]),
             diagnostics: Arc::from([]),
             blockers: Arc::from([]),
             allocator,
@@ -234,6 +248,7 @@ impl WorkspaceSnapshot {
             attachments: None,
             indexes: Arc::new(indexes),
             holes: Arc::from([]),
+            unresolved_value_references: Arc::from([]),
             diagnostics,
             blockers: Arc::from([CompletenessBlocker::MissingEntryPoint]),
             allocator,
@@ -266,7 +281,16 @@ impl WorkspaceSnapshot {
             .iter()
             .filter(|node| node.kind == NodeKind::Hole)
             .count();
-        if indexed_holes != self.holes.len() || self.blockers.len() != self.diagnostics.len() {
+        let indexed_unresolved = self
+            .indexes
+            .nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::UnresolvedValueReference)
+            .count();
+        if indexed_holes != self.holes.len()
+            || indexed_unresolved != self.unresolved_value_references.len()
+            || self.blockers.len() != self.diagnostics.len()
+        {
             return Err(Error::msg(
                 "workspace incomplete-node indexes and diagnostics are inconsistent",
             ));
@@ -286,12 +310,85 @@ impl WorkspaceSnapshot {
                 return Err(Error::msg("workspace hole facts are inconsistent"));
             }
         }
+        let mut unresolved_ids = HashSet::new();
+        unresolved_ids
+            .try_reserve(self.unresolved_value_references.len())
+            .map_err(|_| Error::host("workspace unresolved identity allocation failed"))?;
+        for reference in self.unresolved_value_references.iter() {
+            if !unresolved_ids.insert(reference.state.id.node()) {
+                return Err(Error::msg(
+                    "workspace unresolved value-reference identity is duplicated",
+                ));
+            }
+            let index = self
+                .indexes
+                .node_lookup
+                .get(&reference.state.id.0)
+                .copied()
+                .ok_or_else(|| Error::msg("workspace unresolved reference identity is stale"))?;
+            let expression = semantic_expression_at(&self.program, reference.address)?;
+            let requested_name = match &expression.kind {
+                crate::hir::ExprKind::UnresolvedValueReference { requested_name } => requested_name,
+                _ => {
+                    return Err(Error::msg(
+                        "workspace unresolved reference expression is inconsistent",
+                    ));
+                }
+            };
+            let canonical_owner = self
+                .indexes
+                .address_entities
+                .get(&reference.address.root)
+                .copied()
+                .ok_or_else(|| Error::msg("workspace unresolved reference owner is stale"))?;
+            let canonical_expected = types::view(
+                &self.program,
+                &self.indexes,
+                &reference.expected_internal,
+                Some(canonical_owner),
+            )
+            .map_err(consistency_workspace_error)?;
+            let canonical_visibility =
+                transaction::visible_entities_in(&self.program, &self.indexes, reference.address)
+                    .map_err(consistency_workspace_error)?;
+            if reference.state.revision != self.revision
+                || reference.state.intent != ValueReferenceIntent::CopyLoad
+                || self.indexes.nodes[index].kind != NodeKind::UnresolvedValueReference
+                || self.indexes.node_addresses[index] != reference.address
+                || self.indexes.node_keys[index] != reference.key
+                || self.indexes.node_expected_types[index].as_ref()
+                    != Some(&reference.expected_internal)
+                || self.indexes.node_actual_types[index] != reference.expected_internal
+                || reference.state.owner != canonical_owner
+                || reference.state.context != reference.state.id.node()
+                || reference.state.expected_type != canonical_expected
+                || requested_name.as_ref() != reference.state.requested_name.as_ref()
+                || !lkjscript_contracts::is_identifier(requested_name)
+                || reference.state.visible_entities.as_ref() != canonical_visibility.as_slice()
+            {
+                return Err(Error::msg(
+                    "workspace unresolved value-reference facts are inconsistent",
+                ));
+            }
+        }
+        if self
+            .indexes
+            .nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::UnresolvedValueReference)
+            .any(|node| !unresolved_ids.contains(&node.id))
+        {
+            return Err(Error::msg(
+                "workspace unresolved value-reference record is missing",
+            ));
+        }
         let mut expected_blockers = Vec::new();
         if self.program.main.is_none() {
             expected_blockers.push(CompletenessBlocker::MissingEntryPoint);
         }
+        let mut expression_blockers = Vec::new();
         for hole in self.holes.iter() {
-            expected_blockers.push(match hole.state.kind {
+            expression_blockers.push(match hole.state.kind {
                 HoleKind::MissingBody => CompletenessBlocker::MissingBody {
                     declaration: hole.state.owner,
                     hole: hole.state.id,
@@ -305,6 +402,17 @@ impl WorkspaceSnapshot {
                 },
             });
         }
+        for reference in self.unresolved_value_references.iter() {
+            expression_blockers.push(CompletenessBlocker::UnresolvedValueReference {
+                reference: reference.state.id,
+                requested_name: Arc::clone(&reference.state.requested_name),
+                expected_type: reference.state.expected_type.clone(),
+                owner: reference.state.owner,
+                context: reference.state.context,
+            });
+        }
+        expression_blockers.sort_by_key(incomplete_blocker_node);
+        expected_blockers.extend(expression_blockers);
         if expected_blockers.as_slice() != self.blockers.as_ref() {
             return Err(Error::msg("workspace completeness blockers are stale"));
         }
@@ -350,6 +458,44 @@ impl WorkspaceSnapshot {
     ) -> Result<()> {
         self.provenance.validate_required_capabilities(required)
     }
+}
+
+fn consistency_workspace_error(error: WorkspaceError) -> Error {
+    match error {
+        WorkspaceError::Host(message) => Error::host(message.to_string()),
+        other => Error::msg(other.to_string()),
+    }
+}
+
+fn incomplete_blocker_node(blocker: &CompletenessBlocker) -> Option<NodeId> {
+    match blocker {
+        CompletenessBlocker::MissingEntryPoint => None,
+        CompletenessBlocker::MissingBody { hole, .. }
+        | CompletenessBlocker::TypedHole { hole, .. } => Some(hole.node()),
+        CompletenessBlocker::UnresolvedValueReference { reference, .. } => Some(reference.node()),
+    }
+}
+
+fn semantic_expression_at(
+    program: &SemanticProgram,
+    address: model::NodeAddress,
+) -> Result<&crate::hir::Expr> {
+    let root = match address.root {
+        model::EntityAddress::Main => program
+            .main
+            .as_ref()
+            .map(|main| &main.body)
+            .ok_or_else(|| Error::msg("workspace main expression root is stale"))?,
+        model::EntityAddress::Binding(raw) => program
+            .functions
+            .iter()
+            .find(|function| function.binding.raw() == raw)
+            .map(|function| &function.body)
+            .ok_or_else(|| Error::msg("workspace function expression root is stale"))?,
+        _ => return Err(Error::msg("workspace node has a non-callable root")),
+    };
+    root.try_at_preorder(address.preorder)?
+        .ok_or_else(|| Error::msg("workspace expression address is stale"))
 }
 
 impl fmt::Debug for WorkspaceSnapshot {

@@ -41,6 +41,9 @@ fn body_is_compare_only(body: &Expr, parameter: &str) -> bool {
 fn expression_children(expression: &Expr) -> Vec<&Expr> {
     match &expression.kind {
         ExprKind::Hole => Vec::new(),
+        ExprKind::UnresolvedValueReference { .. } => {
+            unreachable!("complete HIR cannot contain an unresolved value reference")
+        }
         ExprKind::Match { .. } => {
             unreachable!("semantic matches must be lowered before memory planning")
         }

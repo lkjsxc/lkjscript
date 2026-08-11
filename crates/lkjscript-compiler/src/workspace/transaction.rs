@@ -123,14 +123,19 @@ pub(super) fn take_transaction_measurement() -> TransactionMeasurement {
 }
 
 use super::identity::{self, IdentityAllocator};
-use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
+use super::model::{
+    EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes,
+    UnresolvedValueReferenceRecord,
+};
 use super::program::SemanticProgram;
 use super::{
     CompletenessBlocker, DeclarationType, DiagnosticHeader, DiagnosticSeverity, DraftBindingId,
     DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, DraftPatternNode, DraftPatternNodeId,
     DraftTypeParameterId, EntityId, EntityKind, ExpressionDraft, HoleId, HoleKind, HoleState,
-    NodeId, NodeKind, PatternDraft, ProgramState, RevisionId, SemanticChild, SemanticOwner,
-    SemanticTrait, SemanticType, WorkspaceError, WorkspaceNamespace, WorkspaceSnapshot,
+    NodeId, NodeKind, PatternDraft, ProgramState, RevisionId, SemanticChild, SemanticKind,
+    SemanticOwner, SemanticTrait, SemanticType, UnresolvedValueReferenceId,
+    UnresolvedValueReferenceState, ValueReferenceIntent, WorkspaceError, WorkspaceNamespace,
+    WorkspaceSnapshot,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -205,6 +210,14 @@ pub enum Edit {
         target: NodeId,
         goal: String,
     },
+    IntroduceUnresolvedValueReference {
+        target: NodeId,
+        requested_name: String,
+    },
+    ResolveUnresolvedValueReference {
+        reference: UnresolvedValueReferenceId,
+        target: EntityId,
+    },
     RefineHole {
         hole: HoleId,
         expected_type: Option<SemanticType>,
@@ -271,6 +284,13 @@ pub enum SemanticDiffEntry {
     },
     HoleFilled {
         hole: HoleId,
+    },
+    UnresolvedValueReferenceIntroduced {
+        reference: UnresolvedValueReferenceId,
+    },
+    UnresolvedValueReferenceResolved {
+        reference: UnresolvedValueReferenceId,
+        target: EntityId,
     },
     ReferenceRewired {
         site: NodeId,
@@ -456,7 +476,30 @@ fn stage(
         .try_reserve(base.holes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("hole staging allocation failed")))?;
     holes.extend(base.holes.iter().cloned());
-    prune_replaced_subtree_holes(base, &mut holes, &transaction.edits)?;
+    let unresolved_capacity = base
+        .unresolved_value_references
+        .len()
+        .checked_add(edit_count)
+        .ok_or_else(|| {
+            WorkspaceError::Host(Arc::from(
+                "unresolved value-reference staging count overflow",
+            ))
+        })?;
+    let mut unresolved_value_references = Vec::new();
+    unresolved_value_references
+        .try_reserve(unresolved_capacity)
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from(
+                "unresolved value-reference staging allocation failed",
+            ))
+        })?;
+    unresolved_value_references.extend(base.unresolved_value_references.iter().cloned());
+    prune_replaced_incomplete_subtrees(
+        base,
+        &mut holes,
+        &mut unresolved_value_references,
+        &transaction.edits,
+    )?;
     let mut structural = Vec::new();
     structural
         .try_reserve(edit_count)
@@ -677,6 +720,94 @@ fn stage(
                     hole: HoleId(target),
                 });
             }
+            Edit::IntroduceUnresolvedValueReference {
+                target,
+                requested_name,
+            } => {
+                validate_name(&requested_name)?;
+                let (address, key, expected, visible) =
+                    unresolved_introduction_context(base, target)?;
+                reject_deleted_root_edit(deleted_roots, address.root)?;
+                let owner = root_owner(base, address)?;
+                let requested_name: Arc<str> = Arc::from(requested_name);
+                unresolved_value_references.push(UnresolvedValueReferenceRecord {
+                    state: UnresolvedValueReferenceState {
+                        revision,
+                        id: UnresolvedValueReferenceId(target),
+                        intent: ValueReferenceIntent::CopyLoad,
+                        requested_name: Arc::clone(&requested_name),
+                        expected_type: super::types::view(
+                            &base.program,
+                            &base.indexes,
+                            &expected,
+                            Some(owner),
+                        )?,
+                        owner,
+                        context: target,
+                        visible_entities: visible.into(),
+                    },
+                    expected_internal: expected.clone(),
+                    address,
+                    key,
+                });
+                structural.push(StructuralAction {
+                    target,
+                    address,
+                    replacement: Expr {
+                        ty: expected,
+                        effects: EffectSet::UNKNOWN,
+                        origin: Origin::Semantic,
+                        kind: ExprKind::UnresolvedValueReference { requested_name },
+                    },
+                });
+                entries.push(SemanticDiffEntry::UnresolvedValueReferenceIntroduced {
+                    reference: UnresolvedValueReferenceId(target),
+                });
+            }
+            Edit::ResolveUnresolvedValueReference { reference, target } => {
+                require_unresolved_value_reference(base, reference)?;
+                let index = unresolved_value_references
+                    .iter()
+                    .position(|record| record.state.id == reference)
+                    .ok_or_else(|| {
+                        WorkspaceError::StaleIdentity(Arc::from("unresolved value reference"))
+                    })?;
+                let record = unresolved_value_references[index].clone();
+                reject_deleted_root_edit(deleted_roots, record.address.root)?;
+                let resolution_visible = visible_entities(base, record.address)?;
+                let mut draft_nodes = Vec::new();
+                draft_nodes.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from(
+                        "unresolved value-reference resolution allocation failed",
+                    ))
+                })?;
+                draft_nodes.push(DraftNode::Load(DraftBindingRef::Entity(target)));
+                let draft = ExpressionDraft::new(draft_nodes, DraftNodeId::new(0));
+                let lowered = crate::stack::grow(|| {
+                    lower_draft(
+                        base,
+                        &mut program,
+                        &draft,
+                        &record.expected_internal,
+                        Origin::Semantic,
+                        &resolution_visible,
+                        record.address.root,
+                        &mut lowering,
+                        deleted_entities,
+                    )
+                })?;
+                new_entities.extend(lowered.entities);
+                structural.push(StructuralAction {
+                    target: reference.0,
+                    address: record.address,
+                    replacement: lowered.expression,
+                });
+                unresolved_value_references.remove(index);
+                entries.push(SemanticDiffEntry::UnresolvedValueReferenceResolved {
+                    reference,
+                    target,
+                });
+            }
             Edit::RefineHole {
                 hole,
                 expected_type,
@@ -741,6 +872,8 @@ fn stage(
 
     reject_surviving_deleted_dependencies(base, &program, &deletions)?;
     holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
+    unresolved_value_references
+        .retain(|reference| !deleted_roots.contains(&reference.address.root));
     new_holes.retain(|hole| !deleted_roots.contains(&hole.address.root));
     if deleted_roots.contains(&EntityAddress::Main) {
         program.main = None;
@@ -796,7 +929,10 @@ fn stage(
         measurement.effect_roots = effect_roots;
     });
 
-    let validates_complete = program.main.is_some() && holes.is_empty() && new_holes.is_empty();
+    let validates_complete = program.main.is_some()
+        && holes.is_empty()
+        && unresolved_value_references.is_empty()
+        && new_holes.is_empty();
     #[cfg(test)]
     let validation_started = std::time::Instant::now();
     if validates_complete {
@@ -856,6 +992,12 @@ fn stage(
     let finalization_started = std::time::Instant::now();
 
     refresh_hole_addresses(&mut holes, &program, &indexes)?;
+    refresh_unresolved_value_reference_addresses(
+        &mut unresolved_value_references,
+        revision,
+        &program,
+        &indexes,
+    )?;
     install_new_holes(&mut holes, &new_holes, &program, &indexes)?;
     for pending in &new_holes {
         let node = indexes
@@ -865,7 +1007,12 @@ fn stage(
             .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole identity is missing")))?;
         entries.push(SemanticDiffEntry::HoleIntroduced { hole: HoleId(node) });
     }
-    let diagnostics = apply_hole_diagnostics(&mut indexes, &holes, program.main.is_none())?;
+    let diagnostics = apply_incomplete_diagnostics(
+        &mut indexes,
+        &holes,
+        &unresolved_value_references,
+        program.main.is_none(),
+    )?;
     for created in new_entities {
         let entity = indexes
             .address_entities
@@ -882,7 +1029,7 @@ fn stage(
     }
     append_structural_diff(base, &indexes, &structural, &mut entries)?;
     append_graph_diff(base, &indexes, &mut entries)?;
-    let blockers = completeness_blockers(&program, &holes);
+    let blockers = completeness_blockers(&program, &holes, &unresolved_value_references);
     let state = if blockers.is_empty() {
         ProgramState::Complete
     } else {
@@ -898,6 +1045,7 @@ fn stage(
         attachments: None,
         indexes: Arc::new(indexes),
         holes: holes.into(),
+        unresolved_value_references: unresolved_value_references.into(),
         diagnostics: diagnostics.into(),
         blockers: blockers.into(),
         allocator: allocator.clone(),
@@ -932,6 +1080,18 @@ fn stage_hole_refinements(
         .try_reserve(base.holes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("hole staging allocation failed")))?;
     holes.extend(base.holes.iter().cloned());
+    let mut unresolved_value_references = Vec::new();
+    unresolved_value_references
+        .try_reserve(base.unresolved_value_references.len())
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from(
+                "unresolved value-reference staging allocation failed",
+            ))
+        })?;
+    unresolved_value_references.extend(base.unresolved_value_references.iter().cloned());
+    for reference in &mut unresolved_value_references {
+        reference.state.revision = revision;
+    }
     let mut entries = Vec::new();
     entries
         .try_reserve(edits.len())
@@ -957,7 +1117,11 @@ fn stage_hole_refinements(
             goal,
         )?);
     }
-    let diagnostics = hole_diagnostics(&holes, base.program.main.is_none())?;
+    let diagnostics = incomplete_diagnostics(
+        &holes,
+        &unresolved_value_references,
+        base.program.main.is_none(),
+    )?;
     let snapshot = WorkspaceSnapshot {
         namespace: base.namespace,
         revision,
@@ -968,6 +1132,7 @@ fn stage_hole_refinements(
         attachments: None,
         indexes: Arc::clone(&base.indexes),
         holes: holes.into(),
+        unresolved_value_references: unresolved_value_references.into(),
         diagnostics: diagnostics.into(),
         blockers: Arc::clone(&base.blockers),
         allocator: allocator.clone(),
@@ -1389,7 +1554,7 @@ fn reject_deleted_root_edit(
 ) -> Result<(), WorkspaceError> {
     if deleted_roots.contains(&root) {
         Err(WorkspaceError::InvalidTransaction(Arc::from(
-            "a node or hole owned by a deleted declaration cannot be edited in the same transaction",
+            "an incomplete node or expression owned by a deleted declaration cannot be edited in the same transaction",
         )))
     } else {
         Ok(())
@@ -1406,10 +1571,11 @@ fn preflight_structural_edits(
         .map_err(|_| WorkspaceError::Host(Arc::from("structural preflight allocation failed")))?;
     for edit in edits {
         let target = match edit {
-            Edit::ReplaceExpression { target, .. } | Edit::IntroduceHole { target, .. } => {
-                Some(*target)
-            }
+            Edit::ReplaceExpression { target, .. }
+            | Edit::IntroduceHole { target, .. }
+            | Edit::IntroduceUnresolvedValueReference { target, .. } => Some(*target),
             Edit::FillHole { hole, .. } => Some(hole.0),
+            Edit::ResolveUnresolvedValueReference { reference, .. } => Some(reference.0),
             _ => None,
         };
         if let Some(target) = target {
@@ -1437,9 +1603,10 @@ fn preflight_structural_edits(
     Ok(())
 }
 
-fn prune_replaced_subtree_holes(
+fn prune_replaced_incomplete_subtrees(
     base: &WorkspaceSnapshot,
     holes: &mut Vec<HoleRecord>,
+    unresolved_value_references: &mut Vec<UnresolvedValueReferenceRecord>,
     edits: &[Edit],
 ) -> Result<(), WorkspaceError> {
     let mut roots = HashSet::new();
@@ -1447,11 +1614,14 @@ fn prune_replaced_subtree_holes(
         .try_reserve(edits.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("hole-pruning root allocation failed")))?;
     for edit in edits {
-        if let Edit::ReplaceExpression { target, .. } | Edit::IntroduceHole { target, .. } = edit {
+        if let Edit::ReplaceExpression { target, .. }
+        | Edit::IntroduceHole { target, .. }
+        | Edit::IntroduceUnresolvedValueReference { target, .. } = edit
+        {
             roots.insert(*target);
         }
     }
-    if roots.is_empty() || holes.is_empty() {
+    if roots.is_empty() || (holes.is_empty() && unresolved_value_references.is_empty()) {
         return Ok(());
     }
     let mut removed = HashSet::new();
@@ -1466,6 +1636,7 @@ fn prune_replaced_subtree_holes(
         }
     }
     holes.retain(|hole| !removed.contains(&hole.state.id.0));
+    unresolved_value_references.retain(|reference| !removed.contains(&reference.state.id.0));
     Ok(())
 }
 
@@ -3343,6 +3514,60 @@ fn rename_entity(
     Ok(())
 }
 
+fn unresolved_introduction_context(
+    snapshot: &WorkspaceSnapshot,
+    target: NodeId,
+) -> Result<(NodeAddress, NodeKey, Type, Vec<EntityId>), WorkspaceError> {
+    let header = snapshot.workspace_node(target)?;
+    if header.kind != NodeKind::Hole {
+        return edit_context(snapshot, target);
+    }
+    let record = snapshot
+        .holes
+        .iter()
+        .find(|record| record.state.id.node() == target)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
+    let mut visible = Vec::new();
+    visible
+        .try_reserve(record.state.visible_entities.len())
+        .map_err(|_| {
+            WorkspaceError::Host(Arc::from(
+                "unresolved value-reference visibility allocation failed",
+            ))
+        })?;
+    visible.extend(record.state.visible_entities.iter().copied());
+    Ok((
+        record.address,
+        record.key,
+        record.expected_internal.clone(),
+        visible,
+    ))
+}
+
+fn require_unresolved_value_reference(
+    snapshot: &WorkspaceSnapshot,
+    reference: UnresolvedValueReferenceId,
+) -> Result<(), WorkspaceError> {
+    let header = snapshot.workspace_node(reference.0)?;
+    if header.kind != NodeKind::UnresolvedValueReference {
+        return Err(WorkspaceError::WrongEntityKind {
+            operation: Arc::from("resolve-unresolved-value-reference"),
+            expected: Arc::from("unresolved value-reference node"),
+            actual: SemanticKind::Node(header.kind),
+        });
+    }
+    if !snapshot
+        .unresolved_value_references
+        .iter()
+        .any(|record| record.state.id == reference)
+    {
+        return Err(WorkspaceError::StaleIdentity(Arc::from(
+            "unresolved value reference",
+        )));
+    }
+    Ok(())
+}
+
 fn edit_context(
     snapshot: &WorkspaceSnapshot,
     target: NodeId,
@@ -3391,7 +3616,7 @@ fn visible_entities(
     visible_entities_in(&snapshot.program, &snapshot.indexes, address)
 }
 
-fn visible_entities_in(
+pub(super) fn visible_entities_in(
     program: &SemanticProgram,
     indexes: &SnapshotIndexes,
     address: NodeAddress,
@@ -6634,6 +6859,49 @@ fn refresh_hole_addresses(
     Ok(())
 }
 
+fn refresh_unresolved_value_reference_addresses(
+    references: &mut [UnresolvedValueReferenceRecord],
+    revision: RevisionId,
+    program: &SemanticProgram,
+    indexes: &SnapshotIndexes,
+) -> Result<(), WorkspaceError> {
+    for reference in &mut *references {
+        let index = indexes
+            .node_lookup
+            .get(&reference.state.id.0)
+            .copied()
+            .ok_or_else(|| {
+                WorkspaceError::StaleIdentity(Arc::from("unresolved value-reference root"))
+            })?;
+        if indexes.nodes[index].kind != NodeKind::UnresolvedValueReference {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "unresolved value-reference node kind is stale",
+            )));
+        }
+        reference.address = indexes.node_addresses[index];
+        reference.key = indexes.node_keys[index];
+        reference.state.revision = revision;
+        reference.state.owner = indexes
+            .address_entities
+            .get(&reference.address.root)
+            .copied()
+            .ok_or_else(|| {
+                WorkspaceError::StaleIdentity(Arc::from("unresolved value-reference owner"))
+            })?;
+        reference.state.context = reference.state.id.0;
+        reference.state.visible_entities =
+            visible_entities_in(program, indexes, reference.address)?.into();
+        reference.state.expected_type = super::types::view(
+            program,
+            indexes,
+            &reference.expected_internal,
+            Some(reference.state.owner),
+        )?;
+    }
+    references.sort_by_key(|reference| reference.state.id);
+    Ok(())
+}
+
 fn install_new_holes(
     holes: &mut Vec<HoleRecord>,
     pending: &[NewHole],
@@ -6682,13 +6950,15 @@ fn install_new_holes(
     Ok(())
 }
 
-fn hole_diagnostics(
+fn incomplete_diagnostics(
     holes: &[HoleRecord],
+    unresolved_value_references: &[UnresolvedValueReferenceRecord],
     missing_entry: bool,
 ) -> Result<Vec<DiagnosticHeader>, WorkspaceError> {
     let capacity = holes
         .len()
-        .checked_add(usize::from(missing_entry))
+        .checked_add(unresolved_value_references.len())
+        .and_then(|count| count.checked_add(usize::from(missing_entry)))
         .ok_or_else(|| WorkspaceError::Host(Arc::from("diagnostic count overflow")))?;
     let mut diagnostics = Vec::new();
     diagnostics
@@ -6717,16 +6987,28 @@ fn hole_diagnostics(
             )),
         });
     }
+    for reference in unresolved_value_references {
+        diagnostics.push(DiagnosticHeader {
+            code: Arc::from("workspace.unresolved-value-reference"),
+            severity: DiagnosticSeverity::Error,
+            subject: Some(SemanticChild::Node(reference.state.id.0)),
+            message: Arc::from(format!(
+                "unresolved value reference \"{}\" requires {}",
+                reference.state.requested_name, reference.state.expected_type
+            )),
+        });
+    }
     diagnostics.sort_by_key(|diagnostic| diagnostic.subject);
     Ok(diagnostics)
 }
 
-fn apply_hole_diagnostics(
+fn apply_incomplete_diagnostics(
     indexes: &mut SnapshotIndexes,
     holes: &[HoleRecord],
+    unresolved_value_references: &[UnresolvedValueReferenceRecord],
     missing_entry: bool,
 ) -> Result<Vec<DiagnosticHeader>, WorkspaceError> {
-    let diagnostics = hole_diagnostics(holes, missing_entry)?;
+    let diagnostics = incomplete_diagnostics(holes, unresolved_value_references, missing_entry)?;
     rebuild_visible_dependencies(indexes)?;
     indexes.rebuild_maps().map_err(WorkspaceError::from_core)?;
     Ok(diagnostics)
@@ -6735,13 +7017,15 @@ fn apply_hole_diagnostics(
 fn completeness_blockers(
     program: &SemanticProgram,
     holes: &[HoleRecord],
+    unresolved_value_references: &[UnresolvedValueReferenceRecord],
 ) -> Vec<CompletenessBlocker> {
     let mut blockers = Vec::new();
     if program.main.is_none() {
         blockers.push(CompletenessBlocker::MissingEntryPoint);
     }
+    let mut expression_blockers = Vec::new();
     for hole in holes {
-        blockers.push(match hole.state.kind {
+        expression_blockers.push(match hole.state.kind {
             HoleKind::MissingBody => CompletenessBlocker::MissingBody {
                 declaration: hole.state.owner,
                 hole: hole.state.id,
@@ -6755,6 +7039,22 @@ fn completeness_blockers(
             },
         });
     }
+    for reference in unresolved_value_references {
+        expression_blockers.push(CompletenessBlocker::UnresolvedValueReference {
+            reference: reference.state.id,
+            requested_name: Arc::clone(&reference.state.requested_name),
+            expected_type: reference.state.expected_type.clone(),
+            owner: reference.state.owner,
+            context: reference.state.context,
+        });
+    }
+    expression_blockers.sort_by_key(|blocker| match blocker {
+        CompletenessBlocker::MissingEntryPoint => None,
+        CompletenessBlocker::MissingBody { hole, .. }
+        | CompletenessBlocker::TypedHole { hole, .. } => Some(hole.node()),
+        CompletenessBlocker::UnresolvedValueReference { reference, .. } => Some(reference.node()),
+    });
+    blockers.extend(expression_blockers);
     blockers
 }
 
@@ -7172,6 +7472,18 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
         SemanticDiffEntry::HoleFilled { hole } => {
             (8, hole.0.slot(), hole.0.generation(), 0, 0, 0, 0)
         }
+        SemanticDiffEntry::UnresolvedValueReferenceIntroduced { reference } => {
+            (9, reference.0.slot(), reference.0.generation(), 0, 0, 0, 0)
+        }
+        SemanticDiffEntry::UnresolvedValueReferenceResolved { reference, target } => (
+            10,
+            reference.0.slot(),
+            reference.0.generation(),
+            target.slot(),
+            target.generation(),
+            0,
+            0,
+        ),
         SemanticDiffEntry::ReferenceRewired {
             site,
             old_target,
@@ -7180,7 +7492,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             let old = optional_entity(*old_target);
             let new = optional_entity(*new_target);
             (
-                9,
+                11,
                 site.slot(),
                 site.generation(),
                 old.0,
@@ -7197,7 +7509,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             let old = optional_entity(*old_callee);
             let new = optional_entity(*new_callee);
             (
-                10,
+                12,
                 site.slot(),
                 site.generation(),
                 old.0,
@@ -7207,7 +7519,7 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             )
         }
         SemanticDiffEntry::CallInstantiationChanged { site, .. } => {
-            (11, site.slot(), site.generation(), 0, 0, 0, 0)
+            (13, site.slot(), site.generation(), 0, 0, 0, 0)
         }
     }
 }

@@ -16,11 +16,37 @@ mutable program entities.
 
 A `WorkspaceSnapshot` owns one partial-capable `SemanticProgram`, optional imported diagnostic
 origins and presentation attachments, opaque namespace/slot/generation identities, the exact
-identity allocator including tombstones, derived indexes, typed hole records, diagnostics, and
-structured completeness blockers. The semantic program may omit `main`; missing bodies and typed
-expression holes are actual `ExprKind::Hole` leaves with unknown effects. No executable expression
-is retained behind a hole. Source-free expressions have an honest semantic origin; imported source
-paths and digests do not create logical identity.
+identity allocator including tombstones, derived indexes, typed hole records, unresolved value-
+reference records, diagnostics, and structured completeness blockers. The semantic program may omit
+`main`; missing bodies and typed expression holes are actual `ExprKind::Hole` leaves with unknown
+effects. An unresolved value reference is a distinct typed childless expression carrying one
+validated requested-name hint and a fixed future copy-load intent. It has unknown effects, no
+selected target, no reference or candidate dependency edge, and no executable load or fallback.
+Source-free expressions have an honest semantic origin; imported source paths and digests do not
+create logical identity.
+
+The implemented unresolved lifecycle begins at an existing typed expression or body hole. A typed
+introduction edit preserves the targeted root node identity, physically removes the displaced
+subtree and hole record, and publishes one incomplete revision. Direct state inspection returns the
+revision, requested name, expected type, owner, context, and stable visible-scope entities. A
+revision-bound paginated candidate query scans that scope once and returns only visible parameter or
+local identities accepted by the canonical copy-load type and copy-safety prefilters. Candidates
+carry current name, kind, declared semantic type, exact case-sensitive requested-name equality, and
+an explicit requirement for canonical resolution validation. Exact-name matches sort first; the
+remaining order is current name then stable entity identity. Requested spelling is intent metadata:
+renaming a candidate changes its current name and exact-match fact but never rewrites the hint.
+Explicit resolution may select a differently named stable identity.
+
+Resolution is one typed structural edit from the unresolved root to the ordinary canonical load. It
+reuses the existing draft load path for namespace/generation, visibility, value-binding kind, type,
+copy safety, and storage, preserves the root node identity, removes the unresolved blocker and
+diagnostic, and creates the normal reference/dependency facts. If that edit makes the staged snapshot
+complete, the existing whole-program ownership check also runs before publication; otherwise the
+later edit that reaches completeness runs it before that complete revision can publish. Failure
+publishes nothing. Replacing the node or an ancestor and deleting its callable prune the unresolved
+record through ordinary containment and tombstone removed identities; unrelated edits preserve it.
+Old immutable snapshots retain their original unresolved state. Current text import remains
+fail-fast on unresolved source names; it does not manufacture parser recovery state.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
 creation covers non-generic products and enums, generic and non-generic functions, and one
@@ -71,8 +97,8 @@ forwarding an unresolved caller type parameter, ownership/reference-bearing gene
 and non-enum source-free pattern spaces are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
-declarations; they also rename supported bindings, replace expressions, and introduce/refine/fill
-typed holes. Callable deletion cascades through the declaration's type parameters, value
+declarations; they also rename supported bindings, replace expressions, introduce/refine/fill typed
+holes, and introduce or resolve unresolved copy-load value references. Callable deletion cascades through the declaration's type parameters, value
 parameters, locals, payload bindings, body nodes, holes, hidden match storage, match plans, and
 compiler layout participation.
 Product deletion owns its fields and narrowly owns explicit trait implementations whose target is
@@ -111,10 +137,12 @@ change; a refinement whose final goal equals the base goal reports no semantic c
 call-instantiation diff includes exact old/new substitutions, instantiated
 parameter/result types, witnesses, and effects, so a type-argument-only change remains reviewable.
 
-Structured blockers currently cover missing entry point, missing declaration/entry body, and typed
-expression hole. Every blocker is revision-labelled through the snapshot or
-`IncompleteSnapshotError`. Incomplete compilation returns before complete-HIR derivation, memory
-planning, SSA, bytecode lowering, or execution. A complete revision derives one ephemeral
+Structured blockers currently cover missing entry point, missing declaration/entry body, typed
+expression hole, and unresolved value reference. The unresolved diagnostic has stable code
+`workspace.unresolved-value-reference` and is attached to the unresolved node. Every blocker is
+revision-labelled through the snapshot or `IncompleteSnapshotError`. Incomplete compilation returns
+before complete-HIR derivation, memory planning, SSA, bytecode lowering, or execution; independent
+semantic-program validation also rejects a surviving unresolved leaf. A complete revision derives one ephemeral
 source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
 parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
 and source-free scalar, product, enum, lexical-local, mutable counted-loop, borrow-then-move,
@@ -126,7 +154,8 @@ ordinary plans reject builtin or stale provenance.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
-context, exact lexical and match-arm bindings, expected-type-filtered legal constructors (including
+context, unresolved value-reference state and copy-load candidates, exact lexical and match-arm
+bindings, expected-type-filtered legal constructors (including
 early return and selected canonical operation identities), structured function signatures and call
 instantiations, node semantics, and structured match inspection. Return is advertised only where a
 `never` result is admissible; its payload expectation is the result in the owning callable's
@@ -145,17 +174,20 @@ canonical ownership validation rather than
 claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
 storage are not advertised. Hole scope is recomputed after later declaration creation. Continuations
 bind namespace, revision, and query. Public containment edges are emitted in semantic child order,
-including sequence and loop evaluation order. A fallible iterative projection renders state,
-blockers, selected entity/body/type/reference/hole/match sections, declared entity types, local and
-aggregate structure, operation identities, named node effects, ordered arms, patterns, and explicit
-holes without source attachments. Projection labels never construct identity.
+including sequence and loop evaluation order. A fallible iterative projection renders state, blockers, selected
+entity/body/type/reference/hole/unresolved-reference/match sections, declared entity types, local and
+aggregate structure, operation identities, named node effects, ordered arms, patterns, explicit
+holes, and explicit unresolved nodes without source attachments. The selected unresolved slice shows
+its requested name, expected type, owner, context, and visible-scope count but does not dump
+candidates. Projection labels never construct identity.
 
 The former syntax-shaped editing service, source-node protocol identities, hidden-body hole overlay,
 stdio/session schemas, text journal/publication path, CLI routes, unsupported reserved draft shapes,
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
-General unresolved references, ambiguities, conflicts, recovery nodes, direct nominal-member
-mutation, public semantic movement, source-free `break`/`continue`, generic-pattern construction,
+Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
+conflicts, parser recovery nodes, direct nominal-member mutation, public semantic movement,
+source-free `break`/`continue`, generic-pattern construction,
 Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
 incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic

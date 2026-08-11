@@ -171,6 +171,9 @@ fn walk_inner<'a>(
     add(&mut facts.steps, 1)?;
     match &expression.kind {
         ExprKind::Hole => unreachable!("complete HIR cannot contain a hole"),
+        ExprKind::UnresolvedValueReference { .. } => {
+            unreachable!("complete HIR cannot contain an unresolved value reference")
+        }
         ExprKind::Match { .. } => {
             unreachable!("semantic matches must be lowered before memory verification")
         }

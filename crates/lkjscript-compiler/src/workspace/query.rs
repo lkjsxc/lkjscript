@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use super::{
     CallEdge, DiagnosticHeader, EntityHeader, EntityId, EntityKind, HoleId, HoleState, NodeId,
-    ReferenceEdge, RevisionId, SemanticType, WorkspaceError, WorkspaceSnapshot,
+    ReferenceEdge, RevisionId, SemanticKind, SemanticType, UnresolvedValueReferenceId,
+    UnresolvedValueReferenceState, WorkspaceError, WorkspaceSnapshot,
 };
 
 #[cfg(test)]
@@ -109,6 +110,22 @@ pub struct QueryPage<T> {
 }
 
 pub type EntityPage = QueryPage<EntityHeader>;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum ValueReferenceCandidateStatus {
+    RequiresCanonicalValidation,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValueReferenceCandidate {
+    pub entity: EntityId,
+    pub name: Arc<str>,
+    pub kind: EntityKind,
+    pub declared_type: SemanticType,
+    pub exact_name_match: bool,
+    pub status: ValueReferenceCandidateStatus,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NodeTypeFacts {
@@ -1022,6 +1039,113 @@ impl WorkspaceSnapshot {
             .find(|record| record.state.id == hole)
             .map(|record| record.state.clone())
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))
+    }
+
+    pub fn unresolved_value_reference(
+        &self,
+        revision: RevisionId,
+        reference: UnresolvedValueReferenceId,
+    ) -> Result<UnresolvedValueReferenceState, WorkspaceError> {
+        self.check_query_revision(revision)?;
+        let header = self.workspace_node(reference.0)?;
+        if header.kind != super::NodeKind::UnresolvedValueReference {
+            return Err(WorkspaceError::WrongEntityKind {
+                operation: Arc::from("unresolved-value-reference"),
+                expected: Arc::from("unresolved value-reference node"),
+                actual: SemanticKind::Node(header.kind),
+            });
+        }
+        self.unresolved_value_references
+            .iter()
+            .find(|record| record.state.id == reference)
+            .map(|record| record.state.clone())
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("unresolved value reference")))
+    }
+
+    pub fn unresolved_value_reference_candidates(
+        &self,
+        revision: RevisionId,
+        reference: UnresolvedValueReferenceId,
+        request: PageRequest,
+        continuation: Option<&Continuation>,
+    ) -> Result<QueryPage<ValueReferenceCandidate>, WorkspaceError> {
+        let state = self.unresolved_value_reference(revision, reference)?;
+        let record = self
+            .unresolved_value_references
+            .iter()
+            .find(|record| record.state.id == reference)
+            .ok_or_else(|| {
+                WorkspaceError::StaleIdentity(Arc::from("unresolved value reference"))
+            })?;
+        let visible_entities =
+            super::transaction::visible_entities_in(&self.program, &self.indexes, record.address)?;
+        let mut values = Vec::new();
+        values.try_reserve(visible_entities.len()).map_err(|_| {
+            WorkspaceError::Host(Arc::from(
+                "unresolved value-reference candidate allocation failed",
+            ))
+        })?;
+        for entity in visible_entities.iter().copied() {
+            let header = self.workspace_entity(entity)?;
+            if !matches!(
+                header.kind,
+                EntityKind::Parameter
+                    | EntityKind::ImmutableLocal
+                    | EntityKind::StaticBytesLocal
+                    | EntityKind::MutableLocal
+            ) {
+                continue;
+            }
+            let address = self
+                .indexes
+                .entity_lookup
+                .get(&entity)
+                .and_then(|index| self.indexes.entity_addresses.get(*index))
+                .copied()
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("candidate entity")))?;
+            let super::model::EntityAddress::Binding(raw) = address else {
+                continue;
+            };
+            let binding =
+                self.program
+                    .bindings
+                    .get(usize::try_from(raw).map_err(|_| {
+                        WorkspaceError::StaleIdentity(Arc::from("candidate binding"))
+                    })?)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("candidate binding")))?;
+            if !crate::ownership::draft_parameter_load_is_supported(&binding.ty)
+                || !crate::generic_call::types_assignable(&binding.ty, &record.expected_internal)
+                    .map_err(generic_query_error)?
+            {
+                continue;
+            }
+            values.push(ValueReferenceCandidate {
+                entity,
+                name: Arc::clone(&header.name),
+                kind: header.kind,
+                declared_type: super::types::view(
+                    &self.program,
+                    &self.indexes,
+                    &binding.ty,
+                    Some(state.owner),
+                )?,
+                exact_name_match: header.name.as_ref() == state.requested_name.as_ref(),
+                status: ValueReferenceCandidateStatus::RequiresCanonicalValidation,
+            });
+        }
+        #[cfg(test)]
+        let materialized = values.len();
+        values.sort_by(|left, right| {
+            right
+                .exact_name_match
+                .cmp(&left.exact_name_match)
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.entity.cmp(&right.entity))
+        });
+        #[cfg(test)]
+        record_query_measurement(visible_entities.len(), materialized, materialized, 0, 0);
+        let query = id_query_key(b"unresolved-value-reference-candidates", reference.0)?;
+        page(self, query, request, continuation, &values)
     }
 
     pub fn legal_constructors(

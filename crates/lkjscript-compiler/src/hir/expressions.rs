@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::*;
 
@@ -145,6 +146,7 @@ fn for_each_kind_child<'a>(kind: &'a ExprKind, action: &mut impl FnMut(&'a Expr)
             action(body);
         }
         ExprKind::Hole
+        | ExprKind::UnresolvedValueReference { .. }
         | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
@@ -165,6 +167,11 @@ fn for_each_kind_child<'a>(kind: &'a ExprKind, action: &mut impl FnMut(&'a Expr)
 fn clone_kind(kind: &ExprKind, mut children: Vec<Expr>) -> ExprKind {
     match kind {
         ExprKind::Hole => ExprKind::Hole,
+        ExprKind::UnresolvedValueReference { requested_name } => {
+            ExprKind::UnresolvedValueReference {
+                requested_name: Arc::clone(requested_name),
+            }
+        }
         ExprKind::LitI64(value) => ExprKind::LitI64(*value),
         ExprKind::LitF64(value) => ExprKind::LitF64(*value),
         ExprKind::LitBool(value) => ExprKind::LitBool(*value),
@@ -990,6 +997,7 @@ fn take_children(expression: &mut Expr, pending: &mut Vec<Expr>) {
             pending.append(&mut arms);
         }
         ExprKind::Hole
+        | ExprKind::UnresolvedValueReference { .. }
         | ExprKind::LitI64(_)
         | ExprKind::LitF64(_)
         | ExprKind::LitBool(_)
@@ -1018,6 +1026,11 @@ pub enum BorrowKind {
 pub enum ExprKind {
     /// A real incomplete expression. No executable expression exists beneath it.
     Hole,
+    /// A typed request for a future copy-safe load. The requested name is
+    /// author intent, not a selected binding identity or executable fallback.
+    UnresolvedValueReference {
+        requested_name: Arc<str>,
+    },
     LitI64(i64),
     LitF64(f64),
     LitBool(bool),

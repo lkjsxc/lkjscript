@@ -78,11 +78,11 @@ impl SemanticProgram {
             .main
             .as_ref()
             .ok_or_else(|| Error::msg("semantic program has no entry point"))?;
-        if contains_holes(&main.body)
+        if contains_incomplete_expressions(&main.body)
             || self
                 .functions
                 .iter()
-                .any(|function| contains_holes(&function.body))
+                .any(|function| contains_incomplete_expressions(&function.body))
         {
             return Err(Error::msg(
                 "semantic program contains incomplete expressions",
@@ -132,10 +132,13 @@ impl SemanticProgram {
     }
 }
 
-fn contains_holes(root: &hir::Expr) -> bool {
+fn contains_incomplete_expressions(root: &hir::Expr) -> bool {
     let mut pending = vec![root];
     while let Some(expression) = pending.pop() {
-        if matches!(expression.kind, hir::ExprKind::Hole) {
+        if matches!(
+            expression.kind,
+            hir::ExprKind::Hole | hir::ExprKind::UnresolvedValueReference { .. }
+        ) {
             return true;
         }
         hir::for_each_expression_child(expression, &mut |child| pending.push(child));

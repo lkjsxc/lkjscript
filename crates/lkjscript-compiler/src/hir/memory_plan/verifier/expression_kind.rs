@@ -4,6 +4,9 @@ pub(super) fn verified_expression_kind(kind: &hir::ExprKind) -> MemoryExpression
     use hir::ExprKind as K;
     match kind {
         K::Hole => unreachable!("complete HIR cannot contain a hole"),
+        K::UnresolvedValueReference { .. } => {
+            unreachable!("complete HIR cannot contain an unresolved value reference")
+        }
         K::Match { .. } => {
             unreachable!("semantic matches must be lowered before memory verification")
         }

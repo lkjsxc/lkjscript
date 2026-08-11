@@ -59,7 +59,7 @@ impl Resolver<'_> {
 
     pub(in crate::analyze) fn effects(&self, kind: &ExprKind) -> EffectSet {
         match kind {
-            ExprKind::Hole => EffectSet::UNKNOWN,
+            ExprKind::Hole | ExprKind::UnresolvedValueReference { .. } => EffectSet::UNKNOWN,
             ExprKind::LitI64(_)
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)
