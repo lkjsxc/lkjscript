@@ -139,7 +139,6 @@ fn build_entities(
         calls: Vec::new(),
         dependencies: Vec::new(),
         declaration_dependencies: Vec::new(),
-        diagnostics: Vec::new(),
         entity_addresses: Vec::new(),
         node_addresses: Vec::new(),
         node_keys: Vec::new(),

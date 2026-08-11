@@ -6,21 +6,16 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Measure full recomputation under representative imperative edits and queries.** Source-free
-   counted loops and ownership-cleaning early returns now cover ordinary stateful and nonlocal-control
-   edits. Measure transaction, index rebuild, query, projection, and post-edit compile latency;
-   allocations and bytes where practical; retained snapshot memory; invalidated work; and output
-   volume. Keep full recomputation unless equivalent measurements justify more machinery.
-
-## Next
-
 1. **Add unresolved, ambiguous, conflict, and recovery states deliberately.** Keep each state
    inspectable and editable, with truthful legal next actions and an explicit completeness blocker;
    never lower a fabricated executable fallback.
-2. **Define one concrete public movement vertical only when a present owner/order use case exists.**
+
+## Next
+
+1. **Define one concrete public movement vertical only when a present owner/order use case exists.**
    Private identity-preserving compaction is complete but is not public movement. Do not add generic
    coordinates, paths, or tree-editing machinery for symmetry.
-3. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
+2. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
    merge any remaining crate or representation whose separate ownership does not justify compile,
    runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
 

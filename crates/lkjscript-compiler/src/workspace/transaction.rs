@@ -53,6 +53,64 @@ pub(super) fn binding_location_work() -> (u64, u64) {
     )
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct TransactionMeasurement {
+    pub stage_wall: std::time::Duration,
+    pub program_clone: std::time::Duration,
+    pub edit_staging: std::time::Duration,
+    pub compaction: std::time::Duration,
+    pub effect_inference: std::time::Duration,
+    pub complete_validation: std::time::Duration,
+    pub index_build: std::time::Duration,
+    pub identity_reconciliation: std::time::Duration,
+    pub finalization: std::time::Duration,
+    pub program_clones: usize,
+    pub functions_cloned: usize,
+    pub semantic_nodes_cloned: usize,
+    pub bindings_cloned: usize,
+    pub products_cloned: usize,
+    pub enums_cloned: usize,
+    pub implementations_cloned: usize,
+    pub match_plans_cloned: usize,
+    pub compaction_invocations: usize,
+    pub compaction_roots: usize,
+    pub effect_inference_invocations: usize,
+    pub effect_roots: usize,
+    pub complete_hir_derivations: usize,
+    pub complete_hir_nodes: usize,
+    pub index_build_invocations: usize,
+    pub index_entities_built: usize,
+    pub index_nodes_built: usize,
+    pub identity_reconciliation_invocations: usize,
+    pub identity_entity_records_examined: usize,
+    pub identity_node_records_examined: usize,
+    pub metadata_only_path_used: bool,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TRANSACTION_MEASUREMENT: std::cell::RefCell<TransactionMeasurement> =
+        std::cell::RefCell::default();
+}
+
+#[cfg(test)]
+fn reset_transaction_measurement() {
+    TRANSACTION_MEASUREMENT.with(|measurement| {
+        *measurement.borrow_mut() = TransactionMeasurement::default();
+    });
+}
+
+#[cfg(test)]
+fn record_transaction_measurement(action: impl FnOnce(&mut TransactionMeasurement)) {
+    TRANSACTION_MEASUREMENT.with(|measurement| action(&mut measurement.borrow_mut()));
+}
+
+#[cfg(test)]
+pub(super) fn take_transaction_measurement() -> TransactionMeasurement {
+    TRANSACTION_MEASUREMENT.with(|measurement| std::mem::take(&mut *measurement.borrow_mut()))
+}
+
 use super::identity::{self, IdentityAllocator};
 use super::model::{EntityAddress, HoleRecord, NodeAddress, NodeKey, SnapshotIndexes};
 use super::program::SemanticProgram;
@@ -345,9 +403,36 @@ fn stage(
     transaction: Transaction,
     allocator: &mut IdentityAllocator,
 ) -> Result<(WorkspaceSnapshot, SemanticDiff, Vec<InvalidatedDomain>), WorkspaceError> {
+    #[cfg(test)]
+    reset_transaction_measurement();
+    #[cfg(test)]
+    let stage_started = std::time::Instant::now();
     let revision = base.revision.next().map_err(WorkspaceError::from_core)?;
     let edit_count = transaction.edits.len();
+    if transaction
+        .edits
+        .iter()
+        .all(|edit| matches!(edit, Edit::RefineHole { .. }))
+    {
+        return stage_hole_refinements(base, revision, transaction.edits, allocator);
+    }
+    #[cfg(test)]
+    let clone_started = std::time::Instant::now();
     let mut program = try_clone_program(base.program.as_ref())?;
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.program_clone = clone_started.elapsed();
+        measurement.program_clones = 1;
+        measurement.functions_cloned = base.program.functions.len();
+        measurement.semantic_nodes_cloned = base.indexes.nodes.len();
+        measurement.bindings_cloned = base.program.bindings.len();
+        measurement.products_cloned = base.program.products.len();
+        measurement.enums_cloned = base.program.enums.len();
+        measurement.implementations_cloned = base.program.implementations.len();
+        measurement.match_plans_cloned = base.program.match_plans.len();
+    });
+    #[cfg(test)]
+    let edit_staging_started = std::time::Instant::now();
     let deletions = preflight_deletions(base, &program, &transaction.edits)?;
     preflight_structural_edits(base, &transaction.edits)?;
     let deleted_entities = &deletions.entities;
@@ -583,43 +668,15 @@ fn stage(
                 hole,
                 expected_type,
                 goal,
-            } => {
-                if hole.0.namespace() != base.namespace {
-                    return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
-                }
-                let record = holes
-                    .iter_mut()
-                    .find(|record| record.state.id == hole)
-                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
-                reject_deleted_root_edit(deleted_roots, record.address.root)?;
-                if let Some(expected_type) = expected_type {
-                    let expected_type =
-                        resolve_semantic_type(base, &program, expected_type, "hole expectation")?;
-                    if expected_type != record.expected_internal {
-                        return Err(WorkspaceError::TypeMismatch {
-                            expected: Box::new(record.state.expected_type.clone()),
-                            actual: Box::new(super::types::view(
-                                &base.program,
-                                &base.indexes,
-                                &expected_type,
-                                Some(record.state.owner),
-                            )?),
-                        });
-                    }
-                }
-                if goal.is_empty() {
-                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                        "typed hole goal must not be empty",
-                    )));
-                }
-                let old_goal = Arc::clone(&record.state.goal);
-                record.state.goal = Arc::from(goal);
-                entries.push(SemanticDiffEntry::HoleRefined {
-                    hole,
-                    old_goal,
-                    new_goal: Arc::clone(&record.state.goal),
-                });
-            }
+            } => entries.push(refine_hole(
+                base,
+                &program,
+                &mut holes,
+                Some(deleted_roots),
+                hole,
+                expected_type,
+                goal,
+            )?),
             Edit::FillHole { hole, draft } => {
                 if hole.0.namespace() != base.namespace {
                     return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
@@ -682,9 +739,22 @@ fn stage(
         .global_layout
         .retain(|binding| !deleted_bindings.contains(binding));
 
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.edit_staging = edit_staging_started.elapsed();
+    });
+    #[cfg(test)]
+    let compaction_started = std::time::Instant::now();
     let compaction =
         super::compaction::compact(&mut program, &deletions.products, &deletions.enum_vectors)
             .map_err(WorkspaceError::from_core)?;
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.compaction = compaction_started.elapsed();
+        measurement.compaction_invocations = 1;
+        measurement.compaction_roots =
+            program.functions.len() + usize::from(program.main.is_some());
+    });
     if deletions
         .implementations
         .iter()
@@ -699,11 +769,24 @@ fn stage(
     install_survivor_entity_relocations(base, &program, &compaction, &mut forced_entities)?;
     reserve_new_entity_identities(base, allocator, &mut forced_entities, &new_entities)?;
 
+    #[cfg(test)]
+    let effects_started = std::time::Instant::now();
     let binding_count = program.bindings.len();
+    #[cfg(test)]
+    let effect_roots = program.functions.len() + usize::from(program.main.is_some());
     let main_body = program.main.as_mut().map(|main| &mut main.body);
     crate::effects::infer_partial(binding_count, &mut program.functions, main_body);
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.effect_inference = effects_started.elapsed();
+        measurement.effect_inference_invocations = 1;
+        measurement.effect_roots = effect_roots;
+    });
 
-    if program.main.is_some() && holes.is_empty() && new_holes.is_empty() {
+    let validates_complete = program.main.is_some() && holes.is_empty() && new_holes.is_empty();
+    #[cfg(test)]
+    let validation_started = std::time::Instant::now();
+    if validates_complete {
         let complete = program
             .try_complete(&base.source_origins)
             .map_err(WorkspaceError::from_core)?;
@@ -711,10 +794,35 @@ fn stage(
         crate::analyze::verify_match_plans(&complete).map_err(WorkspaceError::from_core)?;
         super::validate::program(&complete).map_err(WorkspaceError::from_core)?;
     }
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.complete_validation = validation_started.elapsed();
+        measurement.complete_hir_derivations = usize::from(validates_complete);
+    });
 
+    #[cfg(test)]
+    let index_started = std::time::Instant::now();
     let canonical =
         super::index::build(&program, base.namespace).map_err(WorkspaceError::from_core)?;
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.index_build = index_started.elapsed();
+        measurement.index_build_invocations = 1;
+        measurement.index_entities_built = canonical.entities.len();
+        measurement.index_nodes_built = canonical.nodes.len();
+        measurement.complete_hir_nodes = if validates_complete {
+            canonical.nodes.len()
+        } else {
+            0
+        };
+    });
     let forced = force_surviving_nodes(base, &canonical, &forced_entities, &structural)?;
+    #[cfg(test)]
+    let reconciliation_started = std::time::Instant::now();
+    #[cfg(test)]
+    let reconciled_entities = canonical.entities.len();
+    #[cfg(test)]
+    let reconciled_nodes = canonical.nodes.len();
     let mut indexes = identity::reconcile(
         canonical,
         &base.indexes,
@@ -723,6 +831,16 @@ fn stage(
         &forced,
     )
     .map_err(WorkspaceError::from_core)?;
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.identity_reconciliation = reconciliation_started.elapsed();
+        measurement.identity_reconciliation_invocations = 1;
+        measurement.identity_entity_records_examined =
+            reconciled_entities + base.indexes.entities.len();
+        measurement.identity_node_records_examined = reconciled_nodes + base.indexes.nodes.len();
+    });
+    #[cfg(test)]
+    let finalization_started = std::time::Instant::now();
 
     refresh_hole_addresses(&mut holes, &program, &indexes)?;
     install_new_holes(&mut holes, &new_holes, &program, &indexes)?;
@@ -734,7 +852,7 @@ fn stage(
             .ok_or_else(|| WorkspaceError::Validation(Arc::from("new hole identity is missing")))?;
         entries.push(SemanticDiffEntry::HoleIntroduced { hole: HoleId(node) });
     }
-    apply_hole_diagnostics(&mut indexes, &holes, program.main.is_none())?;
+    let diagnostics = apply_hole_diagnostics(&mut indexes, &holes, program.main.is_none())?;
     for created in new_entities {
         let entity = indexes
             .address_entities
@@ -767,6 +885,7 @@ fn stage(
         attachments: None,
         indexes: Arc::new(indexes),
         holes: holes.into(),
+        diagnostics: diagnostics.into(),
         blockers: blockers.into(),
         allocator: allocator.clone(),
     };
@@ -777,7 +896,133 @@ fn stage(
         revision,
         entries,
     };
-    let invalidated = vec![
+    let invalidated = invalidated_domains();
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.finalization = finalization_started.elapsed();
+        measurement.stage_wall = stage_started.elapsed();
+    });
+    Ok((snapshot, diff, invalidated))
+}
+
+fn stage_hole_refinements(
+    base: &WorkspaceSnapshot,
+    revision: RevisionId,
+    edits: Vec<Edit>,
+    allocator: &IdentityAllocator,
+) -> Result<(WorkspaceSnapshot, SemanticDiff, Vec<InvalidatedDomain>), WorkspaceError> {
+    #[cfg(test)]
+    let started = std::time::Instant::now();
+    let mut holes = Vec::new();
+    holes
+        .try_reserve(base.holes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("hole staging allocation failed")))?;
+    holes.extend(base.holes.iter().cloned());
+    let mut entries = Vec::new();
+    entries
+        .try_reserve(edits.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("semantic diff allocation failed")))?;
+    for edit in edits {
+        let Edit::RefineHole {
+            hole,
+            expected_type,
+            goal,
+        } = edit
+        else {
+            return Err(WorkspaceError::Validation(Arc::from(
+                "metadata-only transaction contains a semantic edit",
+            )));
+        };
+        entries.push(refine_hole(
+            base,
+            &base.program,
+            &mut holes,
+            None,
+            hole,
+            expected_type,
+            goal,
+        )?);
+    }
+    let diagnostics = hole_diagnostics(&holes, base.program.main.is_none())?;
+    let snapshot = WorkspaceSnapshot {
+        namespace: base.namespace,
+        revision,
+        state: base.state,
+        program: Arc::clone(&base.program),
+        source_origins: Arc::clone(&base.source_origins),
+        provenance: Arc::new(super::CapturedCompilationProvenance::Development),
+        attachments: None,
+        indexes: Arc::clone(&base.indexes),
+        holes: holes.into(),
+        diagnostics: diagnostics.into(),
+        blockers: Arc::clone(&base.blockers),
+        allocator: allocator.clone(),
+    };
+    sort_diff_entries(&mut entries);
+    let diff = SemanticDiff {
+        base_revision: base.revision,
+        revision,
+        entries,
+    };
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.edit_staging = started.elapsed();
+        measurement.stage_wall = started.elapsed();
+        measurement.metadata_only_path_used = true;
+    });
+    Ok((snapshot, diff, invalidated_domains()))
+}
+
+fn refine_hole(
+    base: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    holes: &mut [HoleRecord],
+    deleted_roots: Option<&HashSet<EntityAddress>>,
+    hole: HoleId,
+    expected_type: Option<SemanticType>,
+    goal: String,
+) -> Result<SemanticDiffEntry, WorkspaceError> {
+    if hole.0.namespace() != base.namespace {
+        return Err(WorkspaceError::ForeignNamespace(Arc::from("hole")));
+    }
+    let record = holes
+        .iter_mut()
+        .find(|record| record.state.id == hole)
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
+    if let Some(deleted_roots) = deleted_roots {
+        reject_deleted_root_edit(deleted_roots, record.address.root)?;
+    }
+    if let Some(expected_type) = expected_type {
+        let expected_type =
+            resolve_semantic_type(base, program, expected_type, "hole expectation")?;
+        if expected_type != record.expected_internal {
+            return Err(WorkspaceError::TypeMismatch {
+                expected: Box::new(record.state.expected_type.clone()),
+                actual: Box::new(super::types::view(
+                    &base.program,
+                    &base.indexes,
+                    &expected_type,
+                    Some(record.state.owner),
+                )?),
+            });
+        }
+    }
+    if goal.is_empty() {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "typed hole goal must not be empty",
+        )));
+    }
+    let old_goal = Arc::clone(&record.state.goal);
+    record.state.goal = Arc::from(goal);
+    Ok(SemanticDiffEntry::HoleRefined {
+        hole,
+        old_goal,
+        new_goal: Arc::clone(&record.state.goal),
+    })
+}
+
+fn invalidated_domains() -> Vec<InvalidatedDomain> {
+    vec![
         InvalidatedDomain::SemanticIndexes,
         InvalidatedDomain::Types,
         InvalidatedDomain::Effects,
@@ -785,8 +1030,7 @@ fn stage(
         InvalidatedDomain::Diagnostics,
         InvalidatedDomain::Executable,
         InvalidatedDomain::Provenance,
-    ];
-    Ok((snapshot, diff, invalidated))
+    ]
 }
 
 fn try_clone_program(program: &SemanticProgram) -> Result<SemanticProgram, WorkspaceError> {
@@ -6423,14 +6667,20 @@ fn install_new_holes(
     Ok(())
 }
 
-fn apply_hole_diagnostics(
-    indexes: &mut SnapshotIndexes,
+fn hole_diagnostics(
     holes: &[HoleRecord],
     missing_entry: bool,
-) -> Result<(), WorkspaceError> {
-    indexes.diagnostics.clear();
+) -> Result<Vec<DiagnosticHeader>, WorkspaceError> {
+    let capacity = holes
+        .len()
+        .checked_add(usize::from(missing_entry))
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("diagnostic count overflow")))?;
+    let mut diagnostics = Vec::new();
+    diagnostics
+        .try_reserve(capacity)
+        .map_err(|_| WorkspaceError::Host(Arc::from("diagnostic allocation failed")))?;
     if missing_entry {
-        indexes.diagnostics.push(DiagnosticHeader {
+        diagnostics.push(DiagnosticHeader {
             code: Arc::from("workspace.missing-entry-point"),
             severity: DiagnosticSeverity::Error,
             subject: None,
@@ -6442,7 +6692,7 @@ fn apply_hole_diagnostics(
             HoleKind::MissingBody => ("workspace.missing-body", "missing body"),
             HoleKind::TypedExpression => ("workspace.typed-hole", "typed hole"),
         };
-        indexes.diagnostics.push(DiagnosticHeader {
+        diagnostics.push(DiagnosticHeader {
             code: Arc::from(code),
             severity: DiagnosticSeverity::Error,
             subject: Some(SemanticChild::Node(hole.state.id.0)),
@@ -6452,11 +6702,19 @@ fn apply_hole_diagnostics(
             )),
         });
     }
+    diagnostics.sort_by_key(|diagnostic| diagnostic.subject);
+    Ok(diagnostics)
+}
+
+fn apply_hole_diagnostics(
+    indexes: &mut SnapshotIndexes,
+    holes: &[HoleRecord],
+    missing_entry: bool,
+) -> Result<Vec<DiagnosticHeader>, WorkspaceError> {
+    let diagnostics = hole_diagnostics(holes, missing_entry)?;
     rebuild_visible_dependencies(indexes)?;
-    indexes
-        .diagnostics
-        .sort_by_key(|diagnostic| diagnostic.subject);
-    indexes.rebuild_maps().map_err(WorkspaceError::from_core)
+    indexes.rebuild_maps().map_err(WorkspaceError::from_core)?;
+    Ok(diagnostics)
 }
 
 fn completeness_blockers(
@@ -6763,7 +7021,31 @@ fn append_call_instantiation_diff(
 }
 
 fn sort_diff_entries(entries: &mut [SemanticDiffEntry]) {
-    entries.sort_unstable_by_key(diff_key);
+    entries.sort_unstable_by(|left, right| {
+        diff_key(left)
+            .cmp(&diff_key(right))
+            .then_with(|| diff_tie_break(left, right))
+    });
+}
+
+fn diff_tie_break(left: &SemanticDiffEntry, right: &SemanticDiffEntry) -> std::cmp::Ordering {
+    match (left, right) {
+        (
+            SemanticDiffEntry::HoleRefined {
+                old_goal: left_old,
+                new_goal: left_new,
+                ..
+            },
+            SemanticDiffEntry::HoleRefined {
+                old_goal: right_old,
+                new_goal: right_new,
+                ..
+            },
+        ) => left_old
+            .cmp(right_old)
+            .then_with(|| left_new.cmp(right_new)),
+        _ => std::cmp::Ordering::Equal,
+    }
 }
 
 fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {

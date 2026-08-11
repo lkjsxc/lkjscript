@@ -7,6 +7,81 @@ use super::{
     WorkspaceSnapshot,
 };
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct ProjectionMeasurement {
+    pub snapshot_nodes_inspected: usize,
+    pub nodes_emitted: usize,
+    pub reference_edges_inspected: usize,
+    pub references_emitted: usize,
+    pub visible_entities_inspected: usize,
+    pub visible_entities_emitted: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROJECTION_MEASUREMENT: std::cell::RefCell<ProjectionMeasurement> =
+        const { std::cell::RefCell::new(ProjectionMeasurement {
+            snapshot_nodes_inspected: 0,
+            nodes_emitted: 0,
+            reference_edges_inspected: 0,
+            references_emitted: 0,
+            visible_entities_inspected: 0,
+            visible_entities_emitted: 0,
+        }) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_projection_measurement() {
+    PROJECTION_MEASUREMENT.with(|measurement| {
+        *measurement.borrow_mut() = ProjectionMeasurement::default();
+    });
+}
+
+#[cfg(test)]
+pub(super) fn take_projection_measurement() -> ProjectionMeasurement {
+    PROJECTION_MEASUREMENT.with(|measurement| std::mem::take(&mut *measurement.borrow_mut()))
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+fn record_projection_measurement(
+    snapshot_nodes_inspected: usize,
+    nodes_emitted: usize,
+    reference_edges_inspected: usize,
+    references_emitted: usize,
+    visible_entities_inspected: usize,
+    visible_entities_emitted: usize,
+) {
+    PROJECTION_MEASUREMENT.with(|measurement| {
+        let mut measurement = measurement.borrow_mut();
+        measurement.snapshot_nodes_inspected = measurement
+            .snapshot_nodes_inspected
+            .checked_add(snapshot_nodes_inspected)
+            .expect("projection node-inspection measurement overflow");
+        measurement.nodes_emitted = measurement
+            .nodes_emitted
+            .checked_add(nodes_emitted)
+            .expect("projection node-emission measurement overflow");
+        measurement.reference_edges_inspected = measurement
+            .reference_edges_inspected
+            .checked_add(reference_edges_inspected)
+            .expect("projection reference-inspection measurement overflow");
+        measurement.references_emitted = measurement
+            .references_emitted
+            .checked_add(references_emitted)
+            .expect("projection reference-emission measurement overflow");
+        measurement.visible_entities_inspected = measurement
+            .visible_entities_inspected
+            .checked_add(visible_entities_inspected)
+            .expect("projection visible-entity inspection measurement overflow");
+        measurement.visible_entities_emitted = measurement
+            .visible_entities_emitted
+            .checked_add(visible_entities_emitted)
+            .expect("projection visible-entity emission measurement overflow");
+    });
+}
+
 /// One concise human-readable view selected from a workspace snapshot.
 ///
 /// Projection labels are review-local spellings of stable identities. They are
@@ -162,6 +237,8 @@ impl WorkspaceSnapshot {
         depths
             .try_reserve(self.indexes.nodes.len())
             .map_err(|_| host("projection body work-map allocation failed"))?;
+        #[cfg(test)]
+        let mut emitted = 0_usize;
         for node in &self.indexes.nodes {
             let depth = match node.owner {
                 SemanticOwner::Entity(owner) if owner == entity.id => Some(0_usize),
@@ -179,6 +256,12 @@ impl WorkspaceSnapshot {
             let Some(depth) = depth else {
                 continue;
             };
+            #[cfg(test)]
+            {
+                emitted = emitted
+                    .checked_add(1)
+                    .ok_or_else(|| host("projection emitted-node count overflow"))?;
+            }
             depths.insert(node.id, depth);
             output.spaces(
                 depth
@@ -189,6 +272,8 @@ impl WorkspaceSnapshot {
             let facts = self.node_semantics(self.revision, node.id)?;
             project_node_header(node, &facts, self.is_hole(node.id), output)?;
         }
+        #[cfg(test)]
+        record_projection_measurement(self.indexes.nodes.len(), emitted, 0, 0, 0, 0);
         Ok(())
     }
 
@@ -236,6 +321,8 @@ impl WorkspaceSnapshot {
                 .copied(),
         );
         references.sort_by_key(|edge| (edge.site, edge.target));
+        #[cfg(test)]
+        record_projection_measurement(0, 0, self.indexes.references.len(), references.len(), 0, 0);
 
         output.push("references ")?;
         output.entity_id(target.id)?;
@@ -420,6 +507,8 @@ impl WorkspaceSnapshot {
             .map_err(|_| host("projection hole visibility allocation failed"))?;
         visible.extend(state.visible_entities.iter().copied());
         visible.sort();
+        #[cfg(test)]
+        record_projection_measurement(0, 0, 0, 0, state.visible_entities.len(), visible.len());
         for (index, entity) in visible.into_iter().enumerate() {
             if index != 0 {
                 output.push(",")?;

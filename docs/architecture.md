@@ -10,7 +10,7 @@ responsibility, data flow, ownership, and trust boundaries; it is not a second d
 Workspace::empty OR verified text/path import
     -> one partial-capable SemanticProgram authority
     -> optional source/presentation provenance beside semantic meaning
-    -> immutable WorkspaceSnapshot with stable IDs, tombstones, indexes, and blockers
+    -> immutable WorkspaceSnapshot with stable IDs, tombstones, indexes, diagnostics, and blockers
     -> optional atomic semantic transactions and one-revision Arc publication
     -> compile_snapshot structured completeness gate
     -> one derived source-optional complete HIR and consistency witness
@@ -125,17 +125,33 @@ route available.
 ```text
 Arc<WorkspaceSnapshot> plus base revision
     -> typed declaration/delete/rename/expression/hole batch
-    -> namespace/generation/revision check
-    -> clone SemanticProgram and identity allocator into staging
-    -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
-    -> lower flat drafts, apply disjoint replacements, and validate the final deletion dependency closure
-    -> prune callable/nominal roots and compact/remap dense products, implementations, bindings,
-       plans, places, slots, and private enum-vector addresses once
-    -> recompute partial effects and indexes
-    -> on completion derive HIR and validate ownership/matches/consistency
-    -> reconcile explicit survivors, tombstones, blockers, diagnostics, and semantic diff
+    -> namespace/generation/revision check and staged identity-allocator clone
+    -> when every nonempty edit is RefineHole:
+         clone hole records
+         -> validate exact hole identity/type/goal and rebuild diagnostics
+         -> share unchanged SemanticProgram, indexes, and blockers
+    -> otherwise:
+         clone SemanticProgram
+         -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
+         -> lower flat drafts, apply disjoint replacements, and validate final deletion closure
+         -> prune callable/nominal roots and compact/remap dense products, implementations, bindings,
+            plans, places, slots, and private enum-vector addresses once
+         -> recompute partial effects and indexes
+         -> on completion derive HIR and validate ownership/matches/consistency
+         -> reconcile explicit survivors, tombstones, blockers, diagnostics, and semantic diff
     -> publish one new Arc plus allocator state, or publish nothing
 ```
+
+Diagnostics are revision-selected derived facts stored beside hole records and completeness blockers,
+not inside semantic index storage. Their messages include the current hole goal. An all-`RefineHole`
+transaction therefore rebuilds only those diagnostics after applying the canonical refinement checks;
+it does not clone or compact executable semantic state, infer effects, derive complete HIR, rebuild
+indexes, reconcile identities, or rediscover graph diffs. It preserves the old snapshot, stable hole
+and owner identities, blocker and index meaning, deterministically ordered multi-refinement facts,
+the existing seven conservative invalidation domains, and revision-bound continuation failure. Mixed
+batches use the ordinary semantic staging path. As before, any semantic edit drops presentation and
+locked provenance, stages the allocator before work, and publishes allocator plus snapshot only after
+all fallible outcome copies succeed.
 
 `CreateProduct` and `CreateEnum` reserve stable declaration/member entities first, derive private
 nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
@@ -237,8 +253,8 @@ distinguish established constructors from move/borrow candidates that still requ
 ownership validation, and do not expose hidden match temporaries or advertise generic enum
 construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
 rename, replacement, created/deleted descendants and pattern bindings, hole transitions, and
-reference/call rewiring; invalidation currently reports coarse truthful domains rather than
-incremental cache work.
+reference/call rewiring; invalidation currently reports the same conservative domains for
+metadata-only and semantic edits. There is no incremental cache work or consumer.
 
 Selected entity, body, type, reference, call, hole, and match sections have one concise
 deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
@@ -380,7 +396,10 @@ implemented. Source-loading, parser, and compiler-phase counters; imported scala
 ownership, early-return, match, generic-declaration, and generic-call convergence; malformed/atomic
 retry tests; exact per-node index work; and
 20,000-level nested-expression, local, semantic-match, published-type, and declaration-type
-small-stack release execution protect the selected vertical.
+small-stack release execution protect the selected vertical. A retained five-sample release harness
+also measures goal-only refinement and complete counted-loop edit/query/projection/compile loops up
+to 512 unaffected helpers. It supports sharing unchanged semantic/index state for the exact
+metadata-only case and retaining full recomputation everywhere else.
 Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one

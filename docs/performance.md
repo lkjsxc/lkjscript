@@ -26,6 +26,149 @@ benchmarks.
 Noise-aware thresholds are required. A single developer-machine timing is orientation, not a hard
 regression gate.
 
+## Semantic-workspace recomputation boundary
+
+**Measured Branch B correction; full recomputation remains the general architecture.** The neutral
+hypothesis was that full semantic-program recomputation could be adequate for ordinary complete
+imperative edits, while a goal-only hole refinement might perform avoidable whole-program work. The
+reversal condition was semantic, identity, diagnostic, cleanup, pagination, or failure-atomicity
+divergence; no material equivalent-workload benefit; or a mechanism larger than the removed work.
+No incremental graph, cache, daemon, persistence layer, transaction planner, or second semantic
+authority was added.
+
+The retained sampler is
+[`workspace-recompute.py`](../meta/scripts/workspace-recompute.py) plus the ignored release test and
+small default correctness test in
+[`recompute_measurement.rs`](../crates/lkjscript-compiler/src/workspace/recompute_measurement.rs).
+It builds the locked-release compiler test binary once, then invokes that binary directly in one
+fresh process per sample with one test thread. Fixture construction is timed separately. Internal
+transaction, query, projection, complete-HIR/compiler, and VM intervals exclude Cargo build and
+process startup. The selected workloads were:
+
+| Workload | Exact geometry and semantic result |
+| --- | --- |
+| W0 control | one source-free scalar `main`; 1,000 direct identity queries; compile and VM result `7` |
+| W1 metadata edit | one incomplete `main` hole plus 16, 128, or 512 independent complete scalar helpers; refine only the nonempty goal while preserving its `i64` expectation, identity, owner, context, blockers, and old snapshot |
+| W2 complete loop | one complete 12-node counted-loop root plus 16, 128, or 512 independent complete scalar helpers; replace one limit literal; query the target, helper, local references, and two entity pages; project only `main`; compile immediately; old/new VM results `100`/`101` |
+
+W1 has 17, 129, or 513 entities and semantic nodes. W2 has 18/130/514 entities and
+28/140/524 nodes while its affected root remains 12 nodes and its submitted draft remains one node.
+Every sample retained one old revision where applicable, asserted exact stable survivors and
+revision-bound queries, and observed zero source-loading and parser invocations. Incomplete W1
+compilation entered zero complete-HIR/compiler lowering work. The same source-free production APIs
+construct, edit, query, project, compile, and execute the fixtures; JSON is only the opt-in result
+marker.
+
+Five fresh-process samples per cell were collected before and after on base commit
+`ba256046aecc6403fcdb1281073c84a4bed35c04`. A detached before worktree contained the final
+instrumentation and diagnostics representation but omitted only the all-`RefineHole` dispatch; the
+after worktree contained the direct production path. The retained Rust sampler and Python driver
+were byte-identical in both worktrees, with SHA-256 values
+`51bbc09e78477be9a194ae321af6104e197794689ee1bba6e4266a18d4c29c8d` and
+`2355c8b41e8550d7202a15cc64148d7deb8a3415a36366534287428d2f4ca0a1`. Each driver captured
+worktree metadata before building and after sampling and failed unless it remained equal.
+
+The before and after combined dirty-worktree SHA-256 values were respectively
+`43bdd78c56365743d3a4582591879ad8c5b5f4fab05781903764ac3ea46c7391` and
+`261167c0687016660262d44e43f4976df8015ebdfcd0eabcab9981864638b92c`; the harness records the
+complete status, tracked-diff hash, and each non-generated untracked-file hash. Raw sorted JSON
+remains ignored at `target/workspace-recompute/`. Its before and after SHA-256 values are
+respectively `a76964f30ec183a23aca0ae65a66e10e346b4699b7704a108cf70d50faedb88e` and
+`19ce87e633fffec931ca2d1fff3c372f5270e36d68856ed5b06de55d9412345b`. The commands used were:
+
+```sh
+meta/scripts/workspace-recompute.py \
+  --label paired-before-hole-refinement-path --sizes 16,128,512 --samples 5 \
+  --decision candidate-local-hole-refinement-path
+meta/scripts/workspace-recompute.py \
+  --label paired-after-hole-refinement-path --sizes 16,128,512 --samples 5 \
+  --decision keep-local-hole-refinement-path-and-full-recomputation-elsewhere
+```
+
+The before command was run in the recorded detached source variant; the current checkout reproduces
+the after path. Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available logical
+CPUs, 32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, Cargo 1.96.0, and Python 3.12.3. Cargo
+dependencies and release artifacts were warm; each matrix's no-op build completed before samples.
+Nearest-rank p95 is the maximum of five and remains orientation rather than a stable tail estimate.
+Durations below are per-sample medians with p95 in parentheses.
+
+| Workload | Helpers | Transaction before / after | Selected in-process operation sum before / after |
+| --- | ---: | ---: | ---: |
+| W1 | 16 | 52.7 us (55.5) / 4.32 us (5.27) | 68.7 us (81.2) / 21.3 us (25.6) |
+| W1 | 128 | 332.6 us (479.5) / 5.29 us (6.77) | 366.2 us (524.4) / 45.0 us (52.0) |
+| W1 | 512 | 1.326 ms (1.369) / 8.73 us (10.6) | 1.409 ms (1.455) / 110.0 us (115.7) |
+| W2 | 512 | 1.981 ms (2.786) / 1.840 ms (2.760) | 15.265 ms (21.478) / 15.343 ms (22.022) |
+
+The selected W1 sum is transaction plus hole queries, selected projection, and the incomplete
+compile rejection. At 512 helpers it improves 12.8x; transaction time improves 152x. The W2 sum
+adds transaction, queries, projection, immediate compile, and one intentional VM execution. Its
+15.27/15.34 ms medians and exact unchanged selected work counters show no material change at the
+largest representative geometry; smaller timing cells and tails varied with host noise and are not
+regression claims. W0 direct-query medians were 38.5 us before and 45.5 us after for 1,000 lookups;
+compile was 0.412/0.410 ms and VM was 35.1/33.1 us. Those control differences are noise orientation.
+
+Deterministic work, rather than timing alone, identified the root cause. Before the correction, W1
+at 512 helpers cloned one program containing 512 functions, 512 bindings, and 513 nodes; compacted
+513 roots; inferred effects for 513 roots; rebuilt 513 indexed nodes; and examined 1,026 old/new
+node records during identity reconciliation. The corresponding phase medians were 106 us clone,
+247 us compaction, 27.8 us effect inference, 349 us index construction, 308 us reconciliation, and
+112 us full-path finalization. Afterward the whole-program work counts are exactly zero because that
+route is skipped; the narrow path records 6.78 us of median staging for diagnostics, snapshot
+construction, and diff sorting, while its 8.73 us transaction median also includes invalidation,
+outcome copying, and publication overhead. Those operations did not vanish. The narrow path still
+clones the staged identity allocator and hole records, validates each refinement through
+the canonical expected-type/goal checks, rebuilds goal-bearing diagnostics, preserves the seven
+existing conservative invalidation domains, and publishes one new revision. It shares the unchanged
+`SemanticProgram`, semantic indexes, and blockers. Diagnostics now live beside holes/blockers in the
+snapshot rather than inside semantic indexes, so changing a diagnostic goal does not require copying
+or rebuilding unrelated index state. The post-change W1 loop is instead dominated by its 81.2 us
+hole/diagnostic/legal-constructor query at 512 helpers; that query inspects 512 visible entities,
+materializes 521 constructor/diagnostic items, and returns 9. Its absolute cost and semantically
+relevant candidate set do not justify a second correction in this vertical.
+
+W2 retains full recomputation. At 512 helpers it still clones 524 semantic nodes, compacts and
+infers 513 callable roots, builds 514 entity/524 node index records, reconciles 1,028 entity and 1,048
+node old/new records, and derives complete HIR once during transaction validation plus once during
+immediate compilation. Its post-change query median is 35.8 us: two eight-item entity pages and one
+local-reference page scan 1,032 candidates, materialize 1,032 items, and return 20. The selected body
+projection inspects all 524 snapshot nodes, emits the 12-node `main`, and takes 12.7 us. These global
+read costs are measurable but do not justify a second correction at this geometry. Immediate compile
+is 13.323 ms; complete-HIR derivation is 0.339 ms, memory planning 2.327 ms, and iterative baseline
+normalization is the largest reported phase at 6.905 ms. Compilation, not the 1.840 ms transaction or
+read path, dominates the representative complete loop. Normalization remains part of the one
+canonical verified compiler route; this workload provides no evidence that its work is avoidable.
+
+The selected output remained byte-for-byte equivalent. Every before/after projection digest matched;
+at 512 helpers W1 is 3,683 bytes / 3 lines with SHA-256
+`649db3a59e6b20e838f2bd55a0b62a6b083e39a67febc9aeba814dc39897fe1b` and inspects/emits all 512
+visible identities needed for the next action. W2 is 1,206 bytes / 14 lines with SHA-256
+`693b8fbedcd8f2855d47412ef2c13730ce6afccbb2c23b5ee138eb6e1fe5b67d`. Each sample is one
+command and one process round trip, with seven W1 or nine W2 selected in-process API operations. The
+opt-in libtest protocol has 512-helper after medians of 193 stdout bytes / 6 lines and one stderr
+marker line containing 2,284 W1 bytes or 2,685 W2 bytes; these bytes are not normal product output or
+provider-token evidence.
+
+The driver polls `/proc` every 10 ms and sums resident pages for the direct test process and its
+descendants. This is approximate process-tree RSS, not unique physical or retained-snapshot memory;
+it can miss short samples and double-count shared pages. Driver process wall also includes up to one
+10 ms polling interval of child-exit detection delay, so it was not an optimization gate. At the
+decision-relevant 512-helper cells,
+W1 median RSS was 20.20/20.43 MiB (p95 20.41/22.13 MiB), while W2 was 24.25/24.48 MiB (p95
+24.72/24.52 MiB). The signal shows no material retained-process change. Exact retained snapshot
+bytes, allocator counts, allocation counts, and allocated bytes remain Unknown. One old snapshot was
+held and verified, but process RSS also contains the fixture, test binary, compiler products, and VM.
+
+**Decision:** keep the local all-`RefineHole` correction and retain full recomputation for every
+semantic-program-changing or mixed transaction. Reopen the local correction if goal diagnostics,
+identity allocation, old snapshots, continuations, atomic failure, or incomplete compilation
+diverge, or if equivalent W1 samples lose their material benefit. Reopen broader recomputation only
+when representative larger semantic edits make transaction/query/projection work dominate the local
+loop, retained memory becomes material, or a present consumer establishes a different lifetime. The
+current evidence does not justify general incrementality, a warm service, retained HIR, another
+index, or query/projection optimization. Total allocation evidence, exact retained memory, broader
+query density, ownership-heavy W3 timing, other hosts/targets, and application-scale steady-state
+behavior remain unmeasured.
+
 ## Local agent-loop output boundary
 
 **Measured output-volume correction; timings are orientation only.** The hypothesis was that an

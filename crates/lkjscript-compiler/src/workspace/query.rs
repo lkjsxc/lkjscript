@@ -5,6 +5,74 @@ use super::{
     ReferenceEdge, RevisionId, SemanticType, WorkspaceError, WorkspaceSnapshot,
 };
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct QueryMeasurement {
+    pub candidates_scanned: usize,
+    pub results_materialized: usize,
+    pub sorted_items: usize,
+    pub items_returned: usize,
+    pub pages_built: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static QUERY_MEASUREMENT: std::cell::RefCell<QueryMeasurement> =
+        const { std::cell::RefCell::new(QueryMeasurement {
+            candidates_scanned: 0,
+            results_materialized: 0,
+            sorted_items: 0,
+            items_returned: 0,
+            pages_built: 0,
+        }) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_query_measurement() {
+    QUERY_MEASUREMENT.with(|measurement| {
+        *measurement.borrow_mut() = QueryMeasurement::default();
+    });
+}
+
+#[cfg(test)]
+pub(super) fn take_query_measurement() -> QueryMeasurement {
+    QUERY_MEASUREMENT.with(|measurement| std::mem::take(&mut *measurement.borrow_mut()))
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+fn record_query_measurement(
+    candidates_scanned: usize,
+    results_materialized: usize,
+    sorted_items: usize,
+    items_returned: usize,
+    pages_built: usize,
+) {
+    QUERY_MEASUREMENT.with(|measurement| {
+        let mut measurement = measurement.borrow_mut();
+        measurement.candidates_scanned = measurement
+            .candidates_scanned
+            .checked_add(candidates_scanned)
+            .expect("query candidate measurement overflow");
+        measurement.results_materialized = measurement
+            .results_materialized
+            .checked_add(results_materialized)
+            .expect("query materialization measurement overflow");
+        measurement.sorted_items = measurement
+            .sorted_items
+            .checked_add(sorted_items)
+            .expect("query sort measurement overflow");
+        measurement.items_returned = measurement
+            .items_returned
+            .checked_add(items_returned)
+            .expect("query return measurement overflow");
+        measurement.pages_built = measurement
+            .pages_built
+            .checked_add(pages_built)
+            .expect("query page measurement overflow");
+    });
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PageRequest {
     limit: usize,
@@ -278,6 +346,14 @@ impl WorkspaceSnapshot {
             .map_err(|_| WorkspaceError::Host(Arc::from("entity page allocation failed")))?;
         values.extend(self.indexes.entities.iter().cloned());
         values.sort_by_key(|header| header.id);
+        #[cfg(test)]
+        record_query_measurement(
+            self.indexes.entities.len(),
+            values.len(),
+            values.len(),
+            0,
+            0,
+        );
         page(self, query, request, continuation, &values)
     }
 
@@ -340,6 +416,14 @@ impl WorkspaceSnapshot {
                 .copied(),
         );
         values.sort_by_key(|edge| (edge.site, edge.target));
+        #[cfg(test)]
+        record_query_measurement(
+            self.indexes.references.len(),
+            values.len(),
+            values.len(),
+            0,
+            0,
+        );
         page(self, query, request, continuation, &values)
     }
 
@@ -921,13 +1005,7 @@ impl WorkspaceSnapshot {
     ) -> Result<QueryPage<DiagnosticHeader>, WorkspaceError> {
         self.check_query_revision(revision)?;
         let query = query_key(b"diagnostics", &[])?;
-        page(
-            self,
-            query,
-            request,
-            continuation,
-            &self.indexes.diagnostics,
-        )
+        page(self, query, request, continuation, &self.diagnostics)
     }
 
     pub fn hole_context(
@@ -1131,8 +1209,18 @@ impl WorkspaceSnapshot {
             }
             _ => {}
         }
+        #[cfg(test)]
+        let materialized = values.len();
         values.sort_unstable();
         values.dedup();
+        #[cfg(test)]
+        record_query_measurement(
+            context.visible_entities.len(),
+            materialized,
+            materialized,
+            0,
+            0,
+        );
         let query = id_query_key(b"legal-constructors", hole.0)?;
         page(self, query, request, continuation, &values)
     }
@@ -1658,6 +1746,8 @@ fn page<T: Clone>(
         .try_reserve(end - start)
         .map_err(|_| WorkspaceError::Host(Arc::from("query page allocation failed")))?;
     items.extend_from_slice(&values[start..end]);
+    #[cfg(test)]
+    record_query_measurement(0, 0, 0, items.len(), 1);
     let continuation = if end < values.len() {
         Some(Continuation {
             namespace: snapshot.namespace,

@@ -237,10 +237,15 @@ hole leaves; no prior expression survives introduction. Match arm/body relations
 queryable, and scrutinee, arm-body, or whole-match nodes use the ordinary targeted edit/hole
 operations. Complete-HIR derivation iteratively replaces each semantic match with the existing
 canonical `Let`/ordered-`If`/`MatchUnreachable` lowering; memory, SSA, bytecode, and VM layers never
-accept an unlowered semantic match. Effects use an explicit
-unknown fact while holes remain and are recomputed after every transaction. Shape, lexical scope,
-type, usefulness, and exhaustiveness preflight lower once into staged semantic state; canonical
-complete-HIR ownership validation decides move/borrow legality and cleanup before publication.
+accept an unlowered semantic match. Effects use an explicit unknown fact while holes remain and are
+recomputed after every semantic-program-changing or mixed transaction. A nonempty transaction made
+only of `RefineHole` operations validates the same namespace, identity, exact expected type, and
+nonempty goal through one narrow path; it stages the allocator and hole records, rebuilds the
+goal-bearing diagnostics, and shares the unchanged semantic program, indexes, and blockers.
+Diagnostics are snapshot-derived facts beside holes/blockers rather than part of semantic index
+storage. Shape, lexical scope, type, usefulness, and exhaustiveness preflight lower once into staged
+semantic state; canonical complete-HIR ownership validation decides move/borrow legality and cleanup
+before publication.
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
 future IDs. Replacement and hole introduction remove local-defining `let`, imported mutable-local,
 and semantic-match subtrees. Return insertion recomputes derived sequence, conditional, local-body,
@@ -332,6 +337,16 @@ projection, and canonical block ordering are iterative on these paths. Bytecode 
 classification computes nonowned structural values once per function with linear predecessor-edge
 propagation rather than rescanning the CFG for every emitted value.
 
+Five-sample locked-release measurements at 16, 128, and 512 unaffected helper functions now cover a
+goal-only incomplete edit and a complete counted-loop edit/query/projection/compile/VM loop. At 512
+helpers the local hole-refinement transaction fell from a 1.326 ms median to 8.73 us after eliminating
+one program clone, 513-root compaction/effect work, a 513-node index rebuild, and 1,026 node
+reconciliation visits. The complete 524-node loop remains on full recomputation: transaction median
+is 1.840 ms, immediate compile is 13.323 ms, and exact old/new VM results are `100`/`101`. Selected
+query and projection medians are 35.8 us and 12.7 us. The compact protocol and limitations are in
+[`performance.md`](performance.md); this evidence supports neither general incrementality nor a warm
+service.
+
 The hidden-body hole overlay, test-only HIR construction surrogate, syntax-shaped editing service,
 dense source-node identities, protocol/session schemas, text journal/publication path, CLI routing,
 unsupported draft placeholders, and unconsumed development semantic digest are deleted. No wire
@@ -378,8 +393,10 @@ the retained run and host-capability smoke paths with that built binary.
   generic VM before entry when it cannot represent an otherwise supported program.
 - Daemon, multi-tenant database, distributed, scheduler, and broader platform products are absent by
   design until the local semantic model and measurements justify them.
-- The representative five-sample selected-product baseline in
-  [`performance.md`](performance.md) covers process wall time, approximate process-tree RSS,
-  compiler/runtime phases, typed native declines, published native code/mapping sizes, exact
-  outcomes, cleanup, and host effects. Total allocator counts/bytes, semantic edit/query latency,
-  other targets, and application-scale steady-state throughput remain unmeasured.
+- The representative five-sample selected-product and semantic-workspace baselines in
+  [`performance.md`](performance.md) cover process wall, approximate process-tree RSS, compiler and
+  runtime phases, typed native declines, published native code/mapping sizes, exact outcomes,
+  cleanup/host effects, and selected source-free transaction/query/projection/compile latency at up
+  to 512 unaffected helpers and 524 semantic nodes. Total allocator counts/bytes, exact retained
+  snapshot bytes, ownership-heavy edit timing, broader query density, other targets, and
+  application-scale steady-state throughput remain unmeasured.

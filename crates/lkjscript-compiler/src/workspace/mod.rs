@@ -97,6 +97,7 @@ pub struct WorkspaceSnapshot {
     attachments: Option<Arc<PresentationAttachments>>,
     indexes: Arc<SnapshotIndexes>,
     holes: Arc<[HoleRecord]>,
+    diagnostics: Arc<[DiagnosticHeader]>,
     blockers: Arc<[CompletenessBlocker]>,
     allocator: IdentityAllocator,
 }
@@ -129,6 +130,7 @@ impl WorkspaceSnapshot {
             attachments: None,
             indexes: Arc::clone(&self.indexes),
             holes: Arc::clone(&self.holes),
+            diagnostics: Arc::clone(&self.diagnostics),
             blockers: Arc::clone(&self.blockers),
             allocator: self.allocator.clone(),
         }
@@ -159,7 +161,7 @@ impl WorkspaceSnapshot {
     }
 
     pub fn diagnostics(&self) -> &[DiagnosticHeader] {
-        &self.indexes.diagnostics
+        &self.diagnostics
     }
 
     pub fn holes(&self) -> impl ExactSizeIterator<Item = &HoleState> {
@@ -206,6 +208,7 @@ impl WorkspaceSnapshot {
             attachments: attachments.map(Arc::new),
             indexes: Arc::new(indexes),
             holes: Arc::from([]),
+            diagnostics: Arc::from([]),
             blockers: Arc::from([]),
             allocator,
         })
@@ -213,13 +216,13 @@ impl WorkspaceSnapshot {
 
     fn empty(namespace: WorkspaceNamespace) -> Result<Self> {
         let program = SemanticProgram::empty()?;
-        let mut indexes = index::build(&program, namespace)?;
-        indexes.diagnostics.push(DiagnosticHeader {
+        let indexes = index::build(&program, namespace)?;
+        let diagnostics = Arc::from([DiagnosticHeader {
             code: Arc::from("workspace.missing-entry-point"),
             severity: DiagnosticSeverity::Error,
             subject: None,
             message: Arc::from("program requires a main entry point"),
-        });
+        }]);
         let allocator = IdentityAllocator::from_indexes(namespace, &indexes)?;
         Ok(Self {
             namespace,
@@ -231,6 +234,7 @@ impl WorkspaceSnapshot {
             attachments: None,
             indexes: Arc::new(indexes),
             holes: Arc::from([]),
+            diagnostics,
             blockers: Arc::from([CompletenessBlocker::MissingEntryPoint]),
             allocator,
         })
@@ -262,9 +266,7 @@ impl WorkspaceSnapshot {
             .iter()
             .filter(|node| node.kind == NodeKind::Hole)
             .count();
-        if indexed_holes != self.holes.len()
-            || self.blockers.len() != self.indexes.diagnostics.len()
-        {
+        if indexed_holes != self.holes.len() || self.blockers.len() != self.diagnostics.len() {
             return Err(Error::msg(
                 "workspace incomplete-node indexes and diagnostics are inconsistent",
             ));
@@ -364,5 +366,7 @@ impl fmt::Debug for WorkspaceSnapshot {
     }
 }
 
+#[cfg(test)]
+mod recompute_measurement;
 #[cfg(test)]
 mod tests;

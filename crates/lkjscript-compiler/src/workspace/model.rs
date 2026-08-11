@@ -302,7 +302,6 @@ pub(super) struct SnapshotIndexes {
     pub calls: Vec<CallEdge>,
     pub dependencies: Vec<DependencyEdge>,
     pub declaration_dependencies: Vec<DependencyEdge>,
-    pub diagnostics: Vec<DiagnosticHeader>,
     pub entity_addresses: Vec<EntityAddress>,
     pub node_addresses: Vec<NodeAddress>,
     pub node_keys: Vec<NodeKey>,

@@ -22,7 +22,9 @@ use crate::ssa::lower_program_with_metrics;
 use crate::{CompileSnapshotError, ExecutableProgram, IncompleteSnapshotError, WorkspaceSnapshot};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct SnapshotCompileMetrics {
+pub(crate) struct SnapshotCompileMetrics {
+    #[cfg(test)]
+    pub complete_hir_derivation: Duration,
     pub memory_planning: Duration,
     pub ssa_construction: Duration,
     pub ssa_verification: Duration,
@@ -43,13 +45,17 @@ pub fn compile_snapshot(
     compile_snapshot_with_metrics(snapshot).map(|(program, _)| program)
 }
 
-pub(super) fn compile_snapshot_with_metrics(
+pub(crate) fn compile_snapshot_with_metrics(
     snapshot: &WorkspaceSnapshot,
 ) -> std::result::Result<(ExecutableProgram, SnapshotCompileMetrics), CompileSnapshotError> {
     require_complete(snapshot)?;
+    #[cfg(test)]
+    let complete_hir_started = Instant::now();
     let hir = snapshot
         .validated_complete_hir()
         .map_err(CompileSnapshotError::Compiler)?;
+    #[cfg(test)]
+    let complete_hir_derivation = complete_hir_started.elapsed();
     #[cfg(test)]
     LOWERING_INVOCATIONS.with(|count| count.set(count.get().saturating_add(1)));
 
@@ -91,6 +97,8 @@ pub(super) fn compile_snapshot_with_metrics(
             bytecode_links,
         },
         SnapshotCompileMetrics {
+            #[cfg(test)]
+            complete_hir_derivation,
             memory_planning,
             ssa_construction: ssa_metrics.construction,
             ssa_verification: ssa_metrics.verification,
