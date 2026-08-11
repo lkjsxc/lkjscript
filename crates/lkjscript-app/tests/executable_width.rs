@@ -9,6 +9,7 @@ use lkjscript_jit::{
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 const WIDE_COUNT: usize = 300;
+const DEFAULT_OWNED_CLEANUP_COUNT: usize = 640;
 const STRESS_COUNT: usize = 1_024;
 const WIDE_CONSTANT_COUNT: usize = 65_537;
 
@@ -728,6 +729,12 @@ fn assert_many_owned_arguments(count: usize) {
 }
 
 #[test]
+fn default_owned_arguments_cross_cleanup_widths_and_execute_with_shared_cleanup() {
+    assert_many_owned_arguments(DEFAULT_OWNED_CLEANUP_COUNT);
+}
+
+#[test]
+#[ignore = "1,024-owned-argument locked-release cleanup stress geometry"]
 fn one_thousand_twenty_four_owned_parameters_and_arguments_publish_and_execute_with_shared_cleanup()
 {
     assert_many_owned_arguments(STRESS_COUNT);

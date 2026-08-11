@@ -399,9 +399,17 @@ replacement exists pending a measured consumer.
 
 The documented host and CI boundary runs already-silent Rustfmt plus quiet Clippy, workspace
 all-target all-feature tests, and a locked workspace release build. These forms suppress routine
-progress while retaining command status and diagnostics. The Docker verification uses the same Rust feature/target
-semantics, builds the workspace release once, checks hello without entering it, and then exercises
-the retained run and host-capability smoke paths with that built binary.
+progress while retaining command status and diagnostics. The default owned-cleanup width fixture
+uses 640 arguments while dynamically proving every byte- and `u16`-width, cleanup, execution, and
+resource-failure boundary; the unchanged 1,024-argument geometry remains an ignored locked-release
+stress. This direct fixture split reduced the measured warm native four-command median by 31.0%
+without a runner, concurrency, dependency, or coverage-family change. The Docker verification uses
+the same Rust feature/target semantics, builds the workspace release once, checks hello without
+entering it, and then exercises the retained run and host-capability smoke paths with that built
+binary. Its source layer refreshes Cargo-input mtimes before using persistent target-cache mounts, so
+a changed Rust test cannot reuse a newer stale executable. Product package/source, benchmark, and
+smoke files enter only the verified stage; documentation and policy files are not unconsumed release-
+build inputs.
 
 ## Known gaps
 

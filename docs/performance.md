@@ -26,6 +26,89 @@ benchmarks.
 Noise-aware thresholds are required. A single developer-machine timing is orientation, not a hard
 regression gate.
 
+## Verification critical path
+
+**Measured decision: keep Cargo's native runner, move excess owned-cleanup scale work out of the
+default boundary, and make retained Cargo-cache invalidation source-correct.** The hypothesis was
+that test execution, rather than compilation, dominated the warm native verification sequence and that the default 1,024-owned-argument fixture repeated work
+beyond the representation boundaries it protects. The candidate had to preserve every asserted
+width, ownership, cleanup, evaluator, VM, native-decline, and resource-failure outcome; retain the
+1,024 case as a locked-release stress; reduce the three-sample median native boundary by at least
+15%; and remain smaller than a runner or scheduling change. The reversal condition is a missed defect
+at the retained larger geometry, failure of the default fixture to cross one of its checked
+boundaries, changed test selection outside this fixture, hidden failure output, or loss of the
+repeatable material benefit.
+
+The unchanged commands were Rustfmt, workspace all-target/all-feature Clippy, workspace all-target/
+all-feature tests, and the locked workspace release build in their documented serial order. The
+baseline was clean commit `353236260c5d388ca7dbd3379f8822a49e6c9544`; the candidate used that
+base plus dirty diff SHA-256
+`b422c4111cf94e47750c62340f16cf839594e35de75acc667032a43deda4c8e2`. Environment: `devbox`, Linux
+`7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available logical CPUs, 32 GiB RAM, `powersave`
+governor, ZFS checkout, Rust/Cargo 1.96.0, warm Cargo artifacts, and no Rust/Cargo override. Three
+serial warm samples were retained per cell; p95 below is the maximum of three and only tail
+orientation. Monotonic process wall time and child CPU were recorded directly. Approximate peak
+process-tree RSS used a 50 ms `/proc` poll because GNU `/usr/bin/time` was unavailable; it is not
+unique physical memory.
+
+A warm `cargo test --no-run` took 0.104 s with empty output, while the corresponding first full test
+command took 141.381 s. The serial libtest targets included 26.60 s, 7.01 s, 3.90 s, 65.26 s, 9.24 s,
+and 24.14 s runs; compilation was therefore not the selected bottleneck. `cargo-nextest` was not
+installed, but adding or pinning it was unnecessary: one generated fixture accounted for about
+46% of the full test wall time. The retained Docker baseline corroborated the shape: its verified
+stage spent 66.37 s in the same target, while all post-build product checks and smokes together took
+about 2 s before the timing-only benchmark. Bounded smoke parallelism was lower leverage and was not
+implemented.
+
+The first container candidate exposed a correctness defect rather than a speed result. The source in
+the image contained the new ten-test/two-ignored layout, but the successful `cargo test` output still
+ran the old nine-test/one-ignored layout and its 1,024 default case. BuildKit retained Cargo target
+artifacts whose mtimes were newer than `COPY`-preserved changed source mtimes, so Cargo reused a stale
+test executable. The Docker build now refreshes Cargo input mtimes whenever its source layer changes.
+Only Cargo inputs enter the release-build stage; product package/source, benchmark, and smoke inputs
+enter the derived verified stage, and unconsumed policy, README, documentation, and Compose copies
+were removed. This makes a Rust change rebuild the affected cached artifacts while a smoke-script-only change no longer
+invalidates the release build. The fixed retained run visibly executed ten tests with two ignored and
+the 640 case in 21.41 s.
+
+The candidate adds a 640-owned-argument default case through the exact existing helper and marks the
+unchanged 1,024 case ignored for locked-release stress. The default still dynamically proves byte-
+wide local/place crossings, a main bytecode stream above `u16::MAX`, more than 65,535 logical cleanup
+actions, near-linear physical cleanup storage, evaluator/VM outcome `7`, preferred-route outcome,
+and call-unentered resource-failure cleanup. A 512 probe was rejected because it did not cross the
+bytecode-length boundary; 640 was the first retained passing probe after that failure. The 1,024
+ignored release case passed unchanged with 3.85 s in-process execution. No product code, documented
+verification command, runner, dependency, feature, target, or concurrency changed; the Docker stage
+inputs and cache-validity step changed only to remove unconsumed invalidation and prevent stale
+executable reuse.
+
+| Cell | Wall median (p95) | User CPU median | Approx. peak RSS median | Success output / stderr |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline four-command native boundary | 142.335 s (142.698) | 201.665 s | 446.7 MiB | 5,188 B / 0 B |
+| Retained default fixture | 98.245 s (98.990) | 158.180 s | 431.7 MiB | 5,052 B / 0 B |
+
+The selected boundary fell by 44.089 s, or 31.0%; user CPU fell 21.6%, and approximate peak RSS did
+not increase. The affected test-target median fell from 64.75 s to 21.17 s while retaining eight
+default tests and moving only the larger equivalent geometry behind the existing ignored-release
+policy. This meets the predeclared threshold without concurrent heavyweight commands, extra CI
+compute, port/file isolation work, or a new maintenance dependency. One mixed-cache exact retained
+container orientation fell from 233.069 s to 195.083 s (16.3%); its verified command stage fell from
+160.2 s to 112.3 s (29.9%). The release-build cells were not cache-equivalent (64.1 s versus 75.9 s),
+so these single container samples corroborate the test-work shape but do not establish a general
+container speedup. Keep the smaller default while its dynamic boundary assertions and focused larger
+stress both pass. Reconsider a mature runner only if independent target execution remains dominant
+after direct fixture simplification and measured latency justifies installation, output, filtering,
+doctest, CI, and Docker costs.
+
+Raw native baseline and candidate result documents remain ignored with SHA-256 values
+`5838129b7d2686f637cb639ffd8ec9a5e5dacdbe0f6662c011c2ca096add6459` and
+`65de2d6d0973925eeae5c0b6820a74e34bd79ed07f6dc0c8a6279f8b000cec23`; recorded environment metadata
+has SHA-256 `fde9249b138681e94640de6d3b44af4b711198759ccfb88908b2a9998d90a129`.
+The exact baseline, stale-candidate, and fixed-candidate container stdout logs have SHA-256 values
+`524240a2d7b677b5347373b5d34950a18ba2dbbb26e1e791da437fcc79dc29b8`,
+`8815f94c372dcd2de3455c93694516c56e10e4e3b92a211c81041fe445567cac`, and
+`a9e91e3a6348e17677b67a60678e3c9bea40eda270e6933bf5d0744827eddbf3`.
+
 ## Semantic-workspace recomputation boundary
 
 **Measured decision: retain the local metadata correction and keep full recomputation for semantic

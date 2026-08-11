@@ -6,20 +6,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt clippy
-COPY .gitignore Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.lock.json ./
+COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-COPY docs ./docs
-COPY src ./src
-COPY meta/bench ./meta/bench
-COPY meta/scripts ./meta/scripts
-COPY meta/Dockerfile meta/docker-compose.yml ./meta/
+# COPY preserves host mtimes, while cache mounts retain newer Cargo artifacts across builds.
+# Refresh every Cargo input whenever this source layer changes so stale test binaries cannot pass.
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-release,target=/src/target,sharing=locked \
-    cargo build --quiet --workspace --release --locked \
+    find Cargo.toml Cargo.lock crates -type f -exec touch {} + \
+    && cargo build --quiet --workspace --release --locked \
     && cp /src/target/release/lkjscript /tmp/lkjscript
 
 FROM build AS verified
+COPY lkjscript.package.json lkjscript.lock.json ./
+COPY src ./src
+COPY meta/bench ./meta/bench
+COPY meta/scripts ./meta/scripts
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
