@@ -39,17 +39,11 @@ Explicit resolution may select a differently named stable identity. A page conta
 plus a continuation is sufficient to derive that multiple choices exist without adding snapshot
 state. Even an exact-name candidate remains provisional and cannot resolve the node automatically.
 
-A real source-free fixture leaves four visible, exact-type, copy-safe bindings after filtering. Each
-of the first two ordered candidates can be selected explicitly at the same stable root. Deleting an
-earlier callable forces private binding relocation without changing candidate identities; creating a
-matching parameter in another callable does not enter the lexical scope; rename refreshes current
-names while the old snapshot remains unchanged. No implemented edit can create, move, or directly
-delete one in-scope binding while preserving this unresolved site, and no current consumer supplies
-a deliberate finite subset distinct from immediate resolution. Candidate multiplicity therefore
-remains a revision-derived query fact rather than a second incomplete node kind or stored candidate
-set. Reconsider a finite copy-load choice only when a current site-preserving edit, persistence or
-collaboration flow, or demonstrated multi-turn authoring consumer must preserve a stable-identity
-subset and explicit immediate resolution cannot preserve that intent.
+Candidate multiplicity remains a revision-derived query fact rather than a second incomplete node
+kind or stored candidate set. A finite stable-identity subset would be distinct semantic intent only
+when an author deliberately constrains future resolution across a candidate-lifecycle change.
+Reconsider that state only when a current site-preserving edit or durable multi-turn consumer needs
+the constraint and explicit immediate resolution cannot preserve it.
 
 Resolution is one typed structural edit from the unresolved root to the ordinary canonical load. It
 reuses the existing draft load path for namespace/generation, visibility, value-binding kind, type,
