@@ -270,8 +270,15 @@ queries. The unresolved state returns revision, stable node, fixed copy-load int
 expected type, owner, context, and visible stable entities. Its candidate query scans that visible set
 once, filters through the canonical type/copy preconditions, and returns stable entity/current name/
 kind/type/exact-name facts labelled `RequiresCanonicalValidation`. Exact matches precede current-name
-then stable-identity order; the query digest includes the unresolved node. Node semantics expose canonical
-operation identity and exact named effects alongside node kind and actual/expected type. Signature
+then stable-identity order; the query digest includes the unresolved node. Multiple candidates are a
+derived classification: a one-item page with a continuation proves multiplicity, while the unresolved
+leaf remains the only mutable incomplete authority. The current edit surface has no operation that
+adds, moves, or directly deletes an in-scope binding while preserving this site, and no consumer owns
+a deferred finite subset. Storing candidate membership would therefore duplicate revision-derived
+scope and validation facts. A future site-preserving candidate-lifecycle consumer must demonstrate
+otherwise before this architecture gains a copy-load-specific finite choice.
+Node semantics expose canonical operation identity and exact named effects alongside node kind and
+actual/expected type. Signature
 views expose stable binders and structured bounds; call views expose canonical substitutions, instantiated parameters/results,
 derived witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
 type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring

@@ -35,7 +35,21 @@ carry current name, kind, declared semantic type, exact case-sensitive requested
 an explicit requirement for canonical resolution validation. Exact-name matches sort first; the
 remaining order is current name then stable entity identity. Requested spelling is intent metadata:
 renaming a candidate changes its current name and exact-match fact but never rewrites the hint.
-Explicit resolution may select a differently named stable identity.
+Explicit resolution may select a differently named stable identity. A page containing one candidate
+plus a continuation is sufficient to derive that multiple choices exist without adding snapshot
+state. Even an exact-name candidate remains provisional and cannot resolve the node automatically.
+
+A real source-free fixture leaves four visible, exact-type, copy-safe bindings after filtering. Each
+of the first two ordered candidates can be selected explicitly at the same stable root. Deleting an
+earlier callable forces private binding relocation without changing candidate identities; creating a
+matching parameter in another callable does not enter the lexical scope; rename refreshes current
+names while the old snapshot remains unchanged. No implemented edit can create, move, or directly
+delete one in-scope binding while preserving this unresolved site, and no current consumer supplies
+a deliberate finite subset distinct from immediate resolution. Candidate multiplicity therefore
+remains a revision-derived query fact rather than a second incomplete node kind or stored candidate
+set. Reconsider a finite copy-load choice only when a current site-preserving edit, persistence or
+collaboration flow, or demonstrated multi-turn authoring consumer must preserve a stable-identity
+subset and explicit immediate resolution cannot preserve that intent.
 
 Resolution is one typed structural edit from the unresolved root to the ordinary canonical load. It
 reuses the existing draft load path for namespace/generation, visibility, value-binding kind, type,

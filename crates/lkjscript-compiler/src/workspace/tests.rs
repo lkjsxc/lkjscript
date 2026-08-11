@@ -819,6 +819,15 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
             base_revision: workspace.current().revision(),
             edits: vec![
                 Edit::CreateFunction {
+                    name: "earlier".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![ParameterDraft {
+                        name: "discarded".to_owned(),
+                        ty: DeclarationType::I64,
+                    }],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
                     name: "read".to_owned(),
                     type_parameters: Vec::new(),
                     parameters: vec![
@@ -864,6 +873,7 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
             ],
         })
         .expect("create candidate declarations");
+    let earlier = entity_named(&created.snapshot, EntityKind::Function, "earlier");
     let read = entity_named(&created.snapshot, EntityKind::Function, "read");
     let other = entity_named(&created.snapshot, EntityKind::Function, "other");
     let requested = entity_named(&created.snapshot, EntityKind::Parameter, "requested");
@@ -947,6 +957,60 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
         .expect("first candidate page");
     assert_eq!(first.items[0].entity, requested);
     assert!(first.items[0].exact_name_match);
+    assert_eq!(
+        introduced
+            .snapshot
+            .node(read_reference.node())
+            .expect("unresolved choice node")
+            .kind,
+        NodeKind::UnresolvedValueReference
+    );
+    assert!(!introduced
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.site == read_reference.node()));
+    assert!(matches!(
+        crate::compile_snapshot(&introduced.snapshot),
+        Err(crate::CompileSnapshotError::Incomplete(_))
+    ));
+    let derived_multiple = introduced
+        .snapshot
+        .unresolved_value_reference_candidates(
+            introduced.snapshot.revision(),
+            read_reference,
+            PageRequest::new(1).expect("single-candidate page"),
+            None,
+        )
+        .expect("derive multiple-candidate choice");
+    assert_eq!(derived_multiple.items.len(), 1);
+    assert!(derived_multiple.continuation.is_some());
+    for candidate in &first.items {
+        let mut branch =
+            Workspace::new((*introduced.snapshot).clone()).expect("candidate choice branch");
+        let resolved = branch
+            .apply(Transaction {
+                base_revision: introduced.snapshot.revision(),
+                edits: vec![Edit::ResolveUnresolvedValueReference {
+                    reference: read_reference,
+                    target: candidate.entity,
+                }],
+            })
+            .expect("resolve one plausible candidate explicitly");
+        assert_eq!(
+            resolved
+                .snapshot
+                .node(read_reference.node())
+                .expect("explicitly resolved choice")
+                .kind,
+            NodeKind::Load
+        );
+        assert!(resolved
+            .snapshot
+            .references()
+            .iter()
+            .any(|edge| { edge.site == read_reference.node() && edge.target == candidate.entity }));
+    }
     let first_cursor = first.continuation.clone().expect("candidate continuation");
     assert!(matches!(
         introduced.snapshot.unresolved_value_reference_candidates(
@@ -982,7 +1046,7 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
     }
     assert_eq!(names, ["requested", "alpha", "beta", "zeta"]);
     assert_eq!(names.iter().collect::<HashSet<_>>().len(), names.len());
-    assert!(!introduced
+    let initial_candidates = introduced
         .snapshot
         .unresolved_value_reference_candidates(
             introduced.snapshot.revision(),
@@ -991,18 +1055,92 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
             None,
         )
         .expect("all candidates")
-        .items
-        .iter()
-        .any(|candidate| {
-            candidate.entity == flag
-                || candidate.entity == owned
-                || candidate.kind == EntityKind::Function
-        }));
+        .items;
+    assert!(!initial_candidates.iter().any(|candidate| {
+        candidate.entity == flag
+            || candidate.entity == owned
+            || candidate.kind == EntityKind::Function
+    }));
+    let private_address = |snapshot: &WorkspaceSnapshot, entity: EntityId| {
+        let index = snapshot
+            .indexes
+            .entity_lookup
+            .get(&entity)
+            .copied()
+            .expect("candidate private address lookup");
+        snapshot.indexes.entity_addresses[index]
+    };
+    let requested_before_compaction = private_address(&introduced.snapshot, requested);
 
     let old = Arc::clone(&introduced.snapshot);
-    let renamed = workspace
+    let compacted = workspace
         .apply(Transaction {
             base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: earlier }],
+        })
+        .expect("delete earlier declaration and compact private bindings");
+    assert_ne!(
+        private_address(&compacted.snapshot, requested),
+        requested_before_compaction
+    );
+    let compacted_candidates = compacted
+        .snapshot
+        .unresolved_value_reference_candidates(
+            compacted.snapshot.revision(),
+            read_reference,
+            PageRequest::new(16).expect("candidate page"),
+            None,
+        )
+        .expect("candidates after private compaction")
+        .items;
+    assert_eq!(
+        compacted_candidates
+            .iter()
+            .map(|candidate| candidate.entity)
+            .collect::<Vec<_>>(),
+        initial_candidates
+            .iter()
+            .map(|candidate| candidate.entity)
+            .collect::<Vec<_>>()
+    );
+
+    let expanded = workspace
+        .apply(Transaction {
+            base_revision: compacted.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "later".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: vec![ParameterDraft {
+                    name: "requested".to_owned(),
+                    ty: DeclarationType::I64,
+                }],
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("create out-of-scope matching declaration");
+    assert_eq!(
+        expanded
+            .snapshot
+            .unresolved_value_reference_candidates(
+                expanded.snapshot.revision(),
+                read_reference,
+                PageRequest::new(16).expect("candidate page"),
+                None,
+            )
+            .expect("scope-honest candidates after declaration creation")
+            .items
+            .iter()
+            .map(|candidate| candidate.entity)
+            .collect::<Vec<_>>(),
+        initial_candidates
+            .iter()
+            .map(|candidate| candidate.entity)
+            .collect::<Vec<_>>()
+    );
+
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: expanded.snapshot.revision(),
             edits: vec![Edit::RenameEntity {
                 entity: requested,
                 new_name: "renamed".to_owned(),

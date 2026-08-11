@@ -265,7 +265,12 @@ emits explicit resolution plus ordinary reference rewiring. Whole-program owners
 in the same transaction when resolution makes the snapshot complete; if another incomplete node
 remains, the later completion edit runs it before publishing a complete revision.
 Requested spelling remains unchanged across candidate rename; current candidate names and exact
-case-sensitive name equality are revision-derived.
+case-sensitive name equality are revision-derived. Multiple candidates are likewise a derived query
+classification, not a stored incomplete state. A one-item page plus continuation exposes that choice
+without duplicating candidate authority. The implemented edit surface cannot add, move, or directly
+delete an in-scope binding while preserving the unresolved site, and it has no consumer for a
+deliberately deferred finite subset; explicit stable-identity resolution is the complete current
+workflow.
 
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
 future IDs. Replacement, hole introduction, and unresolved-reference introduction remove local-
@@ -353,8 +358,12 @@ result. Generic declaration and call edits invoke source loading and parsing zer
 copy-load program and the equivalent unresolved-introduction/resolution program agree on stable
 entities/nodes, containment, references, calls, dependencies, types, effects, memory obligations,
 function/main bytecode, and VM result `42`; both source-loading and parser counters remain zero.
-Focused generated candidate pages cover 257 visible bindings without loss or duplication. The
-128-level fast fixture and ignored locked-release 20,000-level fixture on a 128 KiB worker stack each
+A focused ambiguity fixture leaves four visible exact-type copy-safe candidates, derives multiplicity
+from pagination, proves that an exact name does not auto-resolve, explicitly resolves either of two
+stable choices at the same root, preserves candidate identities across forced private binding
+relocation, and excludes a matching parameter created outside the lexical scope. Rename and old-
+snapshot assertions keep requested intent distinct from current presentation. Focused generated
+candidate pages cover 257 visible bindings without loss or duplication. The 128-level fast fixture and ignored locked-release 20,000-level fixture on a 128 KiB worker stack each
 introduce, query, project, replace, compile, execute, and destroy an unresolved leaf at the deepest
 selected branch through the same iterative paths. Attachment changes preserve IDs and projection. Separate ignored locked-release fixtures construct
 and compile a 20,000-level nested expression, 20,000 alternating immutable/mutable lexical locals,
