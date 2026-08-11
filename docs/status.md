@@ -242,8 +242,10 @@ recomputed after every semantic-program-changing or mixed transaction. A nonempt
 only of `RefineHole` operations validates the same namespace, identity, exact expected type, and
 nonempty goal through one narrow path; it stages the allocator and hole records, rebuilds the
 goal-bearing diagnostics, and shares the unchanged semantic program, indexes, and blockers.
-Diagnostics are snapshot-derived facts beside holes/blockers rather than part of semantic index
-storage. Shape, lexical scope, type, usefulness, and exhaustiveness preflight lower once into staged
+Repeated refinements of one hole publish one base-to-final semantic diff; returning to the original
+goal or refining once to the existing goal emits no semantic change. Diagnostics are snapshot-derived
+facts beside holes/blockers rather than part of semantic index storage. Shape, lexical scope, type,
+usefulness, and exhaustiveness preflight lower once into staged
 semantic state; canonical complete-HIR ownership validation decides move/borrow legality and cleanup
 before publication.
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
@@ -337,15 +339,16 @@ projection, and canonical block ordering are iterative on these paths. Bytecode 
 classification computes nonowned structural values once per function with linear predecessor-edge
 propagation rather than rescanning the CFG for every emitted value.
 
-Five-sample locked-release measurements at 16, 128, and 512 unaffected helper functions now cover a
-goal-only incomplete edit and a complete counted-loop edit/query/projection/compile/VM loop. At 512
-helpers the local hole-refinement transaction fell from a 1.326 ms median to 8.73 us after eliminating
-one program clone, 513-root compaction/effect work, a 513-node index rebuild, and 1,026 node
-reconciliation visits. The complete 524-node loop remains on full recomputation: transaction median
-is 1.840 ms, immediate compile is 13.323 ms, and exact old/new VM results are `100`/`101`. Selected
-query and projection medians are 35.8 us and 12.7 us. The compact protocol and limitations are in
-[`performance.md`](performance.md); this evidence supports neither general incrementality nor a warm
-service.
+The retained locked-release harness measures scalar, hole-only, counted-loop, ownership/early-return,
+nominal-match, exact-generic mixed, deletion/compaction, and incomplete-recovery authoring loops. At
+512 helpers, the 524-node counted-loop transaction/query/projection/compile check has 1.616 ms
+transaction and 12.554 ms combined medians; the 538-node mixed generic check has 1.851 ms and
+8.280 ms medians. Compilation dominates both. Same-binary full-versus-narrow hole refinement at 513
+nodes is 1.153 ms versus 6.98 us per transaction and 1.227 ms versus 84.75 us per selected check.
+One-pass work counters and a 2,074-node ignored stress retain the full-recompute path for every
+semantic-program-changing transaction. The exact protocol, broader results, output, RSS limitations,
+and reversal conditions are in [`performance.md`](performance.md); this evidence supports neither
+general incrementality nor a warm service.
 
 The hidden-body hole overlay, test-only HIR construction surrogate, syntax-shaped editing service,
 dense source-node identities, protocol/session schemas, text journal/publication path, CLI routing,
@@ -396,7 +399,8 @@ the retained run and host-capability smoke paths with that built binary.
 - The representative five-sample selected-product and semantic-workspace baselines in
   [`performance.md`](performance.md) cover process wall, approximate process-tree RSS, compiler and
   runtime phases, typed native declines, published native code/mapping sizes, exact outcomes,
-  cleanup/host effects, and selected source-free transaction/query/projection/compile latency at up
-  to 512 unaffected helpers and 524 semantic nodes. Total allocator counts/bytes, exact retained
-  snapshot bytes, ownership-heavy edit timing, broader query density, other targets, and
-  application-scale steady-state throughput remain unmeasured.
+  cleanup/host effects, and source-free scalar, imperative, ownership, nominal-match, generic-mixed,
+  lifecycle, and incomplete transaction/query/projection/compile latency at up to 512 helpers and
+  538 representative nodes, plus one 2,074-node generated stress point. Total allocator counts/bytes,
+  exact retained snapshot bytes, broader query density, other targets, and application-scale
+  steady-state throughput remain unmeasured.

@@ -92,6 +92,17 @@ pub(super) struct TransactionMeasurement {
 thread_local! {
     static TRANSACTION_MEASUREMENT: std::cell::RefCell<TransactionMeasurement> =
         std::cell::RefCell::default();
+    static FORCE_FULL_RECOMPUTATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(super) fn set_force_full_recomputation(force: bool) {
+    FORCE_FULL_RECOMPUTATION.with(|value| value.set(force));
+}
+
+#[cfg(test)]
+fn force_full_recomputation() -> bool {
+    FORCE_FULL_RECOMPUTATION.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -409,11 +420,13 @@ fn stage(
     let stage_started = std::time::Instant::now();
     let revision = base.revision.next().map_err(WorkspaceError::from_core)?;
     let edit_count = transaction.edits.len();
-    if transaction
+    let refinements_only = transaction
         .edits
         .iter()
-        .all(|edit| matches!(edit, Edit::RefineHole { .. }))
-    {
+        .all(|edit| matches!(edit, Edit::RefineHole { .. }));
+    #[cfg(test)]
+    let refinements_only = refinements_only && !force_full_recomputation();
+    if refinements_only {
         return stage_hole_refinements(base, revision, transaction.edits, allocator);
     }
     #[cfg(test)]
@@ -890,6 +903,7 @@ fn stage(
         allocator: allocator.clone(),
     };
     append_call_instantiation_diff(base, &snapshot, &mut entries)?;
+    coalesce_hole_refinement_entries(&mut entries)?;
     sort_diff_entries(&mut entries);
     let diff = SemanticDiff {
         base_revision: base.revision,
@@ -958,6 +972,7 @@ fn stage_hole_refinements(
         blockers: Arc::clone(&base.blockers),
         allocator: allocator.clone(),
     };
+    coalesce_hole_refinement_entries(&mut entries)?;
     sort_diff_entries(&mut entries);
     let diff = SemanticDiff {
         base_revision: base.revision,
@@ -7017,6 +7032,81 @@ fn append_call_instantiation_diff(
             });
         }
     }
+    Ok(())
+}
+
+fn coalesce_hole_refinement_entries(
+    entries: &mut Vec<SemanticDiffEntry>,
+) -> Result<(), WorkspaceError> {
+    let refinement_count = entries
+        .iter()
+        .filter(|entry| matches!(entry, SemanticDiffEntry::HoleRefined { .. }))
+        .count();
+    if refinement_count == 0 {
+        return Ok(());
+    }
+    if refinement_count == 1 {
+        entries.retain(|entry| {
+            !matches!(
+                entry,
+                SemanticDiffEntry::HoleRefined {
+                    old_goal,
+                    new_goal,
+                    ..
+                } if old_goal == new_goal
+            )
+        });
+        return Ok(());
+    }
+    let mut positions = HashMap::<HoleId, usize>::new();
+    positions.try_reserve(refinement_count).map_err(|_| {
+        WorkspaceError::Host(Arc::from("hole refinement diff map allocation failed"))
+    })?;
+    let mut coalesced = Vec::<SemanticDiffEntry>::new();
+    coalesced.try_reserve(entries.len()).map_err(|_| {
+        WorkspaceError::Host(Arc::from("coalesced semantic diff allocation failed"))
+    })?;
+    for entry in entries.drain(..) {
+        let SemanticDiffEntry::HoleRefined {
+            hole,
+            old_goal,
+            new_goal,
+        } = entry
+        else {
+            coalesced.push(entry);
+            continue;
+        };
+        if let Some(index) = positions.get(&hole).copied() {
+            let Some(SemanticDiffEntry::HoleRefined {
+                new_goal: current_goal,
+                ..
+            }) = coalesced.get_mut(index)
+            else {
+                return Err(WorkspaceError::Validation(Arc::from(
+                    "hole refinement diff map is inconsistent",
+                )));
+            };
+            *current_goal = new_goal;
+        } else {
+            positions.insert(hole, coalesced.len());
+            coalesced.push(SemanticDiffEntry::HoleRefined {
+                hole,
+                old_goal,
+                new_goal,
+            });
+        }
+    }
+    coalesced.retain(|entry| {
+        !matches!(
+            entry,
+            SemanticDiffEntry::HoleRefined {
+                old_goal,
+                new_goal,
+                ..
+            } if old_goal == new_goal
+        )
+    });
+    *entries = coalesced;
     Ok(())
 }
 

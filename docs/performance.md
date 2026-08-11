@@ -28,146 +28,153 @@ regression gate.
 
 ## Semantic-workspace recomputation boundary
 
-**Measured Branch B correction; full recomputation remains the general architecture.** The neutral
-hypothesis was that full semantic-program recomputation could be adequate for ordinary complete
-imperative edits, while a goal-only hole refinement might perform avoidable whole-program work. The
-reversal condition was semantic, identity, diagnostic, cleanup, pagination, or failure-atomicity
-divergence; no material equivalent-workload benefit; or a mechanism larger than the removed work.
-No incremental graph, cache, daemon, persistence layer, transaction planner, or second semantic
-authority was added.
+**Measured decision: retain the local metadata correction and keep full recomputation for semantic
+edits.** The falsifiable hypothesis was that a small source-free edit in a wider mixed workspace
+would cause predictable whole-program work without a hidden superlinear cliff, while complete
+compilation rather than transaction/query/projection work would dominate the agent check loop. A
+candidate required at least 10% representative-medium end-to-end benefit or 20% in a clearly dominant
+phase, exact semantic equivalence, and a mechanism smaller than the removed work. The reversal
+condition remains any semantic, identity, diff, diagnostic, blocker, ownership/cleanup, pagination,
+old-snapshot, or failure-atomicity divergence. No incremental graph, cache, daemon, persistence layer,
+transaction planner, or second semantic authority was added.
 
-The retained sampler is
-[`workspace-recompute.py`](../meta/scripts/workspace-recompute.py) plus the ignored release test and
-small default correctness test in
+The retained harness is
+[`workspace-recompute.py`](../meta/scripts/workspace-recompute.py) plus the ignored locked-release
+sampler and fast exactness tests in
 [`recompute_measurement.rs`](../crates/lkjscript-compiler/src/workspace/recompute_measurement.rs).
-It builds the locked-release compiler test binary once, then invokes that binary directly in one
-fresh process per sample with one test thread. Fixture construction is timed separately. Internal
-transaction, query, projection, complete-HIR/compiler, and VM intervals exclude Cargo build and
-process startup. The selected workloads were:
+One release test binary constructs every fixture through semantic transactions, times fixture setup
+separately, performs one real revision-publishing edit, issues structured queries and a selected
+projection, compiles directly, and intentionally enters the VM only for exact outcome confirmation.
+The local v2 JSON is measurement output, not a language or service protocol. The corpus is:
 
-| Workload | Exact geometry and semantic result |
+| Workload | Exact selected operation and outcome |
 | --- | --- |
-| W0 control | one source-free scalar `main`; 1,000 direct identity queries; compile and VM result `7` |
-| W1 metadata edit | one incomplete `main` hole plus 16, 128, or 512 independent complete scalar helpers; refine only the nonempty goal while preserving its `i64` expectation, identity, owner, context, blockers, and old snapshot |
-| W2 complete loop | one complete 12-node counted-loop root plus 16, 128, or 512 independent complete scalar helpers; replace one limit literal; query the target, helper, local references, and two entity pages; project only `main`; compile immediately; old/new VM results `100`/`101` |
+| W0 scalar | one-node `main`, replace `7` with `8`, direct entity/node facts, projection, compile, VM |
+| W1 incomplete metadata | refine one `i64` main-hole goal amid 16/128/512 complete scalar helpers; inspect context, diagnostics, legal constructors, and incomplete compile rejection |
+| W2 imperative | replace the bound in a 12-node mutable counted loop amid 16/128/512 helpers; old/new VM `100`/`101` |
+| W3 ownership/return | replace a two-node early-return subtree under a live byte-vector owner after a shared borrow; retain drop/end-borrow obligations; VM `7`/`9` |
+| W4 nominal/match | create a product and enum, edit one exhaustive payload-match arm, query stable member/payload/match facts; VM `42`/`43` |
+| W5 mixed generic | edit the value argument of an exact `Copy`-witnessed generic call in a middle callable, with equal helper halves around it plus a product, enum, counted loop, and payload match; VM `10`/`11` |
+| W6 lifecycle | create and complete a function, rename it, reject a stale revision atomically, delete a middle independent function, relocate a later private binding, and preserve survivor/node identities and old VM `5` |
+| W7 incomplete recovery | introduce a real typed hole, inspect blockers/context/constructors, reject compilation before lowering, refill the same root, and run `7`/`9` |
 
-W1 has 17, 129, or 513 entities and semantic nodes. W2 has 18/130/514 entities and
-28/140/524 nodes while its affected root remains 12 nodes and its submitted draft remains one node.
-Every sample retained one old revision where applicable, asserted exact stable survivors and
-revision-bound queries, and observed zero source-loading and parser invocations. Incomplete W1
-compilation entered zero complete-HIR/compiler lowering work. The same source-free production APIs
-construct, edit, query, project, compile, and execute the fixtures; JSON is only the opt-in result
-marker.
+W1 geometry is 17/129/513 entities and nodes. W2 is 18/130/514 entities and
+28/140/524 nodes with a fixed 12-node affected root. W5 is 33/145/529 entities and
+42/154/538 nodes; its affected generic-call root remains two nodes and the submitted draft one node.
+The ignored W5 stress uses 2,048 helpers, 2,065 entities, and 2,074 nodes. These are workload
+parameters, never language-validity limits.
 
-Five fresh-process samples per cell were collected before and after on base commit
-`ba256046aecc6403fcdb1281073c84a4bed35c04`. A detached before worktree contained the final
-instrumentation and diagnostics representation but omitted only the all-`RefineHole` dispatch; the
-after worktree contained the direct production path. The retained Rust sampler and Python driver
-were byte-identical in both worktrees, with SHA-256 values
-`51bbc09e78477be9a194ae321af6104e197794689ee1bba6e4266a18d4c29c8d` and
-`2355c8b41e8550d7202a15cc64148d7deb8a3415a36366534287428d2f4ca0a1`. Each driver captured
-worktree metadata before building and after sampling and failed unless it remained equal.
-
-The before and after combined dirty-worktree SHA-256 values were respectively
-`43bdd78c56365743d3a4582591879ad8c5b5f4fab05781903764ac3ea46c7391` and
-`261167c0687016660262d44e43f4976df8015ebdfcd0eabcab9981864638b92c`; the harness records the
-complete status, tracked-diff hash, and each non-generated untracked-file hash. Raw sorted JSON
-remains ignored at `target/workspace-recompute/`. Its before and after SHA-256 values are
-respectively `a76964f30ec183a23aca0ae65a66e10e346b4699b7704a108cf70d50faedb88e` and
-`19ce87e633fffec931ca2d1fff3c372f5270e36d68856ed5b06de55d9412345b`. The commands used were:
+The recorded commands were:
 
 ```sh
 meta/scripts/workspace-recompute.py \
-  --label paired-before-hole-refinement-path --sizes 16,128,512 --samples 5 \
-  --decision candidate-local-hole-refinement-path
+  --label accepted-representative-narrow --sizes 16,128,512 \
+  --samples 5 --warmups 1 --refinement-mode narrow \
+  --decision retain-local-refinement-and-full-recomputation-for-semantic-edits \
+  --output target/workspace-recompute/accepted-representative-narrow.json
 meta/scripts/workspace-recompute.py \
-  --label paired-after-hole-refinement-path --sizes 16,128,512 --samples 5 \
-  --decision keep-local-hole-refinement-path-and-full-recomputation-elsewhere
+  --label accepted-w1-full-control --workloads W1 --sizes 16,128,512 \
+  --samples 5 --warmups 1 --refinement-mode full \
+  --decision same-binary-full-recomputation-control \
+  --output target/workspace-recompute/accepted-w1-full-control.json
+meta/scripts/workspace-recompute.py \
+  --label accepted-stress-w5-2048 --workloads W5 --sizes 2048 \
+  --samples 1 --warmups 1 --refinement-mode narrow \
+  --decision ignored-release-complexity-shape-only \
+  --output target/workspace-recompute/accepted-stress-w5-2048.json
 ```
 
-The before command was run in the recorded detached source variant; the current checkout reproduces
-the after path. Environment: `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available logical
-CPUs, 32 GiB RAM, `rustc 1.96.0 (ac68faa20 2026-05-25)`, Cargo 1.96.0, and Python 3.12.3. Cargo
-dependencies and release artifacts were warm; each matrix's no-op build completed before samples.
-Nearest-rank p95 is the maximum of five and remains orientation rather than a stable tail estimate.
-Durations below are per-sample medians with p95 in parentheses.
+Each representative and full-control cell discards one fresh-process warm-up and retains five
+fresh-process samples with one test thread; the generated stress cell retains one sample after one
+warm-up. The driver preserves exact stdout/stderr bytes and hashes beneath
+`target/workspace-recompute/<label>-raw/`, validates required schema, geometry, outcome, correctness,
+timing, deterministic-work, and sample-count facts, and refuses
+source, binary, or worktree movement during a run. The three recorded documents have SHA-256 values
+`b60e0ec5fd114a9df84d80c5dab898e8ca8d41e69ff182dfdaa3540e1cd78b6d`,
+`23b72a34c374ad3ab7fe956e993da88a4662074fe4b0bcb59a8d7a121014583f`, and
+`4a1565e10542fb3708e657da204f0ec824f19c86733366ea88d08883e478d7e9`.
+All used base commit `79cb09b3c0eb3316994a43e38c7123e06f7b105c`, recorded dirty-worktree digest
+`770895103a10ed74616bc767723f75c6c9d42f8df0a4e38fc9d3a7a8ef9bf63a`, and the same release
+binary digest `f548fec3fdac87ba7cf367baec58f0969a92e9488922ec5312c7a905fdd6b4fe`.
+The dirty state comprised the task-supplied `AGENTS.md` replacement and the measured implementation,
+harness, ignore, and documentation changes; that exact measured state is identified by digest in raw metadata. A later complete
+repeat was excluded as a whole after an isolated 50.86 ms W5/512 transaction and broad host slowdown;
+its undiscarded successful samples remain outside Git for audit rather than being selectively edited.
 
-| Workload | Helpers | Transaction before / after | Selected in-process operation sum before / after |
-| --- | ---: | ---: | ---: |
-| W1 | 16 | 52.7 us (55.5) / 4.32 us (5.27) | 68.7 us (81.2) / 21.3 us (25.6) |
-| W1 | 128 | 332.6 us (479.5) / 5.29 us (6.77) | 366.2 us (524.4) / 45.0 us (52.0) |
-| W1 | 512 | 1.326 ms (1.369) / 8.73 us (10.6) | 1.409 ms (1.455) / 110.0 us (115.7) |
-| W2 | 512 | 1.981 ms (2.786) / 1.840 ms (2.760) | 15.265 ms (21.478) / 15.343 ms (22.022) |
+Environment: host `devbox`, Linux `7.0.0-27-generic` x86-64, AMD Ryzen 9 9955HX, 20 available
+logical CPUs, 32 GiB RAM, `powersave` governor, Rust/Cargo 1.96.0, Python 3.12.3, release test
+profile, warm dependencies/artifacts, and no recorded Rust/Cargo performance override. Starting load
+averages were 3.78/5.69/5.10 for the representative matrix. Timers are monotonic and exclude Cargo
+and process startup. Median is exact integer arithmetic; nearest-rank p95 is the maximum of five and
+only tail orientation. Durations are medians with p95 in parentheses; `check` is edit plus selected
+inspection/projection plus compilation, while `+VM` adds only semantic outcome confirmation. Each
+old-snapshot compile/run is an untimed semantic oracle outside these operation sums.
 
-The selected W1 sum is transaction plus hole queries, selected projection, and the incomplete
-compile rejection. At 512 helpers it improves 12.8x; transaction time improves 152x. The W2 sum
-adds transaction, queries, projection, immediate compile, and one intentional VM execution. Its
-15.27/15.34 ms medians and exact unchanged selected work counters show no material change at the
-largest representative geometry; smaller timing cells and tails varied with host noise and are not
-regression claims. W0 direct-query medians were 38.5 us before and 45.5 us after for 1,000 lookups;
-compile was 0.412/0.410 ms and VM was 35.1/33.1 us. Those control differences are noise orientation.
+| Workload | Helpers | Transaction | Queries / projection | Compile | Check (p95) | +VM | Outcome |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| W0 | 0 | 9.1 us (9.8) | 1.5 / 5.8 us | 0.304 ms | 0.321 ms (0.339) | 0.345 ms | `7` -> `8` |
+| W1 narrow | 512 | 7.0 us (9.9) | 60.9 / 12.6 us | 4.3 us reject | 84.7 us (129.1) | same | incomplete |
+| W2 | 16 | 86.5 us (130.1) | 7.6 / 10.2 us | 0.982 ms | 1.096 ms (1.175) | 1.226 ms | `100` -> `101` |
+| W2 | 128 | 0.394 ms (0.431) | 16.5 / 9.3 us | 3.095 ms | 3.522 ms (3.855) | 3.652 ms | `100` -> `101` |
+| W2 | 512 | 1.616 ms (1.630) | 30.9 / 12.4 us | 10.890 ms | 12.554 ms (13.915) | 12.744 ms | `100` -> `101` |
+| W3 | 0 | 37.2 us (39.4) | 2.0 / 10.9 us | 0.554 ms | 0.607 ms (0.653) | 0.638 ms | `7` -> `9` |
+| W4 | 0 | 85.4 us (264.1) | 4.1 / 14.9 us | 0.607 ms | 0.710 ms (1.337) | 0.746 ms | `42` -> `43` |
+| W5 | 16 | 0.242 ms (0.255) | 12.3 / 15.2 us | 1.150 ms | 1.406 ms (1.531) | 1.435 ms | `10` -> `11` |
+| W5 | 128 | 0.553 ms (0.591) | 16.0 / 15.5 us | 2.356 ms | 2.906 ms (3.285) | 2.952 ms | `10` -> `11` |
+| W5 | 512 | 1.851 ms (2.991) | 32.1 / 20.1 us | 6.375 ms | 8.280 ms (10.151) | 8.385 ms | `10` -> `11` |
+| W6 | 0 | 26.7 us (41.2) delete | 3.6 / 10.7 us | 0.327 ms | 0.529 ms (0.643) | 0.549 ms | `5` -> `5` |
+| W7 | 0 | 9.0 us (9.4) fill | 7.8 / 7.0 us | 0.281 ms | 0.316 ms (0.380) | 0.341 ms | `7` -> `9` |
 
-Deterministic work, rather than timing alone, identified the root cause. Before the correction, W1
-at 512 helpers cloned one program containing 512 functions, 512 bindings, and 513 nodes; compacted
-513 roots; inferred effects for 513 roots; rebuilt 513 indexed nodes; and examined 1,026 old/new
-node records during identity reconciliation. The corresponding phase medians were 106 us clone,
-247 us compaction, 27.8 us effect inference, 349 us index construction, 308 us reconciliation, and
-112 us full-path finalization. Afterward the whole-program work counts are exactly zero because that
-route is skipped; the narrow path records 6.78 us of median staging for diagnostics, snapshot
-construction, and diff sorting, while its 8.73 us transaction median also includes invalidation,
-outcome copying, and publication overhead. Those operations did not vanish. The narrow path still
-clones the staged identity allocator and hole records, validates each refinement through
-the canonical expected-type/goal checks, rebuilds goal-bearing diagnostics, preserves the seven
-existing conservative invalidation domains, and publishes one new revision. It shares the unchanged
-`SemanticProgram`, semantic indexes, and blockers. Diagnostics now live beside holes/blockers in the
-snapshot rather than inside semantic indexes, so changing a diagnostic goal does not require copying
-or rebuilding unrelated index state. The post-change W1 loop is instead dominated by its 81.2 us
-hole/diagnostic/legal-constructor query at 512 helpers; that query inspects 512 visible entities,
-materializes 521 constructor/diagnostic items, and returns 9. Its absolute cost and semantically
-relevant candidate set do not justify a second correction in this vertical.
+The same-binary W1 control makes the retained correction reproducible without a detached source
+variant. At 16/128/512 helpers, full-path versus narrow transaction medians were respectively
+44.90/3.57 us, 268.37/3.25 us, and 1.153 ms/6.98 us. Check medians were 58.67/17.66 us,
+294.45/30.83 us, and 1.227 ms/84.75 us: 3.3x, 9.6x, and 14.5x improvements. Projection digests,
+revisions, blockers, diagnostics, queries, diffs, and public identities matched through the focused
+differential test. At 512 helpers the full control cloned 512 functions, 512 bindings, and 513
+nodes; compacted and inferred 513 roots; built 513 entity/node records; and examined 1,026 old/new
+entity and node records. Every count is zero on the narrow route because only hole records,
+diagnostics, allocator staging, net diff, and publication remain. Repeated refinements now report
+one base-to-final diff per hole, and a net no-op reports no semantic diff.
 
-W2 retains full recomputation. At 512 helpers it still clones 524 semantic nodes, compacts and
-infers 513 callable roots, builds 514 entity/524 node index records, reconciles 1,028 entity and 1,048
-node old/new records, and derives complete HIR once during transaction validation plus once during
-immediate compilation. Its post-change query median is 35.8 us: two eight-item entity pages and one
-local-reference page scan 1,032 candidates, materialize 1,032 items, and return 20. The selected body
-projection inspects all 524 snapshot nodes, emits the 12-node `main`, and takes 12.7 us. These global
-read costs are measurable but do not justify a second correction at this geometry. Immediate compile
-is 13.323 ms; complete-HIR derivation is 0.339 ms, memory planning 2.327 ms, and iterative baseline
-normalization is the largest reported phase at 6.905 ms. Compilation, not the 1.840 ms transaction or
-read path, dominates the representative complete loop. Normalization remains part of the one
-canonical verified compiler route; this workload provides no evidence that its work is avoidable.
+Full recomputation remains predictable. W2 transaction work at 512 helpers clones 524 nodes,
+compacts/infers 513 roots, builds 514 entities/524 nodes, and examines exactly 1,028 entity plus
+1,048 node old/new records. Its phase medians were 98.5 us clone, 204.7 us compaction, 321.4 us
+complete validation, 296.0 us index build, and 311.7 us reconciliation. W5/512 reports the analogous
+one-pass counts for 538 nodes and 517 roots; clone was 112.2 us, compaction 260.2 us, validation
+381.1 us, index build 396.1 us, and reconciliation 301.6 us. No repeated per-entity phase or clone
+cost dominates the check loop. W2 compile instead spends 5.780 ms in canonical normalization and
+2.072 ms in memory planning; W5 compile spends 2.456 ms in memory planning and 1.192 ms in SSA
+construction. The 2,074-node W5 stress took 6.717 ms transaction and 38.808 ms check: versus W5/512,
+4x nodes caused 3.6x transaction and 4.7x check work. This single stress sample is complexity-shape
+evidence, not an application benchmark.
 
-The selected output remained byte-for-byte equivalent. Every before/after projection digest matched;
-at 512 helpers W1 is 3,683 bytes / 3 lines with SHA-256
-`649db3a59e6b20e838f2bd55a0b62a6b083e39a67febc9aeba814dc39897fe1b` and inspects/emits all 512
-visible identities needed for the next action. W2 is 1,206 bytes / 14 lines with SHA-256
-`693b8fbedcd8f2855d47412ef2c13730ce6afccbb2c23b5ee138eb6e1fe5b67d`. Each sample is one
-command and one process round trip, with seven W1 or nine W2 selected in-process API operations. The
-opt-in libtest protocol has 512-helper after medians of 193 stdout bytes / 6 lines and one stderr
-marker line containing 2,284 W1 bytes or 2,685 W2 bytes; these bytes are not normal product output or
-provider-token evidence.
+Direct reads remain secondary: at 512 helpers W1/W2/W5 query medians were 60.9/30.9/32.1 us and
+selected projections were 12.6/12.4/20.1 us. W2 scans/sorts 1,032 candidates for three pages; W5's
+two selected bodies cause 1,076 node inspections for three emitted nodes, but the absolute projection
+cost is 0.3% of its check loop and does not justify another index. Selected projection output is
+3,683 bytes/3 lines for W1, 1,206 bytes/14 lines for W2, and 1,027 bytes/18 lines for W5. The default
+driver emits one 96-byte path line and empty stderr; each opt-in libtest sample emits 193 stdout bytes
+in six lines plus one JSON marker line. These are byte/line measurements, not provider-token or
+billing evidence.
 
-The driver polls `/proc` every 10 ms and sums resident pages for the direct test process and its
-descendants. This is approximate process-tree RSS, not unique physical or retained-snapshot memory;
-it can miss short samples and double-count shared pages. Driver process wall also includes up to one
-10 ms polling interval of child-exit detection delay, so it was not an optimization gate. At the
-decision-relevant 512-helper cells,
-W1 median RSS was 20.20/20.43 MiB (p95 20.41/22.13 MiB), while W2 was 24.25/24.48 MiB (p95
-24.72/24.52 MiB). The signal shows no material retained-process change. Exact retained snapshot
-bytes, allocator counts, allocation counts, and allocated bytes remain Unknown. One old snapshot was
-held and verified, but process RSS also contains the fixture, test binary, compiler products, and VM.
+The 10 ms `/proc` poll is approximate process-tree RSS, not unique physical or retained-snapshot
+memory; short cells can finish between polls. At the meaningful 512-helper cells, median/p95 RSS was
+20.16/20.46 MiB W1, 24.44/24.74 MiB W2, and 32.59/32.75 MiB W5. W1 narrow/full was
+20.16/20.46 versus 20.41/20.88 MiB, showing no material process-peak change. Exact retained snapshot
+bytes, allocator counts, allocation counts, and allocated bytes remain Unknown; every relevant
+sample retained and verified an old snapshot, but RSS also includes fixture, binary, compiler, raw
+buffers, and VM state.
 
-**Decision:** keep the local all-`RefineHole` correction and retain full recomputation for every
-semantic-program-changing or mixed transaction. Reopen the local correction if goal diagnostics,
-identity allocation, old snapshots, continuations, atomic failure, or incomplete compilation
-diverge, or if equivalent W1 samples lose their material benefit. Reopen broader recomputation only
-when representative larger semantic edits make transaction/query/projection work dominate the local
-loop, retained memory becomes material, or a present consumer establishes a different lifetime. The
-current evidence does not justify general incrementality, a warm service, retained HIR, another
-index, or query/projection optimization. Total allocation evidence, exact retained memory, broader
-query density, ownership-heavy W3 timing, other hosts/targets, and application-scale steady-state
-behavior remain unmeasured.
+**Decision:** keep the narrow all-`RefineHole` path and full recomputation for every
+semantic-program-changing or mixed transaction. Compilation dominates representative complete
+checks, whole-program transaction passes have the intended one-pass shape, and indexed queries and
+selected projections are small in absolute time. Reopen the local correction if equivalent W1 loses
+its material benefit or any semantic/failure-atomic fact diverges. Reopen broader recomputation when
+a representative semantic edit makes transaction/query/projection work dominate the local loop,
+exact retained memory becomes material, or a present consumer establishes a larger or different
+snapshot lifetime. Current evidence does not justify general incrementality, a warm service,
+retained HIR, another index, or a second correction. Other hosts/targets, exact allocations, broader
+query density, and application-scale steady-state behavior remain unmeasured.
 
 ## Local agent-loop output boundary
 

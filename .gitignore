@@ -4,6 +4,8 @@
 /tmp/
 .env
 *.swp
+*.py[cod]
+__pycache__/
 .DS_Store
 
 # Agent-local state

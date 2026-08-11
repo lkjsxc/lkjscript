@@ -106,7 +106,9 @@ mismatch; empty, nonexhaustive, or useless match arms; and ownership failure bef
 Failure preserves the exact published `Arc`, revision, allocator generations/free lists, future
 allocation, diagnostics, and projection. Success publishes one revision and returns created and
 deleted entities, member/local identities, holes, descendant changes, and graph rewiring through the
-semantic diff. A call-instantiation diff includes exact old/new substitutions, instantiated
+semantic diff. Multiple refinements of one hole in a transaction report one base-goal-to-final-goal
+change; a refinement whose final goal equals the base goal reports no semantic change. A
+call-instantiation diff includes exact old/new substitutions, instantiated
 parameter/result types, witnesses, and effects, so a type-argument-only change remains reviewable.
 
 Structured blockers currently cover missing entry point, missing declaration/entry body, and typed

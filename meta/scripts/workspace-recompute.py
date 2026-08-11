@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import platform
-import statistics
+import shlex
 import subprocess
+import sys
 import time
 from typing import Any, Iterable
 
@@ -21,7 +23,94 @@ MARKER = "LKJSCRIPT_WORKSPACE_RECOMPUTE "
 TEST = "workspace::recompute_measurement::workspace_recompute_scale_sample"
 ENV_WORKLOAD = "LKJSCRIPT_WORKSPACE_WORKLOAD"
 ENV_FUNCTIONS = "LKJSCRIPT_WORKSPACE_FUNCTIONS"
+ENV_REFINEMENT_MODE = "LKJSCRIPT_WORKSPACE_REFINEMENT_MODE"
 RSS_INTERVAL_SECONDS = 0.01
+PERFORMANCE_ENVIRONMENT_KEYS = {
+    "CARGO_BUILD_JOBS",
+    "CARGO_BUILD_RUSTC",
+    "CARGO_BUILD_RUSTC_WRAPPER",
+    "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    "CARGO_BUILD_TARGET",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "CARGO_INCREMENTAL",
+    "CARGO_TARGET_DIR",
+    "RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "RUSTDOCFLAGS",
+    "RUSTFLAGS",
+}
+SAMPLE_ENVIRONMENT_KEYS = {
+    "DYLD_LIBRARY_PATH",
+    "LANG",
+    "LC_ALL",
+    "LD_LIBRARY_PATH",
+    "PATH",
+    "RUST_BACKTRACE",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+}
+EXPECTED_OLD_RESULTS = {
+    "W0": 7,
+    "W2": 100,
+    "W3": 7,
+    "W4": 42,
+    "W5": 10,
+    "W6": 5,
+    "W7": 7,
+}
+EXPECTED_NEW_RESULTS = {
+    "W0": 8,
+    "W2": 101,
+    "W3": 9,
+    "W4": 43,
+    "W5": 11,
+    "W6": 5,
+    "W7": 9,
+}
+EXPECTED_TRUE_CORRECTNESS = {
+    "W0": ("root_identity_preserved",),
+    "W1": (
+        "hole_identity_preserved",
+        "hole_owner_preserved",
+        "old_snapshot_goal_preserved",
+        "projection_deterministic",
+    ),
+    "W2": (
+        "target_identity_preserved",
+        "unaffected_entity_identity_preserved",
+        "unaffected_node_identity_preserved",
+        "projection_deterministic",
+    ),
+    "W3": ("return_identity_preserved", "return_type_preserved"),
+    "W4": (
+        "match_exhaustive",
+        "selected_arm_identity_preserved",
+        "payload_binding_identity_preserved",
+        "payload_member_identity_preserved",
+    ),
+    "W5": (
+        "call_identity_preserved",
+        "argument_identity_preserved",
+        "substitutions_unchanged",
+        "witnesses_unchanged",
+    ),
+    "W6": (
+        "survivor_identity_preserved",
+        "relocated_survivor_identity_preserved",
+        "relocated_survivor_node_identity_preserved",
+        "deleted_identity_tombstoned",
+        "old_snapshot_preserved",
+        "failed_edit_atomic",
+        "private_binding_relocated",
+        "private_compaction_observed",
+    ),
+    "W7": (
+        "root_identity_preserved",
+        "typed_hole_expected_i64",
+        "compile_stopped_before_lowering",
+    ),
+}
 
 
 def command_output(*command: str) -> str:
@@ -104,6 +193,16 @@ def machine_metadata() -> dict[str, Any]:
             if line.startswith("MemTotal:"):
                 memory_bytes = int(line.split()[1]) * 1024
                 break
+    governor_path = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+    governor = (
+        governor_path.read_text(encoding="utf-8").strip()
+        if governor_path.is_file()
+        else None
+    )
+    affinity = (
+        len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
+    )
+    load_average = list(os.getloadavg()) if hasattr(os, "getloadavg") else None
     return {
         "hostname": platform.node(),
         "os": platform.platform(),
@@ -111,6 +210,9 @@ def machine_metadata() -> dict[str, Any]:
         "architecture": platform.machine(),
         "cpu": cpu,
         "logical_cpus": os.cpu_count(),
+        "affinity_logical_cpus": affinity,
+        "cpu_governor": governor,
+        "load_average_at_capture": load_average,
         "memory_bytes": memory_bytes,
         "rustc": command_output("rustc", "--version"),
         "cargo": command_output("cargo", "--version"),
@@ -145,7 +247,7 @@ def process_tree_rss_bytes(root_pid: int) -> int | None:
     return pages * os.sysconf("SC_PAGE_SIZE")
 
 
-def build_release_test_binary() -> tuple[Path, list[str], int]:
+def build_release_test_binary() -> tuple[Path, list[str], int, bool]:
     command = [
         "cargo",
         "test",
@@ -171,7 +273,7 @@ def build_release_test_binary() -> tuple[Path, list[str], int]:
             "release measurement build failed with exit "
             f"{completed.returncode}\n{completed.stdout}\n{completed.stderr}"
         )
-    executables: list[Path] = []
+    executables: list[tuple[Path, bool]] = []
     for line in completed.stdout.splitlines():
         try:
             message = json.loads(line)
@@ -187,21 +289,156 @@ def build_release_test_binary() -> tuple[Path, list[str], int]:
             and target.get("name") == "lkjscript_compiler"
             and "lib" in target.get("kind", [])
         ):
-            executables.append(Path(executable))
-    unique = sorted(set(executables))
-    if len(unique) != 1:
+            executables.append((Path(executable), message.get("fresh") is True))
+    unique_paths = sorted({path for path, _ in executables})
+    if len(unique_paths) != 1:
         raise RuntimeError(
             "release build did not identify exactly one compiler lib test binary: "
-            + repr([str(path) for path in unique])
+            + repr([str(path) for path in unique_paths])
         )
-    return unique[0], command, wall_ns
+    binary = unique_paths[0]
+    fresh = all(value for path, value in executables if path == binary)
+    return binary, command, wall_ns, fresh
 
 
-def output_lines(value: str) -> int:
+def output_lines(value: bytes) -> int:
     return len(value.splitlines())
 
 
-def run_sample(binary: Path, workload: str, helper_functions: int) -> dict[str, Any]:
+def bounded_output(value: bytes) -> str:
+    limit = 16 * 1024
+    suffix = value[-limit:]
+    prefix = "<truncated>\n" if len(value) > limit else ""
+    return prefix + suffix.decode("utf-8", errors="replace")
+
+
+def sample_environment() -> dict[str, str]:
+    return {
+        key: os.environ[key]
+        for key in sorted(SAMPLE_ENVIRONMENT_KEYS)
+        if key in os.environ
+    }
+
+
+def validate_sample(
+    measured: dict[str, Any], workload: str, helper_functions: int, refinement_mode: str
+) -> None:
+    if measured.get("schema") != "lkjscript.workspace-recompute-sample.v2":
+        raise RuntimeError("workspace sample emitted an unknown schema")
+    if measured.get("workload") != workload:
+        raise RuntimeError("workspace sample workload does not match its requested cell")
+    geometry = measured.get("geometry")
+    correctness = measured.get("correctness")
+    agent_loop = measured.get("agent_loop")
+    if not all(isinstance(value, dict) for value in (geometry, correctness, agent_loop)):
+        raise RuntimeError("workspace sample omitted structured geometry or correctness facts")
+    expected_helpers = helper_functions if workload in {"W1", "W2", "W5"} else 0
+    if nested_number(measured, "geometry.helper_functions") != expected_helpers:
+        raise RuntimeError("workspace sample geometry does not match the requested cell")
+    if workload == "W1" and measured.get("refinement_mode") != refinement_mode:
+        raise RuntimeError("workspace sample refinement mode does not match the request")
+    required_paths = [
+        "transaction.wall_ns",
+        "queries.wall_ns",
+        "projection.wall_ns",
+        "compile.wall_ns",
+        "agent_loop.edit_inspect_check_wall_ns",
+        "agent_loop.authoring_loop_wall_ns",
+        "agent_loop.selected_api_operations",
+        "correctness.source_load_invocations",
+        "correctness.parser_invocations",
+    ]
+    if workload != "W1":
+        required_paths.extend(["vm.wall_ns", "vm.result_i64"])
+    if any(nested_number(measured, path) is None for path in required_paths):
+        raise RuntimeError("workspace sample omitted a required nonnegative integer metric")
+    if any(nested_number(measured, path) < 0 for path in required_paths):
+        raise RuntimeError("workspace sample emitted a negative metric")
+    expected_geometry = {
+        "W0": (1, 1),
+        "W1": (helper_functions + 1, helper_functions + 1),
+        "W2": (helper_functions + 2, helper_functions + 12),
+        "W3": (2, 8),
+        "W4": (10, 10),
+        "W5": (helper_functions + 17, helper_functions + 26),
+        "W6": (3, 3),
+        "W7": (1, 1),
+    }[workload]
+    observed_geometry = (
+        nested_number(measured, "geometry.total_entities"),
+        nested_number(measured, "geometry.total_semantic_nodes"),
+    )
+    if observed_geometry != expected_geometry:
+        raise RuntimeError("workspace sample entity/node geometry is inconsistent")
+    if (
+        nested_number(measured, "correctness.source_load_invocations") != 0
+        or nested_number(measured, "correctness.parser_invocations") != 0
+    ):
+        raise RuntimeError("workspace sample unexpectedly loaded or parsed source")
+    for fact in EXPECTED_TRUE_CORRECTNESS[workload]:
+        if correctness.get(fact) is not True:
+            raise RuntimeError(
+                f"workspace sample correctness fact {fact} is not exactly true"
+            )
+    if workload == "W1":
+        if measured.get("vm") is not None or measured.get("compile", {}).get("status") != "incomplete":
+            raise RuntimeError("W1 must remain incomplete and have no VM result")
+        if nested_number(measured, "compile.lowering_invocations") != 0:
+            raise RuntimeError("W1 incomplete compile entered lowering")
+        expected_shared = refinement_mode == "narrow"
+        if (
+            correctness.get("program_arc_shared") is not expected_shared
+            or correctness.get("index_arc_shared") is not expected_shared
+            or measured.get("transaction", {})
+            .get("work", {})
+            .get("metadata_only_path_used")
+            is not expected_shared
+        ):
+            raise RuntimeError("W1 refinement route facts do not match the selected mode")
+    else:
+        if measured.get("compile", {}).get("status") != "complete":
+            raise RuntimeError("complete workload did not report complete compilation")
+        if (
+            nested_number(measured, "correctness.old_snapshot_result_i64")
+            != EXPECTED_OLD_RESULTS[workload]
+            or nested_number(measured, "correctness.new_snapshot_result_i64")
+            != EXPECTED_NEW_RESULTS[workload]
+            or nested_number(measured, "vm.result_i64")
+            != EXPECTED_NEW_RESULTS[workload]
+        ):
+            raise RuntimeError("workspace sample VM outcomes are inconsistent")
+    projection = measured.get("projection")
+    digest = projection.get("sha256") if isinstance(projection, dict) else None
+    if (
+        not isinstance(projection, dict)
+        or nested_number(measured, "projection.bytes") is None
+        or nested_number(measured, "projection.lines") is None
+        or not isinstance(digest, list)
+        or len(digest) != 32
+        or any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or not 0 <= value <= 255
+            for value in digest
+        )
+    ):
+        raise RuntimeError("workspace sample projection facts are malformed")
+    if (
+        nested_number(measured, "agent_loop.edit_inspect_check_wall_ns")
+        > nested_number(measured, "agent_loop.authoring_loop_wall_ns")
+    ):
+        raise RuntimeError("workspace sample authoring-loop totals are inconsistent")
+
+
+def run_sample(
+    binary: Path,
+    workload: str,
+    helper_functions: int,
+    refinement_mode: str,
+    stdout_path: Path,
+    stderr_path: Path,
+    timeout_seconds: float,
+) -> dict[str, Any]:
     command = [
         str(binary),
         TEST,
@@ -210,63 +447,84 @@ def run_sample(binary: Path, workload: str, helper_functions: int) -> dict[str, 
         "--nocapture",
         "--test-threads=1",
     ]
-    environment = os.environ.copy()
+    environment = sample_environment()
     environment[ENV_WORKLOAD] = workload
-    if workload == "W0":
-        environment.pop(ENV_FUNCTIONS, None)
-    else:
+    environment[ENV_REFINEMENT_MODE] = refinement_mode
+    if workload in {"W1", "W2", "W5"}:
         environment[ENV_FUNCTIONS] = str(helper_functions)
-    started = time.monotonic_ns()
-    process = subprocess.Popen(
-        command,
-        cwd=ROOT,
-        env=environment,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    peak_rss: int | None = None
-    while process.poll() is None:
-        observed = process_tree_rss_bytes(process.pid)
-        if observed is not None:
-            peak_rss = observed if peak_rss is None else max(peak_rss, observed)
-        time.sleep(RSS_INTERVAL_SECONDS)
-    stdout, stderr = process.communicate()
-    elapsed_ns = time.monotonic_ns() - started
+    else:
+        environment.pop(ENV_FUNCTIONS, None)
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    started_ns = time.monotonic_ns()
+    deadline = time.monotonic() + timeout_seconds
+    timed_out = False
+    with stdout_path.open("wb") as stdout_file, stderr_path.open("wb") as stderr_file:
+        process = subprocess.Popen(
+            command,
+            cwd=ROOT,
+            env=environment,
+            stdout=stdout_file,
+            stderr=stderr_file,
+        )
+        peak_rss: int | None = None
+        while process.poll() is None:
+            if time.monotonic() >= deadline:
+                timed_out = True
+                process.kill()
+                process.wait()
+                break
+            observed = process_tree_rss_bytes(process.pid)
+            if observed is not None:
+                peak_rss = observed if peak_rss is None else max(peak_rss, observed)
+            time.sleep(RSS_INTERVAL_SECONDS)
+    elapsed_ns = time.monotonic_ns() - started_ns
+    stdout_bytes = stdout_path.read_bytes()
+    stderr_bytes = stderr_path.read_bytes()
+    if timed_out:
+        raise RuntimeError(
+            f"workspace sample {workload}/{helper_functions} exceeded "
+            f"{timeout_seconds} seconds\n{bounded_output(stderr_bytes)}"
+        )
     if process.returncode != 0:
         raise RuntimeError(
             f"workspace sample {workload}/{helper_functions} failed with exit "
-            f"{process.returncode}\n{stdout}\n{stderr}"
+            f"{process.returncode}\nstdout:\n{bounded_output(stdout_bytes)}"
+            f"\nstderr:\n{bounded_output(stderr_bytes)}"
         )
+    marker = MARKER.encode("utf-8")
     markers = [
-        line[len(MARKER) :]
-        for stream in (stdout, stderr)
+        line[len(marker) :]
+        for stream in (stdout_bytes, stderr_bytes)
         for line in stream.splitlines()
-        if line.startswith(MARKER)
+        if line.startswith(marker)
     ]
     if len(markers) != 1:
         raise RuntimeError(
             f"workspace sample {workload}/{helper_functions} emitted {len(markers)} "
-            f"{MARKER.strip()} markers\n{stdout}\n{stderr}"
+            f"{MARKER.strip()} markers\nstdout:\n{bounded_output(stdout_bytes)}"
+            f"\nstderr:\n{bounded_output(stderr_bytes)}"
         )
     try:
-        measured = json.loads(markers[0])
-    except json.JSONDecodeError as error:
+        measured = json.loads(markers[0].decode("utf-8", errors="strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError(
             f"workspace sample {workload}/{helper_functions} emitted malformed JSON: {error}"
         ) from error
-    if measured.get("schema") != "lkjscript.workspace-recompute-sample.v1":
-        raise RuntimeError("workspace sample emitted an unknown schema")
-    if measured.get("workload") != workload:
-        raise RuntimeError("workspace sample workload does not match its requested cell")
+    if not isinstance(measured, dict):
+        raise RuntimeError("workspace sample JSON root is not an object")
+    validate_sample(measured, workload, helper_functions, refinement_mode)
     measured.update(
         {
             "process_tree_peak_rss_bytes": peak_rss,
             "process_wall_ns": elapsed_ns,
-            "stdout_bytes": len(stdout.encode("utf-8")),
-            "stdout_lines": output_lines(stdout),
-            "stderr_bytes": len(stderr.encode("utf-8")),
-            "stderr_lines": output_lines(stderr),
+            "stdout_bytes": len(stdout_bytes),
+            "stdout_lines": output_lines(stdout_bytes),
+            "stdout_sha256": hashlib.sha256(stdout_bytes).hexdigest(),
+            "stdout_path": str(stdout_path),
+            "stderr_bytes": len(stderr_bytes),
+            "stderr_lines": output_lines(stderr_bytes),
+            "stderr_sha256": hashlib.sha256(stderr_bytes).hexdigest(),
+            "stderr_path": str(stderr_path),
         }
     )
     return measured
@@ -290,22 +548,86 @@ def nearest_rank_p95(values: Iterable[int]) -> int:
 def distribution(values: list[int]) -> dict[str, int] | None:
     if not values:
         return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        median_numerator = ordered[middle]
+        median_denominator = 1
+    else:
+        median_numerator = ordered[middle - 1] + ordered[middle]
+        median_denominator = 2
     return {
-        "median": int(statistics.median(values)),
-        "p95_nearest_rank_orientation": nearest_rank_p95(values),
-        "minimum": min(values),
-        "maximum": max(values),
+        "observations": len(ordered),
+        "median": median_numerator // median_denominator,
+        "median_numerator": median_numerator,
+        "median_denominator": median_denominator,
+        "p95_nearest_rank_orientation": nearest_rank_p95(ordered),
+        "minimum": ordered[0],
+        "maximum": ordered[-1],
     }
 
 
-def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
+def required_summary_metrics(workload: str) -> set[str]:
+    required = {
+        "agent_loop.edit_inspect_check_wall_ns",
+        "agent_loop.authoring_loop_wall_ns",
+        "transaction.wall_ns",
+        "transaction.stage_wall_ns",
+        "queries.wall_ns",
+        "projection.wall_ns",
+        "compile.wall_ns",
+        "process_wall_ns",
+        "stdout_bytes",
+        "stderr_bytes",
+    }
+    if workload != "W1":
+        required.update(
+            {
+                "compile.complete_hir_derivation_ns",
+                "compile.memory_planning_ns",
+                "compile.ssa_construction_ns",
+                "compile.ssa_verification_ns",
+                "compile.normalization_ns",
+                "compile.bytecode_lowering_ns",
+                "compile.bytecode_validation_ns",
+                "vm.wall_ns",
+            }
+        )
+    if workload == "W6":
+        required.update(
+            {
+                "sequence.create_function.wall_ns",
+                "sequence.complete_function_body.wall_ns",
+                "sequence.rename.wall_ns",
+                "sequence.invalid_stale_edit.wall_ns",
+            }
+        )
+    if workload == "W7":
+        required.update(
+            {
+                "sequence.introduce_hole.wall_ns",
+                "sequence.incomplete_compile.wall_ns",
+            }
+        )
+    return required
+
+
+def summarize(results: list[dict[str, Any]], samples_per_cell: int) -> dict[str, Any]:
     grouped: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for result in results:
         grouped[(result["workload"], result["geometry"]["helper_functions"])].append(
             result
         )
     metric_paths = [
+        "agent_loop.edit_inspect_check_wall_ns",
+        "agent_loop.authoring_loop_wall_ns",
         "transaction.wall_ns",
+        "sequence.create_function.wall_ns",
+        "sequence.complete_function_body.wall_ns",
+        "sequence.rename.wall_ns",
+        "sequence.invalid_stale_edit.wall_ns",
+        "sequence.introduce_hole.wall_ns",
+        "sequence.incomplete_compile.wall_ns",
         "transaction.stage_wall_ns",
         "queries.wall_ns",
         "projection.wall_ns",
@@ -326,12 +648,22 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     cells = []
     for (workload, helpers), samples in sorted(grouped.items()):
         timings: dict[str, Any] = {}
+        required_metrics = required_summary_metrics(workload)
         for path in metric_paths:
             values = [
                 value
                 for sample in samples
                 if (value := nested_number(sample, path)) is not None
             ]
+            if path in required_metrics and len(values) != len(samples):
+                raise RuntimeError(
+                    f"required metric {path} is missing within {workload}/{helpers}"
+                )
+            if values and len(values) != len(samples):
+                raise RuntimeError(
+                    f"optional metric {path} is only partially observed within "
+                    f"{workload}/{helpers}"
+                )
             measured = distribution(values)
             if measured is not None:
                 timings[path] = measured
@@ -340,7 +672,11 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             for sample in samples
             for transaction in [sample.get("transaction")]
         ]
-        deterministic_work = work[0] if work and all(item == work[0] for item in work) else None
+        if not work or not all(item == work[0] for item in work):
+            raise RuntimeError(
+                f"deterministic transaction work changed within {workload}/{helpers}"
+            )
+        deterministic_work = work[0]
         geometry = samples[0]["geometry"]
         if any(sample["geometry"] != geometry for sample in samples):
             raise RuntimeError(f"geometry changed within {workload}/{helpers} samples")
@@ -355,7 +691,12 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             }
         )
     return {
-        "tail_method": "nearest-rank p95; with five samples this is the maximum and is orientation only",
+        "median_method": "exact integer numerator/denominator; median is the floor only for convenience when the exact value is half-integral",
+        "tail_method": (
+            "nearest-rank p95 (ceil(0.95*n)); it is the maximum when fewer "
+            "than 20 samples are collected and remains orientation only"
+        ),
+        "samples_per_cell": samples_per_cell,
         "cells": cells,
     }
 
@@ -364,82 +705,252 @@ def parse_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def source_state() -> dict[str, Any]:
+    return {
+        "commit": command_output("git", "rev-parse", "HEAD"),
+        "branch": command_output("git", "branch", "--show-current"),
+        "worktree": worktree_metadata(),
+    }
+
+
+def performance_environment() -> dict[str, str]:
+    return {
+        key: os.environ[key]
+        for key in sorted(os.environ)
+        if key in PERFORMANCE_ENVIRONMENT_KEYS or key.startswith("CARGO_PROFILE_")
+    }
+
+
+def relativize_stream_paths(sample: dict[str, Any], base: Path) -> None:
+    for key in ("stdout_path", "stderr_path"):
+        sample[key] = str(Path(sample[key]).relative_to(base))
+
+
+def raw_stream_manifest(sample: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "workload": sample["workload"],
+        "helper_functions": sample["geometry"]["helper_functions"],
+        "stdout": {
+            "path": sample["stdout_path"],
+            "bytes": sample["stdout_bytes"],
+            "lines": sample["stdout_lines"],
+            "sha256": sample["stdout_sha256"],
+        },
+        "stderr": {
+            "path": sample["stderr_path"],
+            "bytes": sample["stderr_bytes"],
+            "lines": sample["stderr_lines"],
+            "sha256": sample["stderr_sha256"],
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", required=True)
-    parser.add_argument("--workloads", default="W0,W1,W2")
+    parser.add_argument("--workloads", default="W0,W1,W2,W3,W4,W5,W6,W7")
     parser.add_argument("--sizes", default="16,128,512")
     parser.add_argument("--samples", type=int, default=5)
+    parser.add_argument("--warmups", type=int, default=1)
+    parser.add_argument(
+        "--refinement-mode", choices=("narrow", "full"), default="narrow"
+    )
+    parser.add_argument("--sample-timeout-seconds", type=float, default=300.0)
+    parser.add_argument("--progress", action="store_true")
     parser.add_argument("--decision", default="pending")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     workloads = parse_csv(args.workloads)
-    allowed = {"W0", "W1", "W2"}
+    allowed = {f"W{index}" for index in range(8)}
     if not workloads or len(set(workloads)) != len(workloads) or any(
         workload not in allowed for workload in workloads
     ):
-        parser.error("workloads must be a unique comma-separated subset of W0,W1,W2")
+        parser.error("workloads must be a unique comma-separated subset of W0 through W7")
     try:
         sizes = [int(value) for value in parse_csv(args.sizes)]
     except ValueError:
         parser.error("sizes must be comma-separated positive integers")
-    if args.samples < 1 or not sizes or any(size < 1 for size in sizes):
-        parser.error("sizes and samples must select positive measurement geometry")
+    if (
+        args.samples < 1
+        or args.warmups < 0
+        or args.sample_timeout_seconds <= 0
+        or not sizes
+        or any(size < 1 for size in sizes)
+    ):
+        parser.error(
+            "sizes/samples/timeout must be positive and warmups must be nonnegative"
+        )
+    if len(set(sizes)) != len(sizes):
+        parser.error("sizes must not contain duplicates")
+    if args.refinement_mode == "full" and any(workload != "W1" for workload in workloads):
+        parser.error("full refinement mode is a W1 comparison control only")
 
-    worktree_before = worktree_metadata()
-    binary, build_command, build_wall_ns = build_release_test_binary()
-    output = args.output or ROOT / "target" / "workspace-recompute" / f"{args.label}.json"
+    started_at = datetime.now(timezone.utc).isoformat()
+    invocation_cwd = Path.cwd().resolve()
+    requested_output = args.output or Path("target/workspace-recompute") / f"{args.label}.json"
+    output = (
+        requested_output.resolve()
+        if requested_output.is_absolute()
+        else (invocation_cwd / requested_output).resolve()
+    )
+    raw_directory = output.parent / f"{output.stem}-raw"
+    if output.exists() or raw_directory.exists():
+        raise RuntimeError(
+            f"result or raw path already exists; select a fresh label/output: {output}"
+        )
     output.parent.mkdir(parents=True, exist_ok=True)
+    raw_directory.mkdir(parents=True)
 
+    source_before = source_state()
+    machine = machine_metadata()
+    binary, build_command, build_wall_ns, build_fresh = build_release_test_binary()
+    binary_sha256 = hashlib.sha256(binary.read_bytes()).hexdigest()
     results: list[dict[str, Any]] = []
+    warmup_streams: list[dict[str, Any]] = []
+    fixed_workloads = {"W0", "W3", "W4", "W6", "W7"}
     for workload in workloads:
-        workload_sizes = [0] if workload == "W0" else sizes
+        workload_sizes = [0] if workload in fixed_workloads else sizes
         for helper_functions in workload_sizes:
-            for sample_number in range(1, args.samples + 1):
-                print(
-                    f"{args.label}: workload={workload} helpers={helper_functions} "
-                    f"sample={sample_number}/{args.samples}",
-                    flush=True,
+            cell = f"{workload}-n{helper_functions}"
+            for warmup_number in range(1, args.warmups + 1):
+                if args.progress:
+                    print(
+                        f"{args.label}: workload={workload} helpers={helper_functions} "
+                        f"discarded-warmup={warmup_number}/{args.warmups}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                prefix = raw_directory / f"{cell}-warmup-{warmup_number:02}"
+                warmup = run_sample(
+                    binary,
+                    workload,
+                    helper_functions,
+                    args.refinement_mode,
+                    prefix.with_suffix(".stdout"),
+                    prefix.with_suffix(".stderr"),
+                    args.sample_timeout_seconds,
                 )
-                measured = run_sample(binary, workload, helper_functions)
+                relativize_stream_paths(warmup, output.parent)
+                manifest = raw_stream_manifest(warmup)
+                manifest["warmup"] = warmup_number
+                warmup_streams.append(manifest)
+            for sample_number in range(1, args.samples + 1):
+                if args.progress:
+                    print(
+                        f"{args.label}: workload={workload} helpers={helper_functions} "
+                        f"sample={sample_number}/{args.samples}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                prefix = raw_directory / f"{cell}-sample-{sample_number:02}"
+                measured = run_sample(
+                    binary,
+                    workload,
+                    helper_functions,
+                    args.refinement_mode,
+                    prefix.with_suffix(".stdout"),
+                    prefix.with_suffix(".stderr"),
+                    args.sample_timeout_seconds,
+                )
+                relativize_stream_paths(measured, output.parent)
                 measured["sample"] = sample_number
                 results.append(measured)
 
-    worktree = worktree_metadata()
-    if worktree != worktree_before:
-        raise RuntimeError("worktree changed while workspace samples were running")
+    source_after = source_state()
+    if source_after != source_before:
+        raise RuntimeError("source commit, branch, or worktree changed during sampling")
+    if hashlib.sha256(binary.read_bytes()).hexdigest() != binary_sha256:
+        raise RuntimeError("release measurement binary changed during sampling")
+    summary = summarize(results, args.samples)
+    scaled_workloads = {"W1", "W2", "W5"}
+    expected_cells = sum(
+        len(sizes) if workload in scaled_workloads else 1 for workload in workloads
+    )
+    if len(summary["cells"]) != expected_cells or any(
+        cell["samples"] != args.samples for cell in summary["cells"]
+    ):
+        raise RuntimeError("summary does not contain the requested cells and samples")
+    if any(
+        nested_number(sample, "correctness.source_load_invocations") != 0
+        or nested_number(sample, "correctness.parser_invocations") != 0
+        or nested_number(sample, "agent_loop.authoring_loop_wall_ns") is None
+        for sample in results
+    ):
+        raise RuntimeError("sample correctness or authoring-loop summary facts are invalid")
+
     sample_command = (
         f"{binary} {TEST} --exact --ignored --nocapture --test-threads=1"
     )
+    rust_host = next(
+        (
+            line.split(":", 1)[1].strip()
+            for line in command_output("rustc", "-vV").splitlines()
+            if line.startswith("host:")
+        ),
+        "unknown",
+    )
+    selected_target = os.environ.get("CARGO_BUILD_TARGET", rust_host)
+    driver_invocation = shlex.join([sys.executable, *sys.argv])
     document = {
-        "schema": "lkjscript.workspace-recompute-results.v1",
+        "schema": "lkjscript.workspace-recompute-results.v2",
+        "started_at_utc": started_at,
+        "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+        "driver_invocation": driver_invocation,
+        "invocation_cwd": str(invocation_cwd),
+        "driver_output_contract": {
+            "success_stdout": "absolute result path plus one newline",
+            "success_stderr": "empty unless --progress is selected",
+        },
+        "branch": source_before["branch"],
+        "rust_host_triple": rust_host,
+        "target_triple": selected_target,
+        "performance_environment": performance_environment(),
         "label": args.label,
-        "commit": command_output("git", "rev-parse", "HEAD"),
-        "worktree": worktree,
+        "commit": source_before["commit"],
+        "worktree": source_before["worktree"],
+        "source_stable_during_run": True,
         "worktree_stable_during_run": True,
-        "machine": machine_metadata(),
+        "machine": machine,
         "build": {
             "command": " ".join(build_command),
             "profile": "release test profile; workspace release LTO/codegen/strip settings apply",
             "locked": True,
-            "cache_state": "warm Cargo dependencies and release artifacts; build completed once before samples",
+            "cache_state": (
+                "compiler test artifact was already fresh"
+                if build_fresh
+                else "compiler test artifact was rebuilt once before samples"
+            ),
+            "compiler_test_artifact_fresh": build_fresh,
             "wall_ns": build_wall_ns,
             "test_binary": str(binary),
+            "test_binary_sha256": binary_sha256,
         },
         "sample_command": sample_command,
         "sample_environment": {
-            ENV_WORKLOAD: "W0|W1|W2",
-            ENV_FUNCTIONS: "positive helper-function count for W1/W2",
+            ENV_WORKLOAD: "W0|W1|W2|W3|W4|W5|W6|W7",
+            ENV_FUNCTIONS: "positive helper-function count for W1/W2/W5",
+            ENV_REFINEMENT_MODE: args.refinement_mode,
+            "inherited_allowlisted_environment": sample_environment(),
+            "sample_timeout_seconds": args.sample_timeout_seconds,
             "test_threads": 1,
         },
         "workloads": {
-            "W0": "tiny complete source-free scalar control, 1,000 direct identity queries, compile, VM result 7",
+            "W0": "tiny source-free scalar replacement with queries, projection, compile, and VM 7 to 8",
             "W1": "metadata-only main-hole goal refinement in an incomplete workspace of independent complete scalar helpers",
-            "W2": "one counted-loop limit literal replacement, compact queries, selected body projection, immediate compile, VM result 101, retained old result 100",
+            "W2": "counted-loop limit replacement with retained old VM 100 and new VM 101",
+            "W3": "owned byte-vector shared borrow plus early return; return-subtree edit 7 to 9 with cleanup obligations",
+            "W4": "product construction plus exhaustive payload enum match; selected-arm edit 42 to 43",
+            "W5": "exact Copy-bounded generic identity call value edit 10 to 11 in scaled mixed nominal/control geometry",
+            "W6": "function lifecycle, rename, atomic stale failure, middle-function deletion/compaction, tombstone and relocated-survivor checks",
+            "W7": "complete to typed hole to blocked compile-before-lowering to refilled complete VM 7 to 9",
         },
         "sizes": sizes,
         "samples_per_cell": args.samples,
+        "discarded_warmups_per_cell": args.warmups,
+        "warmup_policy": "each cell runs explicit fresh-process warmups first; warmup metrics are discarded but raw streams are retained",
+        "raw_directory": str(raw_directory.relative_to(output.parent)),
+        "warmup_raw_streams": warmup_streams,
         "rss": {
             "method": "10 ms /proc polling; sum resident pages for the direct release test process and descendants",
             "interval_ms": 10,
@@ -448,11 +959,16 @@ def main() -> None:
         "selection": {
             "inclusion": "fresh process exited zero, emitted exactly one decodable marker, and passed all in-sample semantic assertions",
             "exclusion": "no failed or malformed sample is retained",
-            "tail": "nearest-rank p95 orientation; five-sample p95 is the maximum",
+            "tail": "nearest-rank ceil(0.95*n); it is the maximum for fewer than 20 samples",
         },
         "samples": results,
-        "summary": summarize(results),
+        "summary": summary,
         "decision": args.decision,
+        "decision_protocol": {
+            "retain_correction_threshold": "at least 10% representative-medium end-to-end improvement or 20% in a clearly dominant phase",
+            "semantic_requirement": "exact outcomes, identities, diffs, diagnostics, blockers, queries, cleanup, and old snapshots must remain equivalent",
+            "full_recomputation_reversal": "reconsider when representative semantic edit/query/projection work dominates the local loop, retained memory becomes material, or scaling departs from recorded whole-program traversal shape",
+        },
         "limitations": [
             "single-host timing is orientation, not a product guarantee or CI gate",
             "total allocator counts and allocated bytes are unavailable",
@@ -462,7 +978,12 @@ def main() -> None:
             "process wall includes up to one 10 ms RSS-poll interval after the test process exits",
         ],
     }
-    output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    encoded = json.dumps(document, indent=2, sort_keys=True) + "\n"
+    temporary_output = output.with_suffix(output.suffix + ".tmp")
+    if temporary_output.exists():
+        raise RuntimeError(f"temporary result path already exists: {temporary_output}")
+    temporary_output.write_text(encoded, encoding="utf-8")
+    os.replace(temporary_output, output)
     print(output)
 
 

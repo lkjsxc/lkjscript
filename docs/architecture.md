@@ -147,8 +147,9 @@ not inside semantic index storage. Their messages include the current hole goal.
 transaction therefore rebuilds only those diagnostics after applying the canonical refinement checks;
 it does not clone or compact executable semantic state, infer effects, derive complete HIR, rebuild
 indexes, reconcile identities, or rediscover graph diffs. It preserves the old snapshot, stable hole
-and owner identities, blocker and index meaning, deterministically ordered multi-refinement facts,
-the existing seven conservative invalidation domains, and revision-bound continuation failure. Mixed
+and owner identities, blocker and index meaning, one deterministic base-to-final diff per refined
+hole with net no-ops omitted, the existing seven conservative invalidation domains, and revision-bound
+continuation failure. Mixed
 batches use the ordinary semantic staging path. As before, any semantic edit drops presentation and
 locked provenance, stages the allocator before work, and publishes allocator plus snapshot only after
 all fallible outcome copies succeed.
@@ -397,9 +398,11 @@ ownership, early-return, match, generic-declaration, and generic-call convergenc
 retry tests; exact per-node index work; and
 20,000-level nested-expression, local, semantic-match, published-type, and declaration-type
 small-stack release execution protect the selected vertical. A retained five-sample release harness
-also measures goal-only refinement and complete counted-loop edit/query/projection/compile loops up
-to 512 unaffected helpers. It supports sharing unchanged semantic/index state for the exact
-metadata-only case and retaining full recomputation everywhere else.
+measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match, exact-generic mixed,
+lifecycle, and incomplete-recovery edit/query/projection/compile loops, including three scale points
+through 538 representative nodes and one 2,074-node ignored stress point. Same-binary deterministic
+work and timing support sharing unchanged semantic/index state only for exact metadata refinement and
+retaining full recomputation everywhere else.
 Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one

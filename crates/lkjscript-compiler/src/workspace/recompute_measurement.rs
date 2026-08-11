@@ -11,7 +11,22 @@ use super::*;
 
 const MARKER: &str = "LKJSCRIPT_WORKSPACE_RECOMPUTE ";
 const PAGE_SIZE: usize = 8;
-const CONTROL_QUERY_ITERATIONS: usize = 1_000;
+const REFINEMENT_MODE_ENV: &str = "LKJSCRIPT_WORKSPACE_REFINEMENT_MODE";
+
+fn refinement_mode() -> &'static str {
+    match std::env::var(REFINEMENT_MODE_ENV).as_deref() {
+        Ok("full") => {
+            super::transaction::set_force_full_recomputation(true);
+            "full"
+        }
+        Ok("narrow") | Err(std::env::VarError::NotPresent) => {
+            super::transaction::set_force_full_recomputation(false);
+            "narrow"
+        }
+        Ok(other) => panic!("{REFINEMENT_MODE_ENV} must be narrow or full, not {other}"),
+        Err(error) => panic!("invalid {REFINEMENT_MODE_ENV}: {error}"),
+    }
+}
 
 fn nanoseconds(duration: Duration) -> u64 {
     u64::try_from(duration.as_nanos()).expect("measurement duration exceeds u64 nanoseconds")
@@ -280,6 +295,7 @@ fn returned_i64(executable: &crate::ExecutableProgram) -> (i64, Duration) {
         &ExecutionPolicy::unrestricted(),
     );
     let wall = started.elapsed();
+    assert!(outcome.cleanup_failures().is_none());
     let value = match outcome {
         ExecutionOutcome::Returned(value) => value.as_i64().expect("returned i64"),
         other => panic!("unexpected measured VM outcome: {other:?}"),
@@ -292,9 +308,17 @@ fn compile_and_run_i64(snapshot: &WorkspaceSnapshot) -> i64 {
     returned_i64(&executable).0
 }
 
+fn authoring_loop_wall(durations: &[Duration]) -> u64 {
+    nanoseconds(
+        durations
+            .iter()
+            .copied()
+            .try_fold(Duration::ZERO, Duration::checked_add)
+            .expect("authoring-loop duration overflow"),
+    )
+}
+
 fn control_sample() -> Value {
-    crate::source::reset_parser_invocation_count();
-    crate::source::reset_source_load_invocation_count();
     let fixture_started = Instant::now();
     let (mut workspace, main, hole) = create_width_fixture(7_000, 0);
     let completed = workspace
@@ -305,62 +329,99 @@ fn control_sample() -> Value {
                 draft: ExpressionDraft::scalar_i64(7),
             }],
         })
-        .expect("complete control fixture");
+        .expect("complete W0 fixture");
     let fixture_wall = fixture_started.elapsed();
+    let old_snapshot = completed.snapshot;
+    let root = old_snapshot.nodes()[0].id;
 
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let transaction_started = Instant::now();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: old_snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::scalar_i64(8),
+            }],
+        })
+        .expect("replace W0 scalar");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    assert_eq!(edited.snapshot.node(root).expect("W0 root").id, root);
+
+    super::query::reset_query_measurement();
     let query_started = Instant::now();
-    for _ in 0..CONTROL_QUERY_ITERATIONS {
-        let definition = completed
-            .snapshot
-            .definition(completed.snapshot.revision(), main)
-            .expect("control definition query");
-        assert_eq!(definition.id, main);
-    }
+    let definition = edited
+        .snapshot
+        .definition(edited.snapshot.revision(), main)
+        .expect("W0 definition");
+    let semantics = edited
+        .snapshot
+        .node_semantics(edited.snapshot.revision(), root)
+        .expect("W0 semantics");
     let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert_eq!(definition.id, main);
+    assert_eq!(semantics.actual, SemanticType::I64);
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let projection = edited
+        .snapshot
+        .project(&[ProjectionSlice::Body(main), ProjectionSlice::Type(root)])
+        .expect("W0 projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
 
     crate::pipeline::reset_lowering_invocations();
     let compile_started = Instant::now();
-    let (executable, compile) = crate::pipeline::compile_snapshot_with_metrics(&completed.snapshot)
-        .expect("compile control snapshot");
+    let (executable, compile) = crate::pipeline::compile_snapshot_with_metrics(&edited.snapshot)
+        .expect("compile W0 snapshot");
     let compile_wall = compile_started.elapsed();
-    assert_eq!(crate::pipeline::lowering_invocations(), 1);
     let (result, vm_wall) = returned_i64(&executable);
-    assert_eq!(result, 7);
+    assert_eq!(crate::pipeline::lowering_invocations(), 1);
+    let old_result = compile_and_run_i64(&old_snapshot);
+    assert_eq!((old_result, result), (7, 8));
+    assert_eq!(crate::pipeline::lowering_invocations(), 2);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 
     json!({
-        "schema": "lkjscript.workspace-recompute-sample.v1",
+        "schema": "lkjscript.workspace-recompute-sample.v2",
         "workload": "W0",
         "geometry": {
             "helper_functions": 0,
             "total_callables": 1,
-            "total_entities": count(completed.snapshot.entities().len()),
-            "total_semantic_nodes": count(completed.snapshot.nodes().len()),
-            "affected_root_nodes": 0,
-            "draft_nodes": 0,
+            "total_entities": count(edited.snapshot.entities().len()),
+            "total_semantic_nodes": count(edited.snapshot.nodes().len()),
+            "affected_root_nodes": 1,
+            "changed_semantic_nodes": 1,
+            "draft_nodes": 1,
             "page_size": PAGE_SIZE,
-            "retained_old_revisions": 0,
+            "retained_old_revisions": 1,
         },
         "fixture": { "wall_ns": nanoseconds(fixture_wall) },
-        "transaction": Value::Null,
-        "queries": {
-            "wall_ns": nanoseconds(query_wall),
-            "direct_identity_queries": count(CONTROL_QUERY_ITERATIONS),
-        },
-        "projection": Value::Null,
+        "transaction": transaction_value(transaction_wall, transaction, &edited),
+        "queries": query_value(query_wall, query, 2),
+        "projection": projection_value(projection_wall, projection_work, &projection),
         "compile": compile_value(compile_wall, compile, &executable),
         "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": result },
         "correctness": {
             "source_load_invocations": crate::source::source_load_invocation_count(),
             "parser_invocations": crate::source::parser_invocation_count(),
-            "old_snapshot_result_i64": Value::Null,
+            "root_identity_preserved": true,
+            "old_snapshot_result_i64": old_result,
             "new_snapshot_result_i64": result,
         },
         "agent_loop": {
             "commands": 1,
             "process_round_trips": 1,
-            "selected_api_operations": CONTROL_QUERY_ITERATIONS + 2,
+            "selected_api_operations": 6,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()),
+            "output_lines": line_count(&projection),
         },
         "allocation_counts": Value::Null,
         "allocation_bytes": Value::Null,
@@ -386,18 +447,19 @@ fn hole_refinement_sample(helper_functions: usize) -> Value {
 
     crate::source::reset_parser_invocation_count();
     crate::source::reset_source_load_invocation_count();
+    let mode = refinement_mode();
     let transaction_started = Instant::now();
-    let refined = workspace
-        .apply(Transaction {
-            base_revision: old_snapshot.revision(),
-            edits: vec![Edit::RefineHole {
-                hole,
-                expected_type: Some(SemanticType::I64),
-                goal: "return a representative scalar".to_owned(),
-            }],
-        })
-        .expect("refine measured hole");
+    let refined = workspace.apply(Transaction {
+        base_revision: old_snapshot.revision(),
+        edits: vec![Edit::RefineHole {
+            hole,
+            expected_type: Some(SemanticType::I64),
+            goal: "return a representative scalar".to_owned(),
+        }],
+    });
     let transaction_wall = transaction_started.elapsed();
+    super::transaction::set_force_full_recomputation(false);
+    let refined = refined.expect("refine measured hole");
     let transaction = super::transaction::take_transaction_measurement();
     assert_eq!(
         refined.snapshot.revision().sequence(),
@@ -490,8 +552,9 @@ fn hole_refinement_sample(helper_functions: usize) -> Value {
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 
     json!({
-        "schema": "lkjscript.workspace-recompute-sample.v1",
+        "schema": "lkjscript.workspace-recompute-sample.v2",
         "workload": "W1",
+        "refinement_mode": mode,
         "geometry": {
             "helper_functions": count(helper_functions),
             "total_callables": count(helper_functions + 1),
@@ -527,6 +590,10 @@ fn hole_refinement_sample(helper_functions: usize) -> Value {
             "commands": 1,
             "process_round_trips": 1,
             "selected_api_operations": 7,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, incomplete_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, incomplete_wall]),
+            "output_bytes": count(projection.len()),
+            "output_lines": line_count(&projection),
         },
         "allocation_counts": Value::Null,
         "allocation_bytes": Value::Null,
@@ -685,6 +752,7 @@ fn imperative_edit_sample(helper_functions: usize) -> Value {
             .expect("W2 observed entities");
         assert!(first.items.last().map(|item| item.id) < second.items.first().map(|item| item.id));
     }
+    let query_operations = 4_usize + usize::from(second.is_some());
     let semantic_items_observed = observed_entities
         .checked_add(references.items.len())
         .and_then(|value| value.checked_add(2))
@@ -720,7 +788,7 @@ fn imperative_edit_sample(helper_functions: usize) -> Value {
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 
     json!({
-        "schema": "lkjscript.workspace-recompute-sample.v1",
+        "schema": "lkjscript.workspace-recompute-sample.v2",
         "workload": "W2",
         "geometry": {
             "helper_functions": count(helper_functions),
@@ -752,11 +820,1408 @@ fn imperative_edit_sample(helper_functions: usize) -> Value {
         "agent_loop": {
             "commands": 1,
             "process_round_trips": 1,
-            "selected_api_operations": 9,
+            "selected_api_operations": count(query_operations + 4),
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()),
+            "output_lines": line_count(&projection),
         },
         "allocation_counts": Value::Null,
         "allocation_bytes": Value::Null,
         "retained_snapshot_bytes": Value::Null,
+    })
+}
+
+fn return_i64_draft(result: i64) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(result),
+            DraftNode::Return {
+                value: DraftNodeId::new(0),
+            },
+        ],
+        DraftNodeId::new(1),
+    )
+}
+
+fn ownership_early_return_draft(result: i64) -> ExpressionDraft {
+    let owner = DraftBindingId::new(0);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(4),
+            DraftNode::Operation {
+                operation: crate::Operation::ByteVectorNew,
+                arguments: vec![DraftNodeId::new(0)],
+            },
+            DraftNode::BorrowShared(DraftBindingRef::Local(owner)),
+            DraftNode::Operation {
+                operation: crate::Operation::ByteSliceLength,
+                arguments: vec![DraftNodeId::new(2)],
+            },
+            DraftNode::I64(result),
+            DraftNode::Return {
+                value: DraftNodeId::new(4),
+            },
+            DraftNode::Sequence(vec![DraftNodeId::new(3), DraftNodeId::new(5)]),
+            DraftNode::Let {
+                bindings: vec![LocalDraft {
+                    binding: owner,
+                    name: "owned-bytes".to_owned(),
+                    value: DraftNodeId::new(1),
+                }],
+                body: DraftNodeId::new(6),
+            },
+        ],
+        DraftNodeId::new(7),
+    )
+}
+
+fn ownership_edit_sample() -> Value {
+    let fixture_started = Instant::now();
+    let (mut workspace, main, hole) = create_width_fixture(7_300, 0);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ownership_early_return_draft(7),
+            }],
+        })
+        .expect("complete W3 ownership fixture");
+    let fixture_wall = fixture_started.elapsed();
+    let old_snapshot = completed.snapshot;
+    let return_node = old_snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Return)
+        .expect("W3 return node")
+        .id;
+    let target = return_node;
+    let owner = old_snapshot
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::ImmutableLocal && entity.name.as_ref() == "owned-bytes"
+        })
+        .expect("W3 owned local")
+        .id;
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let transaction_started = Instant::now();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: old_snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target,
+                draft: return_i64_draft(9),
+            }],
+        })
+        .expect("edit W3 return subtree");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    assert_eq!(edited.snapshot.node(target).expect("W3 target").id, target);
+    assert_eq!(
+        edited
+            .snapshot
+            .node_semantics(edited.snapshot.revision(), target)
+            .expect("W3 type")
+            .actual,
+        SemanticType::Never
+    );
+
+    super::query::reset_query_measurement();
+    let query_started = Instant::now();
+    let semantics = edited
+        .snapshot
+        .node_semantics(edited.snapshot.revision(), target)
+        .expect("W3 semantics");
+    let references = edited
+        .snapshot
+        .references_to(
+            edited.snapshot.revision(),
+            owner,
+            PageRequest::new(PAGE_SIZE).expect("W3 reference page"),
+            None,
+        )
+        .expect("W3 references");
+    let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert_eq!(semantics.actual, SemanticType::Never);
+    assert!(!references.items.is_empty());
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let projection = edited
+        .snapshot
+        .project(&[ProjectionSlice::Body(main), ProjectionSlice::Type(target)])
+        .expect("W3 projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
+
+    crate::pipeline::reset_lowering_invocations();
+    let compile_started = Instant::now();
+    let (executable, compile) =
+        crate::pipeline::compile_snapshot_with_metrics(&edited.snapshot).expect("compile W3");
+    let compile_wall = compile_started.elapsed();
+    let drop_obligations = executable
+        .memory_plan()
+        .obligations
+        .iter()
+        .filter(|obligation| {
+            obligation.kind == crate::memory_plan::MemoryObligationKind::DropWholeValue
+        })
+        .count();
+    let end_borrows = executable
+        .memory_plan()
+        .obligations
+        .iter()
+        .filter(|obligation| obligation.kind == crate::memory_plan::MemoryObligationKind::EndBorrow)
+        .count();
+    assert!(drop_obligations >= 1);
+    assert!(end_borrows >= 1);
+    let (new_result, vm_wall) = returned_i64(&executable);
+    let old_result = compile_and_run_i64(&old_snapshot);
+    assert_eq!((old_result, new_result), (7, 9));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+
+    json!({
+        "schema": "lkjscript.workspace-recompute-sample.v2",
+        "workload": "W3",
+        "geometry": {
+            "helper_functions": 0,
+            "total_callables": 1,
+            "total_entities": count(edited.snapshot.entities().len()),
+            "total_semantic_nodes": count(edited.snapshot.nodes().len()),
+            "affected_root_nodes": count(old_snapshot.nodes().len()),
+            "changed_semantic_nodes": 2,
+            "draft_nodes": 2,
+            "page_size": PAGE_SIZE,
+            "retained_old_revisions": 1,
+            "owned_byte_vector_length": 4,
+        },
+        "fixture": { "wall_ns": nanoseconds(fixture_wall) },
+        "transaction": transaction_value(transaction_wall, transaction, &edited),
+        "queries": query_value(query_wall, query, references.items.len() + 1),
+        "projection": projection_value(projection_wall, projection_work, &projection),
+        "compile": compile_value(compile_wall, compile, &executable),
+        "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": new_result },
+        "memory": {
+            "drop_whole_value_obligations": count(drop_obligations),
+            "end_borrow_obligations": count(end_borrows),
+            "cleanup_failures": 0,
+        },
+        "correctness": {
+            "source_load_invocations": crate::source::source_load_invocation_count(),
+            "parser_invocations": crate::source::parser_invocation_count(),
+            "return_identity_preserved": true,
+            "return_type_preserved": true,
+            "old_snapshot_result_i64": old_result,
+            "new_snapshot_result_i64": new_result,
+        },
+        "agent_loop": {
+            "commands": 1,
+            "process_round_trips": 1,
+            "selected_api_operations": 6,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()),
+            "output_lines": line_count(&projection),
+        },
+        "allocation_counts": Value::Null,
+        "allocation_bytes": Value::Null,
+        "retained_snapshot_bytes": Value::Null,
+    })
+}
+
+fn product_enum_match_draft(
+    pair: EntityId,
+    left: EntityId,
+    right: EntityId,
+    some: EntityId,
+    none: EntityId,
+    payload_field: EntityId,
+) -> ExpressionDraft {
+    let pair_local = DraftBindingId::new(0);
+    let payload = DraftBindingId::new(1);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::I64(1),
+            DraftNode::ProductValue {
+                product: pair,
+                fields: vec![
+                    DraftFieldValue {
+                        field: left,
+                        value: DraftNodeId::new(0),
+                    },
+                    DraftFieldValue {
+                        field: right,
+                        value: DraftNodeId::new(1),
+                    },
+                ],
+            },
+            DraftNode::Load(DraftBindingRef::Local(pair_local)),
+            DraftNode::ProductField {
+                field: left,
+                value: DraftNodeId::new(3),
+            },
+            DraftNode::EnumValue {
+                variant: some,
+                fields: vec![DraftFieldValue {
+                    field: payload_field,
+                    value: DraftNodeId::new(4),
+                }],
+            },
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(5),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "selected-payload".to_owned(),
+                                },
+                                DraftPatternNode::EnumVariant {
+                                    variant: some,
+                                    fields: vec![DraftPatternField {
+                                        field: payload_field,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(6),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![DraftPatternNode::EnumVariant {
+                                variant: none,
+                                fields: Vec::new(),
+                            }],
+                            DraftPatternNodeId::new(0),
+                        ),
+                        body: DraftNodeId::new(7),
+                    },
+                ],
+            },
+            DraftNode::Let {
+                bindings: vec![LocalDraft {
+                    binding: pair_local,
+                    name: "pair-value".to_owned(),
+                    value: DraftNodeId::new(2),
+                }],
+                body: DraftNodeId::new(8),
+            },
+        ],
+        DraftNodeId::new(9),
+    )
+}
+
+fn product_enum_match_sample() -> Value {
+    let fixture_started = Instant::now();
+    let mut workspace = Workspace::empty_deterministic(7_400).expect("W4 workspace");
+    let declared = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "pair".to_owned(),
+                    fields: vec![
+                        ProductFieldDraft {
+                            name: "left".to_owned(),
+                            ty: SemanticType::I64,
+                        },
+                        ProductFieldDraft {
+                            name: "right".to_owned(),
+                            ty: SemanticType::I64,
+                        },
+                    ],
+                },
+                Edit::CreateEnum {
+                    name: "choice".to_owned(),
+                    variants: vec![
+                        EnumVariantDraft {
+                            name: "some".to_owned(),
+                            fields: vec![EnumFieldDraft {
+                                name: "payload".to_owned(),
+                                ty: SemanticType::I64,
+                            }],
+                        },
+                        EnumVariantDraft {
+                            name: "none".to_owned(),
+                            fields: Vec::new(),
+                        },
+                    ],
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("declare W4 forms");
+    let named = |kind, name: &str| {
+        declared
+            .snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.as_ref() == name)
+            .expect("W4 named entity")
+            .id
+    };
+    let pair = named(EntityKind::Product, "pair");
+    let left = named(EntityKind::ProductField, "left");
+    let right = named(EntityKind::ProductField, "right");
+    let some = named(EntityKind::EnumVariant, "some");
+    let none = named(EntityKind::EnumVariant, "none");
+    let payload_field = named(EntityKind::EnumField, "payload");
+    let main = named(EntityKind::Main, "main");
+    let hole = declared.snapshot.holes().next().expect("W4 main hole").id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: declared.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: product_enum_match_draft(pair, left, right, some, none, payload_field),
+            }],
+        })
+        .expect("complete W4");
+    let fixture_wall = fixture_started.elapsed();
+    let old_snapshot = completed.snapshot;
+    let match_site = old_snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("W4 match")
+        .id;
+    let old_view = old_snapshot
+        .match_view(old_snapshot.revision(), match_site)
+        .expect("W4 old match view");
+    assert!(old_view.exhaustive);
+    let selected_arm = old_view.arms[0].body;
+    let payload_binding = old_view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match pattern.kind {
+            MatchPatternKindView::Binding { binding } => Some(binding),
+            _ => None,
+        })
+        .expect("W4 payload binding");
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let transaction_started = Instant::now();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: old_snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: selected_arm,
+                draft: ExpressionDraft::scalar_i64(43),
+            }],
+        })
+        .expect("edit W4 selected arm");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    let new_view = edited
+        .snapshot
+        .match_view(edited.snapshot.revision(), match_site)
+        .expect("W4 new match view");
+    assert!(new_view.exhaustive);
+    assert_eq!(new_view.arms[0].body, selected_arm);
+    assert!(edited.snapshot.entity(payload_binding).is_ok());
+    assert!(edited.snapshot.entity(payload_field).is_ok());
+
+    super::query::reset_query_measurement();
+    let query_started = Instant::now();
+    let match_view = edited
+        .snapshot
+        .match_view(edited.snapshot.revision(), match_site)
+        .expect("W4 match query");
+    let match_type = edited
+        .snapshot
+        .node_type(edited.snapshot.revision(), match_site)
+        .expect("W4 match type");
+    let payload_type = edited
+        .snapshot
+        .entity_type(edited.snapshot.revision(), payload_binding)
+        .expect("W4 payload type");
+    let semantics = edited
+        .snapshot
+        .node_semantics(edited.snapshot.revision(), selected_arm)
+        .expect("W4 arm semantics");
+    let references = edited
+        .snapshot
+        .references_to(
+            edited.snapshot.revision(),
+            payload_field,
+            PageRequest::new(PAGE_SIZE).expect("W4 references page"),
+            None,
+        )
+        .expect("W4 references");
+    let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert!(match_view.exhaustive);
+    assert_eq!(match_type.actual, SemanticType::I64);
+    assert_eq!(payload_type.declared, Some(SemanticType::I64));
+    assert_eq!(semantics.actual, SemanticType::I64);
+    assert!(!references.items.is_empty());
+    assert!(references
+        .items
+        .iter()
+        .all(|reference| reference.target == payload_field));
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let projection = edited
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(pair),
+            ProjectionSlice::Entity(payload_field),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Match(match_site),
+            ProjectionSlice::Type(selected_arm),
+        ])
+        .expect("W4 projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
+
+    crate::pipeline::reset_lowering_invocations();
+    let compile_started = Instant::now();
+    let (executable, compile) =
+        crate::pipeline::compile_snapshot_with_metrics(&edited.snapshot).expect("compile W4");
+    let compile_wall = compile_started.elapsed();
+    let (new_result, vm_wall) = returned_i64(&executable);
+    let old_result = compile_and_run_i64(&old_snapshot);
+    assert_eq!((old_result, new_result), (42, 43));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+
+    json!({
+        "schema": "lkjscript.workspace-recompute-sample.v2", "workload": "W4",
+        "geometry": {
+            "helper_functions": 0, "total_callables": 1,
+            "total_entities": count(edited.snapshot.entities().len()),
+            "total_semantic_nodes": count(edited.snapshot.nodes().len()),
+            "affected_root_nodes": count(old_snapshot.nodes().len()), "changed_semantic_nodes": 1,
+            "draft_nodes": 1, "page_size": PAGE_SIZE, "retained_old_revisions": 1,
+            "product_fields": 2, "enum_variants": 2, "match_arms": 2,
+        },
+        "fixture": { "wall_ns": nanoseconds(fixture_wall) },
+        "transaction": transaction_value(transaction_wall, transaction, &edited),
+        "queries": query_value(query_wall, query, references.items.len() + 4),
+        "projection": projection_value(projection_wall, projection_work, &projection),
+        "compile": compile_value(compile_wall, compile, &executable),
+        "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": new_result },
+        "correctness": {
+            "source_load_invocations": crate::source::source_load_invocation_count(),
+            "parser_invocations": crate::source::parser_invocation_count(),
+            "match_exhaustive": true, "selected_arm_identity_preserved": true,
+            "payload_binding_identity_preserved": true, "payload_member_identity_preserved": true,
+            "old_snapshot_result_i64": old_result, "new_snapshot_result_i64": new_result,
+        },
+        "agent_loop": {
+            "commands": 1, "process_round_trips": 1, "selected_api_operations": 9,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()), "output_lines": line_count(&projection),
+        },
+        "allocation_counts": Value::Null, "allocation_bytes": Value::Null, "retained_snapshot_bytes": Value::Null,
+    })
+}
+
+fn generic_mixed_sample(helper_functions: usize) -> Value {
+    assert!(helper_functions > 0, "W5 requires positive helper geometry");
+    let fixture_started = Instant::now();
+    let seed = 7_500_u64
+        .checked_add(u64::try_from(helper_functions).expect("W5 geometry"))
+        .expect("W5 seed");
+    let mut workspace = Workspace::empty_deterministic(seed).expect("W5 workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let mut edits = Vec::new();
+    edits
+        .try_reserve(
+            helper_functions
+                .checked_add(6)
+                .expect("W5 declaration count"),
+        )
+        .expect("W5 declaration allocation");
+    let helper_split = helper_functions / 2;
+    for index in 0..helper_split {
+        edits.push(Edit::CreateFunction {
+            name: format!("scalar-helper-{index:06}"),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        });
+    }
+    edits.extend([
+        Edit::CreateProduct {
+            name: "mixed-pair".to_owned(),
+            fields: vec![
+                ProductFieldDraft {
+                    name: "mixed-left".to_owned(),
+                    ty: SemanticType::I64,
+                },
+                ProductFieldDraft {
+                    name: "mixed-right".to_owned(),
+                    ty: SemanticType::I64,
+                },
+            ],
+        },
+        Edit::CreateEnum {
+            name: "mixed-choice".to_owned(),
+            variants: vec![
+                EnumVariantDraft {
+                    name: "mixed-some".to_owned(),
+                    fields: vec![EnumFieldDraft {
+                        name: "mixed-payload".to_owned(),
+                        ty: SemanticType::I64,
+                    }],
+                },
+                EnumVariantDraft {
+                    name: "mixed-none".to_owned(),
+                    fields: Vec::new(),
+                },
+            ],
+        },
+        Edit::CreateFunction {
+            name: "control-form".to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        },
+        Edit::CreateFunction {
+            name: "nominal-form".to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        },
+        Edit::CreateFunction {
+            name: "copy-identity".to_owned(),
+            type_parameters: vec![TypeParameterDraft {
+                id: binder,
+                name: "t".to_owned(),
+                bounds: vec![SemanticTrait::Builtin(BuiltinTrait::Copy)],
+            }],
+            parameters: vec![ParameterDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::DraftTypeParameter(binder),
+            }],
+            return_type: DeclarationType::DraftTypeParameter(binder),
+        },
+        Edit::CreateFunction {
+            name: "generic-call-target".to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        },
+    ]);
+    for index in helper_split..helper_functions {
+        edits.push(Edit::CreateFunction {
+            name: format!("scalar-helper-{index:06}"),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        });
+    }
+    edits.push(Edit::CreateMain {
+        return_type: SemanticType::I64,
+    });
+    let declared = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits,
+        })
+        .expect("declare W5 workspace");
+    let named = |kind, name: &str| {
+        declared
+            .snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.as_ref() == name)
+            .expect("W5 named entity")
+            .id
+    };
+    let pair = named(EntityKind::Product, "mixed-pair");
+    let left = named(EntityKind::ProductField, "mixed-left");
+    let right = named(EntityKind::ProductField, "mixed-right");
+    let some = named(EntityKind::EnumVariant, "mixed-some");
+    let none = named(EntityKind::EnumVariant, "mixed-none");
+    let payload_field = named(EntityKind::EnumField, "mixed-payload");
+    let control = named(EntityKind::Function, "control-form");
+    let nominal = named(EntityKind::Function, "nominal-form");
+    let identity = named(EntityKind::Function, "copy-identity");
+    let target_function = named(EntityKind::Function, "generic-call-target");
+    let main = named(EntityKind::Main, "main");
+    let signature = declared
+        .snapshot
+        .function_signature(declared.snapshot.revision(), identity)
+        .expect("W5 signature");
+    let type_parameter = signature.type_parameters[0].id;
+    let parameter = signature.parameters[0].entity;
+    let mut fills = Vec::new();
+    fills
+        .try_reserve(helper_functions.checked_add(5).expect("W5 fill count"))
+        .expect("W5 fill allocation");
+    for hole in declared.snapshot.holes() {
+        let owner = hole.owner;
+        let name = declared
+            .snapshot
+            .entity(owner)
+            .expect("W5 hole owner")
+            .name
+            .as_ref();
+        let draft = if owner == identity {
+            ExpressionDraft::new(
+                vec![DraftNode::Load(DraftBindingRef::Entity(parameter))],
+                DraftNodeId::new(0),
+            )
+        } else if owner == target_function {
+            ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(10),
+                    DraftNode::Call {
+                        callee: identity,
+                        type_arguments: vec![TypeArgumentDraft {
+                            parameter: type_parameter,
+                            argument: SemanticType::I64,
+                        }],
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            )
+        } else if owner == main {
+            ExpressionDraft::new(
+                vec![DraftNode::Call {
+                    callee: target_function,
+                    type_arguments: Vec::new(),
+                    arguments: Vec::new(),
+                }],
+                DraftNodeId::new(0),
+            )
+        } else if owner == control {
+            counted_loop_draft(3)
+        } else if owner == nominal {
+            product_enum_match_draft(pair, left, right, some, none, payload_field)
+        } else {
+            assert!(name.starts_with("scalar-helper-"));
+            ExpressionDraft::scalar_i64(1)
+        };
+        fills.push(Edit::FillHole {
+            hole: hole.id,
+            draft,
+        });
+    }
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: declared.snapshot.revision(),
+            edits: fills,
+        })
+        .expect("complete W5 workspace");
+    let fixture_wall = fixture_started.elapsed();
+    let old_snapshot = completed.snapshot;
+    let call = old_snapshot
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.kind == NodeKind::Call
+                && old_snapshot
+                    .indexes
+                    .node_enclosing_entities
+                    .get(old_snapshot.indexes.node_lookup[&node.id])
+                    .is_some_and(|owner| *owner == target_function)
+        })
+        .expect("W5 exact generic call")
+        .id;
+    let argument = old_snapshot
+        .containment()
+        .iter()
+        .find_map(|edge| match (edge.owner, edge.child) {
+            (SemanticOwner::Node(owner), SemanticChild::Node(child)) if owner == call => {
+                Some(child)
+            }
+            _ => None,
+        })
+        .expect("W5 call argument");
+    let old_instantiation = old_snapshot
+        .call_instantiation(old_snapshot.revision(), call)
+        .expect("W5 old instantiation");
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let transaction_started = Instant::now();
+    let edited = workspace
+        .apply(Transaction {
+            base_revision: old_snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: argument,
+                draft: ExpressionDraft::scalar_i64(11),
+            }],
+        })
+        .expect("edit W5 value argument");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    let new_instantiation = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call)
+        .expect("W5 new instantiation");
+    assert_eq!(
+        old_instantiation.type_arguments,
+        new_instantiation.type_arguments
+    );
+    assert_eq!(old_instantiation.witnesses, new_instantiation.witnesses);
+    assert_eq!(old_instantiation.parameters, new_instantiation.parameters);
+    assert_eq!(old_instantiation.result, new_instantiation.result);
+    assert_eq!(new_instantiation.witnesses.len(), 1);
+    let witness = &new_instantiation.witnesses[0];
+    assert_eq!(witness.parameter, type_parameter);
+    assert_eq!(
+        witness.trait_identity,
+        SemanticTrait::Builtin(BuiltinTrait::Copy)
+    );
+    assert_eq!(witness.ty, SemanticType::I64);
+    assert_eq!(witness.kind, TraitWitnessKindView::AutoTrait);
+
+    super::query::reset_query_measurement();
+    let query_started = Instant::now();
+    let signature_query = edited
+        .snapshot
+        .function_signature(edited.snapshot.revision(), identity)
+        .expect("W5 signature query");
+    let call_query = edited
+        .snapshot
+        .call_instantiation(edited.snapshot.revision(), call)
+        .expect("W5 call query");
+    let callers = edited
+        .snapshot
+        .callers_of(
+            edited.snapshot.revision(),
+            identity,
+            PageRequest::new(PAGE_SIZE).expect("W5 callers page"),
+            None,
+        )
+        .expect("W5 callers");
+    let callees = edited
+        .snapshot
+        .callees_of(
+            edited.snapshot.revision(),
+            target_function,
+            PageRequest::new(PAGE_SIZE).expect("W5 callees page"),
+            None,
+        )
+        .expect("W5 callees");
+    let argument_type = edited
+        .snapshot
+        .node_type(edited.snapshot.revision(), argument)
+        .expect("W5 argument type");
+    let function_type = edited
+        .snapshot
+        .entity_type(edited.snapshot.revision(), identity)
+        .expect("W5 function type");
+    let argument_semantics = edited
+        .snapshot
+        .node_semantics(edited.snapshot.revision(), argument)
+        .expect("W5 argument semantics");
+    let references = edited
+        .snapshot
+        .references_to(
+            edited.snapshot.revision(),
+            identity,
+            PageRequest::new(PAGE_SIZE).expect("W5 references page"),
+            None,
+        )
+        .expect("W5 references");
+    let search = edited
+        .snapshot
+        .search_entities(
+            edited.snapshot.revision(),
+            "scalar-helper",
+            PageRequest::new(PAGE_SIZE).expect("W5 search page"),
+            None,
+        )
+        .expect("W5 search");
+    let second_page = search
+        .continuation
+        .as_ref()
+        .map(|continuation| {
+            edited.snapshot.search_entities(
+                edited.snapshot.revision(),
+                "scalar-helper",
+                PageRequest::new(PAGE_SIZE).expect("W5 second search page"),
+                Some(continuation),
+            )
+        })
+        .transpose()
+        .expect("W5 second search");
+    let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert_eq!(signature_query.type_parameters.len(), 1);
+    assert_eq!(call_query.type_arguments[0].argument, SemanticType::I64);
+    assert_eq!(argument_type.actual, SemanticType::I64);
+    assert!(function_type.declared.is_some());
+    assert_eq!(argument_semantics.actual, SemanticType::I64);
+    assert_eq!(callers.items.len(), 1);
+    assert_eq!(callees.items.len(), 1);
+    assert_eq!(references.items.len(), 1);
+    let query_operations = 9_usize + usize::from(second_page.is_some());
+    let observed = signature_query.type_parameters.len()
+        + signature_query.parameters.len()
+        + call_query.type_arguments.len()
+        + call_query.witnesses.len()
+        + callers.items.len()
+        + callees.items.len()
+        + references.items.len()
+        + search.items.len()
+        + second_page.as_ref().map_or(0, |page| page.items.len())
+        + 1;
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let projection = edited
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(identity),
+            ProjectionSlice::Call(call),
+            ProjectionSlice::References(identity),
+            ProjectionSlice::Body(target_function),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Type(argument),
+        ])
+        .expect("W5 projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
+
+    crate::pipeline::reset_lowering_invocations();
+    let compile_started = Instant::now();
+    let (executable, compile) =
+        crate::pipeline::compile_snapshot_with_metrics(&edited.snapshot).expect("compile W5");
+    let compile_wall = compile_started.elapsed();
+    let (new_result, vm_wall) = returned_i64(&executable);
+    let old_result = compile_and_run_i64(&old_snapshot);
+    assert_eq!((old_result, new_result), (10, 11));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+
+    json!({
+        "schema": "lkjscript.workspace-recompute-sample.v2", "workload": "W5",
+        "geometry": {
+            "helper_functions": count(helper_functions), "total_callables": count(helper_functions.checked_add(5).expect("W5 callable geometry")),
+            "total_entities": count(edited.snapshot.entities().len()), "total_semantic_nodes": count(edited.snapshot.nodes().len()),
+            "affected_root_nodes": count(old_snapshot.indexes.node_enclosing_entities.iter().filter(|owner| **owner == target_function).count()),
+            "changed_semantic_nodes": 1, "draft_nodes": 1, "page_size": PAGE_SIZE, "retained_old_revisions": 1,
+            "product_fields": 2, "enum_variants": 2, "match_arms": 2, "generic_type_parameters": 1,
+            "helpers_before_target": count(helper_split), "helpers_after_target": count(helper_functions - helper_split),
+        },
+        "fixture": { "wall_ns": nanoseconds(fixture_wall) },
+        "transaction": transaction_value(transaction_wall, transaction, &edited),
+        "queries": query_value(query_wall, query, observed),
+        "projection": projection_value(projection_wall, projection_work, &projection),
+        "compile": compile_value(compile_wall, compile, &executable),
+        "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": new_result },
+        "correctness": {
+            "source_load_invocations": crate::source::source_load_invocation_count(), "parser_invocations": crate::source::parser_invocation_count(),
+            "call_identity_preserved": true, "argument_identity_preserved": true,
+            "substitutions_unchanged": true, "witnesses_unchanged": true,
+            "old_snapshot_result_i64": old_result, "new_snapshot_result_i64": new_result,
+        },
+        "agent_loop": {
+            "commands": 1, "process_round_trips": 1, "selected_api_operations": count(query_operations + 4),
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()), "output_lines": line_count(&projection),
+        },
+        "allocation_counts": Value::Null, "allocation_bytes": Value::Null, "retained_snapshot_bytes": Value::Null,
+    })
+}
+
+fn lifecycle_sample() -> Value {
+    let fixture_started = Instant::now();
+    let mut workspace = Workspace::empty_deterministic(7_600).expect("W6 workspace");
+    let initial_workspace_wall = fixture_started.elapsed();
+
+    let create_started = Instant::now();
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "survivor".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("W6 independent function creation");
+    let create_wall = create_started.elapsed();
+    let create_measurement = super::transaction::take_transaction_measurement();
+    let survivor = created
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function)
+        .expect("W6 survivor")
+        .id;
+    let survivor_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == survivor)
+        .expect("W6 survivor hole")
+        .id;
+    let create_value = transaction_value(create_wall, create_measurement, &created);
+
+    let complete_started = Instant::now();
+    let body_completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: survivor_hole,
+                draft: ExpressionDraft::scalar_i64(5),
+            }],
+        })
+        .expect("W6 independent body completion");
+    let complete_wall = complete_started.elapsed();
+    let complete_measurement = super::transaction::take_transaction_measurement();
+    let complete_value = transaction_value(complete_wall, complete_measurement, &body_completed);
+
+    let setup_started = Instant::now();
+    let declarations = workspace
+        .apply(Transaction {
+            base_revision: body_completed.snapshot.revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "disposable".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateFunction {
+                    name: "tail-survivor".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("W6 create main and disposable");
+    let disposable = declarations
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.as_ref() == "disposable")
+        .expect("W6 disposable")
+        .id;
+    let tail_survivor = declarations
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::Function && entity.name.as_ref() == "tail-survivor"
+        })
+        .expect("W6 tail survivor")
+        .id;
+    let main = declarations
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("W6 main")
+        .id;
+    let disposable_hole = declarations
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == disposable)
+        .expect("W6 disposable hole")
+        .id;
+    let tail_hole = declarations
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == tail_survivor)
+        .expect("W6 tail-survivor hole")
+        .id;
+    let main_hole = declarations
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("W6 main hole")
+        .id;
+    workspace
+        .apply(Transaction {
+            base_revision: declarations.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole: disposable_hole,
+                    draft: ExpressionDraft::scalar_i64(99),
+                },
+                Edit::FillHole {
+                    hole: tail_hole,
+                    draft: ExpressionDraft::scalar_i64(6),
+                },
+                Edit::FillHole {
+                    hole: main_hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Call {
+                            callee: survivor,
+                            type_arguments: Vec::new(),
+                            arguments: Vec::new(),
+                        }],
+                        DraftNodeId::new(0),
+                    ),
+                },
+            ],
+        })
+        .expect("W6 complete executable workspace");
+    super::transaction::take_transaction_measurement();
+    let setup_wall = setup_started.elapsed();
+
+    let rename_started = Instant::now();
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: survivor,
+                new_name: "renamed-survivor".to_owned(),
+            }],
+        })
+        .expect("W6 supported rename");
+    let rename_wall = rename_started.elapsed();
+    let rename_measurement = super::transaction::take_transaction_measurement();
+    let rename_value = transaction_value(rename_wall, rename_measurement, &renamed);
+    assert_eq!(
+        renamed
+            .snapshot
+            .entity(survivor)
+            .expect("W6 renamed survivor")
+            .id,
+        survivor
+    );
+
+    let published = workspace.current();
+    let published_revision = published.revision();
+    let invalid_started = Instant::now();
+    let invalid = workspace.apply(Transaction {
+        base_revision: body_completed.snapshot.revision(),
+        edits: vec![Edit::RenameEntity {
+            entity: survivor,
+            new_name: "must-not-publish".to_owned(),
+        }],
+    });
+    let invalid_wall = invalid_started.elapsed();
+    assert!(matches!(invalid, Err(WorkspaceError::StaleRevision)));
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+    assert_eq!(workspace.current().revision(), published_revision);
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let old_snapshot = workspace.current();
+    let disposable_nodes: Vec<_> = old_snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node.owner == SemanticOwner::Entity(disposable))
+        .map(|node| node.id)
+        .collect();
+    let tail_root = old_snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(tail_survivor))
+        .expect("W6 tail-survivor root")
+        .id;
+    let old_tail_address =
+        old_snapshot.indexes.entity_addresses[old_snapshot.indexes.entity_lookup[&tail_survivor]];
+    let transaction_started = Instant::now();
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: old_snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: disposable }],
+        })
+        .expect("W6 dependency-closed deletion");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    assert_eq!(transaction.compaction_invocations, 1);
+    assert!(deleted.snapshot.entity(disposable).is_err());
+    assert!(old_snapshot.entity(disposable).is_ok());
+    assert!(deleted.snapshot.entity(survivor).is_ok());
+    assert!(deleted.snapshot.entity(tail_survivor).is_ok());
+    assert!(deleted.snapshot.entity(main).is_ok());
+    assert_eq!(
+        deleted
+            .snapshot
+            .node(tail_root)
+            .expect("W6 relocated tail node")
+            .id,
+        tail_root
+    );
+    let new_tail_address = deleted.snapshot.indexes.entity_addresses
+        [deleted.snapshot.indexes.entity_lookup[&tail_survivor]];
+    assert_ne!(old_tail_address, new_tail_address);
+    for node in &disposable_nodes {
+        assert!(deleted.snapshot.node(*node).is_err());
+    }
+
+    super::query::reset_query_measurement();
+    let query_started = Instant::now();
+    let survivor_definition = deleted
+        .snapshot
+        .definition(deleted.snapshot.revision(), survivor)
+        .expect("W6 survivor definition");
+    let tail_definition = deleted
+        .snapshot
+        .definition(deleted.snapshot.revision(), tail_survivor)
+        .expect("W6 tail-survivor definition");
+    let callers = deleted
+        .snapshot
+        .callers_of(
+            deleted.snapshot.revision(),
+            survivor,
+            PageRequest::new(PAGE_SIZE).expect("W6 callers page"),
+            None,
+        )
+        .expect("W6 callers");
+    let search = deleted
+        .snapshot
+        .search_entities(
+            deleted.snapshot.revision(),
+            "survivor",
+            PageRequest::new(PAGE_SIZE).expect("W6 search page"),
+            None,
+        )
+        .expect("W6 search");
+    let tombstone = deleted
+        .snapshot
+        .definition(deleted.snapshot.revision(), disposable);
+    let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert_eq!(survivor_definition.name.as_ref(), "renamed-survivor");
+    assert_eq!(tail_definition.id, tail_survivor);
+    assert_eq!(callers.items.len(), 1);
+    assert_eq!(search.items.len(), 2);
+    assert!(matches!(tombstone, Err(WorkspaceError::StaleIdentity(_))));
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let projection = deleted
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(survivor),
+            ProjectionSlice::Entity(tail_survivor),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::References(survivor),
+        ])
+        .expect("W6 projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
+
+    crate::pipeline::reset_lowering_invocations();
+    let compile_started = Instant::now();
+    let (executable, compile) =
+        crate::pipeline::compile_snapshot_with_metrics(&deleted.snapshot).expect("compile W6");
+    let compile_wall = compile_started.elapsed();
+    let (new_result, vm_wall) = returned_i64(&executable);
+    let old_result = compile_and_run_i64(&old_snapshot);
+    assert_eq!((old_result, new_result), (5, 5));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+
+    json!({
+        "schema": "lkjscript.workspace-recompute-sample.v2", "workload": "W6",
+        "geometry": {
+            "helper_functions": 0, "total_callables": 3, "surviving_callables": 2,
+            "total_entities": count(deleted.snapshot.entities().len()), "total_semantic_nodes": count(deleted.snapshot.nodes().len()),
+            "affected_root_nodes": count(disposable_nodes.len()), "changed_semantic_nodes": count(disposable_nodes.len()), "draft_nodes": 0,
+            "page_size": PAGE_SIZE, "retained_old_revisions": 4, "deleted_entities": 1,
+            "deleted_semantic_nodes": count(disposable_nodes.len()),
+        },
+        "fixture": { "initial_workspace_wall_ns": nanoseconds(initial_workspace_wall), "setup_wall_ns": nanoseconds(setup_wall) },
+        "transaction": transaction_value(transaction_wall, transaction, &deleted),
+        "sequence": {
+            "create_function": create_value, "complete_function_body": complete_value, "rename": rename_value,
+            "invalid_stale_edit": { "wall_ns": nanoseconds(invalid_wall), "error": "stale-revision", "revision_unchanged": true, "snapshot_arc_unchanged": true },
+            "delete": { "revision": deleted.snapshot.revision().sequence() },
+        },
+        "queries": query_value(query_wall, query, callers.items.len() + search.items.len() + 3),
+        "projection": projection_value(projection_wall, projection_work, &projection),
+        "compile": compile_value(compile_wall, compile, &executable),
+        "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": new_result },
+        "correctness": {
+            "source_load_invocations": crate::source::source_load_invocation_count(), "parser_invocations": crate::source::parser_invocation_count(),
+            "survivor_identity_preserved": true, "relocated_survivor_identity_preserved": true,
+            "relocated_survivor_node_identity_preserved": true, "deleted_identity_tombstoned": true, "old_snapshot_preserved": true,
+            "failed_edit_atomic": true, "private_binding_relocated": true, "private_compaction_observed": true,
+            "old_snapshot_result_i64": old_result, "new_snapshot_result_i64": new_result,
+        },
+        "agent_loop": {
+            "commands": 1, "process_round_trips": 1, "selected_api_operations": 13,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[create_wall, complete_wall, rename_wall, invalid_wall, transaction_wall, query_wall, projection_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[create_wall, complete_wall, rename_wall, invalid_wall, transaction_wall, query_wall, projection_wall, compile_wall, vm_wall]),
+            "output_bytes": count(projection.len()), "output_lines": line_count(&projection),
+        },
+        "allocation_counts": Value::Null, "allocation_bytes": Value::Null, "retained_snapshot_bytes": Value::Null,
+    })
+}
+
+fn hole_lifecycle_sample() -> Value {
+    let fixture_started = Instant::now();
+    let (mut workspace, main, hole) = create_width_fixture(7_700, 0);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::scalar_i64(7),
+            }],
+        })
+        .expect("complete W7 fixture");
+    let fixture_wall = fixture_started.elapsed();
+    let complete_snapshot = completed.snapshot;
+    let root = complete_snapshot.nodes()[0].id;
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let introduce_started = Instant::now();
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: complete_snapshot.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: root,
+                goal: "choose the final scalar".to_owned(),
+            }],
+        })
+        .expect("introduce W7 typed hole");
+    let introduce_wall = introduce_started.elapsed();
+    let introduce_measurement = super::transaction::take_transaction_measurement();
+    let introduce_value = transaction_value(introduce_wall, introduce_measurement, &introduced);
+    let typed_hole = HoleId(root);
+    assert_eq!(introduced.snapshot.state(), ProgramState::Incomplete);
+    assert_eq!(
+        introduced.snapshot.node(root).expect("W7 hole root").kind,
+        NodeKind::Hole
+    );
+
+    super::query::reset_query_measurement();
+    let query_started = Instant::now();
+    let context = introduced
+        .snapshot
+        .hole_context(introduced.snapshot.revision(), typed_hole)
+        .expect("W7 hole context");
+    let blockers = introduced.snapshot.completeness_blockers();
+    let diagnostics = introduced
+        .snapshot
+        .diagnostic_page(
+            introduced.snapshot.revision(),
+            PageRequest::new(PAGE_SIZE).expect("W7 diagnostics page"),
+            None,
+        )
+        .expect("W7 diagnostics");
+    let constructors = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            typed_hole,
+            PageRequest::new(PAGE_SIZE).expect("W7 constructors page"),
+            None,
+        )
+        .expect("W7 constructors");
+    let semantics = introduced
+        .snapshot
+        .node_semantics(introduced.snapshot.revision(), root)
+        .expect("W7 hole semantics");
+    let query_wall = query_started.elapsed();
+    let query = super::query::take_query_measurement();
+    assert_eq!(context.expected_type, SemanticType::I64);
+    assert_eq!(blockers.len(), 1);
+    assert_eq!(diagnostics.items.len(), 1);
+    assert!(constructors.items.contains(&LegalConstructor::I64Literal));
+    assert_eq!(semantics.kind, NodeKind::Hole);
+
+    super::projection::reset_projection_measurement();
+    let projection_started = Instant::now();
+    let incomplete_projection = introduced
+        .snapshot
+        .project(&[
+            ProjectionSlice::Hole(typed_hole),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Type(root),
+        ])
+        .expect("W7 incomplete projection");
+    let projection_wall = projection_started.elapsed();
+    let projection_work = super::projection::take_projection_measurement();
+
+    crate::pipeline::reset_lowering_invocations();
+    let incomplete_compile_started = Instant::now();
+    let incomplete_error =
+        crate::compile_snapshot(&introduced.snapshot).expect_err("W7 incomplete compile");
+    let incomplete_compile_wall = incomplete_compile_started.elapsed();
+    assert!(matches!(
+        incomplete_error,
+        crate::CompileSnapshotError::Incomplete(_)
+    ));
+    assert_eq!(crate::pipeline::lowering_invocations(), 0);
+
+    let transaction_started = Instant::now();
+    let filled = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: typed_hole,
+                draft: ExpressionDraft::scalar_i64(9),
+            }],
+        })
+        .expect("fill W7 typed hole");
+    let transaction_wall = transaction_started.elapsed();
+    let transaction = super::transaction::take_transaction_measurement();
+    assert_eq!(
+        filled.snapshot.node(root).expect("W7 refilled root").id,
+        root
+    );
+    assert_eq!(filled.snapshot.state(), ProgramState::Complete);
+
+    let compile_started = Instant::now();
+    let (executable, compile) = crate::pipeline::compile_snapshot_with_metrics(&filled.snapshot)
+        .expect("compile W7 complete");
+    let compile_wall = compile_started.elapsed();
+    let (new_result, vm_wall) = returned_i64(&executable);
+    let old_result = compile_and_run_i64(&complete_snapshot);
+    assert_eq!((old_result, new_result), (7, 9));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+
+    json!({
+        "schema": "lkjscript.workspace-recompute-sample.v2", "workload": "W7",
+        "geometry": {
+            "helper_functions": 0, "total_callables": 1, "total_entities": count(filled.snapshot.entities().len()),
+            "total_semantic_nodes": count(filled.snapshot.nodes().len()), "affected_root_nodes": 1,
+            "changed_semantic_nodes": 1, "draft_nodes": 1, "page_size": PAGE_SIZE, "retained_old_revisions": 2,
+        },
+        "fixture": { "wall_ns": nanoseconds(fixture_wall) },
+        "transaction": transaction_value(transaction_wall, transaction, &filled),
+        "sequence": {
+            "introduce_hole": introduce_value,
+            "incomplete_compile": { "status": "incomplete", "wall_ns": nanoseconds(incomplete_compile_wall), "lowering_invocations": 0 },
+            "fill_hole": { "revision": filled.snapshot.revision().sequence() },
+        },
+        "queries": query_value(query_wall, query, blockers.len() + diagnostics.items.len() + constructors.items.len() + 2),
+        "projection": projection_value(projection_wall, projection_work, &incomplete_projection),
+        "compile": compile_value(compile_wall, compile, &executable),
+        "vm": { "wall_ns": nanoseconds(vm_wall), "result_i64": new_result },
+        "correctness": {
+            "source_load_invocations": crate::source::source_load_invocation_count(), "parser_invocations": crate::source::parser_invocation_count(),
+            "root_identity_preserved": true, "typed_hole_expected_i64": true, "compile_stopped_before_lowering": true,
+            "old_snapshot_result_i64": old_result, "new_snapshot_result_i64": new_result,
+        },
+        "agent_loop": {
+            "commands": 1, "process_round_trips": 1, "selected_api_operations": 10,
+            "edit_inspect_check_wall_ns": authoring_loop_wall(&[introduce_wall, query_wall, projection_wall, incomplete_compile_wall, transaction_wall, compile_wall]),
+            "authoring_loop_wall_ns": authoring_loop_wall(&[introduce_wall, query_wall, projection_wall, incomplete_compile_wall, transaction_wall, compile_wall, vm_wall]),
+            "output_bytes": count(incomplete_projection.len()), "output_lines": line_count(&incomplete_projection),
+        },
+        "allocation_counts": Value::Null, "allocation_bytes": Value::Null, "retained_snapshot_bytes": Value::Null,
     })
 }
 
@@ -841,6 +2306,35 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
     ));
     assert!(Arc::ptr_eq(&before, &workspace.current()));
 
+    let partially_staged_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![
+            Edit::RefineHole {
+                hole,
+                expected_type: Some(SemanticType::I64),
+                goal: "staged but unpublished".to_owned(),
+            },
+            Edit::RefineHole {
+                hole: foreign_hole,
+                expected_type: None,
+                goal: "foreign after valid refinement".to_owned(),
+            },
+        ],
+    });
+    assert!(matches!(
+        partially_staged_failure,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(workspace.current().diagnostics(), before_diagnostics);
+    assert_eq!(
+        workspace
+            .current()
+            .project(&[ProjectionSlice::Hole(hole)])
+            .expect("projection after partially staged refinement failure"),
+        before_projection
+    );
+
     let refined = workspace
         .apply(Transaction {
             base_revision: before.revision(),
@@ -894,7 +2388,7 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
             "provenance",
         ]
     );
-    assert_eq!(refined.diff.entries.len(), 2);
+    assert_eq!(refined.diff.entries.len(), 1);
     let goal_changes: Vec<_> = refined
         .diff
         .entries
@@ -910,10 +2404,7 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
         .collect();
     assert_eq!(
         goal_changes,
-        vec![
-            ("intermediate goal", "final goal"),
-            ("provide the entry-point body", "intermediate goal"),
-        ]
+        vec![("provide the entry-point body", "final goal")]
     );
     assert_eq!(
         refined
@@ -968,6 +2459,11 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
                 Edit::RefineHole {
                     hole,
                     expected_type: None,
+                    goal: "mixed intermediate goal".to_owned(),
+                },
+                Edit::RefineHole {
+                    hole,
+                    expected_type: None,
                     goal: "mixed goal".to_owned(),
                 },
                 Edit::RenameEntity {
@@ -980,6 +2476,23 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
     let mixed_measurement = super::transaction::take_transaction_measurement();
     assert!(!mixed_measurement.metadata_only_path_used);
     assert_eq!(mixed_measurement.program_clones, 1);
+    let mixed_goal_changes: Vec<_> = mixed
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::HoleRefined {
+                hole: changed,
+                old_goal,
+                new_goal,
+            } if *changed == hole => Some((old_goal.as_ref(), new_goal.as_ref())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        mixed_goal_changes,
+        vec![("provide the entry-point body", "mixed goal")]
+    );
     assert_eq!(
         mixed
             .snapshot
@@ -1039,39 +2552,195 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
 }
 
 #[test]
+fn hole_refinement_diff_is_net_deterministic_and_full_path_equivalent() {
+    let (workspace, _main, hole) = create_width_fixture(9_003, 4);
+    let base = workspace.current();
+    let transaction = |goal: &str| Transaction {
+        base_revision: base.revision(),
+        edits: vec![Edit::RefineHole {
+            hole,
+            expected_type: Some(SemanticType::I64),
+            goal: goal.to_owned(),
+        }],
+    };
+
+    let mut no_op = Workspace::new((*base).clone()).expect("no-op refinement workspace");
+    let unchanged = no_op
+        .apply(transaction("provide the entry-point body"))
+        .expect("publish no-op refinement revision");
+    assert!(unchanged.diff.entries.is_empty());
+
+    let mut round_trip = Workspace::new((*base).clone()).expect("round-trip refinement workspace");
+    let returned = round_trip
+        .apply(Transaction {
+            base_revision: base.revision(),
+            edits: vec![
+                Edit::RefineHole {
+                    hole,
+                    expected_type: None,
+                    goal: "temporary goal".to_owned(),
+                },
+                Edit::RefineHole {
+                    hole,
+                    expected_type: None,
+                    goal: "provide the entry-point body".to_owned(),
+                },
+            ],
+        })
+        .expect("publish net-no-op refinement revision");
+    assert!(returned.diff.entries.is_empty());
+
+    let mut narrow = Workspace::new((*base).clone()).expect("narrow refinement workspace");
+    let narrow_outcome = narrow
+        .apply(transaction("equivalent goal"))
+        .expect("narrow refinement");
+    let narrow_measurement = super::transaction::take_transaction_measurement();
+    assert!(narrow_measurement.metadata_only_path_used);
+
+    let mut full = Workspace::new((*base).clone()).expect("full refinement workspace");
+    super::transaction::set_force_full_recomputation(true);
+    let full_result = full.apply(transaction("equivalent goal"));
+    super::transaction::set_force_full_recomputation(false);
+    let full_outcome = full_result.expect("full refinement");
+    let full_measurement = super::transaction::take_transaction_measurement();
+    assert!(!full_measurement.metadata_only_path_used);
+    assert_eq!(narrow_outcome.diff, full_outcome.diff);
+    assert_eq!(narrow_outcome.invalidated, full_outcome.invalidated);
+    assert_eq!(
+        narrow_outcome.snapshot.entities(),
+        full_outcome.snapshot.entities()
+    );
+    assert_eq!(
+        narrow_outcome.snapshot.nodes(),
+        full_outcome.snapshot.nodes()
+    );
+    assert_eq!(
+        narrow_outcome.snapshot.holes().collect::<Vec<_>>(),
+        full_outcome.snapshot.holes().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        narrow_outcome.snapshot.diagnostics(),
+        full_outcome.snapshot.diagnostics()
+    );
+    assert_eq!(
+        narrow_outcome.snapshot.completeness_blockers(),
+        full_outcome.snapshot.completeness_blockers()
+    );
+    assert_eq!(
+        narrow_outcome
+            .snapshot
+            .project(&[])
+            .expect("narrow projection"),
+        full_outcome.snapshot.project(&[]).expect("full projection")
+    );
+    assert!(Arc::ptr_eq(&base.program, &narrow_outcome.snapshot.program));
+    assert!(!Arc::ptr_eq(&base.program, &full_outcome.snapshot.program));
+
+    let mut multi = Workspace::empty_deterministic(9_004).expect("multi-hole workspace");
+    let created = multi
+        .apply(Transaction {
+            base_revision: multi.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "second-hole".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create two holes");
+    let mut holes: Vec<_> = created.snapshot.holes().map(|state| state.id).collect();
+    holes.sort_unstable();
+    let refined = multi
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: holes
+                .iter()
+                .rev()
+                .map(|hole| Edit::RefineHole {
+                    hole: *hole,
+                    expected_type: None,
+                    goal: format!("goal for slot {}", hole.node().slot()),
+                })
+                .collect(),
+        })
+        .expect("refine two holes in reverse order");
+    let diff_holes: Vec<_> = refined
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::HoleRefined { hole, .. } => Some(*hole),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(diff_holes, holes);
+}
+
+#[test]
 fn workspace_recompute_measurement_is_semantically_exact() {
-    let control = control_sample();
-    assert_eq!(control["vm"]["result_i64"], 7);
-    let incomplete = hole_refinement_sample(8);
-    assert_eq!(incomplete["workload"], "W1");
-    assert_eq!(incomplete["compile"]["lowering_invocations"], 0);
-    let complete = imperative_edit_sample(8);
-    assert_eq!(complete["correctness"]["old_snapshot_result_i64"], 100);
-    assert_eq!(complete["correctness"]["new_snapshot_result_i64"], 101);
+    let samples = [
+        control_sample(),
+        hole_refinement_sample(8),
+        imperative_edit_sample(8),
+        ownership_edit_sample(),
+        product_enum_match_sample(),
+        generic_mixed_sample(8),
+        lifecycle_sample(),
+        hole_lifecycle_sample(),
+    ];
+    let expected_operations = [6_u64, 7, 9, 6, 9, 13, 13, 10];
+    for (index, sample) in samples.iter().enumerate() {
+        assert_eq!(sample["schema"], "lkjscript.workspace-recompute-sample.v2");
+        assert_eq!(sample["workload"], format!("W{index}"));
+        assert_eq!(sample["correctness"]["source_load_invocations"], 0);
+        assert_eq!(sample["correctness"]["parser_invocations"], 0);
+        assert!(sample["agent_loop"]["edit_inspect_check_wall_ns"].is_u64());
+        assert!(sample["agent_loop"]["authoring_loop_wall_ns"].is_u64());
+        assert_eq!(
+            sample["agent_loop"]["selected_api_operations"],
+            expected_operations[index]
+        );
+    }
+    assert_eq!(samples[0]["correctness"]["new_snapshot_result_i64"], 8);
+    assert_eq!(samples[1]["compile"]["lowering_invocations"], 0);
+    assert_eq!(samples[2]["correctness"]["new_snapshot_result_i64"], 101);
+    assert_eq!(samples[3]["memory"]["cleanup_failures"], 0);
+    assert_eq!(samples[4]["correctness"]["new_snapshot_result_i64"], 43);
+    assert_eq!(samples[5]["correctness"]["new_snapshot_result_i64"], 11);
+    assert_eq!(samples[6]["correctness"]["failed_edit_atomic"], true);
+    assert_eq!(
+        samples[7]["sequence"]["incomplete_compile"]["lowering_invocations"],
+        0
+    );
 }
 
 #[test]
 #[ignore = "locked-release semantic-workspace recomputation measurement"]
 fn workspace_recompute_scale_sample() {
     let workload = std::env::var("LKJSCRIPT_WORKSPACE_WORKLOAD")
-        .expect("LKJSCRIPT_WORKSPACE_WORKLOAD must select W0, W1, or W2");
+        .expect("LKJSCRIPT_WORKSPACE_WORKLOAD must select W0 through W7");
+    let helper_functions = || {
+        let value = std::env::var("LKJSCRIPT_WORKSPACE_FUNCTIONS")
+            .expect("LKJSCRIPT_WORKSPACE_FUNCTIONS is required for W1, W2, and W5")
+            .parse::<usize>()
+            .expect("LKJSCRIPT_WORKSPACE_FUNCTIONS must be a positive integer");
+        assert!(value > 0, "LKJSCRIPT_WORKSPACE_FUNCTIONS must be positive");
+        value
+    };
     let sample = match workload.as_str() {
         "W0" => control_sample(),
-        "W1" | "W2" => {
-            let helper_functions = std::env::var("LKJSCRIPT_WORKSPACE_FUNCTIONS")
-                .expect("LKJSCRIPT_WORKSPACE_FUNCTIONS is required for W1 and W2")
-                .parse::<usize>()
-                .expect("LKJSCRIPT_WORKSPACE_FUNCTIONS must be a positive integer");
-            assert!(
-                helper_functions > 0,
-                "LKJSCRIPT_WORKSPACE_FUNCTIONS must be positive"
-            );
-            if workload == "W1" {
-                hole_refinement_sample(helper_functions)
-            } else {
-                imperative_edit_sample(helper_functions)
-            }
-        }
+        "W1" => hole_refinement_sample(helper_functions()),
+        "W2" => imperative_edit_sample(helper_functions()),
+        "W3" => ownership_edit_sample(),
+        "W4" => product_enum_match_sample(),
+        "W5" => generic_mixed_sample(helper_functions()),
+        "W6" => lifecycle_sample(),
+        "W7" => hole_lifecycle_sample(),
         other => panic!("unsupported workspace measurement workload {other}"),
     };
     eprintln!(
