@@ -168,6 +168,120 @@ mod tests {
         compile_snapshot(&completed.snapshot).expect("compile source-free ownership-control")
     }
 
+    fn source_free_typed_loop() -> ExecutableProgram {
+        let mut workspace = Workspace::empty().expect("empty source-free loop workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create source-free loop main");
+        let hole = created.snapshot.holes().next().expect("loop main hole").id;
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(42),
+                            DraftNode::Break {
+                                value: DraftNodeId::new(0),
+                            },
+                            DraftNode::Loop {
+                                result_type: SemanticType::I64,
+                                body: vec![DraftNodeId::new(1)],
+                            },
+                        ],
+                        DraftNodeId::new(2),
+                    ),
+                }],
+            })
+            .expect("construct source-free typed loop");
+        compile_snapshot(&completed.snapshot).expect("compile source-free typed loop")
+    }
+
+    fn source_free_continue_cleanup() -> ExecutableProgram {
+        let counter = DraftBindingId::new(0);
+        let iteration_owner = DraftBindingId::new(1);
+        let mut workspace = Workspace::empty().expect("empty source-free continue workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create source-free continue main");
+        let hole = created
+            .snapshot
+            .holes()
+            .next()
+            .expect("continue main hole")
+            .id;
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(0),
+                            DraftNode::Load(DraftBindingRef::Local(counter)),
+                            DraftNode::I64(3),
+                            DraftNode::Operation {
+                                operation: Operation::Less,
+                                arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                            },
+                            DraftNode::I64(1),
+                            DraftNode::Operation {
+                                operation: Operation::ByteVectorNew,
+                                arguments: vec![DraftNodeId::new(4)],
+                            },
+                            DraftNode::Load(DraftBindingRef::Local(counter)),
+                            DraftNode::I64(1),
+                            DraftNode::Operation {
+                                operation: Operation::Add,
+                                arguments: vec![DraftNodeId::new(6), DraftNodeId::new(7)],
+                            },
+                            DraftNode::SetLocal {
+                                target: DraftBindingRef::Local(counter),
+                                value: DraftNodeId::new(8),
+                            },
+                            DraftNode::Continue,
+                            DraftNode::Sequence(vec![DraftNodeId::new(9), DraftNodeId::new(10)]),
+                            DraftNode::Let {
+                                bindings: vec![LocalDraft {
+                                    binding: iteration_owner,
+                                    name: "iteration-owner".to_owned(),
+                                    value: DraftNodeId::new(5),
+                                }],
+                                body: DraftNodeId::new(11),
+                            },
+                            DraftNode::While {
+                                condition: DraftNodeId::new(3),
+                                body: vec![DraftNodeId::new(12)],
+                            },
+                            DraftNode::Load(DraftBindingRef::Local(counter)),
+                            DraftNode::Sequence(vec![DraftNodeId::new(13), DraftNodeId::new(14)]),
+                            DraftNode::MutableLocal {
+                                binding: counter,
+                                name: "counter".to_owned(),
+                                ty: SemanticType::I64,
+                                initial: DraftNodeId::new(0),
+                                body: DraftNodeId::new(15),
+                            },
+                        ],
+                        DraftNodeId::new(16),
+                    ),
+                }],
+            })
+            .expect("construct source-free continue cleanup");
+        compile_snapshot(&completed.snapshot).expect("compile source-free continue cleanup")
+    }
+
     fn direct_call_chain(functions: usize) -> ExecutableProgram {
         let mut source = String::new();
         for index in 0..functions {
@@ -313,6 +427,79 @@ mod tests {
             .stats
             .as_ref()
             .is_some_and(|stats| stats.resource_runtime_calls == 2));
+    }
+
+    #[test]
+    fn imported_and_source_free_typed_loops_use_the_same_product_path() {
+        let imported = scalar_main("loop/\ntype/\ni64\n/type\nbreak/\n42\n/break\n/loop");
+        let source_free = source_free_typed_loop();
+        let mut paths = Vec::new();
+        for program in [&imported, &source_free] {
+            let execution = execute(
+                program,
+                &ExecutionInputs::default(),
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+                false,
+            )
+            .expect("execute typed loop through selected product path");
+            assert!(execution.outcome.cleanup_failures().is_none());
+            assert!(matches!(
+                execution.outcome,
+                ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+            ));
+            paths.push((
+                execution.path,
+                execution.native_entered,
+                execution.vm_executions,
+            ));
+        }
+        assert_eq!(paths[0], paths[1]);
+        assert_eq!(paths[0], (ExecutionPath::BaselineNative, true, 0));
+    }
+
+    #[test]
+    fn imported_and_source_free_continue_cleanup_match_in_the_product_path() {
+        let imported = scalar(concat!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+            "var/\nname/\ncounter\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\n",
+            "less-than/\ncounter\n3\n/less-than\nlet/\nbind/\niteration-owner\n",
+            "new-byte-vector/\n1\n/new-byte-vector\n/bind\ndo/\nset/\ncounter\n",
+            "add/\ncounter\n1\n/add\n/set\ncontinue/\n/continue\n/do\n/let\n",
+            "/while\ncounter\n/do\n/var\n/main\n",
+        ));
+        let source_free = source_free_continue_cleanup();
+        let mut observations = Vec::new();
+        for program in [&imported, &source_free] {
+            let execution = execute(
+                program,
+                &ExecutionInputs::default(),
+                &ExecutionPolicy::unrestricted(),
+                JitConfig::default(),
+                false,
+            )
+            .expect("execute continue cleanup through selected product path");
+            assert_eq!(execution.path, ExecutionPath::BaselineNative);
+            assert!(execution.native_entered);
+            assert_eq!(execution.vm_executions, 0);
+            assert!(execution.outcome.cleanup_failures().is_none());
+            assert!(matches!(
+                execution.outcome,
+                ExecutionOutcome::Returned(value) if value.as_i64() == Some(3)
+            ));
+            let unique = execution
+                .stats
+                .expect("native continue-cleanup stats")
+                .native_unique;
+            assert_eq!(unique.allocations, 3);
+            assert_eq!(unique.drops, 3);
+            assert_eq!(unique.live_owners, 0);
+            assert_eq!(unique.live_loans, 0);
+            assert_eq!(unique.release_backlog, 0);
+            assert_eq!(unique.teardown_failures, 0);
+            observations.push(unique);
+        }
+        assert_eq!(observations[0], observations[1]);
     }
 
     #[test]

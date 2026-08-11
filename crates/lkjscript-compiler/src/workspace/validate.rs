@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use lkjscript_core::{Error, Result};
 
 use crate::hir::{
-    Binding, BindingId, BindingKind, BindingStorage, Expr, ExprKind, MatchEdgeTarget, MatchPattern,
-    Operation, Origin, Program, SourceId, Type,
+    Binding, BindingId, BindingKind, BindingStorage, Expr, ExprKind, LexicalLoopContext,
+    MatchEdgeTarget, MatchPattern, Operation, Origin, Program, SourceId, Type,
 };
 
 struct DeclarationIndexes<'a> {
@@ -699,12 +699,41 @@ fn validate_expression_root(
     return_type: &Type,
     unreachable_counts: &mut [(u64, u64)],
 ) -> Result<()> {
-    let mut pending = Vec::new();
-    pending
-        .try_reserve(1)
+    enum Work<'a> {
+        Visit(&'a Expr),
+        EnterLoop(LexicalLoopContext),
+        ExitLoop(crate::hir::LoopId),
+    }
+
+    let mut work = Vec::new();
+    work.try_reserve(1)
         .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
-    pending.push(root);
-    while let Some(expression) = pending.pop() {
+    work.push(Work::Visit(root));
+    let mut active_loops: Vec<LexicalLoopContext> = Vec::new();
+    let mut declared_loops = HashSet::new();
+    while let Some(item) = work.pop() {
+        let expression = match item {
+            Work::EnterLoop(context) => {
+                active_loops
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR lexical-loop context allocation failed"))?;
+                active_loops.push(context);
+                continue;
+            }
+            Work::ExitLoop(expected) => {
+                let actual = active_loops
+                    .pop()
+                    .ok_or_else(|| Error::msg("HIR lexical-loop context is invalid"))?;
+                if actual.loop_id != expected {
+                    return Err(Error::msg(
+                        "HIR lexical-loop contexts close out of semantic order",
+                    ));
+                }
+                continue;
+            }
+            Work::Visit(expression) => expression,
+        };
+
         validate_program_origin(program, expression.origin)?;
         if !expression.effects.is_known() {
             return Err(Error::msg("complete HIR expression has unknown effects"));
@@ -718,9 +747,101 @@ fn validate_expression_root(
             return_type,
             unreachable_counts,
         )?;
-        push_children(&mut pending, expression)?;
+        match &expression.kind {
+            ExprKind::Break { loop_id, value } => {
+                let target = active_loops
+                    .last()
+                    .ok_or_else(|| Error::msg("HIR break is outside a lexical loop"))?;
+                if *loop_id != target.loop_id {
+                    return Err(Error::msg(
+                        "HIR break does not target the nearest lexical loop",
+                    ));
+                }
+                if value.ty != target.result_type {
+                    return Err(Error::msg(
+                        "HIR break value does not exactly equal its loop result type",
+                    ));
+                }
+            }
+            ExprKind::Continue { loop_id } => {
+                let target = active_loops
+                    .last()
+                    .ok_or_else(|| Error::msg("HIR continue is outside a lexical loop"))?;
+                if *loop_id != target.loop_id {
+                    return Err(Error::msg(
+                        "HIR continue does not target the nearest lexical loop",
+                    ));
+                }
+            }
+            ExprKind::While {
+                loop_id,
+                condition,
+                body,
+            } => {
+                declared_loops
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR loop-identity allocation failed"))?;
+                if !declared_loops.insert(*loop_id) {
+                    return Err(Error::msg(
+                        "HIR loop identity is duplicated in one callable",
+                    ));
+                }
+                let additional = body
+                    .len()
+                    .checked_add(4)
+                    .ok_or_else(|| Error::host("HIR consistency work count overflow"))?;
+                work.try_reserve(additional)
+                    .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
+                work.push(Work::ExitLoop(*loop_id));
+                work.extend(body.iter().rev().map(Work::Visit));
+                work.push(Work::EnterLoop(LexicalLoopContext {
+                    loop_id: *loop_id,
+                    result_type: Type::Unit,
+                    is_while: true,
+                }));
+                work.push(Work::Visit(condition));
+                continue;
+            }
+            ExprKind::Loop {
+                loop_id,
+                result_type,
+                body,
+            } => {
+                declared_loops
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("HIR loop-identity allocation failed"))?;
+                if !declared_loops.insert(*loop_id) {
+                    return Err(Error::msg(
+                        "HIR loop identity is duplicated in one callable",
+                    ));
+                }
+                let additional = body
+                    .len()
+                    .checked_add(3)
+                    .ok_or_else(|| Error::host("HIR consistency work count overflow"))?;
+                work.try_reserve(additional)
+                    .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
+                work.push(Work::ExitLoop(*loop_id));
+                work.extend(body.iter().rev().map(Work::Visit));
+                work.push(Work::EnterLoop(LexicalLoopContext {
+                    loop_id: *loop_id,
+                    result_type: result_type.clone(),
+                    is_while: false,
+                }));
+                continue;
+            }
+            _ => {}
+        }
+        let children = crate::hir::try_expression_children(expression, "HIR consistency")?;
+        work.try_reserve(children.len())
+            .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
+        work.extend(children.into_iter().rev().map(Work::Visit));
     }
-    Ok(())
+    if active_loops.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::msg("HIR lexical-loop context did not close"))
+    }
 }
 
 fn validate_expression_kind(
@@ -843,7 +964,7 @@ fn validate_expression_kind(
         }
         ExprKind::Loop {
             result_type, body, ..
-        } if *result_type == expression.ty => {
+        } if *result_type == expression.ty && !result_type.contains_never() => {
             validate_ordered_control_body(
                 body,
                 "HIR loop body contains an expression after a control terminator",
@@ -1220,99 +1341,6 @@ fn validate_enum_use<'a>(
         return Err(Error::msg("HIR enum field count is stale"));
     }
     Ok(selected)
-}
-
-fn push_children<'a>(pending: &mut Vec<&'a Expr>, expression: &'a Expr) -> Result<()> {
-    let additional = child_count(&expression.kind)?;
-    pending
-        .try_reserve(additional)
-        .map_err(|_| Error::host("HIR consistency work allocation failed"))?;
-    match &expression.kind {
-        ExprKind::Call { args, .. }
-        | ExprKind::Operation { args, .. }
-        | ExprKind::Do(args)
-        | ExprKind::Loop { body: args, .. }
-        | ExprKind::ProductValue { fields: args, .. }
-        | ExprKind::EnumValue { fields: args, .. } => pending.extend(args.iter().rev()),
-        ExprKind::While {
-            condition, body, ..
-        } => {
-            pending.extend(body.iter().rev());
-            pending.push(condition);
-        }
-        ExprKind::F64FromI64Exact(value)
-        | ExprKind::F64FromI64Rounded(value)
-        | ExprKind::I64FromF64Exact(value)
-        | ExprKind::I64FromF64Trunc(value)
-        | ExprKind::Return { value }
-        | ExprKind::Break { value, .. }
-        | ExprKind::Trap { value }
-        | ExprKind::Exit { code: value }
-        | ExprKind::SetLocal { value, .. }
-        | ExprKind::ProductField { value, .. }
-        | ExprKind::EnumIsVariant { value, .. }
-        | ExprKind::EnumField { value, .. }
-        | ExprKind::EnumUnwrap { value, .. } => pending.push(value),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            pending.push(else_branch);
-            pending.push(then_branch);
-            pending.push(condition);
-        }
-        ExprKind::Let { bindings, body } => {
-            pending.push(body);
-            pending.extend(bindings.iter().rev().map(|binding| &binding.value));
-        }
-        ExprKind::MutableLocal { initial, body, .. }
-        | ExprKind::WithProductField {
-            value: initial,
-            replacement: body,
-            ..
-        } => {
-            pending.push(body);
-            pending.push(initial);
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn child_count(kind: &ExprKind) -> Result<usize> {
-    match kind {
-        ExprKind::Call { args, .. }
-        | ExprKind::Operation { args, .. }
-        | ExprKind::Do(args)
-        | ExprKind::Loop { body: args, .. }
-        | ExprKind::ProductValue { fields: args, .. }
-        | ExprKind::EnumValue { fields: args, .. } => Ok(args.len()),
-        ExprKind::While { body, .. } => body
-            .len()
-            .checked_add(1)
-            .ok_or_else(|| Error::host("HIR child count overflow")),
-        ExprKind::If { .. } => Ok(3),
-        ExprKind::Let { bindings, .. } => bindings
-            .len()
-            .checked_add(1)
-            .ok_or_else(|| Error::host("HIR child count overflow")),
-        ExprKind::MutableLocal { .. } | ExprKind::WithProductField { .. } => Ok(2),
-        ExprKind::F64FromI64Exact(_)
-        | ExprKind::F64FromI64Rounded(_)
-        | ExprKind::I64FromF64Exact(_)
-        | ExprKind::I64FromF64Trunc(_)
-        | ExprKind::Return { .. }
-        | ExprKind::Break { .. }
-        | ExprKind::Trap { .. }
-        | ExprKind::Exit { .. }
-        | ExprKind::SetLocal { .. }
-        | ExprKind::ProductField { .. }
-        | ExprKind::EnumIsVariant { .. }
-        | ExprKind::EnumField { .. }
-        | ExprKind::EnumUnwrap { .. } => Ok(1),
-        _ => Ok(0),
-    }
 }
 
 fn validate_type(program: &Program, declarations: &DeclarationIndexes, root: &Type) -> Result<()> {

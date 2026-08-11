@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
+use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
 use super::*;
@@ -105,6 +106,32 @@ fn counted_loop_draft(limit: i64) -> ExpressionDraft {
             body: sequence,
         },
     );
+    ExpressionDraft::new(nodes, root)
+}
+
+fn nested_typed_loop_draft(depth: usize) -> ExpressionDraft {
+    assert!(depth > 0, "nested loop depth must be nonzero");
+    let mut nodes = Vec::new();
+    let value = push_draft_node(&mut nodes, DraftNode::I64(1));
+    let transfer = push_draft_node(&mut nodes, DraftNode::Break { value });
+    let mut root = push_draft_node(
+        &mut nodes,
+        DraftNode::Loop {
+            result_type: SemanticType::I64,
+            body: vec![transfer],
+        },
+    );
+    for _ in 1..depth {
+        let value = push_draft_node(&mut nodes, DraftNode::I64(1));
+        let transfer = push_draft_node(&mut nodes, DraftNode::Break { value });
+        root = push_draft_node(
+            &mut nodes,
+            DraftNode::Loop {
+                result_type: SemanticType::I64,
+                body: vec![root, transfer],
+            },
+        );
+    }
     ExpressionDraft::new(nodes, root)
 }
 
@@ -1873,6 +1900,2320 @@ fn unresolved_value_reference_follows_replacement_rename_and_deletion_lifecycle(
 }
 
 #[test]
+fn source_free_typed_loop_break_executes_without_source_work() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(242).expect("typed loop workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create typed-loop main");
+    let old = Arc::clone(&created.snapshot);
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    let constructors = created
+        .snapshot
+        .legal_constructors(
+            created.snapshot.revision(),
+            hole,
+            PageRequest::new(64).expect("typed-loop constructor page"),
+            None,
+        )
+        .expect("typed-loop constructors")
+        .items;
+    assert!(constructors.contains(&LegalConstructor::Loop {
+        result_type: SemanticType::I64,
+    }));
+    assert!(!constructors.iter().any(|constructor| matches!(
+        constructor,
+        LegalConstructor::Break { .. } | LegalConstructor::Continue
+    )));
+
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(0),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(1)],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("fill main with typed loop");
+
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert_ne!(completed.snapshot.revision(), old.revision());
+    assert_eq!(old.state(), ProgramState::Incomplete);
+    assert_eq!(
+        old.node(hole.node()).expect("old hole node").kind,
+        NodeKind::Hole
+    );
+    let loop_node = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Loop)
+        .expect("typed loop")
+        .id;
+    let break_node = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Break)
+        .expect("typed break")
+        .id;
+    assert_eq!(loop_node, hole.node());
+    let loop_facts = completed
+        .snapshot
+        .node_semantics(completed.snapshot.revision(), loop_node)
+        .expect("loop semantics");
+    assert_eq!(loop_facts.actual, SemanticType::I64);
+    assert_eq!(loop_facts.expected, Some(SemanticType::I64));
+    assert!(loop_facts.effects.contains(EffectSummary::MAY_DIVERGE));
+    let break_facts = completed
+        .snapshot
+        .node_semantics(completed.snapshot.revision(), break_node)
+        .expect("break semantics");
+    assert_eq!(break_facts.actual, SemanticType::Never);
+    assert!(break_facts.effects.contains(EffectSummary::MAY_DIVERGE));
+    let break_value = completed
+        .snapshot
+        .containment()
+        .iter()
+        .find_map(|edge| match (edge.owner, edge.child) {
+            (SemanticOwner::Node(owner), SemanticChild::Node(child)) if owner == break_node => {
+                Some(child)
+            }
+            _ => None,
+        })
+        .expect("break payload");
+    let value_facts = completed
+        .snapshot
+        .node_semantics(completed.snapshot.revision(), break_value)
+        .expect("break payload semantics");
+    assert_eq!(value_facts.actual, SemanticType::I64);
+    assert_eq!(value_facts.expected, Some(SemanticType::I64));
+    assert_eq!(completed.snapshot.references().len(), 0);
+    assert!(completed.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::ExpressionReplaced {
+            node,
+            old_kind: NodeKind::Hole,
+            new_kind: NodeKind::Loop,
+        } if *node == loop_node
+    )));
+    assert!(completed.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::DescendantCreated {
+            kind: NodeKind::Break,
+            ..
+        }
+    )));
+    let projection = completed
+        .snapshot
+        .project(&[ProjectionSlice::Body(main)])
+        .expect("typed-loop projection");
+    for fact in ["kind=loop", "kind=break", "type=\"never\""] {
+        assert!(projection.contains(fact), "missing {fact}: {projection}");
+    }
+    assert!(!projection.contains("loop_id"), "{projection}");
+
+    let executable = crate::compile_snapshot(&completed.snapshot).expect("compile typed loop");
+    assert_eq!(
+        evaluate(executable.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::I64(42))
+    );
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_while_break_and_continue_execute_with_nearest_targets() {
+    let mut break_workspace = Workspace::empty_deterministic(243).expect("while-break workspace");
+    let break_created = break_workspace
+        .apply(Transaction {
+            base_revision: break_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create while-break main");
+    let break_hole = break_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("while-break hole")
+        .id;
+    let break_complete = break_workspace
+        .apply(Transaction {
+            base_revision: break_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: break_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::Unit,
+                        DraftNode::Break {
+                            value: DraftNodeId::new(1),
+                        },
+                        DraftNode::While {
+                            condition: DraftNodeId::new(0),
+                            body: vec![DraftNodeId::new(2)],
+                        },
+                        DraftNode::I64(9),
+                        DraftNode::Sequence(vec![DraftNodeId::new(3), DraftNodeId::new(4)]),
+                    ],
+                    DraftNodeId::new(5),
+                ),
+            }],
+        })
+        .expect("construct while break");
+    assert_eq!(run_i64(&break_complete.snapshot), 9);
+    let body = &break_complete
+        .snapshot
+        .program
+        .main
+        .as_ref()
+        .expect("while-break main")
+        .body;
+    let crate::hir::ExprKind::Do(sequence) = &body.kind else {
+        panic!("expected while-break sequence")
+    };
+    let crate::hir::ExprKind::While {
+        loop_id,
+        body: while_body,
+        ..
+    } = &sequence[0].kind
+    else {
+        panic!("expected while")
+    };
+    let crate::hir::ExprKind::Break {
+        loop_id: break_target,
+        value,
+    } = &while_body[0].kind
+    else {
+        panic!("expected while break")
+    };
+    assert_eq!(break_target, loop_id);
+    assert_eq!(value.ty, crate::Type::Unit);
+
+    let counter = DraftBindingId::new(0);
+    let mut continue_workspace =
+        Workspace::empty_deterministic(244).expect("while-continue workspace");
+    let continue_created = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create while-continue main");
+    let continue_hole = continue_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("while-continue hole")
+        .id;
+    let continue_complete = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: continue_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(0),
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(3),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Less,
+                            arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(4), DraftNodeId::new(5)],
+                        },
+                        DraftNode::SetLocal {
+                            target: DraftBindingRef::Local(counter),
+                            value: DraftNodeId::new(6),
+                        },
+                        DraftNode::Continue,
+                        DraftNode::While {
+                            condition: DraftNodeId::new(3),
+                            body: vec![DraftNodeId::new(7), DraftNodeId::new(8)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::Sequence(vec![DraftNodeId::new(9), DraftNodeId::new(10)]),
+                        DraftNode::MutableLocal {
+                            binding: counter,
+                            name: "counter".to_owned(),
+                            ty: SemanticType::I64,
+                            initial: DraftNodeId::new(0),
+                            body: DraftNodeId::new(11),
+                        },
+                    ],
+                    DraftNodeId::new(12),
+                ),
+            }],
+        })
+        .expect("construct while continue");
+    assert_eq!(run_i64(&continue_complete.snapshot), 3);
+    let continue_node = continue_complete
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Continue)
+        .expect("continue node")
+        .id;
+    assert_eq!(
+        continue_complete
+            .snapshot
+            .node_semantics(continue_complete.snapshot.revision(), continue_node)
+            .expect("continue semantics")
+            .actual,
+        SemanticType::Never
+    );
+    let body = &continue_complete
+        .snapshot
+        .program
+        .main
+        .as_ref()
+        .expect("while-continue main")
+        .body;
+    let crate::hir::ExprKind::MutableLocal { body, .. } = &body.kind else {
+        panic!("expected counter storage")
+    };
+    let crate::hir::ExprKind::Do(sequence) = &body.kind else {
+        panic!("expected counter sequence")
+    };
+    let crate::hir::ExprKind::While {
+        loop_id,
+        body: while_body,
+        ..
+    } = &sequence[0].kind
+    else {
+        panic!("expected counter while")
+    };
+    let crate::hir::ExprKind::Continue { loop_id: target } = &while_body[1].kind else {
+        panic!("expected continue")
+    };
+    assert_eq!(target, loop_id);
+}
+
+#[test]
+fn draft_loop_shadows_and_restores_an_existing_published_loop_context() {
+    let mut workspace = Workspace::empty_deterministic(245).expect("nested loop workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create nested-loop main");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("nested-loop hole")
+        .id;
+    let original = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Unit,
+                        DraftNode::I64(7),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(1),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(0), DraftNodeId::new(2)],
+                        },
+                    ],
+                    DraftNodeId::new(3),
+                ),
+            }],
+        })
+        .expect("publish outer typed loop")
+        .snapshot;
+    assert_eq!(run_i64(&original), 7);
+    let outer_break = original
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Break)
+        .expect("published outer break")
+        .id;
+
+    let replaced = workspace
+        .apply(Transaction {
+            base_revision: original.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: outer_break,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Unit,
+                        DraftNode::Break {
+                            value: DraftNodeId::new(0),
+                        },
+                        DraftNode::Continue,
+                        DraftNode::Bool(false),
+                        DraftNode::If {
+                            condition: DraftNodeId::new(3),
+                            then_branch: DraftNodeId::new(2),
+                            else_branch: DraftNodeId::new(1),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::Unit,
+                            body: vec![DraftNodeId::new(4)],
+                        },
+                        DraftNode::I64(9),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(6),
+                        },
+                        DraftNode::Sequence(vec![DraftNodeId::new(5), DraftNodeId::new(7)]),
+                    ],
+                    DraftNodeId::new(8),
+                ),
+            }],
+        })
+        .expect("replace outer break with nested draft control");
+    assert_eq!(run_i64(&replaced.snapshot), 9);
+    assert_eq!(run_i64(&original), 7);
+
+    let root = &replaced
+        .snapshot
+        .program
+        .main
+        .as_ref()
+        .expect("nested-loop main")
+        .body;
+    let crate::hir::ExprKind::Loop {
+        loop_id: outer_id,
+        body: outer_body,
+        ..
+    } = &root.kind
+    else {
+        panic!("expected outer typed loop")
+    };
+    let crate::hir::ExprKind::Do(replacement) = &outer_body[1].kind else {
+        panic!("expected replacement sequence")
+    };
+    let crate::hir::ExprKind::Loop {
+        loop_id: inner_id,
+        body: inner_body,
+        ..
+    } = &replacement[0].kind
+    else {
+        panic!("expected inner typed loop")
+    };
+    assert_ne!(inner_id, outer_id);
+    let crate::hir::ExprKind::If {
+        then_branch,
+        else_branch,
+        ..
+    } = &inner_body[0].kind
+    else {
+        panic!("expected inner conditional")
+    };
+    let crate::hir::ExprKind::Continue {
+        loop_id: continue_target,
+    } = &then_branch.kind
+    else {
+        panic!("expected inner continue")
+    };
+    let crate::hir::ExprKind::Break {
+        loop_id: inner_break_target,
+        ..
+    } = &else_branch.kind
+    else {
+        panic!("expected inner break")
+    };
+    let crate::hir::ExprKind::Break {
+        loop_id: restored_outer_target,
+        ..
+    } = &replacement[1].kind
+    else {
+        panic!("expected restored outer break")
+    };
+    assert_eq!(continue_target, inner_id);
+    assert_eq!(inner_break_target, inner_id);
+    assert_eq!(restored_outer_target, outer_id);
+    assert!(replaced.snapshot.references().is_empty());
+    assert!(replaced.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::ExpressionReplaced {
+            node,
+            old_kind: NodeKind::Break,
+            new_kind: NodeKind::Sequence,
+        } if *node == outer_break
+    )));
+}
+
+#[test]
+fn control_transfers_insert_into_an_existing_published_while() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let counter = DraftBindingId::new(0);
+    let mut workspace = Workspace::empty_deterministic(246).expect("published while workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create published-while main");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("published-while hole")
+        .id;
+    let published = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(0),
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(3),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Less,
+                            arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(4), DraftNodeId::new(5)],
+                        },
+                        DraftNode::SetLocal {
+                            target: DraftBindingRef::Local(counter),
+                            value: DraftNodeId::new(6),
+                        },
+                        DraftNode::Unit,
+                        DraftNode::While {
+                            condition: DraftNodeId::new(3),
+                            body: vec![DraftNodeId::new(7), DraftNodeId::new(8)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::Sequence(vec![DraftNodeId::new(9), DraftNodeId::new(10)]),
+                        DraftNode::MutableLocal {
+                            binding: counter,
+                            name: "counter".to_owned(),
+                            ty: SemanticType::I64,
+                            initial: DraftNodeId::new(0),
+                            body: DraftNodeId::new(11),
+                        },
+                    ],
+                    DraftNodeId::new(12),
+                ),
+            }],
+        })
+        .expect("publish while with replaceable tail")
+        .snapshot;
+    assert_eq!(run_i64(&published), 3);
+    let tail = published
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.kind == NodeKind::Literal
+                && node.owner
+                    == SemanticOwner::Node(
+                        published
+                            .nodes()
+                            .iter()
+                            .find(|candidate| candidate.kind == NodeKind::While)
+                            .expect("published while")
+                            .id,
+                    )
+                && published
+                    .node_semantics(published.revision(), node.id)
+                    .is_ok_and(|facts| facts.actual == SemanticType::Unit)
+        })
+        .expect("replaceable while tail")
+        .id;
+
+    let continued = workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: tail,
+                draft: ExpressionDraft::new(vec![DraftNode::Continue], DraftNodeId::new(0)),
+            }],
+        })
+        .expect("insert continue into published while");
+    assert_eq!(run_i64(&continued.snapshot), 3);
+    assert_eq!(
+        continued.snapshot.node(tail).expect("continue root").kind,
+        NodeKind::Continue
+    );
+
+    let broken = workspace
+        .apply(Transaction {
+            base_revision: continued.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: tail,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Unit,
+                        DraftNode::Break {
+                            value: DraftNodeId::new(0),
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("insert break into published while");
+    assert_eq!(run_i64(&broken.snapshot), 1);
+    assert_eq!(
+        broken.snapshot.node(tail).expect("break root").kind,
+        NodeKind::Break
+    );
+    let root = &broken
+        .snapshot
+        .program
+        .main
+        .as_ref()
+        .expect("published-while main")
+        .body;
+    let crate::hir::ExprKind::MutableLocal { body, .. } = &root.kind else {
+        panic!("expected counter storage")
+    };
+    let crate::hir::ExprKind::Do(sequence) = &body.kind else {
+        panic!("expected counter sequence")
+    };
+    let crate::hir::ExprKind::While {
+        loop_id,
+        body: while_body,
+        ..
+    } = &sequence[0].kind
+    else {
+        panic!("expected retained while")
+    };
+    let crate::hir::ExprKind::Break {
+        loop_id: target, ..
+    } = &while_body[1].kind
+    else {
+        panic!("expected inserted break")
+    };
+    assert_eq!(target, loop_id);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn legal_loop_control_constructors_are_exact_contextual_and_paginated() {
+    let mut workspace = Workspace::empty_deterministic(247).expect("control query workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create control-query main");
+    let main_hole = created.snapshot.holes().next().expect("main hole").id;
+    let root_constructors = created
+        .snapshot
+        .legal_constructors(
+            created.snapshot.revision(),
+            main_hole,
+            PageRequest::new(64).expect("root constructor page"),
+            None,
+        )
+        .expect("root constructors")
+        .items;
+    assert!(root_constructors.contains(&LegalConstructor::Loop {
+        result_type: SemanticType::I64,
+    }));
+    assert!(!root_constructors.iter().any(|item| matches!(
+        item,
+        LegalConstructor::Break { .. } | LegalConstructor::Continue
+    )));
+
+    let complete = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(20),
+                        DraftNode::I64(22),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                        },
+                        DraftNode::Break {
+                            value: DraftNodeId::new(2),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(3)],
+                        },
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("publish control-query typed loop")
+        .snapshot;
+    let break_node = complete
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Break)
+        .expect("query break")
+        .id;
+    let argument = complete
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.kind == NodeKind::Literal
+                && complete
+                    .node_semantics(complete.revision(), node.id)
+                    .is_ok_and(|facts| facts.actual == SemanticType::I64)
+        })
+        .expect("operation argument")
+        .id;
+
+    let mut break_workspace = Workspace::new((*complete).clone()).expect("break-query workspace");
+    let introduced = break_workspace
+        .apply(Transaction {
+            base_revision: complete.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: break_node,
+                goal: "choose the typed-loop transfer".to_owned(),
+            }],
+        })
+        .expect("introduce break-position hole");
+    let break_hole = introduced
+        .snapshot
+        .holes()
+        .find(|hole| hole.id.node() == break_node)
+        .expect("break-position hole")
+        .id;
+    let full = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            break_hole,
+            PageRequest::new(64).expect("full control constructor page"),
+            None,
+        )
+        .expect("full control constructors")
+        .items;
+    assert!(full.contains(&LegalConstructor::Break {
+        value_type: SemanticType::I64,
+    }));
+    assert!(full.contains(&LegalConstructor::Continue));
+    assert!(!full
+        .iter()
+        .any(|item| matches!(item, LegalConstructor::Loop { .. })));
+
+    let collect = |snapshot: &WorkspaceSnapshot| {
+        let mut items = Vec::new();
+        let mut continuation = None;
+        loop {
+            let page = snapshot
+                .legal_constructors(
+                    snapshot.revision(),
+                    break_hole,
+                    PageRequest::new(1).expect("one constructor per page"),
+                    continuation.as_ref(),
+                )
+                .expect("paged control constructors");
+            items.extend(page.items);
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        items
+    };
+    assert_eq!(collect(&introduced.snapshot), full);
+    assert_eq!(collect(&introduced.snapshot), full);
+    let first_page = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            break_hole,
+            PageRequest::new(1).expect("stale continuation page"),
+            None,
+        )
+        .expect("first control constructor page");
+    let continuation = first_page.continuation.expect("control continuation");
+    let refined = break_workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::RefineHole {
+                hole: break_hole,
+                expected_type: None,
+                goal: "choose the final typed-loop transfer".to_owned(),
+            }],
+        })
+        .expect("refine control hole");
+    assert!(matches!(
+        refined.snapshot.legal_constructors(
+            refined.snapshot.revision(),
+            break_hole,
+            PageRequest::new(1).expect("stale control page"),
+            Some(&continuation),
+        ),
+        Err(WorkspaceError::InvalidContinuation(_))
+    ));
+
+    let mut argument_workspace =
+        Workspace::new((*complete).clone()).expect("argument-query workspace");
+    let argument_hole = argument_workspace
+        .apply(Transaction {
+            base_revision: complete.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: argument,
+                goal: "choose one operation argument".to_owned(),
+            }],
+        })
+        .expect("introduce operation-argument hole");
+    let argument_hole = argument_hole
+        .snapshot
+        .holes()
+        .find(|hole| hole.id.node() == argument)
+        .expect("operation-argument hole");
+    let argument_constructors = argument_workspace
+        .current()
+        .legal_constructors(
+            argument_workspace.current().revision(),
+            argument_hole.id,
+            PageRequest::new(64).expect("argument constructor page"),
+            None,
+        )
+        .expect("operation-argument constructors")
+        .items;
+    assert!(!argument_constructors.iter().any(|item| matches!(
+        item,
+        LegalConstructor::Break { .. } | LegalConstructor::Continue
+    )));
+
+    let mut while_workspace = Workspace::empty_deterministic(248).expect("while query workspace");
+    let while_created = while_workspace
+        .apply(Transaction {
+            base_revision: while_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create while-query main");
+    let while_root = while_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("while root hole")
+        .id;
+    let while_complete = while_workspace
+        .apply(Transaction {
+            base_revision: while_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: while_root,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::Unit,
+                        DraftNode::While {
+                            condition: DraftNodeId::new(0),
+                            body: vec![DraftNodeId::new(1)],
+                        },
+                        DraftNode::I64(9),
+                        DraftNode::Sequence(vec![DraftNodeId::new(2), DraftNodeId::new(3)]),
+                    ],
+                    DraftNodeId::new(4),
+                ),
+            }],
+        })
+        .expect("publish while-query body")
+        .snapshot;
+    let while_tail = while_complete
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.kind == NodeKind::Literal
+                && while_complete
+                    .node_semantics(while_complete.revision(), node.id)
+                    .is_ok_and(|facts| facts.actual == SemanticType::Unit)
+        })
+        .expect("while tail")
+        .id;
+    let while_hole = while_workspace
+        .apply(Transaction {
+            base_revision: while_complete.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: while_tail,
+                goal: "choose the while transfer".to_owned(),
+            }],
+        })
+        .expect("introduce while-tail hole");
+    let while_hole = while_hole
+        .snapshot
+        .holes()
+        .find(|hole| hole.id.node() == while_tail)
+        .expect("while-tail hole");
+    let while_constructors = while_workspace
+        .current()
+        .legal_constructors(
+            while_workspace.current().revision(),
+            while_hole.id,
+            PageRequest::new(64).expect("while constructor page"),
+            None,
+        )
+        .expect("while constructors")
+        .items;
+    assert!(while_constructors.contains(&LegalConstructor::Break {
+        value_type: SemanticType::Unit,
+    }));
+    assert!(while_constructors.contains(&LegalConstructor::Continue));
+    assert!(!while_constructors.contains(&LegalConstructor::Break {
+        value_type: SemanticType::I64,
+    }));
+}
+
+#[test]
+fn invalid_loop_control_drafts_are_atomic_and_retry_stable() {
+    fn create(seed: u64) -> (Workspace, Arc<WorkspaceSnapshot>, HoleId) {
+        let mut workspace =
+            Workspace::empty_deterministic(seed).expect("invalid control workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create invalid-control main");
+        let hole = created.snapshot.holes().next().expect("main hole").id;
+        (workspace, created.snapshot, hole)
+    }
+
+    fn valid() -> ExpressionDraft {
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(7),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(1)],
+                },
+            ],
+            DraftNodeId::new(2),
+        )
+    }
+
+    let (mut workspace, published, hole) = create(249);
+    let projection = published.project(&[]).expect("published projection");
+    let entity_inventory = published.entities().to_vec();
+    let node_inventory = published.nodes().to_vec();
+    let local = DraftBindingId::new(0);
+    let invalid = vec![
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+            ],
+            DraftNodeId::new(1),
+        ),
+        ExpressionDraft::new(vec![DraftNode::Continue], DraftNodeId::new(0)),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::Bool(true),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(1)],
+                },
+            ],
+            DraftNodeId::new(2),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::Bool(true),
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(1),
+                },
+                DraftNode::While {
+                    condition: DraftNodeId::new(0),
+                    body: vec![DraftNodeId::new(2)],
+                },
+                DraftNode::I64(0),
+                DraftNode::Sequence(vec![DraftNodeId::new(3), DraftNodeId::new(4)]),
+            ],
+            DraftNodeId::new(5),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::Continue,
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(1)],
+                },
+            ],
+            DraftNodeId::new(2),
+        ),
+        ExpressionDraft::new(
+            vec![DraftNode::Loop {
+                result_type: SemanticType::List(Box::new(SemanticType::Never)),
+                body: Vec::new(),
+            }],
+            DraftNodeId::new(0),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::I64(2),
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                },
+            ],
+            DraftNodeId::new(3),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::Continue,
+                DraftNode::Unit,
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                },
+            ],
+            DraftNodeId::new(2),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::I64(2),
+                DraftNode::Operation {
+                    operation: crate::Operation::Add,
+                    arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(3)],
+                },
+            ],
+            DraftNodeId::new(4),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::Continue,
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(1),
+                },
+                DraftNode::Let {
+                    bindings: vec![LocalDraft {
+                        binding: local,
+                        name: "never_storage".to_owned(),
+                        value: DraftNodeId::new(0),
+                    }],
+                    body: DraftNodeId::new(2),
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(3)],
+                },
+            ],
+            DraftNodeId::new(4),
+        ),
+    ];
+    for draft in invalid {
+        assert!(workspace
+            .apply(Transaction {
+                base_revision: published.revision(),
+                edits: vec![Edit::FillHole { hole, draft }],
+            })
+            .is_err());
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+        assert_eq!(workspace.current().revision(), published.revision());
+        assert_eq!(workspace.current().entities(), entity_inventory);
+        assert_eq!(workspace.current().nodes(), node_inventory);
+        assert_eq!(
+            workspace.current().project(&[]).expect("atomic projection"),
+            projection
+        );
+    }
+
+    let successful = workspace
+        .apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: valid(),
+            }],
+        })
+        .expect("retry valid loop control");
+    let (mut control, control_published, control_hole) = create(249);
+    let control_successful = control
+        .apply(Transaction {
+            base_revision: control_published.revision(),
+            edits: vec![Edit::FillHole {
+                hole: control_hole,
+                draft: valid(),
+            }],
+        })
+        .expect("control loop completion");
+    assert_eq!(
+        successful.snapshot.entities(),
+        control_successful.snapshot.entities()
+    );
+    assert_eq!(
+        successful.snapshot.nodes(),
+        control_successful.snapshot.nodes()
+    );
+    assert_eq!(successful.diff, control_successful.diff);
+    assert_eq!(run_i64(&successful.snapshot), 7);
+}
+
+#[test]
+fn loop_result_types_reject_foreign_stale_and_wrong_owner_identities() {
+    let mut foreign_source =
+        Workspace::empty_deterministic(250).expect("foreign type source workspace");
+    let foreign_product = foreign_source
+        .apply(Transaction {
+            base_revision: foreign_source.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "foreign-product".to_owned(),
+                fields: vec![ProductFieldDraft {
+                    name: "value".to_owned(),
+                    ty: SemanticType::I64,
+                }],
+            }],
+        })
+        .expect("create foreign product");
+    let foreign_product = entity_named(
+        &foreign_product.snapshot,
+        EntityKind::Product,
+        "foreign-product",
+    );
+    let mut foreign_target =
+        Workspace::empty_deterministic(251).expect("foreign type target workspace");
+    let foreign_main = foreign_target
+        .apply(Transaction {
+            base_revision: foreign_target.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create foreign-type main");
+    let foreign_hole = foreign_main
+        .snapshot
+        .holes()
+        .next()
+        .expect("foreign hole")
+        .id;
+    assert!(matches!(
+        foreign_target.apply(Transaction {
+            base_revision: foreign_main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: foreign_hole,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Loop {
+                        result_type: SemanticType::Product(foreign_product),
+                        body: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        }),
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(
+        &foreign_main.snapshot,
+        &foreign_target.current()
+    ));
+
+    let mut stale_workspace = Workspace::empty_deterministic(252).expect("stale type workspace");
+    let stale_created = stale_workspace
+        .apply(Transaction {
+            base_revision: stale_workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "stale-product".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "value".to_owned(),
+                        ty: SemanticType::I64,
+                    }],
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create stale-type subject");
+    let stale_product = entity_named(
+        &stale_created.snapshot,
+        EntityKind::Product,
+        "stale-product",
+    );
+    let stale_hole = stale_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("stale hole")
+        .id;
+    let deleted = stale_workspace
+        .apply(Transaction {
+            base_revision: stale_created.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: stale_product,
+            }],
+        })
+        .expect("delete stale product");
+    assert!(matches!(
+        stale_workspace.apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: stale_hole,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Loop {
+                        result_type: SemanticType::Product(stale_product),
+                        body: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        }),
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&deleted.snapshot, &stale_workspace.current()));
+
+    let binder = DraftTypeParameterId::new(0);
+    let mut generic_workspace =
+        Workspace::empty_deterministic(253).expect("wrong-owner loop workspace");
+    let generics = generic_workspace
+        .apply(Transaction {
+            base_revision: generic_workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "first".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: binder,
+                        name: "first-type".to_owned(),
+                        bounds: Vec::new(),
+                    }],
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::DraftTypeParameter(binder),
+                },
+                Edit::CreateFunction {
+                    name: "second".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: binder,
+                        name: "second-type".to_owned(),
+                        bounds: Vec::new(),
+                    }],
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::DraftTypeParameter(binder),
+                },
+            ],
+        })
+        .expect("create generic loop owners");
+    let first = entity_named(&generics.snapshot, EntityKind::Function, "first");
+    let second = entity_named(&generics.snapshot, EntityKind::Function, "second");
+    let first_type = generics
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::TypeParameter && entity.owner == Some(first))
+        .expect("first type parameter")
+        .id;
+    let second_hole = generics
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == second)
+        .expect("second body hole")
+        .id;
+    assert!(matches!(
+        generic_workspace.apply(Transaction {
+            base_revision: generics.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: second_hole,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Loop {
+                        result_type: SemanticType::TypeParameter(first_type),
+                        body: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        }),
+        Err(WorkspaceError::WrongTypeParameterOwner {
+            parameter,
+            expected,
+            actual: Some(actual),
+        }) if *parameter == first_type && *expected == second && *actual == first
+    ));
+    assert!(Arc::ptr_eq(
+        &generics.snapshot,
+        &generic_workspace.current()
+    ));
+}
+
+#[test]
+fn malformed_loop_control_draft_graphs_reject_without_publication() {
+    let mut workspace = Workspace::empty_deterministic(254).expect("malformed control workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create malformed-control main");
+    let published = created.snapshot;
+    let hole = published.holes().next().expect("malformed-control hole").id;
+    let malformed = [
+        ExpressionDraft::new(
+            vec![DraftNode::Break {
+                value: DraftNodeId::new(99),
+            }],
+            DraftNodeId::new(0),
+        ),
+        ExpressionDraft::new(
+            vec![DraftNode::I64(1), DraftNode::Continue],
+            DraftNodeId::new(0),
+        ),
+        ExpressionDraft::new(
+            vec![DraftNode::Loop {
+                result_type: SemanticType::I64,
+                body: vec![DraftNodeId::new(0)],
+            }],
+            DraftNodeId::new(0),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::Break {
+                    value: DraftNodeId::new(0),
+                },
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                },
+            ],
+            DraftNodeId::new(2),
+        ),
+        ExpressionDraft::new(
+            vec![
+                DraftNode::I64(1),
+                DraftNode::Loop {
+                    result_type: SemanticType::I64,
+                    body: Vec::new(),
+                },
+            ],
+            DraftNodeId::new(0),
+        ),
+    ];
+    for draft in malformed {
+        assert!(matches!(
+            workspace.apply(Transaction {
+                base_revision: published.revision(),
+                edits: vec![Edit::FillHole { hole, draft }],
+            }),
+            Err(WorkspaceError::InvalidDraft(_))
+        ));
+        assert!(Arc::ptr_eq(&published, &workspace.current()));
+    }
+}
+
+#[test]
+fn imported_and_source_free_typed_loop_and_nested_continue_converge() {
+    const TYPED_SOURCE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nloop/\ntype/\ni64\n/type\nbreak/\n42\n/break\n/loop\n/main\n";
+    const NESTED_SOURCE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nloop/\ntype/\ni64\n/type\nvar/\nname/\nj\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\nless-than/\nj\n3\n/less-than\nset/\nj\nadd/\nj\n1\n/add\n/set\ncontinue/\n/continue\n/while\nbreak/\n2\n/break\n/do\n/var\n/loop\n/main\n";
+
+    let typed_imported = importer::import_source_with_namespace(
+        TYPED_SOURCE,
+        "typed-loop-convergence.lkjscript",
+        WorkspaceNamespace::deterministic(255),
+    )
+    .expect("import typed loop");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut typed_workspace =
+        Workspace::empty_deterministic(255).expect("source-free typed-loop workspace");
+    let typed_created = typed_workspace
+        .apply(Transaction {
+            base_revision: typed_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create source-free typed-loop main");
+    let typed_hole = typed_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("typed-loop hole")
+        .id;
+    let typed_source_free = typed_workspace
+        .apply(Transaction {
+            base_revision: typed_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: typed_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(0),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(1)],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("construct source-free typed loop")
+        .snapshot;
+    assert_eq!(
+        canonical_workspace_observation(&typed_imported),
+        canonical_workspace_observation(&typed_source_free)
+    );
+    let typed_imported_executable =
+        crate::compile_snapshot(&typed_imported).expect("compile imported typed loop");
+    let typed_source_free_executable =
+        crate::compile_snapshot(&typed_source_free).expect("compile source-free typed loop");
+    assert_eq!(
+        typed_imported_executable.bytecode().main().code,
+        typed_source_free_executable.bytecode().main().code
+    );
+    for executable in [&typed_imported_executable, &typed_source_free_executable] {
+        assert_eq!(
+            evaluate(executable.ssa(), &EvalConfig::default()),
+            EvalOutcome::Returned(EvalValue::I64(42))
+        );
+    }
+
+    let nested_imported = importer::import_source_with_namespace(
+        NESTED_SOURCE,
+        "nested-continue-convergence.lkjscript",
+        WorkspaceNamespace::deterministic(256),
+    )
+    .expect("import nested continue");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let counter = DraftBindingId::new(0);
+    let mut nested_workspace =
+        Workspace::empty_deterministic(256).expect("source-free nested-continue workspace");
+    let nested_created = nested_workspace
+        .apply(Transaction {
+            base_revision: nested_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create nested-continue main");
+    let nested_hole = nested_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("nested-continue hole")
+        .id;
+    let nested_source_free = nested_workspace
+        .apply(Transaction {
+            base_revision: nested_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: nested_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(0),
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(3),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Less,
+                            arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(4), DraftNodeId::new(5)],
+                        },
+                        DraftNode::SetLocal {
+                            target: DraftBindingRef::Local(counter),
+                            value: DraftNodeId::new(6),
+                        },
+                        DraftNode::Continue,
+                        DraftNode::While {
+                            condition: DraftNodeId::new(3),
+                            body: vec![DraftNodeId::new(7), DraftNodeId::new(8)],
+                        },
+                        DraftNode::I64(2),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(10),
+                        },
+                        DraftNode::Sequence(vec![DraftNodeId::new(9), DraftNodeId::new(11)]),
+                        DraftNode::MutableLocal {
+                            binding: counter,
+                            name: "j".to_owned(),
+                            ty: SemanticType::I64,
+                            initial: DraftNodeId::new(0),
+                            body: DraftNodeId::new(12),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(13)],
+                        },
+                    ],
+                    DraftNodeId::new(14),
+                ),
+            }],
+        })
+        .expect("construct source-free nested continue")
+        .snapshot;
+    assert_eq!(
+        canonical_workspace_observation(&nested_imported),
+        canonical_workspace_observation(&nested_source_free)
+    );
+    let nested_imported_executable =
+        crate::compile_snapshot(&nested_imported).expect("compile imported nested continue");
+    let nested_source_free_executable =
+        crate::compile_snapshot(&nested_source_free).expect("compile source-free nested continue");
+    assert_eq!(
+        nested_imported_executable.bytecode().main().code,
+        nested_source_free_executable.bytecode().main().code
+    );
+    for executable in [&nested_imported_executable, &nested_source_free_executable] {
+        assert_eq!(
+            evaluate(executable.ssa(), &EvalConfig::default()),
+            EvalOutcome::Returned(EvalValue::I64(2))
+        );
+    }
+    assert_eq!(run_i64(&nested_imported), 2);
+    assert_eq!(run_i64(&nested_source_free), 2);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn affine_break_payload_and_continue_cleanup_match_imported_ownership() {
+    const BREAK_SOURCE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nresult\nloop/\ntype/\nbyte-vector\n/type\nlet/\nbind/\nowner\nnew-byte-vector/\n4\n/new-byte-vector\n/bind\nbreak/\nmove/\nowner\n/move\n/break\n/let\n/loop\n/bind\nbyte-slice-length/\nborrow/\nresult\n/borrow\n/byte-slice-length\n/let\n/main\n";
+    let imported_break = importer::import_source_with_namespace(
+        BREAK_SOURCE,
+        "affine-break-convergence.lkjscript",
+        WorkspaceNamespace::deterministic(257),
+    )
+    .expect("import affine break");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let owner = DraftBindingId::new(0);
+    let result = DraftBindingId::new(1);
+    let mut break_workspace =
+        Workspace::empty_deterministic(257).expect("source-free affine-break workspace");
+    let break_created = break_workspace
+        .apply(Transaction {
+            base_revision: break_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create affine-break main");
+    let break_hole = break_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("affine-break hole")
+        .id;
+    let source_free_break = break_workspace
+        .apply(Transaction {
+            base_revision: break_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: break_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(4),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteVectorNew,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                        DraftNode::Move(DraftBindingRef::Local(owner)),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(2),
+                        },
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: owner,
+                                name: "owner".to_owned(),
+                                value: DraftNodeId::new(1),
+                            }],
+                            body: DraftNodeId::new(3),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::ByteVector,
+                            body: vec![DraftNodeId::new(4)],
+                        },
+                        DraftNode::BorrowShared(DraftBindingRef::Local(result)),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteSliceLength,
+                            arguments: vec![DraftNodeId::new(6)],
+                        },
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: result,
+                                name: "result".to_owned(),
+                                value: DraftNodeId::new(5),
+                            }],
+                            body: DraftNodeId::new(7),
+                        },
+                    ],
+                    DraftNodeId::new(8),
+                ),
+            }],
+        })
+        .expect("construct source-free affine break")
+        .snapshot;
+    assert_eq!(run_i64(&imported_break), 4);
+    assert_eq!(run_i64(&source_free_break), 4);
+    assert_eq!(
+        canonical_workspace_observation(&imported_break),
+        canonical_workspace_observation(&source_free_break)
+    );
+    let imported_break_executable =
+        crate::compile_snapshot(&imported_break).expect("compile imported affine break");
+    let source_free_break_executable =
+        crate::compile_snapshot(&source_free_break).expect("compile source-free affine break");
+    let obligation_kinds = |executable: &crate::ExecutableProgram| {
+        executable
+            .memory_plan()
+            .obligations
+            .iter()
+            .map(|obligation| obligation.kind)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        obligation_kinds(&imported_break_executable),
+        obligation_kinds(&source_free_break_executable)
+    );
+    let whole_value_drops = source_free_break_executable
+        .memory_plan()
+        .obligations
+        .iter()
+        .filter(|obligation| {
+            obligation.kind == crate::memory_plan::MemoryObligationKind::DropWholeValue
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(whole_value_drops.len(), 2);
+    assert!(whole_value_drops.iter().any(|obligation| {
+        obligation.drop_class == Some(crate::memory_plan::MemoryDropClass::Dead)
+    }));
+    assert!(whole_value_drops.iter().any(|obligation| {
+        obligation.drop_class == Some(crate::memory_plan::MemoryDropClass::Static)
+    }));
+    let break_outcome = run_chunk(
+        source_free_break_executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(break_outcome.cleanup_failures().is_none());
+    assert!(matches!(
+        break_outcome,
+        ExecutionOutcome::Returned(value) if value.as_i64() == Some(4)
+    ));
+
+    const CONTINUE_SOURCE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\ncounter\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\nless-than/\ncounter\n3\n/less-than\nlet/\nbind/\niteration-owner\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\ndo/\nset/\ncounter\nadd/\ncounter\n1\n/add\n/set\ncontinue/\n/continue\n/do\n/let\n/while\ncounter\n/do\n/var\n/main\n";
+    let imported_continue = importer::import_source_with_namespace(
+        CONTINUE_SOURCE,
+        "affine-continue-convergence.lkjscript",
+        WorkspaceNamespace::deterministic(258),
+    )
+    .expect("import affine continue");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let counter = DraftBindingId::new(0);
+    let iteration_owner = DraftBindingId::new(1);
+    let mut continue_workspace =
+        Workspace::empty_deterministic(258).expect("source-free affine-continue workspace");
+    let continue_created = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create affine-continue main");
+    let continue_hole = continue_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("affine-continue hole")
+        .id;
+    let source_free_continue = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: continue_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(0),
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(3),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Less,
+                            arguments: vec![DraftNodeId::new(1), DraftNodeId::new(2)],
+                        },
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteVectorNew,
+                            arguments: vec![DraftNodeId::new(4)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(6), DraftNodeId::new(7)],
+                        },
+                        DraftNode::SetLocal {
+                            target: DraftBindingRef::Local(counter),
+                            value: DraftNodeId::new(8),
+                        },
+                        DraftNode::Continue,
+                        DraftNode::Sequence(vec![DraftNodeId::new(9), DraftNodeId::new(10)]),
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: iteration_owner,
+                                name: "iteration-owner".to_owned(),
+                                value: DraftNodeId::new(5),
+                            }],
+                            body: DraftNodeId::new(11),
+                        },
+                        DraftNode::While {
+                            condition: DraftNodeId::new(3),
+                            body: vec![DraftNodeId::new(12)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::Sequence(vec![DraftNodeId::new(13), DraftNodeId::new(14)]),
+                        DraftNode::MutableLocal {
+                            binding: counter,
+                            name: "counter".to_owned(),
+                            ty: SemanticType::I64,
+                            initial: DraftNodeId::new(0),
+                            body: DraftNodeId::new(15),
+                        },
+                    ],
+                    DraftNodeId::new(16),
+                ),
+            }],
+        })
+        .expect("construct source-free affine continue")
+        .snapshot;
+    assert_eq!(run_i64(&imported_continue), 3);
+    assert_eq!(run_i64(&source_free_continue), 3);
+    assert_eq!(
+        canonical_workspace_observation(&imported_continue),
+        canonical_workspace_observation(&source_free_continue)
+    );
+    let imported_continue_executable =
+        crate::compile_snapshot(&imported_continue).expect("compile imported affine continue");
+    let source_free_continue_executable = crate::compile_snapshot(&source_free_continue)
+        .expect("compile source-free affine continue");
+    assert_eq!(
+        obligation_kinds(&imported_continue_executable),
+        obligation_kinds(&source_free_continue_executable)
+    );
+    assert!(obligation_kinds(&source_free_continue_executable)
+        .contains(&crate::memory_plan::MemoryObligationKind::DropWholeValue));
+    let continue_outcome = run_chunk(
+        source_free_continue_executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(continue_outcome.cleanup_failures().is_none());
+    assert!(matches!(
+        continue_outcome,
+        ExecutionOutcome::Returned(value) if value.as_i64() == Some(3)
+    ));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn loop_control_preserves_outer_affine_ownership_and_rejects_conditional_edge_moves() {
+    let owner = DraftBindingId::new(0);
+    let counter = DraftBindingId::new(1);
+    let mut workspace = Workspace::empty_deterministic(259).expect("outer owner workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create outer-owner main");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("outer-owner hole")
+        .id;
+    let complete = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(5),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteVectorNew,
+                            arguments: vec![DraftNodeId::new(0)],
+                        },
+                        DraftNode::I64(0),
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(3),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Less,
+                            arguments: vec![DraftNodeId::new(3), DraftNodeId::new(4)],
+                        },
+                        DraftNode::BorrowShared(DraftBindingRef::Local(owner)),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteSliceLength,
+                            arguments: vec![DraftNodeId::new(6)],
+                        },
+                        DraftNode::Load(DraftBindingRef::Local(counter)),
+                        DraftNode::I64(1),
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(8), DraftNodeId::new(9)],
+                        },
+                        DraftNode::SetLocal {
+                            target: DraftBindingRef::Local(counter),
+                            value: DraftNodeId::new(10),
+                        },
+                        DraftNode::Continue,
+                        DraftNode::Sequence(vec![
+                            DraftNodeId::new(7),
+                            DraftNodeId::new(11),
+                            DraftNodeId::new(12),
+                        ]),
+                        DraftNode::While {
+                            condition: DraftNodeId::new(5),
+                            body: vec![DraftNodeId::new(13)],
+                        },
+                        DraftNode::BorrowShared(DraftBindingRef::Local(owner)),
+                        DraftNode::Operation {
+                            operation: crate::Operation::ByteSliceLength,
+                            arguments: vec![DraftNodeId::new(15)],
+                        },
+                        DraftNode::Sequence(vec![DraftNodeId::new(14), DraftNodeId::new(16)]),
+                        DraftNode::MutableLocal {
+                            binding: counter,
+                            name: "counter".to_owned(),
+                            ty: SemanticType::I64,
+                            initial: DraftNodeId::new(2),
+                            body: DraftNodeId::new(17),
+                        },
+                        DraftNode::Let {
+                            bindings: vec![LocalDraft {
+                                binding: owner,
+                                name: "outer-owner".to_owned(),
+                                value: DraftNodeId::new(1),
+                            }],
+                            body: DraftNodeId::new(18),
+                        },
+                    ],
+                    DraftNodeId::new(19),
+                ),
+            }],
+        })
+        .expect("construct loop preserving outer owner");
+    assert_eq!(run_i64(&complete.snapshot), 5);
+    let executable = crate::compile_snapshot(&complete.snapshot).expect("compile outer-owner loop");
+    assert_eq!(
+        executable
+            .memory_plan()
+            .obligations
+            .iter()
+            .filter(|obligation| {
+                obligation.kind == crate::memory_plan::MemoryObligationKind::DropWholeValue
+                    && obligation.drop_class == Some(crate::memory_plan::MemoryDropClass::Static)
+            })
+            .count(),
+        1
+    );
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+
+    let mut invalid_workspace =
+        Workspace::empty_deterministic(260).expect("loop-carried move workspace");
+    let invalid_created = invalid_workspace
+        .apply(Transaction {
+            base_revision: invalid_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create loop-carried-move main");
+    let invalid_hole = invalid_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("loop-carried-move hole")
+        .id;
+    let invalid_owner = DraftBindingId::new(0);
+    let invalid = invalid_workspace.apply(Transaction {
+        base_revision: invalid_created.snapshot.revision(),
+        edits: vec![Edit::FillHole {
+            hole: invalid_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(1),
+                    DraftNode::Operation {
+                        operation: crate::Operation::ByteVectorNew,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                    DraftNode::Bool(true),
+                    DraftNode::Bool(true),
+                    DraftNode::Move(DraftBindingRef::Local(invalid_owner)),
+                    DraftNode::Continue,
+                    DraftNode::Sequence(vec![DraftNodeId::new(4), DraftNodeId::new(5)]),
+                    DraftNode::Unit,
+                    DraftNode::Break {
+                        value: DraftNodeId::new(7),
+                    },
+                    DraftNode::If {
+                        condition: DraftNodeId::new(3),
+                        then_branch: DraftNodeId::new(6),
+                        else_branch: DraftNodeId::new(8),
+                    },
+                    DraftNode::While {
+                        condition: DraftNodeId::new(2),
+                        body: vec![DraftNodeId::new(9)],
+                    },
+                    DraftNode::I64(0),
+                    DraftNode::Sequence(vec![DraftNodeId::new(10), DraftNodeId::new(11)]),
+                    DraftNode::Let {
+                        bindings: vec![LocalDraft {
+                            binding: invalid_owner,
+                            name: "moved-owner".to_owned(),
+                            value: DraftNodeId::new(1),
+                        }],
+                        body: DraftNodeId::new(12),
+                    },
+                ],
+                DraftNodeId::new(13),
+            ),
+        }],
+    });
+    assert!(matches!(
+        invalid,
+        Err(WorkspaceError::Validation(message))
+            if message.contains("ownership initialization state must be equal")
+    ));
+    assert!(Arc::ptr_eq(
+        &invalid_created.snapshot,
+        &invalid_workspace.current()
+    ));
+
+    let invalid_result = DraftBindingId::new(1);
+    let invalid_break = invalid_workspace.apply(Transaction {
+        base_revision: invalid_created.snapshot.revision(),
+        edits: vec![Edit::FillHole {
+            hole: invalid_hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(1),
+                    DraftNode::Operation {
+                        operation: crate::Operation::ByteVectorNew,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                    DraftNode::Bool(true),
+                    DraftNode::Move(DraftBindingRef::Local(invalid_owner)),
+                    DraftNode::Break {
+                        value: DraftNodeId::new(3),
+                    },
+                    DraftNode::I64(0),
+                    DraftNode::Return {
+                        value: DraftNodeId::new(5),
+                    },
+                    DraftNode::If {
+                        condition: DraftNodeId::new(2),
+                        then_branch: DraftNodeId::new(4),
+                        else_branch: DraftNodeId::new(6),
+                    },
+                    DraftNode::Loop {
+                        result_type: SemanticType::ByteVector,
+                        body: vec![DraftNodeId::new(7)],
+                    },
+                    DraftNode::BorrowShared(DraftBindingRef::Local(invalid_result)),
+                    DraftNode::Operation {
+                        operation: crate::Operation::ByteSliceLength,
+                        arguments: vec![DraftNodeId::new(9)],
+                    },
+                    DraftNode::Let {
+                        bindings: vec![LocalDraft {
+                            binding: invalid_result,
+                            name: "result".to_owned(),
+                            value: DraftNodeId::new(8),
+                        }],
+                        body: DraftNodeId::new(10),
+                    },
+                    DraftNode::Let {
+                        bindings: vec![LocalDraft {
+                            binding: invalid_owner,
+                            name: "moved-owner".to_owned(),
+                            value: DraftNodeId::new(1),
+                        }],
+                        body: DraftNodeId::new(11),
+                    },
+                ],
+                DraftNodeId::new(12),
+            ),
+        }],
+    });
+    assert!(matches!(
+        invalid_break,
+        Err(WorkspaceError::Validation(message))
+            if message.contains("ownership initialization state must be equal")
+    ));
+    assert!(Arc::ptr_eq(
+        &invalid_created.snapshot,
+        &invalid_workspace.current()
+    ));
+}
+
+#[test]
+fn deep_flat_loop_control_is_linear_and_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-deep-loop-control".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let draft = nested_typed_loop_draft(256);
+            let node_count = u64::try_from(draft.nodes.len()).expect("loop draft node count");
+            let mut workspace = Workspace::empty_deterministic(261).expect("deep loop workspace");
+            let created = workspace
+                .apply(Transaction {
+                    base_revision: workspace.current().revision(),
+                    edits: vec![Edit::CreateMain {
+                        return_type: SemanticType::I64,
+                    }],
+                })
+                .expect("create deep-loop main");
+            let hole = created.snapshot.holes().next().expect("deep-loop hole").id;
+            super::transaction::reset_draft_imperative_node_visits();
+            let complete = workspace
+                .apply(Transaction {
+                    base_revision: created.snapshot.revision(),
+                    edits: vec![Edit::FillHole { hole, draft }],
+                })
+                .expect("publish deep loop control");
+            assert_eq!(
+                super::transaction::draft_imperative_node_visits(),
+                (node_count, node_count)
+            );
+            assert_eq!(run_i64(&complete.snapshot), 1);
+            let deepest_break = complete
+                .snapshot
+                .nodes()
+                .iter()
+                .find(|node| node.kind == NodeKind::Break)
+                .expect("deepest break")
+                .id;
+            let introduced = workspace
+                .apply(Transaction {
+                    base_revision: complete.snapshot.revision(),
+                    edits: vec![Edit::IntroduceHole {
+                        target: deepest_break,
+                        goal: "choose the deepest loop transfer".to_owned(),
+                    }],
+                })
+                .expect("introduce deep control hole");
+            let deep_hole = introduced
+                .snapshot
+                .holes()
+                .find(|hole| hole.id.node() == deepest_break)
+                .expect("deep control hole")
+                .id;
+            let constructors = introduced
+                .snapshot
+                .legal_constructors(
+                    introduced.snapshot.revision(),
+                    deep_hole,
+                    PageRequest::new(64).expect("deep constructor page"),
+                    None,
+                )
+                .expect("deep control constructors")
+                .items;
+            assert!(constructors.contains(&LegalConstructor::Break {
+                value_type: SemanticType::I64,
+            }));
+            assert!(constructors.contains(&LegalConstructor::Continue));
+            let refilled = workspace
+                .apply(Transaction {
+                    base_revision: introduced.snapshot.revision(),
+                    edits: vec![Edit::FillHole {
+                        hole: deep_hole,
+                        draft: ExpressionDraft::new(
+                            vec![
+                                DraftNode::I64(1),
+                                DraftNode::Break {
+                                    value: DraftNodeId::new(0),
+                                },
+                            ],
+                            DraftNodeId::new(1),
+                        ),
+                    }],
+                })
+                .expect("refill deep control hole");
+            refilled
+                .snapshot
+                .project(&[])
+                .expect("project deep loop control");
+            assert_eq!(run_i64(&refilled.snapshot), 1);
+            drop(refilled);
+            drop(introduced);
+            drop(complete);
+            drop(workspace);
+        })
+        .expect("spawn deep-loop worker")
+        .join()
+        .expect("deep-loop worker completed");
+}
+
+#[test]
+fn deep_invalid_control_is_stack_safe_and_atomic() {
+    std::thread::Builder::new()
+        .name("workspace-deep-invalid-control".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let mut nodes = vec![DraftNode::Continue];
+            let mut root = DraftNodeId::new(0);
+            for _ in 0..512 {
+                let condition = push_draft_node(&mut nodes, DraftNode::Bool(true));
+                let fallback = push_draft_node(&mut nodes, DraftNode::I64(1));
+                root = push_draft_node(
+                    &mut nodes,
+                    DraftNode::If {
+                        condition,
+                        then_branch: root,
+                        else_branch: fallback,
+                    },
+                );
+            }
+            let node_count = u64::try_from(nodes.len()).expect("invalid control node count");
+            let draft = ExpressionDraft::new(nodes, root);
+            let mut workspace =
+                Workspace::empty_deterministic(262).expect("deep invalid workspace");
+            let created = workspace
+                .apply(Transaction {
+                    base_revision: workspace.current().revision(),
+                    edits: vec![Edit::CreateMain {
+                        return_type: SemanticType::I64,
+                    }],
+                })
+                .expect("create deep-invalid main");
+            let published = created.snapshot;
+            let hole = published.holes().next().expect("deep-invalid hole").id;
+            super::transaction::reset_draft_imperative_node_visits();
+            let error = workspace
+                .apply(Transaction {
+                    base_revision: published.revision(),
+                    edits: vec![Edit::FillHole { hole, draft }],
+                })
+                .expect_err("out-of-context deep continue must fail");
+            assert!(
+                matches!(&error, WorkspaceError::InvalidDraft(message) if message.contains("continue is only valid")),
+                "{error:?}"
+            );
+            assert_eq!(
+                super::transaction::draft_imperative_node_visits(),
+                (node_count, node_count)
+            );
+            assert!(Arc::ptr_eq(&published, &workspace.current()));
+        })
+        .expect("spawn deep-invalid worker")
+        .join()
+        .expect("deep-invalid worker completed");
+}
+
+#[test]
+#[ignore = "locked release stress for source-free lexical loop depth"]
+fn twenty_thousand_level_source_free_loop_control_is_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-twenty-thousand-loops".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let draft = nested_typed_loop_draft(20_000);
+            let mut workspace = Workspace::empty_deterministic(263).expect("loop stress workspace");
+            let created = workspace
+                .apply(Transaction {
+                    base_revision: workspace.current().revision(),
+                    edits: vec![Edit::CreateMain {
+                        return_type: SemanticType::I64,
+                    }],
+                })
+                .expect("create loop-stress main");
+            let hole = created
+                .snapshot
+                .holes()
+                .next()
+                .expect("loop-stress hole")
+                .id;
+            let complete = workspace
+                .apply(Transaction {
+                    base_revision: created.snapshot.revision(),
+                    edits: vec![Edit::FillHole { hole, draft }],
+                })
+                .expect("publish loop stress");
+            assert_eq!(run_i64(&complete.snapshot), 1);
+            complete.snapshot.project(&[]).expect("project loop stress");
+            drop(complete);
+            drop(workspace);
+        })
+        .expect("spawn loop-stress worker")
+        .join()
+        .expect("loop-stress worker completed");
+}
+
+#[test]
+fn divergent_loop_control_joins_legal_conditional_branches() {
+    let mut break_workspace = Workspace::empty_deterministic(267).expect("break-join workspace");
+    let break_created = break_workspace
+        .apply(Transaction {
+            base_revision: break_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create break-join main");
+    let break_hole = break_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("break-join hole")
+        .id;
+    let break_join = break_workspace
+        .apply(Transaction {
+            base_revision: break_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: break_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::I64(42),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(1),
+                        },
+                        DraftNode::Unit,
+                        DraftNode::If {
+                            condition: DraftNodeId::new(0),
+                            then_branch: DraftNodeId::new(2),
+                            else_branch: DraftNodeId::new(3),
+                        },
+                        DraftNode::I64(7),
+                        DraftNode::Break {
+                            value: DraftNodeId::new(5),
+                        },
+                        DraftNode::Loop {
+                            result_type: SemanticType::I64,
+                            body: vec![DraftNodeId::new(4), DraftNodeId::new(6)],
+                        },
+                    ],
+                    DraftNodeId::new(7),
+                ),
+            }],
+        })
+        .expect("join break with unit branch");
+    assert_eq!(run_i64(&break_join.snapshot), 42);
+
+    let mut continue_workspace =
+        Workspace::empty_deterministic(268).expect("continue-join workspace");
+    let continue_created = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create continue-join main");
+    let continue_hole = continue_created
+        .snapshot
+        .holes()
+        .next()
+        .expect("continue-join hole")
+        .id;
+    let continue_join = continue_workspace
+        .apply(Transaction {
+            base_revision: continue_created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: continue_hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(false),
+                        DraftNode::Bool(true),
+                        DraftNode::Continue,
+                        DraftNode::Unit,
+                        DraftNode::If {
+                            condition: DraftNodeId::new(1),
+                            then_branch: DraftNodeId::new(2),
+                            else_branch: DraftNodeId::new(3),
+                        },
+                        DraftNode::While {
+                            condition: DraftNodeId::new(0),
+                            body: vec![DraftNodeId::new(4)],
+                        },
+                        DraftNode::I64(9),
+                        DraftNode::Sequence(vec![DraftNodeId::new(5), DraftNodeId::new(6)]),
+                    ],
+                    DraftNodeId::new(7),
+                ),
+            }],
+        })
+        .expect("join continue with unit branch");
+    assert_eq!(run_i64(&continue_join.snapshot), 9);
+}
+
+#[test]
 fn source_free_main_return_is_queryable_and_executes_without_source_work() {
     crate::source::reset_parser_invocation_count();
     crate::source::reset_source_load_invocation_count();
@@ -1913,7 +4254,19 @@ fn source_free_main_return_is_queryable_and_executes_without_source_work() {
         .expect("body-hole constructors")
         .items;
     assert!(constructors.contains(&LegalConstructor::Return));
-    assert!(constructors.windows(2).all(|pair| pair[0] < pair[1]));
+    assert_eq!(
+        constructors,
+        created
+            .snapshot
+            .legal_constructors(
+                revision,
+                hole,
+                PageRequest::new(64).expect("repeat constructor page"),
+                None,
+            )
+            .expect("repeat body-hole constructors")
+            .items
+    );
     let completed = workspace
         .apply(Transaction {
             base_revision: created.snapshot.revision(),
@@ -3870,6 +6223,129 @@ fn consistency_rejects_non_unit_while_hir_type() {
             .contains("expression kind and type facts are inconsistent"),
         "{error}"
     );
+}
+
+#[test]
+fn consistency_rejects_stale_non_nearest_and_duplicate_loop_targets() {
+    fn complete(seed: u64) -> Arc<WorkspaceSnapshot> {
+        let mut workspace =
+            Workspace::empty_deterministic(seed).expect("loop validation workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create loop validation main");
+        let hole = created
+            .snapshot
+            .holes()
+            .next()
+            .expect("loop validation hole")
+            .id;
+        workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::Bool(true),
+                            DraftNode::Break {
+                                value: DraftNodeId::new(0),
+                            },
+                            DraftNode::Loop {
+                                result_type: SemanticType::Bool,
+                                body: vec![DraftNodeId::new(1)],
+                            },
+                            DraftNode::I64(7),
+                            DraftNode::Break {
+                                value: DraftNodeId::new(3),
+                            },
+                            DraftNode::Loop {
+                                result_type: SemanticType::I64,
+                                body: vec![DraftNodeId::new(2), DraftNodeId::new(4)],
+                            },
+                        ],
+                        DraftNodeId::new(5),
+                    ),
+                }],
+            })
+            .expect("publish loop validation subject")
+            .snapshot
+    }
+
+    let mutate = |seed: u64, action: fn(&mut crate::hir::Expr, crate::hir::LoopId)| {
+        let snapshot = complete(seed);
+        let mut malformed = Arc::try_unwrap(snapshot).expect("unique loop validation snapshot");
+        let program = Arc::get_mut(&mut malformed.program).expect("unique semantic program");
+        let root = &mut program.main.as_mut().expect("main").body;
+        let crate::hir::ExprKind::Loop {
+            loop_id: outer_id, ..
+        } = &root.kind
+        else {
+            panic!("expected outer loop")
+        };
+        action(root, *outer_id);
+        malformed
+            .check_consistency()
+            .expect_err("malformed loop targets must fail closed")
+            .to_string()
+    };
+
+    let non_nearest = mutate(264, |root, outer_id| {
+        let crate::hir::ExprKind::Loop { body, .. } = &mut root.kind else {
+            panic!("expected outer loop")
+        };
+        let crate::hir::ExprKind::Loop { body, .. } = &mut body[0].kind else {
+            panic!("expected inner loop")
+        };
+        let crate::hir::ExprKind::Break { loop_id, .. } = &mut body[0].kind else {
+            panic!("expected inner break")
+        };
+        *loop_id = outer_id;
+    });
+    assert!(
+        non_nearest.contains("nearest lexical loop"),
+        "{non_nearest}"
+    );
+
+    let duplicate = mutate(265, |root, outer_id| {
+        let crate::hir::ExprKind::Loop { body, .. } = &mut root.kind else {
+            panic!("expected outer loop")
+        };
+        let crate::hir::ExprKind::Loop {
+            loop_id,
+            body: inner_body,
+            ..
+        } = &mut body[0].kind
+        else {
+            panic!("expected inner loop")
+        };
+        *loop_id = outer_id;
+        let crate::hir::ExprKind::Break {
+            loop_id: target, ..
+        } = &mut inner_body[0].kind
+        else {
+            panic!("expected inner break")
+        };
+        *target = outer_id;
+    });
+    assert!(duplicate.contains("identity is duplicated"), "{duplicate}");
+
+    let wrong_payload = mutate(266, |root, _| {
+        let crate::hir::ExprKind::Loop { body, .. } = &mut root.kind else {
+            panic!("expected outer loop")
+        };
+        let inner = &mut body[0];
+        let crate::hir::ExprKind::Loop { result_type, .. } = &mut inner.kind else {
+            panic!("expected inner loop")
+        };
+        *result_type = crate::Type::I64;
+        inner.ty = crate::Type::I64;
+    });
+    assert!(wrong_payload.contains("exactly equal"), "{wrong_payload}");
 }
 
 #[test]

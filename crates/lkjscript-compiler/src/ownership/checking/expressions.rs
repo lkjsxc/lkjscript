@@ -1,5 +1,6 @@
 use crate::ownership::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(in crate::ownership) fn check_expr(
     program: &Program,
     expression: &Expr,
@@ -7,13 +8,17 @@ pub(in crate::ownership) fn check_expr(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
     context: UseContext,
 ) -> Result<()> {
     crate::stack::grow(|| {
-        check_expr_inner(program, expression, plan, cursor, state, future, context)
+        check_expr_inner(
+            program, expression, plan, cursor, state, future, control, context,
+        )
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_expr_inner(
     program: &Program,
     expression: &Expr,
@@ -21,6 +26,7 @@ fn check_expr_inner(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
     context: UseContext,
 ) -> Result<()> {
     let current = cursor.enter(plan)?;
@@ -48,7 +54,7 @@ fn check_expr_inner(
         | ExprKind::Trap { .. }
         | ExprKind::Exit { .. } => {
             check_control_expr(
-                program, expression, current, plan, cursor, state, future, context,
+                program, expression, current, plan, cursor, state, future, control, context,
             )?;
         }
         ExprKind::Let { .. }
@@ -62,7 +68,7 @@ fn check_expr_inner(
         | ExprKind::EnumField { .. }
         | ExprKind::EnumUnwrap { .. } => {
             check_scopes_expr(
-                program, expression, current, plan, cursor, state, future, context,
+                program, expression, current, plan, cursor, state, future, control, context,
             )?;
         }
         _ => {}

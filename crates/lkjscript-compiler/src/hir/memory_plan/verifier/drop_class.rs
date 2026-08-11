@@ -105,10 +105,20 @@ fn check_drop_flow(
                 }),
             }
         }
-        ExprKind::While { .. } | ExprKind::Loop { .. } => {
+        ExprKind::While { .. } => {
             let after = check_drop_children(expression, binding, state)?;
             if after == state {
                 Ok(state)
+            } else {
+                Err(verifier_open_error())
+            }
+        }
+        ExprKind::Loop { loop_id, body, .. } => {
+            let after = check_drop_children(expression, binding, state)?;
+            if after == state {
+                Ok(state)
+            } else if !crate::hir::loop_body_has_reentry_path(body, *loop_id)? {
+                Ok(after)
             } else {
                 Err(verifier_open_error())
             }

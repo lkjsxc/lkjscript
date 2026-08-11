@@ -449,7 +449,12 @@ Retained deterministic counters, indexes, and assertions show:
 - the selected product path runs both imported and source-free ownership-control forms through one
   baseline-native entry with no VM execution; each allocates and drops exactly one unique owner,
   returns `7`, reports no cleanup failure, and ends with zero live owners, live loans, release backlog,
-  stale/forged failures, or teardown failures;
+  stale/forged failures, or teardown failures. Imported and source-free typed loops likewise take the
+  baseline-native path and return `42`. Their affine-continue counterparts each allocate and drop
+  exactly three iteration-local owners, return `3`, and end with no live owner, loan, release backlog,
+  or cleanup failure. Compiler convergence tests additionally compare normalized loop/control HIR,
+  private nearest targets, node types/effects, memory obligations, bytecode, evaluator/VM results,
+  parser/load counters, and cleanup behavior;
 - targeted return-value-child and ordinary-value-to-return replacement preserves targeted and
   unaffected ancestor IDs, iteratively changes enclosing sequence, mutable-local, `let`, and
   all-return match results to `never`, refreshes the existing match plan once for the affected root,
@@ -464,14 +469,18 @@ Retained deterministic counters, indexes, and assertions show:
 - an affine mutable-local regression rejects live overwrite atomically, then moves and releases the
   old byte vector, reinitializes the ended place, moves and releases the replacement, returns `4`,
   and completes VM teardown without retained owners or loans;
+- deterministic instrumentation on a 128 KiB stack shows both valid 256-level typed-loop lowering and
+  an invalid 512-level out-of-context control draft perform exactly one validation and one lowering
+  visit per flat draft node. The invalid edit republishes neither snapshot nor allocator state;
 - one ignored locked-release fixture completes a 20,000-level nested-`if` draft beneath one early
   return (60,002 expression nodes), a second completes 20,000 alternating immutable/mutable lexical
-  locals (40,001 expression nodes), and a third completes 20,000 nested semantic enum matches (80,001
-  expression nodes and
-  20,000 canonical plans); each includes staged lowering, semantic clone, dense lifecycle compaction,
-  identity reconciliation, complete-HIR/ownership/match derivation, memory planning, SSA, bytecode,
-  VM execution, projection where selected, deepest-branch hole introduction and legal-constructor
-  control-context query in the nested-`if` fixture, and destruction on a 128 KiB worker stack; separate type-only fixtures exercise
+  locals (40,001 expression nodes), a third completes 20,000 nested semantic enum matches (80,001
+  expression nodes and 20,000 canonical plans), and a fourth completes 20,000 nested typed loops
+  (60,000 expression nodes); each includes staged lowering, semantic clone, dense lifecycle
+  compaction, identity reconciliation, complete-HIR/ownership/match derivation, memory planning, SSA,
+  bytecode, VM execution, projection where selected, deepest-branch hole introduction and
+  legal-constructor control-context query in the nested-`if` and smaller deep-loop fixtures, and
+  destruction on a 128 KiB worker stack; separate type-only fixtures exercise
   published `SemanticType` construction, clone, equality, hashing, display, transaction validation,
   conversion, query, projection, and destruction and creation-only `DeclarationType` construction,
   clone, equality, debug, local-binder resolution, stable publication, signature query, projection,
@@ -506,6 +515,18 @@ cargo test --locked -p lkjscript-app \
   engine::tests::source_free_early_return_enters_native_and_cleans_unique_owner_once -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::source_free_imperative_counted_loop_executes_and_matches_imported_semantics -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::imported_and_source_free_typed_loop_and_nested_continue_converge -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::affine_break_payload_and_continue_cleanup_match_imported_ownership -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::legal_loop_control_constructors_are_exact_contextual_and_paginated -- --exact
+cargo test --locked -p lkjscript-compiler \
+  workspace::tests::deep_flat_loop_control_is_linear_and_stack_safe -- --exact
+cargo test --locked -p lkjscript-app \
+  engine::tests::imported_and_source_free_typed_loops_use_the_same_product_path -- --exact
+cargo test --locked -p lkjscript-app \
+  engine::tests::imported_and_source_free_continue_cleanup_match_in_the_product_path -- --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::wide_imperative_draft_visits_each_node_once_on_a_small_stack -- --exact
 cargo test --locked -p lkjscript-compiler \
@@ -557,6 +578,9 @@ cargo test --locked --release -p lkjscript-compiler \
 cargo test --locked --release -p lkjscript-compiler \
   workspace::tests::twenty_thousand_level_source_free_enum_matches_compile_execute_and_drop_on_small_stack \
   -- --ignored --exact --test-threads=1
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::tests::twenty_thousand_level_source_free_loop_control_is_stack_safe \
+  -- --ignored --exact
 ```
 
 On the development host, the imperative-control cutover's locked-release 20,000-local invocation,
@@ -566,9 +590,11 @@ rebuild. The final return-extended 60,002-node nested-`if` invocation reported 1
 warm release artifacts. The binding-lifecycle cutover's final locked-release 20,000-match invocation
 reported 307.41 seconds for the test body with warm release artifacts (307.469 seconds process wall);
 it is deliberately an ignored maximum-geometry correctness fixture, not a representative latency
-target. These single
-noisy samples are orientation, not product-latency claims or gates. No allocator count, peak RSS,
-retained memory, edit/query latency distribution, or representative application throughput was
+target. The final 20,000-level typed-loop fixture reported 10.84 seconds with warm release artifacts;
+it remains stack-safety and semantic-convergence evidence rather than a representative latency
+workload. These single noisy samples are orientation, not product-latency claims or gates. No allocator count,
+peak RSS, retained memory, edit/query latency distribution, or representative application throughput
+was
 measured. Reverse or redesign the implementation if equivalent observations diverge, an incomplete
 path enters a compiler phase, lookup work ceases to track semantic work, selected depth fails on the
 small stack, structural-local emission resumes repeated CFG scans, cleanup changes, or broader

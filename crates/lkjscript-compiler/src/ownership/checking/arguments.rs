@@ -1,5 +1,6 @@
 use crate::ownership::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(in crate::ownership) fn check_arguments(
     program: &Program,
     args: &[Expr],
@@ -8,6 +9,7 @@ pub(in crate::ownership) fn check_arguments(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
 ) -> Result<()> {
     let mut temporary = Vec::new();
     temporary
@@ -25,7 +27,9 @@ pub(in crate::ownership) fn check_arguments(
         } else {
             UseContext::Ordinary
         };
-        let result = check_expr(program, argument, plan, cursor, state, future, context);
+        let result = check_expr(
+            program, argument, plan, cursor, state, future, control, context,
+        );
         future.restore(checkpoint);
         result?;
         match argument.kind {
@@ -48,6 +52,7 @@ pub(in crate::ownership) fn check_arguments(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(in crate::ownership) fn check_sequence(
     program: &Program,
     expressions: &[Expr],
@@ -56,6 +61,7 @@ pub(in crate::ownership) fn check_sequence(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
 ) -> Result<()> {
     for expression in expressions {
         let child = cursor.peek_range(plan)?;
@@ -67,6 +73,7 @@ pub(in crate::ownership) fn check_sequence(
             cursor,
             state,
             future,
+            control,
             UseContext::Ordinary,
         );
         future.restore(checkpoint);

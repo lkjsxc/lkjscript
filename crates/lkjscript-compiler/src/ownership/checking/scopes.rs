@@ -9,6 +9,7 @@ pub(in crate::ownership) fn check_scopes_expr(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
     _context: UseContext,
 ) -> Result<()> {
     let parent = plan.range(current)?;
@@ -29,6 +30,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                     cursor,
                     state,
                     future,
+                    control,
                     initializer_context,
                 );
                 future.restore(checkpoint);
@@ -67,6 +69,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
             for local in bindings.iter().rev() {
@@ -92,6 +95,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             );
             future.restore(checkpoint);
@@ -108,6 +112,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
             end_reference_binding(state, *binding);
@@ -123,6 +128,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
             let ty = expression_of_binding(program, *target)?;
@@ -149,7 +155,9 @@ pub(in crate::ownership) fn check_scopes_expr(
             }
         }
         ExprKind::ProductValue { fields, .. } => {
-            check_sequence(program, fields, parent, plan, cursor, state, future)?;
+            check_sequence(
+                program, fields, parent, plan, cursor, state, future, control,
+            )?;
         }
         ExprKind::ProductField { value, .. } => {
             check_expr(
@@ -159,6 +167,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
         }
@@ -174,6 +183,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             );
             future.restore(checkpoint);
@@ -185,11 +195,14 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
         }
         ExprKind::EnumValue { fields, .. } => {
-            check_sequence(program, fields, parent, plan, cursor, state, future)?;
+            check_sequence(
+                program, fields, parent, plan, cursor, state, future, control,
+            )?;
         }
         ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. }
@@ -201,6 +214,7 @@ pub(in crate::ownership) fn check_scopes_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
         }

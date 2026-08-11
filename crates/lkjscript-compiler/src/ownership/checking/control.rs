@@ -9,6 +9,7 @@ pub(in crate::ownership) fn check_control_expr(
     cursor: &mut ExprCursor,
     state: &mut State,
     future: &mut FutureUses,
+    control: &mut ControlFlow,
     _context: UseContext,
 ) -> Result<()> {
     let parent = plan.range(current)?;
@@ -21,12 +22,12 @@ pub(in crate::ownership) fn check_control_expr(
                     ));
                 }
             }
-            check_arguments(program, args, parent, plan, cursor, state, future)?;
+            check_arguments(program, args, parent, plan, cursor, state, future, control)?;
         }
         ExprKind::Operation {
             operation, args, ..
         } => {
-            check_arguments(program, args, parent, plan, cursor, state, future)?;
+            check_arguments(program, args, parent, plan, cursor, state, future, control)?;
             if matches!(
                 operation,
                 Operation::DropResource | Operation::SysSqliteClose | Operation::SysSqliteFinalize
@@ -45,11 +46,21 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
         }
         ExprKind::Do(expressions) => {
-            check_sequence(program, expressions, parent, plan, cursor, state, future)?;
+            check_sequence(
+                program,
+                expressions,
+                parent,
+                plan,
+                cursor,
+                state,
+                future,
+                control,
+            )?;
         }
         ExprKind::If {
             condition,
@@ -65,6 +76,7 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             );
             future.restore(checkpoint);
@@ -82,6 +94,7 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 &mut left,
                 future,
+                control,
             )?;
             check_conditional_branch(
                 program,
@@ -91,6 +104,7 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 &mut right,
                 future,
+                control,
             )?;
             if !left_diverges {
                 expire_dead_loans(&mut left, plan, None, future)?;
@@ -109,18 +123,12 @@ pub(in crate::ownership) fn check_control_expr(
             }
         }
         ExprKind::While {
-            condition, body, ..
+            loop_id,
+            condition,
+            body,
         } => {
-            expire_dead_loans(state, plan, Some(parent), future)?;
-            if plan.contains_ownership_action(current)?
-                || plan.uses_reference_binding(current)?
-                || !state.loans.is_empty()
-            {
-                return Err(Error::msg(
-                    "loop-carried moves or loans are unsupported in the initial ownership slice",
-                ));
-            }
-            let before = state.clone();
+            prepare_loop_entry(current, parent, plan, state, future)?;
+            let entry = state.clone();
             check_expr(
                 program,
                 condition,
@@ -128,31 +136,32 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 state,
                 future,
+                control,
                 UseContext::Ordinary,
             )?;
-            check_sequence(program, body, parent, plan, cursor, state, future)?;
-            if *state != before {
-                return Err(Error::msg(
-                    "ownership initialization state must be equal after a loop iteration",
-                ));
+            if project_loop_transfer_state(state, &entry) != entry {
+                return Err(loop_state_error());
             }
-        }
-        ExprKind::Loop { body, .. } => {
-            expire_dead_loans(state, plan, Some(parent), future)?;
-            if plan.contains_ownership_action(current)?
-                || plan.uses_reference_binding(current)?
-                || !state.loans.is_empty()
-            {
-                return Err(Error::msg(
-                    "loop-carried moves or loans are unsupported in the initial ownership slice",
-                ));
+            control.enter(*loop_id, entry.clone())?;
+            check_sequence(program, body, parent, plan, cursor, state, future, control)?;
+            if body_falls_through(body) && *state != entry {
+                return Err(loop_state_error());
             }
-            check_sequence(program, body, parent, plan, cursor, state, future)?;
+            control.exit(*loop_id)?;
+            *state = entry;
         }
-        ExprKind::Return { value }
-        | ExprKind::Break { value, .. }
-        | ExprKind::Trap { value }
-        | ExprKind::Exit { code: value } => {
+        ExprKind::Loop { loop_id, body, .. } => {
+            prepare_loop_entry(current, parent, plan, state, future)?;
+            let entry = state.clone();
+            control.enter(*loop_id, entry.clone())?;
+            check_sequence(program, body, parent, plan, cursor, state, future, control)?;
+            if body_falls_through(body) && *state != entry {
+                return Err(loop_state_error());
+            }
+            control.exit(*loop_id)?;
+            *state = entry;
+        }
+        ExprKind::Break { loop_id, value } => {
             check_expr(
                 program,
                 value,
@@ -160,10 +169,26 @@ pub(in crate::ownership) fn check_control_expr(
                 cursor,
                 state,
                 future,
+                control,
+                UseContext::Ordinary,
+            )?;
+            control.check_transfer(*loop_id, state)?;
+        }
+        ExprKind::Continue { loop_id } => {
+            control.check_transfer(*loop_id, state)?;
+        }
+        ExprKind::Return { value } | ExprKind::Trap { value } | ExprKind::Exit { code: value } => {
+            check_expr(
+                program,
+                value,
+                plan,
+                cursor,
+                state,
+                future,
+                control,
                 UseContext::Ordinary,
             )?;
         }
-        ExprKind::Continue { .. } => {}
         _ => unreachable!("ownership expression category mismatch"),
     }
     Ok(())
@@ -178,6 +203,7 @@ fn check_conditional_branch(
     cursor: &mut ExprCursor,
     state: &mut State,
     outer_future: &mut FutureUses,
+    control: &mut ControlFlow,
 ) -> Result<()> {
     let branch_range = cursor.peek_range(plan)?;
     if diverges {
@@ -190,6 +216,7 @@ fn check_conditional_branch(
             cursor,
             state,
             &mut branch_future,
+            control,
             UseContext::Ordinary,
         )
     } else {
@@ -201,9 +228,103 @@ fn check_conditional_branch(
             cursor,
             state,
             outer_future,
+            control,
             UseContext::Ordinary,
         )
     }
+}
+
+fn prepare_loop_entry(
+    current: usize,
+    parent: ExprRange,
+    plan: &OwnershipPlan,
+    state: &mut State,
+    future: &FutureUses,
+) -> Result<()> {
+    expire_dead_loans(state, plan, Some(parent), future)?;
+    if plan.uses_reference_binding(current)? || !state.loans.is_empty() {
+        return Err(Error::msg(
+            "loop-carried lexical loans are unsupported in the initial ownership slice",
+        ));
+    }
+    Ok(())
+}
+
+fn body_falls_through(body: &[Expr]) -> bool {
+    body.last()
+        .is_none_or(|expression| expression.ty != Type::Never)
+}
+
+impl ControlFlow {
+    fn enter(&mut self, target: LoopId, entry: State) -> Result<()> {
+        if self.loops.iter().any(|frame| frame.target == target) {
+            return Err(Error::msg(
+                "ownership checker found a duplicate active lexical loop identity",
+            ));
+        }
+        self.loops
+            .try_reserve(1)
+            .map_err(|_| Error::host("ownership loop-context allocation failed"))?;
+        self.loops.push(LoopOwnership { target, entry });
+        Ok(())
+    }
+
+    fn check_transfer(&self, target: LoopId, state: &State) -> Result<()> {
+        let frame = self
+            .loops
+            .last()
+            .filter(|frame| frame.target == target)
+            .ok_or_else(invalid_loop_target)?;
+        if project_loop_transfer_state(state, &frame.entry) != frame.entry {
+            return Err(loop_state_error());
+        }
+        Ok(())
+    }
+
+    fn exit(&mut self, target: LoopId) -> Result<()> {
+        let frame = self.loops.pop().ok_or_else(invalid_loop_target)?;
+        if frame.target != target {
+            return Err(invalid_loop_target());
+        }
+        Ok(())
+    }
+}
+
+fn project_loop_transfer_state(state: &State, entry: &State) -> State {
+    let mut projected = state.clone();
+    projected
+        .initialized
+        .retain(|place, _| entry.initialized.contains_key(place));
+    for place in entry.initialized.keys() {
+        projected.initialized.entry(*place).or_insert(false);
+    }
+    projected
+        .loans
+        .retain(|place, _| entry.initialized.contains_key(place));
+    for loans in projected.loans.values_mut() {
+        loans.retain(|loan| loan.binding.is_none());
+    }
+    projected.loans.retain(|_, loans| !loans.is_empty());
+    projected
+        .reference_loans
+        .retain(|binding, _| entry.reference_loans.contains_key(binding));
+    projected
+        .pinned_references
+        .retain(|binding, _| entry.pinned_references.contains_key(binding));
+    projected
+        .consumed_ref_mut
+        .retain(|binding| entry.consumed_ref_mut.contains(binding));
+    projected
+}
+
+fn invalid_loop_target() -> Error {
+    Error::msg("ownership control transfer does not target the nearest active lexical loop")
+}
+
+fn loop_state_error() -> Error {
+    Error::msg(
+        "loop-carried ownership initialization state must be equal after an iteration or local exit",
+    )
 }
 
 fn consume_resource(arguments: &[Expr], plan: &OwnershipPlan, state: &mut State) -> Result<()> {

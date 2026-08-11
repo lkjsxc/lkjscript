@@ -98,7 +98,13 @@ queries only future uses in the current range and expires affected loans at sema
 joins. It does not materialize a suffix-use set per expression or recurse on user depth. Memory-plan
 production walks each immutable- or mutable-local initializer before publishing that local's place,
 matching lexical evaluation order and the resolver's dense `PlaceId` allocation even when a match is
-nested in a later scrutinee.
+nested in a later scrutinee. A private lexical control stack checks every break, continue, and
+ordinary reentry edge independently. It projects away places and scoped loans introduced inside the
+loop, which canonical transfer cleanup ends, while requiring the exact entry ownership and loan state
+for every outer place. Break and continue clean those control-local places before their selected
+edge; outer affine owners stay live. SSA verification applies the same exact dataflow law to cyclic
+blocks rather than rejecting move or borrow instructions merely because a block participates in a
+cycle.
 
 SSA bytecode lowering gathers local type, storage class, and producer kind in one per-function map.
 It also computes nonowned structural values once from block parameters and predecessor edges, then
@@ -180,9 +186,13 @@ node order irrelevant while validation requires one connected tree with each chi
 once. Draft-local binding and pattern-binding handles have a separate transaction-scoped identity
 domain. Implemented expression constructors are scalar and byte literals, selected canonical
 built-in operations, exact generic and non-generic calls, `if`, ordered sequence, immutable `let`,
-explicitly typed mutable locals, assignment, `while`, early `return`, copy-safe loads, byte-vector
-move/shared borrow, product construction/projection, enum construction/variant testing, and ordered
-exhaustive enum matches. Return lowering looks up the callable's canonical declared result once from
+explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`, nearest-lexical
+`break` and `continue`, early `return`, copy-safe loads, byte-vector move/shared borrow, product
+construction/projection, enum construction/variant testing, and ordered exhaustive enum matches.
+Loop lowering resolves one exact non-`never` `SemanticType`; break requires an exact non-divergent
+payload for the active loop (unit for while), while continue has no payload. Both transfers are
+`never`-typed and make later entries in the same ordered body unreachable. Return lowering looks up
+the callable's canonical declared result once from
 the root, rejects divergent or non-exact values, and constructs the existing `never`-typed HIR
 return; it creates no target identity or workspace cleanup rule. Generic drafts key exact type
 arguments by stable binder entity; importer inference and semantic edits converge at one exact
@@ -194,11 +204,22 @@ public payload bindings, establishes one lexical scope per arm, invokes the cano
 plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
 Mutable declaration activation occurs after its initializer and before its body. Resolved draft
 bindings retain exact HIR binding kind, so assignment admits only visible mutable locals. Before
-lowering a draft, one iterative callable scan indexes retained parameter/local places; every stable
-binding use then performs one map lookup instead of rescanning the expression root. One checked scan
-of retained HIR initializes private loop allocation; draft node positions never become loop or
-public identities. Generic patterns, unresolved binder forwarding, ownership/reference generic
-instantiation, and non-enum source-free pattern spaces remain explicit unsupported edits; no
+lowering a draft, one combined iterative walk over the immutable target root derives divergent-
+replacement admissibility and the nearest published loop at the private `NodeAddress`; a while
+condition remains outside its own context. The action-ordered flat-draft walk then enters/exits new
+loops and whiles, resolves exact result types, allocates private HIR `LoopId` values, and binds each
+break/continue to the active top context before canonical HIR construction. These facts live only for
+one staged draft and are discarded on success or failure. Nested draft loops shadow the seed and pop
+back to it. No loop ID, preorder, target edge, label, or coordinate enters the public snapshot,
+projection, query continuation, or semantic diff. Before lowering a draft, one iterative callable
+scan also indexes retained parameter/local places; every stable binding use then performs one map
+lookup instead of rescanning the expression root. A separate checked scan of retained HIR initializes
+private loop allocation; draft node positions never become loop or public identities. Complete-HIR
+consistency validation independently walks each callable with an explicit control stack and checks
+per-callable loop-ID uniqueness, nearest active transfer targets, exact break payload types, and
+closed control context before publication or compilation. Generic patterns, unresolved binder
+forwarding, ownership/reference generic instantiation, and non-enum source-free pattern spaces
+remain explicit unsupported edits; no
 executable fallback exists. After all disjoint structural
 edits and final-state dependency validation, one fallible iterative compaction pass performs callable
 and nominal removals
@@ -262,9 +283,11 @@ HIR validation, memory planning, and SSA provide independent defense against a s
 leaf.
 
 Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and expected- plus control-context-filtered legal constructors, including early
-return and selected canonical operation identities. Definition, structured entity/function/node type, exact
-generic signature/call instantiation, hole context with exact lexical/arm visibility, unresolved
+calls, diagnostics, and expected- plus control-context-filtered legal constructors, including typed
+loop with its exact result type, break with the nearest loop's exact payload type, continue, early
+return, and selected canonical operation identities. Definition, structured entity/function/node
+type, exact generic signature/call instantiation, hole context with exact lexical/arm visibility,
+unresolved
 value-reference state/candidates, node semantics, and structured match inspection are direct identity
 queries. The unresolved state returns revision, stable node, fixed copy-load intent, requested name,
 expected type, owner, context, and visible stable entities. Its candidate query scans that visible set
@@ -424,8 +447,9 @@ capability checking; they are not a replacement service sandbox.
 authority. Missing entry/body, real typed-hole nodes, and first-class unresolved copy-load value
 references; non-generic product and enum creation;
 generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
-sequence, assignment, `while`, and early `return`; selected byte-vector move/borrow and canonical
-operations; aggregate construction/observation; exhaustive non-generic enum payload matches with
+sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, and
+early `return`; selected byte-vector move/borrow and canonical operations; aggregate
+construction/observation; exhaustive non-generic enum payload matches with
 stable arm-local bindings; exact calls to imported or source-free generic functions with stable
 binders, structured types, shared resolution, and derived witnesses; atomic batch edits;
 tombstone-stable identities; structured stable nominal, generic, and match views; deterministic
@@ -433,9 +457,10 @@ queries/projections/diffs; one canonical complete-HIR match derivation; and dire
 implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
 ownership, early-return, match, generic-declaration, generic-call, and direct-versus-resolved copy-
 load convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
-20,000-level nested-expression, local, semantic-match, published-type, and declaration-type
-small-stack release execution protect the selected vertical. A retained five-sample release harness
-measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match, exact-generic mixed,
+20,000-level nested-expression, typed-loop-control, local, semantic-match, published-type, and
+declaration-type small-stack release execution protect the selected vertical. A retained five-sample
+release harness measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match,
+exact-generic mixed,
 lifecycle, and incomplete-recovery edit/query/projection/compile loops, including three scale points
 through 538 representative nodes and one 2,074-node ignored stress point. Same-binary deterministic
 work and timing support sharing unchanged semantic/index state only for exact metadata refinement and
@@ -443,9 +468,9 @@ retaining full recomputation everywhere else.
 Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation, one
-concrete public semantic movement operation only when ownership/order semantics are defined,
-source-free `break`/`continue`, generic patterns, Boolean/integer/product pattern construction,
-generic ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
+concrete public semantic movement operation only when ownership/order semantics are defined, generic
+patterns, Boolean/integer/product pattern construction, generic ownership/reference instantiation,
+unresolved moves/borrows/calls/type names/members/patterns/
 imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,

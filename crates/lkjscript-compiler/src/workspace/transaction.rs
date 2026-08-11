@@ -666,7 +666,7 @@ fn stage(
                         &expected,
                         Origin::Semantic,
                         &visible,
-                        address.root,
+                        address,
                         &mut lowering,
                         deleted_entities,
                     )
@@ -791,7 +791,7 @@ fn stage(
                         &record.expected_internal,
                         Origin::Semantic,
                         &resolution_visible,
-                        record.address.root,
+                        record.address,
                         &mut lowering,
                         deleted_entities,
                     )
@@ -839,7 +839,7 @@ fn stage(
                         &record.expected_internal,
                         Origin::Semantic,
                         &record.state.visible_entities,
-                        record.address.root,
+                        record.address,
                         &mut lowering,
                         deleted_entities,
                     )
@@ -3943,6 +3943,8 @@ struct PreparedMatchArm {
 enum DraftLoweringAction {
     BeginMatch(usize),
     BeginArm { node: usize, arm: usize },
+    EnterLoop(usize),
+    ExitLoop(usize),
     Lower(usize),
 }
 
@@ -4187,12 +4189,17 @@ fn lower_draft(
     expected: &Type,
     origin: Origin,
     visible: &[EntityId],
-    root: EntityAddress,
+    address: NodeAddress,
     lowering: &mut LoweringState,
     deleting_entities: &HashSet<EntityId>,
 ) -> Result<LoweredDraft, WorkspaceError> {
     validate_draft_shape(draft)?;
     let order = draft_lowering_actions(draft)?;
+    let root = address.root;
+    let published_control = expression_root(&snapshot.program, root)?
+        .try_control_context(address.preorder)
+        .map_err(WorkspaceError::from_core)?
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("draft target address")))?;
     let mut definition_events = draft_definition_events(draft)?;
     validate_draft_binding_scopes(draft)?;
     let mut visible_set = HashSet::new();
@@ -4225,6 +4232,27 @@ fn lower_draft(
         .map_err(|_| WorkspaceError::Host(Arc::from("draft local entity allocation failed")))?;
     let mut next_slot = root_local_count(program, root)?;
     let mut prepared_matches = HashMap::new();
+    let loop_count = draft
+        .nodes
+        .iter()
+        .filter(|node| matches!(node, DraftNode::While { .. } | DraftNode::Loop { .. }))
+        .count();
+    let mut draft_loops = HashMap::new();
+    draft_loops
+        .try_reserve(loop_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft loop context allocation failed")))?;
+    let mut active_loops = Vec::new();
+    active_loops
+        .try_reserve(
+            loop_count.checked_add(1).ok_or_else(|| {
+                WorkspaceError::Host(Arc::from("draft loop context count overflow"))
+            })?,
+        )
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft loop context allocation failed")))?;
+    if let Some(context) = published_control.enclosing_loop {
+        active_loops.push(context);
+    }
+    let published_loop_depth = active_loops.len();
 
     for action in order {
         let node_index = match action {
@@ -4330,6 +4358,59 @@ fn lower_draft(
                     )));
                 }
                 prepared.arms.push(PreparedMatchArm { pattern, bindings });
+                continue;
+            }
+            DraftLoweringAction::EnterLoop(node_index) => {
+                let node = draft.nodes.get(node_index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft loop identity is stale"))
+                })?;
+                let (result_type, is_while) = match node {
+                    DraftNode::While { .. } => (Type::Unit, true),
+                    DraftNode::Loop { result_type, .. } => (
+                        super::types::resolve(
+                            snapshot,
+                            program,
+                            result_type,
+                            Some(callable),
+                            false,
+                            false,
+                            "loop result type",
+                        )?,
+                        false,
+                    ),
+                    _ => {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "draft loop context targets a non-loop node",
+                        )))
+                    }
+                };
+                let context = crate::hir::LexicalLoopContext {
+                    loop_id: lowering.loop_id()?,
+                    result_type,
+                    is_while,
+                };
+                if draft_loops.insert(node_index, context.clone()).is_some() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft loop context was entered more than once",
+                    )));
+                }
+                active_loops.push(context);
+                continue;
+            }
+            DraftLoweringAction::ExitLoop(node_index) => {
+                let expected = draft_loops.get(&node_index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from(
+                        "draft loop context exited before entry",
+                    ))
+                })?;
+                let actual = active_loops.pop().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft loop context is missing"))
+                })?;
+                if actual.loop_id != expected.loop_id || active_loops.len() < published_loop_depth {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "draft loop contexts closed out of lexical order",
+                    )));
+                }
                 continue;
             }
             DraftLoweringAction::Lower(node_index) => node_index,
@@ -4797,6 +4878,14 @@ fn lower_draft(
                 }
             }
             DraftNode::While { condition, body } => {
+                let context = draft_loops.remove(&node_index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft while context is missing"))
+                })?;
+                if !context.is_while || context.result_type != Type::Unit {
+                    return Err(WorkspaceError::Validation(Arc::from(
+                        "draft while context has stale type facts",
+                    )));
+                }
                 let condition = take_draft_child(&mut completed, *condition)?;
                 require_workspace_type(snapshot, program, callable, &condition.ty, &Type::Bool)?;
                 let mut values = Vec::new();
@@ -4821,8 +4910,45 @@ fn lower_draft(
                     effects,
                     origin,
                     kind: ExprKind::While {
-                        loop_id: lowering.loop_id()?,
+                        loop_id: context.loop_id,
                         condition: Box::new(condition),
+                        body: values,
+                    },
+                }
+            }
+            DraftNode::Loop { body, .. } => {
+                let context = draft_loops.remove(&node_index).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("draft typed-loop context is missing"))
+                })?;
+                if context.is_while {
+                    return Err(WorkspaceError::Validation(Arc::from(
+                        "draft typed-loop context has stale kind facts",
+                    )));
+                }
+                let mut values = Vec::new();
+                values.try_reserve(body.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("typed-loop body allocation failed"))
+                })?;
+                let mut effects = EffectSet::MAY_DIVERGE;
+                let mut previous = Type::Unit;
+                for expression in body {
+                    if previous == Type::Never {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "typed-loop body contains an expression after a divergent expression",
+                        )));
+                    }
+                    let value = take_draft_child(&mut completed, *expression)?;
+                    previous = value.ty.clone();
+                    effects = effects.union(value.effects);
+                    values.push(value);
+                }
+                Expr {
+                    ty: context.result_type.clone(),
+                    effects,
+                    origin,
+                    kind: ExprKind::Loop {
+                        loop_id: context.loop_id,
+                        result_type: context.result_type,
                         body: values,
                     },
                 }
@@ -4848,6 +4974,56 @@ fn lower_draft(
                     origin,
                     kind: ExprKind::Return {
                         value: Box::new(value),
+                    },
+                }
+            }
+            DraftNode::Break { value } => {
+                let target = active_loops.last().cloned().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from(
+                        "break is only valid inside a lexical loop",
+                    ))
+                })?;
+                let value = take_draft_child(&mut completed, *value)?;
+                if value.ty == Type::Never {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "break value is already divergent",
+                    )));
+                }
+                require_workspace_type(
+                    snapshot,
+                    program,
+                    callable,
+                    &value.ty,
+                    &target.result_type,
+                )?;
+                if target.is_while && target.result_type != Type::Unit {
+                    return Err(WorkspaceError::Validation(Arc::from(
+                        "draft while break context is not unit-typed",
+                    )));
+                }
+                let effects = value.effects.union(EffectSet::MAY_DIVERGE);
+                Expr {
+                    ty: Type::Never,
+                    effects,
+                    origin,
+                    kind: ExprKind::Break {
+                        loop_id: target.loop_id,
+                        value: Box::new(value),
+                    },
+                }
+            }
+            DraftNode::Continue => {
+                let target = active_loops.last().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from(
+                        "continue is only valid inside a lexical loop",
+                    ))
+                })?;
+                Expr {
+                    ty: Type::Never,
+                    effects: EffectSet::MAY_DIVERGE,
+                    origin,
+                    kind: ExprKind::Continue {
+                        loop_id: target.loop_id,
                     },
                 }
             }
@@ -4968,9 +5144,14 @@ fn lower_draft(
             }
         }
     }
-    if !definition_events.is_empty() || !locals.is_empty() || !prepared_matches.is_empty() {
+    if !definition_events.is_empty()
+        || !locals.is_empty()
+        || !prepared_matches.is_empty()
+        || !draft_loops.is_empty()
+        || active_loops.len() != published_loop_depth
+    {
         return Err(WorkspaceError::InvalidDraft(Arc::from(
-            "draft binding scope did not close deterministically",
+            "draft lexical scope did not close deterministically",
         )));
     }
     let root_expression = draft
@@ -5616,6 +5797,8 @@ fn draft_lowering_actions(
         Visit(DraftNodeId),
         BeginMatch(usize),
         BeginArm { node: usize, arm: usize },
+        EnterLoop(usize),
+        ExitLoop(usize),
         Finish(usize),
     }
 
@@ -5624,19 +5807,20 @@ fn draft_lowering_actions(
         .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
     work.push(Work::Visit(draft.root));
     let mut order = Vec::new();
-    let action_capacity = draft
-        .nodes
-        .iter()
-        .try_fold(draft.nodes.len(), |count, node| {
-            if let DraftNode::Match { arms, .. } = node {
-                count
+    let action_capacity =
+        draft
+            .nodes
+            .iter()
+            .try_fold(draft.nodes.len(), |count, node| match node {
+                DraftNode::Match { arms, .. } => count
                     .checked_add(arms.len())
                     .and_then(|value| value.checked_add(1))
-                    .ok_or_else(|| WorkspaceError::Host(Arc::from("draft action count overflow")))
-            } else {
-                Ok(count)
-            }
-        })?;
+                    .ok_or_else(|| WorkspaceError::Host(Arc::from("draft action count overflow"))),
+                DraftNode::While { .. } | DraftNode::Loop { .. } => count
+                    .checked_add(2)
+                    .ok_or_else(|| WorkspaceError::Host(Arc::from("draft action count overflow"))),
+                _ => Ok(count),
+            })?;
     order
         .try_reserve(action_capacity)
         .map_err(|_| WorkspaceError::Host(Arc::from("draft order allocation failed")))?;
@@ -5646,6 +5830,8 @@ fn draft_lowering_actions(
             Work::BeginArm { node, arm } => {
                 order.push(DraftLoweringAction::BeginArm { node, arm });
             }
+            Work::EnterLoop(index) => order.push(DraftLoweringAction::EnterLoop(index)),
+            Work::ExitLoop(index) => order.push(DraftLoweringAction::ExitLoop(index)),
             Work::Finish(index) => order.push(DraftLoweringAction::Lower(index)),
             Work::Visit(id) => {
                 #[cfg(test)]
@@ -5676,6 +5862,33 @@ fn draft_lowering_actions(
                     }
                     work.push(Work::BeginMatch(index));
                     work.push(Work::Visit(*scrutinee));
+                    continue;
+                }
+                if let DraftNode::While { condition, body } = node {
+                    let additional = body.len().checked_add(4).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("draft while order work overflow"))
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("draft order work allocation failed"))
+                    })?;
+                    work.push(Work::Finish(index));
+                    work.push(Work::ExitLoop(index));
+                    work.extend(body.iter().rev().copied().map(Work::Visit));
+                    work.push(Work::EnterLoop(index));
+                    work.push(Work::Visit(*condition));
+                    continue;
+                }
+                if let DraftNode::Loop { body, .. } = node {
+                    let additional = body.len().checked_add(3).ok_or_else(|| {
+                        WorkspaceError::Host(Arc::from("draft loop order work overflow"))
+                    })?;
+                    work.try_reserve(additional).map_err(|_| {
+                        WorkspaceError::Host(Arc::from("draft order work allocation failed"))
+                    })?;
+                    work.push(Work::Finish(index));
+                    work.push(Work::ExitLoop(index));
+                    work.extend(body.iter().rev().copied().map(Work::Visit));
+                    work.push(Work::EnterLoop(index));
                     continue;
                 }
                 let child_count = node

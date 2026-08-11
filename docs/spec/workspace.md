@@ -74,15 +74,23 @@ type models do not recurse on native stack or impose a type-depth quota.
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
 semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
 operations, exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
-`let` bindings, explicitly typed mutable locals, assignment, `while`, early `return`, copy-safe
-loads, byte-vector moves and shared borrows, product construction and field projection, enum
-construction and enum-variant testing, and ordered exhaustive matches over non-generic enum
-scrutinees. A sequence evaluates its children in listed order; an empty sequence yields `unit`, and
-a non-empty sequence yields its final child's value. `while` requires a Boolean condition, evaluates
-its body children in listed order, yields `unit`, and carries the canonical divergence effect. A
-return has one non-divergent value exactly equal to the owning callable's declared result type,
-yields `never`, preserves the value's effects, and exits through canonical ownership cleanup. An
-explicitly moved affine payload transfers to the caller rather than being dropped by the callee. It
+`let` bindings, explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`,
+`break`, `continue`, early `return`, copy-safe loads, byte-vector moves and shared borrows, product
+construction and field projection, enum construction and enum-variant testing, and ordered exhaustive
+matches over non-generic enum scrutinees. A sequence evaluates its children in listed order; an empty
+sequence yields `unit`, and a non-empty sequence yields its final child's value. `while` requires a
+Boolean condition, evaluates its body children in listed order, yields `unit`, and carries the
+canonical divergence effect. A typed loop carries one source-independent `SemanticType`, resolves it
+through the canonical workspace type boundary, rejects `never` at any depth, and has that exact
+result type. `break` carries one non-divergent value exactly equal to the nearest lexical loop result;
+a while therefore requires `unit`. `continue` carries no value. Both transfers have type `never`, and
+an ordered control body rejects any later expression. A draft transfer may target a surrounding loop
+already present in the immutable base snapshot; a nested draft loop or while shadows it and leaving
+the nested body restores it. Private HIR loop identities are allocated during staging and are never
+public workspace identities, references, projection fields, or diff edges. A return has one
+non-divergent value exactly equal to the owning callable's declared result type, yields `never`,
+preserves the value's effects, and exits through canonical ownership cleanup. An explicitly moved
+affine payload transfers to the caller rather than being dropped by the callee. It
 has no target identity: the draft's callable root supplies its lexical target. A generic call supplies
 one structured type argument for every stable parameter entity; argument list order is
 non-semantic, while the published instantiation follows declaration order.
@@ -91,24 +99,28 @@ bounds and derives auto or explicit implementation witnesses. Source inference i
 convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
 Pattern drafts cover wildcards, enum variants with exact stable field identities, and named payload
 bindings. Published lexical and payload bindings use stable entity identities; transaction-local
-binding handles are a
-separate checked identity domain and cannot escape the draft. Each arm has its own lexical binding
-scope. Mutable initializers are outside the declared binding's scope; the body is inside it. Mutable
-storage uses the canonical source/HIR restrictions, assignment requires one visible mutable-local
-kind and an exact non-`never` value type, and `while` uses a private checked loop identity. Affine
+binding handles are a separate checked identity domain and cannot escape the draft. Each arm has its
+own lexical binding scope. Mutable initializers are outside the declared binding's scope; the body is
+inside it. Mutable storage uses the canonical source/HIR restrictions, and assignment requires one
+visible mutable local kind and an exact non-`never` value type. One iterative transaction-local control walk seeds the
+nearest loop from the target's immutable HIR ancestry, allocates private identities for draft loops
+and whiles, and resolves every transfer in one pass. Its facts are discarded after staging. Affine
 storage can be reinitialized only after its prior value has been moved or canonically consumed; live
-affine overwrite is rejected and both successful and failed paths use canonical cleanup. Compiler-
-hidden match scrutinee/projection locals are never workspace entities or legal constructors. The
-canonical usefulness/exhaustiveness checker and complete staged HIR ownership checker remain
+affine overwrite is rejected and both successful and failed paths use canonical cleanup. Break and
+continue clean iteration-local owners before their selected exit or backedge; an outer owner remains
+live, and canonical HIR/SSA ownership validation rejects a changed loop-carried ownership or lexical
+loan state. Compiler-hidden match scrutinee/projection locals are never workspace entities or legal
+constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
+checker remain
 authoritative for match validity, move/borrow legality, and cleanup. Generic pattern construction,
 forwarding an unresolved caller type parameter, ownership/reference-bearing generic instantiation,
 and non-enum source-free pattern spaces are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations; they also rename supported bindings, replace expressions, introduce/refine/fill typed
-holes, and introduce or resolve unresolved copy-load value references. Callable deletion cascades through the declaration's type parameters, value
-parameters, locals, payload bindings, body nodes, holes, hidden match storage, match plans, and
-compiler layout participation.
+holes, and introduce or resolve unresolved copy-load value references. Callable deletion cascades
+through the declaration's type parameters, value parameters, locals, payload bindings, body nodes,
+holes, hidden match storage, match plans, and compiler layout participation.
 Product deletion owns its fields and narrowly owns explicit trait implementations whose target is
 that product. Enum deletion owns its type parameters, variants, and their fields. Direct member,
 trait, or implementation deletion and fixed compiler-context deletion remain unsupported.
@@ -150,24 +162,29 @@ expression hole, and unresolved value reference. The unresolved diagnostic has s
 `workspace.unresolved-value-reference` and is attached to the unresolved node. Every blocker is
 revision-labelled through the snapshot or `IncompleteSnapshotError`. Incomplete compilation returns
 before complete-HIR derivation, memory planning, SSA, bytecode lowering, or execution; independent
-semantic-program validation also rejects a surviving unresolved leaf. A complete revision derives one ephemeral
-source-optional HIR, validates it, and enters the existing compiler without rendering, hashing, or
+semantic-program validation also rejects a surviving unresolved leaf. A complete revision derives one
+ephemeral source-optional HIR, validates it, and enters the existing compiler without rendering,
+hashing, or
 parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
-and source-free scalar, product, enum, lexical-local, mutable counted-loop, borrow-then-move,
-early-return ownership-control, and exhaustive enum-payload match fixtures have equal normalized
-entities/types, containment, references, dependencies, node kinds/types/effects, canonical match
-shape, selected memory-obligation kinds, the main bytecode stream, VM results or traps, and cleanup
-behavior. Imported match plans carry real source origin; source-free plans carry semantic origin;
-ordinary plans reject builtin or stale provenance.
+and source-free scalar, product, enum, lexical-local, mutable counted-loop, typed-loop/break,
+nested-continue, affine break/continue cleanup, borrow-then-move, early-return ownership-control, and
+exhaustive enum-payload match fixtures have equal normalized entities/types, containment, references,
+dependencies, node kinds/types/effects, canonical match shape, selected memory-obligation kinds, the
+main bytecode stream, evaluator/VM results or traps, and cleanup behavior. Imported match plans carry
+real source origin; source-free plans carry semantic origin; ordinary plans reject builtin or stale
+provenance.
 
 Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
 context, unresolved value-reference state and copy-load candidates, exact lexical and match-arm
-bindings, expected-type-filtered legal constructors (including
-early return and selected canonical operation identities), structured function signatures and call
-instantiations, node semantics, and structured match inspection. Return is advertised only where a
-`never` result is admissible; its payload expectation is the result in the owning callable's
-signature view, not the hole's local expected type. Node semantics report stable node identity and kind,
+bindings, expected-type-filtered legal constructors (including typed loop, exact break payload type,
+continue, early return, and selected canonical operation identities), structured function signatures
+and call instantiations, node semantics, and structured match inspection. Loop is advertised with the
+hole's exact representable non-`never` type. Break and continue are advertised only where a nearest
+lexical loop exists and divergent replacement is admissible; break returns the exact stable semantic
+payload type without exposing the private loop identity. Return is advertised only where a `never`
+result is admissible; its payload expectation is the result in the owning callable's signature view,
+not the hole's local expected type. Node semantics report stable node identity and kind,
 actual/expected type, canonical built-in operation identity when present, and named effect bits.
 Generic signature views report stable binder entities, bounds with stable or builtin trait identity,
 value
@@ -177,13 +194,13 @@ stable match/scrutinee/body nodes, result type, exhaustiveness, ordered arms, an
 pattern nodes/fields with stable variant/field/payload-binding entities. Its flat stack-safe
 pattern graph uses a distinct opaque response-local label solely for links within one arm; no raw
 compiler-dense pattern/arm ID is exposed or accepted as identity. Nominal and generic type views
-preserve stable semantic identity. Move and borrow candidates are labelled as requiring
-canonical ownership validation rather than
-claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
+preserve stable semantic identity. Move and borrow candidates are labelled as requiring canonical
+ownership validation rather than claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
 storage are not advertised. Hole scope is recomputed after later declaration creation. Continuations
 bind namespace, revision, and query. Public containment edges are emitted in semantic child order,
-including sequence and loop evaluation order. A fallible iterative projection renders state, blockers, selected
-entity/body/type/reference/hole/unresolved-reference/match sections, declared entity types, local and
+including sequence and loop evaluation order. A fallible iterative projection renders state,
+blockers, selected entity/body/type/reference/hole/unresolved-reference/match sections, declared
+entity types, local and
 aggregate structure, operation identities, named node effects, ordered arms, patterns, explicit
 holes, and explicit unresolved nodes without source attachments. The selected unresolved slice shows
 its requested name, expected type, owner, context, and visible-scope count but does not dump
@@ -195,8 +212,8 @@ and development semantic-digest surrogate are deleted. There is no replacement w
 
 Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
 conflicts, parser recovery nodes, direct nominal-member mutation, public semantic movement,
-source-free `break`/`continue`, generic-pattern construction,
-Boolean/integer/product source-free patterns, source rendering, persistence, collaboration, and
+generic-pattern construction, Boolean/integer/product source-free patterns, source rendering,
+persistence, collaboration, and
 incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Current payload-match ownership

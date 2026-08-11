@@ -895,10 +895,20 @@ fn producer_drop_flow(
                 }),
             }
         }
-        ExprKind::While { .. } | ExprKind::Loop { .. } => {
+        ExprKind::While { .. } => {
             let after = producer_drop_children(expression, binding, flow)?;
             if after == flow {
                 Ok(flow)
+            } else {
+                Err(open_drop_error())
+            }
+        }
+        ExprKind::Loop { loop_id, body, .. } => {
+            let after = producer_drop_children(expression, binding, flow)?;
+            if after == flow {
+                Ok(flow)
+            } else if !crate::hir::loop_body_has_reentry_path(body, *loop_id)? {
+                Ok(after)
             } else {
                 Err(open_drop_error())
             }

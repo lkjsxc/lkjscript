@@ -11,7 +11,6 @@ pub(in crate::ownership) struct ExprRange {
 #[derive(Clone, Copy, Debug)]
 struct ExprFacts {
     range: ExprRange,
-    contains_ownership_action: bool,
     uses_reference_binding: bool,
 }
 
@@ -91,16 +90,11 @@ impl OwnershipPlan {
                     let uses_reference_binding = direct_use
                         .and_then(|binding| program.binding(binding))
                         .is_some_and(|binding| is_ref(&binding.ty) || is_ref_mut(&binding.ty));
-                    let contains_ownership_action = matches!(
-                        expression.kind,
-                        ExprKind::Move { .. } | ExprKind::Borrow { .. }
-                    );
                     self.facts
                         .try_reserve(1)
                         .map_err(|_| Error::host("ownership expression-fact allocation failed"))?;
                     self.facts.push(ExprFacts {
                         range: ExprRange { start: id, end },
-                        contains_ownership_action,
                         uses_reference_binding,
                     });
                     self.record_expression_places(program, expression)?;
@@ -138,14 +132,12 @@ impl OwnershipPlan {
                         .get_mut(expression)
                         .ok_or_else(|| Error::msg("ownership liveness lost expression facts"))?;
                     facts.range.end = end;
-                    let contains_ownership_action = facts.contains_ownership_action;
                     let uses_reference_binding = facts.uses_reference_binding;
                     if let Some(parent) = parent {
                         let parent = self
                             .facts
                             .get_mut(parent)
                             .ok_or_else(|| Error::msg("ownership liveness lost parent facts"))?;
-                        parent.contains_ownership_action |= contains_ownership_action;
                         parent.uses_reference_binding |= uses_reference_binding;
                     }
                 }
@@ -213,16 +205,6 @@ impl OwnershipPlan {
         self.facts
             .get(expression)
             .map(|facts| facts.range)
-            .ok_or_else(|| Error::msg("ownership liveness expression is out of range"))
-    }
-
-    pub(in crate::ownership) fn contains_ownership_action(
-        &self,
-        expression: usize,
-    ) -> Result<bool> {
-        self.facts
-            .get(expression)
-            .map(|facts| facts.contains_ownership_action)
             .ok_or_else(|| Error::msg("ownership liveness expression is out of range"))
     }
 

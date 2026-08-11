@@ -6,7 +6,6 @@ pub(crate) struct ControlFlowGraph {
     successors: Vec<Vec<BlockId>>,
     predecessors: Vec<Vec<BlockId>>,
     reachable: Vec<bool>,
-    cyclic: Vec<bool>,
     dominators: Dominators,
 }
 
@@ -67,7 +66,6 @@ impl ControlFlowGraph {
         let reachable = reachable_blocks(function, &successors)?;
         let (components, component_sizes) =
             strongly_connected_components(&successors, &predecessors)?;
-        let cyclic = cyclic_blocks(&successors, &components, &component_sizes)?;
         let roots = dominance_roots(
             function,
             &successors,
@@ -80,7 +78,6 @@ impl ControlFlowGraph {
             successors,
             predecessors,
             reachable,
-            cyclic,
             dominators,
         })
     }
@@ -107,14 +104,6 @@ impl ControlFlowGraph {
             .and_then(|index| self.reachable.get(index))
             .copied()
             .ok_or_else(|| IrError::new("SSA reachability metadata is inconsistent"))
-    }
-
-    pub(crate) fn is_cyclic(&self, block: BlockId) -> crate::Result<bool> {
-        block
-            .index()
-            .and_then(|index| self.cyclic.get(index))
-            .copied()
-            .ok_or_else(|| IrError::new("SSA cycle metadata is inconsistent"))
     }
 
     pub(crate) fn dominators(&self) -> &Dominators {
@@ -536,25 +525,6 @@ fn strongly_connected_components(
         component_sizes.push(size);
     }
     Ok((components, component_sizes))
-}
-
-fn cyclic_blocks(
-    successors: &[Vec<BlockId>],
-    components: &[usize],
-    component_sizes: &[usize],
-) -> crate::Result<Vec<bool>> {
-    let mut cyclic = bool_vector(successors.len(), false, "SSA cycle index allocation failed")?;
-    for (block, edges) in successors.iter().enumerate() {
-        let component = components
-            .get(block)
-            .copied()
-            .ok_or_else(|| IrError::new("SSA cycle component metadata is inconsistent"))?;
-        cyclic[block] = component_sizes.get(component).copied().unwrap_or(0) > 1
-            || edges
-                .iter()
-                .any(|successor| successor.index() == Some(block));
-    }
-    Ok(cyclic)
 }
 
 fn dominance_roots(

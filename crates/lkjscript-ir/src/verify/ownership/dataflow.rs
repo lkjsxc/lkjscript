@@ -11,17 +11,6 @@ pub(crate) fn verify_ownership_facts(
 ) -> crate::Result<()> {
     let entry = collect_ownership_provenance(function)?;
     for block in &function.blocks {
-        let has_loop_action = block.instructions.iter().any(|instruction| {
-            matches!(
-                instruction.kind,
-                InstructionKind::Move { .. } | InstructionKind::Borrow { .. }
-            )
-        });
-        if has_loop_action && cfg.is_cyclic(block.id)? {
-            return fail(
-                "SSA loop ownership state must be invariant; Move and Borrow are unavailable in loop cycles",
-            );
-        }
         if cfg.is_reachable(block.id)? {
             continue;
         }

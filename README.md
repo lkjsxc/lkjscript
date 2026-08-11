@@ -39,8 +39,9 @@ publication assigns stable type-parameter entities. Drafts construct exact gener
 structured `SemanticType` arguments and compiler-derived trait witnesses; source inference and
 semantic edits share the same exact instantiation validator.
 Implemented drafts also include immutable and mutable lexical locals, ordered sequence, assignment,
-`while`, early `return`, selected canonical built-in operations, byte-vector move/borrow,
-product/enum construction and observation, and source-free exhaustive enum payload matches. Match
+`while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`, selected
+canonical built-in operations, byte-vector move/borrow, product/enum construction and observation,
+and source-free exhaustive enum payload matches. Match
 arms use flat `PatternDraft` trees; named payload bindings receive stable workspace entities while
 compiler-only scrutinee and projection storage remains hidden. Transactions can delete callables and
 whole user product/enum declarations atomically; owned members and target implementations cascade,

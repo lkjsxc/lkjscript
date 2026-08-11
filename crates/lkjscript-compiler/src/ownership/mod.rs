@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use lkjscript_core::{Error, Result};
 
 use crate::hir::{
-    BindingId, BindingKind, BorrowKind, Expr, ExprKind, Function, LoanId, Operation, PlaceId,
-    Program,
+    BindingId, BindingKind, BorrowKind, Expr, ExprKind, Function, LoanId, LoopId, Operation,
+    PlaceId, Program,
 };
 use crate::types::Type;
 
@@ -17,6 +17,16 @@ struct State {
     reference_loans: BTreeMap<BindingId, (PlaceId, LoanId)>,
     pinned_references: HashMap<BindingId, u64>,
     consumed_ref_mut: BTreeSet<BindingId>,
+}
+
+#[derive(Default)]
+struct ControlFlow {
+    loops: Vec<LoopOwnership>,
+}
+
+struct LoopOwnership {
+    target: LoopId,
+    entry: State,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,6 +121,7 @@ fn check_body(
 ) -> Result<()> {
     let mut cursor = ExprCursor::default();
     let mut future = FutureUses::default();
+    let mut control = ControlFlow::default();
     check_expr(
         program,
         body,
@@ -118,8 +129,14 @@ fn check_body(
         &mut cursor,
         &mut state,
         &mut future,
+        &mut control,
         UseContext::Ordinary,
     )?;
+    if !control.loops.is_empty() {
+        return Err(Error::msg(
+            "ownership checker ended with an open lexical loop context",
+        ));
+    }
     cursor.finish(plan)
 }
 

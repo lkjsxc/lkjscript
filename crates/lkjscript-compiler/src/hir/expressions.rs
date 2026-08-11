@@ -55,7 +55,7 @@ fn expression_children(expression: &Expr) -> Vec<&Expr> {
     children
 }
 
-fn try_expression_children<'a>(
+pub(crate) fn try_expression_children<'a>(
     expression: &'a Expr,
     subject: &str,
 ) -> lkjscript_core::Result<Vec<&'a Expr>> {
@@ -435,6 +435,37 @@ fn divergent_child_makes_parent_divergent(kind: &ExprKind, ordinal: usize) -> bo
     }
 }
 
+pub(crate) fn loop_body_has_reentry_path(
+    body: &[Expr],
+    loop_id: LoopId,
+) -> lkjscript_core::Result<bool> {
+    if body
+        .last()
+        .is_none_or(|expression| expression.ty != Type::Never)
+    {
+        return Ok(true);
+    }
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(body.len())
+        .map_err(|_| lkjscript_core::Error::host("HIR loop-control work allocation failed"))?;
+    pending.extend(body.iter().rev());
+    while let Some(expression) = pending.pop() {
+        if matches!(
+            &expression.kind,
+            ExprKind::Continue { loop_id: target } if *target == loop_id
+        ) {
+            return Ok(true);
+        }
+        let children = try_expression_children(expression, "HIR loop control")?;
+        pending
+            .try_reserve(children.len())
+            .map_err(|_| lkjscript_core::Error::host("HIR loop-control work allocation failed"))?;
+        pending.extend(children.into_iter().rev());
+    }
+    Ok(false)
+}
+
 fn validate_reconstructed_control(kind: &ExprKind) -> lkjscript_core::Result<()> {
     let mut ordinal = Some(0_usize);
     let mut invalid = false;
@@ -455,6 +486,19 @@ fn validate_reconstructed_control(kind: &ExprKind) -> lkjscript_core::Result<()>
         ));
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LexicalLoopContext {
+    pub(crate) loop_id: LoopId,
+    pub(crate) result_type: Type,
+    pub(crate) is_while: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExpressionControlContext {
+    pub(crate) divergent_replacement_is_admissible: bool,
+    pub(crate) enclosing_loop: Option<LexicalLoopContext>,
 }
 
 impl Expr {
@@ -482,73 +526,160 @@ impl Expr {
         Ok(None)
     }
 
-    pub(crate) fn try_divergent_replacement_is_admissible(
+    pub(crate) fn try_control_context(
         &self,
         target: u64,
-    ) -> lkjscript_core::Result<Option<bool>> {
+    ) -> lkjscript_core::Result<Option<ExpressionControlContext>> {
         enum Work<'a> {
-            Enter(&'a Expr, Option<usize>),
-            Exit,
+            EnterExpression(&'a Expr, Option<usize>),
+            ExitExpression,
+            EnterLoop(LexicalLoopContext),
+            ExitLoop(LoopId),
         }
 
         let mut work = Vec::new();
         work.try_reserve(1).map_err(|_| {
             lkjscript_core::Error::host("HIR control-context work allocation failed")
         })?;
-        work.push(Work::Enter(self, None));
-        let mut active: Vec<(&Expr, Option<usize>)> = Vec::new();
+        work.push(Work::EnterExpression(self, None));
+        let mut active_expressions: Vec<(&Expr, Option<usize>)> = Vec::new();
+        let mut active_loops: Vec<LexicalLoopContext> = Vec::new();
         let mut preorder = 0_u64;
         while let Some(item) = work.pop() {
             match item {
-                Work::Enter(expression, incoming_ordinal) => {
+                Work::EnterExpression(expression, incoming_ordinal) => {
                     let current = preorder;
                     let Some(next) = preorder.checked_add(1) else {
                         return Ok(None);
                     };
                     preorder = next;
                     if current == target {
+                        let mut admissible = true;
                         let mut child_ordinal = incoming_ordinal;
-                        for (parent, parent_ordinal) in active.iter().rev() {
+                        for (parent, parent_ordinal) in active_expressions.iter().rev() {
                             let Some(ordinal) = child_ordinal else {
-                                return Ok(Some(true));
+                                break;
                             };
                             if !divergent_child_is_admissible(&parent.kind, ordinal) {
-                                return Ok(Some(false));
+                                admissible = false;
+                                break;
                             }
                             if !divergent_child_makes_parent_divergent(&parent.kind, ordinal) {
-                                return Ok(Some(true));
+                                break;
                             }
                             child_ordinal = *parent_ordinal;
                         }
-                        return Ok(Some(true));
+                        return Ok(Some(ExpressionControlContext {
+                            divergent_replacement_is_admissible: admissible,
+                            enclosing_loop: active_loops.last().cloned(),
+                        }));
                     }
 
-                    active.try_reserve(1).map_err(|_| {
+                    active_expressions.try_reserve(1).map_err(|_| {
                         lkjscript_core::Error::host(
                             "HIR control-context ancestry allocation failed",
                         )
                     })?;
-                    active.push((expression, incoming_ordinal));
-                    let children = try_expression_children(expression, "HIR control context")?;
-                    let additional = children.len().checked_add(1).ok_or_else(|| {
-                        lkjscript_core::Error::host("HIR control-context child count overflow")
-                    })?;
-                    work.try_reserve(additional).map_err(|_| {
-                        lkjscript_core::Error::host("HIR control-context work allocation failed")
-                    })?;
-                    work.push(Work::Exit);
-                    work.extend(
-                        children
-                            .into_iter()
-                            .enumerate()
-                            .rev()
-                            .map(|(ordinal, child)| Work::Enter(child, Some(ordinal))),
-                    );
+                    active_expressions.push((expression, incoming_ordinal));
+                    match &expression.kind {
+                        ExprKind::While {
+                            loop_id,
+                            condition,
+                            body,
+                        } => {
+                            let additional = body.len().checked_add(4).ok_or_else(|| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context child count overflow",
+                                )
+                            })?;
+                            work.try_reserve(additional).map_err(|_| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context work allocation failed",
+                                )
+                            })?;
+                            work.push(Work::ExitExpression);
+                            work.push(Work::ExitLoop(*loop_id));
+                            for (index, child) in body.iter().enumerate().rev() {
+                                let ordinal = index.checked_add(1).ok_or_else(|| {
+                                    lkjscript_core::Error::host(
+                                        "HIR control-context child ordinal overflow",
+                                    )
+                                })?;
+                                work.push(Work::EnterExpression(child, Some(ordinal)));
+                            }
+                            work.push(Work::EnterLoop(LexicalLoopContext {
+                                loop_id: *loop_id,
+                                result_type: Type::Unit,
+                                is_while: true,
+                            }));
+                            work.push(Work::EnterExpression(condition, Some(0)));
+                        }
+                        ExprKind::Loop {
+                            loop_id,
+                            result_type,
+                            body,
+                        } => {
+                            let additional = body.len().checked_add(3).ok_or_else(|| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context child count overflow",
+                                )
+                            })?;
+                            work.try_reserve(additional).map_err(|_| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context work allocation failed",
+                                )
+                            })?;
+                            work.push(Work::ExitExpression);
+                            work.push(Work::ExitLoop(*loop_id));
+                            for (ordinal, child) in body.iter().enumerate().rev() {
+                                work.push(Work::EnterExpression(child, Some(ordinal)));
+                            }
+                            work.push(Work::EnterLoop(LexicalLoopContext {
+                                loop_id: *loop_id,
+                                result_type: result_type.clone(),
+                                is_while: false,
+                            }));
+                        }
+                        _ => {
+                            let children =
+                                try_expression_children(expression, "HIR control context")?;
+                            let additional = children.len().checked_add(1).ok_or_else(|| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context child count overflow",
+                                )
+                            })?;
+                            work.try_reserve(additional).map_err(|_| {
+                                lkjscript_core::Error::host(
+                                    "HIR control-context work allocation failed",
+                                )
+                            })?;
+                            work.push(Work::ExitExpression);
+                            work.extend(children.into_iter().enumerate().rev().map(
+                                |(ordinal, child)| Work::EnterExpression(child, Some(ordinal)),
+                            ));
+                        }
+                    }
                 }
-                Work::Exit => {
-                    active.pop().ok_or_else(|| {
+                Work::ExitExpression => {
+                    active_expressions.pop().ok_or_else(|| {
                         lkjscript_core::Error::msg("HIR control-context ancestry is invalid")
                     })?;
+                }
+                Work::EnterLoop(context) => {
+                    active_loops.try_reserve(1).map_err(|_| {
+                        lkjscript_core::Error::host("HIR lexical-loop context allocation failed")
+                    })?;
+                    active_loops.push(context);
+                }
+                Work::ExitLoop(expected) => {
+                    let actual = active_loops.pop().ok_or_else(|| {
+                        lkjscript_core::Error::msg("HIR lexical-loop context is invalid")
+                    })?;
+                    if actual.loop_id != expected {
+                        return Err(lkjscript_core::Error::msg(
+                            "HIR lexical-loop context closed out of order",
+                        ));
+                    }
                 }
             }
         }

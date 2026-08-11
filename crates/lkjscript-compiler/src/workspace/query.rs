@@ -320,7 +320,7 @@ pub enum ConstructorStatus {
     RequiresOwnershipValidation,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum LegalConstructor {
     I64Literal,
@@ -345,6 +345,13 @@ pub enum LegalConstructor {
     MutableLocal,
     SetLocal(EntityId),
     While,
+    Loop {
+        result_type: SemanticType,
+    },
+    Break {
+        value_type: SemanticType,
+    },
+    Continue,
     Return,
 }
 
@@ -1162,15 +1169,47 @@ impl WorkspaceSnapshot {
             .find(|record| record.state.id == hole)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole")))?;
         let expected_type = &record.expected_internal;
+        let control = expression_root(self, record.address.root)?
+            .try_control_context(record.address.preorder)
+            .map_err(WorkspaceError::from_core)?
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole address")))?;
+        let expected_view = super::types::view(
+            &self.program,
+            &self.indexes,
+            expected_type,
+            Some(context.owner),
+        )?;
         let mut values = Vec::new();
         push_legal_constructor(&mut values, LegalConstructor::If)?;
         push_legal_constructor(&mut values, LegalConstructor::Sequence)?;
         push_legal_constructor(&mut values, LegalConstructor::MutableLocal)?;
+        if !expected_type.contains_never() {
+            push_legal_constructor(
+                &mut values,
+                LegalConstructor::Loop {
+                    result_type: expected_view,
+                },
+            )?;
+        }
         let callable_result = self.function_signature(revision, context.owner)?.result;
-        if callable_result != SemanticType::Never
-            && return_constructor_is_legal(self, record.address)?
-        {
+        if callable_result != SemanticType::Never && control.divergent_replacement_is_admissible {
             push_legal_constructor(&mut values, LegalConstructor::Return)?;
+        }
+        if control.divergent_replacement_is_admissible {
+            if let Some(target) = control.enclosing_loop {
+                push_legal_constructor(
+                    &mut values,
+                    LegalConstructor::Break {
+                        value_type: super::types::view(
+                            &self.program,
+                            &self.indexes,
+                            &target.result_type,
+                            Some(context.owner),
+                        )?,
+                    },
+                )?;
+                push_legal_constructor(&mut values, LegalConstructor::Continue)?;
+            }
         }
         if *expected_type == crate::Type::Unit {
             push_legal_constructor(&mut values, LegalConstructor::While)?;
@@ -1335,7 +1374,7 @@ impl WorkspaceSnapshot {
         }
         #[cfg(test)]
         let materialized = values.len();
-        values.sort_unstable();
+        values.sort_unstable_by(compare_legal_constructors);
         values.dedup();
         #[cfg(test)]
         record_query_measurement(
@@ -1409,16 +1448,6 @@ impl WorkspaceSnapshot {
             .node(self.namespace, id)
             .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("node")))
     }
-}
-
-fn return_constructor_is_legal(
-    snapshot: &WorkspaceSnapshot,
-    address: super::model::NodeAddress,
-) -> Result<bool, WorkspaceError> {
-    expression_root(snapshot, address.root)?
-        .try_divergent_replacement_is_admissible(address.preorder)
-        .map_err(WorkspaceError::from_core)?
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("hole address")))
 }
 
 fn expression_at(
@@ -1782,6 +1811,69 @@ fn enum_pattern_entities(
             .copied()
     }));
     Ok((enumeration_entity, variant_entity, field_entities))
+}
+
+fn compare_legal_constructors(
+    left: &LegalConstructor,
+    right: &LegalConstructor,
+) -> std::cmp::Ordering {
+    let rank = |constructor: &LegalConstructor| match constructor {
+        LegalConstructor::I64Literal => 0_u8,
+        LegalConstructor::F64Literal => 1,
+        LegalConstructor::BoolLiteral => 2,
+        LegalConstructor::UnitLiteral => 3,
+        LegalConstructor::Operation(_) => 4,
+        LegalConstructor::Load(_) => 5,
+        LegalConstructor::Move { .. } => 6,
+        LegalConstructor::BorrowShared { .. } => 7,
+        LegalConstructor::Call(_) => 8,
+        LegalConstructor::Product(_) => 9,
+        LegalConstructor::EnumVariant(_) => 10,
+        LegalConstructor::If => 11,
+        LegalConstructor::Sequence => 12,
+        LegalConstructor::MutableLocal => 13,
+        LegalConstructor::SetLocal(_) => 14,
+        LegalConstructor::While => 15,
+        LegalConstructor::Loop { .. } => 16,
+        LegalConstructor::Break { .. } => 17,
+        LegalConstructor::Continue => 18,
+        LegalConstructor::Return => 19,
+    };
+    rank(left)
+        .cmp(&rank(right))
+        .then_with(|| match (left, right) {
+            (LegalConstructor::Operation(left), LegalConstructor::Operation(right)) => {
+                left.cmp(right)
+            }
+            (LegalConstructor::Load(left), LegalConstructor::Load(right))
+            | (LegalConstructor::Call(left), LegalConstructor::Call(right))
+            | (LegalConstructor::Product(left), LegalConstructor::Product(right))
+            | (LegalConstructor::EnumVariant(left), LegalConstructor::EnumVariant(right))
+            | (LegalConstructor::SetLocal(left), LegalConstructor::SetLocal(right)) => {
+                left.cmp(right)
+            }
+            (
+                LegalConstructor::Move {
+                    binding: left_binding,
+                    status: left_status,
+                },
+                LegalConstructor::Move {
+                    binding: right_binding,
+                    status: right_status,
+                },
+            )
+            | (
+                LegalConstructor::BorrowShared {
+                    binding: left_binding,
+                    status: left_status,
+                },
+                LegalConstructor::BorrowShared {
+                    binding: right_binding,
+                    status: right_status,
+                },
+            ) => (left_binding, left_status).cmp(&(right_binding, right_status)),
+            _ => std::cmp::Ordering::Equal,
+        })
 }
 
 fn push_legal_constructor(
