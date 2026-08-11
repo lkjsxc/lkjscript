@@ -61,6 +61,45 @@ fn counter_program_draft() -> ExpressionDraft {
     ExpressionDraft::new(nodes, root)
 }
 
+fn counter_probe_draft() -> ExpressionDraft {
+    let counter = DraftBindingId::new(0);
+    let mut nodes = Vec::new();
+    let initial = push_node(&mut nodes, DraftNode::I64(0));
+    let probe = push_node(&mut nodes, DraftNode::Load(DraftBindingRef::Local(counter)));
+    let one = push_node(&mut nodes, DraftNode::I64(1));
+    let set_one = push_node(
+        &mut nodes,
+        DraftNode::SetLocal {
+            target: DraftBindingRef::Local(counter),
+            value: one,
+        },
+    );
+    let two = push_node(&mut nodes, DraftNode::I64(2));
+    let set_two = push_node(
+        &mut nodes,
+        DraftNode::SetLocal {
+            target: DraftBindingRef::Local(counter),
+            value: two,
+        },
+    );
+    let result = push_node(&mut nodes, DraftNode::Load(DraftBindingRef::Local(counter)));
+    let sequence = push_node(
+        &mut nodes,
+        DraftNode::Sequence(vec![probe, set_one, set_two, result]),
+    );
+    let root = push_node(
+        &mut nodes,
+        DraftNode::MutableLocal {
+            binding: counter,
+            name: "counter".to_owned(),
+            ty: SemanticType::I64,
+            initial,
+            body: sequence,
+        },
+    );
+    ExpressionDraft::new(nodes, root)
+}
+
 fn reordered_sequence_draft(counter: EntityId) -> ExpressionDraft {
     let mut nodes = Vec::new();
     let two = push_node(&mut nodes, DraftNode::I64(2));
@@ -195,9 +234,89 @@ fn assert_atomic_error(
             edits,
         })
         .expect_err("transaction must fail");
-    assert!(std::sync::Arc::ptr_eq(published, &workspace.current()));
-    assert_eq!(workspace.current().revision(), published.revision());
+    let current = workspace.current();
+    assert!(std::sync::Arc::ptr_eq(published, &current));
+    assert_eq!(current.revision(), published.revision());
+    assert_eq!(current.diagnostics(), published.diagnostics());
+    assert_eq!(
+        current.completeness_blockers(),
+        published.completeness_blockers()
+    );
     error
+}
+
+fn assert_next_creation_matches_control(
+    workspace: &mut Workspace,
+    published: &std::sync::Arc<WorkspaceSnapshot>,
+    name: &str,
+) {
+    let mut control = Workspace::new((**published).clone()).expect("movement retry control");
+    let transaction = || Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::CreateFunction {
+            name: name.to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            return_type: DeclarationType::I64,
+        }],
+    };
+    let after_failure = workspace
+        .apply(transaction())
+        .expect("create after rejected movement");
+    let control_created = control
+        .apply(transaction())
+        .expect("create movement retry control");
+    assert_eq!(after_failure.diff, control_created.diff);
+    assert_eq!(
+        after_failure.snapshot.entities(),
+        control_created.snapshot.entities()
+    );
+    assert_eq!(
+        after_failure.snapshot.nodes(),
+        control_created.snapshot.nodes()
+    );
+}
+
+fn independent_owner_sequence_draft() -> ExpressionDraft {
+    let first_owner = DraftBindingId::new(0);
+    let second_owner = DraftBindingId::new(1);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(1),
+            DraftNode::Operation {
+                operation: crate::Operation::ByteVectorNew,
+                arguments: vec![DraftNodeId::new(0)],
+            },
+            DraftNode::I64(2),
+            DraftNode::Operation {
+                operation: crate::Operation::ByteVectorNew,
+                arguments: vec![DraftNodeId::new(2)],
+            },
+            DraftNode::Move(DraftBindingRef::Local(first_owner)),
+            DraftNode::Move(DraftBindingRef::Local(second_owner)),
+            DraftNode::I64(7),
+            DraftNode::Sequence(vec![
+                DraftNodeId::new(4),
+                DraftNodeId::new(5),
+                DraftNodeId::new(6),
+            ]),
+            DraftNode::MutableLocal {
+                binding: second_owner,
+                name: "second-owner".to_owned(),
+                ty: SemanticType::ByteVector,
+                initial: DraftNodeId::new(3),
+                body: DraftNodeId::new(7),
+            },
+            DraftNode::MutableLocal {
+                binding: first_owner,
+                name: "first-owner".to_owned(),
+                ty: SemanticType::ByteVector,
+                initial: DraftNodeId::new(1),
+                body: DraftNodeId::new(8),
+            },
+        ],
+        DraftNodeId::new(9),
+    )
 }
 
 fn owner_sequence_draft() -> ExpressionDraft {
@@ -309,6 +428,10 @@ fn same_sequence_move_changes_order_and_runtime_without_identity_churn() {
     assert_eq!(old_children.len(), 3);
     let old_nodes: std::collections::BTreeSet<_> =
         before.nodes().iter().map(|node| node.id).collect();
+    let old_child_subtrees: Vec<_> = old_children
+        .iter()
+        .map(|child| subtree_nodes(&before, *child))
+        .collect();
     let old_entities: std::collections::BTreeSet<_> =
         before.entities().iter().map(|entity| entity.id).collect();
 
@@ -366,6 +489,9 @@ fn same_sequence_move_changes_order_and_runtime_without_identity_churn() {
             .collect::<std::collections::BTreeSet<_>>(),
         old_nodes
     );
+    for (child, old_subtree) in old_children.iter().zip(old_child_subtrees) {
+        assert_eq!(subtree_nodes(&moved.snapshot, *child), old_subtree);
+    }
     assert_eq!(
         moved
             .snapshot
@@ -390,8 +516,10 @@ fn same_sequence_move_changes_order_and_runtime_without_identity_churn() {
         vec![SemanticDiffEntry::SequenceChildMoved {
             sequence,
             child: old_children[1],
-            old_ordinal: 1,
-            new_ordinal: 0,
+            old_predecessor: Some(old_children[0]),
+            old_successor: Some(old_children[2]),
+            new_predecessor: None,
+            new_successor: Some(old_children[0]),
         }]
     );
 }
@@ -426,27 +554,40 @@ fn assert_scalar_move(
             }],
         })
         .expect("move scalar sequence child");
+    let expected_children = expected_indices
+        .iter()
+        .map(|index| children[*index])
+        .collect::<Vec<_>>();
     assert_eq!(
         direct_children(&moved.snapshot, sequence),
-        expected_indices
-            .iter()
-            .map(|index| children[*index])
-            .collect::<Vec<_>>()
+        expected_children
     );
     assert_eq!(run_i64(&moved.snapshot), expected_result);
+    let new_position = expected_indices
+        .iter()
+        .position(|index| *index == child_index)
+        .expect("new child position");
     assert_eq!(
         moved.diff.entries,
         vec![SemanticDiffEntry::SequenceChildMoved {
             sequence,
             child: children[child_index],
-            old_ordinal: u64::try_from(child_index).expect("old ordinal"),
-            new_ordinal: u64::try_from(
-                expected_indices
-                    .iter()
-                    .position(|index| *index == child_index)
-                    .expect("new ordinal"),
-            )
-            .expect("new ordinal u64"),
+            old_predecessor: child_index
+                .checked_sub(1)
+                .and_then(|index| children.get(index))
+                .copied(),
+            old_successor: child_index
+                .checked_add(1)
+                .and_then(|index| children.get(index))
+                .copied(),
+            new_predecessor: new_position
+                .checked_sub(1)
+                .and_then(|index| expected_children.get(index))
+                .copied(),
+            new_successor: new_position
+                .checked_add(1)
+                .and_then(|index| expected_children.get(index))
+                .copied(),
         }]
     );
 }
@@ -506,9 +647,7 @@ fn moved_subtree_preserves_contained_lexical_entities_and_descendants() {
         moved.snapshot.entity(local).expect("nested local").id,
         local
     );
-    assert!(subtree
-        .iter()
-        .all(|node| moved.snapshot.node(*node).is_ok()));
+    assert_eq!(subtree_nodes(&moved.snapshot, children[0]), subtree);
     assert_eq!(
         direct_children(&moved.snapshot, sequence),
         vec![children[1], children[0], children[2]]
@@ -849,6 +988,11 @@ fn final_child_type_and_divergence_are_recomputed_before_publication() {
         ),
         WorkspaceError::TypeMismatch { .. }
     ));
+    assert_next_creation_matches_control(
+        &mut type_workspace,
+        &typed,
+        "after-type-invalid-movement",
+    );
 
     let condition_draft = ExpressionDraft::new(
         vec![
@@ -914,6 +1058,142 @@ fn final_child_type_and_divergence_are_recomputed_before_publication() {
 }
 
 #[test]
+fn loop_control_order_is_revalidated_without_retargeting_transfers() {
+    let break_draft = ExpressionDraft::new(
+        vec![
+            DraftNode::Unit,
+            DraftNode::I64(1),
+            DraftNode::I64(7),
+            DraftNode::Break {
+                value: DraftNodeId::new(2),
+            },
+            DraftNode::Sequence(vec![
+                DraftNodeId::new(0),
+                DraftNodeId::new(1),
+                DraftNodeId::new(3),
+            ]),
+            DraftNode::Loop {
+                result_type: SemanticType::I64,
+                body: vec![DraftNodeId::new(4)],
+            },
+        ],
+        DraftNodeId::new(5),
+    );
+    let (mut break_workspace, before) = complete_draft(338, SemanticType::I64, break_draft);
+    let sequence = unique_node(&before, NodeKind::Sequence);
+    let children = direct_children(&before, sequence);
+    let moved = break_workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::MoveSequenceChild {
+                sequence,
+                child: children[1],
+                before: Some(children[0]),
+            }],
+        })
+        .expect("move ordinary loop child before break");
+    assert_eq!(run_i64(&moved.snapshot), 7);
+    assert!(matches!(
+        assert_atomic_error(
+            &mut break_workspace,
+            &moved.snapshot,
+            vec![Edit::MoveSequenceChild {
+                sequence,
+                child: children[2],
+                before: Some(children[1]),
+            }],
+        ),
+        WorkspaceError::Validation(message)
+            if message.as_ref()
+                == "sequence movement leaves an expression after a divergent expression"
+    ));
+
+    let continue_draft = ExpressionDraft::new(
+        vec![
+            DraftNode::Unit,
+            DraftNode::Continue,
+            DraftNode::Sequence(vec![DraftNodeId::new(0), DraftNodeId::new(1)]),
+            DraftNode::Bool(false),
+            DraftNode::While {
+                condition: DraftNodeId::new(3),
+                body: vec![DraftNodeId::new(2)],
+            },
+            DraftNode::I64(7),
+            DraftNode::Sequence(vec![DraftNodeId::new(4), DraftNodeId::new(5)]),
+        ],
+        DraftNodeId::new(6),
+    );
+    let (mut continue_workspace, continue_before) =
+        complete_draft(339, SemanticType::I64, continue_draft);
+    let continue_sequence = continue_before
+        .nodes()
+        .iter()
+        .find(|node| {
+            node.kind == NodeKind::Sequence
+                && direct_children(&continue_before, node.id)
+                    .iter()
+                    .any(|child| {
+                        continue_before
+                            .node(*child)
+                            .is_ok_and(|header| header.kind == NodeKind::Continue)
+                    })
+        })
+        .expect("continue sequence")
+        .id;
+    let continue_children = direct_children(&continue_before, continue_sequence);
+    assert!(matches!(
+        assert_atomic_error(
+            &mut continue_workspace,
+            &continue_before,
+            vec![Edit::MoveSequenceChild {
+                sequence: continue_sequence,
+                child: continue_children[1],
+                before: Some(continue_children[0]),
+            }],
+        ),
+        WorkspaceError::Validation(message)
+            if message.as_ref()
+                == "sequence movement leaves an expression after a divergent expression"
+    ));
+    assert_eq!(run_i64(&continue_before), 7);
+}
+
+#[test]
+fn valid_independent_owner_movement_executes_and_cleans_each_owner_once() {
+    let (mut workspace, before) =
+        complete_draft(336, SemanticType::I64, independent_owner_sequence_draft());
+    let sequence = unique_node(&before, NodeKind::Sequence);
+    let children = direct_children(&before, sequence);
+    let moved = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::MoveSequenceChild {
+                sequence,
+                child: children[1],
+                before: Some(children[0]),
+            }],
+        })
+        .expect("move independent owner consumption");
+    assert_eq!(
+        direct_children(&moved.snapshot, sequence),
+        vec![children[1], children[0], children[2]]
+    );
+    for snapshot in [&before, &moved.snapshot] {
+        let executable = crate::compile_snapshot(snapshot).expect("compile owner movement");
+        let outcome = run_chunk(
+            executable.bytecode(),
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+        );
+        assert!(outcome.cleanup_failures().is_none());
+        assert!(matches!(
+            outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(7)
+        ));
+    }
+}
+
+#[test]
 fn canonical_ownership_rejects_live_overwrite_caused_by_movement_and_preserves_cleanup_state() {
     let (mut workspace, published) = complete_draft(313, SemanticType::I64, owner_sequence_draft());
     assert_eq!(run_i64(&published), 7);
@@ -928,18 +1208,31 @@ fn canonical_ownership_rejects_live_overwrite_caused_by_movement_and_preserves_c
         NodeKind::SetLocal
     );
 
-    assert!(matches!(
-        assert_atomic_error(
-            &mut workspace,
-            &published,
-            vec![Edit::MoveSequenceChild {
+    for edits in [
+        vec![Edit::MoveSequenceChild {
+            sequence,
+            child: children[0],
+            before: Some(children[2]),
+        }],
+        vec![
+            Edit::MoveSequenceChild {
                 sequence,
                 child: children[0],
                 before: Some(children[2]),
-            }],
-        ),
-        WorkspaceError::Validation(_)
-    ));
+            },
+            Edit::CreateFunction {
+                name: "unrelated-incomplete".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: DeclarationType::I64,
+            },
+        ],
+    ] {
+        assert!(matches!(
+            assert_atomic_error(&mut workspace, &published, edits),
+            WorkspaceError::Validation(_) | WorkspaceError::InvalidTransaction(_)
+        ));
+    }
     let executable =
         crate::compile_snapshot(&published).expect("compile preserved ownership state");
     let outcome = run_chunk(
@@ -952,6 +1245,183 @@ fn canonical_ownership_rejects_live_overwrite_caused_by_movement_and_preserves_c
         outcome,
         ExecutionOutcome::Returned(value) if value.as_i64() == Some(7)
     ));
+    assert_next_creation_matches_control(
+        &mut workspace,
+        &published,
+        "after-ownership-invalid-movement",
+    );
+}
+
+#[test]
+fn unrelated_incompleteness_cannot_suppress_movement_validation() {
+    let (mut workspace, complete) = complete_draft(334, SemanticType::I64, owner_sequence_draft());
+    let sequence = unique_node(&complete, NodeKind::Sequence);
+    let children = direct_children(&complete, sequence);
+    let incomplete = workspace
+        .apply(Transaction {
+            base_revision: complete.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "unfinished".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("create unrelated incomplete function");
+    assert_eq!(incomplete.snapshot.state(), ProgramState::Incomplete);
+    assert!(matches!(
+        assert_atomic_error(
+            &mut workspace,
+            &incomplete.snapshot,
+            vec![Edit::MoveSequenceChild {
+                sequence,
+                child: children[0],
+                before: Some(children[2]),
+            }],
+        ),
+        WorkspaceError::InvalidTransaction(message)
+            if message.as_ref()
+                == "sequence movement cannot defer canonical validation because another callable is incomplete"
+    ));
+    assert_next_creation_matches_control(
+        &mut workspace,
+        &incomplete.snapshot,
+        "after-external-incomplete-movement",
+    );
+}
+
+#[test]
+fn movement_validation_deferral_batch_policy_is_exact() {
+    let (mut creation_workspace, creation_base, sequence) = scalar_sequence(340, &[1, 2, 3]);
+    let children = direct_children(&creation_base, sequence);
+    assert!(matches!(
+        assert_atomic_error(
+            &mut creation_workspace,
+            &creation_base,
+            vec![
+                Edit::MoveSequenceChild {
+                    sequence,
+                    child: children[1],
+                    before: Some(children[0]),
+                },
+                Edit::CreateFunction {
+                    name: "new-incomplete".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    return_type: DeclarationType::I64,
+                },
+            ],
+        ),
+        WorkspaceError::InvalidTransaction(message)
+            if message.as_ref()
+                == "sequence movement cannot defer canonical validation because another callable is incomplete"
+    ));
+
+    let mut no_main_workspace =
+        Workspace::empty_deterministic(341).expect("movement workspace without main");
+    let created = no_main_workspace
+        .apply(Transaction {
+            base_revision: no_main_workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "sequence-owner".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("create movement function without main");
+    let function = entity_named(&created.snapshot, EntityKind::Function, "sequence-owner");
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("function body hole")
+        .id;
+    let completed_function = no_main_workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(1),
+                        DraftNode::I64(2),
+                        DraftNode::I64(3),
+                        DraftNode::Sequence(vec![
+                            DraftNodeId::new(0),
+                            DraftNodeId::new(1),
+                            DraftNodeId::new(2),
+                        ]),
+                    ],
+                    DraftNodeId::new(3),
+                ),
+            }],
+        })
+        .expect("complete function without main");
+    let function_sequence = unique_node(&completed_function.snapshot, NodeKind::Sequence);
+    let function_children = direct_children(&completed_function.snapshot, function_sequence);
+    assert!(matches!(
+        assert_atomic_error(
+            &mut no_main_workspace,
+            &completed_function.snapshot,
+            vec![Edit::MoveSequenceChild {
+                sequence: function_sequence,
+                child: function_children[0],
+                before: None,
+            }],
+        ),
+        WorkspaceError::InvalidTransaction(message)
+            if message.as_ref()
+                == "sequence movement cannot defer canonical validation while the entry point is absent"
+    ));
+
+    let (mut completion_workspace, complete) = complete_counter_workspace(342);
+    let sequence = unique_node(&complete, NodeKind::Sequence);
+    let children = direct_children(&complete, sequence);
+    let incomplete = completion_workspace
+        .apply(Transaction {
+            base_revision: complete.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "finish-with-move".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: DeclarationType::I64,
+            }],
+        })
+        .expect("create callable completed beside movement");
+    let function = entity_named(
+        &incomplete.snapshot,
+        EntityKind::Function,
+        "finish-with-move",
+    );
+    let function_hole = incomplete
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("external callable hole")
+        .id;
+    let completed = completion_workspace
+        .apply(Transaction {
+            base_revision: incomplete.snapshot.revision(),
+            edits: vec![
+                Edit::MoveSequenceChild {
+                    sequence,
+                    child: children[1],
+                    before: Some(children[0]),
+                },
+                Edit::FillHole {
+                    hole: function_hole,
+                    draft: ExpressionDraft::scalar_i64(9),
+                },
+            ],
+        })
+        .expect("complete external callable beside movement");
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert_eq!(run_i64(&completed.snapshot), 1);
+    assert_eq!(
+        direct_children(&completed.snapshot, sequence),
+        vec![children[1], children[0], children[2]]
+    );
 }
 
 #[test]
@@ -1035,11 +1505,53 @@ fn mixed_rename_and_movement_diff_is_stably_sorted() {
             SemanticDiffEntry::SequenceChildMoved {
                 sequence: diff_sequence,
                 child,
-                old_ordinal: 1,
-                new_ordinal: 0,
+                old_predecessor: Some(old_predecessor),
+                old_successor: Some(old_successor),
+                new_predecessor: None,
+                new_successor: Some(new_successor),
             },
-        ] if *entity == counter && *diff_sequence == sequence && *child == children[1]
+        ] if *entity == counter
+            && *diff_sequence == sequence
+            && *child == children[1]
+            && *old_predecessor == children[0]
+            && *old_successor == children[2]
+            && *new_successor == children[0]
     ));
+}
+
+#[test]
+fn movement_batches_with_complete_nominal_creation() {
+    let (mut workspace, before, sequence) = scalar_sequence(337, &[1, 2, 3]);
+    let children = direct_children(&before, sequence);
+    let outcome = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![
+                Edit::MoveSequenceChild {
+                    sequence,
+                    child: children[0],
+                    before: None,
+                },
+                Edit::CreateProduct {
+                    name: "movement-product".to_owned(),
+                    fields: vec![ProductFieldDraft {
+                        name: "value".to_owned(),
+                        ty: SemanticType::I64,
+                    }],
+                },
+            ],
+        })
+        .expect("move and create complete product");
+    assert_eq!(outcome.snapshot.state(), ProgramState::Complete);
+    assert_eq!(run_i64(&outcome.snapshot), 1);
+    assert!(outcome.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::SequenceChildMoved { sequence: moved, child, .. }
+            if *moved == sequence && *child == children[0]
+    )));
+    assert!(outcome.snapshot.entities().iter().any(|entity| {
+        entity.kind == EntityKind::Product && entity.name.as_ref() == "movement-product"
+    }));
 }
 
 #[test]
@@ -1181,6 +1693,16 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
         .next()
         .expect("typed hole")
         .clone();
+    let main = entity_named(&introduced.snapshot, EntityKind::Main, "main");
+    let hole_projection_before = introduced
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Hole(hole_before.id),
+        ])
+        .expect("project hole before movement");
+    let hole_address_before = introduced.snapshot.indexes.node_addresses
+        [introduced.snapshot.indexes.node_lookup[&hole_before.id.node()]];
     let moved = hole_workspace
         .apply(Transaction {
             base_revision: introduced.snapshot.revision(),
@@ -1195,6 +1717,35 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
     assert_eq!(hole_after.id, hole_before.id);
     assert_eq!(hole_after.expected_type, hole_before.expected_type);
     assert_eq!(hole_after.visible_entities, hole_before.visible_entities);
+    let hole_address_after = moved.snapshot.indexes.node_addresses
+        [moved.snapshot.indexes.node_lookup[&hole_after.id.node()]];
+    assert_ne!(hole_address_after, hole_address_before);
+    assert!(moved.snapshot.completeness_blockers().iter().any(
+        |blocker| matches!(blocker, CompletenessBlocker::TypedHole { hole, .. } if *hole == hole_after.id)
+    ));
+    assert!(moved.snapshot.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "workspace.typed-hole"
+            && diagnostic.subject == Some(SemanticChild::Node(hole_after.id.node()))
+    }));
+    let hole_projection_after = moved
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Hole(hole_after.id),
+        ])
+        .expect("project hole after movement");
+    assert_ne!(hole_projection_after, hole_projection_before);
+    assert!(hole_projection_after.contains("[HOLE]"));
+    assert_eq!(
+        introduced
+            .snapshot
+            .project(&[
+                ProjectionSlice::Body(main),
+                ProjectionSlice::Hole(hole_before.id)
+            ])
+            .expect("reproject old hole snapshot"),
+        hole_projection_before
+    );
     assert_eq!(
         direct_children(&moved.snapshot, sequence),
         vec![
@@ -1212,10 +1763,31 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
         vec![SemanticDiffEntry::SequenceChildMoved {
             sequence,
             child: complete_children[0],
-            old_ordinal: 0,
-            new_ordinal: 1,
+            old_predecessor: None,
+            old_successor: Some(complete_children[1]),
+            new_predecessor: Some(complete_children[1]),
+            new_successor: Some(complete_children[2]),
         }]
     );
+    let filled = hole_workspace
+        .apply(Transaction {
+            base_revision: moved.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole_after.id,
+                draft: ExpressionDraft::new(vec![DraftNode::Unit], DraftNodeId::new(0)),
+            }],
+        })
+        .expect("fill moved hole");
+    assert_eq!(filled.snapshot.state(), ProgramState::Complete);
+    assert_eq!(
+        filled
+            .snapshot
+            .node(hole_after.id.node())
+            .expect("filled root")
+            .id,
+        hole_after.id.node()
+    );
+    assert_eq!(run_i64(&filled.snapshot), 2);
 
     let (mut unresolved_workspace, complete) = complete_counter_workspace(317);
     let sequence = unique_node(&complete, NodeKind::Sequence);
@@ -1235,6 +1807,16 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
         .next()
         .expect("unresolved reference")
         .clone();
+    let unresolved_main = entity_named(&introduced.snapshot, EntityKind::Main, "main");
+    let unresolved_projection_before = introduced
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(unresolved_main),
+            ProjectionSlice::UnresolvedValueReference(unresolved_before.id),
+        ])
+        .expect("project unresolved reference before movement");
+    let unresolved_address_before = introduced.snapshot.indexes.node_addresses
+        [introduced.snapshot.indexes.node_lookup[&unresolved_before.id.node()]];
     let moved = unresolved_workspace
         .apply(Transaction {
             base_revision: introduced.snapshot.revision(),
@@ -1251,6 +1833,7 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
         .next()
         .expect("moved unresolved reference");
     assert_eq!(unresolved_after.id, unresolved_before.id);
+    assert_eq!(unresolved_after.revision, moved.snapshot.revision());
     assert_eq!(
         unresolved_after.requested_name,
         unresolved_before.requested_name
@@ -1264,10 +1847,116 @@ fn moved_hole_and_unresolved_reference_keep_identity_and_block_execution() {
         unresolved_after.visible_entities,
         unresolved_before.visible_entities
     );
+    let unresolved_address_after = moved.snapshot.indexes.node_addresses
+        [moved.snapshot.indexes.node_lookup[&unresolved_after.id.node()]];
+    assert_ne!(unresolved_address_after, unresolved_address_before);
+    assert!(moved
+        .snapshot
+        .completeness_blockers()
+        .iter()
+        .any(|blocker| {
+            matches!(
+                blocker,
+                CompletenessBlocker::UnresolvedValueReference { reference, .. }
+                    if *reference == unresolved_after.id
+            )
+        }));
+    assert!(moved.snapshot.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "workspace.unresolved-value-reference"
+            && diagnostic.subject == Some(SemanticChild::Node(unresolved_after.id.node()))
+    }));
+    let unresolved_projection_after = moved
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(unresolved_main),
+            ProjectionSlice::UnresolvedValueReference(unresolved_after.id),
+        ])
+        .expect("project unresolved reference after movement");
+    assert_ne!(unresolved_projection_after, unresolved_projection_before);
+    assert!(unresolved_projection_after.contains("[UNRESOLVED]"));
     assert!(matches!(
         crate::compile_snapshot(&moved.snapshot),
         Err(crate::CompileSnapshotError::Incomplete(_))
     ));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn moved_unresolved_reference_resolves_at_the_same_stable_root() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let (mut workspace, complete) = complete_draft(335, SemanticType::I64, counter_probe_draft());
+    let sequence = unique_node(&complete, NodeKind::Sequence);
+    let children = direct_children(&complete, sequence);
+    assert_eq!(children.len(), 4);
+    let counter = entity_named(&complete, EntityKind::MutableLocal, "counter");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: complete.revision(),
+            edits: vec![Edit::IntroduceUnresolvedValueReference {
+                target: children[0],
+                requested_name: "counter".to_owned(),
+            }],
+        })
+        .expect("introduce resolvable reference");
+    let reference = introduced
+        .snapshot
+        .unresolved_value_references()
+        .next()
+        .expect("resolvable reference")
+        .id;
+    let moved = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::MoveSequenceChild {
+                sequence,
+                child: reference.node(),
+                before: Some(children[2]),
+            }],
+        })
+        .expect("move resolvable reference");
+    let candidates = moved
+        .snapshot
+        .unresolved_value_reference_candidates(
+            moved.snapshot.revision(),
+            reference,
+            PageRequest::new(16).expect("candidate page request"),
+            None,
+        )
+        .expect("query moved reference candidates");
+    assert!(candidates
+        .items
+        .iter()
+        .any(|candidate| candidate.entity == counter));
+    let resolved = workspace
+        .apply(Transaction {
+            base_revision: moved.snapshot.revision(),
+            edits: vec![Edit::ResolveUnresolvedValueReference {
+                reference,
+                target: counter,
+            }],
+        })
+        .expect("resolve moved reference");
+    assert_eq!(resolved.snapshot.state(), ProgramState::Complete);
+    assert_eq!(
+        direct_children(&resolved.snapshot, sequence),
+        vec![children[1], children[0], children[2], children[3]]
+    );
+    assert_eq!(
+        resolved
+            .snapshot
+            .node(reference.node())
+            .expect("resolved stable root")
+            .id,
+        reference.node()
+    );
+    assert!(resolved
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| { edge.site == reference.node() && edge.target == counter }));
+    assert_eq!(run_i64(&resolved.snapshot), 2);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
@@ -1335,6 +2024,20 @@ fn incomplete_expected_context_refreshes_when_moved_to_final_position() {
             .expect("final incomplete semantics");
         assert_eq!(facts.actual, SemanticType::I64);
         assert_eq!(facts.expected, Some(SemanticType::I64));
+        if !unresolved {
+            let hole = moved.snapshot.holes().next().expect("moved scalar hole").id;
+            assert!(moved
+                .snapshot
+                .legal_constructors(
+                    moved.snapshot.revision(),
+                    hole,
+                    PageRequest::new(8).expect("legal constructor page"),
+                    None,
+                )
+                .expect("moved hole legal constructors")
+                .items
+                .contains(&LegalConstructor::I64Literal));
+        }
         assert!(matches!(
             crate::compile_snapshot(&moved.snapshot),
             Err(crate::CompileSnapshotError::Incomplete(_))
@@ -1664,6 +2367,12 @@ fn deep_moved_subtree_and_wide_sibling_permutation_are_stack_safe_and_identity_s
             assert_eq!(measurement.index_build_invocations, 1);
             assert_eq!(measurement.identity_reconciliation_invocations, 1);
             assert_eq!(measurement.index_nodes_built, moved.snapshot.nodes().len());
+            assert_eq!(measurement.movement_child_blocks_examined, width);
+            assert_eq!(measurement.movement_nodes_relocated, width + 1);
+            assert_eq!(
+                measurement.movement_nodes_relocated,
+                moved.snapshot.nodes().len()
+            );
             assert_eq!(run_i64(&moved.snapshot), 1);
             assert_eq!(
                 moved

@@ -316,16 +316,22 @@ and semantic no-ops reject without publication. One transaction-local block perm
 sequence plus every moved or shifted child-subtree node to its new private address and composes with
 ordinary survivor/entity reconciliation, so ancestors, holes, unresolved references, and all other
 survivors retain identity through preorder or callable-root relocation without allocating or
-tombstoning public identities. The semantic diff reports one stable sequence/child movement with old
-and final `u64` ordinals and emits no replacement, descendant, reference, or call noise. Full type,
+tombstoning public identities. The semantic diff reports one stable sequence/child movement with
+stable old and new predecessor/successor neighborhoods and emits no numeric position, replacement,
+descendant, reference, or call noise. Full type,
 effect, index, incomplete-context, and complete HIR ownership/cleanup validation remains canonical.
-One move may batch with unrelated rename, creation, or deletion work; multiple moves and structural
-edits in the same callable are rejected in this first vertical. Old snapshots preserve their old
-order. Containment and projection expose the new order, incomplete snapshots remain blocked before
-HIR derivation, and complete source-free or post-import snapshots compile directly. Focused
-source-free/imported final-order and bytecode/VM evidence agrees, source loading and parsing remain
-zero after the semantic edit, and eligible moved snapshots execute once through baseline native or
-the unchanged VM after a pre-entry decline. Cross-parent and broader movement remain absent.
+One move may batch with unrelated rename, complete product or enum creation, or deletion work;
+multiple moves, same-callable structural edits, an absent entry point, creation of another incomplete
+callable, and final incomplete state in another callable are rejected in this first vertical. This
+prevents an unrelated blocker from suppressing canonical validation of an otherwise complete moved
+owner. Old snapshots preserve their old order. Containment and projection expose the new order;
+incomplete snapshots remain blocked before HIR derivation, and complete source-free or post-import
+snapshots compile directly. Focused source-free/imported final-order and bytecode/VM evidence agrees,
+source loading and parsing remain zero after the semantic edit, and eligible moved snapshots execute
+once through baseline native or the unchanged VM after a pre-entry decline. A valid reorder of two
+independent affine-owner moves enters baseline native once, performs two allocations and two drops,
+and ends with no live owner, loan, release backlog, stale/forged failure, or teardown failure.
+Cross-parent and broader movement remain absent.
 
 Completeness blockers distinguish missing entry point, missing body with declaration/hole/type,
 typed hole with hole/type/owner/context, and unresolved value reference with node/requested name/type/

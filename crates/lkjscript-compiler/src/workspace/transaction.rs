@@ -85,6 +85,8 @@ pub(super) struct TransactionMeasurement {
     pub identity_reconciliation_invocations: usize,
     pub identity_entity_records_examined: usize,
     pub identity_node_records_examined: usize,
+    pub movement_child_blocks_examined: usize,
+    pub movement_nodes_relocated: usize,
     pub metadata_only_path_used: bool,
 }
 
@@ -272,8 +274,10 @@ pub enum SemanticDiffEntry {
     SequenceChildMoved {
         sequence: NodeId,
         child: NodeId,
-        old_ordinal: u64,
-        new_ordinal: u64,
+        old_predecessor: Option<NodeId>,
+        old_successor: Option<NodeId>,
+        new_predecessor: Option<NodeId>,
+        new_successor: Option<NodeId>,
     },
     DescendantCreated {
         parent: SemanticOwner,
@@ -415,8 +419,10 @@ struct SequenceMovement {
     final_old_ordinals: Vec<usize>,
     old_index: usize,
     new_index: usize,
-    old_ordinal: u64,
-    new_ordinal: u64,
+    old_predecessor: Option<NodeId>,
+    old_successor: Option<NodeId>,
+    new_predecessor: Option<NodeId>,
+    new_successor: Option<NodeId>,
     sequence_type: Type,
     ancestor_types: Vec<Type>,
 }
@@ -902,8 +908,10 @@ fn stage(
         entries.push(SemanticDiffEntry::SequenceChildMoved {
             sequence: movement.sequence,
             child: movement.child,
-            old_ordinal: movement.old_ordinal,
-            new_ordinal: movement.new_ordinal,
+            old_predecessor: movement.old_predecessor,
+            old_successor: movement.old_successor,
+            new_predecessor: movement.new_predecessor,
+            new_successor: movement.new_successor,
         });
     }
     if (!structural.is_empty() || movement.is_some()) && !program.match_plans.is_empty() {
@@ -924,6 +932,13 @@ fn stage(
     program
         .global_layout
         .retain(|binding| !deleted_bindings.contains(binding));
+    reject_external_incompleteness_for_movement(
+        &program,
+        &holes,
+        &unresolved_value_references,
+        &new_holes,
+        movement.as_ref(),
+    )?;
 
     #[cfg(test)]
     record_transaction_measurement(|measurement| {
@@ -1613,6 +1628,39 @@ fn reject_deleted_root_edit(
     }
 }
 
+fn reject_external_incompleteness_for_movement(
+    program: &SemanticProgram,
+    holes: &[HoleRecord],
+    unresolved_value_references: &[UnresolvedValueReferenceRecord],
+    new_holes: &[NewHole],
+    movement: Option<&SequenceMovement>,
+) -> Result<(), WorkspaceError> {
+    let Some(movement) = movement else {
+        return Ok(());
+    };
+    if program.main.is_none() {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "sequence movement cannot defer canonical validation while the entry point is absent",
+        )));
+    }
+    let has_external_incomplete = holes
+        .iter()
+        .map(|hole| hole.address.root)
+        .chain(
+            unresolved_value_references
+                .iter()
+                .map(|reference| reference.address.root),
+        )
+        .chain(new_holes.iter().map(|hole| hole.address.root))
+        .any(|root| root != movement.address.root);
+    if has_external_incomplete {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "sequence movement cannot defer canonical validation because another callable is incomplete",
+        )));
+    }
+    Ok(())
+}
+
 fn preflight_sequence_movement(
     base: &WorkspaceSnapshot,
     edits: &[Edit],
@@ -1718,6 +1766,26 @@ fn preflight_sequence_movement(
             "sequence movement would not change semantic order",
         )));
     }
+    let old_predecessor = old_index
+        .checked_sub(1)
+        .and_then(|index| old_children.get(index))
+        .copied();
+    let old_successor_index = old_index
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("sequence neighbor index overflow")))?;
+    let old_successor = old_children.get(old_successor_index).copied();
+    let new_predecessor = new_index
+        .checked_sub(1)
+        .and_then(|index| final_old_ordinals.get(index))
+        .and_then(|old_ordinal| old_children.get(*old_ordinal))
+        .copied();
+    let new_successor_index = new_index
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("sequence neighbor index overflow")))?;
+    let new_successor = final_old_ordinals
+        .get(new_successor_index)
+        .and_then(|old_ordinal| old_children.get(*old_ordinal))
+        .copied();
 
     let sequence_index = base
         .indexes
@@ -1797,10 +1865,10 @@ fn preflight_sequence_movement(
         final_old_ordinals,
         old_index,
         new_index,
-        old_ordinal: u64::try_from(old_index)
-            .map_err(|_| WorkspaceError::Host(Arc::from("sequence ordinal exceeds u64")))?,
-        new_ordinal: u64::try_from(new_index)
-            .map_err(|_| WorkspaceError::Host(Arc::from("sequence ordinal exceeds u64")))?,
+        old_predecessor,
+        old_successor,
+        new_predecessor,
+        new_successor,
         sequence_type,
         ancestor_types: reversed_ancestor_types,
     }))
@@ -2968,6 +3036,11 @@ fn install_sequence_movement_node_relocations(
             "moved sequence child count changed",
         )));
     }
+    #[cfg(test)]
+    record_transaction_measurement(|measurement| {
+        measurement.movement_child_blocks_examined = movement.old_children.len();
+        measurement.movement_nodes_relocated = movement_node_count;
+    });
     Ok(())
 }
 
@@ -8235,18 +8308,15 @@ fn diff_key(entry: &SemanticDiffEntry) -> (u8, u64, u64, u64, u64, u64, u64) {
             (3, node.slot(), node.generation(), 0, 0, 0, 0)
         }
         SemanticDiffEntry::SequenceChildMoved {
-            sequence,
-            child,
-            old_ordinal,
-            new_ordinal,
+            sequence, child, ..
         } => (
             4,
             sequence.slot(),
             sequence.generation(),
             child.slot(),
             child.generation(),
-            *old_ordinal,
-            *new_ordinal,
+            0,
+            0,
         ),
         SemanticDiffEntry::DescendantCreated { node, .. } => {
             (5, node.slot(), node.generation(), 0, 0, 0, 0)

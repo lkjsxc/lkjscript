@@ -429,6 +429,13 @@ Retained deterministic counters, indexes, and assertions show:
   scope visit per draft node and compiles/executes on a 128 KiB worker stack; separate fresh 1-use
   and 2,001-use stable-target drafts record the same one-time callable location-scan count, while
   exact map lookups grow from 2 to 2,001 rather than rescanning the retained body per use;
+- the retained same-sequence movement fixture permutes 2,048 direct scalar child blocks on a 128 KiB
+  worker stack and records exactly 2,048 examined blocks and 2,049 explicitly relocated nodes,
+  including the sequence. The ordinary full path records one semantic clone, compaction, effect
+  inference, index build, and reconciliation; every public node identity survives and the final
+  program compiles and executes. The ignored 20,000-level moved-subtree fixture exercises the same
+  iterative relocation and destruction path. These exact work counts establish linear selected-root
+  traversal shape and stack safety, not a latency or broad throughput claim;
 - callable/local deletion uses one retained-order binding/plan pass, one iterative expression/pattern
   rewrite per surviving root, and one parent/child-ordinal survivor reconciliation pass; it does not
   rescan the whole program for each binding and retains no dead binding or plan per edit. Focused
@@ -495,6 +502,13 @@ Retained deterministic counters, indexes, and assertions show:
 Reproduce the focused convergence and locked-release stack fixtures with:
 
 ```sh
+cargo test --locked -p lkjscript-compiler \
+  workspace::movement_tests::deep_moved_subtree_and_wide_sibling_permutation_are_stack_safe_and_identity_stable -- --exact
+cargo test --locked -p lkjscript-app \
+  engine::tests::moved_independent_owners_execute_and_clean_up_in_baseline_native -- --exact
+cargo test --locked --release -p lkjscript-compiler \
+  workspace::movement_tests::twenty_thousand_level_moved_subtree_is_stack_safe \
+  -- --ignored --exact
 cargo test --locked -p lkjscript-compiler \
   workspace::tests::source_free_main_return_is_queryable_and_executes_without_source_work -- --exact
 cargo test --locked -p lkjscript-compiler \

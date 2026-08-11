@@ -240,14 +240,17 @@ base revision, rejects a final-order no-op, and mutates only the existing staged
 vector. Removal precedes insertion and no anchor means append. The first vertical rejects more than
 one move and same-callable structural edits in one transaction rather than adding an edit planner.
 A checked child path propagates the changed final-child result through ancestors without recursively
-cloning the moved or shifted subtrees. After canonical index construction, the movement's complete
-old child blocks supply explicit stable-ID-to-new-address facts; kind, destination, identity, and
-collision checks fail before reconciliation. Dense deletion compaction may relocate the callable
-root first. Holes and unresolved records then refresh from retained IDs, while pure movement consumes
+cloning the moved or shifted subtrees. An incomplete node in the moved callable may remain explicit,
+but an absent entry point or final incompleteness in another callable rejects rather than suppressing
+canonical validation of an otherwise complete moved owner. After canonical index construction, the
+movement's complete old child blocks supply explicit stable-ID-to-new-address facts; kind,
+destination, identity, and collision checks fail before reconciliation. Dense deletion compaction may
+relocate the callable root first. Holes and unresolved records then refresh from retained IDs, while pure movement consumes
 no public slot and private preorders remain unobservable. Complete state passes the ordinary
 ownership, cleanup, match, and consistency boundary; incomplete state retains blockers and never
-constructs HIR. One `SequenceChildMoved` diff reports stable identities and semantic ordinals, while
-private relocation emits no replacement, descendant, or graph-rewire facts.
+constructs HIR. One `SequenceChildMoved` diff reports the stable sequence, moved child, and old/new
+predecessor-successor neighborhoods; no numeric position escapes, and private relocation emits no
+replacement, descendant, or graph-rewire facts.
 
 When the program contains semantic match plans, one bounded pass over each affected root refreshes
 any existing plan's arm/result type facts; a program without match plans incurs no additional match

@@ -427,6 +427,125 @@ mod tests {
     }
 
     #[test]
+    fn moved_independent_owners_execute_and_clean_up_in_baseline_native() {
+        let mut workspace = Workspace::empty().expect("owner movement workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                }],
+            })
+            .expect("create owner movement main");
+        let hole = created
+            .snapshot
+            .holes()
+            .next()
+            .expect("owner movement hole")
+            .id;
+        let first_owner = DraftBindingId::new(0);
+        let second_owner = DraftBindingId::new(1);
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(1),
+                            DraftNode::Operation {
+                                operation: Operation::ByteVectorNew,
+                                arguments: vec![DraftNodeId::new(0)],
+                            },
+                            DraftNode::I64(2),
+                            DraftNode::Operation {
+                                operation: Operation::ByteVectorNew,
+                                arguments: vec![DraftNodeId::new(2)],
+                            },
+                            DraftNode::Move(DraftBindingRef::Local(first_owner)),
+                            DraftNode::Move(DraftBindingRef::Local(second_owner)),
+                            DraftNode::I64(7),
+                            DraftNode::Sequence(vec![
+                                DraftNodeId::new(4),
+                                DraftNodeId::new(5),
+                                DraftNodeId::new(6),
+                            ]),
+                            DraftNode::MutableLocal {
+                                binding: second_owner,
+                                name: "second-owner".to_owned(),
+                                ty: SemanticType::ByteVector,
+                                initial: DraftNodeId::new(3),
+                                body: DraftNodeId::new(7),
+                            },
+                            DraftNode::MutableLocal {
+                                binding: first_owner,
+                                name: "first-owner".to_owned(),
+                                ty: SemanticType::ByteVector,
+                                initial: DraftNodeId::new(1),
+                                body: DraftNodeId::new(8),
+                            },
+                        ],
+                        DraftNodeId::new(9),
+                    ),
+                }],
+            })
+            .expect("construct owner movement program");
+        let sequence = completed
+            .snapshot
+            .nodes()
+            .iter()
+            .find(|node| node.kind == NodeKind::Sequence)
+            .expect("owner movement sequence")
+            .id;
+        let children: Vec<_> = completed
+            .snapshot
+            .containment()
+            .iter()
+            .filter_map(|edge| match (edge.owner, edge.child) {
+                (SemanticOwner::Node(owner), SemanticChild::Node(child)) if owner == sequence => {
+                    Some(child)
+                }
+                _ => None,
+            })
+            .collect();
+        let moved = workspace
+            .apply(Transaction {
+                base_revision: completed.snapshot.revision(),
+                edits: vec![Edit::MoveSequenceChild {
+                    sequence,
+                    child: children[1],
+                    before: Some(children[0]),
+                }],
+            })
+            .expect("move independent owners");
+        let program = compile_snapshot(&moved.snapshot).expect("compile moved owners");
+        let execution = execute(
+            &program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            false,
+        )
+        .expect("execute moved owners");
+        assert_eq!(execution.path, ExecutionPath::BaselineNative);
+        assert!(execution.native_entered);
+        assert_eq!(execution.vm_executions, 0);
+        assert!(execution.outcome.cleanup_failures().is_none());
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(7)
+        ));
+        let unique = execution.stats.expect("moved owner stats").native_unique;
+        assert_eq!(unique.allocations, 2);
+        assert_eq!(unique.drops, 2);
+        assert_eq!(unique.live_owners, 0);
+        assert_eq!(unique.live_loans, 0);
+        assert_eq!(unique.release_backlog, 0);
+        assert_eq!(unique.stale_or_forged_failures, 0);
+        assert_eq!(unique.teardown_failures, 0);
+    }
+
+    #[test]
     fn one_shot_baseline_executes_direct_generated_calls() {
         let program = scalar(concat!(
             "def/\nname/\nadd-one\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\n",

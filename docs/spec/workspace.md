@@ -165,8 +165,11 @@ sequence. The child is removed first and then inserted immediately before the an
 it after all remaining children. A request that produces the base order, including appending the
 last child or moving a child before its existing successor, is rejected without publication. The
 first vertical accepts at most one movement per transaction and rejects a same-callable structural
-replacement, hole transition, or unresolved-reference transition in that batch; unrelated rename,
-creation, and deletion work remains atomic through the ordinary transaction route. Cross-sequence,
+replacement, hole transition, or unresolved-reference transition in that batch. Unrelated rename,
+complete product or enum creation, and deletion work remains atomic through the ordinary transaction
+route. Creating an incomplete callable or entry body in the same batch rejects; existing incomplete
+state in another callable must be completed by the batch or movement rejects, so an unrelated blocker
+cannot suppress canonical validation of an otherwise complete moved owner. Cross-sequence,
 cross-parent, cross-scope, match-arm, branch, loop-body, callable, entity, and declaration movement
 is not implemented.
 
@@ -187,12 +190,12 @@ control, match, and consistency checks before publication. Incomplete final stat
 and projectable but rejects compilation before HIR derivation. Failure preserves the exact prior
 `Arc`, allocator, diagnostics, blockers, continuations, provenance, and future identity allocation.
 The movement itself contributes exactly one `SemanticDiffEntry::SequenceChildMoved` for the
-requested child with the stable sequence and child IDs plus checked `u64` base and final semantic
-ordinals; private preorder
-changes do not emit replacement, descendant creation/deletion, reference/call rewiring, or shifted-
-sibling movement noise. Existing containment and selected projection expose the new evaluation
-order. Imported and source-free movement use the same operation after import and direct compilation
-performs no source load or parse.
+requested child with stable sequence and child IDs plus the old and new predecessor/successor
+`NodeId` neighborhoods. Front and back boundaries use `None`; no numeric position or private
+preorder escapes. Private relocation changes do not emit replacement, descendant creation/deletion,
+reference/call rewiring, or shifted-sibling movement noise. Existing containment and selected
+projection expose the new evaluation order. Imported and source-free movement use the same operation
+after import, and direct compilation performs no source load or parse.
 
 Structured blockers currently cover missing entry point, missing declaration/entry body, typed
 expression hole, and unresolved value reference. The unresolved diagnostic has stable code
