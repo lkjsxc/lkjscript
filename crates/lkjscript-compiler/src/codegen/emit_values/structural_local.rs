@@ -53,7 +53,7 @@ impl Emitter<'_> {
         }
         let kind = match metadata.producer {
             LocalProducerKind::Owner
-            | LocalProducerKind::ProductField
+            | LocalProducerKind::AggregateField
             | LocalProducerKind::StructuralMove
             | LocalProducerKind::Call
             | LocalProducerKind::RuntimeOrConversion => Some(StructuralLocalKind::Owner),

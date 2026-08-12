@@ -76,8 +76,9 @@ semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected c
 operations, exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
 `let` bindings, explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`,
 `break`, `continue`, early `return`, copy-safe loads, byte-vector moves and shared borrows, product
-construction and field projection, enum construction and enum-variant testing, and ordered exhaustive
-matches over non-generic enum scrutinees. A sequence evaluates its children in listed order; an empty
+construction and field projection, enum construction and enum-variant testing, and ordered
+exhaustive matches over Boolean, I64, exact-product, and non-generic enum scrutinees. A sequence
+evaluates its children in listed order; an empty
 sequence yields `unit`, and a non-empty sequence yields its final child's value. `while` requires a
 Boolean condition, evaluates its body children in listed order, yields `unit`, and carries the
 canonical divergence effect. A typed loop carries one source-independent `SemanticType`, resolves it
@@ -97,10 +98,14 @@ non-semantic, while the published instantiation follows declaration order.
 The compiler validates substitution, value arguments, ownership/reference restrictions, and trait
 bounds and derives auto or explicit implementation witnesses. Source inference is an importer
 convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
-Pattern drafts cover wildcards, enum variants with exact stable field identities, and named payload
-bindings. Published lexical and payload bindings use stable entity identities; transaction-local
-binding handles are a separate checked identity domain and cannot escape the draft. Each arm has its
-own lexical binding scope. Mutable initializers are outside the declared binding's scope; the body is
+Pattern drafts cover wildcard, named binding, Boolean literal, I64 literal, exact product, and
+non-generic enum-variant nodes. Product nodes name a stable product entity and use stable product-
+field entities; every declared field occurs exactly once, input field order is non-semantic, and
+lowering plus query output use authoritative declaration order, names, types, and source ordinals.
+Enum fields retain the same exact stable-identity coverage law. Nested closed patterns compose under
+product fields and enum payloads, with exact propagated types and no coercion. Published lexical and
+payload bindings use stable entity identities; transaction-local binding handles are a separate
+checked identity domain and cannot escape the draft. Each arm has its own lexical binding scope. Mutable initializers are outside the declared binding's scope; the body is
 inside it. Mutable storage uses the canonical source/HIR restrictions, and assignment requires one
 visible mutable local kind and an exact non-`never` value type. One iterative transaction-local control walk seeds the
 nearest loop from the target's immutable HIR ancestry, allocates private identities for draft loops
@@ -113,8 +118,8 @@ loan state. Compiler-hidden match scrutinee/projection locals are never workspac
 constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
 checker remain
 authoritative for match validity, move/borrow legality, and cleanup. Generic pattern construction,
-forwarding an unresolved caller type parameter, ownership/reference-bearing generic instantiation,
-and non-enum source-free pattern spaces are not fabricated.
+forwarding an unresolved caller type parameter, and ownership/reference-bearing generic
+instantiation are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations; they also rename supported bindings, replace expressions, introduce/refine/fill typed
@@ -252,13 +257,12 @@ and development semantic-digest surrogate are deleted. There is no replacement w
 
 Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
 conflicts, parser recovery nodes, direct nominal-member mutation, cross-parent, entity, declaration,
-and generic semantic movement, generic-pattern construction, Boolean/integer/product source-free
-patterns, source rendering, persistence, collaboration, and
-incremental recomputation remain gaps. Ownership/reference-bearing
+and generic semantic movement, generic-pattern construction, source rendering, persistence,
+collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
-ownership/reference instantiation is an explicit call restriction. Current payload-match ownership
-coverage uses the strongest supported copy-safe field geometry. Everything below continues to define
-the broader
+ownership/reference instantiation is an explicit call restriction. Imported ownership-bearing
+product and enum fields remain valid stable-identity inputs to source-free nested patterns and use
+the canonical ownership and execution route. Everything below continues to define the broader
 target contract.
 
 ## 1. Snapshot authority

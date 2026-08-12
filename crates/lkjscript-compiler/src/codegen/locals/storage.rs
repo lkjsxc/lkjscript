@@ -20,7 +20,7 @@ pub(in crate::codegen) struct LocalMetadata {
 pub(in crate::codegen) enum LocalProducerKind {
     Parameter,
     Owner,
-    ProductField,
+    AggregateField,
     StructuralMove,
     Call,
     RuntimeOrConversion,
@@ -125,7 +125,9 @@ fn local_producer_kind(instruction: &InstructionKind, structural_move: bool) -> 
         | InstructionKind::MemoryWitnessIndependentOwner { .. }
         | InstructionKind::DestinationFinish { .. }
         | InstructionKind::AggregateConsumePayload { .. } => LocalProducerKind::Owner,
-        InstructionKind::ProductField { .. } => LocalProducerKind::ProductField,
+        InstructionKind::ProductField { .. } | InstructionKind::EnumField { .. } => {
+            LocalProducerKind::AggregateField
+        }
         InstructionKind::Move { .. } if structural_move => LocalProducerKind::StructuralMove,
         InstructionKind::Call { .. } => LocalProducerKind::Call,
         InstructionKind::Runtime { .. }

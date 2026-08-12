@@ -4918,10 +4918,13 @@ fn lower_draft(
                             "match scrutinee was not lowered before its patterns",
                         ))
                     })?;
-                if !matches!(scrutinee_type, Type::Enum { .. }) {
+                if !matches!(
+                    scrutinee_type,
+                    Type::Bool | Type::I64 | Type::Product(_) | Type::Enum { .. }
+                ) {
                     return Err(WorkspaceError::unsupported(
                         "match",
-                        "the source-free pattern surface currently supports enum scrutinees",
+                        "the source-free closed pattern surface supports Boolean, I64, product, and enum scrutinees",
                     ));
                 }
                 let scrutinee = allocate_workspace_match_local(
@@ -5904,12 +5907,33 @@ fn lower_prepared_match(
     })
 }
 
-struct ResolvedPatternVariant {
-    ty: Type,
-    enum_id: crate::hir::EnumId,
-    variant: crate::hir::VariantId,
-    layout: crate::hir::RuntimeLayoutId,
-    fields: Vec<ResolvedPatternField>,
+enum ResolvedPatternAggregate {
+    EnumVariant {
+        ty: Type,
+        enum_id: crate::hir::EnumId,
+        variant: crate::hir::VariantId,
+        layout: crate::hir::RuntimeLayoutId,
+        fields: Vec<ResolvedPatternField>,
+    },
+    Product {
+        ty: Type,
+        product: crate::hir::ProductId,
+        fields: Vec<ResolvedPatternField>,
+    },
+}
+
+impl ResolvedPatternAggregate {
+    fn fields(&self) -> &[ResolvedPatternField] {
+        match self {
+            Self::EnumVariant { fields, .. } | Self::Product { fields, .. } => fields,
+        }
+    }
+
+    fn fields_mut(&mut self) -> &mut [ResolvedPatternField] {
+        match self {
+            Self::EnumVariant { fields, .. } | Self::Product { fields, .. } => fields,
+        }
+    }
 }
 
 struct ResolvedPatternField {
@@ -5943,11 +5967,11 @@ fn lower_pattern_draft(
         WorkspaceError::InvalidDraft(Arc::from("pattern root exceeds host index"))
     })?;
     expected_types[root_index] = Some(expected.clone());
-    let mut variants = Vec::new();
-    variants
+    let mut aggregates = Vec::new();
+    aggregates
         .try_reserve(draft.nodes.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("pattern metadata allocation failed")))?;
-    variants.resize_with(draft.nodes.len(), || None);
+    aggregates.resize_with(draft.nodes.len(), || None);
     let mut pending = Vec::new();
     pending
         .try_reserve(draft.nodes.len())
@@ -5967,153 +5991,254 @@ fn lower_pattern_draft(
             .ok_or_else(|| {
                 WorkspaceError::InvalidDraft(Arc::from("pattern node has no expected type"))
             })?;
-        let DraftPatternNode::EnumVariant { variant, fields } = node else {
-            continue;
+        let aggregate = match node {
+            DraftPatternNode::Wildcard | DraftPatternNode::Binding { .. } => None,
+            DraftPatternNode::Bool(_) => {
+                require_pattern_type(&ty, &Type::Bool, "Boolean literal")?;
+                None
+            }
+            DraftPatternNode::I64(_) => {
+                require_pattern_type(&ty, &Type::I64, "I64 literal")?;
+                None
+            }
+            DraftPatternNode::Product { product, fields } => {
+                let header = snapshot.workspace_entity(*product)?;
+                if header.kind != EntityKind::Product {
+                    return Err(wrong_kind(
+                        "product match pattern",
+                        "product declaration",
+                        header.kind,
+                    ));
+                }
+                let EntityAddress::Product(product_index) = entity_address(snapshot, *product)?
+                else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("product")));
+                };
+                let definition = program
+                    .products
+                    .get(host_index(product_index, "product")?)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+                require_pattern_type(&ty, &Type::Product(definition.name.clone()), "product")?;
+                if fields.len() != definition.fields.len() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "product pattern must provide exactly one nested pattern per field",
+                    )));
+                }
+                let mut ordered = Vec::new();
+                ordered.try_reserve(definition.fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("product pattern field allocation failed"))
+                })?;
+                ordered.resize_with(definition.fields.len(), || None);
+                for field in fields {
+                    let field_header = snapshot.workspace_entity(field.field)?;
+                    if field_header.kind != EntityKind::ProductField {
+                        return Err(wrong_kind(
+                            "product match pattern field",
+                            "product field",
+                            field_header.kind,
+                        ));
+                    }
+                    let EntityAddress::ProductField {
+                        product: field_product,
+                        field: field_index,
+                    } = entity_address(snapshot, field.field)?
+                    else {
+                        return Err(WorkspaceError::StaleIdentity(Arc::from("product field")));
+                    };
+                    if field_product != product_index {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "product pattern field belongs to a different product",
+                        )));
+                    }
+                    let field_index = host_index(field_index, "product field")?;
+                    definition
+                        .fields
+                        .get(field_index)
+                        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+                    let slot = ordered
+                        .get_mut(field_index)
+                        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+                    if slot.replace(field.pattern).is_some() {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "product pattern field is duplicated",
+                        )));
+                    }
+                }
+                let mut resolved_fields = Vec::new();
+                resolved_fields
+                    .try_reserve(definition.fields.len())
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from(
+                            "resolved product pattern field allocation failed",
+                        ))
+                    })?;
+                for (declared, pattern) in definition.fields.iter().zip(ordered) {
+                    let pattern = pattern.ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from("product pattern field is missing"))
+                    })?;
+                    resolved_fields.push(ResolvedPatternField {
+                        name: declared.name.clone(),
+                        field_index: declared.source_order,
+                        ty: declared.ty.clone(),
+                        projection: None,
+                        pattern,
+                    });
+                }
+                Some(ResolvedPatternAggregate::Product {
+                    ty,
+                    product: definition.id,
+                    fields: resolved_fields,
+                })
+            }
+            DraftPatternNode::EnumVariant { variant, fields } => {
+                let header = snapshot.workspace_entity(*variant)?;
+                if header.kind != EntityKind::EnumVariant {
+                    return Err(wrong_kind(
+                        "enum match pattern",
+                        "enum variant",
+                        header.kind,
+                    ));
+                }
+                let EntityAddress::EnumVariant {
+                    enumeration,
+                    variant: variant_index,
+                } = entity_address(snapshot, *variant)?
+                else {
+                    return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
+                };
+                let definition = program
+                    .enums
+                    .get(host_index(enumeration, "enum")?)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+                if !definition.type_parameters.is_empty() {
+                    return Err(WorkspaceError::unsupported(
+                        "match-pattern",
+                        "generic enum match authoring is not implemented",
+                    ));
+                }
+                let expected_enum = Type::Enum {
+                    id: definition.id,
+                    name: definition.name.clone(),
+                    arguments: Vec::new(),
+                };
+                require_pattern_type(&ty, &expected_enum, "enum variant")?;
+                let selected = definition
+                    .variants
+                    .get(host_index(variant_index, "enum variant")?)
+                    .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+                if fields.len() != selected.fields.len() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "enum pattern must provide exactly one nested pattern per field",
+                    )));
+                }
+                let mut ordered = Vec::new();
+                ordered.try_reserve(selected.fields.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("enum pattern field allocation failed"))
+                })?;
+                ordered.resize_with(selected.fields.len(), || None);
+                for field in fields {
+                    let field_header = snapshot.workspace_entity(field.field)?;
+                    if field_header.kind != EntityKind::EnumField {
+                        return Err(wrong_kind(
+                            "enum match pattern field",
+                            "enum field",
+                            field_header.kind,
+                        ));
+                    }
+                    let EntityAddress::EnumField {
+                        enumeration: field_enum,
+                        variant: field_variant,
+                        field: field_index,
+                    } = entity_address(snapshot, field.field)?
+                    else {
+                        return Err(WorkspaceError::StaleIdentity(Arc::from("enum field")));
+                    };
+                    if field_enum != enumeration || field_variant != variant_index {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "enum pattern field belongs to a different variant",
+                        )));
+                    }
+                    let field_index = host_index(field_index, "enum field")?;
+                    selected
+                        .fields
+                        .get(field_index)
+                        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+                    let slot = ordered
+                        .get_mut(field_index)
+                        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+                    if slot.replace(field.pattern).is_some() {
+                        return Err(WorkspaceError::InvalidDraft(Arc::from(
+                            "enum pattern field is duplicated",
+                        )));
+                    }
+                }
+                let mut resolved_fields = Vec::new();
+                resolved_fields
+                    .try_reserve(selected.fields.len())
+                    .map_err(|_| {
+                        WorkspaceError::Host(Arc::from(
+                            "resolved enum pattern field allocation failed",
+                        ))
+                    })?;
+                for (declared, pattern) in selected.fields.iter().zip(ordered) {
+                    let pattern = pattern.ok_or_else(|| {
+                        WorkspaceError::InvalidDraft(Arc::from("enum pattern field is missing"))
+                    })?;
+                    resolved_fields.push(ResolvedPatternField {
+                        name: declared.name.clone(),
+                        field_index: declared.source_order,
+                        ty: declared.ty.clone(),
+                        projection: None,
+                        pattern,
+                    });
+                }
+                Some(ResolvedPatternAggregate::EnumVariant {
+                    ty,
+                    enum_id: definition.id,
+                    variant: selected.id,
+                    layout: definition.layout.identity,
+                    fields: resolved_fields,
+                })
+            }
         };
-        let header = snapshot.workspace_entity(*variant)?;
-        if header.kind != EntityKind::EnumVariant {
-            return Err(wrong_kind(
-                "enum match pattern",
-                "enum variant",
-                header.kind,
-            ));
-        }
-        let EntityAddress::EnumVariant {
-            enumeration,
-            variant: variant_index,
-        } = entity_address(snapshot, *variant)?
-        else {
-            return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
-        };
-        let definition = program
-            .enums
-            .get(host_index(enumeration, "enum")?)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
-        if !definition.type_parameters.is_empty() {
-            return Err(WorkspaceError::unsupported(
-                "match-pattern",
-                "generic enum match authoring is not implemented",
-            ));
-        }
-        let expected_enum = Type::Enum {
-            id: definition.id,
-            name: definition.name.clone(),
-            arguments: Vec::new(),
-        };
-        require_type(&ty, &expected_enum)?;
-        let selected = definition
-            .variants
-            .get(host_index(variant_index, "enum variant")?)
-            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
-        if fields.len() != selected.fields.len() {
-            return Err(WorkspaceError::InvalidDraft(Arc::from(
-                "enum pattern must provide exactly one nested pattern per field",
-            )));
-        }
-        let mut ordered = Vec::new();
-        ordered
-            .try_reserve(selected.fields.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("enum pattern field allocation failed")))?;
-        ordered.resize_with(selected.fields.len(), || None);
-        for field in fields {
-            let field_header = snapshot.workspace_entity(field.field)?;
-            if field_header.kind != EntityKind::EnumField {
-                return Err(wrong_kind(
-                    "enum match pattern field",
-                    "enum field",
-                    field_header.kind,
-                ));
+        if let Some(mut aggregate) = aggregate {
+            for field in aggregate.fields().iter().rev() {
+                let child = field.pattern.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+                })?;
+                let expected_slot = expected_types.get_mut(child).ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("pattern child identity is stale"))
+                })?;
+                if expected_slot.replace(field.ty.clone()).is_some() {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "pattern child receives more than one expected type",
+                    )));
+                }
+                pending.push(field.pattern);
             }
-            let EntityAddress::EnumField {
-                enumeration: field_enum,
-                variant: field_variant,
-                field: field_index,
-            } = entity_address(snapshot, field.field)?
-            else {
-                return Err(WorkspaceError::StaleIdentity(Arc::from("enum field")));
-            };
-            if field_enum != enumeration || field_variant != variant_index {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "enum pattern field belongs to a different variant",
-                )));
+            for field in aggregate.fields_mut() {
+                let child = field.pattern.index().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+                })?;
+                if !matches!(draft.nodes.get(child), Some(DraftPatternNode::Wildcard)) {
+                    let name = format!("$match{}", program.bindings.len());
+                    field.projection = Some(allocate_workspace_match_local(
+                        program,
+                        root,
+                        lowering,
+                        next_slot,
+                        name,
+                        field.ty.clone(),
+                        BindingKind::MatchTemporary,
+                        origin,
+                    )?);
+                }
             }
-            let declared = selected
-                .fields
-                .get(host_index(field_index, "enum field")?)
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
-            let slot = ordered
-                .get_mut(host_index(field_index, "enum field")?)
-                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
-            if slot.replace(field.pattern).is_some() {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "enum pattern field is duplicated",
-                )));
-            }
-            let child = field.pattern.index().ok_or_else(|| {
-                WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
-            })?;
-            let expected_slot = expected_types.get_mut(child).ok_or_else(|| {
-                WorkspaceError::InvalidDraft(Arc::from("pattern child identity is stale"))
-            })?;
-            if expected_slot.replace(declared.ty.clone()).is_some() {
-                return Err(WorkspaceError::InvalidDraft(Arc::from(
-                    "pattern child receives more than one expected type",
-                )));
-            }
-            pending.push(field.pattern);
+            aggregates[index] = Some(aggregate);
         }
-        let ordered = ordered
-            .into_iter()
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| {
-                WorkspaceError::InvalidDraft(Arc::from("enum pattern field is missing"))
-            })?;
-        let mut resolved_fields = Vec::new();
-        resolved_fields
-            .try_reserve(selected.fields.len())
-            .map_err(|_| {
-                WorkspaceError::Host(Arc::from("resolved pattern field allocation failed"))
-            })?;
-        for (declared, pattern) in selected.fields.iter().zip(ordered) {
-            resolved_fields.push(ResolvedPatternField {
-                name: declared.name.clone(),
-                field_index: declared.source_order,
-                ty: declared.ty.clone(),
-                projection: None,
-                pattern,
-            });
-        }
-        let enum_id = definition.id;
-        let selected_id = selected.id;
-        let layout = definition.layout.identity;
-        for field in &mut resolved_fields {
-            let child = field.pattern.index().ok_or_else(|| {
-                WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
-            })?;
-            if !matches!(draft.nodes.get(child), Some(DraftPatternNode::Wildcard)) {
-                let name = format!("$match{}", program.bindings.len());
-                field.projection = Some(allocate_workspace_match_local(
-                    program,
-                    root,
-                    lowering,
-                    next_slot,
-                    name,
-                    field.ty.clone(),
-                    BindingKind::MatchTemporary,
-                    origin,
-                )?);
-            }
-        }
-        variants[index] = Some(ResolvedPatternVariant {
-            ty,
-            enum_id,
-            variant: selected_id,
-            layout,
-            fields: resolved_fields,
-        });
     }
 
-    let order = pattern_postorder(draft)?;
+    let order = pattern_postorder(draft, &aggregates)?;
     let mut completed = Vec::new();
     completed
         .try_reserve(draft.nodes.len())
@@ -6164,48 +6289,35 @@ fn lower_pattern_draft(
                 bindings.push(*binding);
                 crate::hir::MatchPattern::Binding { local }
             }
-            DraftPatternNode::EnumVariant { .. } => {
-                let variant = variants[index].take().ok_or_else(|| {
-                    WorkspaceError::InvalidDraft(Arc::from("enum pattern metadata is missing"))
+            DraftPatternNode::Bool(value) => crate::hir::MatchPattern::Bool(*value),
+            DraftPatternNode::I64(value) => crate::hir::MatchPattern::I64(*value),
+            DraftPatternNode::Product { .. } | DraftPatternNode::EnumVariant { .. } => {
+                let aggregate = aggregates[index].take().ok_or_else(|| {
+                    WorkspaceError::InvalidDraft(Arc::from("aggregate pattern metadata is missing"))
                 })?;
-                let mut fields = Vec::new();
-                fields.try_reserve(variant.fields.len()).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("match pattern field allocation failed"))
-                })?;
-                for field in variant.fields {
-                    let child = field.pattern.index().ok_or_else(|| {
-                        WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
-                    })?;
-                    let pattern =
-                        completed
-                            .get_mut(child)
-                            .and_then(Option::take)
-                            .ok_or_else(|| {
-                                WorkspaceError::InvalidDraft(Arc::from(
-                                    "pattern child is stale or reused",
-                                ))
-                            })?;
-                    let projection = field.projection;
-                    if projection.is_none()
-                        != matches!(pattern, crate::hir::MatchPattern::Wildcard { .. })
-                    {
-                        return Err(WorkspaceError::InvalidDraft(Arc::from(
-                            "pattern projection metadata is stale",
-                        )));
-                    }
-                    fields.push(crate::hir::MatchFieldPattern {
-                        name: field.name,
-                        field_index: field.field_index,
-                        projection,
-                        pattern,
-                    });
-                }
-                crate::hir::MatchPattern::Variant {
-                    ty: variant.ty,
-                    enum_id: variant.enum_id,
-                    variant: variant.variant,
-                    layout: variant.layout,
-                    fields,
+                match aggregate {
+                    ResolvedPatternAggregate::EnumVariant {
+                        ty,
+                        enum_id,
+                        variant,
+                        layout,
+                        fields,
+                    } => crate::hir::MatchPattern::Variant {
+                        ty,
+                        enum_id,
+                        variant,
+                        layout,
+                        fields: lower_resolved_pattern_fields(fields, &mut completed)?,
+                    },
+                    ResolvedPatternAggregate::Product {
+                        ty,
+                        product,
+                        fields,
+                    } => crate::hir::MatchPattern::Product {
+                        ty,
+                        product,
+                        fields: lower_resolved_pattern_fields(fields, &mut completed)?,
+                    },
                 }
             }
         };
@@ -6225,7 +6337,58 @@ fn lower_pattern_draft(
     Ok((root, bindings))
 }
 
-fn pattern_postorder(draft: &PatternDraft) -> Result<Vec<usize>, WorkspaceError> {
+fn lower_resolved_pattern_fields(
+    resolved: Vec<ResolvedPatternField>,
+    completed: &mut [Option<crate::hir::MatchPattern>],
+) -> Result<Vec<crate::hir::MatchFieldPattern>, WorkspaceError> {
+    let mut fields = Vec::new();
+    fields
+        .try_reserve(resolved.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("match pattern field allocation failed")))?;
+    for field in resolved {
+        let child = field.pattern.index().ok_or_else(|| {
+            WorkspaceError::InvalidDraft(Arc::from("pattern child exceeds host index"))
+        })?;
+        let pattern = completed
+            .get_mut(child)
+            .and_then(Option::take)
+            .ok_or_else(|| {
+                WorkspaceError::InvalidDraft(Arc::from("pattern child is stale or reused"))
+            })?;
+        let projection = field.projection;
+        if projection.is_none() != matches!(pattern, crate::hir::MatchPattern::Wildcard { .. }) {
+            return Err(WorkspaceError::InvalidDraft(Arc::from(
+                "pattern projection metadata is stale",
+            )));
+        }
+        fields.push(crate::hir::MatchFieldPattern {
+            name: field.name,
+            field_index: field.field_index,
+            projection,
+            pattern,
+        });
+    }
+    Ok(fields)
+}
+
+fn require_pattern_type(
+    actual: &Type,
+    expected: &Type,
+    subject: &str,
+) -> Result<(), WorkspaceError> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+            "{subject} pattern requires type {expected}, got {actual}"
+        ))))
+    }
+}
+
+fn pattern_postorder(
+    draft: &PatternDraft,
+    aggregates: &[Option<ResolvedPatternAggregate>],
+) -> Result<Vec<usize>, WorkspaceError> {
     enum Work {
         Visit(DraftPatternNodeId),
         Finish(usize),
@@ -6248,19 +6411,33 @@ fn pattern_postorder(draft: &PatternDraft) -> Result<Vec<usize>, WorkspaceError>
                 let node = draft.nodes.get(index).ok_or_else(|| {
                     WorkspaceError::InvalidDraft(Arc::from("pattern node identity is stale"))
                 })?;
-                let additional = node.child_count().checked_add(1).ok_or_else(|| {
+                let fields = match node {
+                    DraftPatternNode::Product { .. } | DraftPatternNode::EnumVariant { .. } => {
+                        Some(
+                            aggregates
+                                .get(index)
+                                .and_then(Option::as_ref)
+                                .ok_or_else(|| {
+                                    WorkspaceError::InvalidDraft(Arc::from(
+                                        "aggregate pattern metadata is missing",
+                                    ))
+                                })?
+                                .fields(),
+                        )
+                    }
+                    _ => None,
+                };
+                let child_count = fields.map_or(0, <[ResolvedPatternField]>::len);
+                let additional = child_count.checked_add(1).ok_or_else(|| {
                     WorkspaceError::Host(Arc::from("pattern order work overflow"))
                 })?;
                 work.try_reserve(additional).map_err(|_| {
                     WorkspaceError::Host(Arc::from("pattern order work allocation failed"))
                 })?;
                 work.push(Work::Finish(index));
-                let mut children = Vec::new();
-                children.try_reserve(node.child_count()).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("pattern child allocation failed"))
-                })?;
-                node.for_each_child(|child| children.push(child));
-                work.extend(children.into_iter().rev().map(Work::Visit));
+                if let Some(fields) = fields {
+                    work.extend(fields.iter().rev().map(|field| Work::Visit(field.pattern)));
+                }
             }
         }
     }
@@ -7437,8 +7614,16 @@ fn validate_pattern_shape(pattern: &PatternDraft) -> Result<(), WorkspaceError> 
             "pattern draft must be one connected tree with no reused child",
         )));
     }
-    let mut reached = vec![false; pattern.nodes.len()];
-    let mut pending = vec![pattern.root];
+    let mut reached = Vec::new();
+    reached
+        .try_reserve(pattern.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern reachability allocation failed")))?;
+    reached.resize(pattern.nodes.len(), false);
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(pattern.nodes.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("pattern reachability allocation failed")))?;
+    pending.push(pattern.root);
     let mut reached_count = 0_usize;
     while let Some(id) = pending.pop() {
         let index = id.index().ok_or_else(|| {

@@ -6,11 +6,10 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Select one dependency-closed local semantic vertical from current evidence.** Prefer a
-   demonstrated defect, accepted specification gap, measured bottleneck, or present authoring
-   consumer. Current evidence names direct nominal-member mutation and unsupported source-free
-   pattern shapes as gaps, but selection still requires a concrete user operation and focused
-   failing evidence.
+1. **Select one dependency-closed direct nominal-member mutation vertical.** Current evidence names
+   identity-preserving rename for products, enums, variants, and fields, but implementation still
+   requires one concrete operation, focused failing evidence, and a decision about redundant private
+   nominal display names. Do not combine rename with field/variant addition, deletion, or movement.
 
 ## Next
 

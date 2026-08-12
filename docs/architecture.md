@@ -193,7 +193,8 @@ domain. Implemented expression constructors are scalar and byte literals, select
 built-in operations, exact generic and non-generic calls, `if`, ordered sequence, immutable `let`,
 explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`, nearest-lexical
 `break` and `continue`, early `return`, copy-safe loads, byte-vector move/shared borrow, product
-construction/projection, enum construction/variant testing, and ordered exhaustive enum matches.
+construction/projection, enum construction/variant testing, and ordered exhaustive closed Boolean,
+I64, exact-product, and non-generic enum matches.
 Loop lowering resolves one exact non-`never` `SemanticType`; break requires an exact non-divergent
 payload for the active loop (unit for while), while continue has no payload. Both transfers are
 `never`-typed and make later entries in the same ordered body unreachable. Return lowering looks up
@@ -203,10 +204,15 @@ return; it creates no target identity or workspace cleanup rule. Generic drafts 
 arguments by stable binder entity; importer inference and semantic edits converge at one exact
 substitution, assignability, and bound resolver, which derives auto or explicit implementation
 witnesses.
-Implemented patterns are wildcard, non-generic enum variant/field, and
-stable named payload binding. Match preparation allocates hidden scrutinee/projection places and
-public payload bindings, establishes one lexical scope per arm, invokes the canonical usefulness and
-plan builder, and publishes only if complete-HIR ownership and consistency validation succeed.
+Implemented patterns are wildcard, stable named binding, Boolean literal, I64 literal, exact
+product, and non-generic enum variant/field nodes. Product input uses stable declaration and field
+entities, is canonicalized to exact declaration order and coverage, and shares the same iterative
+expected-type propagation and HIR field form as enum patterns. Match preparation allocates hidden
+scrutinee/projection places and public payload bindings, establishes one lexical scope per arm,
+invokes the canonical usefulness and plan builder, and publishes only if complete-HIR ownership and
+consistency validation succeed. SSA active-variant verification traces the true paths of nested
+short-circuit Boolean merges iteratively and accepts enum projection only when every possible path
+retains the matching variant test.
 Mutable declaration activation occurs after its initializer and before its body. Resolved draft
 bindings retain exact HIR binding kind, so assignment admits only visible mutable locals. Before
 lowering a draft, one combined iterative walk over the immutable target root derives divergent-
@@ -222,10 +228,9 @@ lookup instead of rescanning the expression root. A separate checked scan of ret
 private loop allocation; draft node positions never become loop or public identities. Complete-HIR
 consistency validation independently walks each callable with an explicit control stack and checks
 per-callable loop-ID uniqueness, nearest active transfer targets, exact break payload types, and
-closed control context before publication or compilation. Generic patterns, unresolved binder
-forwarding, ownership/reference generic instantiation, and non-enum source-free pattern spaces
-remain explicit unsupported edits; no
-executable fallback exists. After all disjoint structural
+closed control context before publication or compilation. Generic patterns, unresolved binder forwarding,
+and ownership/reference generic instantiation remain explicit unsupported edits; no executable
+fallback exists. After all disjoint structural
 edits and final-state dependency validation, one fallible iterative compaction pass performs callable
 and nominal removals
 and removes unreachable bindings and match plans. It assigns retained `BindingId` and `MatchPlanId`
@@ -494,8 +499,9 @@ references; non-generic product and enum creation;
 generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
 sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, and
 early `return`; selected byte-vector move/borrow and canonical operations; aggregate
-construction/observation; exhaustive non-generic enum payload matches with
-stable arm-local bindings; exact calls to imported or source-free generic functions with stable
+construction/observation; exhaustive closed non-generic Boolean, I64, product, and enum matches
+with stable arm-local bindings and stable nominal member selection; exact calls to imported or
+source-free generic functions with stable
 binders, structured types, shared resolution, and derived witnesses; one identity-preserving direct-
 child reorder within one semantic sequence; atomic batch edits; tombstone-stable identities;
 structured stable nominal, generic, and match views; deterministic
@@ -515,9 +521,8 @@ Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds direct nominal-member mutation,
 cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
-only when another present owner/order consumer defines it; generic patterns, Boolean/integer/product
-pattern construction, generic ownership/reference instantiation,
-unresolved moves/borrows/calls/type names/members/patterns/
+only when another present owner/order consumer defines it; generic patterns, generic
+ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
 imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,
 collaboration, a measured wire consumer, incremental recomputation, daemon, database service,

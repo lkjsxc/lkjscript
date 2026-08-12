@@ -577,6 +577,12 @@ pub enum DraftPatternNode {
         binding: DraftBindingId,
         name: String,
     },
+    Bool(bool),
+    I64(i64),
+    Product {
+        product: EntityId,
+        fields: Vec<DraftPatternField>,
+    },
     EnumVariant {
         variant: EntityId,
         fields: Vec<DraftPatternField>,
@@ -586,13 +592,13 @@ pub enum DraftPatternNode {
 impl DraftPatternNode {
     pub(super) fn child_count(&self) -> usize {
         match self {
-            Self::EnumVariant { fields, .. } => fields.len(),
-            Self::Wildcard | Self::Binding { .. } => 0,
+            Self::Product { fields, .. } | Self::EnumVariant { fields, .. } => fields.len(),
+            Self::Wildcard | Self::Binding { .. } | Self::Bool(_) | Self::I64(_) => 0,
         }
     }
 
     pub(super) fn for_each_child(&self, mut visit: impl FnMut(DraftPatternNodeId)) {
-        if let Self::EnumVariant { fields, .. } = self {
+        if let Self::Product { fields, .. } | Self::EnumVariant { fields, .. } = self {
             for field in fields {
                 visit(field.pattern);
             }

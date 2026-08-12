@@ -14087,6 +14087,2025 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
 
+fn complete_source_free_i64_main(seed: u64, draft: ExpressionDraft) -> Workspace {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("source-free match workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create source-free match main");
+    let hole = created.snapshot.holes().next().expect("main hole").id;
+    workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole { hole, draft }],
+        })
+        .expect("fill source-free match main");
+    workspace
+}
+
+fn bool_pattern_match_draft(value: bool) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::Bool(value),
+            DraftNode::I64(1),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(0),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![DraftPatternNode::Bool(true)],
+                            DraftPatternNodeId::new(0),
+                        ),
+                        body: DraftNodeId::new(1),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![DraftPatternNode::Bool(false)],
+                            DraftPatternNodeId::new(0),
+                        ),
+                        body: DraftNodeId::new(2),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(3),
+    )
+}
+
+fn i64_pattern_match_draft(value: i64) -> ExpressionDraft {
+    let literals = [-1, 0, i64::MIN, i64::MAX];
+    let mut nodes = vec![DraftNode::I64(value)];
+    let mut arms = Vec::new();
+    for (index, literal) in literals.into_iter().enumerate() {
+        let body = DraftNodeId::new(u64::try_from(nodes.len()).expect("I64 arm body identity"));
+        nodes.push(DraftNode::I64(
+            i64::try_from(index + 1).expect("I64 arm result"),
+        ));
+        arms.push(MatchArmDraft {
+            pattern: PatternDraft::new(
+                vec![DraftPatternNode::I64(literal)],
+                DraftPatternNodeId::new(0),
+            ),
+            body,
+        });
+    }
+    let fallback = DraftNodeId::new(u64::try_from(nodes.len()).expect("fallback identity"));
+    nodes.push(DraftNode::I64(9));
+    arms.push(MatchArmDraft {
+        pattern: PatternDraft::wildcard(),
+        body: fallback,
+    });
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("I64 match identity"));
+    nodes.push(DraftNode::Match {
+        scrutinee: DraftNodeId::new(0),
+        arms,
+    });
+    ExpressionDraft::new(nodes, root)
+}
+
+#[test]
+fn source_free_boolean_and_i64_literal_patterns_query_compile_and_execute() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+
+    for (seed, value, expected) in [(240_u64, true, 1_i64), (241, false, 0)] {
+        let workspace = complete_source_free_i64_main(seed, bool_pattern_match_draft(value));
+        let snapshot = workspace.current();
+        assert_eq!(run_i64(&snapshot), expected);
+        let site = snapshot
+            .nodes()
+            .iter()
+            .find(|node| node.kind == NodeKind::Match)
+            .expect("Boolean match node")
+            .id;
+        let view = snapshot
+            .match_view(snapshot.revision(), site)
+            .expect("Boolean match view");
+        assert_eq!(view.arms.len(), 2);
+        assert!(matches!(
+            view.arms[0].patterns[0].kind,
+            MatchPatternKindView::Bool(true)
+        ));
+        assert!(matches!(
+            view.arms[1].patterns[0].kind,
+            MatchPatternKindView::Bool(false)
+        ));
+    }
+
+    for (index, value) in [-1, 0, i64::MIN, i64::MAX].into_iter().enumerate() {
+        let workspace = complete_source_free_i64_main(
+            242_u64 + u64::try_from(index).expect("seed offset"),
+            i64_pattern_match_draft(value),
+        );
+        let snapshot = workspace.current();
+        assert_eq!(
+            run_i64(&snapshot),
+            i64::try_from(index + 1).expect("I64 result")
+        );
+        let site = snapshot
+            .nodes()
+            .iter()
+            .find(|node| node.kind == NodeKind::Match)
+            .expect("I64 match node")
+            .id;
+        let view = snapshot
+            .match_view(snapshot.revision(), site)
+            .expect("I64 match view");
+        let queried = view
+            .arms
+            .iter()
+            .take(4)
+            .map(|arm| match arm.patterns[0].kind {
+                MatchPatternKindView::I64(value) => value,
+                ref other => panic!("expected I64 pattern, got {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(queried, vec![-1, 0, i64::MIN, i64::MAX]);
+        assert!(matches!(
+            view.arms[4].patterns[0].kind,
+            MatchPatternKindView::Wildcard
+        ));
+    }
+
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+fn scalar_match_with_patterns(
+    scrutinee: DraftNode,
+    patterns: Vec<PatternDraft>,
+) -> ExpressionDraft {
+    let mut nodes = vec![scrutinee];
+    let mut arms = Vec::new();
+    for (index, pattern) in patterns.into_iter().enumerate() {
+        let body = DraftNodeId::new(u64::try_from(nodes.len()).expect("scalar arm body identity"));
+        nodes.push(DraftNode::I64(
+            i64::try_from(index).expect("scalar arm body value"),
+        ));
+        arms.push(MatchArmDraft { pattern, body });
+    }
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("scalar match identity"));
+    nodes.push(DraftNode::Match {
+        scrutinee: DraftNodeId::new(0),
+        arms,
+    });
+    ExpressionDraft::new(nodes, root)
+}
+
+#[test]
+fn source_free_scalar_patterns_reuse_canonical_usefulness_and_fail_atomically() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(250).expect("scalar atomic workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create scalar atomic main");
+    let before = created.snapshot;
+    let hole = before.holes().next().expect("scalar atomic hole").id;
+    let bool_pattern = |value| {
+        PatternDraft::new(
+            vec![DraftPatternNode::Bool(value)],
+            DraftPatternNodeId::new(0),
+        )
+    };
+    let i64_pattern = |value| {
+        PatternDraft::new(
+            vec![DraftPatternNode::I64(value)],
+            DraftPatternNodeId::new(0),
+        )
+    };
+    let cases = vec![
+        (
+            scalar_match_with_patterns(DraftNode::Bool(true), vec![bool_pattern(true)]),
+            "nonexhaustive match",
+        ),
+        (
+            scalar_match_with_patterns(
+                DraftNode::Bool(true),
+                vec![bool_pattern(true), bool_pattern(true), bool_pattern(false)],
+            ),
+            "useless or subsumed match arm 1",
+        ),
+        (
+            scalar_match_with_patterns(
+                DraftNode::Bool(true),
+                vec![PatternDraft::wildcard(), bool_pattern(false)],
+            ),
+            "useless or subsumed match arm 1",
+        ),
+        (
+            scalar_match_with_patterns(DraftNode::I64(1), vec![i64_pattern(1), i64_pattern(2)]),
+            "nonexhaustive match",
+        ),
+        (
+            scalar_match_with_patterns(
+                DraftNode::I64(1),
+                vec![PatternDraft::wildcard(), i64_pattern(1)],
+            ),
+            "useless or subsumed match arm 1",
+        ),
+        (
+            scalar_match_with_patterns(
+                DraftNode::I64(1),
+                vec![bool_pattern(true), PatternDraft::wildcard()],
+            ),
+            "Boolean literal pattern requires type bool",
+        ),
+        (
+            scalar_match_with_patterns(
+                DraftNode::Bool(true),
+                vec![i64_pattern(1), PatternDraft::wildcard()],
+            ),
+            "I64 literal pattern requires type i64",
+        ),
+    ];
+    for (draft, expected) in cases {
+        let error = workspace
+            .apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![Edit::FillHole { hole, draft }],
+            })
+            .expect_err("invalid scalar match must reject");
+        assert!(matches!(error, WorkspaceError::InvalidDraft(_)));
+        assert!(error.to_string().contains(expected), "{error}");
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+        assert_eq!(workspace.current().revision(), before.revision());
+    }
+
+    let retried = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: bool_pattern_match_draft(true),
+            }],
+        })
+        .expect("correct scalar retry");
+    let control = complete_source_free_i64_main(250, bool_pattern_match_draft(true));
+    assert_eq!(retried.snapshot.entities(), control.current().entities());
+    assert_eq!(retried.snapshot.nodes(), control.current().nodes());
+    assert_eq!(run_i64(&retried.snapshot), 1);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+fn create_decision_product(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId, EntityId) {
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "decision".to_owned(),
+                fields: vec![
+                    ProductFieldDraft {
+                        name: "flag".to_owned(),
+                        ty: SemanticType::Bool,
+                    },
+                    ProductFieldDraft {
+                        name: "key".to_owned(),
+                        ty: SemanticType::I64,
+                    },
+                    ProductFieldDraft {
+                        name: "selected".to_owned(),
+                        ty: SemanticType::I64,
+                    },
+                ],
+            }],
+        })
+        .expect("create decision product");
+    (
+        entity_named(&created.snapshot, EntityKind::Product, "decision"),
+        entity_named(&created.snapshot, EntityKind::ProductField, "flag"),
+        entity_named(&created.snapshot, EntityKind::ProductField, "key"),
+        entity_named(&created.snapshot, EntityKind::ProductField, "selected"),
+    )
+}
+
+fn decision_product_match_draft(
+    product: EntityId,
+    flag: EntityId,
+    key: EntityId,
+    selected: EntityId,
+    reverse_fields: bool,
+) -> ExpressionDraft {
+    let payload = DraftBindingId::new(0);
+    let mut pattern_fields = vec![
+        DraftPatternField {
+            field: flag,
+            pattern: DraftPatternNodeId::new(1),
+        },
+        DraftPatternField {
+            field: key,
+            pattern: DraftPatternNodeId::new(2),
+        },
+        DraftPatternField {
+            field: selected,
+            pattern: DraftPatternNodeId::new(0),
+        },
+    ];
+    if reverse_fields {
+        pattern_fields.reverse();
+    }
+    ExpressionDraft::new(
+        vec![
+            DraftNode::Bool(true),
+            DraftNode::I64(-1),
+            DraftNode::I64(42),
+            DraftNode::ProductValue {
+                product,
+                fields: vec![
+                    DraftFieldValue {
+                        field: selected,
+                        value: DraftNodeId::new(2),
+                    },
+                    DraftFieldValue {
+                        field: flag,
+                        value: DraftNodeId::new(0),
+                    },
+                    DraftFieldValue {
+                        field: key,
+                        value: DraftNodeId::new(1),
+                    },
+                ],
+            },
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(3),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "selected-value".to_owned(),
+                                },
+                                DraftPatternNode::Bool(true),
+                                DraftPatternNode::I64(-1),
+                                DraftPatternNode::Product {
+                                    product,
+                                    fields: pattern_fields,
+                                },
+                            ],
+                            DraftPatternNodeId::new(3),
+                        ),
+                        body: DraftNodeId::new(4),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::Product {
+                                    product,
+                                    fields: vec![
+                                        DraftPatternField {
+                                            field: flag,
+                                            pattern: DraftPatternNodeId::new(0),
+                                        },
+                                        DraftPatternField {
+                                            field: key,
+                                            pattern: DraftPatternNodeId::new(1),
+                                        },
+                                        DraftPatternField {
+                                            field: selected,
+                                            pattern: DraftPatternNodeId::new(2),
+                                        },
+                                    ],
+                                },
+                            ],
+                            DraftPatternNodeId::new(3),
+                        ),
+                        body: DraftNodeId::new(5),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(6),
+    )
+}
+
+fn source_free_decision_product_match(
+    seed: u64,
+    reverse_fields: bool,
+) -> (Workspace, EntityId, EntityId, EntityId, EntityId) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("decision workspace");
+    let (product, flag, key, selected) = create_decision_product(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create decision main");
+    let hole = created.snapshot.holes().next().expect("decision hole").id;
+    workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: decision_product_match_draft(product, flag, key, selected, reverse_fields),
+            }],
+        })
+        .expect("fill decision product match");
+    (workspace, product, flag, key, selected)
+}
+
+#[test]
+fn source_free_product_patterns_canonicalize_bind_query_and_preserve_lifecycle() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let (mut reversed, product, flag, key, selected) =
+        source_free_decision_product_match(246, true);
+    let (ordered, ordered_product, ordered_flag, ordered_key, ordered_selected) =
+        source_free_decision_product_match(246, false);
+    let snapshot = reversed.current();
+    let ordered_snapshot = ordered.current();
+    assert_eq!(run_i64(&snapshot), 42);
+    assert_eq!(run_i64(&ordered_snapshot), 42);
+    assert_eq!(
+        (product, flag, key, selected),
+        (ordered_product, ordered_flag, ordered_key, ordered_selected)
+    );
+    assert_eq!(snapshot.entities(), ordered_snapshot.entities());
+    assert_eq!(
+        canonical_workspace_observation(&snapshot),
+        canonical_workspace_observation(&ordered_snapshot)
+    );
+
+    let site = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("product match node")
+        .id;
+    let ordered_site = ordered_snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("ordered product match node")
+        .id;
+    let view = snapshot
+        .match_view(snapshot.revision(), site)
+        .expect("product match view");
+    assert_eq!(
+        view,
+        ordered_snapshot
+            .match_view(ordered_snapshot.revision(), ordered_site)
+            .expect("ordered product match view")
+    );
+    let product_fields = view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match &pattern.kind {
+            MatchPatternKindView::Product {
+                product: found,
+                fields,
+            } if *found == product => Some(fields),
+            _ => None,
+        })
+        .expect("product pattern view");
+    assert_eq!(
+        product_fields
+            .iter()
+            .map(|field| field.field)
+            .collect::<Vec<_>>(),
+        vec![Some(flag), Some(key), Some(selected)]
+    );
+    let child_kinds = product_fields
+        .iter()
+        .map(|field| {
+            &view.arms[0]
+                .patterns
+                .iter()
+                .find(|pattern| pattern.label == field.pattern)
+                .expect("product pattern child")
+                .kind
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(child_kinds[0], MatchPatternKindView::Bool(true)));
+    assert!(matches!(child_kinds[1], MatchPatternKindView::I64(-1)));
+    let binding = match child_kinds[2] {
+        MatchPatternKindView::Binding { binding } => *binding,
+        other => panic!("expected product payload binding, got {other:?}"),
+    };
+    assert_eq!(
+        snapshot
+            .entity(binding)
+            .expect("stable product binding")
+            .name
+            .as_ref(),
+        "selected-value"
+    );
+    assert!(snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == binding));
+    assert!(snapshot
+        .entities()
+        .iter()
+        .all(|entity| !entity.name.starts_with("$match")));
+    let projection = snapshot
+        .project(&[
+            ProjectionSlice::Entity(product),
+            ProjectionSlice::Body(entity_named(&snapshot, EntityKind::Main, "main")),
+            ProjectionSlice::Match(site),
+        ])
+        .expect("product pattern projection");
+    assert_eq!(
+        projection,
+        snapshot
+            .project(&[
+                ProjectionSlice::Entity(product),
+                ProjectionSlice::Body(entity_named(&snapshot, EntityKind::Main, "main")),
+                ProjectionSlice::Match(site),
+            ])
+            .expect("repeat product pattern projection")
+    );
+    for kind in ["kind=product", "kind=bool", "kind=i64", "kind=binding"] {
+        assert!(projection.contains(kind), "{projection}");
+    }
+    assert!(!projection.contains("$match"), "{projection}");
+
+    let reversed_executable = crate::compile_snapshot(&snapshot).expect("compile product match");
+    assert_eq!(
+        evaluate(reversed_executable.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::I64(42))
+    );
+
+    let old = snapshot;
+    let replaced = reversed
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: site,
+                draft: ExpressionDraft::scalar_i64(5),
+            }],
+        })
+        .expect("replace product match");
+    assert_eq!(run_i64(&old), 42);
+    assert_eq!(run_i64(&replaced.snapshot), 5);
+    assert!(old.entity(binding).is_ok());
+    assert!(replaced.snapshot.entity(binding).is_err());
+    for entity in [product, flag, key, selected] {
+        assert_eq!(
+            replaced
+                .snapshot
+                .entity(entity)
+                .expect("retained product entity")
+                .id,
+            entity
+        );
+    }
+    assert!(replaced
+        .diff
+        .entries
+        .iter()
+        .any(|entry| matches!(entry, SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == binding)));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+fn create_named_i64_pair(
+    workspace: &mut Workspace,
+    name: &str,
+    left_name: &str,
+    right_name: &str,
+) -> (EntityId, EntityId, EntityId) {
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: name.to_owned(),
+                fields: vec![
+                    ProductFieldDraft {
+                        name: left_name.to_owned(),
+                        ty: SemanticType::I64,
+                    },
+                    ProductFieldDraft {
+                        name: right_name.to_owned(),
+                        ty: SemanticType::I64,
+                    },
+                ],
+            }],
+        })
+        .expect("create named I64 pair");
+    (
+        entity_named(&created.snapshot, EntityKind::Product, name),
+        entity_named(&created.snapshot, EntityKind::ProductField, left_name),
+        entity_named(&created.snapshot, EntityKind::ProductField, right_name),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct ProductPatternFixture {
+    product: EntityId,
+    left: EntityId,
+    right: EntityId,
+    other: EntityId,
+    other_left: EntityId,
+    other_right: EntityId,
+    stale_product: EntityId,
+    stale_field: EntityId,
+    hole: HoleId,
+}
+
+fn product_pattern_fixture(
+    seed: u64,
+) -> (Workspace, ProductPatternFixture, Arc<WorkspaceSnapshot>) {
+    let mut workspace = Workspace::empty_deterministic(seed).expect("product pattern fixture");
+    let (stale_product, stale_field, _) = create_named_i64_pair(
+        &mut workspace,
+        "discarded-product",
+        "discarded-left",
+        "discarded-right",
+    );
+    let stale_snapshot = workspace.current();
+    workspace
+        .apply(Transaction {
+            base_revision: stale_snapshot.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: stale_product,
+            }],
+        })
+        .expect("delete discarded product");
+    let (product, left, right) = create_pair(&mut workspace);
+    let (other, other_left, other_right) =
+        create_named_i64_pair(&mut workspace, "other-pair", "other-left", "other-right");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create product pattern fixture main");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("fixture main hole")
+        .id;
+    (
+        workspace,
+        ProductPatternFixture {
+            product,
+            left,
+            right,
+            other,
+            other_left,
+            other_right,
+            stale_product,
+            stale_field,
+            hole,
+        },
+        stale_snapshot,
+    )
+}
+
+fn product_pattern(
+    product: EntityId,
+    nodes: Vec<DraftPatternNode>,
+    fields: Vec<DraftPatternField>,
+) -> PatternDraft {
+    let root = DraftPatternNodeId::new(u64::try_from(nodes.len()).expect("product pattern root"));
+    let mut nodes = nodes;
+    nodes.push(DraftPatternNode::Product { product, fields });
+    PatternDraft::new(nodes, root)
+}
+
+fn pair_match_with_pattern(
+    fixture: ProductPatternFixture,
+    pattern: PatternDraft,
+) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(20),
+            DraftNode::I64(22),
+            DraftNode::ProductValue {
+                product: fixture.product,
+                fields: vec![
+                    DraftFieldValue {
+                        field: fixture.right,
+                        value: DraftNodeId::new(1),
+                    },
+                    DraftFieldValue {
+                        field: fixture.left,
+                        value: DraftNodeId::new(0),
+                    },
+                ],
+            },
+            DraftNode::I64(1),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(2),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern,
+                        body: DraftNodeId::new(3),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::wildcard(),
+                        body: DraftNodeId::new(4),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(5),
+    )
+}
+
+fn valid_pair_pattern(fixture: ProductPatternFixture) -> PatternDraft {
+    product_pattern(
+        fixture.product,
+        vec![
+            DraftPatternNode::Binding {
+                binding: DraftBindingId::new(0),
+                name: "left-value".to_owned(),
+            },
+            DraftPatternNode::I64(22),
+        ],
+        vec![
+            DraftPatternField {
+                field: fixture.right,
+                pattern: DraftPatternNodeId::new(1),
+            },
+            DraftPatternField {
+                field: fixture.left,
+                pattern: DraftPatternNodeId::new(0),
+            },
+        ],
+    )
+}
+
+#[test]
+fn malformed_source_free_product_patterns_reject_identities_and_fields_atomically() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let (mut workspace, fixture, stale_snapshot) = product_pattern_fixture(251);
+    let before = workspace.current();
+    assert!(stale_snapshot.entity(fixture.stale_product).is_ok());
+    assert!(stale_snapshot.entity(fixture.stale_field).is_ok());
+    assert!(before.entity(fixture.stale_product).is_err());
+    assert!(before.entity(fixture.stale_field).is_err());
+
+    let mut foreign = Workspace::empty_deterministic(252).expect("foreign product workspace");
+    let (foreign_product, foreign_left, _) = create_pair(&mut foreign);
+    let cases = vec![
+        (
+            "foreign-product",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(foreign_product, Vec::new(), Vec::new()),
+            ),
+        ),
+        (
+            "stale-product",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(fixture.stale_product, Vec::new(), Vec::new()),
+            ),
+        ),
+        (
+            "wrong-kind-product",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(fixture.left, Vec::new(), Vec::new()),
+            ),
+        ),
+        (
+            "foreign-field",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: foreign_left,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "stale-field",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.stale_field,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "wrong-kind-field",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.product,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "wrong-owner",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![
+                        DraftPatternNode::Binding {
+                            binding: DraftBindingId::new(0),
+                            name: "left-value".to_owned(),
+                        },
+                        DraftPatternNode::Wildcard,
+                    ],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.left,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.other_right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "duplicate-field",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.left,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.left,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "missing-field",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Wildcard],
+                    vec![DraftPatternField {
+                        field: fixture.left,
+                        pattern: DraftPatternNodeId::new(0),
+                    }],
+                ),
+            ),
+        ),
+        (
+            "wrong-product-type",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.other,
+                    vec![DraftPatternNode::Wildcard, DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.other_left,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.other_right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+        (
+            "wrong-child-type",
+            pair_match_with_pattern(
+                fixture,
+                product_pattern(
+                    fixture.product,
+                    vec![DraftPatternNode::Bool(true), DraftPatternNode::Wildcard],
+                    vec![
+                        DraftPatternField {
+                            field: fixture.left,
+                            pattern: DraftPatternNodeId::new(0),
+                        },
+                        DraftPatternField {
+                            field: fixture.right,
+                            pattern: DraftPatternNodeId::new(1),
+                        },
+                    ],
+                ),
+            ),
+        ),
+    ];
+
+    for (kind, draft) in cases {
+        let error = workspace
+            .apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![Edit::FillHole {
+                    hole: fixture.hole,
+                    draft,
+                }],
+            })
+            .expect_err("malformed product pattern must reject");
+        match kind {
+            "foreign-product" | "foreign-field" => {
+                assert!(
+                    matches!(error, WorkspaceError::ForeignNamespace(_)),
+                    "{error}"
+                )
+            }
+            "stale-product" | "stale-field" => {
+                assert!(matches!(error, WorkspaceError::StaleIdentity(_)), "{error}")
+            }
+            "wrong-kind-product" | "wrong-kind-field" => {
+                assert!(
+                    matches!(error, WorkspaceError::WrongEntityKind { .. }),
+                    "{error}"
+                )
+            }
+            "wrong-owner" => assert!(
+                error.to_string().contains("belongs to a different product"),
+                "{error}"
+            ),
+            "duplicate-field" => {
+                assert!(error.to_string().contains("field is duplicated"), "{error}")
+            }
+            "missing-field" => assert!(
+                error
+                    .to_string()
+                    .contains("exactly one nested pattern per field"),
+                "{error}"
+            ),
+            "wrong-product-type" => assert!(
+                error.to_string().contains("product pattern requires type"),
+                "{error}"
+            ),
+            "wrong-child-type" => assert!(
+                error
+                    .to_string()
+                    .contains("Boolean literal pattern requires type bool"),
+                "{error}"
+            ),
+            _ => unreachable!("known malformed product pattern case"),
+        }
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+        assert_eq!(workspace.current().revision(), before.revision());
+    }
+
+    let retried = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole {
+                hole: fixture.hole,
+                draft: pair_match_with_pattern(fixture, valid_pair_pattern(fixture)),
+            }],
+        })
+        .expect("correct product pattern retry");
+    let (mut control, control_fixture, _) = product_pattern_fixture(251);
+    let controlled = control
+        .apply(Transaction {
+            base_revision: control.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole: control_fixture.hole,
+                draft: pair_match_with_pattern(
+                    control_fixture,
+                    valid_pair_pattern(control_fixture),
+                ),
+            }],
+        })
+        .expect("clean product pattern control");
+    assert_eq!(retried.snapshot.entities(), controlled.snapshot.entities());
+    assert_eq!(retried.snapshot.nodes(), controlled.snapshot.nodes());
+    assert_eq!(run_i64(&retried.snapshot), 1);
+    let binding = entity_named(&retried.snapshot, EntityKind::ImmutableLocal, "left-value");
+    assert_eq!(
+        binding,
+        entity_named(
+            &controlled.snapshot,
+            EntityKind::ImmutableLocal,
+            "left-value"
+        )
+    );
+    assert!(retried
+        .snapshot
+        .entities()
+        .iter()
+        .all(|entity| !entity.name.starts_with("$match")));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_zero_field_product_pattern_is_exhaustive() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(247).expect("empty product workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateProduct {
+                    name: "empty-product".to_owned(),
+                    fields: Vec::new(),
+                },
+                Edit::CreateMain {
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create empty product and main");
+    let product = entity_named(&created.snapshot, EntityKind::Product, "empty-product");
+    let hole = created
+        .snapshot
+        .holes()
+        .next()
+        .expect("empty product hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::ProductValue {
+                            product,
+                            fields: Vec::new(),
+                        },
+                        DraftNode::I64(7),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(0),
+                            arms: vec![MatchArmDraft {
+                                pattern: PatternDraft::new(
+                                    vec![DraftPatternNode::Product {
+                                        product,
+                                        fields: Vec::new(),
+                                    }],
+                                    DraftPatternNodeId::new(0),
+                                ),
+                                body: DraftNodeId::new(1),
+                            }],
+                        },
+                    ],
+                    DraftNodeId::new(2),
+                ),
+            }],
+        })
+        .expect("fill exhaustive empty product match");
+    assert_eq!(run_i64(&completed.snapshot), 7);
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("empty product match")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), site)
+        .expect("empty product match view");
+    assert!(matches!(
+        &view.arms[0].patterns[0].kind,
+        MatchPatternKindView::Product { product: found, fields }
+            if *found == product && fields.is_empty()
+    ));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+fn run_wide_source_free_product_pattern(width: usize, seed: u64) -> Arc<WorkspaceSnapshot> {
+    assert!(width > 0, "wide product requires fields");
+    let mut workspace = Workspace::empty_deterministic(seed).expect("wide product workspace");
+    let field_drafts = (0..width)
+        .map(|index| ProductFieldDraft {
+            name: format!("field-{index}"),
+            ty: SemanticType::I64,
+        })
+        .collect::<Vec<_>>();
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateProduct {
+                name: "wide-pattern-product".to_owned(),
+                fields: field_drafts,
+            }],
+        })
+        .expect("create wide product");
+    let product = entity_named(
+        &created.snapshot,
+        EntityKind::Product,
+        "wide-pattern-product",
+    );
+    let fields = (0..width)
+        .map(|index| {
+            entity_named(
+                &created.snapshot,
+                EntityKind::ProductField,
+                &format!("field-{index}"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let main = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create wide product main");
+    let hole = main.snapshot.holes().next().expect("wide product hole").id;
+
+    let mut nodes = Vec::new();
+    let mut values = Vec::new();
+    let mut pattern_nodes = Vec::new();
+    let mut pattern_fields = Vec::new();
+    for (index, field) in fields.iter().copied().enumerate() {
+        let value = i64::try_from(index).expect("wide product literal");
+        let id = DraftNodeId::new(u64::try_from(nodes.len()).expect("wide value identity"));
+        nodes.push(DraftNode::I64(value));
+        values.push(DraftFieldValue { field, value: id });
+        let pattern = DraftPatternNodeId::new(
+            u64::try_from(pattern_nodes.len()).expect("wide pattern identity"),
+        );
+        pattern_nodes.push(DraftPatternNode::I64(value));
+        pattern_fields.push(DraftPatternField { field, pattern });
+    }
+    values.reverse();
+    pattern_fields.reverse();
+    let product_value = DraftNodeId::new(u64::try_from(nodes.len()).expect("wide product value"));
+    nodes.push(DraftNode::ProductValue {
+        product,
+        fields: values,
+    });
+    let selected = DraftNodeId::new(u64::try_from(nodes.len()).expect("wide selected body"));
+    nodes.push(DraftNode::I64(1));
+    let fallback = DraftNodeId::new(u64::try_from(nodes.len()).expect("wide fallback body"));
+    nodes.push(DraftNode::I64(0));
+    let pattern_root = DraftPatternNodeId::new(
+        u64::try_from(pattern_nodes.len()).expect("wide product pattern root"),
+    );
+    pattern_nodes.push(DraftPatternNode::Product {
+        product,
+        fields: pattern_fields,
+    });
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("wide match root"));
+    nodes.push(DraftNode::Match {
+        scrutinee: product_value,
+        arms: vec![
+            MatchArmDraft {
+                pattern: PatternDraft::new(pattern_nodes, pattern_root),
+                body: selected,
+            },
+            MatchArmDraft {
+                pattern: PatternDraft::wildcard(),
+                body: fallback,
+            },
+        ],
+    });
+    super::transaction::reset_pattern_lowering_node_visits();
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(nodes, root),
+            }],
+        })
+        .expect("fill wide product pattern");
+    assert_eq!(
+        super::transaction::pattern_lowering_node_visits(),
+        u64::try_from(width + 2).expect("wide pattern visit count")
+    );
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("wide product match")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), site)
+        .expect("wide product match view");
+    let queried_fields = view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match &pattern.kind {
+            MatchPatternKindView::Product {
+                product: found,
+                fields,
+            } if *found == product => Some(fields),
+            _ => None,
+        })
+        .expect("wide product pattern fields");
+    assert_eq!(
+        queried_fields
+            .iter()
+            .map(|field| field.field.expect("stable wide field"))
+            .collect::<Vec<_>>(),
+        fields
+    );
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+    completed.snapshot
+}
+
+#[test]
+fn wide_source_free_product_pattern_is_linear_and_small_stack_safe() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let snapshot = std::thread::Builder::new()
+        .name("workspace-wide-product-pattern".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_wide_source_free_product_pattern(128, 255))
+        .expect("spawn wide product pattern worker")
+        .join()
+        .expect("wide product pattern worker completes");
+    assert_eq!(run_i64(&snapshot), 1);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+struct DeepMixedPatternFixture {
+    workspace: Workspace,
+    hole: HoleId,
+    products: Vec<EntityId>,
+    product_fields: Vec<EntityId>,
+    end_variant: EntityId,
+    next_variants: Vec<EntityId>,
+    enum_fields: Vec<EntityId>,
+}
+
+fn deep_mixed_pattern_fixture(depth: usize, seed: u64) -> DeepMixedPatternFixture {
+    let mut source = concat!(
+        "enum/\nname/\npattern-chain-0\n/name\nvariants/\n",
+        "variant/\nname/\nend\n/name\nfields/\n/fields\n/variant\n",
+        "/variants\n/enum\n",
+    )
+    .to_owned();
+    for level in 1..=depth {
+        source.push_str(&format!(
+            concat!(
+                "product/\nname/\npattern-link-{level}\n/name\nfields/\n",
+                "field/\nname/\nchild-{level}\n/name\ntype/\n",
+                "pattern-chain-{previous}/\n/pattern-chain-{previous}\n/type\n/field\n",
+                "/fields\n/product\n",
+                "enum/\nname/\npattern-chain-{level}\n/name\nvariants/\n",
+                "variant/\nname/\nnext-{level}\n/name\nfields/\n",
+                "variant-field/\nname/\nlink-{level}\n/name\ntype/\n",
+                "product\npattern-link-{level}\n/type\n/variant-field\n/fields\n/variant\n",
+                "variant/\nname/\nstop-{level}\n/name\nfields/\n/fields\n/variant\n",
+                "/variants\n/enum\n",
+            ),
+            level = level,
+            previous = level - 1,
+        ));
+    }
+    source.push_str("main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n0\n/main\n");
+    let imported = importer::import_source_with_namespace(
+        &source,
+        "deep-mixed-source-free-pattern.lkjscript",
+        WorkspaceNamespace::deterministic(seed),
+    )
+    .expect("import deep mixed pattern declarations");
+    let find = |kind, name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == kind
+                    && entity
+                        .name
+                        .rsplit(':')
+                        .next()
+                        .is_some_and(|item| item == name)
+            })
+            .unwrap_or_else(|| panic!("missing deep mixed {kind:?} {name}"))
+            .id
+    };
+    let end_variant = find(EntityKind::EnumVariant, "end");
+    let products = (1..=depth)
+        .map(|level| find(EntityKind::Product, &format!("pattern-link-{level}")))
+        .collect::<Vec<_>>();
+    let product_fields = (1..=depth)
+        .map(|level| find(EntityKind::ProductField, &format!("child-{level}")))
+        .collect::<Vec<_>>();
+    let next_variants = (1..=depth)
+        .map(|level| find(EntityKind::EnumVariant, &format!("next-{level}")))
+        .collect::<Vec<_>>();
+    let enum_fields = (1..=depth)
+        .map(|level| find(EntityKind::EnumField, &format!("link-{level}")))
+        .collect::<Vec<_>>();
+    let target = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Literal)
+        .expect("deep mixed fixture main literal")
+        .id;
+    let mut workspace = Workspace::new(imported).expect("deep mixed pattern workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target,
+                goal: "construct a deep mixed pattern".to_owned(),
+            }],
+        })
+        .expect("introduce deep mixed pattern hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("deep mixed pattern hole")
+        .id;
+    DeepMixedPatternFixture {
+        workspace,
+        hole,
+        products,
+        product_fields,
+        end_variant,
+        next_variants,
+        enum_fields,
+    }
+}
+
+fn run_deep_mixed_source_free_pattern(
+    depth: usize,
+    fixture: DeepMixedPatternFixture,
+) -> Arc<WorkspaceSnapshot> {
+    assert!(depth > 0, "deep mixed pattern requires nesting");
+    let DeepMixedPatternFixture {
+        mut workspace,
+        hole,
+        products,
+        product_fields,
+        end_variant,
+        next_variants,
+        enum_fields,
+    } = fixture;
+    assert_eq!(products.len(), depth);
+    assert_eq!(product_fields.len(), depth);
+    assert_eq!(next_variants.len(), depth);
+    assert_eq!(enum_fields.len(), depth);
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+
+    let mut nodes = vec![DraftNode::EnumValue {
+        variant: end_variant,
+        fields: Vec::new(),
+    }];
+    let mut value = DraftNodeId::new(0);
+    let mut pattern_nodes = vec![DraftPatternNode::EnumVariant {
+        variant: end_variant,
+        fields: Vec::new(),
+    }];
+    let mut pattern = DraftPatternNodeId::new(0);
+    for index in 0..depth {
+        let product_value =
+            DraftNodeId::new(u64::try_from(nodes.len()).expect("deep product value identity"));
+        nodes.push(DraftNode::ProductValue {
+            product: products[index],
+            fields: vec![DraftFieldValue {
+                field: product_fields[index],
+                value,
+            }],
+        });
+        value = DraftNodeId::new(u64::try_from(nodes.len()).expect("deep enum value identity"));
+        nodes.push(DraftNode::EnumValue {
+            variant: next_variants[index],
+            fields: vec![DraftFieldValue {
+                field: enum_fields[index],
+                value: product_value,
+            }],
+        });
+
+        let product_pattern = DraftPatternNodeId::new(
+            u64::try_from(pattern_nodes.len()).expect("deep product pattern identity"),
+        );
+        pattern_nodes.push(DraftPatternNode::Product {
+            product: products[index],
+            fields: vec![DraftPatternField {
+                field: product_fields[index],
+                pattern,
+            }],
+        });
+        pattern = DraftPatternNodeId::new(
+            u64::try_from(pattern_nodes.len()).expect("deep enum pattern identity"),
+        );
+        pattern_nodes.push(DraftPatternNode::EnumVariant {
+            variant: next_variants[index],
+            fields: vec![DraftPatternField {
+                field: enum_fields[index],
+                pattern: product_pattern,
+            }],
+        });
+    }
+    let selected = DraftNodeId::new(u64::try_from(nodes.len()).expect("deep selected body"));
+    nodes.push(DraftNode::I64(1));
+    let fallback = DraftNodeId::new(u64::try_from(nodes.len()).expect("deep fallback body"));
+    nodes.push(DraftNode::I64(0));
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("deep match root"));
+    nodes.push(DraftNode::Match {
+        scrutinee: value,
+        arms: vec![
+            MatchArmDraft {
+                pattern: PatternDraft::new(pattern_nodes, pattern),
+                body: selected,
+            },
+            MatchArmDraft {
+                pattern: PatternDraft::wildcard(),
+                body: fallback,
+            },
+        ],
+    });
+    super::transaction::reset_pattern_lowering_node_visits();
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(nodes, root),
+            }],
+        })
+        .expect("fill deep mixed pattern");
+    assert_eq!(
+        super::transaction::pattern_lowering_node_visits(),
+        u64::try_from(depth * 2 + 2).expect("deep mixed pattern visit count")
+    );
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+    let snapshot = Arc::clone(&completed.snapshot);
+    drop(completed);
+    drop(workspace);
+    snapshot
+}
+
+#[test]
+fn deep_mixed_source_free_pattern_lowering_is_bounded_stack_safe() {
+    let depth = 64;
+    let fixture = deep_mixed_pattern_fixture(depth, 256);
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let snapshot = std::thread::Builder::new()
+        .name("workspace-deep-mixed-pattern".to_owned())
+        .stack_size(256 * 1024)
+        .spawn(move || run_deep_mixed_source_free_pattern(depth, fixture))
+        .expect("spawn deep mixed pattern worker")
+        .join()
+        .expect("deep mixed pattern worker completes");
+    let site = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("deep mixed match")
+        .id;
+    assert_eq!(
+        snapshot
+            .match_view(snapshot.revision(), site)
+            .expect("deep mixed match view")
+            .arms[0]
+            .patterns
+            .len(),
+        depth * 2 + 1
+    );
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_enum_patterns_accept_nested_boolean_and_i64_literals() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(253).expect("enum literal workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "packet".to_owned(),
+                variants: vec![
+                    EnumVariantDraft {
+                        name: "data".to_owned(),
+                        fields: vec![
+                            EnumFieldDraft {
+                                name: "flag".to_owned(),
+                                ty: SemanticType::Bool,
+                            },
+                            EnumFieldDraft {
+                                name: "key".to_owned(),
+                                ty: SemanticType::I64,
+                            },
+                        ],
+                    },
+                    EnumVariantDraft {
+                        name: "empty".to_owned(),
+                        fields: Vec::new(),
+                    },
+                ],
+            }],
+        })
+        .expect("create packet enum");
+    let data = entity_named(&created.snapshot, EntityKind::EnumVariant, "data");
+    let empty = entity_named(&created.snapshot, EntityKind::EnumVariant, "empty");
+    let flag = entity_named(&created.snapshot, EntityKind::EnumField, "flag");
+    let key = entity_named(&created.snapshot, EntityKind::EnumField, "key");
+    let main = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create packet main");
+    let hole = main.snapshot.holes().next().expect("packet main hole").id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::I64(-1),
+                        DraftNode::EnumValue {
+                            variant: data,
+                            fields: vec![
+                                DraftFieldValue {
+                                    field: key,
+                                    value: DraftNodeId::new(1),
+                                },
+                                DraftFieldValue {
+                                    field: flag,
+                                    value: DraftNodeId::new(0),
+                                },
+                            ],
+                        },
+                        DraftNode::I64(7),
+                        DraftNode::I64(1),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(2),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Bool(true),
+                                            DraftPatternNode::I64(-1),
+                                            DraftPatternNode::EnumVariant {
+                                                variant: data,
+                                                fields: vec![
+                                                    DraftPatternField {
+                                                        field: key,
+                                                        pattern: DraftPatternNodeId::new(1),
+                                                    },
+                                                    DraftPatternField {
+                                                        field: flag,
+                                                        pattern: DraftPatternNodeId::new(0),
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(2),
+                                    ),
+                                    body: DraftNodeId::new(3),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Wildcard,
+                                            DraftPatternNode::Wildcard,
+                                            DraftPatternNode::EnumVariant {
+                                                variant: data,
+                                                fields: vec![
+                                                    DraftPatternField {
+                                                        field: flag,
+                                                        pattern: DraftPatternNodeId::new(0),
+                                                    },
+                                                    DraftPatternField {
+                                                        field: key,
+                                                        pattern: DraftPatternNodeId::new(1),
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(2),
+                                    ),
+                                    body: DraftNodeId::new(4),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![DraftPatternNode::EnumVariant {
+                                            variant: empty,
+                                            fields: Vec::new(),
+                                        }],
+                                        DraftPatternNodeId::new(0),
+                                    ),
+                                    body: DraftNodeId::new(5),
+                                },
+                            ],
+                        },
+                    ],
+                    DraftNodeId::new(6),
+                ),
+            }],
+        })
+        .expect("fill nested enum literal match");
+    assert_eq!(run_i64(&completed.snapshot), 7);
+    let site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("nested enum match")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), site)
+        .expect("nested enum match view");
+    assert!(view.arms[0]
+        .patterns
+        .iter()
+        .any(|pattern| matches!(pattern.kind, MatchPatternKindView::Bool(true))));
+    assert!(view.arms[0]
+        .patterns
+        .iter()
+        .any(|pattern| matches!(pattern.kind, MatchPatternKindView::I64(-1))));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_nested_product_and_enum_patterns_compose_after_import() {
+    let source = concat!(
+        "product/\nname/\ninner-record\n/name\nfields/\n",
+        "field/\nname/\nflag\n/name\ntype/\nbool\n/type\n/field\n",
+        "field/\nname/\nnumber\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
+        "product/\nname/\nouter-record\n/name\nfields/\n",
+        "field/\nname/\ninner\n/name\ntype/\nproduct\ninner-record\n/type\n/field\n",
+        "field/\nname/\ntail\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n",
+        "enum/\nname/\nwrapper\n/name\nvariants/\n",
+        "variant/\nname/\nvalue\n/name\nfields/\nvariant-field/\nname/\npayload\n/name\n",
+        "type/\nproduct\ninner-record\n/type\n/variant-field\n/fields\n/variant\n",
+        "variant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "enum/\nname/\nmarker\n/name\nvariants/\n",
+        "variant/\nname/\nmarked\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nunmarked\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "product/\nname/\ncontainer\n/name\nfields/\n",
+        "field/\nname/\nwrapped\n/name\ntype/\nmarker/\n/marker\n/type\n/field\n/fields\n/product\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n0\n/main\n",
+    );
+    let imported = importer::import_source_with_namespace(
+        source,
+        "nested-source-free-patterns.lkjscript",
+        WorkspaceNamespace::deterministic(254),
+    )
+    .expect("import nested nominal declarations");
+    let find = |kind, name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == kind
+                    && entity
+                        .name
+                        .rsplit(':')
+                        .next()
+                        .is_some_and(|item| item == name)
+            })
+            .unwrap_or_else(|| panic!("missing imported {kind:?} {name}"))
+            .id
+    };
+    let inner_product = find(EntityKind::Product, "inner-record");
+    let inner_flag = find(EntityKind::ProductField, "flag");
+    let inner_number = find(EntityKind::ProductField, "number");
+    let outer_product = find(EntityKind::Product, "outer-record");
+    let outer_inner = find(EntityKind::ProductField, "inner");
+    let outer_tail = find(EntityKind::ProductField, "tail");
+    let wrapper_value = find(EntityKind::EnumVariant, "value");
+    let wrapper_payload = find(EntityKind::EnumField, "payload");
+    let marker_marked = find(EntityKind::EnumVariant, "marked");
+    let container_product = find(EntityKind::Product, "container");
+    let container_wrapped = find(EntityKind::ProductField, "wrapped");
+    let target = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Literal)
+        .expect("imported main literal")
+        .id;
+    let mut workspace = Workspace::new(imported).expect("nested pattern workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target,
+                goal: "construct nested product and enum matches".to_owned(),
+            }],
+        })
+        .expect("introduce nested match hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("nested match hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::Bool(true),
+                        DraftNode::I64(-1),
+                        DraftNode::ProductValue {
+                            product: inner_product,
+                            fields: vec![
+                                DraftFieldValue {
+                                    field: inner_number,
+                                    value: DraftNodeId::new(1),
+                                },
+                                DraftFieldValue {
+                                    field: inner_flag,
+                                    value: DraftNodeId::new(0),
+                                },
+                            ],
+                        },
+                        DraftNode::I64(9),
+                        DraftNode::ProductValue {
+                            product: outer_product,
+                            fields: vec![
+                                DraftFieldValue {
+                                    field: outer_tail,
+                                    value: DraftNodeId::new(3),
+                                },
+                                DraftFieldValue {
+                                    field: outer_inner,
+                                    value: DraftNodeId::new(2),
+                                },
+                            ],
+                        },
+                        DraftNode::I64(20),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(4),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Bool(true),
+                                            DraftPatternNode::I64(-1),
+                                            DraftPatternNode::Product {
+                                                product: inner_product,
+                                                fields: vec![
+                                                    DraftPatternField {
+                                                        field: inner_number,
+                                                        pattern: DraftPatternNodeId::new(1),
+                                                    },
+                                                    DraftPatternField {
+                                                        field: inner_flag,
+                                                        pattern: DraftPatternNodeId::new(0),
+                                                    },
+                                                ],
+                                            },
+                                            DraftPatternNode::I64(9),
+                                            DraftPatternNode::Product {
+                                                product: outer_product,
+                                                fields: vec![
+                                                    DraftPatternField {
+                                                        field: outer_tail,
+                                                        pattern: DraftPatternNodeId::new(3),
+                                                    },
+                                                    DraftPatternField {
+                                                        field: outer_inner,
+                                                        pattern: DraftPatternNodeId::new(2),
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(4),
+                                    ),
+                                    body: DraftNodeId::new(5),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::wildcard(),
+                                    body: DraftNodeId::new(6),
+                                },
+                            ],
+                        },
+                        DraftNode::Bool(true),
+                        DraftNode::I64(-1),
+                        DraftNode::ProductValue {
+                            product: inner_product,
+                            fields: vec![
+                                DraftFieldValue {
+                                    field: inner_number,
+                                    value: DraftNodeId::new(9),
+                                },
+                                DraftFieldValue {
+                                    field: inner_flag,
+                                    value: DraftNodeId::new(8),
+                                },
+                            ],
+                        },
+                        DraftNode::EnumValue {
+                            variant: wrapper_value,
+                            fields: vec![DraftFieldValue {
+                                field: wrapper_payload,
+                                value: DraftNodeId::new(10),
+                            }],
+                        },
+                        DraftNode::I64(10),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(11),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::Bool(true),
+                                            DraftPatternNode::I64(-1),
+                                            DraftPatternNode::Product {
+                                                product: inner_product,
+                                                fields: vec![
+                                                    DraftPatternField {
+                                                        field: inner_number,
+                                                        pattern: DraftPatternNodeId::new(1),
+                                                    },
+                                                    DraftPatternField {
+                                                        field: inner_flag,
+                                                        pattern: DraftPatternNodeId::new(0),
+                                                    },
+                                                ],
+                                            },
+                                            DraftPatternNode::EnumVariant {
+                                                variant: wrapper_value,
+                                                fields: vec![DraftPatternField {
+                                                    field: wrapper_payload,
+                                                    pattern: DraftPatternNodeId::new(2),
+                                                }],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(3),
+                                    ),
+                                    body: DraftNodeId::new(12),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::wildcard(),
+                                    body: DraftNodeId::new(13),
+                                },
+                            ],
+                        },
+                        DraftNode::EnumValue {
+                            variant: marker_marked,
+                            fields: Vec::new(),
+                        },
+                        DraftNode::ProductValue {
+                            product: container_product,
+                            fields: vec![DraftFieldValue {
+                                field: container_wrapped,
+                                value: DraftNodeId::new(15),
+                            }],
+                        },
+                        DraftNode::I64(12),
+                        DraftNode::I64(0),
+                        DraftNode::Match {
+                            scrutinee: DraftNodeId::new(16),
+                            arms: vec![
+                                MatchArmDraft {
+                                    pattern: PatternDraft::new(
+                                        vec![
+                                            DraftPatternNode::EnumVariant {
+                                                variant: marker_marked,
+                                                fields: Vec::new(),
+                                            },
+                                            DraftPatternNode::Product {
+                                                product: container_product,
+                                                fields: vec![DraftPatternField {
+                                                    field: container_wrapped,
+                                                    pattern: DraftPatternNodeId::new(0),
+                                                }],
+                                            },
+                                        ],
+                                        DraftPatternNodeId::new(1),
+                                    ),
+                                    body: DraftNodeId::new(17),
+                                },
+                                MatchArmDraft {
+                                    pattern: PatternDraft::wildcard(),
+                                    body: DraftNodeId::new(18),
+                                },
+                            ],
+                        },
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(7), DraftNodeId::new(14)],
+                        },
+                        DraftNode::Operation {
+                            operation: crate::Operation::Add,
+                            arguments: vec![DraftNodeId::new(20), DraftNodeId::new(19)],
+                        },
+                    ],
+                    DraftNodeId::new(21),
+                ),
+            }],
+        })
+        .expect("fill nested product and enum matches");
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    let sites = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node.kind == NodeKind::Match)
+        .map(|node| node.id)
+        .collect::<Vec<_>>();
+    assert_eq!(sites.len(), 3);
+    let views = sites
+        .iter()
+        .map(|site| {
+            completed
+                .snapshot
+                .match_view(completed.snapshot.revision(), *site)
+                .expect("nested product and enum match view")
+        })
+        .collect::<Vec<_>>();
+    let patterns = views
+        .iter()
+        .flat_map(|view| view.arms[0].patterns.iter())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        patterns
+            .iter()
+            .filter(|pattern| matches!(pattern.kind, MatchPatternKindView::Product { .. }))
+            .count(),
+        4
+    );
+    assert_eq!(
+        patterns
+            .iter()
+            .filter(|pattern| matches!(pattern.kind, MatchPatternKindView::EnumVariant { .. }))
+            .count(),
+        2
+    );
+    assert!(patterns
+        .iter()
+        .any(|pattern| matches!(pattern.kind, MatchPatternKindView::Bool(true))));
+    assert!(patterns
+        .iter()
+        .any(|pattern| matches!(pattern.kind, MatchPatternKindView::I64(-1))));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
 #[test]
 fn source_free_enum_payload_match_compiles_and_executes() {
     crate::source::reset_parser_invocation_count();
@@ -15506,9 +17525,9 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
         assert!(Arc::ptr_eq(&published, &workspace.current()));
     }
 
-    let non_enum_match = ExpressionDraft::new(
+    let unsupported_match = ExpressionDraft::new(
         vec![
-            DraftNode::Bool(true),
+            DraftNode::F64(1.0),
             DraftNode::I64(1),
             DraftNode::Match {
                 scrutinee: DraftNodeId::new(0),
@@ -15520,17 +17539,17 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
         ],
         DraftNodeId::new(2),
     );
-    let non_enum_error = workspace
+    let unsupported_error = workspace
         .apply(Transaction {
             base_revision: published.revision(),
             edits: vec![Edit::FillHole {
                 hole,
-                draft: non_enum_match,
+                draft: unsupported_match,
             }],
         })
         .expect_err("unsupported source-free pattern space must reject");
     assert!(matches!(
-        non_enum_error,
+        unsupported_error,
         WorkspaceError::UnsupportedEdit { operation, .. } if operation.as_ref() == "match"
     ));
     assert!(Arc::ptr_eq(&published, &workspace.current()));

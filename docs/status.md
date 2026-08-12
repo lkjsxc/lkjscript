@@ -212,7 +212,8 @@ built-in operations (including exact-type numeric `less-than`), exact generic an
 conditionals, ordered sequences, immutable lexical locals, explicitly typed mutable locals,
 assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`,
 copy-safe loads, byte-vector moves and shared borrows, product construction/projection, enum
-construction and variant tests, and exhaustive non-generic enum matches. Empty sequence is pure
+construction and variant tests, and exhaustive closed Boolean, I64, exact-product, and non-generic
+enum matches. Empty sequence is pure
 `unit`; non-empty sequence yields its last value. A return value must be non-divergent and exactly
 match the owning callable's declared result type; the return node is `never`-typed, carries canonical
 divergence and child effects, and uses the existing HIR cleanup path. An explicitly moved affine
@@ -232,11 +233,15 @@ termination, initialization, and cleanup route. Generic drafts identify binders 
 entities and provide exact structured type arguments; the same resolver validates importer-inferred
 and explicit substitutions, argument types, ownership/reference restrictions, and trait bounds, then
 derives auto
-or explicit implementation witnesses. Each ordered match arm owns a flat `PatternDraft`; wildcards,
-enum variants, fields, and named payload bindings lower through the canonical usefulness,
-exhaustiveness, match-plan, ownership, memory, SSA, and VM path. Payload bindings are stable public
-immutable-local entities. Compiler-only scrutinee and field-projection locals have an explicit hidden
-binding kind and never enter entity/search/constructor results.
+or explicit implementation witnesses. Each ordered match arm owns a flat `PatternDraft`; wildcard,
+named binding, Boolean literal, I64 literal, exact product, and non-generic enum-variant nodes lower
+through the canonical usefulness, exhaustiveness, match-plan, ownership, memory, SSA, and VM path.
+Product nodes select the exact stable product and every stable field identity once; submitted field
+order is non-semantic, while HIR and query fields follow declaration order. These closed patterns
+compose under product fields and enum payloads. Nested structural enum checks retain active-variant
+provenance through the canonical short-circuit SSA merge chain. Payload bindings are stable public immutable-local
+entities. Compiler-only scrutinee and field-projection locals have an explicit hidden binding kind
+and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
 unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
 foreign/stale/wrong-kind type and trait identities, forward or cross-arm binding uses, field
@@ -245,8 +250,7 @@ storage/kinds/types/scopes, non-Boolean loops, divergent return values, wrong ca
 foreign/stale/deleted callees beneath returns, control transfer outside a loop, non-exact or
 divergent break payloads, invalid loop result types, unreachable sequence/loop body entries, and
 contradictory overlapping or deletion-owned edits reject. Generic patterns, unresolved generic
-forwarding, ownership/reference generic instantiation, non-enum source-free pattern spaces, and
-executable placeholders remain absent. Imported and source-free mutable-local subtrees share stable
+forwarding, ownership/reference generic instantiation, and executable placeholders remain absent. Imported and source-free mutable-local subtrees share stable
 identity, lexical visibility, ordinary replacement, tombstoning, and compaction lifecycle behavior.
 
 The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, one explicit
@@ -461,14 +465,18 @@ build inputs.
   `main`; expression construction covers immutable and mutable locals, ordered sequence, assignment,
   `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`, exact calls
   to imported or source-free generic functions, the selected byte-vector move/borrow vertical, and
-  exhaustive non-generic enum payload matches. Source-free generic function declaration authoring
+  exhaustive closed Boolean, I64, exact-product, and non-generic enum matches. Source-free generic
+  function declaration authoring
   supports ordered binders, exact builtin or stable trait bounds, nested binder-bearing signatures,
   stable
-  lifecycle, and direct compilation/execution. The source-free pattern surface currently supports
-  wildcard, enum-variant, field, and payload-binding patterns over non-generic enum scrutinees;
-  Boolean, integer, product, and generic pattern construction remain explicit unsupported edits. Nominal
-  declaration fields still reject ownership/reference types, so current source-free payload-match
-  ownership evidence uses the strongest supported copy-safe payload geometry. Source-free unresolved
+  lifecycle, and direct compilation/execution. Source-free flat pattern drafts support wildcard,
+  binding, Boolean literal, I64 literal, exact product, and non-generic enum-variant nodes. Product
+  and field selection uses stable identities, requires every declared field exactly once, and
+  publishes declaration-order query fields regardless of draft field order; nested closed patterns
+  compose. Generic pattern construction remains an explicit unsupported edit. Source-free nominal
+  declaration fields still reject ownership/reference types, but imported ownership-bearing product
+  and enum fields remain selectable by stable identity; nested source-free patterns over those
+  declarations compile and execute through the same ownership and VM route. Source-free unresolved
   copy-load value references now have complete introduction, inspection, candidate, resolution,
   replacement, owner-deletion, compile-rejection, and execution behavior. Text import still fails
   fast on unresolved source names. Unresolved moves, borrows, calls, type names, nominal members,
