@@ -948,7 +948,9 @@ identities, target, and typed capability grants once and carries that value thro
 weaken package validation.
 
 [`meta/scripts/runtime-baseline.py`](../meta/scripts/runtime-baseline.py) retains the product harness.
-It covers scalar loop/branch, direct calls, redundant scalar work, products/lists, enum matching,
+It accepts only the exact retained `lkjscript.metrics` schema and contract identity before reading
+measurements. It covers scalar loop/branch, direct calls, redundant scalar work, products/lists,
+enum matching,
 unique ownership and cleanup, an entered checked failure, larger benchmark and Mandelbrot programs,
 a nested polymorphic package, bytes/hash, two filesystem paths, and direct SQLite. Every sample
 checks exit status, exact outcome, stdout SHA-256, expected path/native-entry state, and applicable

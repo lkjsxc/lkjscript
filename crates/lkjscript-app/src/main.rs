@@ -1,7 +1,6 @@
 //! CLI entry for the lkjscript language runtime.
 
 mod check;
-mod describe;
 mod disasm;
 mod engine;
 mod errors;
@@ -35,7 +34,6 @@ fn real_main() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Some("check") => check::command(&args),
-        Some("describe") => describe::command(&args),
         Some("run") => execution_command::command(&args),
         Some("disasm") => disasm::command(&args),
         Some("package") => package::command(&args),

@@ -1,13 +1,14 @@
 #![forbid(unsafe_code)]
-//! Canonical descriptors and exact content identities for Current lkjscript contracts.
+//! Exact identities for retained external contracts and canonical shared vocabulary.
 
 mod capability;
 mod digest;
 mod domains;
+#[cfg(test)]
 mod encoding;
 mod memory;
+#[cfg(test)]
 mod model;
-mod registry;
 mod resource;
 mod sha256;
 mod vocabulary;
@@ -15,12 +16,10 @@ mod vocabulary;
 pub use capability::CapabilityKind;
 pub use digest::ContractDigest;
 pub use domains::{
-    current_contracts, BYTECODE, DIAGNOSTICS, DIAGNOSTICS_DIGEST, LANGUAGE, MEMORY_OBLIGATIONS,
-    MEMORY_OBLIGATIONS_DIGEST, METRICS, METRICS_DIGEST, MODULE_INTERFACE, NATIVE_LAYOUT,
-    PACKAGE_LOCK, PACKAGE_MANIFEST, RUNTIME_CALLS, SOURCE, SOURCE_DIGEST,
-    STRUCTURAL_OWNERSHIP_DOMAINS, STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST, TYPED_HIR, VERIFIED_SSA,
+    LANGUAGE, LANGUAGE_DIGEST, MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST, METRICS,
+    METRICS_DIGEST, MODULE_INTERFACE, MODULE_INTERFACE_DIGEST, PACKAGE_LOCK, PACKAGE_LOCK_DIGEST,
+    PACKAGE_MANIFEST, PACKAGE_MANIFEST_DIGEST, SOURCE, SOURCE_DIGEST,
 };
-pub use encoding::canonical_bytes;
 pub use memory::{
     canonical_executable_memory_witness_dependencies,
     canonical_executable_memory_witness_group_descriptor, canonical_semantic_descriptor,
@@ -38,11 +37,6 @@ pub use memory::{
     SemanticDescriptor, SemanticEnumDeclaration, SemanticEnumVariant, SemanticEnumVariantField,
     SemanticPrimitiveKind, SemanticProductDeclaration, SemanticProductField, SemanticType,
 };
-pub use model::{
-    ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,
-    ContractItemKind, ContractName, FactOrdering, NameIdentity,
-};
-pub use registry::{require_exact, ContractMismatch, ContractSet, RegisteredContract};
 pub use resource::ResourceKind;
 pub use sha256::{sha256, Sha256};
 pub use vocabulary::{
@@ -53,6 +47,13 @@ pub use vocabulary::{
     COMPILER_TRAIT_NAMES, CONTEXTUAL_FORM_NAMES, OPERATION_COUNT, PRELUDE_TYPE_NAMES,
     PRELUDE_VARIANT_NAMES, REMOVED_SPELLINGS, RESERVED_WORDS, SIMPLE_TYPE_NAMES,
     TYPE_CONSTRUCTOR_NAMES,
+};
+
+#[cfg(test)]
+pub(crate) use encoding::canonical_bytes;
+#[cfg(test)]
+pub(crate) use model::{
+    ContractDescriptor, ContractError, ContractFact, ContractItem, ContractItemKind, ContractName,
 };
 
 #[cfg(test)]

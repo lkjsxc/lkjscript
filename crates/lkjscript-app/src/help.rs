@@ -6,7 +6,6 @@ pub fn print() {
     println!("                 compile a required package without entering the program");
     println!("  lkjscript run <file.lkjscript> [--] [script-args...]");
     println!("                 compile and intentionally execute the program");
-    println!("  lkjscript describe [--json]");
     println!("  lkjscript package <lock|check> [package-path]");
     println!("  lkjscript memory inventory [--json]");
     println!("  lkjscript memory explain <identity>");

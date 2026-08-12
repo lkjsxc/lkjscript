@@ -28,10 +28,8 @@ invocation exists. Human success writes zero bytes to both streams. `--json` wri
 logical path, one-based line and Unicode-scalar column ranges, message, and ordered related ranges,
 Source `path` and `range` fields are omitted when the producer has no source location; package,
 incomplete, host, and later compiler failures likewise keep only facts their producer owns.
-`lkjscript package check` is also
-silent on success. `describe` now reports only the compiler identity and contract set derived from
-the contract producer; hand-maintained language, target, execution, and unsupported-capability lists
-are absent.
+`lkjscript package check` is also silent on success. The former `describe` command and aggregate
+contract-set digest are deleted because no independent tool or workflow consumed them.
 
 Implemented source behavior includes typed functions and calls, bindings and explicit mutation,
 conditionals and loops, nominal products and enums, exhaustive matching, generics and trait-dispatch
@@ -65,11 +63,16 @@ feature-flagged:
   component contract descriptors, and the global platform revision; and
 - target-matrix, platform-revision, and empty configuration placeholders.
 
-The app no longer has dependencies or tests for those surfaces. Contract and package locks are
-regenerated from the retained local product. Verified SSA and validated bytecode remain typed
-in-process authorities; there is no generic prepared descriptor, cross-representation program
-identity, compilation cache, or unconditional native-specialization artifact. A locked snapshot
-retains only the package target fact needed to compare its completed HIR memory plan with the lock.
+The app no longer has dependencies or tests for those surfaces. Persistent package and lock bytes
+retain exact language, source, module-interface, package-manifest, and package-lock identities.
+Package lookup is one closed direct match and does not construct unrelated descriptors. Metrics and
+memory inventory retain separately owned exact output identities. Capability, resource, operation,
+and memory-witness vocabulary remains canonical typed data without registry membership. Verified
+SSA and validated bytecode remain typed in-process authorities; there is no descriptor or digest for
+typed HIR, verified SSA, bytecode, runtime-call slots, native layout, diagnostics, or structural
+ownership domains, and no generic prepared descriptor, cross-representation program identity,
+compilation cache, or unconditional native-specialization artifact. A locked snapshot retains only
+the package target fact needed to compare its completed HIR memory plan with the lock.
 
 Deleting the service database wrapper did not delete the language SQLite capability. VM host
 operations still dispatch SQLite directly through `lkjscript-sys`; stdio, clock, filesystem,

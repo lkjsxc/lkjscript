@@ -21,6 +21,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 METRICS_PREFIX = "LKJSCRIPT_METRICS "
+METRICS_SCHEMA = "lkjscript.metrics"
+METRICS_CONTRACT = "ae737b579e63cbf518ed4d917698f4222e8752e4471dfb1bb11d6ef3f3e638ec"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 RELEASE_PROFILE = "release (workspace LTO, codegen-units=1, strip=symbols)"
 
@@ -458,7 +460,14 @@ def parse_metrics(path: Path) -> dict[str, Any]:
     line = path.read_text(encoding="utf-8")
     if not line.startswith(METRICS_PREFIX):
         raise RuntimeError(f"metrics file has no {METRICS_PREFIX.strip()} marker: {path}")
-    return json.loads(line[len(METRICS_PREFIX) :])
+    metrics = json.loads(line[len(METRICS_PREFIX) :])
+    if metrics.get("schema") != METRICS_SCHEMA:
+        raise RuntimeError(f"metrics file has unknown schema: {metrics.get('schema')!r}")
+    if metrics.get("contract") != METRICS_CONTRACT:
+        raise RuntimeError(
+            f"metrics file has unknown contract: {metrics.get('contract')!r}"
+        )
+    return metrics
 
 
 def run_sample(

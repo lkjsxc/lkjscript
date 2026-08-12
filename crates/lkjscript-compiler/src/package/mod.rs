@@ -80,7 +80,7 @@ fn verify_with_lock(entry: &Path) -> PackageResult<(PathBuf, Manifest, LockFile,
     let (current, manifest) = graph::build_with_root_manifest(&root)?;
     let (locked, locked_bytes) = encoding::read(&root)?;
     contracts::require(&locked.contract, lkjscript_contracts::PACKAGE_LOCK)?;
-    if locked.contracts != contracts::all()? {
+    if locked.contracts != contracts::all() {
         return Err(Error::msg("package lock contract set is stale").into());
     }
     if current != locked || encoding::encode(&current)? != locked_bytes {

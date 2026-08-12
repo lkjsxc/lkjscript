@@ -1,12 +1,14 @@
 use std::fmt;
 
+#[cfg(test)]
 use crate::{canonical_bytes, sha256, ContractDescriptor, ContractError};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ContractDigest([u8; 32]);
 
 impl ContractDigest {
-    pub fn of(descriptor: &ContractDescriptor) -> Result<Self, ContractError> {
+    #[cfg(test)]
+    pub(crate) fn of(descriptor: &ContractDescriptor) -> Result<Self, ContractError> {
         Ok(Self(sha256(&canonical_bytes(descriptor)?)))
     }
 

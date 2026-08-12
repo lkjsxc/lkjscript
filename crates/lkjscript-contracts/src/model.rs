@@ -5,19 +5,6 @@ use std::fmt;
 pub struct ContractName(String);
 
 impl ContractName {
-    pub fn new(value: impl Into<String>) -> Result<Self, ContractError> {
-        let value = value.into();
-        let valid = !value.is_empty()
-            && value.len() <= 120
-            && value.bytes().all(|byte| {
-                byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-            });
-        if !valid {
-            return Err(ContractError::InvalidName(value));
-        }
-        Ok(Self(value))
-    }
-
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -31,13 +18,9 @@ impl ContractName {
 pub enum ContractItemKind {
     Type,
     Field,
-    Variant,
     Operation,
-    Resource,
-    Section,
     Rule,
     Capability,
-    Other,
 }
 
 impl ContractItemKind {
@@ -45,13 +28,9 @@ impl ContractItemKind {
         match self {
             Self::Type => 1,
             Self::Field => 2,
-            Self::Variant => 3,
             Self::Operation => 4,
-            Self::Resource => 5,
-            Self::Section => 6,
             Self::Rule => 7,
             Self::Capability => 8,
-            Self::Other => 9,
         }
     }
 }
@@ -143,14 +122,6 @@ pub struct ContractDescriptor {
 }
 
 impl ContractDescriptor {
-    pub fn new(name: impl Into<String>) -> Result<Self, ContractError> {
-        Ok(Self {
-            name: ContractName::new(name)?,
-            items: Vec::new(),
-            dependencies: Vec::new(),
-        })
-    }
-
     pub fn item(mut self, item: ContractItem) -> Self {
         self.items.push(item);
         self
@@ -167,10 +138,6 @@ pub enum ContractError {
     DuplicateDependency(String),
     DuplicateFact(String),
     DuplicateItem(String),
-    DuplicateContract(String),
-    MissingDependency(String),
-    DependencyMismatch(String),
-    InvalidName(String),
     InvalidStableId(String),
     LengthOverflow,
 }

@@ -1,20 +1,18 @@
 use std::process::ExitCode;
 
 use lkjscript_contracts::{
-    current_contracts, memory_obligations, ContractDigest, MemoryObligation, MEMORY_OBLIGATIONS,
+    memory_obligations, ContractDigest, MemoryObligation, MEMORY_OBLIGATIONS,
+    MEMORY_OBLIGATIONS_DIGEST,
 };
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
-    let contracts = current_contracts().map_err(|error| error.to_string())?;
-    let contract = contracts
-        .get(MEMORY_OBLIGATIONS)
-        .ok_or_else(|| "memory-obligations contract is not registered".to_string())?
-        .digest();
     let records = memory_obligations();
     match args {
-        [_, operation] if operation == "inventory" => print_inventory(contract, &records, false),
+        [_, operation] if operation == "inventory" => {
+            print_inventory(MEMORY_OBLIGATIONS_DIGEST, &records, false)
+        }
         [_, operation, flag] if operation == "inventory" && flag == "--json" => {
-            print_inventory(contract, &records, true)
+            print_inventory(MEMORY_OBLIGATIONS_DIGEST, &records, true)
         }
         [_, operation, identity] if operation == "explain" => {
             let record = records
@@ -142,18 +140,13 @@ mod tests {
 
     #[test]
     fn inventory_json_is_deterministic_complete_and_truthful() {
-        let contracts = current_contracts().unwrap_or_default();
-        let digest = contracts
-            .get(MEMORY_OBLIGATIONS)
-            .map(|contract| contract.digest())
-            .unwrap_or(ContractDigest::from_bytes([0; 32]));
         let records = memory_obligations();
-        let first = json_inventory(digest, &records);
-        assert_eq!(first, json_inventory(digest, &records));
+        let first = json_inventory(MEMORY_OBLIGATIONS_DIGEST, &records);
+        assert_eq!(first, json_inventory(MEMORY_OBLIGATIONS_DIGEST, &records));
         assert!(first.contains("\"identity\":\"enum\""));
         assert!(first.contains("\"current_trace_fields\":\"none\""));
         assert!(first.contains("current deterministic storage; unsupported shapes reject"));
         assert!(first.contains("verified static image data or execution-owned unique store"));
-        assert!(first.contains(&digest.to_hex()));
+        assert!(first.contains(&MEMORY_OBLIGATIONS_DIGEST.to_hex()));
     }
 }

@@ -93,64 +93,6 @@ fn names_are_metadata_only_when_explicitly_declared() {
 }
 
 #[test]
-fn full_digest_is_required_even_when_display_prefix_matches() {
-    let expected = ContractDigest::from_bytes([7; 32]);
-    let mut actual = [7; 32];
-    actual[31] = 8;
-    let mismatch = require_exact(
-        ContractName::registered("lkjscript.test"),
-        expected,
-        ContractDigest::from_bytes(actual),
-        "producer",
-        "consumer",
-    );
-    assert!(mismatch.is_err());
-}
-
-#[test]
-fn current_registry_is_closed_deterministic_and_dependency_checked() {
-    let first_result = current_contracts();
-    assert!(
-        first_result.is_ok(),
-        "current registry must be valid: {first_result:?}"
-    );
-    let first = first_result.unwrap_or_default();
-    let second_result = current_contracts();
-    assert!(
-        second_result.is_ok(),
-        "current registry must repeat: {second_result:?}"
-    );
-    let second = second_result.unwrap_or_default();
-    assert_eq!(first, second);
-    assert_eq!(first.len(), 14);
-    assert!(first.get(LANGUAGE).is_some());
-    assert!(first.get(MEMORY_OBLIGATIONS).is_some());
-    assert!(first.get(STRUCTURAL_OWNERSHIP_DOMAINS).is_some());
-}
-
-#[test]
-fn compiled_source_digests_match_descriptors() {
-    let result = current_contracts();
-    assert!(result.is_ok());
-    let contracts = result.unwrap_or_default();
-    for (name, digest) in [
-        (DIAGNOSTICS, DIAGNOSTICS_DIGEST),
-        (MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST),
-        (METRICS, METRICS_DIGEST),
-        (SOURCE, SOURCE_DIGEST),
-        (
-            STRUCTURAL_OWNERSHIP_DOMAINS,
-            STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST,
-        ),
-    ] {
-        assert_eq!(
-            contracts.get(name).map(RegisteredContract::digest),
-            Some(digest)
-        );
-    }
-}
-
-#[test]
 fn digest_text_is_full_lowercase_sha256() {
     let item = ContractItem::new("item", ContractItemKind::Type);
     let value = digest(&descriptor(vec![item]));

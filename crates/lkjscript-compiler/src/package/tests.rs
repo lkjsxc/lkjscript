@@ -127,8 +127,13 @@ fn graph_returns_the_manifest_that_produced_the_root_lock() {
 fn lock_contracts_are_full_current_digests() {
     let root = fixture("contracts");
     let lock = graph::build(&root).unwrap();
-    assert_eq!(lock.contracts, contracts::all().unwrap());
+    assert_eq!(lock.contracts, contracts::all());
     assert!(lock.contracts.values().all(|digest| digest.len() == 64));
+    for (name, digest) in &lock.contracts {
+        assert_eq!(contracts::require(digest, name).unwrap().to_hex(), *digest);
+        assert!(contracts::require(&"0".repeat(64), name).is_err());
+    }
+    assert!(contracts::expected("lkjscript.unknown").is_err());
     assert_eq!(lock.packages.len(), 1);
     assert_eq!(lock.packages[0].modules.len(), 1);
     assert_eq!(lock.packages[0].modules[0].exports, Vec::<String>::new());

@@ -14,7 +14,7 @@ fn read_metrics(path: &std::path::Path) -> serde_json::Value {
 }
 
 #[test]
-fn help_describe_and_metrics_expose_current_product_truth() {
+fn help_and_metrics_expose_current_product_truth() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
     let help = Command::new(binary)
         .arg("--help")
@@ -28,6 +28,7 @@ fn help_describe_and_metrics_expose_current_product_truth() {
     assert!(help.contains("run <file.lkjscript> [--] [script-args...]"));
     assert!(help.contains("compile and intentionally execute the program"));
     assert!(help.contains("memory inventory [--json]"));
+    assert!(!help.contains("describe"));
     assert!(!help.contains("line-oriented language"));
     assert!(!help.contains("semantic"));
     assert!(!help.contains("runtime topology"));
@@ -41,55 +42,6 @@ fn help_describe_and_metrics_expose_current_product_truth() {
         assert!(
             !help.contains(removed),
             "removed flag remains in help: {removed}"
-        );
-    }
-
-    let description = Command::new(binary)
-        .args(["describe", "--json"])
-        .output()
-        .expect("run JSON describe");
-    assert!(description.status.success());
-    assert!(description.stderr.is_empty());
-    let description: serde_json::Value =
-        serde_json::from_slice(&description.stdout).expect("describe is JSON");
-    assert_eq!(description["schema"].as_str(), Some("lkjscript.describe"));
-    assert_eq!(description["compiler"].as_str(), Some("lkjscript"));
-    let mut keys = description
-        .as_object()
-        .expect("describe is an object")
-        .keys()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    keys.sort_unstable();
-    assert_eq!(keys, ["compiler", "contract_digest", "contracts", "schema"]);
-    let contracts = description["contracts"]
-        .as_array()
-        .expect("describe contracts are an array");
-    assert_eq!(
-        contracts.len(),
-        lkjscript_contracts::current_contracts()
-            .expect("current contracts")
-            .iter()
-            .count()
-    );
-    assert!(contracts.iter().all(|contract| {
-        contract["name"].as_str().is_some()
-            && contract["digest"]
-                .as_str()
-                .is_some_and(|digest| digest.len() == 64)
-    }));
-    for removed in [
-        "target",
-        "language_forms",
-        "execution_path",
-        "unsupported",
-        "engines",
-        "semantic_operations",
-        "platform_revision",
-    ] {
-        assert!(
-            description.get(removed).is_none(),
-            "stale describe field remains: {removed}"
         );
     }
 
@@ -112,6 +64,11 @@ fn help_describe_and_metrics_expose_current_product_truth() {
     assert!(output.stderr.is_empty());
     let json = read_metrics(&metrics);
     std::fs::remove_file(&metrics).expect("remove metrics output");
+    assert_eq!(json["schema"].as_str(), Some("lkjscript.metrics"));
+    assert_eq!(
+        json["contract"].as_str(),
+        Some(lkjscript_contracts::METRICS_DIGEST.to_hex().as_str())
+    );
     assert_eq!(json["execution_path"].as_str(), Some("baseline-native"));
     assert!(json.get("fallback_reason").is_none());
     assert!(json["native_decline"].is_null());
@@ -289,12 +246,7 @@ fn check_preserves_source_diagnostics_in_human_and_machine_results() {
         "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
     )
     .expect("write initially valid source");
-    let contracts = lkjscript_contracts::current_contracts().expect("load current contracts");
-    let manifest_contract = contracts
-        .get(lkjscript_contracts::PACKAGE_MANIFEST)
-        .expect("package manifest contract")
-        .digest()
-        .to_hex();
+    let manifest_contract = lkjscript_contracts::PACKAGE_MANIFEST_DIGEST.to_hex();
     std::fs::write(
         root.join(lkjscript_compiler::package::MANIFEST_FILE),
         format!(
@@ -512,12 +464,7 @@ fn package_capability_denial_prevents_host_effects() {
         ),
     )
     .expect("write capability fixture source");
-    let contracts = lkjscript_contracts::current_contracts().expect("load current contracts");
-    let manifest_contract = contracts
-        .get(lkjscript_contracts::PACKAGE_MANIFEST)
-        .expect("package manifest contract")
-        .digest()
-        .to_hex();
+    let manifest_contract = lkjscript_contracts::PACKAGE_MANIFEST_DIGEST.to_hex();
     std::fs::write(
         root.join(lkjscript_compiler::package::MANIFEST_FILE),
         format!(
@@ -592,9 +539,9 @@ fn package_capability_denial_prevents_host_effects() {
 }
 
 #[test]
-fn deleted_platform_commands_are_rejected() {
+fn deleted_commands_are_rejected() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
-    for command in ["runtime", "semantic", "system"] {
+    for command in ["describe", "runtime", "semantic", "system"] {
         let output = Command::new(binary)
             .arg(command)
             .output()
@@ -628,12 +575,59 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
         .expect("run memory inventory");
     assert!(inventory.status.success());
     assert!(inventory.stderr.is_empty());
-    let json = String::from_utf8(inventory.stdout).expect("inventory is UTF-8");
-    assert!(json.contains("\"schema\":\"lkjscript.memory-obligations\""));
-    assert!(json.contains("\"identity\":\"enum\""));
-    assert!(json.contains("\"current_trace_fields\":\"none\""));
-    assert!(json.contains("current deterministic storage; unsupported shapes reject"));
-    assert!(json.contains("verified static image data or execution-owned unique store"));
+    let repeated = Command::new(binary)
+        .args(["memory", "inventory", "--json"])
+        .output()
+        .expect("repeat memory inventory");
+    assert!(repeated.status.success());
+    assert!(repeated.stderr.is_empty());
+    assert_eq!(inventory.stdout, repeated.stdout);
+
+    let document: serde_json::Value =
+        serde_json::from_slice(&inventory.stdout).expect("inventory is JSON");
+    assert_eq!(
+        document["schema"].as_str(),
+        Some(lkjscript_contracts::MEMORY_OBLIGATIONS)
+    );
+    assert_eq!(
+        document["contract"].as_str(),
+        Some(
+            lkjscript_contracts::MEMORY_OBLIGATIONS_DIGEST
+                .to_hex()
+                .as_str()
+        )
+    );
+    let entries = document["entries"]
+        .as_array()
+        .expect("inventory entries are an array");
+    let identities = entries
+        .iter()
+        .map(|entry| entry["identity"].as_str().expect("entry identity"))
+        .collect::<Vec<_>>();
+    let expected = lkjscript_contracts::memory_obligations()
+        .iter()
+        .map(|record| record.identity)
+        .collect::<Vec<_>>();
+    assert_eq!(identities, expected);
+    let enumeration = entries
+        .iter()
+        .find(|entry| entry["identity"] == "enum")
+        .expect("enum inventory entry");
+    assert_eq!(enumeration["current_trace_fields"], "none");
+    assert!(entries.iter().any(|entry| {
+        entry["status"].as_str().is_some_and(|value| {
+            value.contains("current deterministic storage; unsupported shapes reject")
+        })
+    }));
+    assert!(entries.iter().any(|entry| {
+        entry.as_object().is_some_and(|entry| {
+            entry.values().any(|value| {
+                value.as_str().is_some_and(|value| {
+                    value.contains("verified static image data or execution-owned unique store")
+                })
+            })
+        })
+    }));
 
     let explain = Command::new(binary)
         .args(["memory", "explain", "byte-vector"])

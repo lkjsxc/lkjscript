@@ -1,6 +1,6 @@
 use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, ContractItemKind};
 
-use super::{name, DIAGNOSTICS, LANGUAGE, SOURCE};
+use super::{name, LANGUAGE, SOURCE};
 
 mod vocabulary;
 
@@ -93,23 +93,6 @@ pub(super) fn source(language: ContractDigest) -> ContractDescriptor {
                     "identity",
                     "source identity",
                     "contract logical-path exact-bytes package",
-                )),
-        )
-}
-
-pub(super) fn diagnostics(language: ContractDigest) -> ContractDescriptor {
-    descriptor(DIAGNOSTICS)
-        .dependency(name(LANGUAGE), language.as_bytes())
-        .item(
-            ContractItem::new("diagnostic-record", ContractItemKind::Type)
-                .fact(fact("code", "code", "stable diagnostic identity"))
-                .fact(fact("severity", "severity", "closed classification"))
-                .fact(fact("message", "message", "presentation text"))
-                .fact(fact("origin", "origin", "package module source span"))
-                .fact(fact(
-                    "contract",
-                    "contract",
-                    "optional exact ContractDigest",
                 )),
         )
 }

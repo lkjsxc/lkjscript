@@ -426,12 +426,27 @@ Execution outcomes are ordinary in-memory Rust values. The process outcome wire 
 authenticated snapshot import/export used by VM/JIT and differential tests. Memory-plan and witness
 facts call this capability `semantic_snapshot`; it is not a process transport promise.
 
+## Contract and vocabulary ownership
+
+Persistent package files use exact direct identities for language, source, module interface,
+manifest, and lock interpretation. Canonical test-only descriptor construction derives and pins
+those values; production package lookup is a closed name match and never constructs a registry.
+Metrics and memory inventory each emit their own exact output identity directly. The memory output
+identity is separate from the typed memory-obligation and witness records consumed in-process.
+
+Diagnostics, typed HIR, verified SSA, validated bytecode, runtime-call slots, native layout, and
+structural ownership domains have no descriptor or digest. Their same-build types and validators own
+the represented properties directly. In particular, runtime-call slots belong to
+`lkjscript-native`; relocation and generated-entry checks do not consult descriptive metadata. The
+former global set, generic registration/lookup, dependency-mismatch injection, set digest, and
+`describe` projection have no active route.
+
 ## Component ownership
 
 Cargo metadata currently reports 11 workspace members and one app binary. Conceptually:
 
-- `lkjscript-contracts` owns retained language, IR, memory, package, native, and runtime-call
-  descriptors and identities;
+- `lkjscript-contracts` owns retained external identities, their canonical test derivation, shared
+  capability/resource/operation vocabulary, and semantic memory-witness records and validation;
 - `lkjscript-core` owns values, execution policy/outcomes, validated bytecode, memory witnesses,
   structural storage, semantic snapshots, and resource tables;
 - `lkjscript-compiler` owns the public immutable semantic workspace snapshot and direct snapshot
