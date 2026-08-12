@@ -7,67 +7,6 @@ pub use structural::*;
 pub use tokens::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ImageContracts {
-    language: lkjscript_contracts::ContractDigest,
-    verified_ssa: lkjscript_contracts::ContractDigest,
-    runtime_calls: lkjscript_contracts::ContractDigest,
-    native_layout: lkjscript_contracts::ContractDigest,
-}
-
-impl ImageContracts {
-    #[must_use]
-    pub const fn new(
-        language: lkjscript_contracts::ContractDigest,
-        verified_ssa: lkjscript_contracts::ContractDigest,
-        runtime_calls: lkjscript_contracts::ContractDigest,
-        native_layout: lkjscript_contracts::ContractDigest,
-    ) -> Self {
-        Self {
-            language,
-            verified_ssa,
-            runtime_calls,
-            native_layout,
-        }
-    }
-
-    #[must_use]
-    pub const fn current() -> Self {
-        Self::new(
-            lkjscript_contracts::LANGUAGE_DIGEST,
-            lkjscript_contracts::VERIFIED_SSA_DIGEST,
-            lkjscript_contracts::RUNTIME_CALLS_DIGEST,
-            lkjscript_contracts::NATIVE_LAYOUT_DIGEST,
-        )
-    }
-
-    #[must_use]
-    pub const fn language(self) -> lkjscript_contracts::ContractDigest {
-        self.language
-    }
-
-    #[must_use]
-    pub const fn verified_ssa(self) -> lkjscript_contracts::ContractDigest {
-        self.verified_ssa
-    }
-
-    #[must_use]
-    pub const fn runtime_calls(self) -> lkjscript_contracts::ContractDigest {
-        self.runtime_calls
-    }
-
-    #[must_use]
-    pub const fn native_layout(self) -> lkjscript_contracts::ContractDigest {
-        self.native_layout
-    }
-}
-
-impl Default for ImageContracts {
-    fn default() -> Self {
-        Self::current()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeExecutionDomain {
     CollectorFree,
     InvocationRegion,

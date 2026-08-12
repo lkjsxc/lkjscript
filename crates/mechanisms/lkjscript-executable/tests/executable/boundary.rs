@@ -14,10 +14,7 @@ fn outcome_image(
     builder.set_entry(entry)?;
     builder.outcome(entry, outcome)?;
     plan.define_function(builder.finish())?;
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::new(ImageContracts::current()),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     Ok((image, function))
 }
 
@@ -41,7 +38,7 @@ fn prepare_error(
 #[test]
 fn preparation_rejects_bad_arguments_and_pre_entry_faults_without_entry(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (image, entries) = scalar_image(ImageContracts::current())?;
+    let (image, entries) = scalar_image()?;
     let installed = ExecutableInstaller::default().install(image)?;
 
     assert_eq!(
@@ -123,7 +120,7 @@ fn preparation_rejects_bad_arguments_and_pre_entry_faults_without_entry(
 #[test]
 fn prepared_drop_is_non_entering_and_enter_consumes_exactly_once(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (image, entries) = scalar_image(ImageContracts::current())?;
+    let (image, entries) = scalar_image()?;
     let installer = ExecutableInstaller::default();
     let installed = installer.install(image)?;
     let mut services = NoopNativeIslandRuntimeServices;
@@ -168,7 +165,7 @@ fn prepared_drop_is_non_entering_and_enter_consumes_exactly_once(
 #[test]
 fn trap_resource_deadline_and_host_are_entered_outcomes() -> Result<(), Box<dyn std::error::Error>>
 {
-    let (image, entries) = scalar_image(ImageContracts::current())?;
+    let (image, entries) = scalar_image()?;
     let installed = ExecutableInstaller::default().install(image)?;
     assert_eq!(
         installed.invoke(

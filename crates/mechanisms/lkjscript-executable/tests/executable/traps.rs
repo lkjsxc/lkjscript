@@ -30,10 +30,7 @@ fn explicit_trap_reports_preserve_full_u64_site_identity() -> Result<(), Box<dyn
     plan.define_function(builder.finish())?;
     functions.push((without_site, None));
 
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::default(),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     let installed = ExecutableInstaller::default().install(image)?;
     for (function, site) in functions {
         let report =

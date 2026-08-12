@@ -111,9 +111,7 @@ pub(super) fn lower_group(
     }
 
     let verified_plan = plan.verify(limits).map_err(LoweringError::backend)?;
-    let image =
-        lkjscript_native::encode(verified_plan, lkjscript_native::EncodingConfig::default())
-            .map_err(LoweringError::backend)?;
+    let image = lkjscript_native::encode(verified_plan).map_err(LoweringError::backend)?;
     Ok(LoweredGroup {
         image,
         functions,

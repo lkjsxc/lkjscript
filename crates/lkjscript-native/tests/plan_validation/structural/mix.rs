@@ -37,9 +37,6 @@ fn structural_and_owned_resource_mix_fails_before_image_installation(
     builder.return_value(block, unit)?;
     plan.define_function(builder.finish())?;
     let verified = plan.verify(BackendLimits::default())?;
-    assert!(matches!(
-        encode(verified, EncodingConfig::default()),
-        Err(NativeError::Image(_))
-    ));
+    assert!(matches!(encode(verified), Err(NativeError::Image(_))));
     Ok(())
 }

@@ -6,9 +6,10 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Reassess retained representation and crate boundaries.** Use profiles and Cargo evidence to
-   merge any remaining crate or representation whose separate ownership does not justify compile,
-   runtime, safety, or maintenance cost. Keep the direct local product and one active architecture.
+1. **Reassess the retained contract-registry surface.** Map each descriptor to a persistent artifact,
+   machine-output consumer, or shared canonical vocabulary use, then delete descriptors that only
+   report same-build typed stages back to the current process. Preserve exact package/lock validation
+   and do not duplicate capability, resource, operation, or memory-witness facts.
 
 ## Next
 

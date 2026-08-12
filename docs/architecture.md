@@ -363,10 +363,11 @@ one invocation before source effects. Eligibility, lowering, installation, setup
 `PreEntryError` decline destroys the complete native attempt before giving the unchanged bytecode,
 inputs, and policy to a fresh VM invocation.
 
-Executable installation validates image identity and contracts, relocates inside a private RW
-mapping, seals it RX, and publishes accounting only on success. `PreparedInvocation::enter`
-consumes the affine preparation and crosses the generated ABI boundary once. Entered errors and
-execution outcomes are post-commit and never run or rerun the VM.
+Executable installation revalidates the opaque image's structural integrity, builds its entry
+mapping, enforces object limits, relocates inside a private RW mapping, seals it RX, and publishes
+accounting only on success. `PreparedInvocation::enter` consumes the affine preparation and crosses
+the generated ABI boundary once. Entered errors and execution outcomes are post-commit and never run
+or rerun the VM.
 
 The VM handles the complete generic operation set. Stdio and clock use the retained host traits.
 Filesystem, network, terminal, entropy, and SQLite operations dispatch through the VM's typed
@@ -411,9 +412,14 @@ through source-closure checking, and captures its target record without rereadin
 Required-package compilation fails when no
 root package exists. After HIR memory planning, `compile_snapshot` compares generated target memory
 and witness facts with that captured record and rejects any validated-bytecode capability omitted by
-the verified manifest; a development snapshot needs no equivalent package check. Executable-image
-content identity, relocation validation, contract checks, private RW construction, RX sealing, and
-failure-atomic installation remain at the real native artifact boundary.
+the verified manifest; a development snapshot needs no equivalent package check.
+
+`InstallableImage` is an opaque derived typed value produced only by the current native encoder and
+moved synchronously into the installer. It crosses no persistence, cache, plugin, process, or version
+boundary and therefore carries no separate contract digest. Structural integrity and accounting are
+validated during construction and revalidated before the executable mechanism allocates memory;
+entry mapping, object limits, relocation checks, private RW construction, RX sealing, and
+failure-atomic publication remain at that named unsafe boundary.
 
 Execution outcomes are ordinary in-memory Rust values. The process outcome wire codec is deleted.
 `SemanticDagSnapshot` remains a validated in-memory graph, and `SealedSemanticDagRuntime` retains

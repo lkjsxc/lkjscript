@@ -135,3 +135,46 @@ impl InstallableImage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BackendLimits, MachinePlanBuilder, RuntimeCallSlot, Signature, SourceFunctionId};
+
+    #[test]
+    fn rejects_corrupted_accounting_and_relocation_metadata(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut plan = MachinePlanBuilder::new();
+        let function = plan.declare_function(
+            SourceFunctionId::new(1),
+            Signature::new(Vec::new(), ValueType::I64)?,
+        )?;
+        let mut builder = plan.function_builder(function)?;
+        let entry = builder.create_block()?;
+        builder.set_entry(entry)?;
+        let value = builder.i64_const(entry, 21)?;
+        let result = builder.runtime_call(entry, RuntimeCallSlot::IdentityI64, vec![value])?;
+        builder.return_value(entry, result)?;
+        plan.define_function(builder.finish())?;
+
+        let mut image = crate::encode(plan.verify(BackendLimits::default())?)?;
+        assert_eq!(image.validate_integrity(), Ok(()));
+
+        let code_bytes = image.accounting.code_bytes;
+        image.accounting.code_bytes += 1;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(ImageIntegrityError::CodeAccountingMismatch)
+        );
+        image.accounting.code_bytes = code_bytes;
+        assert_eq!(image.validate_integrity(), Ok(()));
+
+        assert!(!image.relocations.is_empty());
+        image.relocations[0].offset = u32::MAX;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(ImageIntegrityError::RelocationRange)
+        );
+        Ok(())
+    }
+}

@@ -135,17 +135,13 @@ fn compiled_source_digests_match_descriptors() {
     let contracts = result.unwrap_or_default();
     for (name, digest) in [
         (DIAGNOSTICS, DIAGNOSTICS_DIGEST),
-        (LANGUAGE, LANGUAGE_DIGEST),
         (MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST),
         (METRICS, METRICS_DIGEST),
-        (NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST),
-        (RUNTIME_CALLS, RUNTIME_CALLS_DIGEST),
         (SOURCE, SOURCE_DIGEST),
         (
             STRUCTURAL_OWNERSHIP_DOMAINS,
             STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST,
         ),
-        (VERIFIED_SSA, VERIFIED_SSA_DIGEST),
     ] {
         assert_eq!(
             contracts.get(name).map(RegisteredContract::digest),

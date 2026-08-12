@@ -24,8 +24,8 @@ use lkjscript_executable::{
 };
 use lkjscript_ir::{SsaType, VerifiedProgram};
 use lkjscript_native::{
-    BackendLimits, CodeAccounting, EntryMetadata, HeapOperation, HeapRuntimeSite, ImageContracts,
-    LoanType, NativeLoan, NativeUnique, ReferenceType, Relocation, RuntimeCallSlot,
+    BackendLimits, CodeAccounting, EntryMetadata, HeapOperation, HeapRuntimeSite, LoanType,
+    NativeLoan, NativeUnique, ReferenceType, Relocation, RuntimeCallSlot,
 };
 
 pub use lkjscript_ir::FunctionId;

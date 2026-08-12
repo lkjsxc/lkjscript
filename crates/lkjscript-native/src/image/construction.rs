@@ -35,7 +35,6 @@ impl InstallableImage {
                 metadata_bytes,
                 work_units: parts.work_units,
             },
-            contracts: parts.contracts,
         };
         image.validate_integrity()?;
         Ok(image)

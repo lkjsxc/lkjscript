@@ -4,10 +4,10 @@ use lkjscript_executable::{
     ExecutableInstaller, InvocationOutcome, InvocationReport, NativeInvocationConfig,
 };
 use lkjscript_native::{
-    encode, BackendLimits, BlockId, EncodingConfig, FunctionBuilder, FunctionId,
-    MachinePlanBuilder, NativeExecutionDomain, NativeValue, PlanError, RuntimeCallSlot, Signature,
-    SourceFunctionId, StructuralCallDescriptor, StructuralKind as NativeStructuralKind,
-    StructuralOperation, StructuralTypeIdentity, ValueId, ValueType,
+    encode, BackendLimits, BlockId, FunctionBuilder, FunctionId, MachinePlanBuilder,
+    NativeExecutionDomain, NativeValue, PlanError, RuntimeCallSlot, Signature, SourceFunctionId,
+    StructuralCallDescriptor, StructuralKind as NativeStructuralKind, StructuralOperation,
+    StructuralTypeIdentity, ValueId, ValueType,
 };
 
 pub(super) fn ty(id: u64, kind: NativeStructuralKind) -> StructuralTypeIdentity {
@@ -46,10 +46,7 @@ pub(super) fn invoke(
     ),
     Box<dyn std::error::Error>,
 > {
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::default(),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     assert_eq!(
         image.execution_domain(),
         NativeExecutionDomain::CollectorFree

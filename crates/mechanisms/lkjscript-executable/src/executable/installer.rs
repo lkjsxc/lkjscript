@@ -39,13 +39,6 @@ impl ExecutableInstaller {
         image
             .validate_integrity()
             .map_err(InstallError::InvalidImage)?;
-        let expected = ImageContracts::current();
-        if image.contracts() != expected {
-            return Err(InstallError::ContractMismatch {
-                expected: Box::new(expected),
-                actual: Box::new(image.contracts()),
-            });
-        }
         // Build the deterministic wide source-ID to installed-entry mapping before
         // allocating or publishing executable state. Bookkeeping allocation failure
         // therefore leaves both installer usage and W^X mappings unchanged.

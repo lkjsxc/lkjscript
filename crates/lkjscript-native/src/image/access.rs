@@ -70,9 +70,4 @@ impl InstallableImage {
     pub const fn accounting(&self) -> CodeAccounting {
         self.accounting
     }
-
-    #[must_use]
-    pub const fn contracts(&self) -> ImageContracts {
-        self.contracts
-    }
 }

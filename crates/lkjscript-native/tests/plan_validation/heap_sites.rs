@@ -53,10 +53,7 @@ fn runtime_value_sites_verify_arbitrary_frame_home_arguments_and_classes(
     let result = builder.heap_call(entry, descriptor, vec![owner, replacement])?;
     builder.return_value(entry, result)?;
     plan.define_function(builder.finish())?;
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::default(),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     assert_eq!(image.heap_runtime_sites().len(), 1);
     assert_eq!(image.heap_runtime_sites()[0].arguments().len(), 2);
     assert_eq!(image.heap_runtime_sites()[0].result().value_type(), product);

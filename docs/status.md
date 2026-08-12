@@ -79,10 +79,13 @@ local product rather than a daemon.
 
 ## Executable boundary
 
-Native image installation remains a pre-entry, failure-atomic operation. It validates image
-integrity and contracts, accounts the object, applies relocations in a private RW mapping, seals the
-mapping RX, and publishes installer usage only after success. Dropping an installed image releases
-both its mapping and accounted lease.
+Native image installation remains a pre-entry, failure-atomic operation. Every image is an opaque
+typed value produced by the current in-process native encoder; there is no serialized image, cache,
+plugin, or cross-version loader. Installation revalidates structural integrity, accounts the object,
+applies checked relocations in a private RW mapping, seals the mapping RX, and publishes installer
+usage only after success. The image carries no redundant same-build contract digest or configurable
+version token. Dropping an installed image releases both its mapping and accounted lease. Persistent
+package and lock contract validation remains unchanged at its independent filesystem boundary.
 
 Collector-free `prepare_invocation` and explicit `prepare_region_invocation` validate entry and
 typed arguments, materialize and reserve machine-call and runtime bookkeeping state, and perform

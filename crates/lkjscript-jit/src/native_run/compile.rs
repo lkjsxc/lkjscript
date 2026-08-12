@@ -28,7 +28,6 @@ impl NativeRun {
         }
 
         let accounting = lowered.image.accounting();
-        let contracts = lowered.image.contracts();
         let diagnostic_machine_code = if self.config.retain_machine_code_diagnostics {
             let bytes = u64::try_from(lowered.image.bytes().len()).map_err(|_| {
                 EngineError::new(
@@ -98,7 +97,6 @@ impl NativeRun {
         self.total_compile_time = self.total_compile_time.saturating_add(total);
         let object = CodeObject {
             functions: lowered.functions.clone(),
-            contracts,
             entries,
             accounting,
             accounted_allocation_bytes,

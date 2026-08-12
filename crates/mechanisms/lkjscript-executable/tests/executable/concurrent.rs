@@ -3,7 +3,7 @@ use super::*;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn one_sealed_generated_image_is_concurrently_callable() -> Result<(), Box<dyn std::error::Error>> {
-    let (image, entries) = scalar_image(ImageContracts::current())?;
+    let (image, entries) = scalar_image()?;
     let installer = ExecutableInstaller::default();
     let installed = std::sync::Arc::new(installer.install(image)?);
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));

@@ -16,10 +16,7 @@ fn accounting_image(
     let result = builder.runtime_call(entry, RuntimeCallSlot::EnterFunction, vec![source])?;
     builder.return_value(entry, result)?;
     plan.define_function(builder.finish())?;
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::new(ImageContracts::current()),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     Ok((image, function))
 }
 
@@ -98,10 +95,7 @@ fn unrestricted_native_stack_crosses_former_aggregate_ceiling(
         128 * 1024 * 1024,
         20_000_000,
     );
-    let image = encode(
-        plan.verify(limits)?,
-        EncodingConfig::new(ImageContracts::current()),
-    )?;
+    let image = encode(plan.verify(limits)?)?;
     let installation_limits = ExecutableLimits::new(
         u64::MAX,
         u64::MAX,
@@ -172,10 +166,7 @@ fn unrestricted_large_frame_runs_or_reports_actual_thread_boundary(
         64 * 1024 * 1024,
         5_000_000,
     );
-    let image = encode(
-        plan.verify(limits)?,
-        EncodingConfig::new(ImageContracts::current()),
-    )?;
+    let image = encode(plan.verify(limits)?)?;
     let installed = std::sync::Arc::new(ExecutableInstaller::default().install(image)?);
 
     let large_stack = std::sync::Arc::clone(&installed);
@@ -226,22 +217,9 @@ fn unrestricted_large_frame_runs_or_reports_actual_thread_boundary(
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
-fn enforces_contracts_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::error::Error>> {
-    let current = ImageContracts::current();
-    let mismatched = ImageContracts::new(
-        current.native_layout(),
-        current.verified_ssa(),
-        current.runtime_calls(),
-        current.native_layout(),
-    );
-    let (image, _) = scalar_image(mismatched)?;
-    let installer = ExecutableInstaller::default();
-    assert!(matches!(
-        installer.install(image),
-        Err(InstallError::ContractMismatch { .. })
-    ));
-
-    let (image, _) = scalar_image(ImageContracts::current())?;
+fn enforces_limits_relocations_wx_and_repeated_drop() -> Result<(), Box<dyn std::error::Error>> {
+    let (image, _) = scalar_image()?;
+    assert!(!image.relocations().is_empty());
     let accounting = image.accounting();
     let limits = ExecutableLimits::new(
         accounting.code_bytes() - 1,
@@ -259,9 +237,11 @@ fn enforces_contracts_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::e
             ExecutableLimitKind::ObjectCodeBytes
         ))
     ));
+    assert_eq!(installer.usage().objects(), 0);
+    assert_eq!(installer.usage().code_bytes(), 0);
 
-    let (first_image, _) = scalar_image(ImageContracts::current())?;
-    let (second_image, _) = scalar_image(ImageContracts::current())?;
+    let (first_image, _) = scalar_image()?;
+    let (second_image, _) = scalar_image()?;
     let one_object_limits = ExecutableLimits::new(
         u64::MAX,
         u64::MAX,
@@ -282,7 +262,7 @@ fn enforces_contracts_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::e
     drop(first_installed);
     assert_eq!(one_object_installer.usage().objects(), 0);
 
-    let (image, _) = scalar_image(ImageContracts::current())?;
+    let (image, _) = scalar_image()?;
     let installer = ExecutableInstaller::default();
     {
         let installed = installer.install(image)?;
@@ -297,7 +277,7 @@ fn enforces_contracts_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::e
     assert_eq!(installer.usage().code_bytes(), 0);
 
     for _ in 0..32 {
-        let (image, entries) = scalar_image(ImageContracts::current())?;
+        let (image, entries) = scalar_image()?;
         let installed = installer.install(image)?;
         assert_eq!(
             installed.invoke(entries.direct_call, &[NativeValue::I64(9)])?,

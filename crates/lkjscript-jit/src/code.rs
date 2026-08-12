@@ -9,7 +9,6 @@ pub struct NumericConversionSiteCounts {
 
 pub(crate) struct CodeObject {
     pub(crate) functions: Vec<FunctionId>,
-    pub(crate) contracts: ImageContracts,
     pub(crate) entries: Vec<EntryMetadata>,
     pub(crate) accounting: CodeAccounting,
     pub(crate) accounted_allocation_bytes: u64,
@@ -27,7 +26,6 @@ pub(crate) struct CodeObject {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CodeObjectRecord {
     pub functions: Vec<FunctionId>,
-    pub contracts: ImageContracts,
     pub code_bytes: u64,
     pub metadata_bytes: u64,
     pub accounted_allocation_bytes: u64,

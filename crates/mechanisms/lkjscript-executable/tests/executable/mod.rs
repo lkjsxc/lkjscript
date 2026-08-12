@@ -6,9 +6,9 @@ use lkjscript_executable::{
     NativeResourceLimitKind, NativeRuntimeServices, NoopNativeIslandRuntimeServices, PreEntryError,
 };
 use lkjscript_native::{
-    encode, BackendLimits, EncodingConfig, F64Comparison, FunctionId, I64Comparison,
-    ImageContracts, InstallableImage, MachinePlanBuilder, NativeExecutionDomain, NativeValue,
-    RuntimeCallSlot, Signature, SourceFunctionId, TrapCode, ValueType,
+    encode, BackendLimits, F64Comparison, FunctionId, I64Comparison, InstallableImage,
+    MachinePlanBuilder, NativeExecutionDomain, NativeValue, RuntimeCallSlot, Signature,
+    SourceFunctionId, TrapCode, ValueType,
 };
 
 #[derive(Clone, Copy)]
@@ -115,17 +115,12 @@ impl TestInvoke for InstalledImage {
     }
 }
 
-fn scalar_image(
-    contracts: ImageContracts,
-) -> Result<(InstallableImage, Entries), Box<dyn std::error::Error>> {
+fn scalar_image() -> Result<(InstallableImage, Entries), Box<dyn std::error::Error>> {
     let mut plan = MachinePlanBuilder::new();
     let entries = declarations::declare(&mut plan)?;
     control::define(&mut plan, entries)?;
     numeric::define(&mut plan, entries)?;
     calls::define(&mut plan, entries)?;
-    let image = encode(
-        plan.verify(BackendLimits::default())?,
-        EncodingConfig::new(contracts),
-    )?;
+    let image = encode(plan.verify(BackendLimits::default())?)?;
     Ok((image, entries))
 }

@@ -64,9 +64,6 @@ fn rejects_type_mismatch_unsupported_signature_and_code_limit(
     builder.return_value(entry, value)?;
     plan.define_function(builder.finish())?;
     let verified = plan.verify(limits)?;
-    assert!(matches!(
-        encode(verified, EncodingConfig::default()),
-        Err(NativeError::Encode(_))
-    ));
+    assert!(matches!(encode(verified), Err(NativeError::Encode(_))));
     Ok(())
 }

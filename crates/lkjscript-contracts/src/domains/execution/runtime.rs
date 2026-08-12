@@ -79,7 +79,7 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "integrity",
                     "integrity",
-                    "complete content and contract digests",
+                    "opaque typed construction with exact structural and accounting validation",
                 ))
                 .fact(fact(
                     "memory",

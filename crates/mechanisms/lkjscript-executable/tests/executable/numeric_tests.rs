@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn exact_integer_traps_and_f64_bits_and_ordered_branches() -> Result<(), Box<dyn std::error::Error>>
 {
-    let (image, entries) = scalar_image(ImageContracts::current())?;
+    let (image, entries) = scalar_image()?;
     let installer = ExecutableInstaller::default();
     let installed = installer.install(image)?;
     assert_eq!(

@@ -1,9 +1,6 @@
 use super::*;
 
-pub fn encode(
-    plan: VerifiedMachinePlan,
-    config: EncodingConfig,
-) -> Result<InstallableImage, NativeError> {
+pub fn encode(plan: VerifiedMachinePlan) -> Result<InstallableImage, NativeError> {
     let mut bytes = Vec::new();
     let mut entries = Vec::new();
     let mut relocations = Vec::new();
@@ -129,7 +126,6 @@ pub fn encode(
         trap_map,
         outcome_map,
         work_units: plan.work_units,
-        contracts: config.contracts,
     })
     .map_err(NativeError::Image)?;
     if image.accounting().metadata_bytes() > plan.limits.max_metadata_bytes() {

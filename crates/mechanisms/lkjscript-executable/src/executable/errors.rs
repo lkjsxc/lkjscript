@@ -4,10 +4,6 @@ use super::*;
 pub enum InstallError {
     UnsupportedPlatform,
     InvalidImage(ImageIntegrityError),
-    ContractMismatch {
-        expected: Box<ImageContracts>,
-        actual: Box<ImageContracts>,
-    },
     LimitExceeded(ExecutableLimitKind),
     AllocationFailed,
     RelocationRange,
@@ -22,10 +18,6 @@ impl fmt::Display for InstallError {
                 formatter.write_str("native executable images are supported only on Linux x86-64")
             }
             Self::InvalidImage(error) => write!(formatter, "invalid installable image: {error}"),
-            Self::ContractMismatch { expected, actual } => write!(
-                formatter,
-                "native image contract mismatch: expected {expected:?}, received {actual:?}; rebuild the image"
-            ),
             Self::LimitExceeded(kind) => {
                 write!(formatter, "executable install limit exceeded: {kind:?}")
             }

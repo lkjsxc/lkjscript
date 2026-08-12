@@ -8,7 +8,6 @@ impl NativeRun {
                 .iter()
                 .map(|object| CodeObjectRecord {
                     functions: object.functions.clone(),
-                    contracts: object.contracts,
                     code_bytes: object.accounting.code_bytes(),
                     metadata_bytes: object.accounting.metadata_bytes(),
                     accounted_allocation_bytes: object.accounted_allocation_bytes,

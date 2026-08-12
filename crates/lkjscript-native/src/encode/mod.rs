@@ -2,9 +2,8 @@ use std::collections::HashSet;
 
 use crate::image::{
     entry_metadata, frame_facts, frame_home, heap_runtime_site, outcome_map_entry, relocation,
-    source_map_entry, structural_runtime_site, trap_map_entry, FrameHomeKind, ImageContracts,
-    ImageParts, InstallableImage, NativeExecutionDomain, OutcomeKind, RelocationKind,
-    RelocationTarget,
+    source_map_entry, structural_runtime_site, trap_map_entry, FrameHomeKind, ImageParts,
+    InstallableImage, NativeExecutionDomain, OutcomeKind, RelocationKind, RelocationTarget,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
@@ -34,29 +33,6 @@ const SCRATCH_INTEGER_ARGUMENT_3: u8 = 40;
 const SCRATCH_INTEGER_ARGUMENT_4: u8 = 48;
 const SCRATCH_FLOAT_ARGUMENT_0: u8 = 56;
 const SCRATCH_FLOAT_ARGUMENT_1: u8 = 64;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EncodingConfig {
-    contracts: ImageContracts,
-}
-
-impl EncodingConfig {
-    #[must_use]
-    pub const fn new(contracts: ImageContracts) -> Self {
-        Self { contracts }
-    }
-
-    #[must_use]
-    pub const fn contracts(self) -> ImageContracts {
-        self.contracts
-    }
-}
-
-impl Default for EncodingConfig {
-    fn default() -> Self {
-        Self::new(ImageContracts::current())
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FixupTarget {
