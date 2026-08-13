@@ -191,7 +191,8 @@ function. Removed slots retain tombstone generations across snapshot cloning and
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
 and no attachments. `Transaction` adds non-generic `CreateProduct` and `CreateEnum`, generalized
-generic-or-non-generic `CreateFunction`, and `CreateMain`; identity-preserving rename for functions,
+generic-or-non-generic `CreateFunction`, and `CreateMain` with ordered explicit capability
+parameters; identity-preserving rename for functions,
 parameters, locals, products, product fields, enums, variants, and enum fields; replacement and hole
 operations; and unresolved copy-load value-reference introduction and resolution.
 Function creation uses one ordered declaration-local binder handle domain and a creation-only
@@ -203,13 +204,16 @@ identities. Public published inputs and queries use one exact structured `Semant
 user enums, and type parameters carry stable entities, while all five prelude enums and all five core
 traits have explicit builtin identities. Recursive operations and public/internal conversion for
 both type boundaries are iterative and unrestricted by type depth.
-Invalid names, duplicate declarations/members, ownership-containing aggregate fields,
-foreign/stale/wrong-kind type identities, and allocation failure reject without consuming their
-reserved stable IDs.
+Main parameter names/types use the source entry restrictions: exact capability values, unique names,
+strictly sorted unique capability kinds, and a valid public result. Main parameters receive stable
+entities owned by main and enter its body-hole scope. Invalid names, duplicate declarations/members,
+ownership-containing aggregate fields, foreign/stale/wrong-kind type identities, and allocation
+failure reject without consuming their reserved stable IDs.
 
 `ExpressionDraft` is a flat non-recursive tree with transaction-local lexical binding handles; its
-physical node order is irrelevant. It implements scalar and byte literals, selected canonical
-built-in operations (including exact-type numeric `less-than`), exact generic and non-generic calls,
+physical node order is irrelevant. It implements scalar and byte literals, every canonical operation
+whose canonical metadata selects the ordinary runtime-operation expression route (including numeric,
+string conversion, and explicit-capability stdio operations), exact generic and non-generic calls,
 conditionals, ordered sequences, immutable lexical locals, explicitly typed mutable locals,
 assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`,
 copy-safe loads, byte-vector moves and shared borrows, product construction/projection, enum
@@ -384,7 +388,8 @@ Revision-labelled queries implement deterministic pagination, definitions/refere
 structured entity/function/node types, diagnostics, hole context with exact lexical and arm-local
 visibility, unresolved value-reference state, filtered copy-load candidates, expected- and control-
 context-filtered legal constructors including typed loop, exact break payload type, continue, early
-return, and selected canonical operations, exact generic signatures and call instantiations, node
+return, and canonical direct-operation candidates marked as requiring submitted-argument validation,
+exact generic signatures and call instantiations, node
 semantics, and
 a structured `MatchView` containing the scrutinee, ordered arms, arm-body nodes, pattern types/kinds/fields, stable
 enum/member identities, and payload-binding entities. Node semantics expose kind, actual/expected
@@ -478,8 +483,9 @@ build inputs.
 
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
-  covers non-generic products and enums, generic and non-generic functions, and parameterless
-  `main`; expression construction covers immutable and mutable locals, ordered sequence, assignment,
+  covers non-generic products and enums, generic and non-generic functions, and `main` with ordered
+  explicit capability parameters; expression construction covers immutable and mutable locals,
+  ordered sequence, assignment,
   `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`, exact calls
   to imported or source-free generic functions, the selected byte-vector move/borrow vertical, and
   exhaustive closed Boolean, I64, exact-product, and non-generic enum matches. Source-free generic
@@ -499,8 +505,12 @@ build inputs.
   fast on unresolved source names. Unresolved moves, borrows, calls, type names, nominal members,
   patterns, and imports; ambiguity, conflict, and parser recovery; nominal member
   addition/deletion/reordering; and cross-parent, entity, declaration, match-arm, branch, loop-body,
-  callable, and generic public movement remain gaps. Generic ownership/reference instantiation and forwarding
-  a caller's unresolved type parameter remain narrow explicit unsupported cases.
+  callable, and generic public movement remain gaps. Generic ownership/reference instantiation and
+  forwarding a caller's unresolved type parameter remain narrow explicit unsupported cases. Direct
+  operation drafts exclude control, numeric-conversion, and enum-construction operations that
+  require dedicated HIR forms. A retained source-free recursive factorial plus capability-bearing
+  main compiles directly, prints the same `3628800` bytes as the imported hello oracle, and invokes
+  source loading and parsing zero times.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.
 - Owned runtime structural values and source-free nested-expression, alternating immutable/mutable

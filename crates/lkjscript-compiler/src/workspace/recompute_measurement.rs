@@ -114,6 +114,7 @@ fn create_width_fixture(seed: u64, helper_functions: usize) -> (Workspace, Entit
         });
     }
     edits.push(Edit::CreateMain {
+        parameters: Vec::new(),
         return_type: SemanticType::I64,
     });
     let created = workspace
@@ -1160,6 +1161,7 @@ fn product_enum_match_sample() -> Value {
                     ],
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -1430,6 +1432,7 @@ fn generic_mixed_sample(helper_functions: usize) -> Value {
         });
     }
     edits.push(Edit::CreateMain {
+        parameters: Vec::new(),
         return_type: SemanticType::I64,
     });
     let declared = workspace
@@ -1806,6 +1809,7 @@ fn lifecycle_sample() -> Value {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -2282,6 +2286,7 @@ fn metadata_only_hole_refinement_is_shared_atomic_and_revision_safe() {
         .apply(Transaction {
             base_revision: foreign.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2648,6 +2653,7 @@ fn hole_refinement_diff_is_net_deterministic_and_full_path_equivalent() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],

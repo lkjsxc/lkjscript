@@ -124,6 +124,7 @@ mod tests {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -175,6 +176,7 @@ mod tests {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -212,6 +214,7 @@ mod tests {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -338,6 +341,7 @@ mod tests {
                         }],
                     },
                     Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     },
                 ],
@@ -428,6 +432,7 @@ mod tests {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -531,6 +536,7 @@ mod tests {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })

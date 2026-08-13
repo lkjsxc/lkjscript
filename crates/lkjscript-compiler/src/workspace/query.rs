@@ -317,6 +317,7 @@ pub struct MatchPatternFieldView {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ConstructorStatus {
     Established,
+    RequiresCanonicalValidation,
     RequiresOwnershipValidation,
 }
 
@@ -327,7 +328,10 @@ pub enum LegalConstructor {
     F64Literal,
     BoolLiteral,
     UnitLiteral,
-    Operation(crate::operation::Operation),
+    Operation {
+        operation: crate::operation::Operation,
+        status: ConstructorStatus,
+    },
     Load(EntityId),
     Move {
         binding: EntityId,
@@ -1229,11 +1233,6 @@ impl WorkspaceSnapshot {
             }
             _ => {}
         }
-        for operation in super::draft::SOURCE_FREE_OPERATIONS.iter().copied() {
-            if operation_matches_expected(operation, expected_type) {
-                push_legal_constructor(&mut values, LegalConstructor::Operation(operation))?;
-            }
-        }
         for entity in context.visible_entities.iter().copied() {
             let header = self.workspace_entity(entity)?;
             let address = self
@@ -1313,6 +1312,17 @@ impl WorkspaceSnapshot {
                     _ => {}
                 },
                 _ => {}
+            }
+        }
+        for operation in crate::operation::Operation::ALL.iter().copied() {
+            if operation.direct_result_matches(expected_type) {
+                push_legal_constructor(
+                    &mut values,
+                    LegalConstructor::Operation {
+                        operation,
+                        status: ConstructorStatus::RequiresCanonicalValidation,
+                    },
+                )?;
             }
         }
         match expected_type {
@@ -1817,7 +1827,7 @@ fn compare_legal_constructors(
         LegalConstructor::F64Literal => 1,
         LegalConstructor::BoolLiteral => 2,
         LegalConstructor::UnitLiteral => 3,
-        LegalConstructor::Operation(_) => 4,
+        LegalConstructor::Operation { .. } => 4,
         LegalConstructor::Load(_) => 5,
         LegalConstructor::Move { .. } => 6,
         LegalConstructor::BorrowShared { .. } => 7,
@@ -1837,9 +1847,16 @@ fn compare_legal_constructors(
     rank(left)
         .cmp(&rank(right))
         .then_with(|| match (left, right) {
-            (LegalConstructor::Operation(left), LegalConstructor::Operation(right)) => {
-                left.cmp(right)
-            }
+            (
+                LegalConstructor::Operation {
+                    operation: left_operation,
+                    status: left_status,
+                },
+                LegalConstructor::Operation {
+                    operation: right_operation,
+                    status: right_status,
+                },
+            ) => (left_operation, left_status).cmp(&(right_operation, right_status)),
             (LegalConstructor::Load(left), LegalConstructor::Load(right))
             | (LegalConstructor::Call(left), LegalConstructor::Call(right))
             | (LegalConstructor::Product(left), LegalConstructor::Product(right))
@@ -1880,23 +1897,6 @@ fn push_legal_constructor(
         .map_err(|_| WorkspaceError::Host(Arc::from("legal constructor allocation failed")))?;
     values.push(value);
     Ok(())
-}
-
-fn operation_matches_expected(
-    operation: crate::operation::Operation,
-    expected: &crate::Type,
-) -> bool {
-    match operation {
-        crate::operation::Operation::Add => matches!(expected, crate::Type::I64 | crate::Type::F64),
-        crate::operation::Operation::Less => *expected == crate::Type::Bool,
-        crate::operation::Operation::ByteVectorNew | crate::operation::Operation::ThawBytes => {
-            *expected == crate::Type::ByteVector
-        }
-        crate::operation::Operation::ByteSliceLength
-        | crate::operation::Operation::ByteSliceByteAt
-        | crate::operation::Operation::BytesLength => *expected == crate::Type::I64,
-        _ => false,
-    }
 }
 
 fn generic_query_error(error: crate::generic_call::GenericCallError) -> WorkspaceError {

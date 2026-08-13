@@ -16,15 +16,8 @@ impl Analyzer {
         Ok(types)
     }
     pub(in crate::analyze) fn resolve_main(&mut self, pending: PendingMain<'_>) -> Result<Main> {
-        if pending.return_type.contains_never() {
-            return Err(self.error(pending.origin, "never is not a public main return payload"));
-        }
-        if contains_resource_type(&pending.return_type) {
-            return Err(self.error(
-                pending.origin,
-                "typed resources cannot escape as a main result",
-            ));
-        }
+        validate_main_result_type(&pending.return_type)
+            .map_err(|message| self.error(pending.origin, message))?;
         let arity = pending.param_names.len();
         let mut params = Vec::with_capacity(pending.param_names.len());
         let mut scope = HashMap::new();

@@ -15,6 +15,7 @@ serde_stacker.workspace = true
 stacker.workspace = true
 
 [dev-dependencies]
+lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-ir = { path = "../lkjscript-ir", features = ["test-oracle"] }
 lkjscript-vm = { path = "../lkjscript-vm" }
 

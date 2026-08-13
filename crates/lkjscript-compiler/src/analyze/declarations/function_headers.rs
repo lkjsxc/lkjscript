@@ -44,21 +44,22 @@ pub(in crate::analyze) fn parse_main<'a>(
     if params.is_empty() && params_form.is_some() {
         return Err("pure main must omit empty params/".into());
     }
-    validate_main_capabilities(&signature_params, &names, &params)?;
+    if signature_params != params || names.len() != params.len() {
+        return Err("main sig/params must agree exactly".into());
+    }
+    validate_main_parameter_types(names.iter().map(String::as_str).zip(&params))?;
     Ok((names, params, return_type, body))
 }
 
-fn validate_main_capabilities(
-    signature: &[Type],
-    names: &[String],
-    params: &[Type],
+pub(in crate::analyze) fn validate_main_parameter_types<'a>(
+    parameters: impl IntoIterator<Item = (&'a str, &'a Type)>,
 ) -> std::result::Result<(), String> {
-    if signature != params || names.len() != params.len() {
-        return Err("main sig/params must agree exactly".into());
-    }
     let mut prior = None;
     let mut seen_names = HashSet::new();
-    for (name, ty) in names.iter().zip(params) {
+    for (name, ty) in parameters {
+        if !lkjscript_contracts::is_identifier(name) || is_reserved_semantic_name(name) {
+            return Err("main parameter name is invalid or reserved by the language".into());
+        }
         let Type::Capability(kind) = ty else {
             return Err("main parameters must be exact Capability values".into());
         };
@@ -69,6 +70,21 @@ fn validate_main_capabilities(
             return Err("main capability kinds must be sorted and unique".into());
         }
         prior = Some(*kind);
+    }
+    Ok(())
+}
+
+pub(in crate::analyze) fn validate_main_result_type(
+    result: &Type,
+) -> std::result::Result<(), String> {
+    if result.contains_never() {
+        return Err("never is not a public main return payload".into());
+    }
+    if contains_resource_type(result) {
+        return Err("typed resources cannot escape as a main result".into());
+    }
+    if matches!(result, Type::ByteSlice | Type::ByteSliceMut) {
+        return Err("main cannot return a lexical reference".into());
     }
     Ok(())
 }

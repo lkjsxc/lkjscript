@@ -39,12 +39,6 @@ impl Analyzer {
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
                         self.validate_product_type(&return_type)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
-                        if matches!(return_type, Type::ByteSlice | Type::ByteSliceMut) {
-                            return Err(self.error(
-                                source,
-                                "main cannot return a lexical reference in the initial ownership slice",
-                            ));
-                        }
                         let mut free = HashSet::new();
                         collect_type_params(&return_type, &mut free);
                         if let Some(parameter) = free.into_iter().next() {

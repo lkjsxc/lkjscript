@@ -126,6 +126,131 @@ impl Operation {
         };
         Ok((resolved, result))
     }
+
+    /// Whether the canonical direct-operation result scheme can produce `expected` for at least one
+    /// argument shape. This is a provisional discovery predicate; submitted arguments still pass
+    /// `resolve_types` and all canonical ownership checks before publication.
+    pub(crate) fn direct_result_matches(self, expected: &Type) -> bool {
+        if !self.supports_direct_operation_expression() {
+            return false;
+        }
+        let signature = self.signature();
+        let (variables, parameters, result) = match &signature {
+            Type::Forall { vars, body } => {
+                let Type::Fn { params, ret } = body.as_ref() else {
+                    return false;
+                };
+                (vars.as_slice(), params.as_slice(), ret.as_ref())
+            }
+            Type::Fn { params, ret } => (&[][..], params.as_slice(), ret.as_ref()),
+            _ => return false,
+        };
+        let mut substitutions = std::collections::HashMap::new();
+        if bind_expected_result(result, expected, variables, &mut substitutions).is_err() {
+            return false;
+        }
+        for variable in variables {
+            if substitutions.contains_key(variable) {
+                continue;
+            }
+            let Some(inferred) = self.canonical_unbound_witness(variable, parameters) else {
+                return false;
+            };
+            substitutions.insert(variable.clone(), inferred);
+        }
+        let arguments = parameters
+            .iter()
+            .map(|parameter| parameter.subst(&substitutions))
+            .collect::<Vec<_>>();
+        self.resolve_types(&arguments)
+            .is_ok_and(|(_, result)| result == *expected)
+    }
+}
+
+fn bind_expected_result(
+    pattern: &Type,
+    expected: &Type,
+    variables: &[String],
+    substitutions: &mut std::collections::HashMap<String, Type>,
+) -> Result<(), ()> {
+    let mut pending = vec![(pattern, expected)];
+    while let Some((pattern, value)) = pending.pop() {
+        match (pattern, value) {
+            (Type::Param(parameter), value)
+                if variables.iter().any(|variable| variable == parameter) =>
+            {
+                if substitutions
+                    .get(parameter)
+                    .is_some_and(|previous| previous != value)
+                {
+                    return Err(());
+                }
+                substitutions
+                    .entry(parameter.clone())
+                    .or_insert_with(|| value.clone());
+            }
+            (Type::List(pattern), Type::List(value)) => pending.push((pattern, value)),
+            (
+                Type::Enum {
+                    id: pattern_id,
+                    arguments: patterns,
+                },
+                Type::Enum {
+                    id: value_id,
+                    arguments: values,
+                },
+            ) if pattern_id == value_id && patterns.len() == values.len() => {
+                pending.extend(patterns.iter().zip(values));
+            }
+            (pattern, value) if pattern == value => {}
+            _ => return Err(()),
+        }
+    }
+    Ok(())
+}
+
+impl Operation {
+    fn canonical_unbound_witness(self, variable: &str, parameters: &[Type]) -> Option<Type> {
+        if !parameters
+            .iter()
+            .any(|parameter| type_contains_parameter(parameter, variable))
+        {
+            return None;
+        }
+        if self == Operation::SameObject {
+            return Some(Type::Resource(lkjscript_core::ResourceKind::InputStream));
+        }
+        let semantics = lkjscript_contracts::operation_semantics_by_id(self.identity())?;
+        if let [constraint] = semantics.generic_constraints {
+            let values = constraint
+                .strip_prefix("resource:one-of(")?
+                .strip_suffix(')')?;
+            let kind = values
+                .split(',')
+                .next()
+                .and_then(lkjscript_core::ResourceKind::parse)?;
+            return Some(Type::Resource(kind));
+        }
+        Some(Type::I64)
+    }
+}
+
+fn type_contains_parameter(root: &Type, variable: &str) -> bool {
+    let mut pending = vec![root];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Param(name) if name == variable => return true,
+            Type::List(inner) => pending.push(inner),
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
+        }
+    }
+    false
 }
 
 fn validate_resource_operation(operation: Operation, arguments: &[Type]) -> Result<(), String> {

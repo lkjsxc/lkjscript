@@ -44,7 +44,7 @@ fn ambient_and_wrong_capability_calls_are_rejected() {
 }
 
 #[test]
-fn duplicate_unsorted_and_forged_capabilities_are_rejected() {
+fn duplicate_unsorted_reserved_and_forged_capabilities_are_rejected() {
     let duplicate = STDIO_MAIN.replace(
         "inputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
         "inputs/\ncapability/\nstdio\n/capability\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
@@ -67,6 +67,14 @@ fn duplicate_unsorted_and_forged_capabilities_are_rejected() {
         .expect_err("unsorted capabilities")
         .to_string();
     assert!(error.contains("sorted and unique"));
+
+    let reserved = STDIO_MAIN
+        .replace("params/\nstdio\ncapability", "params/\nmain\ncapability")
+        .replace("print/\nstdio", "print/\nmain");
+    let error = compile_source(&reserved, "reserved-parameter.lkjscript")
+        .expect_err("reserved main parameter")
+        .to_string();
+    assert!(error.contains("invalid or reserved"), "{error}");
 
     let forged = STDIO_MAIN.replace("print/\nstdio", "print/\n7");
     assert!(compile_source(&forged, "forged.lkjscript").is_err());

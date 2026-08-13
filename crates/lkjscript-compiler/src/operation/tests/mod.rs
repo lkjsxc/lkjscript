@@ -86,6 +86,70 @@ fn compiler_operation_order_agrees_with_stable_registry_identities() {
     }
 }
 
+#[test]
+fn direct_expression_support_is_owned_by_canonical_lowering_metadata() {
+    for operation in Operation::ALL.iter().copied() {
+        let semantics = lkjscript_contracts::operation_semantics_by_id(operation.identity());
+        assert!(
+            semantics.is_some(),
+            "missing canonical operation semantics for {operation:?}"
+        );
+        let Some(semantics) = semantics else {
+            continue;
+        };
+        let expected = semantics.runtime_lowering
+            == lkjscript_contracts::RuntimeLowering::RuntimeCall
+            && semantics.semantic_constructor
+                == lkjscript_contracts::SemanticConstructor::BuiltinCall
+            && semantics.legal_constructor_available;
+        assert_eq!(
+            operation.supports_direct_operation_expression(),
+            expected,
+            "{operation:?}"
+        );
+    }
+    for supported in [
+        Operation::Add,
+        Operation::Less,
+        Operation::Multiply,
+        Operation::StrFromI64,
+        Operation::Print,
+    ] {
+        assert!(supported.supports_direct_operation_expression());
+    }
+    for dedicated in [
+        Operation::Exit,
+        Operation::And,
+        Operation::F64FromI64Exact,
+        Operation::Some,
+    ] {
+        assert!(!dedicated.supports_direct_operation_expression());
+    }
+}
+
+#[test]
+fn direct_result_matching_is_structural_and_constraint_aware() {
+    assert!(Operation::Multiply.direct_result_matches(&Type::I64));
+    assert!(Operation::Multiply.direct_result_matches(&Type::F64));
+    assert!(!Operation::Multiply.direct_result_matches(&Type::Unit));
+    assert!(!Operation::Multiply.direct_result_matches(&Type::Str));
+    assert!(Operation::Less.direct_result_matches(&Type::Bool));
+    assert!(Operation::SameObject.direct_result_matches(&Type::Bool));
+    assert!(Operation::StrFromI64.direct_result_matches(&Type::Str));
+    assert!(Operation::Print.direct_result_matches(&Type::Unit));
+    assert!(
+        Operation::SysWriteByte.direct_result_matches(&crate::types::result_type(
+            Type::Unit,
+            crate::types::system_error_type(),
+        ))
+    );
+    let option_i64 = crate::types::option_type(Type::I64);
+    assert!(Operation::Car.direct_result_matches(&option_i64));
+    assert!(Operation::Cons.direct_result_matches(&Type::List(Box::new(option_i64))));
+    assert!(Operation::Cdr
+        .direct_result_matches(&Type::List(Box::new(Type::List(Box::new(Type::I64))))));
+}
+
 fn canonical_type(ty: &Type) -> String {
     match ty {
         Type::Never => "never".into(),

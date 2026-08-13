@@ -67,6 +67,7 @@ version = "0.0.0"
 dependencies = [
  "lkjscript-contracts",
  "lkjscript-core",
+ "lkjscript-host",
  "lkjscript-ir",
  "lkjscript-vm",
  "serde",

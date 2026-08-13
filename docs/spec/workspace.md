@@ -57,8 +57,11 @@ Old immutable snapshots retain their original unresolved state. Current text imp
 fail-fast on unresolved source names; it does not manufacture parser recovery state.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
-creation covers non-generic products and enums, generic and non-generic functions, and one
-parameterless `main`; function and entry bodies begin as typed holes. One generalized function
+creation covers non-generic products and enums, generic and non-generic functions, and one `main`
+with zero or more ordered explicit capability parameters; function and entry bodies begin as typed
+holes. Each main parameter is a stable entity owned by main and visible in its body hole. Main
+creation applies the same exact capability-only, sorted-kind, unique-name, and result restrictions as
+source import before publication. One generalized function
 creation operation accepts zero or more ordered type-parameter drafts. A declaration-local opaque
 binder handle may occur at arbitrary depth in the creation-only `DeclarationType`; it has only that
 edit's lifetime and never enters a snapshot, query, projection, or diff. Staging validates names,
@@ -72,8 +75,9 @@ debug/display where supported, validation, conversion, projection, and destructi
 type models do not recurse on native stack or impose a type-depth quota.
 
 `ExpressionDraft` and `PatternDraft` are flat non-recursive trees whose physical node order is not
-semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, selected canonical built-in
-operations, exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
+semantic. Expression drafts cover i64/f64/Boolean/unit/byte literals, every canonical built-in
+operation whose operation-owned metadata selects the ordinary runtime-operation expression route,
+exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
 `let` bindings, explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`,
 `break`, `continue`, early `return`, copy-safe loads, byte-vector moves and shared borrows, product
 construction and field projection, enum construction and enum-variant testing, and ordered
@@ -116,10 +120,12 @@ continue clean iteration-local owners before their selected exit or backedge; an
 live, and canonical HIR/SSA ownership validation rejects a changed loop-carried ownership or lexical
 loan state. Compiler-hidden match scrutinee/projection locals are never workspace entities or legal
 constructors. The canonical usefulness/exhaustiveness checker and complete staged HIR ownership
-checker remain
-authoritative for match validity, move/borrow legality, and cleanup. Generic pattern construction,
-forwarding an unresolved caller type parameter, and ownership/reference-bearing generic
-instantiation are not fabricated.
+checker remain authoritative for match validity, move/borrow legality, and cleanup. Control forms,
+numeric-conversion forms, and enum constructors that require dedicated HIR lowering are not admitted
+as direct operation expressions. Canonical operation resolution still decides
+submitted arity, argument types, generic instantiation, effects, capability requirements, ownership,
+traps, divergence, and runtime lowering. Generic pattern construction, forwarding an unresolved
+caller type parameter, and ownership/reference-bearing generic instantiation are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations. `RenameEntity` renames functions, parameters, locals, products, product fields, enums,
@@ -222,8 +228,11 @@ ephemeral source-optional HIR, validates it, and enters the existing compiler wi
 hashing, or
 parsing source. Source-free selected paths invoke source loading and parsing zero times. Imported
 and source-free scalar, product, enum, lexical-local, mutable counted-loop, typed-loop/break,
-nested-continue, affine break/continue cleanup, borrow-then-move, early-return ownership-control, and
-exhaustive enum-payload match fixtures have equal normalized entities/types, containment, references,
+nested-continue, affine break/continue cleanup, borrow-then-move, early-return ownership-control,
+exhaustive enum-payload match, and recursive capability-bearing hello fixtures have equal defined
+runtime results. The hello pair produces the same captured output; the source-free path performs no
+source load or parse. Other equivalence fixtures have equal normalized entities/types, containment,
+references,
 dependencies, node kinds/types/effects, canonical match shape, selected memory-obligation kinds, the
 main bytecode stream, evaluator/VM results or traps, and cleanup behavior. Imported match plans carry
 real source origin; source-free plans carry semantic origin; ordinary plans reject builtin or stale
@@ -233,7 +242,8 @@ Revision-labelled queries cover deterministic paginated entity listing/search,
 definitions/references, callers/callees, structured entity/function/node types, diagnostics, hole
 context, unresolved value-reference state and copy-load candidates, exact lexical and match-arm
 bindings, expected-type-filtered legal constructors (including typed loop, exact break payload type,
-continue, early return, and selected canonical operation identities), structured function signatures
+continue, early return, and canonical direct-operation identities marked as requiring submitted-
+argument validation), structured function signatures
 and call instantiations, node semantics, and structured match inspection. Loop is advertised with the
 hole's exact representable non-`never` type. Break and continue are advertised only where a nearest
 lexical loop exists and divergent replacement is admissible; break returns the exact stable semantic

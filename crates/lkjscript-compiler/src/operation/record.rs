@@ -1,5 +1,7 @@
 use crate::operation::*;
-use lkjscript_contracts::{CapabilityKind, OperationOwnership, RuntimeLowering};
+use lkjscript_contracts::{
+    CapabilityKind, OperationOwnership, RuntimeLowering, SemanticConstructor,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TypedOperationRecord {
@@ -15,6 +17,18 @@ pub(crate) struct TypedOperationRecord {
 }
 
 impl Operation {
+    /// Whether this operation can use the ordinary `ExprKind::Operation` -> runtime-op route.
+    ///
+    /// Control forms, numeric conversions, and enum constructors require dedicated lowering and
+    /// therefore cannot be represented honestly by a flat direct-operation draft.
+    pub(crate) fn supports_direct_operation_expression(self) -> bool {
+        lkjscript_contracts::operation_semantics_by_id(self.identity()).is_some_and(|semantics| {
+            semantics.runtime_lowering == RuntimeLowering::RuntimeCall
+                && semantics.semantic_constructor == SemanticConstructor::BuiltinCall
+                && semantics.legal_constructor_available
+        })
+    }
+
     pub(crate) fn record(self) -> TypedOperationRecord {
         let semantics = lkjscript_contracts::operation_semantics_by_id(self.identity());
         TypedOperationRecord {

@@ -6,16 +6,6 @@ use lkjscript_contracts::{CapabilityKind, ResourceKind};
 use super::{EntityId, SemanticEnum, SemanticType, WorkspaceError};
 use crate::operation::Operation;
 
-pub(super) const SOURCE_FREE_OPERATIONS: &[Operation] = &[
-    Operation::Add,
-    Operation::Less,
-    Operation::ByteVectorNew,
-    Operation::ByteSliceLength,
-    Operation::ByteSliceByteAt,
-    Operation::BytesLength,
-    Operation::ThawBytes,
-];
-
 /// Dense identity into one flat expression draft. It is never a workspace identity.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DraftNodeId(u64);

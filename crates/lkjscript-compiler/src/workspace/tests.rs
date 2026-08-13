@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use lkjscript_core::{ExecutionOutcome, ExecutionPolicy};
+use lkjscript_core::{CapabilityKind, ExecutionOutcome, ExecutionPolicy};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_vm::{run_chunk, ExecutionInputs};
 
@@ -36,6 +36,104 @@ fn run_bool(snapshot: &WorkspaceSnapshot) -> bool {
         ExecutionOutcome::Returned(value) => value.as_bool().expect("returned Boolean"),
         outcome => panic!("unexpected execution outcome: {outcome:?}"),
     }
+}
+
+fn run_stdio(snapshot: &WorkspaceSnapshot) -> Vec<u8> {
+    let executable = crate::compile_snapshot(snapshot).expect("compile capability snapshot");
+    let stdio = lkjscript_host::BufferedStdio::default();
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs {
+            arguments: Vec::new(),
+            capabilities: executable.bytecode().required_capabilities().to_vec(),
+            host: lkjscript_host::HostEnvironment {
+                stdio: Some(std::sync::Arc::new(stdio.clone())),
+                ..lkjscript_host::HostEnvironment::default()
+            },
+        },
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(
+        matches!(outcome, ExecutionOutcome::Returned(_)),
+        "{outcome:?}"
+    );
+    stdio.output().expect("captured stdio output")
+}
+
+fn source_free_factorial_draft(parameter: EntityId, function: EntityId) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::Load(DraftBindingRef::Entity(parameter)),
+            DraftNode::I64(1),
+            DraftNode::Operation {
+                operation: crate::Operation::LessEqual,
+                arguments: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+            },
+            DraftNode::I64(1),
+            DraftNode::Load(DraftBindingRef::Entity(parameter)),
+            DraftNode::Load(DraftBindingRef::Entity(parameter)),
+            DraftNode::I64(1),
+            DraftNode::Operation {
+                operation: crate::Operation::Subtract,
+                arguments: vec![DraftNodeId::new(5), DraftNodeId::new(6)],
+            },
+            DraftNode::Call {
+                callee: function,
+                type_arguments: Vec::new(),
+                arguments: vec![DraftNodeId::new(7)],
+            },
+            DraftNode::Operation {
+                operation: crate::Operation::Multiply,
+                arguments: vec![DraftNodeId::new(4), DraftNodeId::new(8)],
+            },
+            DraftNode::If {
+                condition: DraftNodeId::new(2),
+                then_branch: DraftNodeId::new(3),
+                else_branch: DraftNodeId::new(9),
+            },
+        ],
+        DraftNodeId::new(10),
+    )
+}
+
+fn source_free_hello_main_draft(stdio: EntityId, function: EntityId) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::Load(DraftBindingRef::Entity(stdio)),
+            DraftNode::I64(10),
+            DraftNode::Call {
+                callee: function,
+                type_arguments: Vec::new(),
+                arguments: vec![DraftNodeId::new(1)],
+            },
+            DraftNode::Operation {
+                operation: crate::Operation::StrFromI64,
+                arguments: vec![DraftNodeId::new(2)],
+            },
+            DraftNode::Operation {
+                operation: crate::Operation::Print,
+                arguments: vec![DraftNodeId::new(0), DraftNodeId::new(3)],
+            },
+        ],
+        DraftNodeId::new(4),
+    )
+}
+
+fn all_legal_constructors(snapshot: &WorkspaceSnapshot, hole: HoleId) -> Vec<LegalConstructor> {
+    let request = PageRequest::new(16).expect("constructor page");
+    let mut continuation = None;
+    let mut values = Vec::new();
+    loop {
+        let page = snapshot
+            .legal_constructors(snapshot.revision(), hole, request, continuation.as_ref())
+            .expect("legal constructor page");
+        values.extend(page.items);
+        continuation = page.continuation;
+        if continuation.is_none() {
+            break;
+        }
+    }
+    values
 }
 
 fn push_draft_node(nodes: &mut Vec<DraftNode>, node: DraftNode) -> DraftNodeId {
@@ -153,6 +251,7 @@ fn create_source_free_declarations(
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -336,6 +435,7 @@ fn source_free_construction_never_invokes_parser_and_executes() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -506,6 +606,427 @@ fn source_free_construction_never_invokes_parser_and_executes() {
     assert_eq!(crate::pipeline::lowering_invocations(), 1);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_capability_hello_compiles_and_matches_imported_output() {
+    let hello = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../src/examples/hello/main.lkjscript");
+    let imported = import_path(&hello).expect("import checked hello fixture oracle");
+    let imported_output = run_stdio(&imported);
+    assert_eq!(imported_output, b"3628800");
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(210).expect("empty hello workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "fact".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![ParameterDraft {
+                        name: "n".to_owned(),
+                        ty: DeclarationType::I64,
+                    }],
+                    return_type: DeclarationType::I64,
+                },
+                Edit::CreateMain {
+                    parameters: vec![ParameterDraft {
+                        name: "stdio".to_owned(),
+                        ty: DeclarationType::Capability(CapabilityKind::Stdio),
+                    }],
+                    return_type: SemanticType::Unit,
+                },
+            ],
+        })
+        .expect("create factorial and capability main");
+    let fact = entity_named(&created.snapshot, EntityKind::Function, "fact");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let n = entity_named(&created.snapshot, EntityKind::Parameter, "n");
+    let stdio = entity_named(&created.snapshot, EntityKind::Parameter, "stdio");
+    let fact_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == fact)
+        .expect("factorial hole")
+        .id;
+    let main_hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main hole")
+        .id;
+
+    for (hole, expected) in [
+        (fact_hole, crate::Operation::Multiply),
+        (main_hole, crate::Operation::Print),
+    ] {
+        let constructors = all_legal_constructors(&created.snapshot, hole);
+        assert!(
+            constructors.contains(&LegalConstructor::Operation {
+                operation: expected,
+                status: ConstructorStatus::RequiresCanonicalValidation,
+            }),
+            "missing {expected:?}: {constructors:?}"
+        );
+    }
+
+    let signature = created
+        .snapshot
+        .function_signature(created.snapshot.revision(), main)
+        .expect("main signature");
+    assert_eq!(
+        signature.parameters,
+        vec![ValueParameterView {
+            entity: stdio,
+            name: "stdio".into(),
+            ty: SemanticType::Capability(CapabilityKind::Stdio),
+        }]
+    );
+    assert_eq!(signature.result, SemanticType::Unit);
+    assert_eq!(
+        created
+            .snapshot
+            .entity(stdio)
+            .expect("main parameter entity")
+            .owner,
+        Some(main)
+    );
+    assert!(created
+        .snapshot
+        .hole_context(created.snapshot.revision(), main_hole)
+        .expect("main hole context")
+        .visible_entities
+        .contains(&stdio));
+    let created_entities: Vec<_> = created
+        .diff
+        .entries
+        .iter()
+        .filter_map(|entry| match entry {
+            SemanticDiffEntry::EntityCreated { entity, .. } => Some(*entity),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(created_entities, [fact, n, main, stdio]);
+
+    let fact_filled = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: fact_hole,
+                draft: source_free_factorial_draft(n, fact),
+            }],
+        })
+        .expect("fill recursive factorial");
+    assert_eq!(
+        fact_filled
+            .snapshot
+            .entity(n)
+            .expect("stable factorial parameter")
+            .id,
+        n
+    );
+    assert_eq!(
+        fact_filled
+            .snapshot
+            .entity(stdio)
+            .expect("stable main parameter")
+            .id,
+        stdio
+    );
+
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: fact_filled.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: main_hole,
+                draft: source_free_hello_main_draft(stdio, fact),
+            }],
+        })
+        .expect("fill capability-bearing main");
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert!(completed.snapshot.completeness_blockers().is_empty());
+    assert!(completed.snapshot.attachments().is_none());
+    assert!(completed.snapshot.source_origins.is_empty());
+    let print_facts = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .filter_map(|node| {
+            let facts = completed
+                .snapshot
+                .node_semantics(completed.snapshot.revision(), node.id)
+                .expect("main node facts");
+            (facts.operation == Some(crate::Operation::Print)).then_some(facts)
+        })
+        .next()
+        .expect("print operation facts");
+    assert!(print_facts.effects.contains(EffectSummary::HOST_IO));
+    let operation_set: HashSet<_> = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .filter_map(|node| {
+            completed
+                .snapshot
+                .node_semantics(completed.snapshot.revision(), node.id)
+                .expect("operation facts")
+                .operation
+        })
+        .collect();
+    for operation in [
+        crate::Operation::LessEqual,
+        crate::Operation::Subtract,
+        crate::Operation::Multiply,
+        crate::Operation::StrFromI64,
+        crate::Operation::Print,
+    ] {
+        assert!(operation_set.contains(&operation), "missing {operation:?}");
+    }
+    let executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile source-free hello");
+    assert_eq!(
+        executable.bytecode().required_capabilities(),
+        &[CapabilityKind::Stdio]
+    );
+    assert_eq!(run_stdio(&completed.snapshot), imported_output);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+    assert_eq!(
+        created
+            .snapshot
+            .holes()
+            .find(|hole| hole.id == main_hole)
+            .expect("old incomplete snapshot retains main hole")
+            .id,
+        main_hole
+    );
+
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: completed.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: main }],
+        })
+        .expect("delete capability main");
+    assert!(deleted.snapshot.entity(main).is_err());
+    assert!(deleted.snapshot.entity(stdio).is_err());
+    assert_eq!(
+        created
+            .snapshot
+            .entity(stdio)
+            .expect("old main parameter remains queryable")
+            .id,
+        stdio
+    );
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: vec![ParameterDraft {
+                    name: "stdio".to_owned(),
+                    ty: DeclarationType::Capability(CapabilityKind::Stdio),
+                }],
+                return_type: SemanticType::Unit,
+            }],
+        })
+        .expect("recreate capability main");
+    let recreated_stdio = entity_named(&recreated.snapshot, EntityKind::Parameter, "stdio");
+    assert_ne!(recreated_stdio, stdio);
+    assert!(recreated.snapshot.entity(stdio).is_err());
+}
+
+#[test]
+fn capability_main_creation_and_operation_admission_reject_atomically() {
+    let mut workspace = Workspace::empty_deterministic(211).expect("empty rejection workspace");
+    let before = workspace.current();
+    let invalid_parameters = [
+        vec![ParameterDraft {
+            name: "".to_owned(),
+            ty: DeclarationType::Capability(CapabilityKind::Stdio),
+        }],
+        vec![ParameterDraft {
+            name: "main".to_owned(),
+            ty: DeclarationType::Capability(CapabilityKind::Stdio),
+        }],
+        vec![ParameterDraft {
+            name: "value".to_owned(),
+            ty: DeclarationType::I64,
+        }],
+        vec![
+            ParameterDraft {
+                name: "duplicate".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Arguments),
+            },
+            ParameterDraft {
+                name: "duplicate".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Stdio),
+            },
+        ],
+        vec![
+            ParameterDraft {
+                name: "first".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Stdio),
+            },
+            ParameterDraft {
+                name: "second".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Stdio),
+            },
+        ],
+        vec![
+            ParameterDraft {
+                name: "stdio".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Stdio),
+            },
+            ParameterDraft {
+                name: "arguments".to_owned(),
+                ty: DeclarationType::Capability(CapabilityKind::Arguments),
+            },
+        ],
+    ];
+    for parameters in invalid_parameters {
+        let rejected = workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters,
+                return_type: SemanticType::Unit,
+            }],
+        });
+        assert!(rejected.is_err());
+        assert!(std::sync::Arc::ptr_eq(&before, &workspace.current()));
+    }
+    let invalid_result = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateMain {
+            parameters: Vec::new(),
+            return_type: SemanticType::Never,
+        }],
+    });
+    assert!(invalid_result.is_err());
+    assert!(std::sync::Arc::ptr_eq(&before, &workspace.current()));
+
+    let foreign_workspace = Workspace::empty_deterministic(212).expect("foreign workspace");
+    let foreign_entity = EntityId::new(foreign_workspace.current().namespace(), 0, 1);
+    for ty in [
+        DeclarationType::Product(foreign_entity),
+        DeclarationType::TypeParameter(foreign_entity),
+    ] {
+        let rejected = workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: vec![ParameterDraft {
+                    name: "foreign".to_owned(),
+                    ty,
+                }],
+                return_type: SemanticType::Unit,
+            }],
+        });
+        assert!(matches!(rejected, Err(WorkspaceError::ForeignNamespace(_))));
+        assert!(std::sync::Arc::ptr_eq(&before, &workspace.current()));
+    }
+
+    let mut control = Workspace::empty_deterministic(211).expect("control workspace");
+    control
+        .apply(Transaction {
+            base_revision: control.current().revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: vec![ParameterDraft {
+                    name: "stdio".to_owned(),
+                    ty: DeclarationType::Capability(CapabilityKind::Stdio),
+                }],
+                return_type: SemanticType::Unit,
+            }],
+        })
+        .expect("control capability main");
+    let retried = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: vec![ParameterDraft {
+                    name: "stdio".to_owned(),
+                    ty: DeclarationType::Capability(CapabilityKind::Stdio),
+                }],
+                return_type: SemanticType::Unit,
+            }],
+        })
+        .expect("retry capability main");
+    assert_eq!(retried.snapshot.entities(), control.current().entities());
+    assert_eq!(retried.snapshot.nodes(), control.current().nodes());
+    let main = entity_named(&retried.snapshot, EntityKind::Main, "main");
+    let hole = retried.snapshot.holes().next().expect("main hole").id;
+    let published = workspace.current();
+
+    for operation in [crate::Operation::Print, crate::Operation::Multiply] {
+        let wrong_arity = workspace.apply(Transaction {
+            base_revision: published.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::Operation {
+                        operation,
+                        arguments: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        });
+        assert!(matches!(wrong_arity, Err(WorkspaceError::InvalidDraft(_))));
+        assert!(std::sync::Arc::ptr_eq(&published, &workspace.current()));
+    }
+
+    let wrong_print_type = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(1),
+                    DraftNode::I64(2),
+                    DraftNode::Operation {
+                        operation: crate::Operation::Print,
+                        arguments: vec![DraftNodeId::new(0), DraftNodeId::new(1)],
+                    },
+                ],
+                DraftNodeId::new(2),
+            ),
+        }],
+    });
+    assert!(matches!(
+        wrong_print_type,
+        Err(WorkspaceError::InvalidDraft(_))
+    ));
+    assert!(std::sync::Arc::ptr_eq(&published, &workspace.current()));
+
+    let unsupported = workspace.apply(Transaction {
+        base_revision: published.revision(),
+        edits: vec![Edit::FillHole {
+            hole,
+            draft: ExpressionDraft::new(
+                vec![
+                    DraftNode::I64(0),
+                    DraftNode::Operation {
+                        operation: crate::Operation::Exit,
+                        arguments: vec![DraftNodeId::new(0)],
+                    },
+                ],
+                DraftNodeId::new(1),
+            ),
+        }],
+    });
+    assert!(matches!(
+        unsupported,
+        Err(WorkspaceError::UnsupportedEdit { .. })
+    ));
+    assert!(std::sync::Arc::ptr_eq(&published, &workspace.current()));
+    assert_eq!(
+        published
+            .function_signature(published.revision(), main)
+            .expect("published signature")
+            .parameters[0]
+            .ty,
+        SemanticType::Capability(CapabilityKind::Stdio)
+    );
 }
 
 #[test]
@@ -895,6 +1416,7 @@ fn unresolved_value_reference_candidates_are_typed_ordered_paginated_and_revisio
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -1377,6 +1899,7 @@ fn unresolved_value_reference_failures_are_atomic_and_retry_ids_are_stable() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -1761,6 +2284,7 @@ fn unresolved_value_reference_follows_replacement_rename_and_deletion_lifecycle(
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -1908,6 +2432,7 @@ fn source_free_typed_loop_break_executes_without_source_work() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2049,6 +2574,7 @@ fn source_free_while_break_and_continue_execute_with_nearest_targets() {
         .apply(Transaction {
             base_revision: break_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2119,6 +2645,7 @@ fn source_free_while_break_and_continue_execute_with_nearest_targets() {
         .apply(Transaction {
             base_revision: continue_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2223,6 +2750,7 @@ fn draft_loop_shadows_and_restores_an_existing_published_loop_context() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2379,6 +2907,7 @@ fn control_transfers_insert_into_an_existing_published_while() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2532,6 +3061,7 @@ fn legal_loop_control_constructors_are_exact_contextual_and_paginated() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2722,6 +3252,7 @@ fn legal_loop_control_constructors_are_exact_contextual_and_paginated() {
         .apply(Transaction {
             base_revision: while_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -2807,6 +3338,7 @@ fn invalid_loop_control_drafts_are_atomic_and_retry_stable() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -3037,6 +3569,7 @@ fn loop_result_types_reject_foreign_stale_and_wrong_owner_identities() {
         .apply(Transaction {
             base_revision: foreign_target.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3081,6 +3614,7 @@ fn loop_result_types_reject_foreign_stale_and_wrong_owner_identities() {
                     }],
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -3201,6 +3735,7 @@ fn malformed_loop_control_draft_graphs_reject_without_publication() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3280,6 +3815,7 @@ fn imported_and_source_free_typed_loop_and_nested_continue_converge() {
         .apply(Transaction {
             base_revision: typed_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3346,6 +3882,7 @@ fn imported_and_source_free_typed_loop_and_nested_continue_converge() {
         .apply(Transaction {
             base_revision: nested_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3451,6 +3988,7 @@ fn affine_break_payload_and_continue_cleanup_match_imported_ownership() {
         .apply(Transaction {
             base_revision: break_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3574,6 +4112,7 @@ fn affine_break_payload_and_continue_cleanup_match_imported_ownership() {
         .apply(Transaction {
             base_revision: continue_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3682,6 +4221,7 @@ fn loop_control_preserves_outer_affine_ownership_and_rejects_conditional_edge_mo
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3790,6 +4330,7 @@ fn loop_control_preserves_outer_affine_ownership_and_rejects_conditional_edge_mo
         .apply(Transaction {
             base_revision: invalid_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -3935,6 +4476,7 @@ fn deep_flat_loop_control_is_linear_and_stack_safe() {
                 .apply(Transaction {
                     base_revision: workspace.current().revision(),
                     edits: vec![Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     }],
                 })
@@ -4048,6 +4590,7 @@ fn deep_invalid_control_is_stack_safe_and_atomic() {
                 .apply(Transaction {
                     base_revision: workspace.current().revision(),
                     edits: vec![Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     }],
                 })
@@ -4089,6 +4632,7 @@ fn twenty_thousand_level_source_free_loop_control_is_stack_safe() {
                 .apply(Transaction {
                     base_revision: workspace.current().revision(),
                     edits: vec![Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     }],
                 })
@@ -4122,6 +4666,7 @@ fn divergent_loop_control_joins_legal_conditional_branches() {
         .apply(Transaction {
             base_revision: break_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4172,6 +4717,7 @@ fn divergent_loop_control_joins_legal_conditional_branches() {
         .apply(Transaction {
             base_revision: continue_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4223,6 +4769,7 @@ fn source_free_main_return_is_queryable_and_executes_without_source_work() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4339,6 +4886,7 @@ fn source_free_function_return_uses_its_own_declared_result_type() {
                     return_type: DeclarationType::Bool,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -4447,6 +4995,7 @@ fn source_free_returns_join_conditionals_and_exit_while_bodies() {
         .apply(Transaction {
             base_revision: branch_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4559,6 +5108,7 @@ fn source_free_returns_join_conditionals_and_exit_while_bodies() {
         .apply(Transaction {
             base_revision: while_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4642,6 +5192,7 @@ fn source_free_returns_join_conditionals_and_exit_while_bodies() {
         .apply(Transaction {
             base_revision: mutable_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4697,6 +5248,7 @@ fn return_replacement_and_hole_lifecycle_preserve_only_surviving_identity() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4831,6 +5383,7 @@ fn return_replacement_recomputes_control_ancestor_types() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -4982,6 +5535,7 @@ fn invalid_return_drafts_are_structured_atomic_and_retry_stable() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -5168,6 +5722,7 @@ fn unreachable_return_replacement_rejects_while_an_unrelated_hole_remains() {
                     return_type: DeclarationType::Unit,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -5304,6 +5859,7 @@ fn return_call_references_reject_foreign_stale_and_deleted_entities_atomically()
                         return_type: DeclarationType::I64,
                     },
                     Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     },
                 ],
@@ -5436,6 +5992,7 @@ fn source_free_imperative_counted_loop_executes_and_matches_imported_semantics()
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -5565,17 +6122,14 @@ fn source_free_imperative_counted_loop_executes_and_matches_imported_semantics()
         })
         .expect("introduce comparison hole");
     let comparison_hole = introduced.snapshot.holes().next().expect("comparison hole");
-    let constructors = introduced
-        .snapshot
-        .legal_constructors(
-            introduced.snapshot.revision(),
-            comparison_hole.id,
-            PageRequest::new(64).expect("comparison constructor page"),
-            None,
-        )
-        .expect("comparison constructors")
-        .items;
-    assert!(constructors.contains(&LegalConstructor::Operation(crate::Operation::Less)));
+    let constructors = all_legal_constructors(&introduced.snapshot, comparison_hole.id);
+    assert!(
+        constructors.contains(&LegalConstructor::Operation {
+            operation: crate::Operation::Less,
+            status: ConstructorStatus::RequiresCanonicalValidation,
+        }),
+        "{constructors:?}"
+    );
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
@@ -5587,6 +6141,7 @@ fn empty_sequence_is_unit_pure_and_executable() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::Unit,
             }],
         })
@@ -5642,6 +6197,7 @@ fn imperative_draft_scope_kind_type_and_operation_failures_are_atomic() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -6130,6 +6686,7 @@ fn consistency_rejects_set_local_targeting_immutable_hir_storage() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -6181,6 +6738,7 @@ fn consistency_rejects_non_unit_while_hir_type() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -6234,6 +6792,7 @@ fn consistency_rejects_stale_non_nearest_and_duplicate_loop_targets() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -6421,6 +6980,7 @@ fn adjacent_nested_while_ids_are_distinct_and_sequence_order_is_observable() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -6457,6 +7017,7 @@ fn affine_mutable_reinitialization_moves_and_cleans_up_exactly_once() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -6585,6 +7146,7 @@ fn unit_hole_legal_constructors_expose_imperative_forms_and_visible_mutable_set(
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -6711,6 +7273,7 @@ fn wide_imperative_draft_visits_each_node_once_on_a_small_stack() {
                 .apply(Transaction {
                     base_revision: workspace.current().revision(),
                     edits: vec![Edit::CreateMain {
+                        parameters: Vec::new(),
                         return_type: SemanticType::I64,
                     }],
                 })
@@ -6745,6 +7308,7 @@ fn wide_stable_assignment_targets_use_one_callable_location_scan() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -6823,6 +7387,7 @@ fn mutable_local_identity_survives_rename_and_recreation_is_fresh() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -7073,6 +7638,7 @@ fn source_free_generic_function_creation_is_exact_and_executes_without_source_wo
                     return_type: DeclarationType::DraftTypeParameter(binder),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -7562,6 +8128,7 @@ fn generic_declaration_trait_identities_fail_closed_before_publication() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -7681,6 +8248,7 @@ fn generic_declaration_type_identities_and_shapes_fail_closed_atomically() {
                     return_type: DeclarationType::DraftTypeParameter(draft),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -7977,6 +8545,7 @@ fn source_free_bound_rejection_names_the_created_binder_and_is_atomic() {
                     return_type: DeclarationType::DraftTypeParameter(binder),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -9132,6 +9701,7 @@ fn source_free_generic_binders_survive_rename_compaction_and_follow_deletion() {
                     return_type: DeclarationType::DraftTypeParameter(binder),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -9422,6 +9992,7 @@ fn imported_and_source_free_generic_declarations_converge_through_bytecode_and_v
                     return_type: DeclarationType::DraftTypeParameter(draft_parameter),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -9586,9 +10157,11 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                 return_type: DeclarationType::I64,
             },
             Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             },
             Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             },
         ],
@@ -9620,6 +10193,7 @@ fn failed_source_free_creation_and_drafts_are_atomic_and_ids_are_retry_stable() 
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -9904,6 +10478,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -10270,6 +10845,7 @@ fn callable_deletion_is_dependency_closed_compacts_and_preserves_survivors() {
         .apply(Transaction {
             base_revision: without_main.snapshot.revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -10524,6 +11100,7 @@ fn source_free_mutable_initializer_compacts_before_local_activation() {
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -10670,6 +11247,7 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
         .apply(Transaction {
             base_revision: function_created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -10704,6 +11282,7 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
         .apply(Transaction {
             base_revision: main_first.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -10746,7 +11325,7 @@ fn declarations_created_in_separate_revisions_refresh_hole_scope_and_keep_ids() 
         .legal_constructors(
             function_created.snapshot.revision(),
             main_hole,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("main constructors")
@@ -11163,7 +11742,7 @@ fn typed_hole_is_queryable_refinable_not_executable_and_fill_preserves_root() {
         .legal_constructors(
             introduced.snapshot.revision(),
             hole,
-            PageRequest::new(8).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("legal constructors")
@@ -11532,6 +12111,7 @@ fn run_source_free_deep(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -11655,6 +12235,7 @@ fn source_free_index_root_resolution_is_one_lookup_per_node() {
             .apply(Transaction {
                 base_revision: workspace.current().revision(),
                 edits: vec![Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 }],
             })
@@ -11952,6 +12533,7 @@ fn run_source_free_deep_match(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -12188,6 +12770,7 @@ fn direct_nominal_and_member_rename_preserves_identity_types_runtime_and_old_sna
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -12635,6 +13218,7 @@ fn product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors()
                     }],
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -12891,6 +13475,7 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
                     }],
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::Bool,
                 },
             ],
@@ -13267,6 +13852,7 @@ fn nominal_deletion_dependencies_use_the_final_staged_state_in_any_edit_order() 
         .apply(Transaction {
             base_revision: hole_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::Enum {
                     constructor: SemanticEnum::Entity(hole_choice),
                     arguments: Vec::new(),
@@ -14190,6 +14776,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -14332,6 +14919,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::Product(pair),
             }],
         })
@@ -14387,7 +14975,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .legal_constructors(
             introduced.snapshot.revision(),
             product_hole.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("product constructors")
@@ -14400,6 +14988,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .apply(Transaction {
             base_revision: enum_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::Enum {
                     constructor: SemanticEnum::Entity(choice),
                     arguments: Vec::new(),
@@ -14451,7 +15040,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
         .legal_constructors(
             introduced.snapshot.revision(),
             enum_hole.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("enum constructors")
@@ -14470,6 +15059,7 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -14545,6 +15135,7 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
         .apply(Transaction {
             base_revision: enum_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -14618,6 +15209,7 @@ fn complete_source_free_i64_main(seed: u64, draft: ExpressionDraft) -> Workspace
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -14791,6 +15383,7 @@ fn source_free_scalar_patterns_reuse_canonical_usefulness_and_fail_atomically() 
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -15030,6 +15623,7 @@ fn source_free_decision_product_match(
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -15360,6 +15954,7 @@ fn product_pattern_fixture(
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -15771,6 +16366,7 @@ fn source_free_zero_field_product_pattern_is_exhaustive() {
                     fields: Vec::new(),
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -15871,6 +16467,7 @@ fn run_wide_source_free_product_pattern(width: usize, seed: u64) -> Arc<Workspac
         .apply(Transaction {
             base_revision: created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -16274,6 +16871,7 @@ fn source_free_enum_patterns_accept_nested_boolean_and_i64_literals() {
         .apply(Transaction {
             base_revision: created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -16729,6 +17327,7 @@ fn source_free_enum_payload_match_compiles_and_executes() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -17030,6 +17629,7 @@ fn source_free_choice_match(seed: u64) -> (Workspace, EntityId, EntityId, Entity
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -17485,6 +18085,7 @@ fn source_free_match_pattern_physical_order_does_not_change_semantics() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -17575,6 +18176,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -17803,6 +18405,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -18346,6 +18949,7 @@ fn match_arm_hole_context_contains_only_its_payload_bindings() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -18457,7 +19061,7 @@ fn match_arm_hole_context_contains_only_its_payload_bindings() {
         .legal_constructors(
             introduced.snapshot.revision(),
             first.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("arm constructors")
@@ -18503,6 +19107,7 @@ fn create_owned_workspace(seed: u64) -> (Workspace, EntityId, EntityId, HoleId, 
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -18605,6 +19210,7 @@ fn source_free_return_moves_an_affine_value_to_its_caller() {
                     return_type: DeclarationType::ByteVector,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],
@@ -18767,6 +19373,7 @@ fn source_free_early_return_executes_cleans_up_and_matches_imported_semantics() 
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -19053,6 +19660,7 @@ fn source_free_bounds_failure_unwinds_owned_local_without_cleanup_failure() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -19400,6 +20008,7 @@ fn imported_nominal_local_and_ownership_programs_converge() {
         .apply(Transaction {
             base_revision: product_workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -19490,6 +20099,7 @@ fn imported_nominal_local_and_ownership_programs_converge() {
         .apply(Transaction {
             base_revision: enum_created.snapshot.revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::Enum {
                     constructor: SemanticEnum::Entity(choice),
                     arguments: Vec::new(),
@@ -19679,7 +20289,7 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
         .legal_constructors(
             compacted.snapshot.revision(),
             compacted_hole.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("generic constructors")
@@ -19848,6 +20458,7 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20051,7 +20662,7 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .legal_constructors(
             introduced.snapshot.revision(),
             nested.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("local constructors")
@@ -20062,7 +20673,7 @@ fn nested_hole_visibility_is_exact_for_source_free_locals() {
         .legal_constructors(
             introduced.snapshot.revision(),
             outside.id,
-            PageRequest::new(16).expect("page"),
+            PageRequest::new(256).expect("page"),
             None,
         )
         .expect("outside constructors")
@@ -20105,6 +20716,7 @@ fn local_defining_subtrees_are_removed_compacted_and_tombstoned() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20241,6 +20853,7 @@ fn surviving_lexical_local_keeps_identity_when_an_earlier_local_compacts() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20356,6 +20969,7 @@ fn inserting_a_local_before_a_survivor_rebuilds_places_in_evaluation_order() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20474,6 +21088,7 @@ fn removing_an_earlier_match_compacts_and_preserves_a_later_plan() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20553,6 +21168,7 @@ fn malformed_forward_and_out_of_scope_draft_bindings_are_atomic() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20652,6 +21268,7 @@ fn malformed_operation_and_node_drafts_are_atomic_and_retry_stable() {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -20758,6 +21375,7 @@ fn run_source_free_deep_locals(depth: usize, seed: u64) {
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })

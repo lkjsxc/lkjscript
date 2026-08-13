@@ -1,76 +1,48 @@
 # AGENTS.md
 
-## Scope
+## Scope and Language
 
-This file applies to the entire repository.
+This file governs the repository. A deeper `AGENTS.md` may narrow local procedure but must not weaken semantic, safety, identity, atomicity, determinism, verification, or evidence requirements.
 
-A deeper `AGENTS.md` may narrow local procedure but must not weaken repository-wide semantic, safety, identity, or verification requirements.
+Use English for maintained code, tests, diagnostics, documentation, commit messages, and machine-readable fields unless an external protocol requires another language.
 
-Use English for maintained code, tests, diagnostics, documentation, and commits unless an external protocol requires otherwise.
+Prompts, transcripts, scratch notes, and raw logs are not repository authority. Do not commit them unless the active task explicitly makes one a maintained product artifact.
 
 ## Mission
 
-Build lkjscript as an AI-primary, statically typed, memory-safe, collector-free programming system.
+Build `lkjscript` as an AI-primary, statically typed, memory-safe, collector-free programming system.
 
-AI-primary means that agents can construct, inspect, revise, validate, compile, and execute programs through deterministic typed semantic operations.
+AI-primary means deterministic typed semantic operations let agents discover, construct, inspect, revise, validate, compile, and execute programs. Model inference never participates in parsing, resolution, typing, ownership, effects, artifact acceptance, or runtime correctness.
 
-Human-readable source remains an import and package format.
+Source remains an import, package, review, and interoperability format. After import, source text is not mutable semantic authority. The in-process semantic workspace is the authoring authority.
 
-Source text is not the mutable semantic authority after import.
-
-The in-process semantic workspace is the active authoring authority.
-
-Long-term performance matters, but correctness, safety, failure atomicity, one coherent authority, stable identity, and generic runtime coverage come first.
+Prefer one complete coherent architecture and one dependency-closed vertical over broad partial frameworks. Long-term performance matters, but correctness, safety, atomicity, one authority, stable identity, deterministic behavior, and a complete generic runtime path come first.
 
 ## Current Product Boundary
 
-The supported product is local package checking and execution plus an in-process semantic workspace API.
-
-The active path is:
+Read `docs/status.md` for current facts. The supported product is local package checking/execution plus an in-process semantic workspace:
 
 ```text
-verified source or source-free semantic construction
-    -> SemanticProgram
+verified source import or source-free construction
+    -> partial-capable SemanticProgram
     -> immutable WorkspaceSnapshot
     -> completeness gate
-    -> complete HIR
-    -> memory planning
+    -> source-optional complete HIR
+    -> ownership and memory planning
     -> verified SSA
     -> validated bytecode
-    -> VM or bounded baseline-native execution
+    -> generic VM or bounded baseline-native specialization
 ```
 
-`SemanticProgram` is the mutable staging authority inside one transaction.
+`SemanticProgram` is mutable only during one staged transaction. `WorkspaceSnapshot` is the immutable published authority. HIR, SSA, bytecode, native images, projections, diagnostics, and metrics are derived.
 
-`WorkspaceSnapshot` is the immutable published authority.
+Public semantic identities are opaque and stable according to explicit continuity rules. Compiler IDs, dense indexes, ordinals, addresses, slots, registers, source coordinates, and machine details remain private.
 
-HIR, SSA, bytecode, native code, and projection text are derived.
+A successful transaction publishes one revision. Failure publishes nothing. Old snapshots remain valid. Presentation and source provenance never become semantic identity.
 
-Public semantic identities are opaque and stable.
-
-Compiler IDs, addresses, ordinals, vector positions, slots, registers, and machine details remain private.
-
-A semantic transaction publishes one complete revision or publishes nothing.
-
-Old snapshots remain valid.
-
-Presentation attachments and source provenance are optional and never become semantic identity.
-
-The following are absent by design unless a current measured consumer proves otherwise:
-
-- daemon or warm-service architecture;
-- RPC, collaboration, or distributed protocols;
-- persistence journals or databases;
-- schedulers or orchestration;
-- plugin platforms;
-- generalized caches;
-- compatibility layers for deleted designs.
-
-Do not recreate these systems while solving a local compiler or workspace problem.
+Absent unless a current measured consumer proves otherwise: daemon, RPC, wire protocol, persistence, collaboration, scheduler, plugin platform, generalized cache, and compatibility layers for deleted designs.
 
 ## Priority Order
-
-When requirements compete, use this order:
 
 1. semantic correctness;
 2. memory and type safety;
@@ -78,529 +50,252 @@ When requirements compete, use this order:
 4. one semantic authority;
 5. stable public identity;
 6. deterministic observable behavior;
-7. generic runtime coverage;
-8. stack safety and scale correctness;
-9. direct AI-agent usability;
-10. measured performance;
-11. implementation simplicity;
-12. documentation precision;
-13. compatibility with provisional behavior.
+7. complete generic compiler/runtime coverage;
+8. exact capability, effect, ownership, and cleanup behavior;
+9. stack safety and user-scale correctness;
+10. direct AI-agent usability;
+11. measured performance;
+12. simplicity and low agent search cost;
+13. documentation precision;
+14. compatibility with provisional behavior.
 
-Compatibility is intentionally last.
+Compatibility is intentionally last. Future platform ideas, prompt length, diff size, crate count, file count, and line count are not product evidence.
 
 ## Authority
 
-Use this authority order:
+Use this order:
 
-1. the current user task;
-2. the nearest applicable `AGENTS.md`;
-3. normative files under `docs/spec/`;
+1. active user task;
+2. nearest applicable `AGENTS.md`;
+3. normative `docs/spec/`;
 4. executable code and focused tests;
-5. manifests, lock files, schemas, and command definitions;
+5. manifests, locks, schemas, commands, and generated contract inputs;
 6. `README.md`;
 7. `docs/status.md`;
 8. `docs/architecture.md`;
 9. `docs/performance.md`;
 10. `docs/roadmap.md`;
-11. historical prompts, comments, and stale prose.
+11. comments, historical prompts, and stale prose.
 
-When code and prose disagree, identify the intended current contract with focused evidence.
+Language semantics belong in `docs/spec/language.md`; workspace semantics in `docs/spec/workspace.md`; checkout facts in code/tests/manifests and `docs/status.md`; responsibility and flow in `docs/architecture.md`; measurements in `docs/performance.md`; ordering in `docs/roadmap.md`; superseded behavior in Git history.
 
-Do not preserve an accidental implementation merely because it exists.
+When artifacts disagree, classify the claim, inspect its owner and focused executable evidence, preserve accepted semantics, and update or delete stale material in the same change. Do not preserve accidents merely because they exist or rewrite normative contracts because implementation is inconvenient. Do not manufacture authority through copied tables, prompt archives, unconsumed registries, descriptors, revisions, or digests.
 
-Do not rewrite a normative contract merely because one implementation is inconvenient.
+## Autonomy and Compatibility
 
-Update every maintained authority affected by the final behavior.
+Use the actual checkout, current consumers, specifications, focused tests, recent history, and measurements. Do not ask the user to choose internal alternatives evidence can decide.
 
-## Compatibility and Cutovers
+Broad authority permits one clean decision, not unrelated expansion. Ask only when a genuinely external requirement is missing and no safe explicit assumption can complete the selected vertical.
 
-Backward compatibility is not an objective unless the current task explicitly makes it one.
+If the requested objective is already complete, verify it and stop. When roadmap `Now` is empty, select work only from a concrete consumer, focused failure, accepted gap, measured bottleneck, or demonstrated maintenance burden.
 
-Prefer one clean cutover.
+Backward compatibility is not an objective unless the task names a current independent boundary. Syntax, source encoding, Rust APIs, commands, crate topology, internal forms, fixtures, tests, and docs may change incompatibly. Persistent package/lock boundaries and the `.lkjscript` extension remain exact where current contracts require them.
 
-Do not add legacy modes, migration modes, `v2` duplicates, `next` modules, deprecated aliases, compatibility adapters, dual authorities, or feature flags that preserve obsolete architecture.
+Prefer direct cutover. Do not add `v2`, `next`, editions, legacy modes, deprecated aliases, adapters, dual readers/writers, compatibility flags, or migrations for nonexistent persistent data. Update all active producers/consumers and delete displaced code, stale tests/docs, and obsolete dependencies.
 
-Delete obsolete code, tests, schemas, prose, and dependency edges in the same change.
-
-Persistent package and lock boundaries remain exact where they are current product contracts.
-
-Everything else must earn compatibility from a real current consumer.
+Preserve unrelated work and external state. Never reset, clean, overwrite, or force-push work you did not create.
 
 ## Select One Verified Vertical
 
-Each implementation turn should select one dependency-closed vertical.
-
-A valid vertical has:
+One turn normally completes one dependency-closed vertical with:
 
 - one concrete user or agent operation;
-- one identified authority;
-- one end-to-end success path;
-- one end-to-end rejection path;
-- exact identity behavior;
-- exact transaction behavior;
+- one demonstrated defect, accepted gap, consumer, bottleneck, or maintenance burden;
+- one semantic authority and bounded producer-to-consumer path;
+- one success and one rejection path;
+- exact identity and transaction behavior;
 - focused executable evidence;
-- a clear stop condition;
-- explicit non-goals.
+- explicit non-goals and stop condition.
 
-Broad intentions such as “improve architecture” or “make the language AI-friendly” are not implementation verticals.
+“Improve architecture,” “make it AI-friendly,” and “prepare for persistence” are not verticals.
 
-A vertical may include a prerequisite representation cleanup when the current representation makes the selected operation dishonest.
+A prerequisite cleanup is allowed only when the current representation makes the selected operation dishonest or impossible, removes a real contradiction, and stays inside the dependency closure.
 
-That prerequisite must be necessary, remove an existing contradiction, and avoid unrelated redesign.
+Do not combine roadmap items because they share a file. Stop after the selected vertical passes. Mention the next evidenced problem without implementing it.
 
-Stop after the selected vertical is integrated and verified.
+Before implementation answer:
 
-Do not begin the next roadmap item in the same turn.
+1. What exact operation improves?
+2. Which current consumer needs it?
+3. Which test/example/query/benchmark proves the gap?
+4. Which artifact owns semantics?
+5. Which representation is authoritative?
+6. Which identities survive, are created, or are tombstoned?
+7. What remains failure-atomic?
+8. Which compiler/runtime route proves success?
+9. What is out of scope?
+10. What is the stop condition?
+11. Why is broader machinery unnecessary?
+
+If these lack concrete answers, either verify the work is already complete or stop after a focused audit with an exact handoff. Do not build infrastructure to avoid stopping.
 
 ## Multi-Turn Workflow
 
-Assume development continues across multiple turns.
+### Orient
 
-At the start:
+1. Record commit, branch, and `git status --short`.
+2. Read applicable instructions and only the required normative/status sections.
+3. Inspect recent relevant commits.
+4. Search owning symbols before opening large files.
+5. Inspect representative producers, consumers, and tests.
+6. Run the smallest characterization.
+7. Preserve unrelated work.
 
-1. record the current commit;
-2. inspect `git status --short`;
-3. read applicable instructions;
-4. read the exact current roadmap item;
-5. inspect recent relevant commits;
-6. locate the executable authority;
-7. run the smallest characterization needed;
-8. keep a compact task ledger.
+Keep a compact task ledger in working memory or ignored scratch space: selected operation, contradiction/consumer, authority, producer/consumers, identities, atomicity, focused tests, non-goals, stop condition, and any measurement question.
 
-The ledger should record the selected operation, current contradiction, authority, likely files, invariants, focused tests, non-goals, and stop condition.
+### Characterize and Decide
 
-Do not commit the ledger unless it becomes maintained documentation.
+Prefer one focused test, existing example, exact query assertion, imported/source-free equivalence case, malformed-input case at the owning boundary, deterministic work counter, or retained benchmark. Do not build a general harness for a focused defect or add measurement without a stated complexity question.
 
-During implementation:
+Make one coherent representation decision, record rejected alternatives briefly, and stop exploring once evidence selects it.
 
-1. characterize current behavior;
-2. make one coherent representation decision;
-3. update the producer;
-4. update every current consumer;
-5. delete obsolete alternatives;
-6. add focused tests;
-7. run focused verification;
-8. update maintained documentation;
-9. run the full boundary once;
-10. inspect the final diff;
-11. commit one cohesive change when permitted.
+### Implement
 
-At the end, report the starting and ending commits, semantic result, representation changes, tests, commands, unrun verification, remaining gaps, and exact worktree state.
+1. Update the authoritative representation.
+2. Update its producer and every active consumer.
+3. Preserve/reconcile public identity explicitly.
+4. Reuse canonical type, effect, ownership, and capability validation.
+5. Delete displaced alternatives.
+6. Add focused success and rejection evidence.
+7. Run focused verification.
+8. Update maintained docs.
+9. Run the full boundary once.
+10. Inspect the final diff and commit one cohesive change when permitted.
+
+### Report
+
+Report starting/ending commits, selected vertical, semantic result, representation decision, compatibility breaks, identity/atomicity behavior, tests, commands, unrun verification, measurements, remaining gaps, and worktree state.
 
 ## Evidence Before Abstraction
 
-Before adding an abstraction, answer:
+Before adding an abstraction, identify current producers/consumers, owned invariant, removed invalid state or repeated work, proving test/measurement, and deletion condition. Check whether it creates another authority/identity domain, requires serialization/versioning/process boundaries, narrows the generic path, or increases search space. Prefer a local helper when sufficient.
 
-- Which current producers and consumers use it?
-- Which invariant does it own?
-- Why can the invariant not remain local?
-- What duplication or invalid state does it remove?
-- What measurable work does it avoid?
-- What current test proves its value?
-- Does it create another authority or identity domain?
-- Does it require persistence, versioning, or a service?
-- Does it narrow the generic path?
-- Does it increase agent search space?
-- Is a local helper sufficient?
-- What is its deletion condition?
+A new type is not automatically better modeling; a crate is not automatically modularity; a registry is not authority; a digest is not integrity; a protocol is not agent usability; a cache is not performance; a planner is not composability.
 
-If the answers are weak, do not add the abstraction.
+Preferred solution order:
 
-A new type is not automatically better modeling.
-
-A new crate is not automatically modularity.
-
-A registry is not automatically authority.
-
-A digest is not automatically integrity.
-
-A protocol is not automatically agent usability.
-
-A cache is not automatically performance.
-
-## Preferred Solution Order
-
-Try solutions in this order:
-
-1. delete the obsolete path;
-2. use an existing identity or typed value;
+1. delete obsolete code;
+2. reuse an identity or typed value;
 3. make one representation authoritative;
-4. move validation to the owning boundary;
+4. move validation to its owner;
 5. replace repeated scans with one local index;
-6. replace recursive user-depth traversal with an explicit work stack;
-7. simplify a data structure;
+6. replace user-depth recursion with an explicit work stack;
+7. simplify a structure;
 8. add a narrow helper;
-9. add a local measurement;
-10. add a cache only with measured reuse;
-11. add process or protocol machinery only with a current consumer.
+9. add focused measurement;
+10. add cache/process/protocol machinery only after current measured need.
 
-Do not start at step ten or eleven.
+Do not add a generic tree editor for one edit, visitor framework for one traversal, planner for one overlap, registry for a closed enum, serializer for a same-build value, cache for unmeasured work, service for an in-process consumer, persistence for an editing test, or collaboration state without writers.
 
-## Anti-Overengineering Rules
+Do not expose private coordinates, make names identity, infer continuity from equal content, turn observations into semantic limits, turn fixtures into architecture, preserve history as compatibility, or generalize around hypothetical consumers.
 
-Do not add a generic tree-edit framework, visitor framework, planner, registry, service boundary, serializer, digest, cache, or identity domain for one local operation.
+## AI-Primary Semantic Rules
 
-Do not expose private coordinates or compiler IDs.
+Prefer typed operations, stable opaque identities, immutable snapshots, revision-checked transactions, structured diagnostics, exact continuations, deterministic ordering/pagination, finite candidate sets, explicit unsupported results, queryable incomplete states, direct source-free compilation, failure atomicity, and compact selective queries.
 
-Do not turn presentation names into identity.
+Avoid heuristic rebinding, hidden resolution, implicit globals, unstable coordinates, natural-language correctness paths, stale caches, opaque retries, partial publication, and APIs requiring reconstruction of private compiler state.
 
-Do not turn measurements into language limits.
+Source parsing is a boundary. Resolve names during import, then use identities. Post-import edits do not reload or reparse source. Source-free programs compile without synthetic source. Do not render/reparse semantic edits, retain parallel mutable HIR/workspace authorities, retain stale derived forms in snapshots, or reconnect references by spelling.
 
-Do not turn tests into architecture.
+Compiler-owned built-ins remain fixed context unless a normative contract makes them mutable entities.
 
-Do not turn historical documentation into compatibility.
+## Identity, Names, and Transactions
 
-Do not generalize around hypothetical future consumers.
+Public identities are opaque, namespace-scoped, generation-aware, kind-checked, stable across unrelated edits/private compaction, invalid after deletion, preserved in old snapshots, and checked before use.
 
-Do not add configuration for a single valid behavior.
+Private identities may be dense and relocate. Reconcile every surviving public entity explicitly. Never infer continuity from names, content, hashes, preorder, spans, vector positions, private IDs, or addresses. Survivors keep identities; deletion tombstones; same-name recreation gets a fresh generation; replacement descendants get new identities unless an operation proves movement continuity. Private relocation emits no semantic move.
 
-Do not preserve an impossible state solely so a rejection test can manufacture it.
+Names are presentation/lookup unless semantics say otherwise. Renaming does not create entities, rebind by text, alter runtime identity, rewrite unrelated structure, change nominal/member identity, or fabricate rewiring. Collision rules belong to the owning namespace. Reject no-op edits unless their contract publishes them.
 
-Keep helpers local until multiple current consumers justify broader placement.
+Every transaction checks base revision and target namespace, generation, liveness, kind, owner, and visibility as applicable. Stage allocator and all fallible work before publication.
 
-## AI-Primary Design
+Failure publishes nothing, consumes no identity, and preserves the current snapshot, revision, allocator, diagnostics, blockers, attachments, provenance, and future allocation. Success publishes one immutable revision and deterministic base-to-final semantic diff.
 
-Prefer typed operations, stable identities, immutable snapshots, exact continuations, structured diagnostics, deterministic pagination, finite candidates, explicit unsupported results, source-free construction, source-free compilation, failure atomicity, and direct execution evidence.
+Diffs describe semantic changes, not private addresses, compaction, vector shifts, or compiler churn. Reject unsupported overlap rather than adding a generalized planner. Follow existing final-state versus ordered semantics. Deletion owns only defined containment; independent dependents do not disappear transitively.
 
-Avoid mutable source strings as semantic authority, heuristic rebinding, hidden automatic resolution, implicit global state, unstable coordinates, prose-only success criteria, broad natural-language command interpreters, background services, opaque retries, stale caches, and partial publication.
+## Partial Programs, Types, and Compiler Boundary
 
-Weak models benefit more from a small exact API than from a large speculative platform.
+Incomplete snapshots are queryable values. Holes and unresolved references are semantic nodes; blockers are structured; diagnostics derive from current state. Incomplete snapshots do not compile. Do not install placeholders, fallback values, or automatic ambiguity resolution. Requested-name intent is not a selected target; candidate sets remain derived unless an author records a stable constrained choice.
 
-## Semantic Authority
+Parser recovery requires a source-import consumer. Conflict state requires real merge or concurrent-writer semantics.
 
-Source parsing is a boundary.
+Public types use stable semantic identities; compiler-local types may use private identities. User-depth operations must be stack-safe. A type-shape change inventories constructors, matches, clone/drop/equality/hash, substitution, validation, dependencies, compaction, queries, projection, diagnostics, tests, and persistent boundaries.
 
-Resolve source names during import.
+Reuse existing identity domains and canonical generic resolution/witness machinery. Semantic edits use exact type arguments where required. Do not build a second generic solver or weaken type/trait validation. Unsupported construction rejects explicitly.
 
-Move analyzed meaning into `SemanticProgram`.
+`compile_snapshot` is the sole snapshot compilation boundary. It rejects incompleteness before HIR, memory planning, SSA, bytecode, native lowering, or execution. Complete HIR passes canonical consistency/ownership validation; memory planning remains authoritative; SSA is verified; bytecode is validated. Staging does not duplicate compiler logic or bypass validation.
 
-Retain source provenance only for current diagnostics and package verification.
+Source-free tests prove zero post-construction source loading/parsing. Imported/source-free equivalence compares semantic facts and behavior, not private IDs.
 
-A post-import semantic edit must not reload or reparse source.
+## Queries, Capabilities, Ownership, and Runtime
 
-A source-free program must compile without synthetic source.
+Queries are revision-labelled, deterministic, stably ordered, paginated when large, and continuation-bound to namespace/revision/query. Return compact identities first; selectively expand details. Projection text never becomes authority or identity.
 
-Do not render and reparse semantic edits.
+A legal-constructor query is honest: do not advertise an edit its path cannot validate, or omit supported behavior because a stale second whitelist was not updated. Expose provisional status when canonical validation remains. Do not create a global registry for a closed query.
 
-Do not retain parallel mutable HIR and workspace authorities.
+Capabilities are explicit typed values. Imported and source-free entry points obey the same capability rules. Operation signatures, effects, ownership, capability requirements, traps/divergence, and lowering come from canonical operation contracts, not workspace copies. Do not fabricate grants, suppress effects, copy affine values, suppress cleanup, or weaken ownership validation.
 
-Do not retain stale derived representations in snapshots.
+Moves, borrows, drops, cleanup, control transfer, and failures remain exact. Loop exits/backedges preserve outer ownership/loans. Early return and failed calls use canonical cleanup exactly once.
 
-Do not reconstruct source identity for source-free nodes.
+The VM is the generic validated route. Baseline native execution is bounded specialization. Eligibility/lowering/installation/preparation may decline before entry and then run the unchanged program in VM. After native entry, never retry in VM. Do not narrow valid behavior, add engine selectors, transition policy, or compilation caches without a current requirement and evidence. Host effects occur exactly once.
 
-## Identity
+Unsafe code remains localized at real unsafe/FFI boundaries with a stated safety argument. Validate FFI values; preserve W^X and pre-entry installation atomicity.
 
-Public identities must be opaque, namespace-scoped, generation-aware, stable across unrelated edits and private compaction, invalid after deletion, preserved in old snapshots, and checked before use.
+## Scale, Boundaries, and Performance
 
-Private identities may be dense and may relocate during staging.
+User-controlled depth never consumes unbounded native stack. Use explicit work stacks or another proven bounded mechanism for expressions, patterns, types, values, dependencies, compaction, projection, queries, validation, diffs, and destruction.
 
-Every relocation that affects a surviving public entity must be reconciled explicitly.
+Do not impose arbitrary semantic limits or turn benchmark sizes into language maxima. Use wide identities/counts and checked host-index conversion. Query budgets limit one response/work unit, never semantic authority.
 
-Do not infer continuity from equal content, names, hashes, preorder, or vector position.
+Classify boundaries:
 
-A surviving entity keeps its public identity.
+- persistent bytes need exact encoding, validation, corruption behavior, explicit compatibility policy, and a current consumer;
+- unsafe/FFI values need checked representation, safety invariants, and atomicity;
+- machine-readable CLI needs a deterministic schema and consumer decoding tests;
+- same-build in-process values normally need Rust types and constructor validation, not digests/registries/serialization;
+- closed vocabularies normally need a closed enum, exhaustive matches, and canonical metadata, not a global registry.
 
-A deleted entity is tombstoned.
+Begin with in-memory immutable/copy-on-write snapshots. Add persistence for measured crash recovery, retained scale, restart continuity, or durable consumers; collaboration for defined multi-writer semantics; daemon only after local paths are complete enough to measure a process boundary. The language SQLite capability is not workspace persistence.
 
-A same-name recreation receives a fresh generation.
+Performance work requires workload, baseline, suspected cost, structural proposal, correctness oracle, and reversal condition. Measure the production path and relevant phases. Do not infer gains from code size, allocation count, or one sample; optimize inactive paths; narrow programs for specialization; add parallelism before independent work is measured; add caches before reuse is measured; or use warm services to hide local recomputation.
 
-A replacement subtree receives new descendant identities unless the operation explicitly defines movement continuity.
+Incrementality requires measured repeated work, exact dependencies, failure-safe publication, the full path as oracle, and demonstrated reduction. Prefer a narrow proven fast path over a generalized dependency engine. Cache presence/schedule never changes meaning and cache keys never become identity.
 
-An identity-preserving operation must prove one-to-one continuity.
+Record only retained measurements in `docs/performance.md`; never fabricate or overclaim.
 
-## Names
+## Crates, Modules, Files, and Dependencies
 
-Names are presentation and lookup data unless a normative language rule explicitly defines otherwise.
+A crate boundary must earn itself through unsafe/FFI isolation, independently useful API, supported target boundary, measured compile isolation, low coupling, or current product boundary. Do not add crates for aesthetics or hide fan-in.
 
-Resolve source names to identities once.
+A module owns one coherent responsibility. Large files are not automatically wrong; small files are not automatically modular. Do not impose line limits.
 
-Use identities for subsequent semantic references.
+Split only when the selected vertical reveals a stable responsibility with a narrow interface, reduces search fan-out/conflicting ownership, creates no second authority/framework, and tests can follow it. Do not perform repository-wide shuffles. Search exact symbols and read narrow ranges in large files.
 
-Renaming must not create a new entity, rebind references by text, alter runtime identity, or rewrite unrelated semantic structure.
+Prefer mature dependencies when they remove substantial machinery/risk; keep local code when smaller, clearer, safer, or measurably better. Do not add dependencies for trivial transformations, proc macros for small closed vocabularies, async runtimes without async products, or serialization for in-process values. Update dependencies and lock data atomically; remove unused edges.
 
-Do not store redundant mutable names in identity-bearing private types.
+## Errors, Tests, and Verification
 
-Name collision rules belong to the namespace that owns the name.
+Reject invalid input at the owning boundary. Use structured errors where callers need facts. Do not stringify and reparse typed errors, fabricate paths/spans/identities, swallow host failures, or panic on untrusted/user-scale input. Avoid new production `unwrap`/`expect` without a proven invariant and repository convention.
 
-Do not impose global uniqueness on a local member namespace.
+Observable output must not depend on hash iteration, allocator accidents, or private vector order. Sort by semantic keys when undefined; preserve declaration/evaluation order when defined.
 
-A no-op edit must not create misleading semantic history unless its contract explicitly documents no-op publication.
+Tests protect intended semantics, not obsolete topology. Add the smallest focused evidence and prefer coherent/table-driven scenarios with independent oracles.
 
-## Transactions
+Cover relevant success/failure, namespace/generation/kind/owner/visibility, revision, atomicity/allocation rollback, identity/tombstones/old snapshots, deterministic diffs/queries/projections, types/effects/capabilities/ownership/cleanup/exactly-once behavior, source-free compilation, VM/native behavior, stack safety, compaction, and complexity shape.
 
-Every transaction checks its base revision.
+Do not weaken tests to make redesign pass. Delete obsolete API tests. Quiet-success CLI tests assert both streams empty. Machine-output tests decode as consumers. Ignored stress tests state why and how. Executable source-free features require production compilation/execution evidence.
 
-Every target identity is checked for namespace, generation, liveness, and kind.
+Iteration ladder:
 
-The identity allocator is staged.
+1. narrow affected test;
+2. affected crate/module tests;
+3. one compiler check after a deliberate type-shape migration;
+4. warnings fixed immediately;
+5. formatting when stable.
 
-All fallible work occurs before publication.
+Capture long output once and inspect the causal region. Do not repeatedly dump logs or rerun unchanged commands.
 
-Failure publishes no snapshot, consumes no public identity, and leaves current `Arc`, revision, diagnostics, blockers, attachments, provenance, and allocator state unchanged.
-
-Success publishes exactly one immutable revision and one deterministic base-to-final diff.
-
-Diffs describe semantic changes and never expose private addresses or compaction churn.
-
-Do not emit reference or call rewiring when a stable target is unchanged.
-
-Batch behavior must be explicit.
-
-Reject unsupported overlap rather than adding a generalized planner.
-
-Use final-state validation where the existing contract requires it.
-
-Do not silently make edit order irrelevant or observable contrary to the current contract.
-
-## Partial Programs
-
-Incomplete snapshots are first-class queryable values.
-
-Holes and unresolved value references are semantic nodes.
-
-Completeness blockers are structured.
-
-Diagnostics are derived from current incomplete state.
-
-Incomplete snapshots must not compile.
-
-Do not install executable placeholders, invent fallback values, or auto-resolve ambiguity.
-
-Requested-name intent is not a selected target.
-
-## Types
-
-Public workspace types use stable semantic identities.
-
-Compiler-local types may use private identities, but compiler-local names must not masquerade as identity.
-
-Recursive type operations must remain stack-safe.
-
-A type representation change must inventory constructors, pattern matches, clone, drop, equality, hashing, substitution, validation, dependency collection, compaction, query conversion, projection, diagnostics, tests, and persistent boundaries.
-
-Use existing identity domains.
-
-Do not add an identity merely to avoid updating consumers.
-
-Do not update one type consumer and leave another name-based or index-based authority behind.
-
-## Compiler Pipeline
-
-`compile_snapshot` is the sole semantic-snapshot compilation boundary.
-
-It rejects incompleteness before HIR memory planning, SSA, bytecode, native lowering, or execution.
-
-Complete HIR must pass canonical consistency and ownership validation.
-
-Memory planning remains authoritative for ownership obligations.
-
-SSA must be verified.
-
-Bytecode must be validated.
-
-Derived stages must not observe holes or unresolved references.
-
-Do not bypass canonical validation for a convenient semantic edit.
-
-Do not duplicate compiler logic inside workspace staging.
-
-Use the ordinary compiler path as an independent oracle.
-
-## Runtime
-
-The VM is the generic validated execution route.
-
-Baseline native execution is a bounded specialization.
-
-Native eligibility, lowering, installation, or typed pre-entry preparation may decline.
-
-A pre-entry decline runs the unchanged validated program in the VM.
-
-After native entry begins, its result is final.
-
-Do not retry in the VM after native entry.
-
-Do not narrow valid language behavior because native lowering is incomplete.
-
-Exactly-once effects and exact cleanup are semantic requirements.
-
-Do not add a public engine selector or automatic transition policy without a current product requirement.
-
-## Ownership and Unsafe Boundaries
-
-Collector-free ownership behavior is a current design constraint.
-
-Moves, borrows, drops, cleanup ranges, control transfer, and failure paths must remain exact.
-
-A semantic edit that changes structure or control must pass canonical ownership validation.
-
-Do not copy affine values, suppress cleanup, or weaken validation to make a feature pass.
-
-Unsafe code must remain localized and state its safety argument.
-
-FFI inputs and outputs must be validated.
-
-Pre-entry native installation must remain failure-atomic.
-
-Executable mappings must preserve W^X behavior.
-
-## Stack Safety and Scale
-
-User-controlled depth must not consume unbounded native stack.
-
-Use explicit work stacks or another proven bounded-stack mechanism for expression, pattern, type, value, dependency, compaction, projection, query, and validation traversal.
-
-Do not impose arbitrary semantic limits to avoid fixing recursion.
-
-Check conversions to host indexes.
-
-Do not silently narrow user-scale counts.
-
-Use generated fixtures for scale.
-
-Keep expensive equivalent geometry in explicit locked-release stress tests when appropriate.
-
-## Boundary Classification
-
-Classify a value before designing its contract.
-
-Persistent bytes require exact encoding, validation, corruption handling, and a current compatibility policy.
-
-Unsafe or FFI values require checked representation, explicit safety invariants, and failure atomicity.
-
-Machine-readable CLI output requires one deterministic schema and consumer-style decoding tests.
-
-Same-build in-process values normally need Rust types and constructor validation, not a digest, registry, serializer, or protocol version.
-
-Closed vocabulary normally needs a closed enum or direct match, not a global registry.
-
-Metrics and diagnostics are observations, not semantic authority.
-
-## Crates, Modules, and Dependencies
-
-A crate boundary must earn itself through unsafe or FFI isolation, an independently useful API, a supported target boundary, measured compile isolation, low coupling, or a current product boundary.
-
-Do not add a crate to hide fan-in or improve graph aesthetics.
-
-Do not merge a genuine unsafe or FFI boundary merely to reduce member count.
-
-A module should own one coherent responsibility.
-
-Prefer mature dependencies when they remove substantial machinery or risk.
-
-Keep local code when it is smaller, clearer, safer, or measurably better.
-
-Do not add a dependency or proc macro for a trivial fixed transformation.
-
-## Errors and Determinism
-
-Reject invalid input at the owning boundary.
-
-Use structured errors where callers need structured facts.
-
-Do not stringify a typed error and parse it later.
-
-Do not fabricate source paths, spans, or identities.
-
-Do not swallow host failures.
-
-Do not panic on untrusted or user-scale input.
-
-Avoid new production `unwrap` or `expect` without a proven invariant and repository convention.
-
-Observable output must not depend on hash-map iteration, allocator accidents, or private vector order.
-
-Sort by semantic keys where order is not otherwise defined.
-
-Preserve declaration and evaluation order where the language defines them.
-
-Continuations bind namespace, revision, and query.
-
-## Performance
-
-Performance work requires a workload, baseline, suspected cost, proposed structural change, correctness oracle, and reversal condition.
-
-Measure the production path.
-
-Separate startup, source loading, parsing, staging, indexing, HIR derivation, ownership, SSA, bytecode, native lowering, installation, VM execution, and cleanup.
-
-Do not infer performance from code size, allocation count, or one sample.
-
-Do not add caching, parallelism, or a warm service without measured repeated work and a current consumer.
-
-Do not turn performance observations into semantic admission limits.
-
-Update `docs/performance.md` only with retained measured evidence.
-
-Do not fabricate numbers or claim gains that were not measured.
-
-## Agent Attention and API Cost
-
-Treat coding-agent attention and API spend as finite.
-
-Save cost by reducing search and rework, not by reducing verification.
-
-Use `rg` before opening whole files.
-
-Read narrow ranges.
-
-Do not repeatedly dump large files or full compiler logs.
-
-Capture long output once and inspect the relevant failure region.
-
-Batch mechanically related representation updates.
-
-After a deliberate enum or type-shape change, one targeted compiler check may serve as a migration inventory.
-
-Do not invoke a compiler check after every individual match arm.
-
-Run focused tests before the workspace suite.
-
-Do not rerun an unchanged full boundary.
-
-Do not assign overlapping work to multiple agents.
-
-Use subagents only for truly independent bounded investigation.
-
-The lead agent owns design, integration, and final verification.
-
-Do not spend tokens generating speculative alternatives after evidence selects one design.
-
-Do not create API-cost instrumentation without a current consumer.
-
-Task prompts are execution inputs and are not committed unless explicitly made repository documentation.
-
-## Tests
-
-Tests protect intended semantics and public invariants, not provisional topology.
-
-Add the smallest focused evidence for each root cause.
-
-Prefer table-driven cases and shared fixtures when clearer.
-
-Use independent oracles where practical.
-
-Relevant dimensions include success, malformed input, wrong namespace, stale or deleted identity, wrong kind or owner, revision mismatch, failure atomicity, allocator rollback, identity preservation, old snapshots, deterministic diffs and projection, type preservation, ownership, cleanup, exactly-once effects, source-free compilation, no post-import parsing, VM and native behavior, stack safety, compaction, and complexity shape.
-
-Do not create one test function per checklist row when one coherent scenario is better.
-
-Do not weaken a test merely to make a redesign pass.
-
-Delete tests that protect obsolete APIs or representations.
-
-Quiet-success CLI tests assert both streams are empty.
-
-Machine-output tests decode output as a consumer.
-
-Ignored stress tests state why they are ignored and how to run them.
-
-## Verification
-
-Escalate only after focused evidence passes.
-
-Use the smallest relevant package and test filter first.
-
-Then run the full repository boundary once:
+Before completion:
 
 ```bash
 cargo fmt --all -- --check
@@ -608,76 +303,79 @@ cargo clippy --quiet --workspace --all-targets --all-features --locked -- -D war
 cargo test --quiet --workspace --all-targets --all-features --locked
 cargo build --quiet --workspace --release --locked
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+git diff --check
 ```
 
-Run `cargo fmt --all` before the check form when formatting changed.
+Run `cargo fmt --all` first when needed. Do not omit locked/all-targets/all-features/release. Run Docker verification when available and relevant; report exact environment failures and never claim unrun verification. Inspect final status/diff for prompts, logs, caches, generated files, artifacts, and unrelated changes.
 
-Do not omit `--locked`, all targets, all features, or the release build.
+## Documentation and Git
 
-Do not claim Docker verification if Docker was unavailable.
+Docs describe current behavior:
 
-Do not infer CI health from absence of reported checks.
+- `docs/spec/`: normative contracts;
+- `docs/status.md`: implemented facts;
+- `docs/architecture.md`: responsibility, flow, ownership, trust boundaries;
+- `docs/performance.md`: measurements and reversal conditions;
+- `docs/roadmap.md`: ordering and evidence gates;
+- `README.md`: concise product entry point.
 
-If a command fails environmentally, preserve the diagnostic and distinguish environment failure from product failure.
+Do not present future architecture as current, duplicate authorities, or keep stale claims. A completed item leaves roadmap `Now`; do not invent speculative work to keep it populated. Add decision records only for non-obvious cross-cutting choices likely to be reopened.
 
-Run `git diff --check`.
+Record the starting commit and inspect worktree. Keep artifacts out of commits. Use one cohesive commit per verified vertical when permitted; subject describes the semantic result, not the prompt. Do not push or open a PR unless requested.
 
-Inspect `git status --short` and the final diff for prompts, logs, caches, generated files, or build artifacts.
+Before commit inspect status, stat, substantive diff, and `git diff --check`; confirm verification/docs and no prompt/artifact/unrelated staging. After commit inspect status, record the commit, and report intentionally untracked files and unrun verification.
 
-## Documentation
+## Agent Attention and API Cost
 
-Documentation describes current behavior.
+Treat context, tool calls, attention, and API spend as finite. Save cost through less search/rework, never less correctness or final verification.
 
-Use `docs/spec/` for normative behavior, `docs/status.md` for the checkout, `docs/architecture.md` for responsibility and data flow, `docs/performance.md` for measured evidence, `docs/roadmap.md` for selected next work and gates, and `README.md` for the concise entry point.
+- search before reading; use exact symbols and narrow ranges;
+- use recent diffs to avoid rediscovering settled decisions;
+- keep a compact task ledger;
+- do not repeatedly restate the mission or reread this file in one turn;
+- do not dump whole compiler files, generated fixtures, or full logs;
+- capture long output once and inspect the causal region;
+- batch mechanical representation updates;
+- use one compiler pass as migration inventory;
+- run focused tests before workspace tests;
+- do not rerun commands with unchanged inputs;
+- stop generating alternatives after evidence selects one;
+- do not create API-cost instrumentation without a consumer;
+- do not create permanent summaries that immediately stale;
+- hand off exact paths, symbols, invariants, failures, and commands instead of copied source.
 
-Do not write future architecture as though it exists.
+The lead agent owns design, integration, and final verification. Use subagents only for independent bounded investigations or disjoint work, with one question, exact scope, required evidence, stop condition, and compact output. Do not assign overlapping implementation or competing architectures.
 
-Do not duplicate large authorities across documents.
+## Completion and Stop Rules
 
-Remove stale claims in the same change.
+Complete only when the selected operation works end to end; invalid input rejects deterministically; failed transactions publish nothing and preserve allocation; identities follow continuity rules; old snapshots remain valid; canonical validation still runs; runtime and exactly-once effects are correct; focused tests protect the root cause; docs match checkout; required verification passed or is honestly reported; obsolete paths are deleted; and no speculative adjacent system appears.
 
-A completed roadmap item leaves `Now`.
+Stop and narrow if the change introduces a second authority, unjustified identity domain, generic planner for one edit, unmeasured cache, consumerless protocol/serializer/daemon/persistence, narrowed VM path, weakened atomicity, invalid old snapshots, user-depth recursion, arbitrary quota, unrelated feature expansion, compatibility layer, or broad unrelated file reorganization.
 
-Do not invent speculative work merely to keep `Now` populated.
+Usually correct by reusing identity/canonical validation, localizing a helper, deleting redundant representation, deferring unproven systems, or stopping after focused audit. Do not solve uncertainty by building more infrastructure.
 
-## Git
+Final report:
 
-Record the starting commit.
+```text
+Starting commit:
+Ending commit:
+Selected vertical:
+Current consumer:
+Semantic result:
+Representation decision:
+Deleted obsolete path:
+Compatibility breaks:
+Identity behavior:
+Atomicity behavior:
+Compiler/runtime evidence:
+Focused tests:
+Focused commands:
+Full verification:
+Docker verification:
+Measurements:
+Documentation:
+Remaining gaps:
+Worktree state:
+```
 
-Do not overwrite unrelated user changes or destructively reset work you did not create.
-
-Keep generated and build artifacts out of commits.
-
-Use one cohesive commit for one verified vertical when permitted.
-
-The commit subject describes the semantic result, not the task prompt.
-
-Do not push or open a pull request unless explicitly requested.
-
-Before commit:
-
-1. inspect `git status --short`;
-2. inspect `git diff --stat`;
-3. inspect the substantive diff;
-4. run `git diff --check`;
-5. confirm required verification;
-6. confirm maintained documentation;
-7. confirm no task prompt is staged.
-
-After commit, inspect `git status --short`, record the commit, and report any intentionally untracked file.
-
-## Completion
-
-A task is complete only when the selected operation works end to end, invalid input rejects deterministically, failed transactions publish nothing, identities follow the declared continuity rule, old snapshots remain valid, canonical validation still runs, runtime behavior is correct, focused tests protect the root cause, maintained documentation matches the checkout, required verification passed or is honestly reported, obsolete paths are deleted, and the final diff contains no speculative adjacent system.
-
-The final report states starting and ending commits, the selected vertical, the representation decision, compatibility breaks, tests, focused and full commands, unrun verification, measurements if any, remaining gaps, and worktree state.
-
-Do not claim broader language support or performance than the evidence proves.
-
-## Stop Rules
-
-Stop and narrow the task if a second semantic authority, new identity domain, generic planner, unmeasured cache, consumerless protocol, narrowed VM path, weakened atomicity, invalid old snapshot, user-depth recursion, or unrelated feature expansion appears.
-
-The usual correction is to reuse an existing identity, localize a helper, delete a redundant representation, or defer an unproven system.
-
-Do not solve uncertainty by building more infrastructure.
+Distinguish product and environment failures. State exact unrun verification. Report evidence and decisions, not hidden reasoning or a transcript.

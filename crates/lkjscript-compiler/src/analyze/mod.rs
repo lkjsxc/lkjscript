@@ -123,6 +123,16 @@ pub(crate) fn is_reserved_semantic_name(name: &str) -> bool {
     declarations::is_builtin_type_name(name) || resolution::is_contextual_name(name)
 }
 
+pub(crate) fn validate_semantic_main_parameters<'a>(
+    parameters: impl IntoIterator<Item = (&'a str, &'a Type)>,
+) -> std::result::Result<(), String> {
+    validate_main_parameter_types(parameters)
+}
+
+pub(crate) fn validate_semantic_main_result(result: &Type) -> std::result::Result<(), String> {
+    validate_main_result_type(result)
+}
+
 struct Resolver<'a> {
     analyzer: &'a mut Analyzer,
     origin: SourceId,

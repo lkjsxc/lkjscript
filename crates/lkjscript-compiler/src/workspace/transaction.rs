@@ -195,6 +195,7 @@ pub enum Edit {
         return_type: DeclarationType,
     },
     CreateMain {
+        parameters: Vec<ParameterDraft>,
         return_type: SemanticType,
     },
     DeleteEntity {
@@ -603,50 +604,17 @@ fn stage(
                 parameters,
                 return_type,
             )?,
-            Edit::CreateMain { return_type } => {
-                let return_type =
-                    resolve_semantic_type(base, &program, return_type, "main return")?;
-                reject_reference_result(&return_type, "main")?;
-                if program.main.is_some() {
-                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                        "main entry point already exists",
-                    )));
-                }
-                new_entities.try_reserve(1).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("created entity allocation failed"))
-                })?;
-                new_holes.try_reserve(1).map_err(|_| {
-                    WorkspaceError::Host(Arc::from("created hole allocation failed"))
-                })?;
-                program.main = Some(crate::hir::Main {
-                    origin: Origin::Semantic,
-                    params: Vec::new(),
-                    param_places: Vec::new(),
-                    param_types: Vec::new(),
-                    return_type: return_type.clone(),
-                    arity: 0,
-                    local_count: 0,
-                    body: Expr {
-                        ty: return_type,
-                        effects: EffectSet::UNKNOWN,
-                        origin: Origin::Semantic,
-                        kind: ExprKind::Hole,
-                    },
-                });
-                new_entities.push(NewEntity {
-                    address: EntityAddress::Main,
-                    kind: EntityKind::Main,
-                    name: Arc::from("main"),
-                });
-                new_holes.push(NewHole {
-                    address: NodeAddress {
-                        root: EntityAddress::Main,
-                        preorder: 0,
-                    },
-                    kind: HoleKind::MissingBody,
-                    goal: Arc::from("provide the entry-point body"),
-                });
-            }
+            Edit::CreateMain {
+                parameters,
+                return_type,
+            } => create_main(
+                base,
+                &mut program,
+                &mut new_entities,
+                &mut new_holes,
+                parameters,
+                return_type,
+            )?,
             Edit::DeleteEntity { .. } => {}
             Edit::RenameEntity { entity, new_name } => {
                 if deleted_entities.contains(&entity) {
@@ -3083,6 +3051,166 @@ fn insert_forced_node(
     }
 }
 
+fn create_main(
+    base: &WorkspaceSnapshot,
+    program: &mut SemanticProgram,
+    created: &mut Vec<NewEntity>,
+    holes: &mut Vec<NewHole>,
+    parameters: Vec<ParameterDraft>,
+    return_type: SemanticType,
+) -> Result<(), WorkspaceError> {
+    if program.main.is_some() {
+        return Err(WorkspaceError::InvalidTransaction(Arc::from(
+            "main entry point already exists",
+        )));
+    }
+    let draft_entities = HashMap::new();
+    let mut resolved_parameter_types = Vec::new();
+    resolved_parameter_types
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("main parameter type allocation failed")))?;
+    for parameter in &parameters {
+        let semantic = declaration_type_to_semantic(&parameter.ty, &draft_entities)?;
+        resolved_parameter_types.push(resolve_semantic_type(
+            base,
+            program,
+            semantic,
+            "main parameter",
+        )?);
+    }
+    crate::analyze::validate_semantic_main_parameters(
+        parameters
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .zip(&resolved_parameter_types),
+    )
+    .map_err(|message| WorkspaceError::InvalidTransaction(Arc::from(message)))?;
+
+    let return_type = resolve_semantic_type(base, program, return_type, "main return")?;
+    crate::analyze::validate_semantic_main_result(&return_type)
+        .map_err(|message| WorkspaceError::InvalidTransaction(Arc::from(message)))?;
+
+    let created_count = parameters
+        .len()
+        .checked_add(1)
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("created main entity count overflow")))?;
+    created
+        .try_reserve(created_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("created main entity allocation failed")))?;
+    holes
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("created hole allocation failed")))?;
+    created.push(NewEntity {
+        address: EntityAddress::Main,
+        kind: EntityKind::Main,
+        name: Arc::from("main"),
+    });
+    let first_parameter_raw = u64::try_from(program.bindings.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+    for (index, parameter) in parameters.iter().enumerate() {
+        let raw = first_parameter_raw
+            .checked_add(u64::try_from(index).map_err(|_| {
+                WorkspaceError::Host(Arc::from("main parameter binding index exceeds u64"))
+            })?)
+            .ok_or_else(|| {
+                WorkspaceError::Host(Arc::from("main parameter binding identity overflow"))
+            })?;
+        created.push(NewEntity {
+            address: EntityAddress::Binding(raw),
+            kind: EntityKind::Parameter,
+            name: Arc::from(parameter.name.as_str()),
+        });
+    }
+
+    let (parameter_bindings, parameter_places) =
+        append_parameter_bindings(program, parameters, &resolved_parameter_types)?;
+    let arity = resolved_parameter_types.len();
+    program.main = Some(crate::hir::Main {
+        origin: Origin::Semantic,
+        params: parameter_bindings,
+        param_places: parameter_places,
+        param_types: resolved_parameter_types,
+        return_type: return_type.clone(),
+        arity,
+        local_count: arity,
+        body: Expr {
+            ty: return_type,
+            effects: EffectSet::UNKNOWN,
+            origin: Origin::Semantic,
+            kind: ExprKind::Hole,
+        },
+    });
+    holes.push(NewHole {
+        address: NodeAddress {
+            root: EntityAddress::Main,
+            preorder: 0,
+        },
+        kind: HoleKind::MissingBody,
+        goal: Arc::from("provide the entry-point body"),
+    });
+    Ok(())
+}
+
+fn validate_parameter_drafts(
+    parameters: &[ParameterDraft],
+    duplicate_message: &'static str,
+) -> Result<(), WorkspaceError> {
+    let mut names = HashSet::new();
+    names
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter name allocation failed")))?;
+    for parameter in parameters {
+        validate_name(&parameter.name)?;
+        if !names.insert(parameter.name.as_str()) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                duplicate_message,
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn append_parameter_bindings(
+    program: &mut SemanticProgram,
+    parameters: Vec<ParameterDraft>,
+    resolved_types: &[Type],
+) -> Result<(Vec<crate::hir::BindingId>, Vec<PlaceId>), WorkspaceError> {
+    if parameters.len() != resolved_types.len() {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "callable parameter declarations and resolved types disagree",
+        )));
+    }
+    program
+        .bindings
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter binding allocation failed")))?;
+    let mut bindings = Vec::new();
+    let mut places = Vec::new();
+    bindings
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter binding allocation failed")))?;
+    places
+        .try_reserve(parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("parameter place allocation failed")))?;
+    for (index, (parameter, ty)) in parameters.into_iter().zip(resolved_types).enumerate() {
+        let raw = u64::try_from(program.bindings.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
+        let binding = crate::hir::BindingId::new(raw);
+        program.bindings.push(Binding {
+            id: binding,
+            name: parameter.name,
+            kind: BindingKind::Parameter,
+            ty: ty.clone(),
+            origin: Origin::Semantic,
+        });
+        bindings.push(binding);
+        places.push(PlaceId::new(u64::try_from(index).map_err(|_| {
+            WorkspaceError::Host(Arc::from("parameter place exceeds u64"))
+        })?));
+    }
+    Ok((bindings, places))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn create_function(
     base: &WorkspaceSnapshot,
@@ -3178,18 +3306,7 @@ fn create_function(
         }
     }
 
-    let mut parameter_names = HashSet::new();
-    parameter_names
-        .try_reserve(parameters.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("parameter name allocation failed")))?;
-    for parameter in &parameters {
-        validate_name(&parameter.name)?;
-        if !parameter_names.insert(parameter.name.as_str()) {
-            return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                "function parameter name is duplicated",
-            )));
-        }
-    }
+    validate_parameter_drafts(&parameters, "function parameter name is duplicated")?;
 
     let mut used_parameters = HashSet::new();
     used_parameters
@@ -3352,30 +3469,8 @@ fn create_function(
         origin: Origin::Semantic,
     });
 
-    let mut parameter_bindings = Vec::new();
-    let mut parameter_places = Vec::new();
-    parameter_bindings
-        .try_reserve(parameters.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("parameter binding allocation failed")))?;
-    parameter_places
-        .try_reserve(parameters.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("parameter place allocation failed")))?;
-    for (index, parameter) in parameters.into_iter().enumerate() {
-        let raw = u64::try_from(program.bindings.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("binding identity exceeds u64")))?;
-        let binding = crate::hir::BindingId::new(raw);
-        program.bindings.push(Binding {
-            id: binding,
-            name: parameter.name,
-            kind: BindingKind::Parameter,
-            ty: resolved_parameter_types[index].clone(),
-            origin: Origin::Semantic,
-        });
-        parameter_bindings.push(binding);
-        parameter_places.push(PlaceId::new(u64::try_from(index).map_err(|_| {
-            WorkspaceError::Host(Arc::from("parameter place exceeds u64"))
-        })?));
-    }
+    let (parameter_bindings, parameter_places) =
+        append_parameter_bindings(program, parameters, &resolved_parameter_types)?;
     program.functions.push(crate::hir::Function {
         binding: function_binding,
         origin: Origin::Semantic,
@@ -5406,10 +5501,10 @@ fn lower_draft(
                 operation,
                 arguments,
             } => {
-                if !super::draft::SOURCE_FREE_OPERATIONS.contains(operation) {
+                if !operation.supports_direct_operation_expression() {
                     return Err(WorkspaceError::unsupported(
                         "operation",
-                        "this canonical operation is outside the selected source-free ownership surface",
+                        "this canonical operation requires dedicated non-expression lowering",
                     ));
                 }
                 let mut args = Vec::new();

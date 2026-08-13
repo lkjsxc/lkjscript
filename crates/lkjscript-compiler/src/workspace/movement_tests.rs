@@ -135,6 +135,7 @@ fn complete_counter_workspace(seed: u64) -> (Workspace, std::sync::Arc<Workspace
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -203,6 +204,7 @@ fn complete_i64_sequence(
         .apply(Transaction {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
                 return_type: SemanticType::I64,
             }],
         })
@@ -367,7 +369,10 @@ fn complete_draft(
     let created = workspace
         .apply(Transaction {
             base_revision: workspace.current().revision(),
-            edits: vec![Edit::CreateMain { return_type }],
+            edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
+                return_type,
+            }],
         })
         .expect("create draft main");
     let hole = created.snapshot.holes().next().expect("draft hole").id;
@@ -1574,6 +1579,7 @@ fn movement_composes_with_unrelated_callable_deletion_and_private_root_relocatio
                     return_type: DeclarationType::I64,
                 },
                 Edit::CreateMain {
+                    parameters: Vec::new(),
                     return_type: SemanticType::I64,
                 },
             ],

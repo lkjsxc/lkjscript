@@ -178,8 +178,10 @@ allocates stable function, binder, and value-parameter identities in semantic or
 handles to private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
 `Function::bounds` facts only when binders exist. It then creates a real result-typed missing-body
 hole with unknown effects. The local handles never enter the semantic program, indexes, query,
-projection, or diff. `CreateMain` creates parameterless `main` with a real missing-body hole.
-Imported and source-free generic binders are reconciled identically as stable `TypeParameter`
+projection, or diff. `CreateMain` reuses the parameter draft/type path for ordered exact capability
+parameters, validates the canonical source entry restrictions before staging, assigns stable
+parameter entities owned by main, and creates a real missing-body hole whose scope includes those
+parameters. Imported and source-free generic binders are reconciled identically as stable `TypeParameter`
 entities owned by the function. Published types use `SemanticType`; both recursive type boundaries
 use stable nominal references, keep compiler-local names and dense IDs private, and implement their
 depth-sensitive operations iteratively. Creation ordering is independent: tagged addresses preserve
@@ -189,8 +191,9 @@ Created declaration, binder, member, parameter, local, and hole IDs are returned
 `ExpressionDraft` and `PatternDraft` are flat and non-recursive; iterative traversal makes physical
 node order irrelevant while validation requires one connected tree with each child used exactly
 once. Draft-local binding and pattern-binding handles have a separate transaction-scoped identity
-domain. Implemented expression constructors are scalar and byte literals, selected canonical
-built-in operations, exact generic and non-generic calls, `if`, ordered sequence, immutable `let`,
+domain. Implemented expression constructors are scalar and byte literals, canonical operations whose
+operation-owned metadata selects the ordinary runtime-operation expression route, exact generic and
+non-generic calls, `if`, ordered sequence, immutable `let`,
 explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`, nearest-lexical
 `break` and `continue`, early `return`, copy-safe loads, byte-vector move/shared borrow, product
 construction/projection, enum construction/variant testing, and ordered exhaustive closed Boolean,
@@ -317,7 +320,8 @@ leaf.
 Queries are revision-labelled and deterministically paginated for entities/search, references,
 calls, diagnostics, and expected- plus control-context-filtered legal constructors, including typed
 loop with its exact result type, break with the nearest loop's exact payload type, continue, early
-return, and selected canonical operation identities. Definition, structured entity/function/node
+return, and canonical direct-operation identities marked as requiring canonical submitted-argument
+validation. Definition, structured entity/function/node
 type, exact generic signature/call instantiation, hole context with exact lexical/arm visibility,
 unresolved
 value-reference state/candidates, node semantics, and structured match inspection are direct identity
@@ -378,7 +382,10 @@ accounting only on success. `PreparedInvocation::enter` consumes the affine prep
 the generated ABI boundary once. Entered errors and execution outcomes are post-commit and never run
 or rerun the VM.
 
-The VM handles the complete generic operation set. Stdio and clock use the retained host traits.
+The VM handles the complete generic operation set. A retained source-free hello proof constructs
+recursive factorial plus an explicit stdio main parameter, compiles the snapshot without source
+loading or parsing, and prints the same bytes as the imported fixture through this route. Stdio and
+clock use the retained host traits.
 Filesystem, network, terminal, entropy, and SQLite operations dispatch through the VM's typed
 resource table and `lkjscript-sys`; SQLite remains a direct language capability. The former service
 database wrapper, directory provider, durable store, database tenant provider, local-control peer,

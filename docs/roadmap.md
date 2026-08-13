@@ -6,9 +6,9 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-No new implementation vertical is selected. Identity-preserving direct rename for products, product
-fields, enums, variants, and enum fields is complete; select the next item only from a concrete
-current consumer and focused failing evidence.
+No new implementation vertical is selected. Source-free construction now covers the current
+capability-bearing hello entry point through direct compilation and execution; select another item
+only from a concrete current consumer and focused failing evidence.
 
 ## Next
 
