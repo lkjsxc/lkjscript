@@ -67,7 +67,7 @@ pub(super) fn verify_witness_groups(plan: &HirMemoryPlan) -> Result<()> {
 
 fn verified_group_declaration_key(ty: &Type) -> Option<VerifiedDeclarationKey> {
     match ty {
-        Type::Product(name) => Some(VerifiedDeclarationKey::Product(name.clone())),
+        Type::Product(id) => Some(VerifiedDeclarationKey::Product(*id)),
         Type::Enum { id, .. } => Some(VerifiedDeclarationKey::Enum(id.bytes())),
         _ => None,
     }
@@ -116,7 +116,7 @@ impl VerifiedTypes<'_> {
                     Vec::new()
                 };
                 let member = match key {
-                    VerifiedDeclarationKey::Product(name) => Type::Product(name),
+                    VerifiedDeclarationKey::Product(id) => Type::Product(id),
                     VerifiedDeclarationKey::Enum(id) => {
                         let item = self
                             .program
@@ -126,7 +126,6 @@ impl VerifiedTypes<'_> {
                             .ok_or_else(|| Error::msg("memory verifier lost recursive enum"))?;
                         Type::Enum {
                             id: item.id,
-                            name: item.name.clone(),
                             arguments: member_arguments,
                         }
                     }

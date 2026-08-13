@@ -22,7 +22,7 @@ fn type_contains_resource(ty: &Type) -> bool {
 
 fn declaration_key(ty: &Type) -> Option<DeclarationKey> {
     match ty {
-        Type::Product(name) => Some(DeclarationKey::Product(name.clone())),
+        Type::Product(id) => Some(DeclarationKey::Product(*id)),
         Type::Enum { id, .. } => Some(DeclarationKey::Enum(id.bytes())),
         _ => None,
     }

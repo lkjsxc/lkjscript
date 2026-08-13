@@ -109,7 +109,7 @@ pub(super) fn generic_copy_product_program() -> hir::Program {
     let t = hir::Type::Param("t".into());
     let u = hir::Type::Param("u".into());
     let record = product(0, "transport-record", &[("value", hir::Type::I64)]);
-    let record_ty = hir::Type::Product(record.name.clone());
+    let record_ty = hir::Type::Product(record.id);
     let function_ty = hir::Type::Forall {
         vars: vec!["u".into(), "t".into()],
         body: Box::new(hir::Type::Fn {

@@ -24,9 +24,9 @@ impl Usefulness<'_> {
                         .map(|variant| Constructor::Variant(variant.id)),
                 );
             }
-            Type::Product(name) => {
+            Type::Product(id) => {
                 reserve(&mut constructors, 1, "product match constructor space")?;
-                constructors.push(Constructor::Product(self.product(name)?.id));
+                constructors.push(Constructor::Product(self.product(*id)?.id));
             }
             Type::I64 => return Ok(None),
             _ => {
@@ -71,8 +71,8 @@ impl Usefulness<'_> {
         let mut fields = Vec::new();
         match (ty, constructor) {
             (Type::Bool, Constructor::Bool(_)) | (Type::I64, Constructor::I64(_)) => {}
-            (Type::Product(name), Constructor::Product(id)) => {
-                let product = self.product(name)?;
+            (Type::Product(product), Constructor::Product(id)) => {
+                let product = self.product(*product)?;
                 if product.id != *id {
                     return Err(Error::msg("product pattern constructor identity mismatch"));
                 }
@@ -125,10 +125,13 @@ impl Usefulness<'_> {
             .ok_or_else(|| Error::msg("match type references unknown enum"))
     }
 
-    pub(super) fn product(&self, name: &str) -> Result<&ProductDefinition> {
+    pub(super) fn product(&self, id: ProductId) -> Result<&ProductDefinition> {
         self.products
-            .iter()
-            .find(|item| item.name == name)
+            .get(
+                id.index()
+                    .ok_or_else(|| Error::msg("match ProductId exceeds host index"))?,
+            )
+            .filter(|item| item.id == id)
             .ok_or_else(|| Error::msg("match type references unknown product"))
     }
 

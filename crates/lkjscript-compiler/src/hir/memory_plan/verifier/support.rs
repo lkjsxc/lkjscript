@@ -87,20 +87,12 @@ pub(super) fn type_matches(expected: &Type, actual: &MemoryType) -> bool {
             (Type::Resource(left), MemoryType::Resource(right)) if left == right => {}
             (Type::Product(left), MemoryType::Product(right)) if left == right => {}
             (
-                Type::Enum {
-                    id,
-                    name,
-                    arguments,
-                },
+                Type::Enum { id, arguments },
                 MemoryType::Enum {
                     id: actual_id,
-                    name: actual_name,
                     arguments: actual_arguments,
                 },
-            ) if id.bytes() == *actual_id
-                && name == actual_name
-                && arguments.len() == actual_arguments.len() =>
-            {
+            ) if id.bytes() == *actual_id && arguments.len() == actual_arguments.len() => {
                 pending.extend(arguments.iter().zip(actual_arguments));
             }
             (Type::Param(left), MemoryType::TypeParameter(right)) if left == right => {}
@@ -144,14 +136,9 @@ fn verified_memory_type_inner(ty: &Type) -> MemoryType {
         Type::ByteSliceMut => MemoryType::ByteSliceMut,
         Type::Symbol => MemoryType::Symbol,
         Type::Resource(kind) => MemoryType::Resource(*kind),
-        Type::Product(name) => MemoryType::Product(name.clone()),
-        Type::Enum {
-            id,
-            name,
-            arguments,
-        } => MemoryType::Enum {
+        Type::Product(id) => MemoryType::Product(*id),
+        Type::Enum { id, arguments } => MemoryType::Enum {
             id: id.bytes(),
-            name: name.clone(),
             arguments: arguments.iter().map(verified_memory_type).collect(),
         },
         Type::Param(name) => MemoryType::TypeParameter(name.clone()),

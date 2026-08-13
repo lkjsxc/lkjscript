@@ -20,7 +20,7 @@ pub(crate) struct VerifiedTypes<'a> {
     pub(crate) program: &'a hir::Program,
     pub(crate) plan: &'a HirMemoryPlan,
     pub(crate) graph: VerifiedDeclarationGraph,
-    pub(crate) product_indices: HashMap<String, usize>,
+    pub(crate) product_indices: HashMap<hir::ProductId, usize>,
     pub(crate) enum_indices: HashMap<[u8; 32], usize>,
     pub(crate) memo: HashMap<Type, MemoryTypeFactId>,
     pub(crate) expected: Vec<VerifiedExpectedType>,
@@ -34,13 +34,12 @@ impl<'a> VerifiedTypes<'a> {
         let mut product_indices = HashMap::new();
         product_indices
             .try_reserve(program.products.len())
-            .map_err(|_| Error::host("memory verifier product-name index allocation failed"))?;
+            .map_err(|_| Error::host("memory verifier product index allocation failed"))?;
         for (index, product) in program.products.iter().enumerate() {
-            if product_indices
-                .insert(product.name.clone(), index)
-                .is_some()
-            {
-                return Err(Error::msg("memory verifier product names are not unique"));
+            if product_indices.insert(product.id, index).is_some() {
+                return Err(Error::msg(
+                    "memory verifier product identities are not unique",
+                ));
             }
         }
         let mut enum_indices = HashMap::new();
@@ -150,11 +149,11 @@ impl<'a> VerifiedTypes<'a> {
         Ok(id)
     }
 
-    pub(crate) fn product_definition(&self, name: &str) -> Result<&hir::ProductDefinition> {
+    pub(crate) fn product_definition(&self, id: hir::ProductId) -> Result<&hir::ProductDefinition> {
         self.product_indices
-            .get(name)
+            .get(&id)
             .and_then(|index| self.program.products.get(*index))
-            .filter(|product| product.name == name)
+            .filter(|product| product.id == id)
             .ok_or_else(|| Error::msg("memory verifier lost product"))
     }
 

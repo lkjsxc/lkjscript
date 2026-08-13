@@ -6,8 +6,8 @@ impl VerifiedTypes<'_> {
         key: &VerifiedDeclarationKey,
     ) -> Result<Vec<(Type, MemoryTypePathElement)>> {
         match key {
-            VerifiedDeclarationKey::Product(name) => {
-                let item = self.product_definition(name)?;
+            VerifiedDeclarationKey::Product(id) => {
+                let item = self.product_definition(*id)?;
                 item.fields
                     .iter()
                     .enumerate()
@@ -16,7 +16,7 @@ impl VerifiedTypes<'_> {
                             field.ty.clone(),
                             MemoryTypePathElement::ProductField {
                                 index: index_u64(index)?,
-                                name: field.name.clone(),
+                                field: field.identity,
                             },
                         ))
                     })

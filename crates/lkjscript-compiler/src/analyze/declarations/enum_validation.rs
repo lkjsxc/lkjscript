@@ -15,13 +15,12 @@ impl Analyzer {
         parameters: &[String],
     ) -> std::result::Result<Type, String> {
         Ok(match ty {
-            Type::Enum {
-                name, arguments, ..
-            } => {
-                let (id, declared) = self
+            Type::Enum { id, arguments } => {
+                let (name, (_, declared)) = self
                     .enum_headers
-                    .get(name)
-                    .ok_or_else(|| format!("unknown enum type {name}"))?;
+                    .iter()
+                    .find(|(_, (expected, _))| expected == id)
+                    .ok_or_else(|| "unknown enum type identity".to_owned())?;
                 if arguments.len() != declared.len() {
                     return Err(format!(
                         "enum type {name} requires {} explicit invariant arguments, got {}",
@@ -38,11 +37,7 @@ impl Analyzer {
                         "enum type {name} cannot be instantiated with an ownership/reference-bearing type"
                     ));
                 }
-                Type::Enum {
-                    id: *id,
-                    name: name.clone(),
-                    arguments,
-                }
+                Type::Enum { id: *id, arguments }
             }
             Type::Param(name) if !parameters.iter().any(|parameter| parameter == name) => {
                 return Err(format!("unbound type parameter {name}"));

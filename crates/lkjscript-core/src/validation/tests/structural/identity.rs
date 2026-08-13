@@ -37,24 +37,26 @@ fn product_runtime_identity_tamper_is_rejected() {
 }
 
 #[test]
-fn region_product_contract_identity_tamper_is_rejected() {
+fn region_product_identity_must_be_resolved_and_need_not_follow_presentation_name() {
     let mut chunk = unit_chunk();
     let plan = crate::MemoryPlanId::new([9; 32]);
     chunk.memory_plan = Some(plan);
     chunk.main.memory_plan = Some(plan);
     chunk.products.push(crate::ProductMetadata {
         id: crate::ProductId::new(0),
-        identity: crate::runtime_product_contract_identity(plan, "record")
-            .expect("canonical product identity"),
+        identity: crate::RuntimeLayoutId::new([3; 32]),
         region: true,
         name: "record".into(),
         fields: vec!["value".into()],
         region_fields: vec![crate::RegionProductFieldKind::I64],
     });
     validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
-        .expect("canonical region-product identity validates");
-    chunk.products[0].identity = crate::RuntimeLayoutId::new([3; 32]);
-    assert!(error(chunk).contains("noncanonical region identity"));
+        .expect("stable region-product identity validates");
+    chunk.products[0].name = "renamed-record".into();
+    validate_chunk(chunk.clone(), ValidationPolicy::Unrestricted)
+        .expect("presentation rename does not change identity");
+    chunk.products[0].identity = crate::RuntimeLayoutId::new([0; 32]);
+    assert!(error(chunk).contains("unresolved runtime identity"));
 }
 
 #[test]

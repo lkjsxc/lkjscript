@@ -7,8 +7,8 @@ impl VerifiedTypes<'_> {
         let mut declarations = BTreeMap::new();
         while let Some(ty) = pending.pop_front() {
             match ty {
-                Type::Product(name) => {
-                    let item = self.product_definition(name)?;
+                Type::Product(id) => {
+                    let item = self.product_definition(*id)?;
                     if declarations.contains_key(&item.identity) {
                         continue;
                     }

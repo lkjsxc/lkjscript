@@ -51,7 +51,7 @@ impl Analyzer {
         let mut names = HashSet::new();
         let mut fields = Vec::with_capacity(forms.len());
         for (order, form) in forms.iter().enumerate() {
-            let (name, ty) = parse_variant_field(form).map_err(|message| {
+            let (name, ty) = parse_variant_field(self, form).map_err(|message| {
                 self.error(
                     source,
                     format!("enum {enum_name} variant {variant_name}: {message}"),

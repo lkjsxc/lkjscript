@@ -16,16 +16,10 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 "product metadata {index} has an unresolved runtime identity"
             )));
         }
-        if product.region {
-            let plan = chunk.memory_plan.ok_or_else(|| {
-                Error::msg("region-product metadata lacks a canonical memory plan")
-            })?;
-            let expected = crate::runtime_product_contract_identity(plan, &product.name)?;
-            if product.identity != expected {
-                return Err(Error::msg(format!(
-                    "product metadata {index} has a noncanonical region identity"
-                )));
-            }
+        if product.region && chunk.memory_plan.is_none() {
+            return Err(Error::msg(
+                "region-product metadata lacks a canonical memory plan",
+            ));
         }
         metadata_bytes = checked_add(metadata_bytes, 33)?;
         if product.name.is_empty() {

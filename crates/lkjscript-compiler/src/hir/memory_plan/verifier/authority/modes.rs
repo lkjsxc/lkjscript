@@ -87,7 +87,7 @@ pub(super) fn verified_execution_cutover(ty: &Type) -> Option<MemoryExecutionCut
     match ty {
         Type::Str => Some(MemoryExecutionCutover::StructuralString),
         Type::Path => Some(MemoryExecutionCutover::StructuralPath),
-        Type::Product(name) => Some(MemoryExecutionCutover::Product(name.clone())),
+        Type::Product(id) => Some(MemoryExecutionCutover::Product(*id)),
         Type::Enum { id, arguments, .. } => Some(MemoryExecutionCutover::Enum {
             id: id.bytes(),
             arguments: arguments.iter().map(verified_memory_type).collect(),

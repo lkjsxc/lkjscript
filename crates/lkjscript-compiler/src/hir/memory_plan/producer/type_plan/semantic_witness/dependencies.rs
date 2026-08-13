@@ -9,8 +9,8 @@ impl TypePlanner<'_> {
             Type::List(element) => {
                 self.producer_dependency(root, element, R::ListElement, &mut output)?;
             }
-            Type::Product(name) => {
-                let item = self.product(name)?;
+            Type::Product(id) => {
+                let item = self.product(*id)?;
                 for field in &item.fields {
                     self.producer_dependency(
                         root,

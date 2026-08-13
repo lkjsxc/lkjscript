@@ -122,7 +122,12 @@ forwarding an unresolved caller type parameter, and ownership/reference-bearing 
 instantiation are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
-declarations; they also rename supported bindings, replace expressions, introduce/refine/fill typed
+declarations. `RenameEntity` renames functions, parameters, locals, products, product fields, enums,
+variants, and enum fields by stable entity identity; nominal and member rename changes only the
+owning presentation name. A rename must change the name, global declaration names remain unique and
+non-reserved, product-field and variant names remain unique among siblings, and enum-field names
+remain unique within their variant. Invalid, colliding, reserved, or same-name requests publish
+nothing and consume no identity. Transactions also replace expressions, introduce/refine/fill typed
 holes, and introduce or resolve unresolved copy-load value references. Callable deletion cascades
 through the declaration's type parameters, value parameters, locals, payload bindings, body nodes,
 holes, hidden match storage, match plans, and compiler layout participation.
@@ -136,8 +141,13 @@ match patterns/plans decide whether an independent dependency survives. A surviv
 rejects with the requested declaration and a deterministic surviving dependent; deleting every
 dependent declaration or structurally removing every body dependency in the same batch succeeds
 regardless of edit order. Product and implementation IDs and private product/enum/implementation
-vector addresses compact once; every survivor reference is explicitly remapped while stable public
-entity/node identities and stable nominal/member/layout identities remain unchanged. Semantic diffs
+vector addresses compact once; every survivor reference and every nested stored product type is
+explicitly remapped while stable public entity/node identities and stable nominal/member/layout
+identities remain unchanged. Private nominal types use product and enum identities rather than
+presentation spelling, so rename does not rewrite types, aggregate operations, generic witnesses, or
+match plans. Canonical memory blocker and drop paths select product fields by stable field identity
+and ordinal, never presentation spelling; a field rename therefore leaves the memory plan unchanged.
+Semantic diffs
 report every changed edge at aggregate sites that reference a declaration and multiple owned members;
 private relocation alone emits no rewire. Deletion and same-name creation in one transaction is
 invalid; a later recreation receives fresh public identities and generations.
@@ -256,8 +266,8 @@ stdio/session schemas, text journal/publication path, CLI routes, unsupported re
 and development semantic-digest surrogate are deleted. There is no replacement wire service.
 
 Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
-conflicts, parser recovery nodes, direct nominal-member mutation, cross-parent, entity, declaration,
-and generic semantic movement, generic-pattern construction, source rendering, persistence,
+conflicts, parser recovery nodes, nominal member addition/deletion/reordering, cross-parent, entity,
+declaration, and generic semantic movement, generic-pattern construction, source rendering, persistence,
 collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Imported ownership-bearing

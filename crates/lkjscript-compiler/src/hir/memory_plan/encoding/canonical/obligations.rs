@@ -65,7 +65,7 @@ impl Canonical for MemoryDropGlueKind {
             Self::Resource(kind) => tagged(output, 2, kind),
             Self::String => output.tag(3),
             Self::Path => output.tag(4),
-            Self::Product(name) => tagged(output, 5, name),
+            Self::Product(id) => tagged(output, 5, &id.raw()),
             Self::Enum { id, arguments } => {
                 output.tag(6)?;
                 output.value(id)?;
@@ -78,10 +78,10 @@ impl Canonical for MemoryDropGlueKind {
 impl Canonical for MemoryDropPathElement {
     fn encode(&self, output: &mut Encoder) -> Result<()> {
         match self {
-            Self::ProductField { index, name } => {
+            Self::ProductField { index, field } => {
                 output.tag(0)?;
                 output.value(index)?;
-                output.value(name)
+                output.value(field)
             }
             Self::EnumField {
                 variant,

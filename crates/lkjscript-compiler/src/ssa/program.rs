@@ -4,10 +4,10 @@ pub(in crate::ssa) fn construct_program(
     program: &hir::Program,
     memory_plan: &HirMemoryPlan,
 ) -> Result<Program> {
-    let product_ids: HashMap<String, ProductId> = program
+    let product_ids: HashMap<crate::hir::ProductId, ProductId> = program
         .products
         .iter()
-        .map(|product| (product.name.clone(), ProductId::new(product.id.raw())))
+        .map(|product| (product.id, ProductId::new(product.id.raw())))
         .collect();
     let function_ids: HashMap<BindingId, FunctionId> = program
         .functions
@@ -20,7 +20,7 @@ pub(in crate::ssa) fn construct_program(
         })
         .collect::<Result<_>>()?;
     let mut structural = lower_structural_memory(program, memory_plan, &product_ids)?;
-    let region_products = lower_region_products(memory_plan, &product_ids)?;
+    let region_products = lower_region_products(program, memory_plan, &product_ids)?;
     if !region_products.is_empty() && structural.types.is_empty() {
         structural.plan = lkjscript_ir::MemoryPlanId::new(memory_plan.id.as_bytes());
     }

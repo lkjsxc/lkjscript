@@ -42,14 +42,14 @@ fn recursive_fields(
     key: &DeclarationKey,
 ) -> Result<Vec<(Type, MemoryTypePathElement)>> {
     match key {
-        DeclarationKey::Product(name) => {
-            let item = self.product_indices.get(name)
+        DeclarationKey::Product(id) => {
+            let item = self.product_indices.get(id)
                 .and_then(|index| self.program.products.get(*index))
-                .filter(|item| item.name == *name)
+                .filter(|item| item.id == *id)
                 .ok_or_else(|| Error::msg("recursive memory plan lost product"))?;
             item.fields.iter().enumerate().map(|(index, field)| Ok((field.ty.clone(),
                 MemoryTypePathElement::ProductField { index: index_u64(index)?,
-                    name: field.name.clone() }))).collect()
+                    field: field.identity }))).collect()
         }
         DeclarationKey::Enum(id) => {
             let item = self.enum_indices.get(id)
@@ -94,13 +94,13 @@ fn recursive_root_type(
     arguments: &[Type],
 ) -> Result<Type> {
     match key {
-        DeclarationKey::Product(name) => Ok(Type::Product(name.clone())),
+        DeclarationKey::Product(id) => Ok(Type::Product(*id)),
         DeclarationKey::Enum(id) => {
             let item = self.enum_indices.get(id)
                 .and_then(|index| self.program.enums.get(*index))
                 .filter(|item| item.id.bytes() == *id)
                 .ok_or_else(|| Error::msg("recursive memory plan lost enum identity"))?;
-            Ok(Type::Enum { id: item.id, name: item.name.clone(), arguments: arguments.to_vec() })
+            Ok(Type::Enum { id: item.id, arguments: arguments.to_vec() })
         }
     }
 }

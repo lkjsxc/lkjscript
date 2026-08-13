@@ -27,7 +27,7 @@ pub(super) fn verified_witness_parameters(
                 ));
             }
             Type::Param(_) => {}
-            _ if verified_type_contains_any_parameter(ty) => {
+            _ if verified_type_contains_any_parameter(ty)? => {
                 return Err(Error::msg(
                     "memory verifier rejected nested witness parameter use",
                 ));
@@ -113,13 +113,12 @@ pub(super) fn verified_witness_arguments(
             "memory verifier rejected direct generic substitution order/count",
         ));
     }
-    if substitutions
-        .iter()
-        .any(|item| verified_unresolved_substitution(&item.ty))
-    {
-        return Err(Error::msg(
-            "memory verifier found unresolved direct generic substitution",
-        ));
+    for substitution in substitutions {
+        if verified_unresolved_substitution(&substitution.ty)? {
+            return Err(Error::msg(
+                "memory verifier found unresolved direct generic substitution",
+            ));
+        }
     }
     let mut output = Vec::with_capacity(parameters.len());
     for parameter in parameters {
@@ -136,29 +135,60 @@ pub(super) fn verified_witness_arguments(
     Ok(output)
 }
 
-fn verified_type_contains_any_parameter(ty: &Type) -> bool {
-    match ty {
-        Type::Param(_) => true,
-        Type::List(inner) => verified_type_contains_any_parameter(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(verified_type_contains_any_parameter),
-        Type::Fn { params, ret } => {
-            params.iter().any(verified_type_contains_any_parameter)
-                || verified_type_contains_any_parameter(ret)
-        }
-        Type::Forall { body, .. } => verified_type_contains_any_parameter(body),
-        _ => false,
-    }
+fn verified_type_contains_any_parameter(root: &Type) -> Result<bool> {
+    verified_visit_witness_type(root, |ty| matches!(ty, Type::Param(_)))
 }
 
-fn verified_unresolved_substitution(ty: &Type) -> bool {
-    match ty {
-        Type::Param(_) | Type::Forall { .. } => true,
-        Type::List(inner) => verified_unresolved_substitution(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(verified_unresolved_substitution),
-        Type::Fn { params, ret } => {
-            params.iter().any(verified_unresolved_substitution)
-                || verified_unresolved_substitution(ret)
+fn verified_unresolved_substitution(root: &Type) -> Result<bool> {
+    verified_visit_witness_type(root, |ty| {
+        matches!(ty, Type::Param(_) | Type::Forall { .. })
+    })
+}
+
+fn verified_visit_witness_type(
+    root: &Type,
+    mut predicate: impl FnMut(&Type) -> bool,
+) -> Result<bool> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Error::host("memory verifier witness type traversal allocation failed"))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        if predicate(ty) {
+            return Ok(true);
         }
-        _ => false,
+        match ty {
+            Type::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    Error::host("memory verifier witness type traversal allocation failed")
+                })?;
+                pending.push(inner);
+            }
+            Type::Enum { arguments, .. } => {
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    Error::host("memory verifier witness type traversal allocation failed")
+                })?;
+                pending.extend(arguments);
+            }
+            Type::Fn { params, ret } => {
+                let additional = params.len().checked_add(1).ok_or_else(|| {
+                    Error::host("memory verifier witness type child count overflow")
+                })?;
+                pending.try_reserve(additional).map_err(|_| {
+                    Error::host("memory verifier witness type traversal allocation failed")
+                })?;
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => {
+                pending.try_reserve(1).map_err(|_| {
+                    Error::host("memory verifier witness type traversal allocation failed")
+                })?;
+                pending.push(body);
+            }
+            _ => {}
+        }
     }
+    Ok(false)
 }

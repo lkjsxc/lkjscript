@@ -18,7 +18,7 @@ impl Resolver<'_> {
         if type_tag != "type" {
             return Err(self.error("var expects type/…/type second"));
         }
-        let declared_type = parse_type_form(type_args)
+        let declared_type = parse_type_form(self.analyzer, type_args)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
         if let Some(reason) = crate::ownership::mutable_local_storage_restriction(&declared_type) {
             return Err(self.error(format!("var {name}: {reason}")));

@@ -25,7 +25,7 @@ fn memory_witness_parameters(
                 ));
             }
             Type::Param(_) => {}
-            _ if type_contains_any_parameter(ty) => {
+            _ if type_contains_any_parameter(ty)? => {
                 return Err(Error::msg(
                     "HIR memory witness parameter has a nested operational use",
                 ));
@@ -119,13 +119,12 @@ fn memory_witness_arguments(
             "HIR direct generic call witness substitutions are reordered",
         ));
     }
-    if substitutions
-        .iter()
-        .any(|item| unresolved_substitution(&item.ty))
-    {
-        return Err(Error::msg(
-            "HIR direct generic call witness substitution is unresolved",
-        ));
+    for substitution in substitutions {
+        if unresolved_substitution(&substitution.ty)? {
+            return Err(Error::msg(
+                "HIR direct generic call witness substitution is unresolved",
+            ));
+        }
     }
     let mut output = Vec::with_capacity(parameters.len());
     for parameter in parameters {
@@ -144,28 +143,56 @@ fn memory_witness_arguments(
     Ok(output)
 }
 
-fn type_contains_any_parameter(ty: &Type) -> bool {
-    match ty {
-        Type::Param(_) => true,
-        Type::List(inner) => type_contains_any_parameter(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(type_contains_any_parameter),
-        Type::Fn { params, ret } => {
-            params.iter().any(type_contains_any_parameter)
-                || type_contains_any_parameter(ret)
-        }
-        Type::Forall { body, .. } => type_contains_any_parameter(body),
-        _ => false,
-    }
+fn type_contains_any_parameter(root: &Type) -> Result<bool> {
+    visit_transport_type(root, |ty| matches!(ty, Type::Param(_)))
 }
 
-fn unresolved_substitution(ty: &Type) -> bool {
-    match ty {
-        Type::Param(_) | Type::Forall { .. } => true,
-        Type::List(inner) => unresolved_substitution(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(unresolved_substitution),
-        Type::Fn { params, ret } => {
-            params.iter().any(unresolved_substitution) || unresolved_substitution(ret)
+fn unresolved_substitution(root: &Type) -> Result<bool> {
+    visit_transport_type(root, |ty| matches!(ty, Type::Param(_) | Type::Forall { .. }))
+}
+
+fn visit_transport_type(root: &Type, mut predicate: impl FnMut(&Type) -> bool) -> Result<bool> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Error::host("HIR memory witness type traversal allocation failed"))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        if predicate(ty) {
+            return Ok(true);
         }
-        _ => false,
+        match ty {
+            Type::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    Error::host("HIR memory witness type traversal allocation failed")
+                })?;
+                pending.push(inner);
+            }
+            Type::Enum { arguments, .. } => {
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    Error::host("HIR memory witness type traversal allocation failed")
+                })?;
+                pending.extend(arguments);
+            }
+            Type::Fn { params, ret } => {
+                let additional = params
+                    .len()
+                    .checked_add(1)
+                    .ok_or_else(|| Error::host("HIR memory witness type child count overflow"))?;
+                pending.try_reserve(additional).map_err(|_| {
+                    Error::host("HIR memory witness type traversal allocation failed")
+                })?;
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => {
+                pending.try_reserve(1).map_err(|_| {
+                    Error::host("HIR memory witness type traversal allocation failed")
+                })?;
+                pending.push(body);
+            }
+            _ => {}
+        }
     }
+    Ok(false)
 }

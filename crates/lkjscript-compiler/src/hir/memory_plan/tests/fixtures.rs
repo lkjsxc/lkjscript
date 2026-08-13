@@ -87,7 +87,7 @@ pub(super) fn product_value(
     fields: Vec<hir::Expr>,
 ) -> hir::Expr {
     expression(
-        hir::Type::Product(definition.name.clone()),
+        hir::Type::Product(definition.id),
         hir::ExprKind::ProductValue {
             product: definition.id,
             fields,
@@ -148,7 +148,6 @@ pub(super) fn enum_definition(
 pub(super) fn enum_type(definition: &hir::EnumDefinition, arguments: Vec<hir::Type>) -> hir::Type {
     hir::Type::Enum {
         id: definition.id,
-        name: definition.name.clone(),
         arguments,
     }
 }

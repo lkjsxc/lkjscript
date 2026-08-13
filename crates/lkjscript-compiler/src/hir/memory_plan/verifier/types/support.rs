@@ -106,7 +106,7 @@ pub(crate) fn verified_type_contains_resource(ty: &Type) -> bool {
 
 pub(crate) fn verified_key(ty: &Type) -> Option<VerifiedDeclarationKey> {
     match ty {
-        Type::Product(name) => Some(VerifiedDeclarationKey::Product(name.clone())),
+        Type::Product(id) => Some(VerifiedDeclarationKey::Product(*id)),
         Type::Enum { id, .. } => Some(VerifiedDeclarationKey::Enum(id.bytes())),
         _ => None,
     }

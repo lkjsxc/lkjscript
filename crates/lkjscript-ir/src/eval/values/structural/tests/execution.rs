@@ -83,6 +83,7 @@ fn legacy_product_constructor_cannot_bypass_structural_destination() -> crate::R
     let fields = vec![SsaType::Str, SsaType::I64];
     program.products.push(ProductMetadata {
         id: product,
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "text-and-count".into(),
         fields: vec![
             ProductField {

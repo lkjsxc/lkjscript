@@ -1,6 +1,6 @@
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum DeclarationKey {
-    Product(String),
+    Product(hir::ProductId),
     Enum([u8; 32]),
 }
 
@@ -27,7 +27,7 @@ impl DeclarationGraph {
             program
                 .products
                 .iter()
-                .map(|item| DeclarationKey::Product(item.name.clone())),
+                .map(|item| DeclarationKey::Product(item.id)),
         );
         keys.extend(
             program
@@ -132,11 +132,11 @@ fn collect_declarations(ty: &Type, output: &mut Vec<DeclarationKey>) -> Result<(
     let mut pending = vec![ty];
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Product(name) => {
+            Type::Product(id) => {
                 output
                     .try_reserve(1)
                     .map_err(|_| Error::msg("memory declaration output allocation failed"))?;
-                output.push(DeclarationKey::Product(name.clone()));
+                output.push(DeclarationKey::Product(*id));
             }
             Type::Enum { id, arguments, .. } => {
                 output

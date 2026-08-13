@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum VerifiedDeclarationKey {
-    Product(String),
+    Product(hir::ProductId),
     Enum([u8; 32]),
 }
 
@@ -29,7 +29,7 @@ impl VerifiedDeclarationGraph {
             program
                 .products
                 .iter()
-                .map(|item| VerifiedDeclarationKey::Product(item.name.clone())),
+                .map(|item| VerifiedDeclarationKey::Product(item.id)),
         );
         keys.extend(
             program
@@ -137,11 +137,11 @@ pub(super) fn verified_collect_declarations(
     let mut pending = vec![ty];
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Product(name) => {
+            Type::Product(id) => {
                 output.try_reserve(1).map_err(|_| {
                     Error::msg("memory verifier declaration output allocation failed")
                 })?;
-                output.push(VerifiedDeclarationKey::Product(name.clone()));
+                output.push(VerifiedDeclarationKey::Product(*id));
             }
             Type::Enum { id, arguments, .. } => {
                 output.try_reserve(1).map_err(|_| {

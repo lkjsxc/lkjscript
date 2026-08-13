@@ -26,6 +26,7 @@ fn deep_types_verify_and_reject_deterministically_on_a_small_native_stack() {
             let mut valid = one_block_program();
             valid.products.push(ProductMetadata {
                 id: ProductId::new(0),
+                identity: RuntimeLayoutId::new([1; 32]),
                 name: "DeepValid".into(),
                 fields: vec![ProductField {
                     name: "value".into(),
@@ -38,6 +39,7 @@ fn deep_types_verify_and_reject_deterministically_on_a_small_native_stack() {
                 let mut program = one_block_program();
                 program.products.push(ProductMetadata {
                     id: ProductId::new(0),
+                    identity: RuntimeLayoutId::new([1; 32]),
                     name: "DeepMalformed".into(),
                     fields: vec![ProductField {
                         name: "value".into(),
@@ -74,6 +76,7 @@ fn auto_trait_solver_memoizes_wide_obligations_and_solves_nominal_cycles() {
     cyclic.products = vec![
         ProductMetadata {
             id: ProductId::new(0),
+            identity: RuntimeLayoutId::new([1; 32]),
             name: "A".into(),
             fields: vec![ProductField {
                 name: "b".into(),
@@ -82,6 +85,7 @@ fn auto_trait_solver_memoizes_wide_obligations_and_solves_nominal_cycles() {
         },
         ProductMetadata {
             id: ProductId::new(1),
+            identity: RuntimeLayoutId::new([1; 32]),
             name: "B".into(),
             fields: vec![ProductField {
                 name: "a".into(),
@@ -142,6 +146,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
     }
     deeply_nested_type.products.push(ProductMetadata {
         id: crate::ProductId::new(0),
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "Deep".into(),
         fields: vec![crate::ProductField {
             name: "value".into(),
@@ -157,6 +162,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
     let mut core_implementation = bounded_call_program();
     core_implementation.products.push(ProductMetadata {
         id: crate::ProductId::new(0),
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "Point".into(),
         fields: Vec::new(),
     });

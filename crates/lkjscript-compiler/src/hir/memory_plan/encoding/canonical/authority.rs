@@ -58,10 +58,10 @@ unit_enum!(MemoryDestinationKind {
 impl Canonical for MemoryTypePathElement {
     fn encode(&self, output: &mut Encoder) -> Result<()> {
         match self {
-            Self::ProductField { index, name } => {
+            Self::ProductField { index, field } => {
                 output.tag(0)?;
                 output.value(index)?;
-                output.value(name)
+                output.value(field)
             }
             Self::EnumVariantField {
                 variant_index,
@@ -88,9 +88,9 @@ impl Canonical for MemoryExecutionCutover {
         match self {
             Self::StructuralString => output.tag(0),
             Self::StructuralPath => output.tag(1),
-            Self::Product(name) => {
+            Self::Product(id) => {
                 output.tag(2)?;
-                output.value(name)
+                output.value(&id.raw())
             }
             Self::Enum { id, arguments } => {
                 output.tag(3)?;

@@ -29,7 +29,7 @@ impl TypePlanner<'_> {
             Type::Fn { .. } | Type::Forall { .. } => {
                 unresolved(ty, MemoryBlockerReason::CapturedClosure)
             }
-            Type::Product(name) => self.derive_product(name)?,
+            Type::Product(id) => self.derive_product(*id)?,
             Type::Enum { id, arguments, .. } => self.derive_enum(id.bytes(), arguments)?,
         })
     }
@@ -62,9 +62,9 @@ impl TypePlanner<'_> {
         Ok(result)
     }
 
-    fn derive_product(&mut self, name: &str) -> Result<DerivedType> {
-        let key = DeclarationKey::Product(name.to_owned());
-        let definition = self.product(name)?.clone();
+    fn derive_product(&mut self, id: hir::ProductId) -> Result<DerivedType> {
+        let key = DeclarationKey::Product(id);
+        let definition = self.product(id)?.clone();
         self.charge_fields(definition.fields.len())?;
         if self.graph.is_recursive(&key) {
             return self.derive_recursive(&key, &[]);
@@ -76,7 +76,7 @@ impl TypePlanner<'_> {
                 self.fact(id)?.clone(),
                 MemoryTypePathElement::ProductField {
                     index: index_u64(index)?,
-                    name: field.name.clone(),
+                    field: field.identity,
                 },
             ));
         }
@@ -88,7 +88,8 @@ impl TypePlanner<'_> {
         let derived = fold_aggregate(children, false, region_capable);
         if derived.closure.class == MemoryClosureClass::Unresolved {
             return Err(Error::msg(format!(
-                "LKJ-MEM-PRODUCT-UNRESOLVED product={name} blocker={:?} path={:?}",
+                "LKJ-MEM-PRODUCT-UNRESOLVED product={} blocker={:?} path={:?}",
+                definition.name,
                 derived.closure.blocker_reason, derived.closure.blocker_path
             )));
         }

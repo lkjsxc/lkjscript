@@ -12,7 +12,7 @@ pub(super) fn witness<'a>(plan: &'a HirMemoryPlan, ty: &MemoryType) -> Result<&'
 #[test]
 fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result<()> {
     let definition = product(0, "record", &[("value", hir::Type::Str)]);
-    let ty = hir::Type::Product(definition.name.clone());
+    let ty = hir::Type::Product(definition.id);
     let hir = program(
         ty.clone(),
         product_value(&definition, vec![text("value")]),
@@ -23,16 +23,16 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     let second = derive(&hir)?;
     assert_eq!(
         first.id.to_hex(),
-        "aefbc5e9f26385407617d28c23b7d01ec1a0b9138b48bcaf1d7aba7eca2972ee"
+        "a0ecc5efffae151e3ea64752ab85e2eee447f8d23d910f468aee93719fcd0f57"
     );
     assert_eq!(
-        witness(&first, &MemoryType::Product("record".into()))?
+        witness(&first, &MemoryType::Product(hir::ProductId::new(0)))?
             .id
             .to_hex(),
         "1d2d759f0a7445a3c78c34dc57d752d51ef9ab511d961d00f2a5d7bb1f7613ff"
     );
     assert_eq!(first.witnesses, second.witnesses);
-    let product_witness = witness(&first, &MemoryType::Product("record".into()))?;
+    let product_witness = witness(&first, &MemoryType::Product(hir::ProductId::new(0)))?;
     assert!(product_witness.facts.capabilities.sealed_region);
     assert!(product_witness.facts.capabilities.unique);
     assert_eq!(product_witness.facts.domain, MemoryDomain::UniqueStructural);
@@ -45,8 +45,8 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     let changed = derive(&changed)?;
     assert_ne!(first.id, changed.id);
     assert_ne!(
-        witness(&first, &MemoryType::Product("record".into()))?.id,
-        witness(&changed, &MemoryType::Product("record".into()))?.id,
+        witness(&first, &MemoryType::Product(hir::ProductId::new(0)))?.id,
+        witness(&changed, &MemoryType::Product(hir::ProductId::new(0)))?.id,
         "declaration changes must change witness identity"
     );
     assert_eq!(first.id, second.id);
@@ -54,7 +54,7 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     work_changed.work.verifier_steps = work_changed.work.verifier_steps.saturating_add(1);
     assert_ne!(first.id, compute_plan_id(&work_changed)?);
     assert_eq!(
-        witness(&first, &MemoryType::Product("record".into()))?
+        witness(&first, &MemoryType::Product(hir::ProductId::new(0)))?
             .facts
             .semantic_snapshot,
         MemorySemanticSnapshotEligibility::Eligible

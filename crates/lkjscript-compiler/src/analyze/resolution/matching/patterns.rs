@@ -69,7 +69,8 @@ impl Resolver<'_> {
         if name != "type" {
             return Err(self.error("pattern must state type/ first"));
         }
-        let unresolved = parse_type_form(args).map_err(|message| self.error(message))?;
+        let unresolved =
+            parse_type_form(self.analyzer, args).map_err(|message| self.error(message))?;
         let parameters: Vec<_> = self.type_variables.iter().cloned().collect();
         let ty = self
             .analyzer

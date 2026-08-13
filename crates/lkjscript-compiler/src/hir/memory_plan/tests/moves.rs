@@ -11,13 +11,13 @@ fn affine_aggregate_copy_and_partial_field_move_are_rejected() -> Result<()> {
         id: binding,
         name: "record".into(),
         kind: hir::BindingKind::ImmutableLocal,
-        ty: hir::Type::Product(record.name.clone()),
+        ty: hir::Type::Product(record.id),
         origin: hir::Origin::Source(origin()),
     };
     let value = product_value(&record, vec![bytes()]);
     for body in [
         expression(
-            hir::Type::Product(record.name.clone()),
+            hir::Type::Product(record.id),
             hir::ExprKind::Load(hir::BindingRef {
                 binding,
                 storage: hir::BindingStorage::Local(0),
@@ -29,7 +29,7 @@ fn affine_aggregate_copy_and_partial_field_move_are_rejected() -> Result<()> {
                 product: record.id,
                 field: 0,
                 value: Box::new(expression(
-                    hir::Type::Product(record.name.clone()),
+                    hir::Type::Product(record.id),
                     hir::ExprKind::Load(hir::BindingRef {
                         binding,
                         storage: hir::BindingStorage::Local(0),

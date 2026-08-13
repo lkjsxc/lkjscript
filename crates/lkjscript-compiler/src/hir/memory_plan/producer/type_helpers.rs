@@ -134,7 +134,7 @@ impl TypePlanner<'_> {
         let kind = match ty {
             Type::Str => MemoryDropGlueKind::String,
             Type::Path => MemoryDropGlueKind::Path,
-            Type::Product(name) => MemoryDropGlueKind::Product(name.clone()),
+            Type::Product(id) => MemoryDropGlueKind::Product(*id),
             Type::Enum { id, arguments, .. } => MemoryDropGlueKind::Enum {
                 id: id.bytes(), arguments: arguments.iter().map(memory_type).collect(),
             },
@@ -148,14 +148,14 @@ impl TypePlanner<'_> {
         match ty {
             Type::Str | Type::Path => Ok(vec![MemoryDropBranch { active_variant: None,
                 actions: Vec::new() }]),
-            Type::Product(name) => {
-                let product = self.product(name)?;
+            Type::Product(id) => {
+                let product = self.product(*id)?;
                 let mut actions = Vec::new();
                 for (index, field) in product.fields.iter().enumerate().rev() {
                     if let Some(glue) = self.memo.get(&field.ty).and_then(|id| self.facts.get(id.index()?))
                         .and_then(|fact| fact.drop_glue) {
                         actions.push(MemoryDropAction { path: vec![MemoryDropPathElement::ProductField {
-                            index: index_u64(index)?, name: field.name.clone() }], glue });
+                            index: index_u64(index)?, field: field.identity }], glue });
                     }
                 }
                 Ok(vec![MemoryDropBranch { active_variant: None, actions }])

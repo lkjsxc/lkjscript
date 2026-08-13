@@ -57,7 +57,7 @@ impl Resolver<'_> {
             fields.push(value);
         }
         Ok(self.expression(
-            Type::Product(product.name),
+            Type::Product(product.id),
             ExprKind::ProductValue {
                 product: product.id,
                 fields,
@@ -70,15 +70,16 @@ impl Resolver<'_> {
             return Err(self.error("field expects a product value and field name"));
         };
         let value = self.resolve_expr(value_expression)?;
-        let Type::Product(product_name) = &value.ty else {
+        let Type::Product(product_id) = &value.ty else {
             return Err(self.error("field value must have a concrete Product type"));
         };
+        let product_id = *product_id;
         let field_name = symbolic_name(name_expression)
             .map_err(|_| self.error("field name must be a symbol"))?;
         let product = self
             .analyzer
-            .product_by_name(product_name)
-            .map_err(|_| self.error(format!("unknown product type {product_name}")))?
+            .product_by_id(product_id)
+            .map_err(|_| self.error("unknown product type identity"))?
             .clone();
         let (field_index, field) = product
             .fields
@@ -113,16 +114,16 @@ impl Resolver<'_> {
             );
         };
         let value = self.resolve_expr(value_expression)?;
-        let Type::Product(product_name) = &value.ty else {
+        let Type::Product(product_id) = &value.ty else {
             return Err(self.error("with-field value must have a concrete Product type"));
         };
-        let product_name = product_name.clone();
+        let product_id = *product_id;
         let field_name = symbolic_name(name_expression)
             .map_err(|_| self.error("with-field name must be a symbol"))?;
         let product = self
             .analyzer
-            .product_by_name(&product_name)
-            .map_err(|_| self.error(format!("unknown product type {product_name}")))?
+            .product_by_id(product_id)
+            .map_err(|_| self.error("unknown product type identity"))?
             .clone();
         let (field_index, field) = product
             .fields
@@ -145,7 +146,7 @@ impl Resolver<'_> {
             )));
         }
         Ok(self.expression(
-            Type::Product(product.name),
+            Type::Product(product.id),
             ExprKind::WithProductField {
                 product: product.id,
                 field: field_index,

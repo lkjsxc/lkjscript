@@ -31,14 +31,16 @@ impl std::fmt::Display for Type {
                     }
                     Type::Symbol => formatter.write_str("symbol")?,
                     Type::Resource(kind) => formatter.write_str(kind.as_str())?,
-                    Type::Product(name) => {
-                        formatter.write_str("product ")?;
-                        formatter.write_str(name)?;
-                    }
-                    Type::Enum {
-                        name, arguments, ..
-                    } => {
-                        formatter.write_str(name.rsplit(':').next().unwrap_or(name))?;
+                    Type::Product(id) => write!(formatter, "product#{}", id.raw())?,
+                    Type::Enum { id, arguments } => {
+                        if let Some(name) = crate::types::prelude_name_for_id(*id) {
+                            formatter.write_str(name)?;
+                        } else {
+                            formatter.write_str("enum#")?;
+                            for byte in id.bytes() {
+                                write!(formatter, "{byte:02x}")?;
+                            }
+                        }
                         for argument in arguments.iter().rev() {
                             pending.push(Work::Type(argument));
                             pending.push(Work::Text(" "));

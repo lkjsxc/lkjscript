@@ -82,7 +82,10 @@ pub fn runtime_product_identity(program: &Program, id: ProductId) -> Result<Runt
         .iter()
         .find(|product| product.id == id)
         .ok_or_else(|| IrError::new("product runtime identity metadata is missing"))?;
-    runtime_product_contract_identity(program.memory.plan, &product.name)
+    if !product.identity.is_resolved() {
+        return Err(IrError::new("product runtime identity is unresolved"));
+    }
+    Ok(product.identity)
 }
 
 pub fn runtime_product_contract_identity(

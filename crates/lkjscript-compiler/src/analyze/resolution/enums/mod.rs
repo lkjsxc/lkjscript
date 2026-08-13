@@ -8,7 +8,7 @@ impl Resolver<'_> {
             return Err(self.error("variant-value expects exactly type/, variant/, and fields/"));
         };
         let unresolved = match type_form {
-            AstExpr::Call { name, args } if name == "type" => parse_type_form(args),
+            AstExpr::Call { name, args } if name == "type" => parse_type_form(self.analyzer, args),
             _ => Err("variant-value expects type/ first".into()),
         }
         .map_err(|message| self.error(message))?;

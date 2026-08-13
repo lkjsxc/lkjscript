@@ -34,7 +34,7 @@ pub(in crate::ssa) fn restore<K: Ord, V>(map: &mut BTreeMap<K, V>, key: K, previ
 
 pub(in crate::ssa) fn signature_from_type(
     ty: &Type,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<Signature> {
     match ty {
         Type::Fn { params, ret } => Ok(Signature::monomorphic(
@@ -93,12 +93,15 @@ fn naked_parameter(ty: &Type, parameter: &str) -> bool {
 
 pub(in crate::ssa) fn lower_type(
     ty: &Type,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<SsaType> {
     crate::stack::grow(|| lower_type_inner(ty, products))
 }
 
-fn lower_type_inner(ty: &Type, products: &HashMap<String, ProductId>) -> Result<SsaType> {
+fn lower_type_inner(
+    ty: &Type,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
+) -> Result<SsaType> {
     Ok(match ty {
         Type::Never => return Err(Error::msg("Never has no SSA value representation")),
         Type::Unit => SsaType::Unit,
@@ -114,10 +117,10 @@ fn lower_type_inner(ty: &Type, products: &HashMap<String, ProductId>) -> Result<
         Type::Capability(kind) => SsaType::Capability(*kind),
         Type::Symbol => SsaType::Symbol,
         Type::Resource(kind) => SsaType::Resource(*kind),
-        Type::Product(name) => SsaType::Product(
+        Type::Product(id) => SsaType::Product(
             *products
-                .get(name)
-                .ok_or_else(|| Error::msg(format!("HIR type references unknown product {name}")))?,
+                .get(id)
+                .ok_or_else(|| Error::msg(format!("HIR type references unknown product {id:?}")))?,
         ),
         Type::Enum { id, arguments, .. } => SsaType::Enum {
             id: lkjscript_ir::EnumId::new(id.bytes()),

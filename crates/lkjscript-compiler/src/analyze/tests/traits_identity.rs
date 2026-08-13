@@ -36,7 +36,7 @@ fn marker_trait_impl_and_bound_resolve_to_dense_canonical_identities() {
     };
     assert_eq!(
         instantiation.substitutions[0].ty,
-        Type::Product("point".into())
+        Type::Product(program.products[0].id)
     );
     assert_eq!(instantiation.witnesses[0].trait_id, marker.id);
     assert_eq!(

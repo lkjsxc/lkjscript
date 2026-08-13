@@ -12180,6 +12180,431 @@ fn create_choice(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId, En
 }
 
 #[test]
+fn direct_nominal_and_member_rename_preserves_identity_types_runtime_and_old_snapshot() {
+    let mut workspace = Workspace::empty_deterministic(149).expect("nominal rename workspace");
+    let (pair, left, right) = create_pair(&mut workspace);
+    let (choice, some, none, value) = create_choice(&mut workspace);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateMain {
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create nominal rename main");
+    let main = entity_named(&created.snapshot, EntityKind::Main, "main");
+    let hole = created
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("nominal rename main hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: created.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::I64(42),
+                        DraftNode::I64(7),
+                        DraftNode::ProductValue {
+                            product: pair,
+                            fields: vec![
+                                DraftFieldValue {
+                                    field: left,
+                                    value: DraftNodeId::new(0),
+                                },
+                                DraftFieldValue {
+                                    field: right,
+                                    value: DraftNodeId::new(1),
+                                },
+                            ],
+                        },
+                        DraftNode::ProductField {
+                            field: left,
+                            value: DraftNodeId::new(2),
+                        },
+                        DraftNode::EnumValue {
+                            variant: some,
+                            fields: vec![DraftFieldValue {
+                                field: value,
+                                value: DraftNodeId::new(3),
+                            }],
+                        },
+                        DraftNode::EnumIsVariant {
+                            variant: some,
+                            value: DraftNodeId::new(4),
+                        },
+                        DraftNode::I64(42),
+                        DraftNode::I64(0),
+                        DraftNode::If {
+                            condition: DraftNodeId::new(5),
+                            then_branch: DraftNodeId::new(6),
+                            else_branch: DraftNodeId::new(7),
+                        },
+                    ],
+                    DraftNodeId::new(8),
+                ),
+            }],
+        })
+        .expect("complete nominal rename program");
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    let before_executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile before nominal rename");
+    assert!(before_executable
+        .memory_plan()
+        .type_facts
+        .iter()
+        .any(|fact| matches!(fact.ty, crate::memory_plan::MemoryType::Product(_))));
+    let old = completed.snapshot;
+    let product_identity = old.program.products[0].identity;
+    let product_field_identities: Vec<_> = old.program.products[0]
+        .fields
+        .iter()
+        .map(|field| field.identity)
+        .collect();
+    let enum_id = old.program.enums[0].id;
+    let enum_layout = old.program.enums[0].layout.identity;
+    let variant_ids: Vec<_> = old.program.enums[0]
+        .variants
+        .iter()
+        .map(|variant| variant.id)
+        .collect();
+    let enum_field_id = old.program.enums[0].variants[0].fields[0].id;
+    let node_ids: Vec<_> = old.nodes().iter().map(|node| node.id).collect();
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![
+                Edit::RenameEntity {
+                    entity: pair,
+                    new_name: "tuple".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: left,
+                    new_name: "first".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: right,
+                    new_name: "second".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: choice,
+                    new_name: "selection".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: some,
+                    new_name: "present".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: none,
+                    new_name: "absent".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: value,
+                    new_name: "payload".to_owned(),
+                },
+            ],
+        })
+        .expect("rename nominal declarations and members atomically");
+    assert_eq!(run_i64(&renamed.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    let after_executable =
+        crate::compile_snapshot(&renamed.snapshot).expect("compile after nominal rename");
+    assert_eq!(
+        before_executable.memory_plan().id,
+        after_executable.memory_plan().id
+    );
+    assert_eq!(
+        before_executable.ssa().program().products[0].identity,
+        after_executable.ssa().program().products[0].identity
+    );
+    assert_eq!(
+        before_executable.bytecode().products()[0].identity,
+        after_executable.bytecode().products()[0].identity
+    );
+    for (entity, name) in [
+        (pair, "tuple"),
+        (left, "first"),
+        (right, "second"),
+        (choice, "selection"),
+        (some, "present"),
+        (none, "absent"),
+        (value, "payload"),
+    ] {
+        let header = renamed
+            .snapshot
+            .definition(renamed.snapshot.revision(), entity)
+            .expect("renamed entity remains live");
+        assert_eq!(header.id, entity);
+        assert_eq!(header.name.as_ref(), name);
+        assert!(renamed.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityRenamed { entity: changed, new_name, .. }
+                if *changed == entity && new_name.as_ref() == name
+        )));
+    }
+    assert_eq!(
+        renamed.snapshot.program.products[0].identity,
+        product_identity
+    );
+    assert_eq!(
+        renamed.snapshot.program.products[0]
+            .fields
+            .iter()
+            .map(|field| field.identity)
+            .collect::<Vec<_>>(),
+        product_field_identities
+    );
+    assert_eq!(renamed.snapshot.program.enums[0].id, enum_id);
+    assert_eq!(
+        renamed.snapshot.program.enums[0].layout.identity,
+        enum_layout
+    );
+    assert_eq!(
+        renamed.snapshot.program.enums[0]
+            .variants
+            .iter()
+            .map(|variant| variant.id)
+            .collect::<Vec<_>>(),
+        variant_ids
+    );
+    assert_eq!(
+        renamed.snapshot.program.enums[0].variants[0].fields[0].id,
+        enum_field_id
+    );
+    assert_eq!(
+        renamed
+            .snapshot
+            .entity_type(renamed.snapshot.revision(), pair)
+            .expect("renamed product type")
+            .declared,
+        Some(SemanticType::Product(pair))
+    );
+    assert_eq!(
+        renamed
+            .snapshot
+            .entity_type(renamed.snapshot.revision(), choice)
+            .expect("renamed enum type")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(choice),
+            arguments: Vec::new(),
+        })
+    );
+    for node in node_ids {
+        assert_eq!(renamed.snapshot.node(node).expect("renamed node").id, node);
+    }
+    assert!(renamed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == pair));
+    assert!(renamed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == left));
+    assert!(renamed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == choice));
+    assert!(renamed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == some));
+    assert!(renamed
+        .snapshot
+        .references()
+        .iter()
+        .any(|edge| edge.target == value));
+    assert!(!renamed.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::ReferenceRewired { .. } | SemanticDiffEntry::CallRewired { .. }
+    )));
+    let projection = renamed
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(pair),
+            ProjectionSlice::Entity(left),
+            ProjectionSlice::Entity(choice),
+            ProjectionSlice::Entity(some),
+            ProjectionSlice::Entity(value),
+        ])
+        .expect("renamed nominal projection");
+    for name in ["tuple", "first", "selection", "present", "payload"] {
+        assert!(
+            projection.contains(&format!("name=\"{name}\"")),
+            "{projection}"
+        );
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn nominal_rename_collisions_same_name_and_reserved_names_are_atomic() {
+    let mut workspace = Workspace::empty_deterministic(148).expect("nominal collision workspace");
+    let (pair, left, right) = create_pair(&mut workspace);
+    let (choice, some, none, value) = create_choice(&mut workspace);
+    let before = workspace.current();
+    let cases = [
+        (pair, "pair"),
+        (pair, "choice"),
+        (pair, "i64"),
+        (left, "right"),
+        (choice, "pair"),
+        (choice, "choice"),
+        (some, "none"),
+        (value, "value"),
+    ];
+    for (entity, new_name) in cases {
+        let result = workspace.apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity,
+                new_name: new_name.to_owned(),
+            }],
+        });
+        assert!(result.is_err(), "rename to {new_name} must reject");
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+    }
+
+    let mut control = Workspace::new((*before).clone()).expect("rename allocator control");
+    let create = |revision| Transaction {
+        base_revision: revision,
+        edits: vec![Edit::CreateProduct {
+            name: "allocator-probe".to_owned(),
+            fields: Vec::new(),
+        }],
+    };
+    let control_created = control
+        .apply(create(control.current().revision()))
+        .expect("control product allocation");
+    let retried = workspace
+        .apply(create(workspace.current().revision()))
+        .expect("post-failure product allocation");
+    assert_eq!(
+        entity_named(
+            &control_created.snapshot,
+            EntityKind::Product,
+            "allocator-probe"
+        ),
+        entity_named(&retried.snapshot, EntityKind::Product, "allocator-probe")
+    );
+    assert_eq!(
+        before
+            .definition(before.revision(), right)
+            .expect("old right")
+            .name
+            .as_ref(),
+        "right"
+    );
+    assert_eq!(
+        before
+            .definition(before.revision(), none)
+            .expect("old none")
+            .name
+            .as_ref(),
+        "none"
+    );
+}
+
+#[test]
+fn imported_nominal_match_rename_uses_identity_without_reparse() {
+    let snapshot = importer::import_source_with_namespace(
+        &imported_choice_match_source(),
+        "nominal-rename-match.lkjscript",
+        WorkspaceNamespace::deterministic(147),
+    )
+    .expect("import nominal match rename program");
+    assert_eq!(run_i64(&snapshot), 42);
+    let choice = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":choice"))
+        .expect("imported choice")
+        .id;
+    let some = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant && entity.name.ends_with(":some"))
+        .expect("imported some")
+        .id;
+    let value = snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumField && entity.name.ends_with("value"))
+        .expect("imported value")
+        .id;
+    let match_node = snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("imported match")
+        .id;
+    let before_view = snapshot
+        .match_view(snapshot.revision(), match_node)
+        .expect("imported match view");
+    let old = snapshot.clone();
+    let mut workspace = Workspace::new(snapshot).expect("imported rename workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::RenameEntity {
+                    entity: choice,
+                    new_name: "renamed-choice".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: some,
+                    new_name: "renamed-some".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: value,
+                    new_name: "renamed-value".to_owned(),
+                },
+            ],
+        })
+        .expect("rename imported nominal match");
+    assert_eq!(run_i64(&renamed.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    let after_view = renamed
+        .snapshot
+        .match_view(renamed.snapshot.revision(), match_node)
+        .expect("renamed match view");
+    assert_eq!(before_view.site, after_view.site);
+    assert_eq!(before_view.scrutinee, after_view.scrutinee);
+    assert_eq!(before_view.result, after_view.result);
+    assert_eq!(before_view.arms, after_view.arms);
+    for (entity, name) in [
+        (choice, "renamed-choice"),
+        (some, "renamed-some"),
+        (value, "renamed-value"),
+    ] {
+        assert_eq!(
+            renamed
+                .snapshot
+                .definition(renamed.snapshot.revision(), entity)
+                .expect("renamed imported entity")
+                .name
+                .as_ref(),
+            name
+        );
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
 fn product_deletion_cascades_fields_compacts_dense_ids_and_preserves_survivors() {
     crate::source::reset_parser_invocation_count();
     crate::source::reset_source_load_invocation_count();
@@ -13360,6 +13785,106 @@ fn imported_product_pattern_and_value_survive_earlier_product_compaction() {
 }
 
 #[test]
+fn rename_and_earlier_nominal_deletion_share_identity_reconciliation_and_compaction() {
+    let source = concat!(
+        "product/\nname/\nremove-product\n/name\nfields/\n/fields\n/product\n",
+        "product/\nname/\npair\n/name\nfields/\n",
+        "field/\nname/\nleft\n/name\ntype/\nbool\n/type\n/field\n",
+        "field/\nname/\nright\n/name\ntype/\nbool\n/type\n/field\n/fields\n/product\n",
+        "enum/\nname/\nremove-enum\n/name\nvariants/\nvariant/\nname/\nold\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\nselected\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "match/\nproduct-value/\npair\n",
+        "field/\nleft\ntrue\n/field\nfield/\nright\nfalse\n/field\n/product-value\n",
+        "arms/\narm/\nproduct-pattern/\ntype/\nproduct\npair\n/type\nfields/\n",
+        "product-field-pattern/\nname/\nleft\n/name\nwildcard/\n/wildcard\n/product-field-pattern\n",
+        "product-field-pattern/\nname/\nright\n/name\nwildcard/\n/wildcard\n/product-field-pattern\n",
+        "/fields\n/product-pattern\n42\n/arm\n/arms\n/match\n/main\n",
+    );
+    let snapshot = importer::import_source_with_namespace(
+        source,
+        "nominal-rename-compaction.lkjscript",
+        WorkspaceNamespace::deterministic(159),
+    )
+    .expect("import nominal rename compaction program");
+    assert_eq!(run_i64(&snapshot), 42);
+    let find = |kind, suffix: &str| {
+        snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.kind == kind && entity.name.ends_with(suffix))
+            .unwrap_or_else(|| panic!("missing {kind:?} ending in {suffix}"))
+            .id
+    };
+    let remove_product = find(EntityKind::Product, ":remove-product");
+    let pair = find(EntityKind::Product, ":pair");
+    let left = find(EntityKind::ProductField, "left");
+    let remove_enum = find(EntityKind::Enum, ":remove-enum");
+    let choice = find(EntityKind::Enum, ":choice");
+    let selected = find(EntityKind::EnumVariant, ":selected");
+    let old = snapshot.clone();
+    let mut workspace = Workspace::new(snapshot).expect("rename compaction workspace");
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let changed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![
+                Edit::RenameEntity {
+                    entity: pair,
+                    new_name: "renamed-pair".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: left,
+                    new_name: "renamed-left".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: choice,
+                    new_name: "renamed-choice".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: selected,
+                    new_name: "renamed-selected".to_owned(),
+                },
+                Edit::DeleteEntity {
+                    entity: remove_product,
+                },
+                Edit::DeleteEntity {
+                    entity: remove_enum,
+                },
+            ],
+        })
+        .expect("rename survivors and delete earlier nominals atomically");
+    assert_eq!(run_i64(&changed.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    assert_eq!(changed.snapshot.program.products[0].id.raw(), 0);
+    let crate::hir::MatchPattern::Product { product, .. } =
+        &changed.snapshot.program.match_plans[0].arms[0].pattern
+    else {
+        panic!("retained product pattern changed kind")
+    };
+    assert_eq!(product.raw(), 0);
+    for (entity, name) in [
+        (pair, "renamed-pair"),
+        (left, "renamed-left"),
+        (choice, "renamed-choice"),
+        (selected, "renamed-selected"),
+    ] {
+        assert_eq!(
+            changed
+                .snapshot
+                .definition(changed.snapshot.revision(), entity)
+                .expect("renamed compacted entity")
+                .name
+                .as_ref(),
+            name
+        );
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
 fn source_free_nominal_declarations_publish_stable_children_types_and_dependencies() {
     let mut workspace = Workspace::empty_deterministic(50).expect("empty workspace");
     let (pair, left, right) = create_pair(&mut workspace);
@@ -14520,6 +15045,94 @@ fn source_free_decision_product_match(
         })
         .expect("fill decision product match");
     (workspace, product, flag, key, selected)
+}
+
+#[test]
+fn product_and_field_rename_preserve_nested_pattern_selection_and_runtime() {
+    let (mut workspace, product, flag, key, selected) =
+        source_free_decision_product_match(245, false);
+    let old = workspace.current();
+    assert_eq!(run_i64(&old), 42);
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![
+                Edit::RenameEntity {
+                    entity: product,
+                    new_name: "renamed-decision".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: flag,
+                    new_name: "renamed-flag".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: key,
+                    new_name: "renamed-key".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: selected,
+                    new_name: "renamed-selected".to_owned(),
+                },
+            ],
+        })
+        .expect("rename matched product and fields");
+    assert_eq!(run_i64(&renamed.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    let plan = &renamed.snapshot.program.match_plans[0];
+    for arm in &plan.arms {
+        let crate::hir::MatchPattern::Product {
+            product: selected_product,
+            fields,
+            ..
+        } = &arm.pattern
+        else {
+            panic!("renamed product pattern changed kind")
+        };
+        assert_eq!(*selected_product, renamed.snapshot.program.products[0].id);
+        assert_eq!(
+            fields
+                .iter()
+                .map(|field| field.field_index)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+    }
+    let view = renamed
+        .snapshot
+        .match_view(
+            renamed.snapshot.revision(),
+            renamed
+                .snapshot
+                .nodes()
+                .iter()
+                .find(|node| node.kind == NodeKind::Match)
+                .expect("renamed product match")
+                .id,
+        )
+        .expect("renamed product match view");
+    for arm in view.arms {
+        let MatchPatternKindView::Product {
+            product: viewed,
+            fields,
+        } = &arm
+            .patterns
+            .iter()
+            .find(|pattern| matches!(pattern.kind, MatchPatternKindView::Product { .. }))
+            .expect("renamed product pattern view")
+            .kind
+        else {
+            unreachable!("selected product view")
+        };
+        assert_eq!(*viewed, product);
+        assert_eq!(
+            fields.iter().map(|field| field.field).collect::<Vec<_>>(),
+            vec![Some(flag), Some(key), Some(selected)]
+        );
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
 
 #[test]
@@ -18546,23 +19159,102 @@ fn canonical_entity_path(snapshot: &WorkspaceSnapshot, mut entity: EntityId) -> 
     parts.join("/")
 }
 
-fn canonical_type_text(snapshot: &WorkspaceSnapshot, ty: &crate::Type) -> String {
-    let mut display = ty.to_string();
-    for product in &snapshot.program.products {
-        let name = product.name.rsplit(':').next().unwrap_or(&product.name);
-        display = display.replace(&product.name, name);
+fn canonical_type_text(snapshot: &WorkspaceSnapshot, root: &crate::Type) -> String {
+    enum Work<'a> {
+        Visit(&'a crate::Type),
+        Enum(&'a str, usize),
+        List,
+        Function(usize),
+        Forall(&'a [String]),
     }
-    for enumeration in &snapshot.program.enums {
-        let name = enumeration
-            .name
-            .rsplit(':')
-            .next()
-            .unwrap_or(&enumeration.name);
-        display = display.replace(&enumeration.name, name);
-    }
-    display
-}
 
+    let mut work = vec![Work::Visit(root)];
+    let mut completed = Vec::new();
+    while let Some(item) = work.pop() {
+        match item {
+            Work::Visit(ty) => match ty {
+                crate::Type::Never
+                | crate::Type::Unit
+                | crate::Type::Bool
+                | crate::Type::I64
+                | crate::Type::F64
+                | crate::Type::Str
+                | crate::Type::Bytes
+                | crate::Type::ByteVector
+                | crate::Type::ByteSlice
+                | crate::Type::ByteSliceMut
+                | crate::Type::Path
+                | crate::Type::Capability(_)
+                | crate::Type::Symbol
+                | crate::Type::Resource(_)
+                | crate::Type::Param(_) => completed.push(ty.to_string()),
+                crate::Type::Product(id) => {
+                    let definition = id
+                        .index()
+                        .and_then(|index| snapshot.program.products.get(index))
+                        .filter(|definition| definition.id == *id)
+                        .expect("canonical product type");
+                    completed.push(
+                        definition
+                            .name
+                            .rsplit(':')
+                            .next()
+                            .unwrap_or(&definition.name)
+                            .to_owned(),
+                    );
+                }
+                crate::Type::Enum { id, arguments } => {
+                    let definition = snapshot
+                        .program
+                        .enums
+                        .iter()
+                        .find(|definition| definition.id == *id)
+                        .expect("canonical enum type");
+                    work.push(Work::Enum(&definition.name, arguments.len()));
+                    work.extend(arguments.iter().rev().map(Work::Visit));
+                }
+                crate::Type::List(inner) => {
+                    work.push(Work::List);
+                    work.push(Work::Visit(inner));
+                }
+                crate::Type::Fn { params, ret } => {
+                    work.push(Work::Function(params.len()));
+                    work.push(Work::Visit(ret));
+                    work.extend(params.iter().rev().map(Work::Visit));
+                }
+                crate::Type::Forall { vars, body } => {
+                    work.push(Work::Forall(vars));
+                    work.push(Work::Visit(body));
+                }
+            },
+            Work::Enum(name, count) => {
+                let split = completed.len() - count;
+                let arguments = completed.split_off(split);
+                let name = name.rsplit(':').next().unwrap_or(name);
+                completed.push(if arguments.is_empty() {
+                    name.to_owned()
+                } else {
+                    format!("{name} {}", arguments.join(" "))
+                });
+            }
+            Work::List => {
+                let inner = completed.pop().expect("canonical list child");
+                completed.push(format!("list {inner}"));
+            }
+            Work::Function(count) => {
+                let result = completed.pop().expect("canonical function result");
+                let split = completed.len() - count;
+                let parameters = completed.split_off(split);
+                completed.push(format!("fn ({}) -> {result}", parameters.join(", ")));
+            }
+            Work::Forall(vars) => {
+                let body = completed.pop().expect("canonical forall body");
+                completed.push(format!("forall {}. {body}", vars.join(", ")));
+            }
+        }
+    }
+    completed.pop().expect("canonical type result")
+}
 fn canonical_workspace_observation(snapshot: &WorkspaceSnapshot) -> CanonicalWorkspaceObservation {
     let mut entities = snapshot
         .entities()

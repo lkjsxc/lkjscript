@@ -329,14 +329,9 @@ fn memory_type_inner(ty: &Type) -> MemoryType {
         Type::ByteSliceMut => MemoryType::ByteSliceMut,
         Type::Symbol => MemoryType::Symbol,
         Type::Resource(kind) => MemoryType::Resource(*kind),
-        Type::Product(name) => MemoryType::Product(name.clone()),
-        Type::Enum {
-            id,
-            name,
-            arguments,
-        } => MemoryType::Enum {
+        Type::Product(id) => MemoryType::Product(*id),
+        Type::Enum { id, arguments } => MemoryType::Enum {
             id: id.bytes(),
-            name: name.clone(),
             arguments: arguments.iter().map(memory_type).collect(),
         },
         Type::Param(name) => MemoryType::TypeParameter(name.clone()),
@@ -598,7 +593,7 @@ fn execution_cutover(ty: &Type) -> Option<MemoryExecutionCutover> {
     match ty {
         Type::Str => Some(MemoryExecutionCutover::StructuralString),
         Type::Path => Some(MemoryExecutionCutover::StructuralPath),
-        Type::Product(name) => Some(MemoryExecutionCutover::Product(name.clone())),
+        Type::Product(id) => Some(MemoryExecutionCutover::Product(*id)),
         Type::Enum { id, arguments, .. } => Some(MemoryExecutionCutover::Enum {
             id: id.bytes(),
             arguments: arguments.iter().map(memory_type).collect(),

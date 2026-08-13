@@ -2,7 +2,7 @@ impl CleanupPlan {
     pub(in crate::ssa) fn new(
         plan: &HirMemoryPlan,
         function: MemoryFunctionId,
-        products: &HashMap<String, ProductId>,
+        products: &HashMap<crate::hir::ProductId, ProductId>,
         structural: &StructuralMemoryMetadata,
     ) -> Result<Self> {
         let function_plan = plan

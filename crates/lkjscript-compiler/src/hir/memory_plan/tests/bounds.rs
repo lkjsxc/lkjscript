@@ -106,7 +106,7 @@ fn generated_structural_parameter_program(count: u64) -> Result<hir::Program> {
     let parameter_types: Vec<_> = program
         .products
         .iter()
-        .map(|product| hir::Type::Product(product.name.clone()))
+        .map(|product| hir::Type::Product(product.id))
         .collect();
     let parameter_ids: Vec<_> = (0_u64..)
         .take(parameter_types.len())

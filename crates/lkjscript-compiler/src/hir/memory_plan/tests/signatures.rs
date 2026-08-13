@@ -11,7 +11,7 @@ fn function_signatures_and_direct_immutable_borrows_are_exact() -> Result<()> {
         (hir::Type::Str, text("string"), Vec::new()),
         (hir::Type::Path, fake(hir::Type::Path), Vec::new()),
         (
-            hir::Type::Product(aggregate.name.clone()),
+            hir::Type::Product(aggregate.id),
             product_value(&aggregate, vec![text("aggregate")]),
             vec![aggregate.clone()],
         ),
@@ -125,7 +125,7 @@ fn destinations_record_field_order_active_payload_and_reverse_abort() -> Result<
             bytes(),
         ],
     );
-    let ty = hir::Type::Product(record.name.clone());
+    let ty = hir::Type::Product(record.id);
     let plan = derive(&program(ty, body, vec![record.clone()], Vec::new()))?;
     let destination = plan
         .destinations
@@ -137,7 +137,7 @@ fn destinations_record_field_order_active_payload_and_reverse_abort() -> Result<
     assert_eq!(destination.kind, MemoryDestinationKind::CutoverRequired);
     assert_eq!(
         destination.execution_cutover,
-        Some(MemoryExecutionCutover::Product(record.name))
+        Some(MemoryExecutionCutover::Product(record.id))
     );
     assert_eq!(
         destination

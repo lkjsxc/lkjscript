@@ -6,10 +6,9 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-1. **Select one dependency-closed direct nominal-member mutation vertical.** Current evidence names
-   identity-preserving rename for products, enums, variants, and fields, but implementation still
-   requires one concrete operation, focused failing evidence, and a decision about redundant private
-   nominal display names. Do not combine rename with field/variant addition, deletion, or movement.
+No new implementation vertical is selected. Identity-preserving direct rename for products, product
+fields, enums, variants, and enum fields is complete; select the next item only from a concrete
+current consumer and focused failing evidence.
 
 ## Next
 

@@ -98,9 +98,9 @@ mod tests {
     use lkjscript_compiler::{
         compile_path, compile_snapshot, compile_source,
         workspace::{
-            DraftBindingId, DraftBindingRef, DraftNode, DraftNodeId, Edit, ExpressionDraft,
-            LocalDraft, NodeKind, SemanticChild, SemanticOwner, SemanticType, Transaction,
-            Workspace,
+            DraftBindingId, DraftBindingRef, DraftFieldValue, DraftNode, DraftNodeId, Edit,
+            ExpressionDraft, LocalDraft, NodeKind, ProductFieldDraft, SemanticChild, SemanticOwner,
+            SemanticType, Transaction, Workspace,
         },
         Operation,
     };
@@ -314,6 +314,104 @@ mod tests {
             true,
         )
         .expect("execute product path");
+        assert_eq!(execution.path, ExecutionPath::BaselineNative);
+        assert!(execution.native_entered);
+        assert_eq!(execution.vm_executions, 0);
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)
+        ));
+    }
+
+    #[test]
+    fn renamed_product_executes_once_in_baseline_native() {
+        let mut workspace = Workspace::empty().expect("nominal rename native workspace");
+        let created = workspace
+            .apply(Transaction {
+                base_revision: workspace.current().revision(),
+                edits: vec![
+                    Edit::CreateProduct {
+                        name: "record".to_owned(),
+                        fields: vec![ProductFieldDraft {
+                            name: "value".to_owned(),
+                            ty: SemanticType::I64,
+                        }],
+                    },
+                    Edit::CreateMain {
+                        return_type: SemanticType::I64,
+                    },
+                ],
+            })
+            .expect("create native rename product");
+        let product = created
+            .snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.name.as_ref() == "record")
+            .expect("native rename product")
+            .id;
+        let field = created
+            .snapshot
+            .entities()
+            .iter()
+            .find(|entity| entity.name.as_ref() == "value")
+            .expect("native rename field")
+            .id;
+        let hole = created
+            .snapshot
+            .holes()
+            .next()
+            .expect("native rename hole")
+            .id;
+        let completed = workspace
+            .apply(Transaction {
+                base_revision: created.snapshot.revision(),
+                edits: vec![Edit::FillHole {
+                    hole,
+                    draft: ExpressionDraft::new(
+                        vec![
+                            DraftNode::I64(42),
+                            DraftNode::ProductValue {
+                                product,
+                                fields: vec![DraftFieldValue {
+                                    field,
+                                    value: DraftNodeId::new(0),
+                                }],
+                            },
+                            DraftNode::ProductField {
+                                field,
+                                value: DraftNodeId::new(1),
+                            },
+                        ],
+                        DraftNodeId::new(2),
+                    ),
+                }],
+            })
+            .expect("complete native rename product");
+        let renamed = workspace
+            .apply(Transaction {
+                base_revision: completed.snapshot.revision(),
+                edits: vec![
+                    Edit::RenameEntity {
+                        entity: product,
+                        new_name: "renamed-record".to_owned(),
+                    },
+                    Edit::RenameEntity {
+                        entity: field,
+                        new_name: "renamed-value".to_owned(),
+                    },
+                ],
+            })
+            .expect("rename native product and field");
+        let program = compile_snapshot(&renamed.snapshot).expect("compile renamed native product");
+        let execution = execute(
+            &program,
+            &ExecutionInputs::default(),
+            &ExecutionPolicy::unrestricted(),
+            JitConfig::default(),
+            true,
+        )
+        .expect("execute renamed product path");
         assert_eq!(execution.path, ExecutionPath::BaselineNative);
         assert!(execution.native_entered);
         assert_eq!(execution.vm_executions, 0);

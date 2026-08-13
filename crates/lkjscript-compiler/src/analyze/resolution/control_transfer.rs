@@ -107,7 +107,7 @@ impl Resolver<'_> {
         if name != "type" {
             return Err(self.error("loop expects type/ result first"));
         }
-        let result_type = parse_type_form(atoms)
+        let result_type = parse_type_form(self.analyzer, atoms)
             .map_err(|message| self.error(format!("loop result: {message}")))?;
         if result_type.contains_never() {
             return Err(self.error("Never is not a loop exit payload type"));

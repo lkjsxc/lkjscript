@@ -659,13 +659,14 @@ fn stage(
                         "entity is renamed more than once in one transaction",
                     )));
                 }
-                validate_name(&new_name)?;
                 let header = base.workspace_entity(entity)?;
-                if matches!(
+                if !matches!(
                     header.kind,
-                    EntityKind::Main
-                        | EntityKind::BuiltinOperation
-                        | EntityKind::TypeParameter
+                    EntityKind::Function
+                        | EntityKind::Parameter
+                        | EntityKind::ImmutableLocal
+                        | EntityKind::StaticBytesLocal
+                        | EntityKind::MutableLocal
                         | EntityKind::Product
                         | EntityKind::ProductField
                         | EntityKind::Enum
@@ -674,9 +675,15 @@ fn stage(
                 ) {
                     return Err(WorkspaceError::unsupported(
                         "rename-entity",
-                        "main, builtin operations, and nominal declarations or members cannot be renamed",
+                        "this entity kind cannot be renamed",
                     ));
                 }
+                if header.name.as_ref() == new_name {
+                    return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                        "rename must change the entity name",
+                    )));
+                }
+                validate_name(&new_name)?;
                 let address = base
                     .indexes
                     .entity_lookup
@@ -949,6 +956,18 @@ fn stage(
     let compaction =
         super::compaction::compact(&mut program, &deletions.products, &deletions.enum_vectors)
             .map_err(WorkspaceError::from_core)?;
+    for hole in &mut holes {
+        hole.expected_internal = hole
+            .expected_internal
+            .try_remap_products(&compaction.products)
+            .map_err(WorkspaceError::from_core)?;
+    }
+    for reference in &mut unresolved_value_references {
+        reference.expected_internal = reference
+            .expected_internal
+            .try_remap_products(&compaction.products)
+            .map_err(WorkspaceError::from_core)?;
+    }
     #[cfg(test)]
     record_transaction_measurement(|measurement| {
         measurement.compaction = compaction_started.elapsed();
@@ -2080,20 +2099,6 @@ fn reject_surviving_deleted_dependencies(
     if deletions.requested.is_empty() {
         return Ok(());
     }
-    let mut product_names = HashMap::new();
-    product_names
-        .try_reserve(program.products.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("product name lookup allocation failed")))?;
-    for product in &program.products {
-        if product_names
-            .insert(product.name.as_str(), product.id)
-            .is_some()
-        {
-            return Err(WorkspaceError::Validation(Arc::from(
-                "product declaration name is duplicated",
-            )));
-        }
-    }
     let mut blockers = Vec::new();
 
     if let Some(main) = &program.main {
@@ -2110,7 +2115,6 @@ fn reject_surviving_deleted_dependencies(
                     &owner,
                     "callable signature type",
                     deletions,
-                    &product_names,
                     &mut blockers,
                 )?;
             }
@@ -2119,7 +2123,6 @@ fn reject_surviving_deleted_dependencies(
                 &main.body,
                 &owner,
                 deletions,
-                &product_names,
                 &mut blockers,
             )?;
         }
@@ -2143,7 +2146,6 @@ fn reject_surviving_deleted_dependencies(
             &owner,
             "callable signature type",
             deletions,
-            &product_names,
             &mut blockers,
         )?;
         collect_expression_deletion_blockers(
@@ -2151,7 +2153,6 @@ fn reject_surviving_deleted_dependencies(
             &function.body,
             &owner,
             deletions,
-            &product_names,
             &mut blockers,
         )?;
     }
@@ -2174,7 +2175,6 @@ fn reject_surviving_deleted_dependencies(
                 &owner,
                 "product field type",
                 deletions,
-                &product_names,
                 &mut blockers,
             )?;
         }
@@ -2202,7 +2202,6 @@ fn reject_surviving_deleted_dependencies(
                 &owner,
                 "enum field type",
                 deletions,
-                &product_names,
                 &mut blockers,
             )?;
         }
@@ -2275,7 +2274,6 @@ fn collect_type_deletion_blockers(
     owner: &DependencyOwner,
     category: &'static str,
     deletions: &DeletionPlan,
-    product_names: &HashMap<&str, lkjscript_core::ProductId>,
     blockers: &mut Vec<DependencyBlocker>,
 ) -> Result<(), WorkspaceError> {
     let mut pending = Vec::new();
@@ -2285,11 +2283,9 @@ fn collect_type_deletion_blockers(
     pending.push(root);
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Product(name) => {
-                if let Some(product) = product_names.get(name.as_str()) {
-                    if let Some(requested) = deletions.product_requests.get(product) {
-                        push_deletion_blocker(blockers, *requested, owner, category)?;
-                    }
+            Type::Product(id) => {
+                if let Some(requested) = deletions.product_requests.get(id) {
+                    push_deletion_blocker(blockers, *requested, owner, category)?;
                 }
             }
             Type::Enum { id, arguments, .. } => {
@@ -2334,7 +2330,6 @@ fn collect_expression_deletion_blockers(
     root: &Expr,
     owner: &DependencyOwner,
     deletions: &DeletionPlan,
-    product_names: &HashMap<&str, lkjscript_core::ProductId>,
     blockers: &mut Vec<DependencyBlocker>,
 ) -> Result<(), WorkspaceError> {
     let mut pending = Vec::new();
@@ -2349,7 +2344,6 @@ fn collect_expression_deletion_blockers(
             owner,
             "expression type",
             deletions,
-            product_names,
             blockers,
         )?;
         match &expression.kind {
@@ -2388,7 +2382,6 @@ fn collect_expression_deletion_blockers(
                             owner,
                             "generic substitution type",
                             deletions,
-                            product_names,
                             blockers,
                         )?;
                     }
@@ -2398,7 +2391,6 @@ fn collect_expression_deletion_blockers(
                             owner,
                             "trait witness type",
                             deletions,
-                            product_names,
                             blockers,
                         )?;
                         if let crate::hir::TraitWitnessKind::Explicit(implementation) = witness.kind
@@ -2424,7 +2416,6 @@ fn collect_expression_deletion_blockers(
                 owner,
                 "resolved operation signature",
                 deletions,
-                product_names,
                 blockers,
             )?,
             ExprKind::SetLocal { target, .. } => collect_binding_deletion_blocker(
@@ -2456,14 +2447,7 @@ fn collect_expression_deletion_blockers(
                     WorkspaceError::Host(Arc::from("match dependency set allocation failed"))
                 })?;
                 match_plans.insert(*plan);
-                collect_match_plan_deletion_blockers(
-                    program,
-                    *plan,
-                    owner,
-                    deletions,
-                    product_names,
-                    blockers,
-                )?;
+                collect_match_plan_deletion_blockers(program, *plan, owner, deletions, blockers)?;
             }
             ExprKind::Match { .. } | ExprKind::MatchUnreachable { .. } => {}
             _ => {}
@@ -2491,7 +2475,6 @@ fn collect_match_plan_deletion_blockers(
     id: crate::hir::MatchPlanId,
     owner: &DependencyOwner,
     deletions: &DeletionPlan,
-    product_names: &HashMap<&str, lkjscript_core::ProductId>,
     blockers: &mut Vec<DependencyBlocker>,
 ) -> Result<(), WorkspaceError> {
     let plan = id
@@ -2504,7 +2487,6 @@ fn collect_match_plan_deletion_blockers(
         owner,
         "match scrutinee type",
         deletions,
-        product_names,
         blockers,
     )?;
     collect_type_deletion_blockers(
@@ -2512,7 +2494,6 @@ fn collect_match_plan_deletion_blockers(
         owner,
         "match result type",
         deletions,
-        product_names,
         blockers,
     )?;
     for arm in &plan.arms {
@@ -2521,10 +2502,9 @@ fn collect_match_plan_deletion_blockers(
             owner,
             "match arm type",
             deletions,
-            product_names,
             blockers,
         )?;
-        collect_pattern_deletion_blockers(&arm.pattern, owner, deletions, product_names, blockers)?;
+        collect_pattern_deletion_blockers(&arm.pattern, owner, deletions, blockers)?;
     }
     for test in &plan.tests {
         if let crate::hir::MatchTestKind::Variant { enum_id, .. } = test.kind {
@@ -2539,14 +2519,7 @@ fn collect_match_plan_deletion_blockers(
         .map(|item| &item.local)
         .chain(plan.bindings.iter().map(|item| &item.local))
     {
-        collect_type_deletion_blockers(
-            &local.ty,
-            owner,
-            "match local type",
-            deletions,
-            product_names,
-            blockers,
-        )?;
+        collect_type_deletion_blockers(&local.ty, owner, "match local type", deletions, blockers)?;
     }
     Ok(())
 }
@@ -2555,7 +2528,6 @@ fn collect_pattern_deletion_blockers(
     root: &crate::hir::MatchPattern,
     owner: &DependencyOwner,
     deletions: &DeletionPlan,
-    product_names: &HashMap<&str, lkjscript_core::ProductId>,
     blockers: &mut Vec<DependencyBlocker>,
 ) -> Result<(), WorkspaceError> {
     let mut pending = Vec::new();
@@ -2565,14 +2537,7 @@ fn collect_pattern_deletion_blockers(
     pending.push(root);
     while let Some(pattern) = pending.pop() {
         let ty = pattern.ty();
-        collect_type_deletion_blockers(
-            &ty,
-            owner,
-            "match pattern type",
-            deletions,
-            product_names,
-            blockers,
-        )?;
+        collect_type_deletion_blockers(&ty, owner, "match pattern type", deletions, blockers)?;
         match pattern {
             crate::hir::MatchPattern::Variant {
                 enum_id, fields, ..
@@ -2590,7 +2555,6 @@ fn collect_pattern_deletion_blockers(
                             owner,
                             "match projection type",
                             deletions,
-                            product_names,
                             blockers,
                         )?;
                     }
@@ -2613,7 +2577,6 @@ fn collect_pattern_deletion_blockers(
                             owner,
                             "match projection type",
                             deletions,
-                            product_names,
                             blockers,
                         )?;
                     }
@@ -4034,27 +3997,34 @@ fn type_contains_enum(ty: &Type) -> bool {
 }
 
 fn declaration_name_exists(program: &SemanticProgram, name: &str) -> bool {
-    function_name_conflicts(program, name, None)
+    global_name_conflicts(program, name, None)
 }
 
-fn function_name_conflicts(
+fn global_name_conflicts(
     program: &SemanticProgram,
     name: &str,
-    except: Option<crate::hir::BindingId>,
+    except: Option<EntityAddress>,
 ) -> bool {
     name == "main"
         || crate::hir::Operation::from_name(name).is_some()
         || crate::analyze::is_reserved_semantic_name(name)
         || program.bindings.iter().any(|binding| {
             binding.kind == BindingKind::Function
-                && Some(binding.id) != except
+                && except != Some(EntityAddress::Binding(binding.id.raw()))
                 && binding.name == name
         })
-        || program.products.iter().any(|product| product.name == name)
+        || program.products.iter().any(|product| {
+            except != Some(EntityAddress::Product(product.id.raw())) && product.name == name
+        })
         || program
             .enums
             .iter()
-            .any(|enumeration| enumeration.name == name)
+            .enumerate()
+            .any(|(index, enumeration)| {
+                let raw = u64::try_from(index).ok();
+                raw.is_none_or(|raw| except != Some(EntityAddress::Enum(raw)))
+                    && enumeration.name == name
+            })
         || program
             .traits
             .iter()
@@ -4067,39 +4037,155 @@ fn rename_entity(
     kind: EntityKind,
     new_name: &str,
 ) -> Result<(), WorkspaceError> {
-    if !matches!(
-        kind,
-        EntityKind::Function
-            | EntityKind::Parameter
-            | EntityKind::ImmutableLocal
-            | EntityKind::StaticBytesLocal
-            | EntityKind::MutableLocal
-    ) {
-        return Err(WorkspaceError::unsupported(
-            "rename-entity",
-            "this declaration kind is not in the initial editing vertical",
-        ));
+    match (address, kind) {
+        (EntityAddress::Binding(raw), kind)
+            if matches!(
+                kind,
+                EntityKind::Function
+                    | EntityKind::Parameter
+                    | EntityKind::ImmutableLocal
+                    | EntityKind::StaticBytesLocal
+                    | EntityKind::MutableLocal
+            ) =>
+        {
+            let index = host_index(raw, "entity")?;
+            program
+                .bindings
+                .get(index)
+                .filter(|binding| binding.id.raw() == raw)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
+            if kind == EntityKind::Function
+                && global_name_conflicts(program, new_name, Some(address))
+            {
+                return Err(global_name_collision());
+            }
+            replace_name(&mut program.bindings[index].name, new_name);
+        }
+        (EntityAddress::Product(raw), EntityKind::Product) => {
+            let index = host_index(raw, "product")?;
+            program
+                .products
+                .get(index)
+                .filter(|definition| definition.id.raw() == raw)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+            if global_name_conflicts(program, new_name, Some(address)) {
+                return Err(global_name_collision());
+            }
+            replace_name(&mut program.products[index].name, new_name);
+        }
+        (EntityAddress::ProductField { product, field }, EntityKind::ProductField) => {
+            let product = program
+                .products
+                .get_mut(host_index(product, "product")?)
+                .filter(|definition| definition.id.raw() == product)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
+            let field_index = host_index(field, "product field")?;
+            if product
+                .fields
+                .iter()
+                .enumerate()
+                .any(|(index, sibling)| index != field_index && sibling.name == new_name)
+            {
+                return Err(member_name_collision("product field"));
+            }
+            let target = product
+                .fields
+                .get_mut(field_index)
+                .filter(|target| target.source_order == field)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
+            replace_name(&mut target.name, new_name);
+        }
+        (EntityAddress::Enum(raw), EntityKind::Enum) => {
+            let index = host_index(raw, "enum")?;
+            if program.enums.get(index).is_none() {
+                return Err(WorkspaceError::StaleIdentity(Arc::from("enum")));
+            }
+            if global_name_conflicts(program, new_name, Some(address)) {
+                return Err(global_name_collision());
+            }
+            replace_name(&mut program.enums[index].name, new_name);
+        }
+        (
+            EntityAddress::EnumVariant {
+                enumeration,
+                variant,
+            },
+            EntityKind::EnumVariant,
+        ) => {
+            let definition = program
+                .enums
+                .get_mut(host_index(enumeration, "enum")?)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
+            let variant_index = host_index(variant, "enum variant")?;
+            if definition
+                .variants
+                .iter()
+                .enumerate()
+                .any(|(index, sibling)| index != variant_index && sibling.name == new_name)
+            {
+                return Err(member_name_collision("enum variant"));
+            }
+            let target = definition
+                .variants
+                .get_mut(variant_index)
+                .filter(|target| target.source_order == variant)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+            replace_name(&mut target.name, new_name);
+        }
+        (
+            EntityAddress::EnumField {
+                enumeration,
+                variant,
+                field,
+            },
+            EntityKind::EnumField,
+        ) => {
+            let variant_index = host_index(variant, "enum variant")?;
+            let selected = program
+                .enums
+                .get_mut(host_index(enumeration, "enum")?)
+                .and_then(|definition| definition.variants.get_mut(variant_index))
+                .filter(|selected| selected.source_order == variant)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
+            let field_index = host_index(field, "enum field")?;
+            if selected
+                .fields
+                .iter()
+                .enumerate()
+                .any(|(index, sibling)| index != field_index && sibling.name == new_name)
+            {
+                return Err(member_name_collision("enum field"));
+            }
+            let target = selected
+                .fields
+                .get_mut(field_index)
+                .filter(|target| target.source_order == field)
+                .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
+            replace_name(&mut target.name, new_name);
+        }
+        _ => {
+            return Err(WorkspaceError::unsupported(
+                "rename-entity",
+                "this entity kind cannot be renamed",
+            ))
+        }
     }
-    let EntityAddress::Binding(raw) = address else {
-        return Err(WorkspaceError::StaleIdentity(Arc::from("entity")));
-    };
-    let index =
-        usize::try_from(raw).map_err(|_| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
-    let binding = program
-        .bindings
-        .get(index)
-        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("entity")))?;
-    let binding_id = binding.id;
-    let is_function = matches!(binding.kind, BindingKind::Function);
-    if is_function && function_name_conflicts(program, new_name, Some(binding_id)) {
-        return Err(WorkspaceError::InvalidTransaction(Arc::from(
-            "global declaration name already exists or is reserved",
-        )));
-    }
-    let binding = &mut program.bindings[index];
-    binding.name.clear();
-    binding.name.push_str(new_name);
     Ok(())
+}
+
+fn replace_name(name: &mut String, replacement: &str) {
+    name.clear();
+    name.push_str(replacement);
+}
+
+fn global_name_collision() -> WorkspaceError {
+    WorkspaceError::InvalidTransaction(Arc::from(
+        "global declaration name already exists or is reserved",
+    ))
+}
+
+fn member_name_collision(kind: &str) -> WorkspaceError {
+    WorkspaceError::InvalidTransaction(Arc::from(format!("{kind} name collides with a sibling")))
 }
 
 fn unresolved_introduction_context(
@@ -4602,7 +4688,6 @@ struct DraftDefinitionEvent {
 
 struct LoweringState {
     root_places: HashMap<EntityAddress, u64>,
-    product_names: HashMap<String, lkjscript_core::ProductId>,
     implementation_index:
         HashMap<(crate::hir::TraitId, lkjscript_core::ProductId), crate::hir::ImplId>,
     next_loan: u64,
@@ -4645,15 +4730,6 @@ impl LoweringState {
                 crate::hir::for_each_expression_child(expression, &mut |child| pending.push(child));
             }
         }
-        let mut product_names = HashMap::new();
-        product_names
-            .try_reserve(program.products.len())
-            .map_err(|_| {
-                WorkspaceError::Host(Arc::from("generic product index allocation failed"))
-            })?;
-        for product in &program.products {
-            product_names.insert(product.name.clone(), product.id);
-        }
         let mut implementation_index = HashMap::new();
         implementation_index
             .try_reserve(program.implementations.len())
@@ -4675,7 +4751,6 @@ impl LoweringState {
         }
         Ok(Self {
             root_places: HashMap::new(),
-            product_names,
             implementation_index,
             next_loan,
             next_loop,
@@ -5295,7 +5370,6 @@ fn lower_draft(
                     traits: &program.traits,
                     products: &program.products,
                     implementations: &program.implementations,
-                    product_names: &lowering.product_names,
                     implementation_index: &lowering.implementation_index,
                 };
                 let exact = crate::generic_call::resolve_exact(
@@ -5937,7 +6011,6 @@ impl ResolvedPatternAggregate {
 }
 
 struct ResolvedPatternField {
-    name: String,
     field_index: u64,
     ty: Type,
     projection: Option<crate::hir::MatchLocal>,
@@ -6018,7 +6091,7 @@ fn lower_pattern_draft(
                     .products
                     .get(host_index(product_index, "product")?)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product")))?;
-                require_pattern_type(&ty, &Type::Product(definition.name.clone()), "product")?;
+                require_pattern_type(&ty, &Type::Product(definition.id), "product")?;
                 if fields.len() != definition.fields.len() {
                     return Err(WorkspaceError::InvalidDraft(Arc::from(
                         "product pattern must provide exactly one nested pattern per field",
@@ -6077,7 +6150,6 @@ fn lower_pattern_draft(
                         WorkspaceError::InvalidDraft(Arc::from("product pattern field is missing"))
                     })?;
                     resolved_fields.push(ResolvedPatternField {
-                        name: declared.name.clone(),
                         field_index: declared.source_order,
                         ty: declared.ty.clone(),
                         projection: None,
@@ -6118,7 +6190,6 @@ fn lower_pattern_draft(
                 }
                 let expected_enum = Type::Enum {
                     id: definition.id,
-                    name: definition.name.clone(),
                     arguments: Vec::new(),
                 };
                 require_pattern_type(&ty, &expected_enum, "enum variant")?;
@@ -6185,7 +6256,6 @@ fn lower_pattern_draft(
                         WorkspaceError::InvalidDraft(Arc::from("enum pattern field is missing"))
                     })?;
                     resolved_fields.push(ResolvedPatternField {
-                        name: declared.name.clone(),
                         field_index: declared.source_order,
                         ty: declared.ty.clone(),
                         projection: None,
@@ -6362,7 +6432,6 @@ fn lower_resolved_pattern_fields(
             )));
         }
         fields.push(crate::hir::MatchFieldPattern {
-            name: field.name,
             field_index: field.field_index,
             projection,
             pattern,
@@ -7260,7 +7329,7 @@ fn lower_product_value(
         .iter()
         .fold(EffectSet::PURE, |set, field| set.union(field.effects));
     Ok(Expr {
-        ty: Type::Product(definition.name.clone()),
+        ty: Type::Product(definition.id),
         effects,
         origin,
         kind: ExprKind::ProductValue {
@@ -7299,7 +7368,7 @@ fn lower_product_field(
         .get(host_index(field, "product field")?)
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product field")))?;
     let value = take_draft_child(completed, value)?;
-    require_type(&value.ty, &Type::Product(definition.name.clone()))?;
+    require_type(&value.ty, &Type::Product(definition.id))?;
     Ok(Expr {
         ty: field_definition.ty.clone(),
         effects: value.effects,
@@ -7403,7 +7472,6 @@ fn lower_enum_value(
     Ok(Expr {
         ty: Type::Enum {
             id: definition.id,
-            name: definition.name.clone(),
             arguments: Vec::new(),
         },
         effects,
@@ -7449,7 +7517,6 @@ fn lower_enum_is_variant(
         &value.ty,
         &Type::Enum {
             id: definition.id,
-            name: definition.name.clone(),
             arguments: Vec::new(),
         },
     )?;

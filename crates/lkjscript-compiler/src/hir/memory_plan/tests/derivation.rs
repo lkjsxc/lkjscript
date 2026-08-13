@@ -24,8 +24,8 @@ fn products_fold_copy_immutable_affine_and_nested_fields() -> Result<()> {
         3,
         "nested-record",
         &[
-            ("copy", hir::Type::Product(copy.name.clone())),
-            ("immutable", hir::Type::Product(immutable.name.clone())),
+            ("copy", hir::Type::Product(copy.id)),
+            ("immutable", hir::Type::Product(immutable.id)),
         ],
     );
     let nested_value = product_value(
@@ -42,7 +42,7 @@ fn products_fold_copy_immutable_affine_and_nested_fields() -> Result<()> {
         ],
     );
     let hir_program = program(
-        hir::Type::Product(nested.name.clone()),
+        hir::Type::Product(nested.id),
         nested_value,
         vec![
             copy.clone(),
@@ -53,22 +53,22 @@ fn products_fold_copy_immutable_affine_and_nested_fields() -> Result<()> {
         Vec::new(),
     );
     let plan = derive(&hir_program)?;
-    let copy_fact = fact(&plan, &MemoryType::Product(copy.name))?;
+    let copy_fact = fact(&plan, &MemoryType::Product(copy.id))?;
     assert_eq!(copy_fact.mode, MemoryAggregateMode::Copy);
     assert_eq!(copy_fact.root_projection, MemoryRootProjection::Structural);
     assert_eq!(copy_fact.copy_share, MemoryCopySharePlan::StructuralCopy);
     assert!(copy_fact.contains_dynamic_owner);
     assert_eq!(
-        fact(&plan, &MemoryType::Product(immutable.name))?.mode,
+        fact(&plan, &MemoryType::Product(immutable.id))?.mode,
         MemoryAggregateMode::ImmutableValue
     );
     assert_eq!(
-        fact(&plan, &MemoryType::Product(nested.name))?.mode,
+        fact(&plan, &MemoryType::Product(nested.id))?.mode,
         MemoryAggregateMode::ImmutableValue
     );
 
     let affine_program = program(
-        hir::Type::Product(affine.name.clone()),
+        hir::Type::Product(affine.id),
         product_value(
             &affine,
             vec![
@@ -81,7 +81,7 @@ fn products_fold_copy_immutable_affine_and_nested_fields() -> Result<()> {
         Vec::new(),
     );
     let affine_plan = derive(&affine_program)?;
-    let aggregate = fact(&affine_plan, &MemoryType::Product(affine.name))?;
+    let aggregate = fact(&affine_plan, &MemoryType::Product(affine.id))?;
     assert_eq!(aggregate.mode, MemoryAggregateMode::Affine);
     assert!(aggregate.contains_dynamic_owner);
     Ok(())
@@ -104,7 +104,6 @@ fn generic_enum_folds_every_variant_but_destination_tracks_active_payload() -> R
     let plan = derive(&hir_program)?;
     let memory_ty = MemoryType::Enum {
         id: choice.id.bytes(),
-        name: choice.name.clone(),
         arguments: vec![MemoryType::String],
     };
     let enum_fact = fact(&plan, &memory_ty)?;

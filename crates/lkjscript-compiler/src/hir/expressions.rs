@@ -1022,7 +1022,7 @@ impl Expr {
                         lkjscript_core::Error::host("HIR remap result allocation failed")
                     })?;
                     completed.push(Self {
-                        ty: expression.ty.clone(),
+                        ty: expression.ty.try_remap_products(products)?,
                         effects: expression.effects,
                         origin: expression.origin,
                         kind,
@@ -1165,7 +1165,11 @@ fn remap_kind_dense_ids(
         } => {
             remap_reference(callee)?;
             if let Some(instantiation) = instantiation {
+                for substitution in &mut instantiation.substitutions {
+                    substitution.ty = substitution.ty.try_remap_products(products)?;
+                }
                 for witness in &mut instantiation.witnesses {
+                    witness.ty = witness.ty.try_remap_products(products)?;
                     if let TraitWitnessKind::Explicit(implementation) = &mut witness.kind {
                         *implementation =
                             implementations
@@ -1179,6 +1183,14 @@ fn remap_kind_dense_ids(
                     }
                 }
             }
+        }
+        ExprKind::Operation {
+            resolved_signature, ..
+        } => {
+            *resolved_signature = resolved_signature.try_remap_products(products)?;
+        }
+        ExprKind::Loop { result_type, .. } => {
+            *result_type = result_type.try_remap_products(products)?;
         }
         ExprKind::Let {
             bindings: locals, ..

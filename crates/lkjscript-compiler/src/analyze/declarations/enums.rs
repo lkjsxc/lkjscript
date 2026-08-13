@@ -56,6 +56,7 @@ pub(in crate::analyze) fn parse_variant(
 }
 
 pub(in crate::analyze) fn parse_variant_field(
+    analyzer: &Analyzer,
     expression: &AstExpr,
 ) -> std::result::Result<(String, Type), String> {
     let AstExpr::Call { name, args } = expression else {
@@ -69,7 +70,7 @@ pub(in crate::analyze) fn parse_variant_field(
     }
     let field_name = declared_name_form(name_form, "variant-field")?;
     let ty = match type_form {
-        AstExpr::Call { name, args } if name == "type" => parse_type_form(args)?,
+        AstExpr::Call { name, args } if name == "type" => parse_type_form(analyzer, args)?,
         _ => return Err("variant-field expects type/ second".into()),
     };
     Ok((field_name, ty))

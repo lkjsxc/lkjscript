@@ -1,12 +1,9 @@
 use super::{parse_one, Type};
 
 #[test]
-fn product_types_are_explicit_and_nominal_by_name() {
+fn product_types_require_declaration_resolution() {
     let atoms = vec!["list".into(), "product".into(), "point".into()];
-    assert_eq!(
-        parse_one(&atoms, 0),
-        Ok((Type::List(Box::new(Type::Product("point".into()))), 3))
-    );
+    assert!(parse_one(&atoms, 0).is_err());
     assert!(parse_one(&["product".into()], 0).is_err());
     assert!(parse_one(&["product".into(), "Point".into()], 0).is_err());
 }

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use lkjscript_core::{CapabilityKind, ResourceKind};
+use lkjscript_core::{CapabilityKind, ProductId, ResourceKind};
 
 use crate::types::EnumId;
 

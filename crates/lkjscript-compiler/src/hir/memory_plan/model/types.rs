@@ -13,10 +13,9 @@ pub enum MemoryType {
     ByteSliceMut,
     Symbol,
     Resource(ResourceKind),
-    Product(String),
+    Product(ProductId),
     Enum {
         id: [u8; 32],
-        name: String,
         arguments: Vec<Self>,
     },
     TypeParameter(String),
@@ -35,7 +34,7 @@ impl Clone for MemoryType {
     fn clone(&self) -> Self {
         enum Work<'a> {
             Visit(&'a MemoryType),
-            Enum([u8; 32], &'a str, usize),
+            Enum([u8; 32], usize),
             List,
             Function(usize),
             ForAll(&'a [String]),
@@ -60,13 +59,9 @@ impl Clone for MemoryType {
                     Self::ByteSliceMut => completed.push(Self::ByteSliceMut),
                     Self::Symbol => completed.push(Self::Symbol),
                     Self::Resource(kind) => completed.push(Self::Resource(*kind)),
-                    Self::Product(name) => completed.push(Self::Product(name.clone())),
-                    Self::Enum {
-                        id,
-                        name,
-                        arguments,
-                    } => {
-                        pending.push(Work::Enum(*id, name, arguments.len()));
+                    Self::Product(id) => completed.push(Self::Product(*id)),
+                    Self::Enum { id, arguments } => {
+                        pending.push(Work::Enum(*id, arguments.len()));
                         pending.extend(arguments.iter().rev().map(Work::Visit));
                     }
                     Self::TypeParameter(name) => {
@@ -86,16 +81,12 @@ impl Clone for MemoryType {
                         pending.push(Work::Visit(body));
                     }
                 },
-                Work::Enum(id, name, count) => {
+                Work::Enum(id, count) => {
                     let Some(split) = completed.len().checked_sub(count) else {
                         unreachable!("memory type clone enum completion order")
                     };
                     let arguments = completed.split_off(split);
-                    completed.push(Self::Enum {
-                        id,
-                        name: name.to_owned(),
-                        arguments,
-                    });
+                    completed.push(Self::Enum { id, arguments });
                 }
                 Work::List => {
                     let Some(inner) = completed.pop() else {
@@ -180,22 +171,18 @@ impl PartialEq for MemoryType {
                 | (Self::Symbol, Self::Symbol) => {}
                 (Self::Capability(left), Self::Capability(right)) if left == right => {}
                 (Self::Resource(left), Self::Resource(right)) if left == right => {}
-                (Self::Product(left), Self::Product(right))
-                | (Self::TypeParameter(left), Self::TypeParameter(right)) if left == right => {}
+                (Self::Product(left), Self::Product(right)) if left == right => {}
+                (Self::TypeParameter(left), Self::TypeParameter(right)) if left == right => {}
                 (
                     Self::Enum {
                         id: left_id,
-                        name: left_name,
                         arguments: left_arguments,
                     },
                     Self::Enum {
                         id: right_id,
-                        name: right_name,
                         arguments: right_arguments,
                     },
-                ) if left_id == right_id
-                    && left_name == right_name
-                    && left_arguments.len() == right_arguments.len() =>
+                ) if left_id == right_id && left_arguments.len() == right_arguments.len() =>
                 {
                     pending.extend(left_arguments.iter().zip(right_arguments));
                 }
@@ -249,11 +236,10 @@ impl std::fmt::Debug for MemoryType {
             Self::ByteSliceMut => formatter.write_str("ByteSliceMut"),
             Self::Symbol => formatter.write_str("Symbol"),
             Self::Resource(kind) => formatter.debug_tuple("Resource").field(kind).finish(),
-            Self::Product(name) => formatter.debug_tuple("Product").field(name).finish(),
-            Self::Enum { id, name, arguments } => formatter
+            Self::Product(id) => formatter.debug_tuple("Product").field(id).finish(),
+            Self::Enum { id, arguments } => formatter
                 .debug_struct("Enum")
                 .field("id", id)
-                .field("name", name)
                 .field("arguments", arguments)
                 .finish(),
             Self::TypeParameter(name) => {

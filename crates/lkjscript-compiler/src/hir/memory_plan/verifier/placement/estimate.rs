@@ -3,8 +3,14 @@ use std::collections::BTreeSet;
 use super::*;
 use crate::hir::{Expr, ExprKind};
 
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+enum EstimateKey {
+    Product(u64),
+    Enum(hir::EnumId),
+}
+
 pub(super) struct EstimateIndex<'a> {
-    products: HashMap<&'a str, &'a hir::ProductDefinition>,
+    products: HashMap<hir::ProductId, &'a hir::ProductDefinition>,
     enums: HashMap<hir::EnumId, &'a hir::EnumDefinition>,
 }
 
@@ -19,8 +25,10 @@ impl<'a> EstimateIndex<'a> {
             .try_reserve(program.enums.len())
             .map_err(|_| Error::host("placement verifier enum index allocation failed"))?;
         for product in &program.products {
-            if products.insert(product.name.as_str(), product).is_some() {
-                return Err(Error::msg("placement verifier product name is duplicated"));
+            if products.insert(product.id, product).is_some() {
+                return Err(Error::msg(
+                    "placement verifier product identity is duplicated",
+                ));
             }
         }
         for enumeration in &program.enums {
@@ -46,7 +54,7 @@ pub(super) fn checked_estimate(index: &EstimateIndex<'_>, expression: &Expr) -> 
 fn estimate_type(
     index: &EstimateIndex<'_>,
     ty: &Type,
-    active: &mut BTreeSet<String>,
+    active: &mut BTreeSet<EstimateKey>,
 ) -> Result<(u64, u64)> {
     crate::stack::grow(|| estimate_type_inner(index, ty, active))
 }
@@ -54,7 +62,7 @@ fn estimate_type(
 fn estimate_type_inner(
     index: &EstimateIndex<'_>,
     ty: &Type,
-    active: &mut BTreeSet<String>,
+    active: &mut BTreeSet<EstimateKey>,
 ) -> Result<(u64, u64)> {
     match ty {
         Type::Unit | Type::Never => Ok((0, 0)),
@@ -66,43 +74,43 @@ fn estimate_type_inner(
         Type::Symbol | Type::ByteSlice | Type::ByteSliceMut => Ok((0, 16)),
         Type::Str | Type::Bytes | Type::Path | Type::ByteVector | Type::List(_) => Ok((1, 0)),
         Type::Param(_) => Ok((0, 0)),
-        Type::Product(name) => estimate_product(index, name, active),
+        Type::Product(id) => estimate_product(index, *id, active),
         Type::Enum { id, .. } => estimate_enum(index, *id, active),
     }
 }
 
 fn estimate_product(
     index: &EstimateIndex<'_>,
-    name: &str,
-    active: &mut BTreeSet<String>,
+    id: hir::ProductId,
+    active: &mut BTreeSet<EstimateKey>,
 ) -> Result<(u64, u64)> {
-    if !active.insert(name.into()) {
+    if !active.insert(EstimateKey::Product(id.raw())) {
         return Ok((0, 0));
     }
     let product = index
         .products
-        .get(name)
+        .get(&id)
         .copied()
         .ok_or_else(|| Error::msg("value placement lost product estimate metadata"))?;
     let mut total = (1_u64, 0_u64);
     for field in &product.fields {
         total = add_estimate(total, estimate_type(index, &field.ty, active)?)?;
     }
-    active.remove(name);
+    active.remove(&EstimateKey::Product(id.raw()));
     Ok(total)
 }
 
 fn estimate_enum(
     index: &EstimateIndex<'_>,
     id: hir::EnumId,
-    active: &mut BTreeSet<String>,
+    active: &mut BTreeSet<EstimateKey>,
 ) -> Result<(u64, u64)> {
     let definition = index
         .enums
         .get(&id)
         .copied()
         .ok_or_else(|| Error::msg("value placement lost enum estimate metadata"))?;
-    if !active.insert(definition.name.clone()) {
+    if !active.insert(EstimateKey::Enum(id)) {
         return Ok((0, 0));
     }
     let mut largest = (1_u64, 2_u64);
@@ -115,7 +123,7 @@ fn estimate_enum(
             largest = (largest.0.max(estimate.0), largest.1.max(estimate.1));
         }
     }
-    active.remove(&definition.name);
+    active.remove(&EstimateKey::Enum(id));
     Ok(largest)
 }
 

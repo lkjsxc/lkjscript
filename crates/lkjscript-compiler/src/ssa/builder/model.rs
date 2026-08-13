@@ -3,7 +3,7 @@ use crate::ssa::*;
 impl<'a> FunctionBuilder<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::ssa) fn new(
-        product_ids: &'a HashMap<String, ProductId>,
+        product_ids: &'a HashMap<crate::hir::ProductId, ProductId>,
         function_ids: &'a HashMap<BindingId, FunctionId>,
         function_effects: &'a HashMap<FunctionId, EffectSet>,
         function_parameter_modes: &'a HashMap<FunctionId, Vec<MemoryParameterMode>>,

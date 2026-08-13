@@ -46,7 +46,7 @@ fn generic_copy_product_binds_exact_transport_witnesses() -> Result<()> {
         .iter()
         .find(|item| matches!(item.target, MemoryCallTarget::Direct(_)))
         .ok_or_else(|| Error::msg("generic direct call is missing"))?;
-    let product = fact(&plan, &MemoryType::Product("transport-record".into()))?;
+    let product = fact(&plan, &MemoryType::Product(hir::ProductId::new(0)))?;
     let boolean = fact(&plan, &MemoryType::Bool)?;
     assert_eq!(
         call.witness_arguments,
@@ -184,6 +184,51 @@ fn malformed_transport_substitutions_and_signatures_use_exact_errors() -> Result
         error(&nested),
         "HIR memory witness parameter has a nested operational use"
     );
+    Ok(())
+}
+
+#[test]
+fn deeply_nested_witness_parameter_rejects_on_a_small_stack() -> Result<()> {
+    let worker = std::thread::Builder::new()
+        .name("memory-witness-deep-parameter".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| -> Result<()> {
+            let baseline = generic_copy_product_program();
+            let plan = producer::derive(&baseline)?;
+            let mut program = baseline.clone();
+            let mut nested = hir::Type::Param("t".into());
+            for _ in 0..20_000 {
+                nested = hir::Type::List(Box::new(nested));
+            }
+            program.bindings[2].ty = hir::Type::Forall {
+                vars: vec!["t".into(), "u".into()],
+                body: Box::new(hir::Type::Fn {
+                    params: vec![nested, hir::Type::Param("u".into())],
+                    ret: Box::new(hir::Type::Param("t".into())),
+                }),
+            };
+            let producer_error = producer::derive(&program)
+                .err()
+                .ok_or_else(|| Error::msg("deep nested witness parameter was accepted"))?
+                .to_string();
+            assert_eq!(
+                producer_error,
+                "HIR memory witness parameter has a nested operational use"
+            );
+            let verifier_error = verifier::verify(&program, &plan)
+                .err()
+                .ok_or_else(|| Error::msg("memory verifier accepted a deep nested parameter"))?
+                .to_string();
+            assert_eq!(
+                verifier_error,
+                "memory verifier rejected nested witness parameter use"
+            );
+            Ok(())
+        })
+        .map_err(|_| Error::msg("cannot spawn deep memory witness test"))?;
+    worker
+        .join()
+        .map_err(|_| Error::msg("deep memory witness test panicked"))??;
     Ok(())
 }
 

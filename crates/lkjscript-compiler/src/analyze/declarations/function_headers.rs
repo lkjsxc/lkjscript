@@ -13,9 +13,10 @@ pub(in crate::analyze) fn definition_name(args: &[AstExpr]) -> std::result::Resu
 
 type ParsedMain<'a> = (Vec<String>, Vec<Type>, Type, &'a AstExpr);
 
-pub(in crate::analyze) fn parse_main(
-    args: &[AstExpr],
-) -> std::result::Result<ParsedMain<'_>, String> {
+pub(in crate::analyze) fn parse_main<'a>(
+    analyzer: &Analyzer,
+    args: &'a [AstExpr],
+) -> std::result::Result<ParsedMain<'a>, String> {
     let (signature_form, params_form, body) = match args {
         [signature, body] => (signature, None, body),
         [signature, params, body] => (signature, Some(params), body),
@@ -31,11 +32,13 @@ pub(in crate::analyze) fn parse_main(
     if name != "sig" {
         return Err("expected sig/…/sig first".into());
     }
-    let (signature_params, return_type) = parse_signature(signature_args)?;
+    let (signature_params, return_type) = parse_signature(analyzer, signature_args)?;
     let (names, params) = match params_form {
         None if signature_params.is_empty() => (Vec::new(), Vec::new()),
         None => return Err("capability-bearing main requires params/".into()),
-        Some(AstExpr::Call { name, args }) if name == "params" => parse_typed_params(args)?,
+        Some(AstExpr::Call { name, args }) if name == "params" => {
+            parse_typed_params(analyzer, args)?
+        }
         Some(_) => return Err("main expects params/ immediately after sig/".into()),
     };
     if params.is_empty() && params_form.is_some() {
@@ -70,9 +73,10 @@ fn validate_main_capabilities(
     Ok(())
 }
 
-pub(in crate::analyze) fn parse_function(
-    args: &[AstExpr],
-) -> std::result::Result<ParsedFunction<'_>, String> {
+pub(in crate::analyze) fn parse_function<'a>(
+    analyzer: &Analyzer,
+    args: &'a [AstExpr],
+) -> std::result::Result<ParsedFunction<'a>, String> {
     let mut index = 0;
     let mut forall_vars = Vec::new();
     if let Some(AstExpr::Call { name, args }) = args.get(index) {
@@ -113,12 +117,14 @@ pub(in crate::analyze) fn parse_function(
     }
 
     let signature = match args.get(index) {
-        Some(AstExpr::Call { name, args }) if name == "sig" => parse_signature(args)?,
+        Some(AstExpr::Call { name, args }) if name == "sig" => parse_signature(analyzer, args)?,
         _ => return Err("fn expects sig/ after optional forall/ and bounds/".into()),
     };
     index += 1;
     let params = match args.get(index) {
-        Some(AstExpr::Call { name, args }) if name == "params" => parse_typed_params(args)?,
+        Some(AstExpr::Call { name, args }) if name == "params" => {
+            parse_typed_params(analyzer, args)?
+        }
         _ => return Err("fn expects params/ immediately after sig/".into()),
     };
     index += 1;

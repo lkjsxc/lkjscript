@@ -152,7 +152,6 @@ fn build_entities(
         entity_lookup: HashMap::new(),
         node_lookup: HashMap::new(),
         node_children: HashMap::new(),
-        product_name_indices: HashMap::new(),
         enum_identity_indices: HashMap::new(),
         variant_identity_indices: HashMap::new(),
         address_entities: HashMap::new(),
@@ -235,23 +234,7 @@ fn build_entities(
 
     let mut products = Vec::new();
     reserve(&mut products, program.products.len(), "product entity map")?;
-    indexes
-        .product_name_indices
-        .try_reserve(program.products.len())
-        .map_err(|_| Error::host("product name index allocation failed"))?;
     for (product_index, product) in program.products.iter().enumerate() {
-        let mut product_name = String::new();
-        product_name
-            .try_reserve(product.name.len())
-            .map_err(|_| Error::host("product name copy allocation failed"))?;
-        product_name.push_str(&product.name);
-        if indexes
-            .product_name_indices
-            .insert(product_name, product_index)
-            .is_some()
-        {
-            return Err(Error::msg("product declaration name is duplicated"));
-        }
         let product_index = u64::try_from(product_index)
             .map_err(|_| Error::host("workspace product address exceeds u64"))?;
         let entity = push_entity(
@@ -548,7 +531,7 @@ fn install_entity_types(
     }
     for (index, product) in program.products.iter().enumerate() {
         let (entity, fields) = &maps.products[index];
-        let ty = Type::Product(product.name.clone());
+        let ty = Type::Product(product.id);
         set(*entity, ty)?;
         for (field, entity) in product.fields.iter().zip(fields) {
             set(*entity, field.ty.clone())?;
@@ -560,7 +543,6 @@ fn install_entity_types(
         };
         let ty = Type::Enum {
             id: definition.id,
-            name: definition.name.clone(),
             arguments: definition
                 .type_parameters
                 .iter()
@@ -658,7 +640,7 @@ fn add_entity_dependencies(
 }
 
 fn add_types_dependencies<'a>(
-    _program: &SemanticProgram,
+    program: &SemanticProgram,
     maps: &EntityMaps,
     indexes: &mut SnapshotIndexes,
     owner: EntityId,
@@ -671,8 +653,13 @@ fn add_types_dependencies<'a>(
     }
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Product(name) => {
-                if let Some(index) = indexes.product_name_indices.get(name).copied() {
+            Type::Product(id) => {
+                if let Some(index) = id.index().filter(|index| {
+                    program
+                        .products
+                        .get(*index)
+                        .is_some_and(|definition| definition.id == *id)
+                }) {
                     push_dependency(indexes, owner, maps.products[index].0)?;
                 }
             }
@@ -1228,7 +1215,7 @@ fn expression_children<'a>(
             let expected = program
                 .products
                 .get(index_of(product.raw(), "product")?)
-                .map(|item| Type::Product(item.name.clone()));
+                .map(|item| Type::Product(item.id));
             children.push((value, expected));
             if let ExprKind::WithProductField {
                 field, replacement, ..

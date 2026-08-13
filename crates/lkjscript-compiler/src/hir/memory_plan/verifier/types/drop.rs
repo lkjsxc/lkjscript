@@ -44,7 +44,7 @@ impl VerifiedTypes<'_> {
         let kind = match ty {
             Type::Str => MemoryDropGlueKind::String,
             Type::Path => MemoryDropGlueKind::Path,
-            Type::Product(name) => MemoryDropGlueKind::Product(name.clone()),
+            Type::Product(id) => MemoryDropGlueKind::Product(*id),
             Type::Enum { id, arguments, .. } => MemoryDropGlueKind::Enum {
                 id: id.bytes(),
                 arguments: arguments.iter().map(verified_memory_type).collect(),
@@ -78,8 +78,8 @@ impl VerifiedTypes<'_> {
                 active_variant: None,
                 actions: Vec::new(),
             }]),
-            Type::Product(name) => {
-                let item = self.product_definition(name)?;
+            Type::Product(id) => {
+                let item = self.product_definition(*id)?;
                 let mut actions = Vec::new();
                 for (index, field) in item.fields.iter().enumerate().rev() {
                     if let Some(glue) = self
@@ -91,7 +91,7 @@ impl VerifiedTypes<'_> {
                         actions.push(MemoryDropAction {
                             path: vec![MemoryDropPathElement::ProductField {
                                 index: index_u64(index)?,
-                                name: field.name.clone(),
+                                field: field.identity,
                             }],
                             glue,
                         });

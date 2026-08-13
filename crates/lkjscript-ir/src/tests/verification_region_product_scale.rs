@@ -29,6 +29,7 @@ fn region_product_metadata_crosses_the_former_sixteen_thousand_limit() -> crate:
         let identity = runtime_product_contract_identity(program.memory.plan, &name)?;
         program.products.push(ProductMetadata {
             id: product,
+            identity,
             name,
             fields: Vec::<ProductField>::new(),
         });

@@ -5,8 +5,9 @@ use canonical::Encoder;
 
 mod canonical;
 
-const PLAN_DOMAIN: &[u8] = b"lkjscript.hir-memory-plan\0canonical-platform-contract";
-const TYPE_DOMAIN: &[u8] = b"lkjscript.memory-type\0canonical-platform-contract";
+const PLAN_DOMAIN: &[u8] =
+    b"lkjscript.hir-memory-plan.identity-nominals-and-fields\0canonical-platform-contract";
+const TYPE_DOMAIN: &[u8] = b"lkjscript.memory-type.identity-nominals\0canonical-platform-contract";
 
 pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     let mut output = Encoder::new(PLAN_DOMAIN)?;

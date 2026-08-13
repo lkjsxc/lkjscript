@@ -26,7 +26,7 @@ impl TypePlanner<'_> {
             Type::Symbol => S::Primitive(P::Symbol),
             Type::Capability(kind) => S::Capability(*kind),
             Type::Resource(kind) => S::Resource(*kind),
-            Type::Product(name) => S::Product(self.product(name)?.identity),
+            Type::Product(id) => S::Product(self.product(*id)?.identity),
             Type::Enum { id, arguments, .. } => S::Enum {
                 identity: id.bytes(),
                 arguments: arguments

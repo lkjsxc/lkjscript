@@ -2,7 +2,7 @@ use crate::ssa::*;
 
 pub(in crate::ssa) fn lower_enums(
     definitions: &[hir::EnumDefinition],
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<Vec<EnumMetadata>> {
     definitions
         .iter()
@@ -12,7 +12,7 @@ pub(in crate::ssa) fn lower_enums(
 
 fn lower_enum(
     definition: &hir::EnumDefinition,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<EnumMetadata> {
     let mut tag_order: Vec<_> = definition
         .variants

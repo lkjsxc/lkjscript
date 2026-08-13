@@ -212,7 +212,7 @@ impl MatchLowerer<'_> {
         let declared = usize::try_from(field.field_index)
             .ok()
             .and_then(|index| selected.fields.get(index))
-            .filter(|item| item.name == field.name)
+            .filter(|item| item.source_order == field.field_index)
             .ok_or_else(|| Error::msg("match lowering lost variant field"))?;
         let projection = field
             .projection

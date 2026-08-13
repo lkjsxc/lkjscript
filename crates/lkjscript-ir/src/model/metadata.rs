@@ -9,6 +9,7 @@ pub struct SourceMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductMetadata {
     pub id: ProductId,
+    pub identity: RuntimeLayoutId,
     pub name: String,
     pub fields: Vec<ProductField>,
 }

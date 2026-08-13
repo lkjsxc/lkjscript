@@ -191,8 +191,9 @@ function. Removed slots retain tombstone generations across snapshot cloning and
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
 and no attachments. `Transaction` adds non-generic `CreateProduct` and `CreateEnum`, generalized
-generic-or-non-generic `CreateFunction`, and `CreateMain` to rename, replacement, hole operations,
-and unresolved copy-load value-reference introduction and resolution.
+generic-or-non-generic `CreateFunction`, and `CreateMain`; identity-preserving rename for functions,
+parameters, locals, products, product fields, enums, variants, and enum fields; replacement and hole
+operations; and unresolved copy-load value-reference introduction and resolution.
 Function creation uses one ordered declaration-local binder handle domain and a creation-only
 `DeclarationType`; staged validation allocates stable function, type-parameter, and value-parameter
 entities before canonical universal-signature construction. The local handles never enter published
@@ -292,6 +293,20 @@ delete an in-scope binding while preserving the unresolved site, and it has no c
 deliberately deferred finite subset; explicit stable-identity resolution is the complete current
 workflow.
 
+`RenameEntity` changes only the selected declaration or member's presentation name. Product types
+carry private dense `ProductId`; enum types carry stable `EnumId` plus explicit arguments; memory
+planning and SSA retain identity-bearing nominal metadata. Canonical memory blocker/drop paths carry
+stable product-field identities plus ordinals instead of field names. Generic memory-witness
+parameter and substitution inspection is iterative at user-controlled type depth. Product/member and
+enum/member stable identities, enum runtime-layout identity, selected aggregate operations, match
+plans, references, nodes, and old snapshots remain unchanged. Global nominal rename rejects reserved
+or colliding names;
+product fields and enum variants reject sibling collisions, enum fields reject collisions inside
+their variant, and every same-name rename rejects. Focused source-free and imported match evidence
+compiles and executes after rename without parsing or source loading; an eligible renamed product
+also enters baseline native exactly once and returns the same result. Failed rename leaves the
+published `Arc` and future allocation unchanged.
+
 Failure preserves the exact `Arc`, revision, diagnostics, projection, tombstones, and deterministic
 future IDs. Replacement, hole introduction, and unresolved-reference introduction remove local-
 defining `let`, imported mutable-local, and semantic-match subtrees. Return insertion recomputes derived sequence, conditional, local-body,
@@ -314,8 +329,10 @@ Deletion dependencies are checked against the final staged semantic state rather
 or edit order. Surviving signature, field, expression, hole, generic-witness, and match dependencies
 reject deterministically; explicitly deleting their independent owners or structurally removing body
 uses in the same batch succeeds. One compaction boundary rewrites dense product, implementation,
-binding, plan, slot, and place IDs, relocates private enum/product/implementation vector addresses,
-and preserves survivor public entity and node identities. Stable product/member semantic identities
+binding, plan, slot, and place IDs, including nested product identities in signatures, declaration
+fields, expressions, generic substitutions/witnesses, match plans, holes, and unresolved-reference
+expectations; relocates private enum/product/implementation vector addresses; and preserves survivor
+public entity and node identities. Stable product/member semantic identities
 and enum/variant/field/layout identities are not compacted. Deleted identities tombstone, old
 snapshots remain valid, later same-name recreation receives fresh generations, and same-batch
 same-name recreation is rejected. Deleting `main` still yields `MissingEntryPoint`.
@@ -480,9 +497,9 @@ build inputs.
   copy-load value references now have complete introduction, inspection, candidate, resolution,
   replacement, owner-deletion, compile-rejection, and execution behavior. Text import still fails
   fast on unresolved source names. Unresolved moves, borrows, calls, type names, nominal members,
-  patterns, and imports; ambiguity, conflict, and parser recovery; direct nominal-member mutation;
-  and cross-parent, entity, declaration, match-arm, branch, loop-body, callable, and generic public
-  movement remain gaps. Generic ownership/reference instantiation and forwarding
+  patterns, and imports; ambiguity, conflict, and parser recovery; nominal member
+  addition/deletion/reordering; and cross-parent, entity, declaration, match-arm, branch, loop-body,
+  callable, and generic public movement remain gaps. Generic ownership/reference instantiation and forwarding
   a caller's unresolved type parameter remain narrow explicit unsupported cases.
 - There is no persistence, journal, wire service, or collaboration layer for workspace snapshots.
   Add one only after a measured consumer establishes the boundary and resource policy.

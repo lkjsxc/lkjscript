@@ -97,8 +97,8 @@ impl Analyzer {
         source: SourceId,
         args: &'a [AstExpr],
     ) -> Result<PendingMain<'a>> {
-        let (param_names, param_types, return_type, body) =
-            parse_main(args).map_err(|message| self.error(source, format!("main: {message}")))?;
+        let (param_names, param_types, return_type, body) = parse_main(self, args)
+            .map_err(|message| self.error(source, format!("main: {message}")))?;
         let param_types = self.resolve_main_parameter_types(source, param_types)?;
         let return_type = self
             .resolve_enum_type(&return_type, &[])

@@ -78,9 +78,80 @@ fn string_path_and_blocker_leaves_are_exact() -> Result<()> {
 }
 
 #[test]
+fn product_field_presentation_does_not_change_blocker_or_drop_paths() -> Result<()> {
+    let blocked = product(
+        0,
+        "blocked-record",
+        &[("unknown", hir::Type::Param("t".into()))],
+    );
+    let blocked_ty = hir::Type::Product(blocked.id);
+    let mut renamed_blocked = blocked.clone();
+    renamed_blocked.fields[0].name = "renamed-unknown".into();
+    let blocker = producer::derive(&program(
+        blocked_ty.clone(),
+        fake(blocked_ty.clone()),
+        vec![blocked],
+        Vec::new(),
+    ))
+    .err()
+    .ok_or_else(|| lkjscript_core::Error::msg("unresolved product accepted"))?
+    .to_string();
+    let renamed_blocker = producer::derive(&program(
+        blocked_ty.clone(),
+        fake(blocked_ty),
+        vec![renamed_blocked],
+        Vec::new(),
+    ))
+    .err()
+    .ok_or_else(|| lkjscript_core::Error::msg("renamed unresolved product accepted"))?
+    .to_string();
+    let path = blocker
+        .split(" path=")
+        .nth(1)
+        .ok_or_else(|| lkjscript_core::Error::msg("unresolved product blocker path is missing"))?;
+    let renamed_path = renamed_blocker.split(" path=").nth(1).ok_or_else(|| {
+        lkjscript_core::Error::msg("renamed unresolved product blocker path is missing")
+    })?;
+    assert_eq!(path, renamed_path);
+
+    let owned = product(0, "owned-record", &[("owner", hir::Type::ByteVector)]);
+    let field_identity = owned.fields[0].identity;
+    let owned_ty = hir::Type::Product(owned.id);
+    let mut renamed_owned = owned.clone();
+    renamed_owned.fields[0].name = "renamed-owner".into();
+    let plan = derive(&program(
+        owned_ty.clone(),
+        fake(owned_ty.clone()),
+        vec![owned],
+        Vec::new(),
+    ))?;
+    let renamed_plan = derive(&program(
+        owned_ty.clone(),
+        fake(owned_ty),
+        vec![renamed_owned],
+        Vec::new(),
+    ))?;
+    assert_eq!(plan, renamed_plan);
+    let product = fact(&plan, &MemoryType::Product(hir::ProductId::new(0)))?;
+    let drop_path = product
+        .drop_path
+        .and_then(|id| id.index())
+        .and_then(|index| plan.drop_paths.get(index))
+        .ok_or_else(|| lkjscript_core::Error::msg("product drop path is missing"))?;
+    assert_eq!(
+        drop_path.branches[0].actions[0].path,
+        vec![MemoryDropPathElement::ProductField {
+            index: 0,
+            field: field_identity,
+        }]
+    );
+    Ok(())
+}
+
+#[test]
 fn products_without_a_structural_or_region_plan_reject_as_unresolved() {
     let blocked = product(0, "blocked", &[("value", hir::Type::Param("t".into()))]);
-    let ty = hir::Type::Product(blocked.name.clone());
+    let ty = hir::Type::Product(blocked.id);
     let error = derive(&program(ty.clone(), fake(ty), vec![blocked], Vec::new()))
         .err()
         .unwrap_or_else(|| lkjscript_core::Error::msg("blocked product unexpectedly planned"));
@@ -94,10 +165,10 @@ fn wrapped_recursive_edges_are_rejected_instead_of_reentering_type_interning() -
         "wrapped-node",
         &[(
             "children",
-            hir::Type::List(Box::new(hir::Type::Product("wrapped-node".into()))),
+            hir::Type::List(Box::new(hir::Type::Product(hir::ProductId::new(0)))),
         )],
     );
-    let ty = hir::Type::Product(wrapped.name.clone());
+    let ty = hir::Type::Product(wrapped.id);
     let error = match derive(&program(ty.clone(), fake(ty), vec![wrapped], Vec::new())) {
         Err(error) => error,
         Ok(_) => {
@@ -112,8 +183,12 @@ fn wrapped_recursive_edges_are_rejected_instead_of_reentering_type_interning() -
 
 #[test]
 fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
-    let recursive = product(0, "node", &[("next", hir::Type::Product("node".into()))]);
-    let recursive_ty = hir::Type::Product(recursive.name.clone());
+    let recursive = product(
+        0,
+        "node",
+        &[("next", hir::Type::Product(hir::ProductId::new(0)))],
+    );
+    let recursive_ty = hir::Type::Product(recursive.id);
     let hir_program = program(
         recursive_ty.clone(),
         fake(recursive_ty),
@@ -121,7 +196,7 @@ fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
         Vec::new(),
     );
     let plan = derive(&hir_program)?;
-    let recursive_fact = fact(&plan, &MemoryType::Product(recursive.name))?;
+    let recursive_fact = fact(&plan, &MemoryType::Product(recursive.id))?;
     assert_eq!(recursive_fact.mode, MemoryAggregateMode::ImmutableValue);
     assert_eq!(
         recursive_fact.closure.class,
@@ -130,14 +205,14 @@ fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
     assert_eq!(recursive_fact.closure.blocker_reason, None);
 
     let unresolved_mixed = product(
-        1,
+        0,
         "unresolved-mixed",
         &[
-            ("next", hir::Type::Product("unresolved-mixed".into())),
+            ("next", hir::Type::Product(hir::ProductId::new(0))),
             ("bytes", hir::Type::Bytes),
         ],
     );
-    let ty = hir::Type::Product(unresolved_mixed.name.clone());
+    let ty = hir::Type::Product(unresolved_mixed.id);
     let error = producer::derive(&program(
         ty.clone(),
         fake(ty),
@@ -149,19 +224,19 @@ fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
     .unwrap_or_default();
     assert!(error.contains("LKJ-MEM-RECURSIVE-AFFINE"));
 
-    let copy_child = product(2, "copy-child", &[("value", hir::Type::I64)]);
+    let copy_child = product(0, "copy-child", &[("value", hir::Type::I64)]);
     let deterministic_mixed = product(
-        3,
+        1,
         "deterministic-mixed",
         &[
             (
                 "unresolved",
-                hir::Type::List(Box::new(hir::Type::Product(copy_child.name.clone()))),
+                hir::Type::List(Box::new(hir::Type::Product(copy_child.id))),
             ),
             ("bytes", hir::Type::Bytes),
         ],
     );
-    let ty = hir::Type::Product(deterministic_mixed.name.clone());
+    let ty = hir::Type::Product(deterministic_mixed.id);
     let error = producer::derive(&program(
         ty.clone(),
         fake(ty),
@@ -181,12 +256,12 @@ fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
 fn declaration_names_never_select_prelude_memory_rules() -> Result<()> {
     for definition in [
         product(0, "option", &[("value", hir::Type::Str)]),
-        product(1, "result", &[("value", hir::Type::Str)]),
+        product(0, "result", &[("value", hir::Type::Str)]),
     ] {
-        let ty = hir::Type::Product(definition.name.clone());
+        let ty = hir::Type::Product(definition.id);
         let body = product_value(&definition, vec![text("value")]);
         let plan = derive(&program(ty, body, vec![definition.clone()], Vec::new()))?;
-        let item = fact(&plan, &MemoryType::Product(definition.name))?;
+        let item = fact(&plan, &MemoryType::Product(definition.id))?;
         assert_eq!(item.mode, MemoryAggregateMode::ImmutableValue);
         assert_eq!(item.closure.class, MemoryClosureClass::Deterministic);
     }

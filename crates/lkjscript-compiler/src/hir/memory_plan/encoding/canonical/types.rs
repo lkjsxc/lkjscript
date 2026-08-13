@@ -41,15 +41,10 @@ impl Canonical for MemoryType {
                 Self::ByteSliceMut => output.tag(11)?,
                 Self::Symbol => output.tag(12)?,
                 Self::Resource(kind) => tagged(output, 13, kind)?,
-                Self::Product(name) => tagged(output, 14, name)?,
-                Self::Enum {
-                    id,
-                    name,
-                    arguments,
-                } => {
+                Self::Product(id) => tagged(output, 14, &id.raw())?,
+                Self::Enum { id, arguments } => {
                     output.tag(15)?;
                     output.value(id)?;
-                    output.value(name)?;
                     output.value(&u64::try_from(arguments.len()).map_err(|_| {
                         Error::msg("canonical memory type argument count exceeds u64")
                     })?)?;

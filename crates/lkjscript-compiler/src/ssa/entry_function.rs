@@ -3,7 +3,7 @@ use crate::ssa::*;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn construct(
     program: &hir::Program,
-    product_ids: &HashMap<String, ProductId>,
+    product_ids: &HashMap<crate::hir::ProductId, ProductId>,
     function_ids: &HashMap<BindingId, FunctionId>,
     function_effects: &HashMap<FunctionId, EffectSet>,
     function_parameter_modes: &HashMap<FunctionId, Vec<MemoryParameterMode>>,

@@ -6,7 +6,7 @@ use lkjscript_core::{Error, Result};
 
 fn destination_fixture() -> Result<(hir::Program, HirMemoryPlan)> {
     let record = product(0, "verified-record", &[("name", hir::Type::Str)]);
-    let ty = hir::Type::Product(record.name.clone());
+    let ty = hir::Type::Product(record.id);
     let program = program(
         ty,
         product_value(&record, vec![text("name")]),

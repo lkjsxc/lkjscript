@@ -10,7 +10,6 @@ pub(crate) struct GenericFacts<'a> {
     pub traits: &'a [TraitDefinition],
     pub products: &'a [ProductDefinition],
     pub implementations: &'a [ImplDefinition],
-    pub product_names: &'a HashMap<String, ProductId>,
     pub implementation_index: &'a HashMap<(TraitId, ProductId), ImplId>,
 }
 
@@ -217,7 +216,7 @@ pub(crate) fn substitute_type(
         Visit(&'a Type, bool),
         Enter(&'a [String]),
         Exit(&'a [String]),
-        Enum(crate::hir::EnumId, &'a str, usize),
+        Enum(crate::hir::EnumId, usize),
         List,
         Function(usize),
         Forall(&'a [String]),
@@ -250,9 +249,7 @@ pub(crate) fn substitute_type(
                     Type::Capability(kind) => completed.push(Type::Capability(*kind)),
                     Type::Symbol => completed.push(Type::Symbol),
                     Type::Resource(kind) => completed.push(Type::Resource(*kind)),
-                    Type::Product(name) => {
-                        completed.push(Type::Product(clone_type_string(name)?));
-                    }
+                    Type::Product(id) => completed.push(Type::Product(*id)),
                     Type::Param(name)
                         if apply
                             && !bound.contains_key(name.as_str())
@@ -274,11 +271,7 @@ pub(crate) fn substitute_type(
                     Type::Param(name) => {
                         completed.push(Type::Param(clone_type_string(name)?));
                     }
-                    Type::Enum {
-                        id,
-                        name,
-                        arguments,
-                    } => {
+                    Type::Enum { id, arguments } => {
                         let additional = arguments.len().checked_add(1).ok_or_else(|| {
                             GenericCallError::Host("type substitution child count overflow".into())
                         })?;
@@ -287,7 +280,7 @@ pub(crate) fn substitute_type(
                                 "type substitution work allocation failed".into(),
                             )
                         })?;
-                        work.push(Work::Enum(*id, name, arguments.len()));
+                        work.push(Work::Enum(*id, arguments.len()));
                         work.extend(
                             arguments
                                 .iter()
@@ -375,18 +368,14 @@ pub(crate) fn substitute_type(
                     }
                 }
             }
-            Work::Enum(id, name, count) => {
+            Work::Enum(id, count) => {
                 let split = completed.len().checked_sub(count).ok_or_else(|| {
                     GenericCallError::InvalidFacts(
                         "type substitution enum children are incomplete".into(),
                     )
                 })?;
                 let arguments = completed.split_off(split);
-                completed.push(Type::Enum {
-                    id,
-                    name: clone_type_string(name)?,
-                    arguments,
-                });
+                completed.push(Type::Enum { id, arguments });
             }
             Work::List => {
                 let inner = completed.pop().ok_or_else(|| {
@@ -475,18 +464,21 @@ fn solve_trait_bound(
         }
         TraitWitnessKind::AutoTrait
     } else {
-        let Type::Product(name) = ty else {
+        let Type::Product(product) = ty else {
             return Err(GenericCallError::UnsatisfiedTrait {
                 parameter: parameter.to_owned(),
                 trait_id,
                 ty: Box::new(ty.clone()),
             });
         };
-        let product = facts
-            .product_names
-            .get(name)
-            .copied()
-            .ok_or_else(|| GenericCallError::UnknownProduct(name.clone()))?;
+        let product = *product;
+        if product
+            .index()
+            .and_then(|index| facts.products.get(index))
+            .is_none_or(|definition| definition.id != product)
+        {
+            return Err(GenericCallError::UnknownProduct(format!("{product:?}")));
+        }
         let implementation = facts
             .implementation_index
             .get(&(trait_id, product))
@@ -670,13 +662,12 @@ fn auto_trait_dependencies<'a>(
                 Ok(true)
             }
             Type::Enum { .. } => Ok(false),
-            Type::Product(name) => {
-                let product = facts
-                    .product_names
-                    .get(name)
-                    .and_then(|id| id.index())
+            Type::Product(id) => {
+                let product = id
+                    .index()
                     .and_then(|index| facts.products.get(index))
-                    .ok_or_else(|| GenericCallError::UnknownProduct(name.clone()))?;
+                    .filter(|product| product.id == *id)
+                    .ok_or_else(|| GenericCallError::UnknownProduct(format!("{id:?}")))?;
                 dependencies
                     .try_reserve(product.fields.len())
                     .map_err(|_| {
@@ -883,13 +874,11 @@ mod tests {
                         ret: Box::new(Type::Param("t".to_owned())),
                     }),
                 };
-                let product_names = HashMap::new();
                 let implementation_index = HashMap::new();
                 let facts = GenericFacts {
                     traits: &[],
                     products: &[],
                     implementations: &[],
-                    product_names: &product_names,
                     implementation_index: &implementation_index,
                 };
                 let exact = resolve_exact(

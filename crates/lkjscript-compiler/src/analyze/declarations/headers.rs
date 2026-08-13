@@ -31,7 +31,7 @@ impl Analyzer {
                                 self.error(source, "executable root declares duplicate main")
                             );
                         }
-                        let (param_names, param_types, return_type, body) = parse_main(args)
+                        let (param_names, param_types, return_type, body) = parse_main(self, args)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
                         let param_types = self.resolve_main_parameter_types(source, param_types)?;
                         let return_type = self
@@ -99,7 +99,7 @@ impl Analyzer {
                 format!("def {name}: top-level def must declare an immutable fn"),
             ));
         }
-        let mut parsed = parse_function(fn_args)
+        let mut parsed = parse_function(self, fn_args)
             .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
         self.resolve_function_enum_types(&mut parsed)
             .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;

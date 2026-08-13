@@ -104,7 +104,7 @@ pub(in crate::ssa) struct LoopTarget {
 }
 
 pub(in crate::ssa) struct FunctionBuilder<'a> {
-    pub(in crate::ssa) product_ids: &'a HashMap<String, ProductId>,
+    pub(in crate::ssa) product_ids: &'a HashMap<crate::hir::ProductId, ProductId>,
     pub(in crate::ssa) function_ids: &'a HashMap<BindingId, FunctionId>,
     pub(in crate::ssa) function_effects: &'a HashMap<FunctionId, EffectSet>,
     pub(in crate::ssa) function_parameter_modes: &'a HashMap<FunctionId, Vec<MemoryParameterMode>>,

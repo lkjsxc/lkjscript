@@ -1,7 +1,7 @@
 fn install_memory_witnesses(
     memory: &mut StructuralMemoryMetadata,
     plan: &HirMemoryPlan,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<()> {
     let installed: std::collections::HashSet<_> = plan.witnesses.iter()
         .filter(|witness| witness_is_installable(witness))

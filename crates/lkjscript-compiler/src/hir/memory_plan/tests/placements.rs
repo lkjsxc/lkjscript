@@ -18,7 +18,7 @@ fn shared_program() -> hir::Program {
             ("h", hir::Type::Str),
         ],
     );
-    let ty = hir::Type::Product(payload.name.clone());
+    let ty = hir::Type::Product(payload.id);
     let left = hir::BindingId::new(0);
     let right = hir::BindingId::new(1);
     let function = hir::BindingId::new(2);

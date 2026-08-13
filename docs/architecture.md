@@ -276,14 +276,18 @@ unresolved references, hidden match storage, plans, and layout participation. Pr
 implementation lifecycle; enum containment owns type parameters, variants, and fields. Other
 dependents never cascade. One concrete
 compaction result rewrites `ProductId`, `ImplId`, `BindingId`, `MatchPlanId`, local places and slots,
-and every expression/pattern/witness occurrence. Enum vector positions relocate privately while
-stable enum, variant, field, and runtime-layout IDs remain unchanged. Reconciliation forces old
-public identities onto every surviving product/member, enum/member, implementation, binding, and
-structurally surviving node address. `Type::Product(String)` remains the active HIR type identity:
-complete and partial indexes validate globally unique product names, product rename is unsupported,
-same-batch same-name recreation cannot rebind a survivor, and immutable snapshots own separate HIR
-vectors. The existing stable product and field identities remain unchanged rather than adding a
-fourth product identity. Direct member, trait, and implementation deletion remains unsupported;
+and every nested signature, declaration-field, expression, pattern, hole, unresolved expectation,
+substitution, and witness occurrence. Enum vector positions relocate privately while stable enum,
+variant, field, and runtime-layout IDs remain unchanged. Reconciliation forces old public identities
+onto every surviving product/member, enum/member, implementation, binding, and structurally
+surviving node address. HIR and memory types use dense `ProductId`; enum types use stable `EnumId`
+plus explicit type arguments. Mutable display names live only on their owning definitions and member
+records. `RenameEntity` therefore changes one presentation attribute without sweeping types,
+aggregate sites, matches, witnesses, SSA types, or runtime identities. Global declaration and sibling
+collision checks remain at the transaction boundary, same-name rename rejects, same-batch same-name
+recreation cannot rebind a survivor, and immutable snapshots own separate HIR vectors. Existing
+stable product and field identities remain unchanged rather than adding another product identity.
+Direct member, trait, and implementation deletion remains unsupported;
 delete-and-same-name-create is not implicit replacement.
 
 Introducing a typed hole physically replaces and drops its subtree, including owned local/match
@@ -502,11 +506,14 @@ early `return`; selected byte-vector move/borrow and canonical operations; aggre
 construction/observation; exhaustive closed non-generic Boolean, I64, product, and enum matches
 with stable arm-local bindings and stable nominal member selection; exact calls to imported or
 source-free generic functions with stable
-binders, structured types, shared resolution, and derived witnesses; one identity-preserving direct-
-child reorder within one semantic sequence; atomic batch edits; tombstone-stable identities;
+binders, structured types, shared resolution, and derived witnesses; identity-preserving direct
+rename for products, product fields, enums, variants, and enum fields, including identity-selected
+canonical memory blocker/drop paths and iterative generic memory-witness type inspection; one
+identity-preserving direct-child reorder within one semantic sequence; atomic batch edits;
+tombstone-stable identities;
 structured stable nominal, generic, and match views; deterministic
-queries/projections/diffs; one canonical complete-HIR match derivation; and direct execution are
-implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
+queries/projections/diffs; one canonical complete-HIR match derivation; VM execution and eligible
+baseline-native entry after nominal rename; and direct execution are implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
 ownership, early-return, match, generic-declaration, generic-call, and direct-versus-resolved copy-
 load convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
 20,000-level nested-expression, typed-loop-control, local, semantic-match, published-type, and
@@ -519,8 +526,8 @@ work and timing support sharing unchanged semantic/index state only for exact me
 retaining full recomputation everywhere else.
 Formatting-only attachment changes preserve IDs and projection.
 
-**Target, not implemented:** later workspace expansion adds direct nominal-member mutation,
-cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
+**Target, not implemented:** later workspace expansion adds nominal member addition, deletion, or
+reordering; cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
 only when another present owner/order consumer defines it; generic patterns, generic
 ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
 imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer

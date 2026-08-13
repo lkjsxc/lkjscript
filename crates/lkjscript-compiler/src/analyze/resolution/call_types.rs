@@ -24,7 +24,6 @@ impl Resolver<'_> {
             traits: &self.analyzer.traits,
             products: &self.analyzer.products,
             implementations: &self.analyzer.implementations,
-            product_names: &self.analyzer.product_names,
             implementation_index: &self.analyzer.implementation_index,
         };
         match crate::generic_call::resolve_exact(

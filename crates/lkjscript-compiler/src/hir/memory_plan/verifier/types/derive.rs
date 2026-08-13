@@ -31,7 +31,7 @@ impl VerifiedTypes<'_> {
             Type::Fn { .. } | Type::Forall { .. } => {
                 verified_unresolved(ty, MemoryBlockerReason::CapturedClosure)
             }
-            Type::Product(name) => self.product(name)?,
+            Type::Product(id) => self.product(*id)?,
             Type::Enum { id, arguments, .. } => self.enum_type(id.bytes(), arguments)?,
         })
     }
@@ -64,9 +64,9 @@ impl VerifiedTypes<'_> {
         Ok(result)
     }
 
-    fn product(&mut self, name: &str) -> Result<VerifiedDerived> {
-        let key = VerifiedDeclarationKey::Product(name.to_owned());
-        let item = self.product_definition(name)?.clone();
+    fn product(&mut self, id: hir::ProductId) -> Result<VerifiedDerived> {
+        let key = VerifiedDeclarationKey::Product(id);
+        let item = self.product_definition(id)?.clone();
         verified_observe(&mut self.fields, item.fields.len())?;
         if self.graph.is_recursive(&key) {
             return self.recursive(&key, &[]);
@@ -78,7 +78,7 @@ impl VerifiedTypes<'_> {
                 self.expected(id)?.derived.clone(),
                 MemoryTypePathElement::ProductField {
                     index: index_u64(index)?,
-                    name: field.name.clone(),
+                    field: field.identity,
                 },
             ));
         }
@@ -90,7 +90,8 @@ impl VerifiedTypes<'_> {
         let derived = verified_fold(children, region_capable);
         if derived.closure.class == MemoryClosureClass::Unresolved {
             return Err(Error::msg(format!(
-                "memory verifier rejects unresolved product {name}"
+                "memory verifier rejects unresolved product {}",
+                item.name
             )));
         }
         Ok(derived)

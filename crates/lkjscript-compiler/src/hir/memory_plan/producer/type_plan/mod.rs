@@ -9,7 +9,7 @@ struct DerivedType {
 struct TypePlanner<'a> {
     program: &'a hir::Program,
     graph: DeclarationGraph,
-    product_indices: HashMap<String, usize>,
+    product_indices: HashMap<hir::ProductId, usize>,
     enum_indices: HashMap<[u8; 32], usize>,
     memo: HashMap<Type, MemoryTypeFactId>,
     facts: Vec<MemoryTypeFact>,
@@ -26,10 +26,10 @@ impl<'a> TypePlanner<'a> {
         let mut product_indices = HashMap::new();
         product_indices
             .try_reserve(program.products.len())
-            .map_err(|_| Error::host("HIR memory-plan product-name index allocation failed"))?;
+            .map_err(|_| Error::host("HIR memory-plan product index allocation failed"))?;
         for (index, product) in program.products.iter().enumerate() {
-            if product_indices.insert(product.name.clone(), index).is_some() {
-                return Err(Error::msg("HIR memory-plan product names are not unique"));
+            if product_indices.insert(product.id, index).is_some() {
+                return Err(Error::msg("HIR memory-plan product identities are not unique"));
             }
         }
         let mut enum_indices = HashMap::new();
@@ -115,12 +115,12 @@ impl<'a> TypePlanner<'a> {
         Ok(id)
     }
 
-    fn product(&self, name: &str) -> Result<&hir::ProductDefinition> {
+    fn product(&self, id: hir::ProductId) -> Result<&hir::ProductDefinition> {
         self.product_indices
-            .get(name)
+            .get(&id)
             .and_then(|index| self.program.products.get(*index))
-            .filter(|product| product.name == name)
-            .ok_or_else(|| Error::msg(format!("HIR memory plan references unknown product {name}")))
+            .filter(|product| product.id == id)
+            .ok_or_else(|| Error::msg(format!("HIR memory plan references unknown product {id:?}")))
     }
 
     fn enumeration(&self, id: [u8; 32]) -> Result<&hir::EnumDefinition> {

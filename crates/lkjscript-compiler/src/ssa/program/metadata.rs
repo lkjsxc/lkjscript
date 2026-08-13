@@ -1,6 +1,6 @@
 pub(super) fn lower_product_metadata(
     program: &hir::Program,
-    product_ids: &HashMap<String, ProductId>,
+    product_ids: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<Vec<ProductMetadata>> {
     program
         .products
@@ -8,6 +8,7 @@ pub(super) fn lower_product_metadata(
         .map(|product| {
             Ok(ProductMetadata {
                 id: ProductId::new(product.id.raw()),
+                identity: RuntimeLayoutId::new(product.identity),
                 name: product.name.clone(),
                 fields: product
                     .fields

@@ -1,13 +1,13 @@
 pub(in crate::ssa) fn lower_memory_type(
     ty: &MemoryType,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<SsaType> {
     crate::stack::grow(|| lower_memory_type_inner(ty, products))
 }
 
 fn lower_memory_type_inner(
     ty: &MemoryType,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<SsaType> {
     Ok(match ty {
         MemoryType::Never => return Err(Error::msg("Never has no structural representation")),
@@ -24,9 +24,9 @@ fn lower_memory_type_inner(
         MemoryType::ByteSliceMut => SsaType::ByteSliceMut,
         MemoryType::Symbol => SsaType::Symbol,
         MemoryType::Resource(kind) => SsaType::Resource(*kind),
-        MemoryType::Product(name) => SsaType::Product(
+        MemoryType::Product(id) => SsaType::Product(
             *products
-                .get(name)
+                .get(id)
                 .ok_or_else(|| Error::msg("structural type references unknown product"))?,
         ),
         MemoryType::Enum { id, arguments, .. } => SsaType::Enum {
@@ -60,22 +60,22 @@ fn lower_memory_type_inner(
 }
 
 fn layout_kind(
-    product_definitions: &HashMap<&str, &hir::ProductDefinition>,
+    product_definitions: &HashMap<hir::ProductId, &hir::ProductDefinition>,
     enum_definitions: &HashMap<[u8; 32], &hir::EnumDefinition>,
     ty: &MemoryType,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<StructuralLayoutKind> {
     match ty {
         MemoryType::String => Ok(StructuralLayoutKind::String),
         MemoryType::Path => Ok(StructuralLayoutKind::Path),
-        MemoryType::Product(name) => {
+        MemoryType::Product(id) => {
             let product = product_definitions
-                .get(name.as_str())
+                .get(id)
                 .copied()
                 .ok_or_else(|| Error::msg("structural layout lost product definition"))?;
             Ok(StructuralLayoutKind::Product {
                 product: *products
-                    .get(name)
+                    .get(id)
                     .ok_or_else(|| Error::msg("structural layout lost ProductId"))?,
                 fields: product
                     .fields

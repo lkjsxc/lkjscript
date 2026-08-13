@@ -37,6 +37,7 @@ fn product_instructions_without_deterministic_storage_metadata_reject() {
     let product = ProductId::new(0);
     program.products.push(ProductMetadata {
         id: product,
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "blocked".into(),
         fields: vec![ProductField {
             name: "value".into(),

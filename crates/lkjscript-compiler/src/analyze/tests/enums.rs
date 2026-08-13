@@ -1,5 +1,5 @@
 use super::*;
-use crate::hir::{EnumId, VariantFieldId, VariantId};
+use crate::hir::{VariantFieldId, VariantId};
 
 pub(super) fn canonical_source(body: &str) -> String {
     body.to_string()
@@ -26,7 +26,7 @@ fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
     let second = analyze_one(&source).expect("stable reanalysis");
     let definition = &first.enums[0];
     assert_eq!(definition.id, second.enums[0].id);
-    assert_ne!(definition.id, EnumId::UNRESOLVED);
+    assert_ne!(definition.id.bytes(), [0; 32]);
     assert_eq!(definition.type_parameters, ["t"]);
     assert_eq!(definition.variants.len(), 2);
     assert_eq!(definition.variants[0].source_order, 0);
@@ -51,12 +51,10 @@ fn same_shaped_enums_are_nominally_unequal_and_instantiation_is_invariant() {
     assert_ne!(program.enums[0].id, program.enums[1].id);
     let left_i64 = Type::Enum {
         id: program.enums[0].id,
-        name: "left".into(),
         arguments: vec![Type::I64],
     };
     let left_bool = Type::Enum {
         id: program.enums[0].id,
-        name: "left".into(),
         arguments: vec![Type::Bool],
     };
     assert!(!Type::unify_assignable(&left_i64, &left_bool));

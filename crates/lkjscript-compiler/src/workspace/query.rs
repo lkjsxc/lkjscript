@@ -1316,21 +1316,16 @@ impl WorkspaceSnapshot {
             }
         }
         match expected_type {
-            crate::Type::Product(name) => {
-                if let Some((index, _)) = self
-                    .program
-                    .products
-                    .iter()
-                    .enumerate()
-                    .find(|(_, product)| product.name == *name)
+            crate::Type::Product(id) => {
+                if id
+                    .index()
+                    .and_then(|index| self.program.products.get(index))
+                    .is_some_and(|product| product.id == *id)
                 {
-                    let raw = u64::try_from(index).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("product constructor index exceeds u64"))
-                    })?;
                     if let Some(entity) = self
                         .indexes
                         .address_entities
-                        .get(&super::model::EntityAddress::Product(raw))
+                        .get(&super::model::EntityAddress::Product(id.raw()))
                         .copied()
                     {
                         push_legal_constructor(&mut values, LegalConstructor::Product(entity))?;

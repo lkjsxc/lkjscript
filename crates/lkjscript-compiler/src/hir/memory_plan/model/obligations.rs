@@ -18,7 +18,7 @@ pub enum MemoryDropGlueKind {
     Resource(ResourceKind),
     String,
     Path,
-    Product(String),
+    Product(ProductId),
     Enum { id: [u8; 32], arguments: Vec<MemoryType> },
 }
 
@@ -31,7 +31,10 @@ pub struct MemoryDropGluePlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryDropPathElement {
-    ProductField { index: u64, name: String },
+    ProductField {
+        index: u64,
+        field: [u8; 32],
+    },
     EnumField {
         variant: [u8; 32],
         index: u64,

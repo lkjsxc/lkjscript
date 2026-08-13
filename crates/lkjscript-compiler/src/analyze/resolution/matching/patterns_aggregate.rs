@@ -76,7 +76,6 @@ impl Resolver<'_> {
             };
             let pattern = self.parse_match_pattern(nested, &field_ty)?;
             fields.push(MatchFieldPattern {
-                name,
                 field_index: declared.source_order,
                 projection,
                 pattern,
@@ -105,19 +104,19 @@ impl Resolver<'_> {
                 "product-pattern type {ty} does not exactly equal scrutinee type {expected}",
             )));
         }
-        let Type::Product(name) = &ty else {
+        let Type::Product(product) = &ty else {
             return Err(self.error("product-pattern type must name a Product"));
         };
         let definition = self
             .analyzer
-            .product_by_name(name)
-            .map_err(|_| self.error(format!("unknown product type {name}")))?
+            .product_by_id(*product)
+            .map_err(|_| self.error("unknown product type identity"))?
             .clone();
         let forms = fields_children(fields_form).map_err(|message| self.error(message))?;
         if forms.len() != definition.fields.len() {
             return Err(self.error(format!(
                 "product-pattern {} expected {} fields, got {}",
-                name,
+                definition.name,
                 definition.fields.len(),
                 forms.len(),
             )));
@@ -144,7 +143,6 @@ impl Resolver<'_> {
             };
             let pattern = self.parse_match_pattern(nested, &declared.ty)?;
             fields.push(MatchFieldPattern {
-                name: field_name,
                 field_index: declared.source_order,
                 projection,
                 pattern,

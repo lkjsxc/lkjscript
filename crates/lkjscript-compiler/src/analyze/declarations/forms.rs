@@ -14,6 +14,7 @@ pub(in crate::analyze) fn trait_declaration(
 }
 
 pub(in crate::analyze) fn impl_declaration(
+    analyzer: &Analyzer,
     args: &[AstExpr],
 ) -> std::result::Result<(String, Type), String> {
     let [trait_form, for_form] = args else {
@@ -31,7 +32,7 @@ pub(in crate::analyze) fn impl_declaration(
         _ => return Err("marker impl expects trait/ first".into()),
     };
     let target = match for_form {
-        AstExpr::Call { name, args } if name == "for" => parse_type_form(args)?,
+        AstExpr::Call { name, args } if name == "for" => parse_type_form(analyzer, args)?,
         _ => return Err("marker impl expects for/ second".into()),
     };
     Ok((trait_name, target))
@@ -61,6 +62,7 @@ pub(in crate::analyze) fn product_declaration(
 }
 
 pub(in crate::analyze) fn parse_product_field(
+    analyzer: &Analyzer,
     expression: &AstExpr,
 ) -> std::result::Result<(String, Type), String> {
     let AstExpr::Call { name, args } = expression else {
@@ -83,7 +85,7 @@ pub(in crate::analyze) fn parse_product_field(
         _ => return Err("field expects name/…/name first".into()),
     };
     let ty = match type_form {
-        AstExpr::Call { name, args } if name == "type" => parse_type_form(args)?,
+        AstExpr::Call { name, args } if name == "type" => parse_type_form(analyzer, args)?,
         _ => return Err("field expects type/…/type second".into()),
     };
     Ok((field_name, ty))

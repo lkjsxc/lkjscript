@@ -44,9 +44,10 @@ impl Analyzer {
                 let mut names = HashSet::new();
                 let mut fields = Vec::with_capacity(field_forms.len());
                 for (field_order, field_form) in field_forms.iter().enumerate() {
-                    let (field_name, ty) = parse_product_field(field_form).map_err(|message| {
-                        self.error(source, format!("product {product_name}: {message}"))
-                    })?;
+                    let (field_name, ty) =
+                        parse_product_field(self, field_form).map_err(|message| {
+                            self.error(source, format!("product {product_name}: {message}"))
+                        })?;
                     let ty = self.resolve_enum_type(&ty, &[]).map_err(|message| {
                         self.error(source, format!("product {product_name}: {message}"))
                     })?;
@@ -124,18 +125,18 @@ impl Analyzer {
         while let Some(ty) = pending.pop() {
             match ty {
                 Type::Never => return Err("Never is not a storage, field, or ABI type".into()),
-                Type::Product(name) if !self.product_names.contains_key(name) => {
-                    return Err(format!("unknown product type {name}"));
+                Type::Product(id) if !self.product_names.values().any(|known| known == id) => {
+                    return Err(format!("unknown product type identity {id:?}"));
                 }
-                Type::Enum {
-                    id,
-                    name,
-                    arguments,
-                } => {
-                    let Some((expected, parameters)) = self.enum_headers.get(name) else {
-                        return Err(format!("unknown enum type {name}"));
+                Type::Enum { id, arguments } => {
+                    let Some((name, (_, parameters))) = self
+                        .enum_headers
+                        .iter()
+                        .find(|(_, (expected, _))| expected == id)
+                    else {
+                        return Err("unknown enum type identity".into());
                     };
-                    if id != expected || arguments.len() != parameters.len() {
+                    if arguments.len() != parameters.len() {
                         return Err(format!("enum type {name} has invalid identity or arity"));
                     }
                     pending.extend(arguments);
@@ -163,11 +164,17 @@ impl Analyzer {
             .get(name)
             .copied()
             .ok_or_else(|| Error::msg(format!("unknown product type {name}")))?;
+        self.product_by_id(id)
+            .map_err(|_| Error::msg(format!("missing HIR product metadata for {name}")))
+    }
+
+    pub(in crate::analyze) fn product_by_id(&self, id: ProductId) -> Result<&ProductDefinition> {
         self.products
-            .get(id.index().ok_or_else(|| {
-                Error::msg(format!("ProductId for {name} exceeds host index width"))
-            })?)
+            .get(
+                id.index()
+                    .ok_or_else(|| Error::msg("ProductId exceeds host index width"))?,
+            )
             .filter(|product| product.id == id)
-            .ok_or_else(|| Error::msg(format!("missing HIR product metadata for {name}")))
+            .ok_or_else(|| Error::msg(format!("missing HIR product metadata for {id:?}")))
     }
 }

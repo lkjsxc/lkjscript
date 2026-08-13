@@ -21,9 +21,7 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
         {
             return fail("SSA product overlaps structural and region metadata");
         }
-        let expected =
-            crate::runtime_product_contract_identity(program.memory.plan, &product.name)?;
-        if region.identity != expected {
+        if !product.identity.is_resolved() || region.identity != product.identity {
             return fail("SSA region product identity is noncanonical");
         }
         if product

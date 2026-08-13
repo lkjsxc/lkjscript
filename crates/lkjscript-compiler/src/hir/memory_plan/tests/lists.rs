@@ -63,7 +63,7 @@ fn list_element_eligibility_and_copy_region_selection_are_exact() -> Result<()> 
         {
             let product = product(0, "copy-element", &[("value", hir::Type::I64)]);
             (
-                hir::Type::Product(product.name.clone()),
+                hir::Type::Product(product.id),
                 vec![product],
                 MemoryListElementEligibility::Copy,
             )
@@ -95,13 +95,13 @@ fn list_element_eligibility_and_copy_region_selection_are_exact() -> Result<()> 
 fn nested_products_close_transitively_over_selected_list_regions() -> Result<()> {
     let list_ty = hir::Type::List(Box::new(hir::Type::I64));
     let inner = product(0, "inner", &[("items", list_ty.clone())]);
-    let inner_ty = hir::Type::Product(inner.name.clone());
+    let inner_ty = hir::Type::Product(inner.id);
     let outer = product(
         1,
         "outer",
         &[("inner", inner_ty.clone()), ("flag", hir::Type::Bool)],
     );
-    let outer_ty = hir::Type::Product(outer.name.clone());
+    let outer_ty = hir::Type::Product(outer.id);
     let inner_value = product_value(&inner, vec![fake(list_ty)]);
     let outer_value = product_value(&outer, vec![inner_value, fake(hir::Type::Bool)]);
     let plan = derive(&program(
@@ -128,7 +128,7 @@ fn nested_products_close_transitively_over_selected_list_regions() -> Result<()>
 fn product_of_selected_lists_uses_an_ordinary_region() -> Result<()> {
     let list_ty = hir::Type::List(Box::new(hir::Type::I64));
     let product = product(0, "list-record", &[("items", list_ty.clone())]);
-    let ty = hir::Type::Product(product.name.clone());
+    let ty = hir::Type::Product(product.id);
     let plan = derive(&program(
         ty.clone(),
         product_value(&product, vec![fake(list_ty)]),

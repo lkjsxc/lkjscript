@@ -4,7 +4,7 @@ use lkjscript_core::{Error, Result};
 
 use crate::hir::{
     BindingId, BindingKind, Expr, ExprKind, ImplId, MatchLocal, MatchPattern, MatchPlan,
-    MatchPlanId, PlaceId, ProductId,
+    MatchPlanId, PlaceId, ProductId, Type,
 };
 
 use super::program::SemanticProgram;
@@ -134,6 +134,7 @@ pub(super) fn compact(
     program.products = products;
     program.enums = enums;
     program.implementations = implementations;
+    remap_stored_types(program, &product_map)?;
     let mut plan_roots = HashMap::new();
     plan_roots
         .try_reserve(program.match_plans.len())
@@ -352,6 +353,57 @@ pub(super) fn compact(
         implementations: implementation_map,
         enum_vectors,
     })
+}
+
+fn remap_stored_types(
+    program: &mut SemanticProgram,
+    products: &HashMap<ProductId, ProductId>,
+) -> Result<()> {
+    for binding in &mut program.bindings {
+        if type_references_deleted_product(&binding.ty, products) {
+            continue;
+        }
+        binding.ty = binding.ty.try_remap_products(products)?;
+    }
+    for definition in &mut program.products {
+        for field in &mut definition.fields {
+            field.ty = field.ty.try_remap_products(products)?;
+        }
+    }
+    for definition in &mut program.enums {
+        for field in definition
+            .variants
+            .iter_mut()
+            .flat_map(|variant| &mut variant.fields)
+        {
+            field.ty = field.ty.try_remap_products(products)?;
+        }
+    }
+    if let Some(main) = &mut program.main {
+        for ty in &mut main.param_types {
+            *ty = ty.try_remap_products(products)?;
+        }
+        main.return_type = main.return_type.try_remap_products(products)?;
+    }
+    Ok(())
+}
+
+fn type_references_deleted_product(root: &Type, products: &HashMap<ProductId, ProductId>) -> bool {
+    let mut pending = vec![root];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Product(id) if !products.contains_key(id) => return true,
+            Type::Enum { arguments, .. } => pending.extend(arguments),
+            Type::List(inner) => pending.push(inner),
+            Type::Fn { params, ret } => {
+                pending.push(ret);
+                pending.extend(params);
+            }
+            Type::Forall { body, .. } => pending.push(body),
+            _ => {}
+        }
+    }
+    false
 }
 
 fn collect_plan_roots(
@@ -810,22 +862,22 @@ fn remap_plan(
                 &locations.places,
                 products,
             )?,
-            body_type: arm.body_type.clone(),
+            body_type: arm.body_type.try_remap_products(products)?,
         });
     }
     let mut projections = plan.projections.clone();
     for item in &mut projections {
-        item.local = remap_local(&item.local, bindings, locations)?;
+        item.local = remap_local(&item.local, bindings, products, locations)?;
     }
     let mut assignments = plan.bindings.clone();
     for item in &mut assignments {
-        item.local = remap_local(&item.local, bindings, locations)?;
+        item.local = remap_local(&item.local, bindings, products, locations)?;
     }
     Ok(MatchPlan {
         id,
         origin: plan.origin,
-        scrutinee: remap_local(&plan.scrutinee, bindings, locations)?,
-        result_type: plan.result_type.clone(),
+        scrutinee: remap_local(&plan.scrutinee, bindings, products, locations)?,
+        result_type: plan.result_type.try_remap_products(products)?,
         arms,
         tests: plan.tests.clone(),
         projections,
@@ -839,6 +891,7 @@ fn remap_plan(
 fn remap_local(
     local: &MatchLocal,
     bindings: &HashMap<BindingId, BindingId>,
+    products: &HashMap<ProductId, ProductId>,
     locations: &Locations,
 ) -> Result<MatchLocal> {
     Ok(MatchLocal {
@@ -853,7 +906,7 @@ fn remap_local(
             .get(&local.binding)
             .copied()
             .ok_or_else(|| Error::msg("match-local slot remap is incomplete"))?,
-        ty: local.ty.clone(),
+        ty: local.ty.try_remap_products(products)?,
     })
 }
 

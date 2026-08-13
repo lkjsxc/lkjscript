@@ -46,15 +46,7 @@ fn parse_one_inner(atoms: &[String], i: usize) -> Result<(Type, usize), String> 
             };
             Ok((Type::Resource(kind), i + 1))
         }
-        "product" => {
-            let Some(name) = atoms.get(i + 1) else {
-                return Err("product requires a declared product name".into());
-            };
-            if !is_product_type_name(name) {
-                return Err(format!("invalid product type name {name}"));
-            }
-            Ok((Type::Product(name.clone()), i + 2))
-        }
+        "product" => Err("product types require declaration resolution".into()),
         "list" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
             Ok((Type::List(Box::new(inner)), next))
@@ -87,8 +79,4 @@ fn is_type_param_name(name: &str) -> bool {
     lkjscript_contracts::is_identifier(name)
         && !lkjscript_contracts::RESERVED_WORDS.contains(&name)
         && !lkjscript_contracts::BUILTIN_ERROR_NAMES.contains(&name)
-}
-
-fn is_product_type_name(name: &str) -> bool {
-    lkjscript_contracts::is_identifier(name) || crate::source::module_names::is_internal_name(name)
 }

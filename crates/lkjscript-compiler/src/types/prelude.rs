@@ -5,17 +5,37 @@ use lkjscript_core::{
 };
 
 pub fn prelude_type(kind: PreludeEnum, arguments: Vec<Type>) -> Type {
-    let (id, name) = match kind {
-        PreludeEnum::Option => (OPTION_ID, "option"),
-        PreludeEnum::Result => (RESULT_ID, "result"),
-        PreludeEnum::NumericError => (NUMERIC_ERROR_ID, "numeric-error"),
-        PreludeEnum::Utf8Error => (UTF8_ERROR_ID, "utf8-error"),
-        PreludeEnum::SystemError => (SYSTEM_ERROR_ID, "system-error"),
+    let id = match kind {
+        PreludeEnum::Option => OPTION_ID,
+        PreludeEnum::Result => RESULT_ID,
+        PreludeEnum::NumericError => NUMERIC_ERROR_ID,
+        PreludeEnum::Utf8Error => UTF8_ERROR_ID,
+        PreludeEnum::SystemError => SYSTEM_ERROR_ID,
     };
     Type::Enum {
         id: EnumId::new(id),
-        name: name.into(),
         arguments,
+    }
+}
+
+pub const fn prelude_name(kind: PreludeEnum) -> &'static str {
+    match kind {
+        PreludeEnum::Option => "option",
+        PreludeEnum::Result => "result",
+        PreludeEnum::NumericError => "numeric-error",
+        PreludeEnum::Utf8Error => "utf8-error",
+        PreludeEnum::SystemError => "system-error",
+    }
+}
+
+pub const fn prelude_name_for_id(id: EnumId) -> Option<&'static str> {
+    match id.bytes() {
+        OPTION_ID => Some("option"),
+        RESULT_ID => Some("result"),
+        NUMERIC_ERROR_ID => Some("numeric-error"),
+        UTF8_ERROR_ID => Some("utf8-error"),
+        SYSTEM_ERROR_ID => Some("system-error"),
+        _ => None,
     }
 }
 

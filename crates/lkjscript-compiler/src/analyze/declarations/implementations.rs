@@ -19,7 +19,7 @@ impl Analyzer {
                     continue;
                 }
                 let (trait_name, target) =
-                    impl_declaration(args).map_err(|message| self.error(source, message))?;
+                    impl_declaration(self, args).map_err(|message| self.error(source, message))?;
                 let trait_id = self.trait_names.get(&trait_name).copied().ok_or_else(|| {
                     self.error(
                         source,
@@ -39,22 +39,17 @@ impl Analyzer {
                         ),
                     ));
                 }
-                let Type::Product(product_name) = &target else {
+                let Type::Product(product) = target else {
                     return Err(self.error(
                         source,
                         "marker impl target must be one exact nominal Product type",
                     ));
                 };
-                let product = self
+                let product_name = self
                     .product_names
-                    .get(product_name)
-                    .copied()
-                    .ok_or_else(|| {
-                        self.error(
-                            source,
-                            format!("impl references unknown product {product_name}"),
-                        )
-                    })?;
+                    .iter()
+                    .find_map(|(name, id)| (*id == product).then_some(name.as_str()))
+                    .ok_or_else(|| self.error(source, "impl references unknown product"))?;
                 if !coherent.insert((trait_id, product)) {
                     return Err(self.error(
                         source,

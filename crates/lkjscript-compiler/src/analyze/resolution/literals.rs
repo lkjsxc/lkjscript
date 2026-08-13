@@ -2,7 +2,7 @@ use crate::analyze::*;
 
 impl Resolver<'_> {
     pub(in crate::analyze) fn resolve_empty_list(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        let element = parse_type_form(args)
+        let element = parse_type_form(self.analyzer, args)
             .map_err(|message| self.error(format!("empty-list: {message}")))?;
         self.analyzer
             .validate_product_type(&element)
@@ -21,8 +21,8 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_none(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        let value_type =
-            parse_type_form(args).map_err(|message| self.error(format!("none: {message}")))?;
+        let value_type = parse_type_form(self.analyzer, args)
+            .map_err(|message| self.error(format!("none: {message}")))?;
         let value_type = self
             .analyzer
             .resolve_enum_type(

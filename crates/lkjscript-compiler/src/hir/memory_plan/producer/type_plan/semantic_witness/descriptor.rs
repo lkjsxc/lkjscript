@@ -7,8 +7,8 @@ impl TypePlanner<'_> {
         let mut declarations = BTreeMap::new();
         while let Some(ty) = pending.pop_front() {
             match ty {
-                Type::Product(name) => {
-                    let item = self.product(name)?;
+                Type::Product(id) => {
+                    let item = self.product(*id)?;
                     if declarations.contains_key(&item.identity) {
                         continue;
                     }

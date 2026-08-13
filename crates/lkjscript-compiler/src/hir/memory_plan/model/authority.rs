@@ -51,7 +51,10 @@ pub enum MemoryMixedBridgeDirection {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemoryTypePathElement {
-    ProductField { index: u64, name: String },
+    ProductField {
+        index: u64,
+        field: [u8; 32],
+    },
     EnumVariantField {
         variant_index: u64,
         variant: [u8; 32],
@@ -94,7 +97,7 @@ pub enum MemoryExecution {
 pub enum MemoryExecutionCutover {
     StructuralString,
     StructuralPath,
-    Product(String),
+    Product(ProductId),
     Enum { id: [u8; 32], arguments: Vec<MemoryType> },
 }
 

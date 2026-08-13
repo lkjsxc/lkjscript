@@ -102,20 +102,29 @@ fn canonical_type(ty: &Type) -> String {
         Type::Symbol => "symbol".into(),
         Type::Capability(kind) => format!("capability {}", kind.as_str()),
         Type::Resource(kind) => kind.as_str().into(),
-        Type::Product(name) | Type::Param(name) => name.clone(),
-        Type::Enum {
-            name, arguments, ..
-        } => format!(
-            "{} {}",
-            name.rsplit(':').next().unwrap_or(name),
-            arguments
-                .iter()
-                .map(canonical_type)
-                .collect::<Vec<_>>()
-                .join(" ")
-        )
-        .trim_end()
-        .into(),
+        Type::Product(id) => format!("product#{}", id.raw()),
+        Type::Param(name) => name.clone(),
+        Type::Enum { id, arguments } => {
+            let name = match id.bytes() {
+                lkjscript_core::OPTION_ID => "option",
+                lkjscript_core::RESULT_ID => "result",
+                lkjscript_core::NUMERIC_ERROR_ID => "numeric-error",
+                lkjscript_core::UTF8_ERROR_ID => "utf8-error",
+                lkjscript_core::SYSTEM_ERROR_ID => "system-error",
+                _ => "enum",
+            };
+            format!(
+                "{} {}",
+                name,
+                arguments
+                    .iter()
+                    .map(canonical_type)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+            .trim_end()
+            .into()
+        }
         Type::List(inner) => format!("list {}", canonical_type(inner)),
         Type::Fn { params, ret } => format!(
             "fn inputs {} output {}",

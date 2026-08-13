@@ -7,34 +7,22 @@ use crate::hir::{
     MatchEdgeTarget, MatchPattern, Operation, Origin, Program, SourceId, Type,
 };
 
-struct DeclarationIndexes<'a> {
-    products_by_name: HashMap<&'a str, usize>,
-    product_ids_by_name: HashMap<String, lkjscript_core::ProductId>,
+struct DeclarationIndexes {
     implementation_index:
         HashMap<(crate::hir::TraitId, lkjscript_core::ProductId), crate::hir::ImplId>,
     enums_by_id: HashMap<crate::hir::EnumId, usize>,
 }
 
-impl<'a> DeclarationIndexes<'a> {
-    fn build(program: &'a Program) -> Result<Self> {
-        let mut products_by_name = HashMap::new();
-        products_by_name
+impl DeclarationIndexes {
+    fn build(program: &Program) -> Result<Self> {
+        let mut product_names = HashSet::new();
+        product_names
             .try_reserve(program.products.len())
             .map_err(|_| Error::host("HIR product name index allocation failed"))?;
-        for (index, product) in program.products.iter().enumerate() {
-            if products_by_name
-                .insert(product.name.as_str(), index)
-                .is_some()
-            {
+        for product in &program.products {
+            if !product_names.insert(product.name.as_str()) {
                 return Err(Error::msg("HIR product declaration name is duplicated"));
             }
-        }
-        let mut product_ids_by_name = HashMap::new();
-        product_ids_by_name
-            .try_reserve(program.products.len())
-            .map_err(|_| Error::host("HIR product identity index allocation failed"))?;
-        for product in &program.products {
-            product_ids_by_name.insert(product.name.clone(), product.id);
         }
         let mut implementation_index = HashMap::new();
         implementation_index
@@ -61,8 +49,6 @@ impl<'a> DeclarationIndexes<'a> {
             }
         }
         Ok(Self {
-            products_by_name,
-            product_ids_by_name,
             implementation_index,
             enums_by_id,
         })
@@ -560,7 +546,7 @@ fn validate_pattern(
                     .try_reserve(fields.len())
                     .map_err(|_| Error::host("HIR match pattern work allocation failed"))?;
                 for (field, declared) in fields.iter().zip(&selected.fields) {
-                    if field.name != declared.name || field.field_index != declared.source_order {
+                    if field.field_index != declared.source_order {
                         return Err(Error::msg("HIR match field identity is stale"));
                     }
                     let field_type = substitute_hir_type(&declared.ty, &substitutions)?;
@@ -592,13 +578,13 @@ fn validate_pattern(
                 product,
                 fields,
             } => {
-                let Type::Product(name) = ty else {
+                let Type::Product(type_product) = ty else {
                     return Err(Error::msg("HIR product pattern lost its product type"));
                 };
                 let definition = program
                     .products
                     .get(index_of(product.raw(), "HIR match product")?)
-                    .filter(|definition| definition.id == *product && definition.name == *name)
+                    .filter(|definition| definition.id == *product && type_product == product)
                     .ok_or_else(|| Error::msg("HIR match pattern has a stale product identity"))?;
                 if fields.len() != definition.fields.len() {
                     return Err(Error::msg("HIR match pattern has stale product fields"));
@@ -607,7 +593,7 @@ fn validate_pattern(
                     .try_reserve(fields.len())
                     .map_err(|_| Error::host("HIR match pattern work allocation failed"))?;
                 for (field, declared) in fields.iter().zip(&definition.fields) {
-                    if field.name != declared.name || field.field_index != declared.source_order {
+                    if field.field_index != declared.source_order {
                         return Err(Error::msg("HIR match field identity is stale"));
                     }
                     match (&field.projection, &field.pattern) {
@@ -1041,7 +1027,7 @@ fn validate_expression_kind(
         ExprKind::ProductValue { product, fields } => {
             let definition = require_product(program, *product)?;
             if fields.len() != definition.fields.len()
-                || !matches!(&expression.ty, Type::Product(name) if *name == definition.name)
+                || !matches!(&expression.ty, Type::Product(id) if *id == definition.id)
             {
                 return Err(Error::msg("HIR product construction facts are stale"));
             }
@@ -1057,7 +1043,7 @@ fn validate_expression_kind(
                 .get(index_of(*field, "HIR product field")?)
                 .ok_or_else(|| Error::msg("HIR product field identity is stale"))?;
             if expression.ty != field.ty
-                || !matches!(&value.ty, Type::Product(name) if *name == definition.name)
+                || !matches!(&value.ty, Type::Product(id) if *id == definition.id)
             {
                 return Err(Error::msg("HIR product projection facts are stale"));
             }
@@ -1075,7 +1061,7 @@ fn validate_expression_kind(
                 .ok_or_else(|| Error::msg("HIR product field identity is stale"))?;
             if replacement.ty != field.ty
                 || expression.ty != value.ty
-                || !matches!(&value.ty, Type::Product(name) if *name == definition.name)
+                || !matches!(&value.ty, Type::Product(id) if *id == definition.id)
             {
                 return Err(Error::msg("HIR product update facts are stale"));
             }
@@ -1229,7 +1215,6 @@ fn validate_call_signature(
         traits: &program.traits,
         products: &program.products,
         implementations: &program.implementations,
-        product_names: &declarations.product_ids_by_name,
         implementation_index: &declarations.implementation_index,
     };
     let exact = crate::generic_call::resolve_exact(
@@ -1351,22 +1336,22 @@ fn validate_type(program: &Program, declarations: &DeclarationIndexes, root: &Ty
     pending.push(root);
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Product(name) => {
-                if !declarations.products_by_name.contains_key(name.as_str()) {
+            Type::Product(id) => {
+                if id
+                    .index()
+                    .and_then(|index| program.products.get(index))
+                    .is_none_or(|definition| definition.id != *id)
+                {
                     return Err(Error::msg("HIR type references an unknown product"));
                 }
             }
-            Type::Enum {
-                id,
-                name,
-                arguments,
-            } => {
+            Type::Enum { id, arguments } => {
                 let definition = declarations
                     .enums_by_id
                     .get(id)
                     .and_then(|index| program.enums.get(*index))
                     .ok_or_else(|| Error::msg("HIR type references an unknown enum"))?;
-                if definition.name != *name || definition.type_parameters.len() != arguments.len() {
+                if definition.type_parameters.len() != arguments.len() {
                     return Err(Error::msg("HIR enum type identity or arity is stale"));
                 }
                 pending

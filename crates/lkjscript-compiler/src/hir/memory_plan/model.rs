@@ -1,6 +1,6 @@
 use std::fmt;
 
-use lkjscript_core::{CapabilityKind, ResourceKind};
+use lkjscript_core::{CapabilityKind, ProductId, ResourceKind};
 
 pub const HIR_MEMORY_PLAN_SCHEMA: &str = "lkjscript.hir-memory-plan";
 

@@ -15,7 +15,7 @@ type RepresentationKey = (
 pub(super) fn install_value_representations(
     memory: &mut StructuralMemoryMetadata,
     plan: &HirMemoryPlan,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<()> {
     let mut representation_keys = HashSet::new();
     let mut facts_by_witness = HashMap::new();

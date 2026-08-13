@@ -72,7 +72,7 @@ fn pattern_inner(
                 .collect();
             for (field, declared) in fields.iter().zip(&selected.fields) {
                 let field_ty = declared.ty.subst(&substitutions);
-                if field.name != declared.name || field.field_index != declared.source_order {
+                if field.field_index != declared.source_order {
                     return Err(Error::msg(
                         "variant pattern field identity/type/order is stale",
                     ));
@@ -104,19 +104,23 @@ fn pattern_inner(
             product,
             fields,
         } => {
-            let Type::Product(name) = ty else {
+            let Type::Product(type_product) = ty else {
                 return Err(Error::msg("product pattern lost product type"));
             };
             let definition = program
                 .products
-                .iter()
-                .find(|item| item.id == *product && item.name == *name)
+                .get(
+                    product
+                        .index()
+                        .ok_or_else(|| Error::msg("product pattern identity exceeds host index"))?,
+                )
+                .filter(|item| item.id == *product && type_product == product)
                 .ok_or_else(|| Error::msg("product pattern identity is stale"))?;
             if fields.len() != definition.fields.len() {
                 return Err(Error::msg("product pattern field count is stale"));
             }
             for (field, declared) in fields.iter().zip(&definition.fields) {
-                if field.name != declared.name || field.field_index != declared.source_order {
+                if field.field_index != declared.source_order {
                     return Err(Error::msg(
                         "product pattern field identity/type/order is stale",
                     ));

@@ -4,12 +4,12 @@ use crate::ssa::*;
 pub(in crate::ssa) fn lower_structural_memory(
     program: &hir::Program,
     plan: &HirMemoryPlan,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<StructuralMemoryMetadata> {
     let product_definitions: HashMap<_, _> = program
         .products
         .iter()
-        .map(|product| (product.name.as_str(), product))
+        .map(|product| (product.id, product))
         .collect();
     let enum_definitions: HashMap<_, _> = program
         .enums
@@ -141,13 +141,13 @@ pub(in crate::ssa) fn structural_glue(
 
 pub(in crate::ssa) fn glue_type(
     kind: &MemoryDropGlueKind,
-    products: &HashMap<String, ProductId>,
+    products: &HashMap<crate::hir::ProductId, ProductId>,
 ) -> Result<Option<SsaType>> {
     Ok(match kind {
         MemoryDropGlueKind::String => Some(SsaType::Str),
         MemoryDropGlueKind::Path => Some(SsaType::Path),
-        MemoryDropGlueKind::Product(name) => {
-            Some(SsaType::Product(*products.get(name).ok_or_else(|| {
+        MemoryDropGlueKind::Product(id) => {
+            Some(SsaType::Product(*products.get(id).ok_or_else(|| {
                 Error::msg("structural product glue has no ProductId")
             })?))
         }

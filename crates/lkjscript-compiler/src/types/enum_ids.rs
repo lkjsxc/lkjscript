@@ -23,10 +23,6 @@ macro_rules! stable_id {
 
 stable_id!(EnumId);
 
-impl EnumId {
-    pub const UNRESOLVED: Self = Self::new([0; 32]);
-}
-
 stable_id!(VariantId);
 stable_id!(VariantFieldId);
 stable_id!(RuntimeLayoutId);

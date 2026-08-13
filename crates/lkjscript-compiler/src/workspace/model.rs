@@ -361,7 +361,6 @@ pub(super) struct SnapshotIndexes {
     pub entity_lookup: HashMap<EntityId, usize>,
     pub node_lookup: HashMap<NodeId, usize>,
     pub node_children: HashMap<NodeId, Vec<NodeId>>,
-    pub product_name_indices: HashMap<String, usize>,
     pub enum_identity_indices: HashMap<crate::hir::EnumId, usize>,
     pub variant_identity_indices:
         HashMap<(crate::hir::EnumId, crate::hir::VariantId), (usize, usize)>,

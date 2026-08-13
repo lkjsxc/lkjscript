@@ -10,13 +10,12 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
     }) {
         return fail("SSA source metadata must have dense IDs and non-empty paths");
     }
-    if program
-        .products
-        .iter()
-        .enumerate()
-        .any(|(index, product)| product.id.index() != Some(index) || product.name.is_empty())
-    {
-        return fail("SSA products must have dense IDs and non-empty names");
+    if program.products.iter().enumerate().any(|(index, product)| {
+        product.id.index() != Some(index)
+            || !product.identity.is_resolved()
+            || product.name.is_empty()
+    }) {
+        return fail("SSA products must have dense IDs, resolved identities, and non-empty names");
     }
     let mut product_names = HashSet::new();
     for product in &program.products {

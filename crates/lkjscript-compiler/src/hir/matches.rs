@@ -27,7 +27,6 @@ pub struct MatchLocal {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchFieldPattern {
-    pub name: String,
     pub field_index: u64,
     pub projection: Option<MatchLocal>,
     pub pattern: MatchPattern,
@@ -101,10 +100,18 @@ impl MatchPattern {
             match item {
                 Work::Visit(pattern) => match pattern {
                     MatchPattern::Wildcard { ty } => {
-                        completed.push(MatchPattern::Wildcard { ty: ty.clone() });
+                        completed.push(MatchPattern::Wildcard {
+                            ty: ty.try_remap_products(products)?,
+                        });
                     }
                     MatchPattern::Binding { local } => completed.push(MatchPattern::Binding {
-                        local: remap_match_local(local, bindings, local_slots, local_places)?,
+                        local: remap_match_local(
+                            local,
+                            bindings,
+                            local_slots,
+                            local_places,
+                            products,
+                        )?,
                     }),
                     MatchPattern::Bool(value) => completed.push(MatchPattern::Bool(*value)),
                     MatchPattern::I64(value) => completed.push(MatchPattern::I64(*value)),
@@ -166,20 +173,25 @@ impl MatchPattern {
                     })?;
                     for (field, pattern) in fields.iter().zip(patterns) {
                         remapped_fields.push(MatchFieldPattern {
-                            name: field.name.clone(),
                             field_index: field.field_index,
                             projection: field
                                 .projection
                                 .as_ref()
                                 .map(|local| {
-                                    remap_match_local(local, bindings, local_slots, local_places)
+                                    remap_match_local(
+                                        local,
+                                        bindings,
+                                        local_slots,
+                                        local_places,
+                                        products,
+                                    )
                                 })
                                 .transpose()?,
                             pattern,
                         });
                     }
                     completed.push(MatchPattern::Variant {
-                        ty: ty.clone(),
+                        ty: ty.try_remap_products(products)?,
                         enum_id,
                         variant,
                         layout,
@@ -201,20 +213,25 @@ impl MatchPattern {
                     })?;
                     for (field, pattern) in fields.iter().zip(patterns) {
                         remapped_fields.push(MatchFieldPattern {
-                            name: field.name.clone(),
                             field_index: field.field_index,
                             projection: field
                                 .projection
                                 .as_ref()
                                 .map(|local| {
-                                    remap_match_local(local, bindings, local_slots, local_places)
+                                    remap_match_local(
+                                        local,
+                                        bindings,
+                                        local_slots,
+                                        local_places,
+                                        products,
+                                    )
                                 })
                                 .transpose()?,
                             pattern,
                         });
                     }
                     completed.push(MatchPattern::Product {
-                        ty: ty.clone(),
+                        ty: ty.try_remap_products(products)?,
                         product: products.get(&product).copied().ok_or_else(|| {
                             lkjscript_core::Error::msg("match product remap is incomplete")
                         })?,
@@ -241,6 +258,7 @@ fn remap_match_local(
     bindings: &HashMap<BindingId, BindingId>,
     local_slots: &HashMap<BindingId, usize>,
     local_places: &HashMap<BindingId, PlaceId>,
+    products: &HashMap<ProductId, ProductId>,
 ) -> lkjscript_core::Result<MatchLocal> {
     Ok(MatchLocal {
         binding: bindings
@@ -255,7 +273,7 @@ fn remap_match_local(
             .get(&local.binding)
             .copied()
             .ok_or_else(|| lkjscript_core::Error::msg("match slot remap is incomplete"))?,
-        ty: local.ty.clone(),
+        ty: local.ty.try_remap_products(products)?,
     })
 }
 
@@ -322,10 +340,7 @@ fn fields_equal<'a>(
         return false;
     }
     for (left, right) in left.iter().zip(right) {
-        if left.name != right.name
-            || left.field_index != right.field_index
-            || left.projection != right.projection
-        {
+        if left.field_index != right.field_index || left.projection != right.projection {
             return false;
         }
         pending.push((&left.pattern, &right.pattern));
@@ -408,7 +423,6 @@ impl Clone for MatchPattern {
                         .iter()
                         .zip(patterns)
                         .map(|(field, pattern)| MatchFieldPattern {
-                            name: field.name.clone(),
                             field_index: field.field_index,
                             projection: field.projection.clone(),
                             pattern,
@@ -435,7 +449,6 @@ impl Clone for MatchPattern {
                         .iter()
                         .zip(patterns)
                         .map(|(field, pattern)| MatchFieldPattern {
-                            name: field.name.clone(),
                             field_index: field.field_index,
                             projection: field.projection.clone(),
                             pattern,

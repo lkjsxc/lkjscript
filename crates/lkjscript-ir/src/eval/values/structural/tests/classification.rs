@@ -16,6 +16,7 @@ fn exact_memory_metadata_selects_structural_execution() {
     let legacy = ProductId::new(0);
     program.products.push(ProductMetadata {
         id: legacy,
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "legacy-list".into(),
         fields: vec![ProductField {
             name: "items".into(),
@@ -31,6 +32,7 @@ fn exact_memory_metadata_selects_structural_execution() {
     let planned_type = SsaType::Product(planned);
     program.products.push(ProductMetadata {
         id: planned,
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "planned".into(),
         fields: vec![ProductField {
             name: "text".into(),
@@ -115,6 +117,7 @@ fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
     };
     program.products.push(ProductMetadata {
         id: ProductId::new(0),
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "mixed".into(),
         fields: vec![
             ProductField {
@@ -140,6 +143,7 @@ fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
     assert!(mode(&program, mixed).is_err());
     program.products.push(ProductMetadata {
         id: ProductId::new(1),
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "recursive".into(),
         fields: vec![ProductField {
             name: "again".into(),

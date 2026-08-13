@@ -8,12 +8,10 @@ use crate::hir;
 fn mutually_recursive_expression_statement_enums_share_one_group() {
     let expression_ty = hir::Type::Enum {
         id: enum_id(60),
-        name: "expression".into(),
         arguments: Vec::new(),
     };
     let statement_ty = hir::Type::Enum {
         id: enum_id(70),
-        name: "statement".into(),
         arguments: Vec::new(),
     };
     let expression = enum_definition(
@@ -48,23 +46,19 @@ fn mutually_recursive_expression_statement_enums_share_one_group() {
 
 #[test]
 fn parent_group_names_exact_external_child_group_and_member() {
-    let child = product(80, "child", &[("value", hir::Type::I64)]);
-    let parent = product(
-        81,
-        "parent",
-        &[("child", hir::Type::Product("child".into()))],
-    );
-    let root = hir::Type::Product(parent.name.clone());
+    let child = product(0, "child", &[("value", hir::Type::I64)]);
+    let parent = product(1, "parent", &[("child", hir::Type::Product(child.id))]);
+    let root = hir::Type::Product(parent.id);
     let plan = derive(&program(
         root.clone(),
         fake(root),
-        vec![parent, child],
+        vec![child, parent],
         Vec::new(),
     ))
     .expect("external child group plan");
-    let parent = super::witnesses::witness(&plan, &MemoryType::Product("parent".into()))
+    let parent = super::witnesses::witness(&plan, &MemoryType::Product(hir::ProductId::new(1)))
         .expect("parent witness");
-    let child = super::witnesses::witness(&plan, &MemoryType::Product("child".into()))
+    let child = super::witnesses::witness(&plan, &MemoryType::Product(hir::ProductId::new(0)))
         .expect("child witness");
     assert!(matches!(parent.facts.dependencies[0].target,
         lkjscript_contracts::ExecutableMemoryWitnessTarget::ExternalMember { group, member }

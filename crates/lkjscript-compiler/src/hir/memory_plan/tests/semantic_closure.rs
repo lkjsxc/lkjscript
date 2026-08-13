@@ -14,25 +14,25 @@ fn witness<'a>(plan: &'a HirMemoryPlan, ty: &MemoryType) -> &'a MemoryWitness {
 
 #[test]
 fn unrelated_declaration_does_not_change_reachable_product_contract_or_witness() {
-    let root = product(1, "root", &[("value", hir::Type::I64)]);
-    let body = fake(hir::Type::Product(root.name.clone()));
+    let root = product(0, "root", &[("value", hir::Type::I64)]);
+    let body = fake(hir::Type::Product(root.id));
     let baseline = derive(&program(
-        hir::Type::Product(root.name.clone()),
+        hir::Type::Product(root.id),
         body.clone(),
         vec![root.clone()],
         Vec::new(),
     ))
     .expect("baseline plan");
-    let unrelated = product(9, "unrelated", &[("other", hir::Type::Bool)]);
+    let unrelated = product(1, "unrelated", &[("other", hir::Type::Bool)]);
     let extended = derive(&program(
-        hir::Type::Product(root.name.clone()),
+        hir::Type::Product(root.id),
         body,
         vec![root, unrelated],
         Vec::new(),
     ))
     .expect("extended plan");
-    let left = witness(&baseline, &MemoryType::Product("root".into()));
-    let right = witness(&extended, &MemoryType::Product("root".into()));
+    let left = witness(&baseline, &MemoryType::Product(hir::ProductId::new(0)));
+    let right = witness(&extended, &MemoryType::Product(hir::ProductId::new(0)));
     assert_eq!(left.id, right.id);
     assert_eq!(left.facts.semantic_contract, right.facts.semantic_contract);
     assert_eq!(left.facts.semantic.declarations.len(), 1);
@@ -41,19 +41,19 @@ fn unrelated_declaration_does_not_change_reachable_product_contract_or_witness()
 #[test]
 fn product_field_roles_are_complete_ordered_and_identity_bearing() {
     let root = product(
-        1,
+        0,
         "pair",
         &[("left", hir::Type::I64), ("right", hir::Type::Bool)],
     );
-    let body = fake(hir::Type::Product(root.name.clone()));
+    let body = fake(hir::Type::Product(root.id));
     let plan = derive(&program(
-        hir::Type::Product(root.name.clone()),
+        hir::Type::Product(root.id),
         body,
         vec![root.clone()],
         Vec::new(),
     ))
     .expect("pair plan");
-    let record = witness(&plan, &MemoryType::Product("pair".into()));
+    let record = witness(&plan, &MemoryType::Product(hir::ProductId::new(0)));
     assert_eq!(record.facts.dependencies.len(), 2);
     for (index, dependency) in record.facts.dependencies.iter().enumerate() {
         let lkjscript_contracts::ExecutableMemoryWitnessRole::ProductField {
@@ -76,16 +76,20 @@ fn product_field_roles_are_complete_ordered_and_identity_bearing() {
 
 #[test]
 fn recursive_product_self_edge_uses_local_member_ordinal() {
-    let root = product(1, "tree", &[("next", hir::Type::Product("tree".into()))]);
-    let body = fake(hir::Type::Product(root.name.clone()));
+    let root = product(
+        0,
+        "tree",
+        &[("next", hir::Type::Product(hir::ProductId::new(0)))],
+    );
+    let body = fake(hir::Type::Product(root.id));
     let plan = derive(&program(
-        hir::Type::Product(root.name.clone()),
+        hir::Type::Product(root.id),
         body,
         vec![root.clone()],
         Vec::new(),
     ))
     .expect("recursive tree plan");
-    let record = witness(&plan, &MemoryType::Product("tree".into()));
+    let record = witness(&plan, &MemoryType::Product(hir::ProductId::new(0)));
     assert_eq!(record.facts.dependencies.len(), 1);
     assert!(matches!(
         record.facts.dependencies[0].target,
@@ -108,11 +112,14 @@ fn mutually_recursive_product_enum_closes_one_atomic_group() {
         40,
         "expression",
         &[],
-        vec![("statement", vec![hir::Type::Product("statement".into())])],
+        vec![(
+            "statement",
+            vec![hir::Type::Product(hir::ProductId::new(0))],
+        )],
     );
     let enumeration_ty = enum_type(&enumeration, Vec::new());
-    let statement = product(41, "statement", &[("expression", enumeration_ty)]);
-    let root = hir::Type::Product(statement.name.clone());
+    let statement = product(0, "statement", &[("expression", enumeration_ty)]);
+    let root = hir::Type::Product(statement.id);
     let plan = derive(&program(
         root.clone(),
         fake(root),
@@ -120,7 +127,7 @@ fn mutually_recursive_product_enum_closes_one_atomic_group() {
         vec![enumeration],
     ))
     .expect("mutual recursive plan");
-    let statement = witness(&plan, &MemoryType::Product("statement".into()));
+    let statement = witness(&plan, &MemoryType::Product(hir::ProductId::new(0)));
     let group = plan
         .witness_groups
         .iter()
@@ -141,7 +148,6 @@ fn mutually_recursive_product_enum_closes_one_atomic_group() {
 fn generic_recursive_tree_instantiation_is_one_self_recursive_group() {
     let open_tree = hir::Type::Enum {
         id: enum_id(50),
-        name: "tree".into(),
         arguments: vec![hir::Type::Param("t".into())],
     };
     let tree = enum_definition(
@@ -165,7 +171,6 @@ fn generic_recursive_tree_instantiation_is_one_self_recursive_group() {
         &plan,
         &MemoryType::Enum {
             id: enum_id(50).bytes(),
-            name: "tree".into(),
             arguments: vec![MemoryType::I64],
         },
     );

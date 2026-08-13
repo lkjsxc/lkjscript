@@ -6,6 +6,7 @@ fn explicit_publish_destination_and_finish_execute_in_structural_runtime() -> cr
     let product = ProductId::new(0);
     program.products.push(ProductMetadata {
         id: product,
+        identity: RuntimeLayoutId::new([1; 32]),
         name: "published-text".into(),
         fields: vec![ProductField {
             name: "text".into(),

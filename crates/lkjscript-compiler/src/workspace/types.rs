@@ -487,18 +487,15 @@ pub(super) fn view(
                 crate::Type::Capability(kind) => completed.push(SemanticType::Capability(*kind)),
                 crate::Type::Symbol => completed.push(SemanticType::Symbol),
                 crate::Type::Resource(kind) => completed.push(SemanticType::Resource(*kind)),
-                crate::Type::Product(name) => {
-                    let index = indexes
-                        .product_name_indices
-                        .get(name)
-                        .copied()
+                crate::Type::Product(id) => {
+                    let definition = id
+                        .index()
+                        .and_then(|index| program.products.get(index))
+                        .filter(|definition| definition.id == *id)
                         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product type")))?;
-                    let raw = u64::try_from(index).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("product type index exceeds u64"))
-                    })?;
                     let entity = indexes
                         .address_entities
-                        .get(&EntityAddress::Product(raw))
+                        .get(&EntityAddress::Product(definition.id.raw()))
                         .copied()
                         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product type")))?;
                     completed.push(SemanticType::Product(entity));
@@ -653,7 +650,6 @@ pub(super) fn view(
         WorkspaceError::Validation(Arc::from("semantic type conversion omitted its root"))
     })?;
     if completed.is_empty() {
-        let _ = program;
         Ok(result)
     } else {
         Err(WorkspaceError::Validation(Arc::from(
@@ -696,7 +692,7 @@ pub(super) fn resolve_with_staged_type_parameters(
 ) -> Result<crate::Type, WorkspaceError> {
     enum Work<'a> {
         Visit(&'a SemanticType),
-        Enum(crate::hir::EnumId, String, usize),
+        Enum(crate::hir::EnumId, usize),
         List,
         Function(usize),
         Forall(Vec<String>),
@@ -752,16 +748,16 @@ pub(super) fn resolve_with_staged_type_parameters(
                         .products
                         .get(host_index(raw, "product type")?)
                         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("product type")))?;
-                    completed.push(crate::Type::Product(clone_type_name(
-                        &definition.name,
-                        "product type name",
-                    )?));
+                    if definition.id.raw() != raw {
+                        return Err(WorkspaceError::StaleIdentity(Arc::from("product type")));
+                    }
+                    completed.push(crate::Type::Product(definition.id));
                 }
                 SemanticType::Enum {
                     constructor,
                     arguments,
                 } => {
-                    let (id, name, arity) = match constructor {
+                    let (id, arity) = match constructor {
                         SemanticEnum::Builtin(kind) => builtin_enum_facts(*kind),
                         SemanticEnum::Entity(entity) => {
                             let header = semantic_entity(snapshot, *entity, "enum type")?;
@@ -778,11 +774,7 @@ pub(super) fn resolve_with_staged_type_parameters(
                                 .ok_or_else(|| {
                                     WorkspaceError::StaleIdentity(Arc::from("enum type"))
                                 })?;
-                            (
-                                definition.id,
-                                clone_type_name(&definition.name, "enum type name")?,
-                                definition.type_parameters.len(),
-                            )
+                            (definition.id, definition.type_parameters.len())
                         }
                     };
                     if arguments.len() != arity {
@@ -798,7 +790,7 @@ pub(super) fn resolve_with_staged_type_parameters(
                         WorkspaceError::Host(Arc::from("semantic enum child count overflow"))
                     })?;
                     reserve(&mut work, additional, "semantic enum validation work")?;
-                    work.push(Work::Enum(id, name, arguments.len()));
+                    work.push(Work::Enum(id, arguments.len()));
                     work.extend(arguments.iter().rev().map(Work::Visit));
                 }
                 SemanticType::TypeParameter(entity) => {
@@ -871,7 +863,7 @@ pub(super) fn resolve_with_staged_type_parameters(
                     work.push(Work::Visit(body));
                 }
             },
-            Work::Enum(id, name, count) => {
+            Work::Enum(id, count) => {
                 let split = completed.len().checked_sub(count).ok_or_else(|| {
                     WorkspaceError::InvalidSemanticType {
                         position: Arc::from(subject.to_owned()),
@@ -879,11 +871,7 @@ pub(super) fn resolve_with_staged_type_parameters(
                     }
                 })?;
                 let arguments = completed.split_off(split);
-                completed.push(crate::Type::Enum {
-                    id,
-                    name,
-                    arguments,
-                });
+                completed.push(crate::Type::Enum { id, arguments });
             }
             Work::List => {
                 let inner = completed
@@ -1054,33 +1042,13 @@ fn builtin_enum(bytes: [u8; 32]) -> Option<BuiltinEnum> {
     }
 }
 
-fn builtin_enum_facts(kind: BuiltinEnum) -> (crate::hir::EnumId, String, usize) {
+fn builtin_enum_facts(kind: BuiltinEnum) -> (crate::hir::EnumId, usize) {
     match kind {
-        BuiltinEnum::Option => (
-            crate::hir::EnumId::new(lkjscript_core::OPTION_ID),
-            "option".into(),
-            1,
-        ),
-        BuiltinEnum::Result => (
-            crate::hir::EnumId::new(lkjscript_core::RESULT_ID),
-            "result".into(),
-            2,
-        ),
-        BuiltinEnum::NumericError => (
-            crate::hir::EnumId::new(lkjscript_core::NUMERIC_ERROR_ID),
-            "numeric-error".into(),
-            0,
-        ),
-        BuiltinEnum::Utf8Error => (
-            crate::hir::EnumId::new(lkjscript_core::UTF8_ERROR_ID),
-            "utf8-error".into(),
-            0,
-        ),
-        BuiltinEnum::SystemError => (
-            crate::hir::EnumId::new(lkjscript_core::SYSTEM_ERROR_ID),
-            "system-error".into(),
-            0,
-        ),
+        BuiltinEnum::Option => (crate::hir::EnumId::new(lkjscript_core::OPTION_ID), 1),
+        BuiltinEnum::Result => (crate::hir::EnumId::new(lkjscript_core::RESULT_ID), 2),
+        BuiltinEnum::NumericError => (crate::hir::EnumId::new(lkjscript_core::NUMERIC_ERROR_ID), 0),
+        BuiltinEnum::Utf8Error => (crate::hir::EnumId::new(lkjscript_core::UTF8_ERROR_ID), 0),
+        BuiltinEnum::SystemError => (crate::hir::EnumId::new(lkjscript_core::SYSTEM_ERROR_ID), 0),
     }
 }
 

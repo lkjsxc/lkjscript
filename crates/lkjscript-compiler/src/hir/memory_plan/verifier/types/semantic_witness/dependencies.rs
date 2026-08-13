@@ -9,8 +9,8 @@ impl VerifiedTypes<'_> {
             Type::List(element) => {
                 self.verified_dependency(root, element, R::ListElement, &mut output)?;
             }
-            Type::Product(name) => {
-                let item = self.product_definition(name)?;
+            Type::Product(id) => {
+                let item = self.product_definition(*id)?;
                 for field in &item.fields {
                     self.verified_dependency(
                         root,
@@ -103,7 +103,7 @@ impl VerifiedTypes<'_> {
 
 pub(crate) fn verifier_semantic_declaration_key(ty: &Type) -> Option<VerifiedDeclarationKey> {
     match ty {
-        Type::Product(name) => Some(VerifiedDeclarationKey::Product(name.clone())),
+        Type::Product(id) => Some(VerifiedDeclarationKey::Product(*id)),
         Type::Enum { id, .. } => Some(VerifiedDeclarationKey::Enum(id.bytes())),
         _ => None,
     }
