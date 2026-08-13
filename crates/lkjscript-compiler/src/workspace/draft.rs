@@ -301,7 +301,7 @@ impl TryFrom<&SemanticType> for DeclarationType {
                         }
                         SemanticType::Forall { .. } => {
                             return Err(WorkspaceError::InvalidSemanticType {
-                                position: Arc::from("function declaration"),
+                                position: Arc::from("declaration"),
                                 reason: Arc::from(
                                     "nested universal types are not valid in declaration input",
                                 ),

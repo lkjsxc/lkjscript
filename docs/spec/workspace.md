@@ -300,8 +300,9 @@ and development semantic-digest surrogate are deleted. There is no replacement w
 
 Unresolved calls, moves, borrows, type names, nominal members, patterns, and imports; ambiguities,
 conflicts, parser recovery nodes, nominal member addition/deletion/reordering, cross-parent, entity,
-declaration, and generic semantic movement, generic-pattern construction, source rendering, persistence,
-collaboration, and incremental recomputation remain gaps. Ownership/reference-bearing
+declaration, and generic semantic movement, broader generic-pattern construction beyond exact enum
+variants, source rendering, persistence, collaboration, and incremental recomputation remain gaps.
+Ownership/reference-bearing
 nominal fields are also outside the current source-free declaration surface, while generic
 ownership/reference instantiation is an explicit call restriction. Imported ownership-bearing
 product and enum fields remain valid stable-identity inputs to source-free nested patterns and use

@@ -20433,6 +20433,16 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
                                 DeclarationType::DraftTypeParameter(second),
                             )),
                         },
+                        EnumFieldDraft {
+                            name: "project".to_owned(),
+                            ty: DeclarationType::Function {
+                                parameters: vec![DeclarationType::Enum {
+                                    constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                                    arguments: vec![DeclarationType::DraftTypeParameter(first)],
+                                }],
+                                result: Box::new(DeclarationType::DraftTypeParameter(second)),
+                            },
+                        },
                     ],
                 }],
             }],
@@ -20443,6 +20453,7 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
     let stable_second = created_entity(&pair.diff, EntityKind::TypeParameter, "b");
     let first_field = created_entity(&pair.diff, EntityKind::EnumField, "first");
     let second_field = created_entity(&pair.diff, EntityKind::EnumField, "second");
+    let project_field = created_entity(&pair.diff, EntityKind::EnumField, "project");
     let parameter_children = pair
         .snapshot
         .containment()
@@ -20497,9 +20508,23 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
         .iter()
         .find(|definition| definition.name == "pair")
         .expect("canonical generic pair");
+    assert_eq!(
+        pair.snapshot
+            .entity_type(pair.snapshot.revision(), project_field)
+            .expect("function-nested enum field type")
+            .declared,
+        Some(SemanticType::Function {
+            parameters: vec![SemanticType::Enum {
+                constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                arguments: vec![SemanticType::TypeParameter(stable_first)],
+            }],
+            result: Box::new(SemanticType::TypeParameter(stable_second)),
+        })
+    );
     assert_eq!(definition.type_parameters, ["a", "b"]);
     assert_eq!(definition.origin, crate::hir::Origin::Semantic);
     assert!(!definition.layout.recursive);
+    assert!(!definition.variants[0].fields[2].indirect);
     pair.snapshot
         .check_consistency()
         .expect("validate generic pair snapshot");
@@ -21948,30 +21973,23 @@ fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
             projection
         );
     }
-    for edit in [
-        Edit::CreateEnum {
-            name: "invalid-name".to_owned(),
-            type_parameters: vec![EnumTypeParameterDraft {
-                id: declared,
-                name: String::new(),
-            }],
-            variants: vec![EnumVariantDraft {
-                name: "one".to_owned(),
-                fields: Vec::new(),
-            }],
-        },
-        Edit::CreateEnum {
-            name: "reserved-name".to_owned(),
-            type_parameters: vec![EnumTypeParameterDraft {
-                id: declared,
-                name: "i64".to_owned(),
-            }],
-            variants: vec![EnumVariantDraft {
-                name: "one".to_owned(),
-                fields: Vec::new(),
-            }],
-        },
+    for (enum_name, parameter_name) in [
+        ("invalid-name", "Bad"),
+        ("builtin-name", "i64"),
+        ("contextual-name", "if"),
+        ("operation-name", "sha256"),
     ] {
+        let edit = Edit::CreateEnum {
+            name: enum_name.to_owned(),
+            type_parameters: vec![EnumTypeParameterDraft {
+                id: declared,
+                name: parameter_name.to_owned(),
+            }],
+            variants: vec![EnumVariantDraft {
+                name: "one".to_owned(),
+                fields: Vec::new(),
+            }],
+        };
         assert!(matches!(
             workspace.apply(Transaction {
                 base_revision: before.revision(),
@@ -21981,6 +21999,30 @@ fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
         ));
         assert!(Arc::ptr_eq(&before, &workspace.current()));
     }
+
+    let staged_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateEnum {
+            name: "staged-failure".to_owned(),
+            type_parameters: vec![EnumTypeParameterDraft {
+                id: declared,
+                name: "t".to_owned(),
+            }],
+            variants: vec![EnumVariantDraft {
+                name: "one".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::Never,
+                }],
+            }],
+        }],
+    });
+    assert!(matches!(
+        staged_failure,
+        Err(WorkspaceError::InvalidSemanticType { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    assert_eq!(workspace.current().revision(), before.revision());
 
     let corrected = Transaction {
         base_revision: before.revision(),
@@ -22113,6 +22155,17 @@ fn generic_enum_declaration_type_identities_and_fields_fail_closed_atomically() 
     for (name, ty) in [
         ("owned", DeclarationType::ByteVector),
         ("reference", DeclarationType::ByteSlice),
+        (
+            "nested-owned",
+            DeclarationType::List(Box::new(DeclarationType::ByteVector)),
+        ),
+        (
+            "nested-reference",
+            DeclarationType::Function {
+                parameters: vec![DeclarationType::I64],
+                result: Box::new(DeclarationType::ByteSlice),
+            },
+        ),
     ] {
         assert!(matches!(
             workspace.apply(Transaction {

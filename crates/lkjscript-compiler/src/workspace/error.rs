@@ -139,7 +139,10 @@ impl fmt::Display for WorkspaceError {
                 write!(formatter, "invalid semantic type for {position}: {reason}")
             }
             Self::UnknownDraftTypeParameter { parameter } => {
-                write!(formatter, "declaration type references unknown {parameter:?}")
+                write!(
+                    formatter,
+                    "declaration type references unknown {parameter:?}"
+                )
             }
             Self::DuplicateDraftTypeParameter { parameter } => {
                 write!(formatter, "declaration repeats {parameter:?}")
@@ -179,7 +182,10 @@ impl fmt::Display for WorkspaceError {
                 "type parameter {parameter:?} is owned by {actual:?}, not {expected:?}"
             ),
             Self::InvisibleTypeParameter { parameter } => {
-                write!(formatter, "type parameter {parameter:?} is not visible here")
+                write!(
+                    formatter,
+                    "type parameter {parameter:?} is not visible here"
+                )
             }
             Self::CallArity {
                 callee,
@@ -198,7 +204,7 @@ impl fmt::Display for WorkspaceError {
                 "type argument {argument} for {parameter:?} does not satisfy {trait_identity:?}"
             ),
             Self::GenericForwardingUnsupported => formatter.write_str(
-                "forwarding a caller type parameter through this generic operation is unavailable in the current transport route",
+                "forwarding a caller type parameter through this generic operation is unsupported",
             ),
             Self::InvisibleEntity {
                 operation,

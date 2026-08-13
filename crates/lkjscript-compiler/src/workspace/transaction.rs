@@ -4170,34 +4170,66 @@ fn reject_reference_result(ty: &Type, subject: &str) -> Result<(), WorkspaceErro
 }
 
 fn reject_ownership_field(ty: &Type, subject: &str) -> Result<(), WorkspaceError> {
-    if matches!(
-        ty,
-        Type::Bytes | Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut | Type::Resource(_)
-    ) {
-        Err(WorkspaceError::unsupported(
-            "create-declaration",
-            &format!("{subject} cannot store ownership or reference type {ty}"),
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn type_contains_enum(ty: &Type) -> bool {
-    let mut pending = vec![ty];
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("field type validation allocation failed")))?;
+    pending.push(ty);
     while let Some(ty) = pending.pop() {
         match ty {
-            Type::Enum { .. } => return true,
-            Type::List(inner) => pending.push(inner),
+            Type::Bytes
+            | Type::ByteVector
+            | Type::ByteSlice
+            | Type::ByteSliceMut
+            | Type::Resource(_) => {
+                return Err(WorkspaceError::unsupported(
+                    "create-declaration",
+                    &format!("{subject} cannot store ownership or reference type {ty}"),
+                ));
+            }
+            Type::Enum { arguments, .. } => {
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("field type validation allocation failed"))
+                })?;
+                pending.extend(arguments);
+            }
+            Type::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("field type validation allocation failed"))
+                })?;
+                pending.push(inner);
+            }
             Type::Fn { params, ret } => {
+                let additional = params.len().checked_add(1).ok_or_else(|| {
+                    WorkspaceError::Host(Arc::from("field type validation count overflow"))
+                })?;
+                pending.try_reserve(additional).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("field type validation allocation failed"))
+                })?;
                 pending.push(ret);
                 pending.extend(params);
             }
-            Type::Forall { body, .. } => pending.push(body),
+            Type::Forall { body, .. } => {
+                pending.try_reserve(1).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("field type validation allocation failed"))
+                })?;
+                pending.push(body);
+            }
             _ => {}
         }
     }
-    false
+    Ok(())
+}
+
+fn type_contains_enum(ty: &Type) -> bool {
+    let mut ty = ty;
+    loop {
+        match ty {
+            Type::Enum { .. } => return true,
+            Type::List(inner) => ty = inner,
+            _ => return false,
+        }
+    }
 }
 
 fn declaration_name_exists(program: &SemanticProgram, name: &str) -> bool {
