@@ -1147,12 +1147,13 @@ fn product_enum_match_sample() -> Value {
                 },
                 Edit::CreateEnum {
                     name: "choice".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![
                         EnumVariantDraft {
                             name: "some".to_owned(),
                             fields: vec![EnumFieldDraft {
                                 name: "payload".to_owned(),
-                                ty: SemanticType::I64,
+                                ty: DeclarationType::I64,
                             }],
                         },
                         EnumVariantDraft {
@@ -1378,12 +1379,13 @@ fn generic_mixed_sample(helper_functions: usize) -> Value {
         },
         Edit::CreateEnum {
             name: "mixed-choice".to_owned(),
+            type_parameters: Vec::new(),
             variants: vec![
                 EnumVariantDraft {
                     name: "mixed-some".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "mixed-payload".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
                 },
                 EnumVariantDraft {

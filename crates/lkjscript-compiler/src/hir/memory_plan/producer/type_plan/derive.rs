@@ -121,6 +121,9 @@ impl TypePlanner<'_> {
             .cloned()
             .zip(arguments.iter().cloned())
             .collect();
+        for argument in arguments {
+            self.intern(argument)?;
+        }
         let mut children = Vec::new();
         for (variant_index, variant) in definition.variants.iter().enumerate() {
             for (field_index, field) in variant.fields.iter().enumerate() {

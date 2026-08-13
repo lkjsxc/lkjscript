@@ -142,11 +142,11 @@ impl fmt::Display for WorkspaceError {
                 write!(formatter, "declaration type references unknown {parameter:?}")
             }
             Self::DuplicateDraftTypeParameter { parameter } => {
-                write!(formatter, "function declaration repeats {parameter:?}")
+                write!(formatter, "declaration repeats {parameter:?}")
             }
             Self::DuplicateTypeParameterName { first, duplicate } => write!(
                 formatter,
-                "function declaration gives {first:?} and {duplicate:?} the same name"
+                "declaration gives {first:?} and {duplicate:?} the same name"
             ),
             Self::DuplicateTypeParameterBound {
                 parameter,

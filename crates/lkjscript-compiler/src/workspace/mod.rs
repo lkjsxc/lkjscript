@@ -54,9 +54,9 @@ pub use query::{
     ValueReferenceCandidate, ValueReferenceCandidateStatus,
 };
 pub use transaction::{
-    Edit, EnumFieldDraft, EnumVariantDraft, InvalidatedDomain, ParameterDraft, ProductFieldDraft,
-    SemanticDiff, SemanticDiffEntry, Transaction, TransactionOutcome, TypeParameterDraft,
-    Workspace,
+    Edit, EnumFieldDraft, EnumTypeParameterDraft, EnumVariantDraft, InvalidatedDomain,
+    ParameterDraft, ProductFieldDraft, SemanticDiff, SemanticDiffEntry, Transaction,
+    TransactionOutcome, TypeParameterDraft, Workspace,
 };
 pub use types::{BuiltinEnum, BuiltinTrait, SemanticEnum, SemanticTrait, SemanticType};
 

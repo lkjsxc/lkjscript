@@ -8526,6 +8526,7 @@ fn source_free_bound_rejection_names_the_created_binder_and_is_atomic() {
             edits: vec![
                 Edit::CreateEnum {
                     name: "choice".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "only".to_owned(),
                         fields: Vec::new(),
@@ -12305,6 +12306,59 @@ fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
     assert_eq!(projection.matches("list ").count(), depth);
 }
 
+fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
+    let parameter = DraftTypeParameterId::new(0);
+    let mut ty = DeclarationType::DraftTypeParameter(parameter);
+    for _ in 0..depth {
+        ty = DeclarationType::List(Box::new(ty));
+    }
+    let mut workspace = Workspace::empty_deterministic(seed).expect("empty generic enum workspace");
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "deep-generic-enum".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: parameter,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![EnumVariantDraft {
+                    name: "value".to_owned(),
+                    fields: vec![EnumFieldDraft {
+                        name: "payload".to_owned(),
+                        ty,
+                    }],
+                }],
+            }],
+        })
+        .expect("publish deep generic enum declaration type");
+    let enumeration = created_entity(&created.diff, EntityKind::Enum, "deep-generic-enum");
+    let stable_parameter = created_entity(&created.diff, EntityKind::TypeParameter, "t");
+    let field = created_entity(&created.diff, EntityKind::EnumField, "payload");
+    let mut expected = SemanticType::TypeParameter(stable_parameter);
+    for _ in 0..depth {
+        expected = SemanticType::List(Box::new(expected));
+    }
+    assert_eq!(
+        created
+            .snapshot
+            .entity_type(created.snapshot.revision(), field)
+            .expect("deep generic enum field type")
+            .declared,
+        Some(expected)
+    );
+    let projection = created
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(enumeration),
+            ProjectionSlice::Entity(stable_parameter),
+            ProjectionSlice::Entity(field),
+        ])
+        .expect("project deep generic enum declaration");
+    assert!(projection.contains("type-parameter"));
+    assert!(projection.matches("list ").count() >= depth);
+}
+
 fn run_deep_generic_declaration_type_boundary(depth: usize, seed: u64) {
     let parameter = DraftTypeParameterId::new(0);
     let mut ty = DeclarationType::DraftTypeParameter(parameter);
@@ -12356,6 +12410,17 @@ fn run_deep_generic_declaration_type_boundary(depth: usize, seed: u64) {
         .expect("project deep generic declaration");
     assert!(projection.contains("type-parameter"));
     assert!(projection.matches("list ").count() >= depth);
+}
+
+#[test]
+fn modest_generic_enum_declaration_types_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-modest-generic-enum-declaration-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_generic_enum_declaration_type_boundary(256, 195))
+        .expect("spawn generic enum declaration type boundary")
+        .join()
+        .expect("generic enum declaration type boundary completes");
 }
 
 #[test]
@@ -12711,6 +12776,20 @@ fn entity_named(snapshot: &WorkspaceSnapshot, kind: EntityKind, name: &str) -> E
         .id
 }
 
+fn created_entity(diff: &SemanticDiff, kind: EntityKind, name: &str) -> EntityId {
+    diff.entries
+        .iter()
+        .find_map(|entry| match entry {
+            SemanticDiffEntry::EntityCreated {
+                entity,
+                kind: found_kind,
+                name: found_name,
+            } if *found_kind == kind && found_name.as_ref() == name => Some(*entity),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing created {kind:?} {name}"))
+}
+
 fn create_pair(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId) {
     let created = workspace
         .apply(Transaction {
@@ -12743,12 +12822,13 @@ fn create_choice(workspace: &mut Workspace) -> (EntityId, EntityId, EntityId, En
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "choice".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![
                     EnumVariantDraft {
                         name: "some".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "value".to_owned(),
-                            ty: SemanticType::I64,
+                            ty: DeclarationType::I64,
                         }],
                     },
                     EnumVariantDraft {
@@ -13456,16 +13536,18 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
             edits: vec![
                 Edit::CreateEnum {
                     name: "remove-enum".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "removed-variant".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "removed-field".to_owned(),
-                            ty: SemanticType::I64,
+                            ty: DeclarationType::I64,
                         }],
                     }],
                 },
                 Edit::CreateEnum {
                     name: "middle-enum".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "middle-variant".to_owned(),
                         fields: Vec::new(),
@@ -13473,11 +13555,12 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
                 },
                 Edit::CreateEnum {
                     name: "kept-enum".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "kept-variant".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "kept-field".to_owned(),
-                            ty: SemanticType::Bool,
+                            ty: DeclarationType::Bool,
                         }],
                     }],
                 },
@@ -13581,6 +13664,7 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
             Edit::DeleteEntity { entity: removed },
             Edit::CreateEnum {
                 name: "remove-enum".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "replacement".to_owned(),
                     fields: Vec::new(),
@@ -13658,6 +13742,7 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
             base_revision: deleted.snapshot.revision(),
             edits: vec![Edit::CreateEnum {
                 name: "remove-enum".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "replacement".to_owned(),
                     fields: Vec::new(),
@@ -13686,6 +13771,7 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
                 },
                 Edit::CreateEnum {
                     name: "old-enum".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "old-variant".to_owned(),
                         fields: Vec::new(),
@@ -13714,11 +13800,12 @@ fn nominal_creation_and_deletion_share_one_compaction_and_forced_identity_bounda
             },
             Edit::CreateEnum {
                 name: "new-enum".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "new-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "new-enum-field".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
                 }],
             },
@@ -14004,11 +14091,12 @@ fn nominal_signature_and_field_dependencies_require_dependency_closed_batch_dele
                 },
                 Edit::CreateEnum {
                     name: "enum-dependent".to_owned(),
+                    type_parameters: Vec::new(),
                     variants: vec![EnumVariantDraft {
                         name: "holding".to_owned(),
                         fields: vec![EnumFieldDraft {
                             name: "enum-reference".to_owned(),
-                            ty: SemanticType::Product(root),
+                            ty: DeclarationType::Product(root),
                         }],
                     }],
                 },
@@ -14616,10 +14704,12 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
         },
         Edit::CreateEnum {
             name: "empty".to_owned(),
+            type_parameters: Vec::new(),
             variants: Vec::new(),
         },
         Edit::CreateEnum {
             name: "duplicate".to_owned(),
+            type_parameters: Vec::new(),
             variants: vec![
                 EnumVariantDraft {
                     name: "same".to_owned(),
@@ -14633,27 +14723,29 @@ fn invalid_nominal_declarations_are_atomic_and_forced_ids_are_retry_stable() {
         },
         Edit::CreateEnum {
             name: "duplicate-fields".to_owned(),
+            type_parameters: Vec::new(),
             variants: vec![EnumVariantDraft {
                 name: "one".to_owned(),
                 fields: vec![
                     EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     },
                     EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     },
                 ],
             }],
         },
         Edit::CreateEnum {
             name: "owned-enum".to_owned(),
+            type_parameters: Vec::new(),
             variants: vec![EnumVariantDraft {
                 name: "one".to_owned(),
                 fields: vec![EnumFieldDraft {
                     name: "value".to_owned(),
-                    ty: SemanticType::ByteSlice,
+                    ty: DeclarationType::ByteSlice,
                 }],
             }],
         },
@@ -14765,11 +14857,12 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "alternate".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "alternate-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "other-enum-field".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
                 }],
             }],
@@ -16855,17 +16948,18 @@ fn source_free_enum_patterns_accept_nested_boolean_and_i64_literals() {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "packet".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![
                     EnumVariantDraft {
                         name: "data".to_owned(),
                         fields: vec![
                             EnumFieldDraft {
                                 name: "flag".to_owned(),
-                                ty: SemanticType::Bool,
+                                ty: DeclarationType::Bool,
                             },
                             EnumFieldDraft {
                                 name: "key".to_owned(),
-                                ty: SemanticType::I64,
+                                ty: DeclarationType::I64,
                             },
                         ],
                     },
@@ -18383,11 +18477,12 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "alternate".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "alternate-variant".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "alternate-field".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
                 }],
             }],
@@ -18408,16 +18503,17 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
             base_revision: workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "duo".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "both".to_owned(),
                     fields: vec![
                         EnumFieldDraft {
                             name: "left-value".to_owned(),
-                            ty: SemanticType::I64,
+                            ty: DeclarationType::I64,
                         },
                         EnumFieldDraft {
                             name: "right-value".to_owned(),
-                            ty: SemanticType::I64,
+                            ty: DeclarationType::I64,
                         },
                     ],
                 }],
@@ -20112,11 +20208,12 @@ fn imported_nominal_local_and_ownership_programs_converge() {
             base_revision: enum_workspace.current().revision(),
             edits: vec![Edit::CreateEnum {
                 name: "choice".to_owned(),
+                type_parameters: Vec::new(),
                 variants: vec![EnumVariantDraft {
                     name: "some".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "value".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: DeclarationType::I64,
                     }],
                 }],
             }],
@@ -20232,6 +20329,228 @@ fn imported_nominal_local_and_ownership_programs_converge() {
     }
 }
 
+#[test]
+fn source_free_generic_enum_declaration_publishes_stable_binders() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(300).expect("generic enum workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "maybe".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: binder,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![
+                    EnumVariantDraft {
+                        name: "none".to_owned(),
+                        fields: Vec::new(),
+                    },
+                    EnumVariantDraft {
+                        name: "some".to_owned(),
+                        fields: vec![EnumFieldDraft {
+                            name: "value".to_owned(),
+                            ty: DeclarationType::DraftTypeParameter(binder),
+                        }],
+                    },
+                ],
+            }],
+        })
+        .expect("create generic enum");
+    let enumeration = created_entity(&created.diff, EntityKind::Enum, "maybe");
+    let parameter = created_entity(&created.diff, EntityKind::TypeParameter, "t");
+    let some = created_entity(&created.diff, EntityKind::EnumVariant, "some");
+    let value = created_entity(&created.diff, EntityKind::EnumField, "value");
+    assert_eq!(
+        created.snapshot.entity(parameter).expect("binder").owner,
+        Some(enumeration)
+    );
+    assert_eq!(
+        created.snapshot.entity(value).expect("field").owner,
+        Some(some)
+    );
+    assert_eq!(
+        created
+            .snapshot
+            .entity_type(created.snapshot.revision(), value)
+            .expect("field type")
+            .declared,
+        Some(SemanticType::TypeParameter(parameter))
+    );
+    for entity in [enumeration, parameter, some, value] {
+        assert!(created.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityCreated { entity: found, .. } if *found == entity
+        )));
+    }
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms() {
+    let imported_phantom = importer::import_source_with_namespace(
+        &generic_phantom_enum_source(),
+        "generic-phantom-oracle.lkjscript",
+        WorkspaceNamespace::deterministic(315),
+    )
+    .expect("import fully phantom generic enum");
+    assert_eq!(imported_phantom.state(), ProgramState::Complete);
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(307).expect("generic pair workspace");
+    let first = DraftTypeParameterId::new(9);
+    let second = DraftTypeParameterId::new(2);
+    let pair = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "pair".to_owned(),
+                type_parameters: vec![
+                    EnumTypeParameterDraft {
+                        id: first,
+                        name: "a".to_owned(),
+                    },
+                    EnumTypeParameterDraft {
+                        id: second,
+                        name: "b".to_owned(),
+                    },
+                ],
+                variants: vec![EnumVariantDraft {
+                    name: "both".to_owned(),
+                    fields: vec![
+                        EnumFieldDraft {
+                            name: "first".to_owned(),
+                            ty: DeclarationType::DraftTypeParameter(first),
+                        },
+                        EnumFieldDraft {
+                            name: "second".to_owned(),
+                            ty: DeclarationType::List(Box::new(
+                                DeclarationType::DraftTypeParameter(second),
+                            )),
+                        },
+                    ],
+                }],
+            }],
+        })
+        .expect("create ordered generic pair");
+    let enumeration = created_entity(&pair.diff, EntityKind::Enum, "pair");
+    let stable_first = created_entity(&pair.diff, EntityKind::TypeParameter, "a");
+    let stable_second = created_entity(&pair.diff, EntityKind::TypeParameter, "b");
+    let first_field = created_entity(&pair.diff, EntityKind::EnumField, "first");
+    let second_field = created_entity(&pair.diff, EntityKind::EnumField, "second");
+    let parameter_children = pair
+        .snapshot
+        .containment()
+        .iter()
+        .filter_map(|edge| match edge {
+            ContainmentEdge {
+                owner: SemanticOwner::Entity(owner),
+                child: SemanticChild::Entity(child),
+            } if *owner == enumeration
+                && pair.snapshot.entity(*child).expect("pair child").kind
+                    == EntityKind::TypeParameter =>
+            {
+                Some(*child)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(parameter_children, [stable_first, stable_second]);
+    assert_eq!(
+        pair.snapshot
+            .entity_type(pair.snapshot.revision(), enumeration)
+            .expect("pair type")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(enumeration),
+            arguments: vec![
+                SemanticType::TypeParameter(stable_first),
+                SemanticType::TypeParameter(stable_second),
+            ],
+        })
+    );
+    assert_eq!(
+        pair.snapshot
+            .entity_type(pair.snapshot.revision(), first_field)
+            .expect("first field type")
+            .declared,
+        Some(SemanticType::TypeParameter(stable_first))
+    );
+    assert_eq!(
+        pair.snapshot
+            .entity_type(pair.snapshot.revision(), second_field)
+            .expect("nested second field type")
+            .declared,
+        Some(SemanticType::List(Box::new(SemanticType::TypeParameter(
+            stable_second
+        ))))
+    );
+    let definition = pair
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "pair")
+        .expect("canonical generic pair");
+    assert_eq!(definition.type_parameters, ["a", "b"]);
+    assert_eq!(definition.origin, crate::hir::Origin::Semantic);
+    assert!(!definition.layout.recursive);
+    pair.snapshot
+        .check_consistency()
+        .expect("validate generic pair snapshot");
+
+    let phantom = DraftTypeParameterId::new(11);
+    let marker = workspace
+        .apply(Transaction {
+            base_revision: pair.snapshot.revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "marker".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: phantom,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![EnumVariantDraft {
+                    name: "mark".to_owned(),
+                    fields: Vec::new(),
+                }],
+            }],
+        })
+        .expect("create fully phantom generic enum");
+    let marker_entity = created_entity(&marker.diff, EntityKind::Enum, "marker");
+    let marker_parameter = created_entity(&marker.diff, EntityKind::TypeParameter, "t");
+    assert_eq!(
+        marker
+            .snapshot
+            .entity_type(marker.snapshot.revision(), marker_entity)
+            .expect("phantom enum type")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(marker_entity),
+            arguments: vec![SemanticType::TypeParameter(marker_parameter)],
+        })
+    );
+    let projection = marker
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(enumeration),
+            ProjectionSlice::Entity(stable_first),
+            ProjectionSlice::Entity(stable_second),
+            ProjectionSlice::Entity(second_field),
+            ProjectionSlice::Entity(marker_entity),
+            ProjectionSlice::Entity(marker_parameter),
+        ])
+        .expect("generic enum projection");
+    assert!(projection.contains("kind=type-parameter"), "{projection}");
+    assert!(projection.contains("type-parameter("), "{projection}");
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
 fn generic_maybe_match_source() -> String {
     concat!(
         "def/\nname/\nidentity\n/name\nfn/\nforall/\nu\n/forall\n",
@@ -20285,6 +20604,28 @@ fn generic_maybe_none_source() -> String {
     .to_owned()
 }
 
+fn generic_phantom_enum_source() -> String {
+    concat!(
+        "enum/\nname/\nmarker\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nmark\n/name\nfields/\n/fields\n/variant\n",
+        "/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n0\n/main\n",
+    )
+    .to_owned()
+}
+
+fn generic_phantom_value_source() -> String {
+    concat!(
+        "enum/\nname/\nmarker\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nmark\n/name\nfields/\n/fields\n/variant\n",
+        "/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nmarker/\ni64\n/marker\n/output\n/sig\n",
+        "variant-value/\ntype/\nmarker/\ni64\n/marker\n/type\n",
+        "variant/\nmark\n/variant\nfields/\n/fields\n/variant-value\n/main\n",
+    )
+    .to_owned()
+}
+
 fn generic_pair_value_source() -> String {
     concat!(
         "enum/\nname/\npair\n/name\nforall/\na\nb\n/forall\nvariants/\n",
@@ -20300,6 +20641,29 @@ fn generic_pair_value_source() -> String {
         "/fields\n/variant-value\n/main\n",
     )
     .to_owned()
+}
+
+fn generic_maybe_declaration_edit(name: &str, binder: DraftTypeParameterId) -> Edit {
+    Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters: vec![EnumTypeParameterDraft {
+            id: binder,
+            name: "t".to_owned(),
+        }],
+        variants: vec![
+            EnumVariantDraft {
+                name: "none".to_owned(),
+                fields: Vec::new(),
+            },
+            EnumVariantDraft {
+                name: "some".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::DraftTypeParameter(binder),
+                }],
+            },
+        ],
+    }
 }
 
 fn exact_generic_enum_value_draft(
@@ -20383,6 +20747,244 @@ fn exact_generic_maybe_match_draft(
         ],
         DraftNodeId::new(4),
     )
+}
+
+#[test]
+fn source_free_generic_enum_declaration_value_and_match_compile_execute_and_converge() {
+    let imported = importer::import_source_with_namespace(
+        &generic_maybe_match_source(),
+        "source-free-generic-enum-oracle.lkjscript",
+        WorkspaceNamespace::deterministic(308),
+    )
+    .expect("import generic enum oracle");
+    assert_eq!(run_i64(&imported), 42);
+    let oracle = canonical_workspace_observation(&imported);
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(309).expect("empty generic enum workspace");
+    let enum_binder = DraftTypeParameterId::new(0);
+    let declaration = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![generic_maybe_declaration_edit("maybe", enum_binder)],
+        })
+        .expect("publish source-free generic enum");
+    assert_eq!(declaration.snapshot.state(), ProgramState::Incomplete);
+    assert!(declaration
+        .snapshot
+        .completeness_blockers()
+        .iter()
+        .any(|blocker| matches!(blocker, CompletenessBlocker::MissingEntryPoint)));
+    assert!(declaration.snapshot.attachments().is_none());
+    let enumeration = created_entity(&declaration.diff, EntityKind::Enum, "maybe");
+    let type_parameter = created_entity(&declaration.diff, EntityKind::TypeParameter, "t");
+    let none = created_entity(&declaration.diff, EntityKind::EnumVariant, "none");
+    let some = created_entity(&declaration.diff, EntityKind::EnumVariant, "some");
+    let value_field = created_entity(&declaration.diff, EntityKind::EnumField, "value");
+    assert_eq!(
+        declaration
+            .snapshot
+            .entity_type(declaration.snapshot.revision(), value_field)
+            .expect("generic enum field type")
+            .declared,
+        Some(SemanticType::TypeParameter(type_parameter))
+    );
+
+    let function_binder = DraftTypeParameterId::new(1);
+    let callables = workspace
+        .apply(Transaction {
+            base_revision: declaration.snapshot.revision(),
+            edits: vec![
+                Edit::CreateFunction {
+                    name: "identity".to_owned(),
+                    type_parameters: vec![TypeParameterDraft {
+                        id: function_binder,
+                        name: "u".to_owned(),
+                        bounds: Vec::new(),
+                    }],
+                    parameters: vec![ParameterDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(function_binder),
+                    }],
+                    return_type: DeclarationType::DraftTypeParameter(function_binder),
+                },
+                Edit::CreateMain {
+                    parameters: Vec::new(),
+                    return_type: SemanticType::I64,
+                },
+            ],
+        })
+        .expect("create source-free callables after enum publication");
+    let function = created_entity(&callables.diff, EntityKind::Function, "identity");
+    let value_parameter = created_entity(&callables.diff, EntityKind::Parameter, "value");
+    let main = created_entity(&callables.diff, EntityKind::Main, "main");
+    let function_hole = callables
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == function)
+        .expect("identity body hole")
+        .id;
+    let main_hole = callables
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main)
+        .expect("main body hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: callables.snapshot.revision(),
+            edits: vec![
+                Edit::FillHole {
+                    hole: function_hole,
+                    draft: ExpressionDraft::new(
+                        vec![DraftNode::Load(DraftBindingRef::Entity(value_parameter))],
+                        DraftNodeId::new(0),
+                    ),
+                },
+                Edit::FillHole {
+                    hole: main_hole,
+                    draft: exact_generic_maybe_match_draft(some, none, value_field, type_parameter),
+                },
+            ],
+        })
+        .expect("construct and exhaustively match source-free generic enum");
+    assert_eq!(completed.snapshot.state(), ProgramState::Complete);
+    assert_eq!(canonical_workspace_observation(&completed.snapshot), oracle);
+    for entity in [
+        enumeration,
+        type_parameter,
+        none,
+        some,
+        value_field,
+        function,
+        value_parameter,
+        main,
+    ] {
+        assert_eq!(
+            completed
+                .snapshot
+                .entity(entity)
+                .expect("stable created entity")
+                .id,
+            entity
+        );
+    }
+    let match_site = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match && node.owner == SemanticOwner::Entity(main))
+        .expect("source-free generic enum match")
+        .id;
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), match_site)
+        .expect("source-free generic match view");
+    assert!(view.exhaustive);
+    let exact_type = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64],
+    };
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), view.scrutinee)
+            .expect("exact scrutinee type")
+            .actual,
+        exact_type
+    );
+    let payload_binding = view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match pattern.kind {
+            MatchPatternKindView::Binding { binding } => Some(binding),
+            _ => None,
+        })
+        .expect("generic payload binding");
+    assert_eq!(
+        completed
+            .snapshot
+            .entity_type(completed.snapshot.revision(), payload_binding)
+            .expect("substituted payload binding type")
+            .declared,
+        Some(SemanticType::I64)
+    );
+    let projection = completed
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(enumeration),
+            ProjectionSlice::Entity(type_parameter),
+            ProjectionSlice::Entity(value_field),
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Match(match_site),
+        ])
+        .expect("source-free generic enum projection");
+    assert!(projection.contains("kind=type-parameter"), "{projection}");
+    assert!(
+        projection.contains(" i64\" kind=enum-variant"),
+        "{projection}"
+    );
+
+    let executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile source-free enum");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
+    let old_complete = completed.snapshot;
+
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: old_complete.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: view.scrutinee,
+                goal: "reconstruct the exact source-free enum value".to_owned(),
+            }],
+        })
+        .expect("introduce exact generic enum hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .find(|hole| hole.id.node() == view.scrutinee)
+        .expect("exact generic enum hole");
+    assert_eq!(hole.expected_type, exact_type);
+    let constructors = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            hole.id,
+            PageRequest::new(64).expect("constructor page"),
+            None,
+        )
+        .expect("exact generic enum constructors")
+        .items;
+    assert!(constructors.contains(&LegalConstructor::EnumVariant(none)));
+    assert!(constructors.contains(&LegalConstructor::EnumVariant(some)));
+    let restored = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole.id,
+                draft: exact_generic_enum_value_draft(
+                    some,
+                    vec![TypeArgumentDraft {
+                        parameter: type_parameter,
+                        argument: SemanticType::I64,
+                    }],
+                    vec![(value_field, DraftNode::I64(42))],
+                ),
+            }],
+        })
+        .expect("restore exact generic enum value");
+    assert_eq!(canonical_workspace_observation(&restored.snapshot), oracle);
+    assert_eq!(run_i64(&old_complete), 42);
+    assert_eq!(run_i64(&restored.snapshot), 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
 
 #[test]
@@ -20609,6 +21211,120 @@ fn exact_generic_enum_values_and_patterns_compile_execute_and_converge() {
     );
     assert!(outcome.cleanup_failures().is_none());
     assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_phantom_enum_value_retains_its_exact_concrete_instantiation() {
+    let imported = importer::import_source_with_namespace(
+        &generic_phantom_value_source(),
+        "source-free-phantom-enum-oracle.lkjscript",
+        WorkspaceNamespace::deterministic(310),
+    )
+    .expect("import phantom enum oracle");
+    let oracle = canonical_workspace_observation(&imported);
+    let imported_executable = crate::compile_snapshot(&imported).expect("compile phantom oracle");
+    let imported_outcome = run_chunk(
+        imported_executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(imported_outcome.cleanup_failures().is_none());
+    let ExecutionOutcome::Returned(imported_value) = imported_outcome else {
+        panic!("imported phantom enum must return")
+    };
+    let imported_tag = imported_value
+        .enum_physical_tag()
+        .expect("imported phantom enum tag");
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(311).expect("phantom enum workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let declaration = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "marker".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: binder,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![EnumVariantDraft {
+                    name: "mark".to_owned(),
+                    fields: Vec::new(),
+                }],
+            }],
+        })
+        .expect("create source-free phantom enum");
+    let enumeration = created_entity(&declaration.diff, EntityKind::Enum, "marker");
+    let parameter = created_entity(&declaration.diff, EntityKind::TypeParameter, "t");
+    let variant = created_entity(&declaration.diff, EntityKind::EnumVariant, "mark");
+    let exact = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64],
+    };
+    let main = workspace
+        .apply(Transaction {
+            base_revision: declaration.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
+                return_type: exact.clone(),
+            }],
+        })
+        .expect("create exact phantom main");
+    let main_entity = created_entity(&main.diff, EntityKind::Main, "main");
+    let hole = main
+        .snapshot
+        .holes()
+        .find(|hole| hole.owner == main_entity)
+        .expect("phantom main hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: exact_generic_enum_value_draft(
+                    variant,
+                    vec![TypeArgumentDraft {
+                        parameter,
+                        argument: SemanticType::I64,
+                    }],
+                    Vec::new(),
+                ),
+            }],
+        })
+        .expect("construct source-free phantom value");
+    let root = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main_entity))
+        .expect("phantom enum root")
+        .id;
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), root)
+            .expect("phantom enum facts")
+            .actual,
+        exact
+    );
+    assert_eq!(canonical_workspace_observation(&completed.snapshot), oracle);
+    let executable = crate::compile_snapshot(&completed.snapshot).expect("compile phantom enum");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    let ExecutionOutcome::Returned(value) = outcome else {
+        panic!("source-free phantom enum must return")
+    };
+    assert_eq!(value.enum_physical_tag(), Some(imported_tag));
+    assert_eq!(value.enum_field_i64(0), None);
     assert_eq!(crate::source::parser_invocation_count(), 0);
     assert_eq!(crate::source::source_load_invocation_count(), 0);
 }
@@ -20971,6 +21687,442 @@ fn generic_enum_arguments_and_fields_canonicalize_to_declaration_order() {
     };
     assert_eq!(value.enum_payload_len(), Some(2));
     assert_eq!(value.enum_field_i64(0), Some(7));
+}
+
+#[test]
+fn generic_enum_declaration_lifecycle_preserves_binders_and_old_snapshots() {
+    let mut workspace = Workspace::empty_deterministic(316).expect("generic enum lifecycle");
+    let first_binder = DraftTypeParameterId::new(0);
+    let first = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![generic_maybe_declaration_edit("first", first_binder)],
+        })
+        .expect("create first generic enum");
+    let first_enum = created_entity(&first.diff, EntityKind::Enum, "first");
+    let first_parameter = created_entity(&first.diff, EntityKind::TypeParameter, "t");
+    let first_none = created_entity(&first.diff, EntityKind::EnumVariant, "none");
+    let first_some = created_entity(&first.diff, EntityKind::EnumVariant, "some");
+    let first_field = created_entity(&first.diff, EntityKind::EnumField, "value");
+
+    let kept_binder = DraftTypeParameterId::new(1);
+    let kept = workspace
+        .apply(Transaction {
+            base_revision: first.snapshot.revision(),
+            edits: vec![generic_maybe_declaration_edit("kept", kept_binder)],
+        })
+        .expect("create kept generic enum");
+    let kept_enum = created_entity(&kept.diff, EntityKind::Enum, "kept");
+    let kept_parameter = created_entity(&kept.diff, EntityKind::TypeParameter, "t");
+    let kept_none = created_entity(&kept.diff, EntityKind::EnumVariant, "none");
+    let kept_some = created_entity(&kept.diff, EntityKind::EnumVariant, "some");
+    let kept_field = created_entity(&kept.diff, EntityKind::EnumField, "value");
+    let old = kept.snapshot;
+    let old_definition = old
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "kept")
+        .expect("old kept definition")
+        .clone();
+
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![
+                Edit::RenameEntity {
+                    entity: kept_enum,
+                    new_name: "renamed-kept".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: kept_some,
+                    new_name: "renamed-some".to_owned(),
+                },
+                Edit::RenameEntity {
+                    entity: kept_field,
+                    new_name: "renamed-value".to_owned(),
+                },
+            ],
+        })
+        .expect("rename generic enum and members");
+    for entity in [kept_enum, kept_parameter, kept_none, kept_some, kept_field] {
+        assert_eq!(
+            renamed
+                .snapshot
+                .entity(entity)
+                .expect("renamed survivor")
+                .id,
+            entity
+        );
+    }
+    assert_eq!(
+        renamed
+            .snapshot
+            .entity_type(renamed.snapshot.revision(), kept_field)
+            .expect("renamed field type")
+            .declared,
+        Some(SemanticType::TypeParameter(kept_parameter))
+    );
+    assert_eq!(
+        old.entity(kept_enum).expect("old enum name").name.as_ref(),
+        "kept"
+    );
+    assert_eq!(
+        old.entity(kept_some)
+            .expect("old variant name")
+            .name
+            .as_ref(),
+        "some"
+    );
+    assert_eq!(
+        old.entity(kept_field)
+            .expect("old field name")
+            .name
+            .as_ref(),
+        "value"
+    );
+
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: renamed.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity { entity: first_enum }],
+        })
+        .expect("compact earlier generic enum");
+    for entity in [kept_enum, kept_parameter, kept_none, kept_some, kept_field] {
+        assert_eq!(
+            compacted
+                .snapshot
+                .entity(entity)
+                .expect("compacted survivor")
+                .id,
+            entity
+        );
+    }
+    let compacted_definition = compacted
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "renamed-kept")
+        .expect("compacted kept definition");
+    assert_eq!(compacted_definition.id, old_definition.id);
+    assert_eq!(compacted_definition.layout, old_definition.layout);
+    assert_eq!(compacted_definition.type_parameters, ["t"]);
+    for deleted in [
+        first_enum,
+        first_parameter,
+        first_none,
+        first_some,
+        first_field,
+    ] {
+        assert!(compacted.snapshot.entity(deleted).is_err());
+        assert_eq!(old.entity(deleted).expect("old deleted entity").id, deleted);
+    }
+
+    let pre_delete = compacted.snapshot;
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: pre_delete.revision(),
+            edits: vec![Edit::DeleteEntity { entity: kept_enum }],
+        })
+        .expect("delete generic enum");
+    for removed in [kept_enum, kept_parameter, kept_none, kept_some, kept_field] {
+        assert!(deleted.snapshot.entity(removed).is_err());
+        assert_eq!(
+            pre_delete.entity(removed).expect("old generic entity").id,
+            removed
+        );
+        assert!(deleted.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityDeleted { entity, .. } if *entity == removed
+        )));
+    }
+
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![generic_maybe_declaration_edit(
+                "renamed-kept",
+                DraftTypeParameterId::new(2),
+            )],
+        })
+        .expect("recreate generic enum name");
+    let recreated_enum = created_entity(&recreated.diff, EntityKind::Enum, "renamed-kept");
+    let recreated_parameter = created_entity(&recreated.diff, EntityKind::TypeParameter, "t");
+    assert_ne!(recreated_enum, kept_enum);
+    assert_ne!(recreated_parameter, kept_parameter);
+}
+
+#[test]
+fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
+    let seed = 312;
+    let mut workspace = Workspace::empty_deterministic(seed).expect("generic enum error workspace");
+    let before = workspace.current();
+    let projection = before.project(&[]).expect("pre-failure projection");
+    let duplicate = DraftTypeParameterId::new(0);
+    let declared = DraftTypeParameterId::new(1);
+    let unknown = DraftTypeParameterId::new(2);
+    let same_name = DraftTypeParameterId::new(3);
+    let invalid_cases = vec![
+        (
+            Edit::CreateEnum {
+                name: "duplicate-id".to_owned(),
+                type_parameters: vec![
+                    EnumTypeParameterDraft {
+                        id: duplicate,
+                        name: "t".to_owned(),
+                    },
+                    EnumTypeParameterDraft {
+                        id: duplicate,
+                        name: "u".to_owned(),
+                    },
+                ],
+                variants: vec![EnumVariantDraft {
+                    name: "one".to_owned(),
+                    fields: Vec::new(),
+                }],
+            },
+            WorkspaceError::DuplicateDraftTypeParameter {
+                parameter: duplicate,
+            },
+        ),
+        (
+            Edit::CreateEnum {
+                name: "duplicate-name".to_owned(),
+                type_parameters: vec![
+                    EnumTypeParameterDraft {
+                        id: declared,
+                        name: "t".to_owned(),
+                    },
+                    EnumTypeParameterDraft {
+                        id: same_name,
+                        name: "t".to_owned(),
+                    },
+                ],
+                variants: vec![EnumVariantDraft {
+                    name: "one".to_owned(),
+                    fields: Vec::new(),
+                }],
+            },
+            WorkspaceError::DuplicateTypeParameterName {
+                first: declared,
+                duplicate: same_name,
+            },
+        ),
+        (
+            Edit::CreateEnum {
+                name: "unknown".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![EnumVariantDraft {
+                    name: "one".to_owned(),
+                    fields: vec![EnumFieldDraft {
+                        name: "value".to_owned(),
+                        ty: DeclarationType::DraftTypeParameter(unknown),
+                    }],
+                }],
+            },
+            WorkspaceError::UnknownDraftTypeParameter { parameter: unknown },
+        ),
+    ];
+    for (edit, expected) in invalid_cases {
+        let error = workspace
+            .apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![edit],
+            })
+            .expect_err("invalid generic enum declaration must reject");
+        assert_eq!(error, expected);
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+        assert_eq!(workspace.current().revision(), before.revision());
+        assert_eq!(workspace.current().diagnostics(), before.diagnostics());
+        assert_eq!(
+            workspace.current().completeness_blockers(),
+            before.completeness_blockers()
+        );
+        assert_eq!(workspace.current().attachments(), before.attachments());
+        assert_eq!(
+            workspace.current().project(&[]).expect("projection"),
+            projection
+        );
+    }
+    for edit in [
+        Edit::CreateEnum {
+            name: "invalid-name".to_owned(),
+            type_parameters: vec![EnumTypeParameterDraft {
+                id: declared,
+                name: String::new(),
+            }],
+            variants: vec![EnumVariantDraft {
+                name: "one".to_owned(),
+                fields: Vec::new(),
+            }],
+        },
+        Edit::CreateEnum {
+            name: "reserved-name".to_owned(),
+            type_parameters: vec![EnumTypeParameterDraft {
+                id: declared,
+                name: "i64".to_owned(),
+            }],
+            variants: vec![EnumVariantDraft {
+                name: "one".to_owned(),
+                fields: Vec::new(),
+            }],
+        },
+    ] {
+        assert!(matches!(
+            workspace.apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![edit],
+            }),
+            Err(WorkspaceError::InvalidTransaction(_))
+        ));
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+    }
+
+    let corrected = Transaction {
+        base_revision: before.revision(),
+        edits: vec![generic_maybe_declaration_edit("maybe", declared)],
+    };
+    let retry = workspace.apply(corrected.clone()).expect("corrected retry");
+    let mut control = Workspace::empty_deterministic(seed).expect("generic enum control");
+    let control = control.apply(corrected).expect("clean control creation");
+    assert_eq!(retry.snapshot.entities(), control.snapshot.entities());
+    assert_eq!(retry.snapshot.containment(), control.snapshot.containment());
+    assert_eq!(retry.diff, control.diff);
+}
+
+#[test]
+fn generic_enum_declaration_type_identities_and_fields_fail_closed_atomically() {
+    let mut workspace = Workspace::empty_deterministic(313).expect("generic enum type workspace");
+    let owner_binder = DraftTypeParameterId::new(0);
+    let owner = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "owner".to_owned(),
+                type_parameters: vec![TypeParameterDraft {
+                    id: owner_binder,
+                    name: "t".to_owned(),
+                    bounds: Vec::new(),
+                }],
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::DraftTypeParameter(owner_binder),
+                }],
+                return_type: DeclarationType::DraftTypeParameter(owner_binder),
+            }],
+        })
+        .expect("create foreign binder owner");
+    let owner_entity = created_entity(&owner.diff, EntityKind::Function, "owner");
+    let stable_parameter = created_entity(&owner.diff, EntityKind::TypeParameter, "t");
+    let before = workspace.current();
+    let field = |name: &str, ty: DeclarationType| Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters: Vec::new(),
+        variants: vec![EnumVariantDraft {
+            name: "one".to_owned(),
+            fields: vec![EnumFieldDraft {
+                name: "value".to_owned(),
+                ty,
+            }],
+        }],
+    };
+    let wrong_owner = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![field(
+            "wrong-owner",
+            DeclarationType::TypeParameter(stable_parameter),
+        )],
+    });
+    assert!(matches!(
+        wrong_owner,
+        Err(WorkspaceError::WrongTypeParameterOwner { parameter, actual: Some(actual), .. })
+            if parameter.as_ref() == &stable_parameter && actual.as_ref() == &owner_entity
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let wrong_kind = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![field(
+            "wrong-kind",
+            DeclarationType::TypeParameter(owner_entity),
+        )],
+    });
+    assert!(matches!(
+        wrong_kind,
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let stale = EntityId::new(
+        stable_parameter.namespace(),
+        stable_parameter.slot(),
+        stable_parameter
+            .generation()
+            .checked_add(1)
+            .expect("stale generation"),
+    );
+    let stale_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![field("stale", DeclarationType::TypeParameter(stale))],
+    });
+    assert!(matches!(
+        stale_failure,
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let foreign_namespace = Workspace::empty_deterministic(314)
+        .expect("foreign workspace")
+        .current()
+        .namespace();
+    let foreign = EntityId::new(
+        foreign_namespace,
+        stable_parameter.slot(),
+        stable_parameter.generation(),
+    );
+    let foreign_failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![field("foreign", DeclarationType::TypeParameter(foreign))],
+    });
+    assert!(matches!(
+        foreign_failure,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let bad_arity = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![field(
+            "bad-arity",
+            DeclarationType::Enum {
+                constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                arguments: Vec::new(),
+            },
+        )],
+    });
+    assert!(matches!(
+        bad_arity,
+        Err(WorkspaceError::InvalidSemanticType { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    for (name, ty) in [
+        ("owned", DeclarationType::ByteVector),
+        ("reference", DeclarationType::ByteSlice),
+    ] {
+        assert!(matches!(
+            workspace.apply(Transaction {
+                base_revision: before.revision(),
+                edits: vec![field(name, ty)],
+            }),
+            Err(WorkspaceError::UnsupportedEdit { .. })
+        ));
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+    }
 }
 
 #[test]

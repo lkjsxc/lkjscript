@@ -33,10 +33,11 @@ production dependencies do not enable it.
 The active product scope is local package check/run plus the compiler's in-process semantic
 workspace library. Text and paths are importer conveniences, not program authority.
 `Workspace::empty` creates a source-free incomplete program; revision-checked transactions can
-create products, enums, generic or non-generic functions, and an entry point with ordered explicit
-capability parameters, then fill real typed holes with flat non-recursive drafts. Function creation
-uses declaration-local binder handles only until atomic publication assigns stable type-parameter
-entities. Main capability parameters and ordinary value parameters receive stable entities. Drafts
+create products, generic or non-generic non-recursive enums and functions, and an entry point with
+ordered explicit capability parameters, then fill real typed holes with flat non-recursive drafts.
+Enum and function creation use declaration-local binder handles only until atomic publication assigns
+stable declaration-owned type-parameter entities. Main capability parameters and ordinary value
+parameters receive stable entities. Drafts
 construct exact generic calls with structured `SemanticType` arguments and compiler-derived trait
 witnesses; source inference and semantic edits share the same exact instantiation validator.
 Implemented drafts also include immutable and mutable lexical locals, ordered sequence, assignment,

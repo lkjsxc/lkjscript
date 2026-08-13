@@ -6,9 +6,10 @@ semantic rule. Current capability is in [`status.md`](status.md); intended contr
 
 ## Now
 
-No new implementation vertical is selected. Source-free construction now covers exact values and
-exhaustive patterns for existing generic enum declarations through direct compilation and VM
-execution; select another item only from a concrete current consumer and focused failing evidence.
+No new implementation vertical is selected. Source-free construction now covers unbounded non-
+recursive generic enum declarations, exact values, and exhaustive exact enum patterns through direct
+compilation and VM execution; select another item only from a concrete current consumer and focused
+failing evidence.
 
 ## Next
 

@@ -160,9 +160,15 @@ pub struct ProductFieldDraft {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumTypeParameterDraft {
+    pub id: DraftTypeParameterId,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnumFieldDraft {
     pub name: String,
-    pub ty: SemanticType,
+    pub ty: DeclarationType,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -186,6 +192,7 @@ pub enum Edit {
     },
     CreateEnum {
         name: String,
+        type_parameters: Vec<EnumTypeParameterDraft>,
         variants: Vec<EnumVariantDraft>,
     },
     CreateFunction {
@@ -576,7 +583,11 @@ fn stage(
                     fields,
                 )?;
             }
-            Edit::CreateEnum { name, variants } => {
+            Edit::CreateEnum {
+                name,
+                type_parameters,
+                variants,
+            } => {
                 create_enum(
                     base,
                     &mut program,
@@ -584,6 +595,7 @@ fn stage(
                     &mut forced_entities,
                     &mut new_entities,
                     name,
+                    type_parameters,
                     variants,
                 )?;
             }
@@ -3648,7 +3660,7 @@ fn declaration_type_to_semantic(
             Work::Enum(constructor, count) => {
                 let split = completed.len().checked_sub(count).ok_or_else(|| {
                     WorkspaceError::InvalidSemanticType {
-                        position: Arc::from("function declaration"),
+                        position: Arc::from("declaration"),
                         reason: Arc::from("enum type children are incomplete"),
                     }
                 })?;
@@ -3662,7 +3674,7 @@ fn declaration_type_to_semantic(
                 let inner = completed
                     .pop()
                     .ok_or_else(|| WorkspaceError::InvalidSemanticType {
-                        position: Arc::from("function declaration"),
+                        position: Arc::from("declaration"),
                         reason: Arc::from("list type child is incomplete"),
                     })?;
                 completed.push(SemanticType::List(Box::new(inner)));
@@ -3672,12 +3684,12 @@ fn declaration_type_to_semantic(
                     completed
                         .pop()
                         .ok_or_else(|| WorkspaceError::InvalidSemanticType {
-                            position: Arc::from("function declaration"),
+                            position: Arc::from("declaration"),
                             reason: Arc::from("function type result is incomplete"),
                         })?;
                 let split = completed.len().checked_sub(count).ok_or_else(|| {
                     WorkspaceError::InvalidSemanticType {
-                        position: Arc::from("function declaration"),
+                        position: Arc::from("declaration"),
                         reason: Arc::from("function type parameters are incomplete"),
                     }
                 })?;
@@ -3692,14 +3704,14 @@ fn declaration_type_to_semantic(
     let result = completed
         .pop()
         .ok_or_else(|| WorkspaceError::InvalidSemanticType {
-            position: Arc::from("function declaration"),
+            position: Arc::from("declaration"),
             reason: Arc::from("declaration type omitted its root"),
         })?;
     if completed.is_empty() {
         Ok(result)
     } else {
         Err(WorkspaceError::InvalidSemanticType {
-            position: Arc::from("function declaration"),
+            position: Arc::from("declaration"),
             reason: Arc::from("declaration type left disconnected results"),
         })
     }
@@ -3849,6 +3861,7 @@ fn create_enum(
     forced: &mut HashMap<EntityAddress, EntityId>,
     created: &mut Vec<NewEntity>,
     name: String,
+    type_parameters: Vec<EnumTypeParameterDraft>,
     variants: Vec<EnumVariantDraft>,
 ) -> Result<(), WorkspaceError> {
     validate_declaration_name(&name)?;
@@ -3862,41 +3875,141 @@ fn create_enum(
             "enum must contain at least one variant",
         )));
     }
-    let created_count = variants.iter().try_fold(1_usize, |count, variant| {
+
+    let mut draft_parameters = HashMap::new();
+    draft_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter draft allocation failed")))?;
+    let mut type_parameter_names = HashMap::new();
+    type_parameter_names
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter name allocation failed")))?;
+    for parameter in &type_parameters {
+        validate_name(&parameter.name)?;
+        if crate::analyze::is_reserved_semantic_name(&parameter.name)
+            || crate::hir::Operation::from_name(&parameter.name).is_some()
+        {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "enum type-parameter name is reserved by the language",
+            )));
+        }
+        if draft_parameters
+            .insert(parameter.id, parameter.name.as_str())
+            .is_some()
+        {
+            return Err(WorkspaceError::DuplicateDraftTypeParameter {
+                parameter: parameter.id,
+            });
+        }
+        if let Some(first) = type_parameter_names.insert(parameter.name.as_str(), parameter.id) {
+            return Err(WorkspaceError::DuplicateTypeParameterName {
+                first,
+                duplicate: parameter.id,
+            });
+        }
+    }
+
+    let mut variant_names = HashSet::new();
+    variant_names
+        .try_reserve(variants.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant name allocation failed")))?;
+    let mut referenced_parameters = HashSet::new();
+    referenced_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("used type-parameter allocation failed")))?;
+    for variant in &variants {
+        validate_name(&variant.name)?;
+        if !variant_names.insert(variant.name.as_str()) {
+            return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                "enum variant name is duplicated",
+            )));
+        }
+        let mut field_names = HashSet::new();
+        field_names
+            .try_reserve(variant.fields.len())
+            .map_err(|_| WorkspaceError::Host(Arc::from("enum field name allocation failed")))?;
+        for field in &variant.fields {
+            validate_name(&field.name)?;
+            if !field_names.insert(field.name.as_str()) {
+                return Err(WorkspaceError::InvalidTransaction(Arc::from(
+                    "enum field name is duplicated within its variant",
+                )));
+            }
+            collect_declaration_type_parameters(
+                &field.ty,
+                &draft_parameters,
+                &mut referenced_parameters,
+            )?;
+        }
+    }
+
+    let created_count = 1_usize
+        .checked_add(type_parameters.len())
+        .ok_or_else(|| WorkspaceError::Host(Arc::from("created enum entity count overflow")))?;
+    let created_count = variants.iter().try_fold(created_count, |count, variant| {
         count
             .checked_add(1)
             .and_then(|count| count.checked_add(variant.fields.len()))
             .ok_or_else(|| WorkspaceError::Host(Arc::from("created enum entity count overflow")))
     })?;
+    forced
+        .try_reserve(created_count)
+        .map_err(|_| WorkspaceError::Host(Arc::from("forced enum entity allocation failed")))?;
     created
         .try_reserve(created_count)
         .map_err(|_| WorkspaceError::Host(Arc::from("created enum entity allocation failed")))?;
+    program
+        .enums
+        .try_reserve(1)
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum allocation failed")))?;
+
     let raw = u64::try_from(program.enums.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("enum identity exceeds u64")))?;
     let address = EntityAddress::Enum(raw);
     let entity = reserve_forced_entity(allocator, forced, address)?;
     let nominal = entity_derived_identity(b"workspace-enum-nominal-v1", entity);
     let enum_id = crate::hir::EnumId::new(nominal);
-    let mut variant_names = HashSet::new();
-    variant_names
-        .try_reserve(variants.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant name allocation failed")))?;
-    let mut resolved_variants = Vec::new();
-    resolved_variants
-        .try_reserve(variants.len())
-        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant allocation failed")))?;
     created.push(NewEntity {
         address,
         kind: EntityKind::Enum,
         name: Arc::from(name.as_str()),
     });
+
+    let mut staged_type_parameters = HashMap::new();
+    staged_type_parameters
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("staged type-parameter allocation failed")))?;
+    let mut draft_entities = HashMap::new();
+    draft_entities
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("draft binder allocation failed")))?;
+    let mut variables = Vec::new();
+    variables
+        .try_reserve(type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum binder allocation failed")))?;
+    for (ordinal, parameter) in type_parameters.iter().enumerate() {
+        let ordinal = u64::try_from(ordinal)
+            .map_err(|_| WorkspaceError::Host(Arc::from("type-parameter ordinal exceeds u64")))?;
+        let parameter_address = EntityAddress::EnumTypeParameter {
+            enumeration: raw,
+            ordinal,
+        };
+        let parameter_entity = reserve_forced_entity(allocator, forced, parameter_address)?;
+        staged_type_parameters.insert(parameter_entity, parameter.name.clone());
+        draft_entities.insert(parameter.id, parameter_entity);
+        variables.push(parameter.name.clone());
+        created.push(NewEntity {
+            address: parameter_address,
+            kind: EntityKind::TypeParameter,
+            name: Arc::from(parameter.name.as_str()),
+        });
+    }
+
+    let mut resolved_variants = Vec::new();
+    resolved_variants
+        .try_reserve(variants.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum variant allocation failed")))?;
     for (variant_index, variant) in variants.into_iter().enumerate() {
-        validate_name(&variant.name)?;
-        if !variant_names.insert(variant.name.clone()) {
-            return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                "enum variant name is duplicated",
-            )));
-        }
         let variant_raw = u64::try_from(variant_index)
             .map_err(|_| WorkspaceError::Host(Arc::from("enum variant index exceeds u64")))?;
         let variant_address = EntityAddress::EnumVariant {
@@ -3913,22 +4026,22 @@ fn create_enum(
             kind: EntityKind::EnumVariant,
             name: Arc::from(variant.name.as_str()),
         });
-        let mut field_names = HashSet::new();
-        field_names
-            .try_reserve(variant.fields.len())
-            .map_err(|_| WorkspaceError::Host(Arc::from("enum field name allocation failed")))?;
         let mut fields = Vec::new();
         fields
             .try_reserve(variant.fields.len())
             .map_err(|_| WorkspaceError::Host(Arc::from("enum field allocation failed")))?;
         for (field_index, field) in variant.fields.into_iter().enumerate() {
-            validate_name(&field.name)?;
-            if !field_names.insert(field.name.clone()) {
-                return Err(WorkspaceError::InvalidTransaction(Arc::from(
-                    "enum field name is duplicated within its variant",
-                )));
-            }
-            let ty = resolve_semantic_type(base, program, field.ty, "enum field")?;
+            let semantic = declaration_type_to_semantic(&field.ty, &draft_entities)?;
+            let ty = super::types::resolve_with_staged_type_parameters(
+                base,
+                program,
+                &semantic,
+                Some(entity),
+                &staged_type_parameters,
+                false,
+                false,
+                "enum field",
+            )?;
             reject_ownership_field(&ty, "enum field")?;
             let field_raw = u64::try_from(field_index)
                 .map_err(|_| WorkspaceError::Host(Arc::from("enum field index exceeds u64")))?;
@@ -3965,15 +4078,11 @@ fn create_enum(
         b"workspace-enum-runtime-layout-v1",
         nominal,
     ));
-    program
-        .enums
-        .try_reserve(1)
-        .map_err(|_| WorkspaceError::Host(Arc::from("enum allocation failed")))?;
     program.enums.push(crate::hir::EnumDefinition {
         id: enum_id,
         name,
         origin: Origin::Semantic,
-        type_parameters: Vec::new(),
+        type_parameters: variables,
         variants: resolved_variants,
         layout: crate::hir::EnumLayoutFacts {
             identity: layout,

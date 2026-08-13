@@ -171,13 +171,16 @@ all fallible outcome copies succeed.
 
 `CreateProduct` and `CreateEnum` reserve stable declaration/member entities first, derive private
 nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
-and publish the complete declaration atomically. One generalized `CreateFunction` accepts zero or
-more ordered type-parameter drafts. A declaration-local `DraftTypeParameterId` can occur at arbitrary
-depth in the creation-only `DeclarationType`; validation resolves it only within that edit. Staging
-allocates stable function, binder, and value-parameter identities in semantic order, maps the local
-handles to private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
+and publish the complete declaration atomically. `CreateEnum` and `CreateFunction` each accept zero
+or more ordered type-parameter drafts. A declaration-local `DraftTypeParameterId` can occur at
+arbitrary depth in the creation-only `DeclarationType`; validation resolves it only within that edit.
+Enum staging allocates stable enum and binder identities before resolving fields with the enum as
+owner, then constructs the canonical unbounded `EnumDefinition`; phantom binders are valid and the
+operation deliberately has no local nominal self handle for recursion. Function staging allocates
+stable function, binder, and value-parameter identities in semantic order, maps the local handles to
+private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
 `Function::bounds` facts only when binders exist. It then creates a real result-typed missing-body
-hole with unknown effects. The local handles never enter the semantic program, indexes, query,
+hole with unknown effects. Local handles never enter the semantic program, indexes, query,
 projection, or diff. `CreateMain` reuses the parameter draft/type path for ordered exact capability
 parameters, validates the canonical source entry restrictions before staging, assigns stable
 parameter entities owned by main, and creates a real missing-body hole whose scope includes those

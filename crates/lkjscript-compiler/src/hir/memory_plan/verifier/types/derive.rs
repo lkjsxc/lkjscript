@@ -117,6 +117,9 @@ impl VerifiedTypes<'_> {
             .cloned()
             .zip(arguments.iter().cloned())
             .collect();
+        for argument in arguments {
+            self.intern(argument)?;
+        }
         let mut children = Vec::new();
         for (vi, variant) in item.variants.iter().enumerate() {
             for (fi, field) in variant.fields.iter().enumerate() {

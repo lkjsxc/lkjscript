@@ -57,7 +57,7 @@ pub enum DraftBindingRef {
     Local(DraftBindingId),
 }
 
-/// Identity of one type parameter inside a single function declaration draft.
+/// Identity of one type parameter inside a single declaration draft.
 ///
 /// This invocation-local handle is not a workspace identity and never enters a
 /// published snapshot, query, projection, or semantic diff.
@@ -74,7 +74,7 @@ impl DraftTypeParameterId {
     }
 }
 
-/// A creation-time type for one function declaration.
+/// A creation-time type for one function or enum declaration.
 ///
 /// Published type parameters use stable [`EntityId`] values. A type parameter
 /// declared by the same creation edit instead uses [`DraftTypeParameterId`]

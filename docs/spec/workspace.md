@@ -57,16 +57,20 @@ Old immutable snapshots retain their original unresolved state. Current text imp
 fail-fast on unresolved source names; it does not manufacture parser recovery state.
 
 All construction and later editing uses one revision-checked atomic transaction path. Implemented
-creation covers non-generic products and enums, generic and non-generic functions, and one `main`
+creation covers non-generic products, generic or non-generic enums and functions, and one `main`
 with zero or more ordered explicit capability parameters; function and entry bodies begin as typed
 holes. Each main parameter is a stable entity owned by main and visible in its body hole. Main
 creation applies the same exact capability-only, sorted-kind, unique-name, and result restrictions as
-source import before publication. One generalized function
-creation operation accepts zero or more ordered type-parameter drafts. A declaration-local opaque
-binder handle may occur at arbitrary depth in the creation-only `DeclarationType`; it has only that
-edit's lifetime and never enters a snapshot, query, projection, or diff. Staging validates names,
-handles, exact trait identities, bounds, and types, then allocates stable function, binder, and value-
-parameter entities and lowers to the same canonical universal function and bound facts used by the
+source import before publication. The generalized enum and function creation operations accept zero
+or more ordered type-parameter drafts. A declaration-local opaque binder handle may occur at
+arbitrary depth in the creation-only `DeclarationType`; it has only that edit's lifetime and never
+enters a snapshot, query, projection, or diff. Enum fields use this declaration type directly, so
+local handles publish only after conversion to stable enum-owned type-parameter entities and the
+canonical private enum variables. Enum parameters are unbounded, may be phantom, and do not carry
+trait bounds; source-free recursive enum declarations remain unsupported because `CreateEnum`
+exposes no declaration-local nominal self handle. Function staging additionally validates exact
+trait identities and bounds. Staging allocates each declaration, binder, and member or value-
+parameter entity before constructing the same canonical enum or universal function facts used by the
 source importer. Public published type inputs and query results use one exact recursive
 `SemanticType`, whose nominal and binder cases carry stable workspace identities rather than product
 names, compiler enum/trait IDs, layout IDs, binder strings, or source identities. Prelude enum

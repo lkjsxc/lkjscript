@@ -190,15 +190,18 @@ entity addresses are independent of public ordering, so adding `main` does not r
 function. Removed slots retain tombstone generations across snapshot cloning and reopening.
 
 `Workspace::empty` reports `Incomplete`, one missing-entry blocker/diagnostic, zero entities/nodes,
-and no attachments. `Transaction` adds non-generic `CreateProduct` and `CreateEnum`, generalized
-generic-or-non-generic `CreateFunction`, and `CreateMain` with ordered explicit capability
+and no attachments. `Transaction` adds non-generic `CreateProduct`, generalized generic-or-non-
+generic `CreateEnum` and `CreateFunction`, and `CreateMain` with ordered explicit capability
 parameters; identity-preserving rename for functions,
 parameters, locals, products, product fields, enums, variants, and enum fields; replacement and hole
 operations; and unresolved copy-load value-reference introduction and resolution.
-Function creation uses one ordered declaration-local binder handle domain and a creation-only
-`DeclarationType`; staged validation allocates stable function, type-parameter, and value-parameter
-entities before canonical universal-signature construction. The local handles never enter published
-state. Products, enums, variants, fields, functions, function type parameters, value parameters,
+Enum and function creation use one ordered declaration-local binder handle domain and a creation-
+only `DeclarationType`; staged validation allocates stable declaration and type-parameter entities
+before resolving binder-bearing types. Enum parameters are unbounded and may be phantom; enum fields
+publish stable enum-owned parameter identities and lower to the canonical generic `EnumDefinition`.
+Functions additionally publish value-parameter entities before canonical universal-signature
+construction. Local handles never enter published state. Products, enums, variants, fields,
+functions, function or enum type parameters, value parameters,
 locals, bodies, and holes receive opaque stable entities independent of compiler-dense nominal/layout
 identities. Public published inputs and queries use one exact structured `SemanticType`; products,
 user enums, and type parameters carry stable entities, while all five prelude enums and all five core
@@ -490,7 +493,7 @@ build inputs.
 
 - Text remains a persistent package/import format, but not a compiler or editing authority. The
   concise projection is review/debug output, not a complete source renderer. Declaration creation
-  covers non-generic products and enums, generic and non-generic functions, and `main` with ordered
+  covers non-generic products, generic and non-generic enums and functions, and `main` with ordered
   explicit capability parameters; expression construction covers immutable and mutable locals,
   ordered sequence, assignment,
   `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`, exact calls
@@ -502,8 +505,10 @@ build inputs.
   wildcard, binding, Boolean literal, I64 literal, exact product, and exact generic or non-generic
   enum-variant nodes. Product and field selection uses stable identities, requires every declared
   field exactly once, and publishes declaration-order query fields regardless of draft field order;
-  nested closed patterns compose. Generic enum declaration creation and broader generic pattern
-  families remain unsupported. Source-free nominal
+  nested closed patterns compose. Source-free generic enum declaration authoring supports ordered
+  unbounded binders, phantom binders, nested binder-bearing fields, stable lifecycle, and direct
+  compilation/execution. Recursive source-free enum declarations, enum bounds, and broader generic
+  pattern families remain unsupported. Source-free nominal
   declaration fields still reject ownership/reference types, but imported ownership-bearing product
   and enum fields remain selectable by stable identity; nested source-free patterns over those
   declarations compile and execute through the same ownership and VM route. Source-free unresolved
