@@ -8582,6 +8582,7 @@ fn source_free_bound_rejection_names_the_created_binder_and_is_atomic() {
                 vec![
                     DraftNode::EnumValue {
                         variant,
+                        type_arguments: Vec::new(),
                         fields: Vec::new(),
                     },
                     DraftNode::Call {
@@ -9019,6 +9020,7 @@ fn explicit_generic_calls_derive_auto_witnesses_and_fail_atomically_when_unsatis
                     vec![
                         DraftNode::EnumValue {
                             variant,
+                            type_arguments: Vec::new(),
                             fields: Vec::new(),
                         },
                         DraftNode::Call {
@@ -9156,6 +9158,7 @@ fn unsatisfied_bound_reports_the_exact_binder_when_traits_repeat() {
                         DraftNode::I64(1),
                         DraftNode::EnumValue {
                             variant,
+                            type_arguments: Vec::new(),
                             fields: Vec::new(),
                         },
                         DraftNode::Call {
@@ -12467,6 +12470,7 @@ fn deep_match_draft(
     nodes.push(DraftNode::I64(1));
     nodes.push(DraftNode::EnumValue {
         variant: some,
+        type_arguments: Vec::new(),
         fields: vec![DraftFieldValue {
             field: value_field,
             value: DraftNodeId::new(0),
@@ -12479,6 +12483,7 @@ fn deep_match_draft(
         let some_value = DraftNodeId::new(u64::try_from(nodes.len()).expect("some value id"));
         nodes.push(DraftNode::EnumValue {
             variant: some,
+            type_arguments: Vec::new(),
             fields: vec![DraftFieldValue {
                 field: value_field,
                 value: payload,
@@ -12487,6 +12492,7 @@ fn deep_match_draft(
         let none_value = DraftNodeId::new(u64::try_from(nodes.len()).expect("none value id"));
         nodes.push(DraftNode::EnumValue {
             variant: none,
+            type_arguments: Vec::new(),
             fields: Vec::new(),
         });
         let next = DraftNodeId::new(u64::try_from(nodes.len()).expect("match id"));
@@ -12810,6 +12816,7 @@ fn direct_nominal_and_member_rename_preserves_identity_types_runtime_and_old_sna
                         },
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value,
                                 value: DraftNodeId::new(3),
@@ -13510,6 +13517,7 @@ fn enum_deletion_cascades_members_and_preserves_stable_nominal_layout_identity()
                         DraftNode::Bool(true),
                         DraftNode::EnumValue {
                             variant: kept_variant,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: kept_field,
                                 value: DraftNodeId::new(0),
@@ -14870,6 +14878,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
                 DraftNode::I64(1),
                 DraftNode::EnumValue {
                     variant: some,
+                    type_arguments: Vec::new(),
                     fields: vec![DraftFieldValue {
                         field: other_enum_field,
                         value: DraftNodeId::new(0),
@@ -14881,6 +14890,7 @@ fn malformed_nominal_value_identities_and_fields_are_atomic() {
         ExpressionDraft::new(
             vec![DraftNode::EnumValue {
                 variant: pair,
+                type_arguments: Vec::new(),
                 fields: Vec::new(),
             }],
             DraftNodeId::new(0),
@@ -15007,6 +15017,7 @@ fn nominal_holes_report_compatible_stable_constructors() {
                         DraftNode::I64(7),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value,
                                 value: DraftNodeId::new(0),
@@ -15152,6 +15163,7 @@ fn source_free_product_and_enum_locals_compile_and_execute() {
                         DraftNode::I64(7),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),
@@ -16711,6 +16723,7 @@ fn run_deep_mixed_source_free_pattern(
 
     let mut nodes = vec![DraftNode::EnumValue {
         variant: end_variant,
+        type_arguments: Vec::new(),
         fields: Vec::new(),
     }];
     let mut value = DraftNodeId::new(0);
@@ -16732,6 +16745,7 @@ fn run_deep_mixed_source_free_pattern(
         value = DraftNodeId::new(u64::try_from(nodes.len()).expect("deep enum value identity"));
         nodes.push(DraftNode::EnumValue {
             variant: next_variants[index],
+            type_arguments: Vec::new(),
             fields: vec![DraftFieldValue {
                 field: enum_fields[index],
                 value: product_value,
@@ -16888,6 +16902,7 @@ fn source_free_enum_patterns_accept_nested_boolean_and_i64_literals() {
                         DraftNode::I64(-1),
                         DraftNode::EnumValue {
                             variant: data,
+                            type_arguments: Vec::new(),
                             fields: vec![
                                 DraftFieldValue {
                                     field: key,
@@ -17170,6 +17185,7 @@ fn source_free_nested_product_and_enum_patterns_compose_after_import() {
                         },
                         DraftNode::EnumValue {
                             variant: wrapper_value,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: wrapper_payload,
                                 value: DraftNodeId::new(10),
@@ -17218,6 +17234,7 @@ fn source_free_nested_product_and_enum_patterns_compose_after_import() {
                         },
                         DraftNode::EnumValue {
                             variant: marker_marked,
+                            type_arguments: Vec::new(),
                             fields: Vec::new(),
                         },
                         DraftNode::ProductValue {
@@ -17345,6 +17362,7 @@ fn source_free_enum_payload_match_compiles_and_executes() {
                         DraftNode::I64(42),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),
@@ -17646,6 +17664,7 @@ fn source_free_choice_match(seed: u64) -> (Workspace, EntityId, EntityId, Entity
                         DraftNode::I64(42),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),
@@ -17862,6 +17881,7 @@ fn choice_match_draft(some: EntityId, none: EntityId, value_field: EntityId) -> 
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -17917,6 +17937,7 @@ fn choice_match_with_patterns(
     nodes.push(DraftNode::I64(42));
     nodes.push(DraftNode::EnumValue {
         variant: some,
+        type_arguments: Vec::new(),
         fields: vec![DraftFieldValue {
             field: value_field,
             value: DraftNodeId::new(0),
@@ -18102,6 +18123,7 @@ fn source_free_match_pattern_physical_order_does_not_change_semantics() {
                         DraftNode::I64(42),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),
@@ -18212,6 +18234,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18233,6 +18256,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18261,6 +18285,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18289,6 +18314,7 @@ fn source_free_match_rejects_nonexhaustive_and_useless_arms_atomically() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18776,6 +18802,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18819,6 +18846,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
             DraftNode::I64(42),
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: value_field,
                     value: DraftNodeId::new(0),
@@ -18909,6 +18937,7 @@ fn malformed_source_free_match_shapes_identities_and_scopes_are_atomic() {
                 DraftNode::I64(2),
                 DraftNode::EnumValue {
                     variant: both,
+                    type_arguments: Vec::new(),
                     fields: vec![
                         DraftFieldValue {
                             field: left,
@@ -18967,6 +18996,7 @@ fn match_arm_hole_context_contains_only_its_payload_bindings() {
                         DraftNode::I64(42),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),
@@ -20119,6 +20149,7 @@ fn imported_nominal_local_and_ownership_programs_converge() {
                         DraftNode::I64(7),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value,
                                 value: DraftNodeId::new(0),
@@ -20201,8 +20232,1126 @@ fn imported_nominal_local_and_ownership_programs_converge() {
     }
 }
 
+fn generic_maybe_match_source() -> String {
+    concat!(
+        "def/\nname/\nidentity\n/name\nfn/\nforall/\nu\n/forall\n",
+        "sig/\ninputs/\nu\n/inputs\noutput/\nu\n/output\n/sig\n",
+        "params/\nvalue\nu\n/params\nvalue\n/fn\n/def\n",
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nmaybe/\ni64\n/maybe\n/type\n",
+        "variant/\nsome\n/variant\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\n42\n/variant-field\n",
+        "/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\n",
+        "variant/\nsome\n/variant\nfields/\n",
+        "variant-field-pattern/\nname/\nvalue\n/name\n",
+        "binding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n",
+        "/fields\n/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\n",
+        "variant/\nnone\n/variant\nfields/\n/fields\n/variant-pattern\n",
+        "0\n/arm\n/arms\n/match\n/main\n",
+    )
+    .to_owned()
+}
+
+fn generic_maybe_bool_source() -> String {
+    concat!(
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\nfalse\n/main\n",
+    )
+    .to_owned()
+}
+
+fn generic_maybe_none_source() -> String {
+    concat!(
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nmaybe/\ni64\n/maybe\n/output\n/sig\n",
+        "variant-value/\ntype/\nmaybe/\ni64\n/maybe\n/type\n",
+        "variant/\nnone\n/variant\nfields/\n/fields\n/variant-value\n/main\n",
+    )
+    .to_owned()
+}
+
+fn generic_pair_value_source() -> String {
+    concat!(
+        "enum/\nname/\npair\n/name\nforall/\na\nb\n/forall\nvariants/\n",
+        "variant/\nname/\nboth\n/name\nfields/\n",
+        "variant-field/\nname/\nfirst\n/name\ntype/\na\n/type\n/variant-field\n",
+        "variant-field/\nname/\nsecond\n/name\ntype/\nb\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\npair/\ni64\nbool\n/pair\n/output\n/sig\n",
+        "variant-value/\ntype/\npair/\ni64\nbool\n/pair\n/type\n",
+        "variant/\nboth\n/variant\nfields/\n",
+        "variant-field/\nname/\nfirst\n/name\n7\n/variant-field\n",
+        "variant-field/\nname/\nsecond\n/name\ntrue\n/variant-field\n",
+        "/fields\n/variant-value\n/main\n",
+    )
+    .to_owned()
+}
+
+fn exact_generic_enum_value_draft(
+    variant: EntityId,
+    type_arguments: Vec<TypeArgumentDraft>,
+    fields: Vec<(EntityId, DraftNode)>,
+) -> ExpressionDraft {
+    let mut nodes = Vec::new();
+    let mut values = Vec::new();
+    for (field, value) in fields {
+        let id = DraftNodeId::new(u64::try_from(nodes.len()).expect("enum payload node identity"));
+        nodes.push(value);
+        values.push(DraftFieldValue { field, value: id });
+    }
+    let root = DraftNodeId::new(u64::try_from(nodes.len()).expect("enum value node identity"));
+    nodes.push(DraftNode::EnumValue {
+        variant,
+        type_arguments,
+        fields: values,
+    });
+    ExpressionDraft::new(nodes, root)
+}
+
+fn exact_generic_maybe_match_draft(
+    some: EntityId,
+    none: EntityId,
+    value_field: EntityId,
+    type_parameter: EntityId,
+) -> ExpressionDraft {
+    let payload = DraftBindingId::new(0);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: some,
+                type_arguments: vec![TypeArgumentDraft {
+                    parameter: type_parameter,
+                    argument: SemanticType::I64,
+                }],
+                fields: vec![DraftFieldValue {
+                    field: value_field,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(1),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "x".to_owned(),
+                                },
+                                DraftPatternNode::EnumVariant {
+                                    variant: some,
+                                    fields: vec![DraftPatternField {
+                                        field: value_field,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(2),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![DraftPatternNode::EnumVariant {
+                                variant: none,
+                                fields: Vec::new(),
+                            }],
+                            DraftPatternNodeId::new(0),
+                        ),
+                        body: DraftNodeId::new(3),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(4),
+    )
+}
+
 #[test]
-fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
+fn exact_generic_enum_values_and_patterns_compile_execute_and_converge() {
+    let imported = importer::import_source_with_namespace(
+        &generic_maybe_match_source(),
+        "generic-enum-authoring.lkjscript",
+        WorkspaceNamespace::deterministic(301),
+    )
+    .expect("import generic enum oracle");
+    assert_eq!(run_i64(&imported), 42);
+    let enumeration = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":maybe"))
+        .expect("generic enum")
+        .id;
+    let type_parameter = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
+        })
+        .expect("generic enum type parameter")
+        .id;
+    let variant = |name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::EnumVariant
+                    && entity.owner == Some(enumeration)
+                    && entity.name.ends_with(&format!(":{name}"))
+            })
+            .expect("generic enum variant")
+            .id
+    };
+    let none = variant("none");
+    let some = variant("some");
+    let value_field = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumField && entity.owner == Some(some))
+        .expect("generic enum payload field")
+        .id;
+    let main = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("generic enum main")
+        .id;
+    let match_site = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match && node.owner == SemanticOwner::Entity(main))
+        .expect("generic enum match root")
+        .id;
+    let scrutinee = imported
+        .match_view(imported.revision(), match_site)
+        .expect("imported generic match")
+        .scrutinee;
+    let expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64],
+    };
+    let oracle = canonical_workspace_observation(&imported);
+    let old = imported.clone();
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::new(imported).expect("generic enum workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: scrutinee,
+                goal: "construct an exact generic enum value".to_owned(),
+            }],
+        })
+        .expect("introduce generic enum value hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .find(|hole| hole.id.node() == scrutinee)
+        .expect("generic enum value hole");
+    assert_eq!(hole.expected_type, expected);
+    let constructors = introduced
+        .snapshot
+        .legal_constructors(
+            introduced.snapshot.revision(),
+            hole.id,
+            PageRequest::new(64).expect("constructor page"),
+            None,
+        )
+        .expect("generic enum constructors")
+        .items;
+    assert!(constructors.contains(&LegalConstructor::EnumVariant(none)));
+    assert!(constructors.contains(&LegalConstructor::EnumVariant(some)));
+
+    let constructed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole.id,
+                draft: exact_generic_enum_value_draft(
+                    some,
+                    vec![TypeArgumentDraft {
+                        parameter: type_parameter,
+                        argument: SemanticType::I64,
+                    }],
+                    vec![(value_field, DraftNode::I64(42))],
+                ),
+            }],
+        })
+        .expect("construct payload generic enum value");
+    assert_eq!(run_i64(&constructed.snapshot), 42);
+    assert_eq!(
+        constructed
+            .snapshot
+            .node_semantics(constructed.snapshot.revision(), scrutinee)
+            .expect("payload generic enum facts")
+            .actual,
+        expected
+    );
+
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: constructed.snapshot.revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: match_site,
+                draft: exact_generic_maybe_match_draft(some, none, value_field, type_parameter),
+            }],
+        })
+        .expect("author generic enum value and exhaustive patterns");
+    assert_eq!(run_i64(&completed.snapshot), 42);
+    assert_eq!(run_i64(&old), 42);
+    assert_eq!(run_i64(&constructed.snapshot), 42);
+    for entity in [enumeration, type_parameter, some, none, value_field, main] {
+        assert_eq!(
+            completed
+                .snapshot
+                .entity(entity)
+                .expect("stable generic entity")
+                .id,
+            entity
+        );
+    }
+    assert_eq!(
+        completed
+            .snapshot
+            .node(match_site)
+            .expect("identity-preserved match root")
+            .id,
+        match_site
+    );
+    let view = completed
+        .snapshot
+        .match_view(completed.snapshot.revision(), match_site)
+        .expect("source-free generic match view");
+    assert!(view.exhaustive);
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), view.scrutinee)
+            .expect("generic scrutinee facts")
+            .actual,
+        expected
+    );
+    let binding = view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match pattern.kind {
+            MatchPatternKindView::Binding { binding } => Some(binding),
+            _ => None,
+        })
+        .expect("generic payload binding");
+    assert_eq!(
+        completed
+            .snapshot
+            .entity_type(completed.snapshot.revision(), binding)
+            .expect("generic payload binding type")
+            .declared,
+        Some(SemanticType::I64)
+    );
+    assert!(view.arms[0].patterns.iter().any(|pattern| {
+        pattern.ty == expected
+            && matches!(
+                pattern.kind,
+                MatchPatternKindView::EnumVariant {
+                    enumeration: Some(found_enum),
+                    variant: Some(found_variant),
+                    ..
+                } if found_enum == enumeration && found_variant == some
+            )
+    }));
+    let projection = completed
+        .snapshot
+        .project(&[
+            ProjectionSlice::Body(main),
+            ProjectionSlice::Match(match_site),
+        ])
+        .expect("generic enum projection");
+    assert_eq!(
+        projection,
+        completed
+            .snapshot
+            .project(&[
+                ProjectionSlice::Body(main),
+                ProjectionSlice::Match(match_site)
+            ])
+            .expect("repeat generic enum projection")
+    );
+    assert!(projection.contains(" type=\"enum("), "{projection}");
+    assert!(
+        projection.contains(" i64\" kind=enum-variant"),
+        "{projection}"
+    );
+    assert_eq!(canonical_workspace_observation(&completed.snapshot), oracle);
+    let executable = crate::compile_snapshot(&completed.snapshot).expect("compile generic enum");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn exact_nullary_generic_enum_value_retains_its_concrete_instantiation() {
+    let imported = importer::import_source_with_namespace(
+        &generic_maybe_none_source(),
+        "generic-enum-nullary.lkjscript",
+        WorkspaceNamespace::deterministic(304),
+    )
+    .expect("import nullary generic enum oracle");
+    let enumeration = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":maybe"))
+        .expect("nullary generic enum")
+        .id;
+    let type_parameter = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
+        })
+        .expect("nullary generic enum type parameter")
+        .id;
+    let none = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::EnumVariant
+                && entity.owner == Some(enumeration)
+                && entity.name.ends_with(":none")
+        })
+        .expect("nullary generic enum variant")
+        .id;
+    let root = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Enum)
+        .expect("nullary generic enum root")
+        .id;
+    let expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64],
+    };
+    let oracle = canonical_workspace_observation(&imported);
+    let imported_executable =
+        crate::compile_snapshot(&imported).expect("compile imported nullary generic enum");
+    let imported_outcome = run_chunk(
+        imported_executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(imported_outcome.cleanup_failures().is_none());
+    let ExecutionOutcome::Returned(imported_value) = imported_outcome else {
+        panic!("imported nullary generic enum must return")
+    };
+    let imported_tag = imported_value
+        .enum_physical_tag()
+        .expect("imported nullary generic enum tag");
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let old = imported.clone();
+    let mut workspace = Workspace::new(imported).expect("nullary generic enum workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: root,
+                goal: "retain an explicit phantom instantiation".to_owned(),
+            }],
+        })
+        .expect("introduce nullary generic enum hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("nullary enum hole");
+    assert_eq!(hole.expected_type, expected);
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: hole.id,
+                draft: exact_generic_enum_value_draft(
+                    none,
+                    vec![TypeArgumentDraft {
+                        parameter: type_parameter,
+                        argument: SemanticType::I64,
+                    }],
+                    Vec::new(),
+                ),
+            }],
+        })
+        .expect("author nullary generic enum value");
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), root)
+            .expect("nullary generic enum semantic facts")
+            .actual,
+        expected
+    );
+    assert_eq!(canonical_workspace_observation(&completed.snapshot), oracle);
+    assert_eq!(
+        old.node_semantics(old.revision(), root)
+            .expect("old nullary generic enum facts")
+            .actual,
+        expected
+    );
+    let executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile nullary generic enum");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    let ExecutionOutcome::Returned(value) = outcome else {
+        panic!("source-free nullary generic enum must return")
+    };
+    assert_eq!(value.enum_physical_tag(), Some(imported_tag));
+    assert_eq!(value.enum_field_i64(0), None);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn generic_enum_variant_testing_uses_the_operand_instantiation() {
+    let imported = importer::import_source_with_namespace(
+        &generic_maybe_bool_source(),
+        "generic-enum-variant-test.lkjscript",
+        WorkspaceNamespace::deterministic(306),
+    )
+    .expect("import generic enum variant-test fixture");
+    let enumeration = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":maybe"))
+        .expect("variant-test generic enum")
+        .id;
+    let type_parameter = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
+        })
+        .expect("variant-test generic enum parameter")
+        .id;
+    let none = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::EnumVariant
+                && entity.owner == Some(enumeration)
+                && entity.name.ends_with(":none")
+        })
+        .expect("variant-test nullary variant")
+        .id;
+    let main = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Main)
+        .expect("variant-test main")
+        .id;
+    let root = imported
+        .nodes()
+        .iter()
+        .find(|node| node.owner == SemanticOwner::Entity(main))
+        .expect("variant-test target")
+        .id;
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::new(imported).expect("generic enum variant-test workspace");
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::ReplaceExpression {
+                target: root,
+                draft: ExpressionDraft::new(
+                    vec![
+                        DraftNode::EnumValue {
+                            variant: none,
+                            type_arguments: vec![TypeArgumentDraft {
+                                parameter: type_parameter,
+                                argument: SemanticType::I64,
+                            }],
+                            fields: Vec::new(),
+                        },
+                        DraftNode::EnumIsVariant {
+                            variant: none,
+                            value: DraftNodeId::new(0),
+                        },
+                    ],
+                    DraftNodeId::new(1),
+                ),
+            }],
+        })
+        .expect("author generic enum variant test");
+    assert!(run_bool(&completed.snapshot));
+    let test = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Enum && node.id == root)
+        .expect("identity-preserved generic variant test")
+        .id;
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), test)
+            .expect("generic enum variant-test facts")
+            .actual,
+        SemanticType::Bool
+    );
+    let executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile generic enum variant test");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_bool() == Some(true)));
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn generic_enum_arguments_and_fields_canonicalize_to_declaration_order() {
+    let imported = importer::import_source_with_namespace(
+        &generic_pair_value_source(),
+        "generic-enum-order.lkjscript",
+        WorkspaceNamespace::deterministic(305),
+    )
+    .expect("import generic enum ordering oracle");
+    let enumeration = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":pair"))
+        .expect("ordered generic enum")
+        .id;
+    let parameter = |name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::TypeParameter
+                    && entity.owner == Some(enumeration)
+                    && entity.name.as_ref() == name
+            })
+            .expect("ordered generic enum parameter")
+            .id
+    };
+    let first_parameter = parameter("a");
+    let second_parameter = parameter("b");
+    let variant = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant && entity.owner == Some(enumeration))
+        .expect("ordered generic enum variant")
+        .id;
+    let field = |name: &str| {
+        imported
+            .entities()
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::EnumField
+                    && entity.owner == Some(variant)
+                    && entity.name.as_ref() == name
+            })
+            .expect("ordered generic enum field")
+            .id
+    };
+    let first = field("first");
+    let second = field("second");
+    let root = imported.nodes()[0].id;
+    let expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::I64, SemanticType::Bool],
+    };
+    let oracle = canonical_workspace_observation(&imported);
+    let mut workspace = Workspace::new(imported).expect("ordered generic enum workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: root,
+                goal: "submit generic arguments and fields out of order".to_owned(),
+            }],
+        })
+        .expect("introduce ordered generic enum hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("ordered enum hole")
+        .id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: introduced.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: exact_generic_enum_value_draft(
+                    variant,
+                    vec![
+                        TypeArgumentDraft {
+                            parameter: second_parameter,
+                            argument: SemanticType::Bool,
+                        },
+                        TypeArgumentDraft {
+                            parameter: first_parameter,
+                            argument: SemanticType::I64,
+                        },
+                    ],
+                    vec![(second, DraftNode::Bool(true)), (first, DraftNode::I64(7))],
+                ),
+            }],
+        })
+        .expect("author reordered generic enum value");
+    assert_eq!(
+        completed
+            .snapshot
+            .node_semantics(completed.snapshot.revision(), root)
+            .expect("ordered generic enum facts")
+            .actual,
+        expected
+    );
+    assert_eq!(canonical_workspace_observation(&completed.snapshot), oracle);
+    let payloads = completed
+        .snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node.owner == SemanticOwner::Node(root))
+        .map(|node| {
+            completed
+                .snapshot
+                .node_semantics(completed.snapshot.revision(), node.id)
+                .expect("ordered generic enum payload facts")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(payloads.len(), 2);
+    assert_eq!(payloads[0].actual, SemanticType::I64);
+    assert_eq!(payloads[0].expected, Some(SemanticType::I64));
+    assert_eq!(payloads[1].actual, SemanticType::Bool);
+    assert_eq!(payloads[1].expected, Some(SemanticType::Bool));
+    let executable =
+        crate::compile_snapshot(&completed.snapshot).expect("compile ordered generic enum");
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    let ExecutionOutcome::Returned(value) = outcome else {
+        panic!("ordered generic enum must return")
+    };
+    assert_eq!(value.enum_payload_len(), Some(2));
+    assert_eq!(value.enum_field_i64(0), Some(7));
+}
+
+#[test]
+fn generic_enum_authoring_failures_are_atomic_and_retry_stable() {
+    let source = generic_maybe_match_source();
+    let imported = importer::import_source_with_namespace(
+        &source,
+        "generic-enum-errors.lkjscript",
+        WorkspaceNamespace::deterministic(302),
+    )
+    .expect("import generic enum error fixture");
+    let foreign = importer::import_source_with_namespace(
+        &source,
+        "foreign-generic-enum-errors.lkjscript",
+        WorkspaceNamespace::deterministic(303),
+    )
+    .expect("import foreign generic enum fixture");
+    let enumeration = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Enum && entity.name.ends_with(":maybe"))
+        .expect("generic enum")
+        .id;
+    let type_parameter = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
+        })
+        .expect("generic enum type parameter")
+        .id;
+    let function = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::Function && entity.name.ends_with(":identity"))
+        .expect("generic function")
+        .id;
+    let other_parameter = imported
+        .function_signature(imported.revision(), function)
+        .expect("generic function signature")
+        .type_parameters[0]
+        .id;
+    let some = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::EnumVariant
+                && entity.owner == Some(enumeration)
+                && entity.name.ends_with(":some")
+        })
+        .expect("some variant")
+        .id;
+    let none = imported
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.kind == EntityKind::EnumVariant
+                && entity.owner == Some(enumeration)
+                && entity.name.ends_with(":none")
+        })
+        .expect("none variant")
+        .id;
+    let value_field = imported
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumField && entity.owner == Some(some))
+        .expect("some payload field")
+        .id;
+    let foreign_parameter = foreign
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::TypeParameter)
+        .expect("foreign type parameter")
+        .id;
+    let stale = EntityId::new(imported.namespace(), u64::MAX, 1);
+    let match_site = imported
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("generic match")
+        .id;
+    let scrutinee = imported
+        .match_view(imported.revision(), match_site)
+        .expect("generic match view")
+        .scrutinee;
+    let mut workspace = Workspace::new(imported.clone()).expect("generic value error workspace");
+    let introduced = workspace
+        .apply(Transaction {
+            base_revision: imported.revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: scrutinee,
+                goal: "reject invalid generic enum values".to_owned(),
+            }],
+        })
+        .expect("introduce generic value error hole");
+    let hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("generic value hole")
+        .id;
+    let before = workspace.current();
+    let value = |arguments: Vec<TypeArgumentDraft>, fields: Vec<(EntityId, DraftNode)>| {
+        exact_generic_enum_value_draft(some, arguments, fields)
+    };
+    let failures = vec![
+        value(Vec::new(), vec![(value_field, DraftNode::I64(42))]),
+        value(
+            vec![
+                TypeArgumentDraft {
+                    parameter: type_parameter,
+                    argument: SemanticType::I64,
+                },
+                TypeArgumentDraft {
+                    parameter: type_parameter,
+                    argument: SemanticType::I64,
+                },
+            ],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: other_parameter,
+                argument: SemanticType::I64,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: foreign_parameter,
+                argument: SemanticType::I64,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: enumeration,
+                argument: SemanticType::I64,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: stale,
+                argument: SemanticType::I64,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: type_parameter,
+                argument: SemanticType::ByteVector,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: type_parameter,
+                argument: SemanticType::Product(stale),
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: type_parameter,
+                argument: SemanticType::Bool,
+            }],
+            vec![(value_field, DraftNode::I64(42))],
+        ),
+        value(
+            vec![TypeArgumentDraft {
+                parameter: type_parameter,
+                argument: SemanticType::I64,
+            }],
+            Vec::new(),
+        ),
+    ];
+    let mut errors = Vec::new();
+    for draft in failures {
+        errors.push(
+            workspace
+                .apply(Transaction {
+                    base_revision: before.revision(),
+                    edits: vec![Edit::FillHole { hole, draft }],
+                })
+                .expect_err("invalid generic enum value must reject"),
+        );
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+    }
+    assert!(matches!(
+        errors[0],
+        WorkspaceError::MissingTypeArgument { parameter } if parameter == type_parameter
+    ));
+    assert!(matches!(
+        errors[1],
+        WorkspaceError::DuplicateTypeArgument { parameter } if parameter == type_parameter
+    ));
+    assert!(matches!(
+        &errors[2],
+        WorkspaceError::WrongTypeParameterOwner { parameter, expected, .. }
+            if parameter.as_ref() == &other_parameter && expected.as_ref() == &enumeration
+    ));
+    assert!(matches!(errors[3], WorkspaceError::ForeignNamespace(_)));
+    assert!(matches!(errors[4], WorkspaceError::WrongEntityKind { .. }));
+    assert!(matches!(errors[5], WorkspaceError::StaleIdentity(_)));
+    assert!(matches!(errors[6], WorkspaceError::UnsupportedEdit { .. }));
+    assert!(matches!(errors[7], WorkspaceError::StaleIdentity(_)));
+    assert!(matches!(
+        &errors[8],
+        WorkspaceError::TypeMismatch { expected, actual }
+            if expected.as_ref() == &SemanticType::Bool
+                && actual.as_ref() == &SemanticType::I64
+    ));
+    assert!(matches!(errors[9], WorkspaceError::InvalidDraft(_)));
+
+    let valid = exact_generic_enum_value_draft(
+        some,
+        vec![TypeArgumentDraft {
+            parameter: type_parameter,
+            argument: SemanticType::I64,
+        }],
+        vec![(value_field, DraftNode::I64(42))],
+    );
+    let mut control = Workspace::new((*before).clone()).expect("generic value allocator control");
+    let retried = workspace
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: valid.clone(),
+            }],
+        })
+        .expect("retry valid generic enum value");
+    let controlled = control
+        .apply(Transaction {
+            base_revision: before.revision(),
+            edits: vec![Edit::FillHole { hole, draft: valid }],
+        })
+        .expect("control generic enum value");
+    assert_eq!(retried.diff, controlled.diff);
+    assert_eq!(run_i64(&retried.snapshot), 42);
+
+    let mut pattern_workspace = Workspace::new(imported).expect("generic pattern error workspace");
+    let introduced = pattern_workspace
+        .apply(Transaction {
+            base_revision: pattern_workspace.current().revision(),
+            edits: vec![Edit::IntroduceHole {
+                target: match_site,
+                goal: "reject invalid generic enum patterns".to_owned(),
+            }],
+        })
+        .expect("introduce generic pattern error hole");
+    let pattern_hole = introduced
+        .snapshot
+        .holes()
+        .next()
+        .expect("generic match hole")
+        .id;
+    let pattern_before = pattern_workspace.current();
+
+    let mut nonexhaustive =
+        exact_generic_maybe_match_draft(some, none, value_field, type_parameter);
+    let DraftNode::Match { arms, .. } = &mut nonexhaustive.nodes[4] else {
+        panic!("generic match draft root")
+    };
+    arms.pop();
+    nonexhaustive.nodes.remove(3);
+    nonexhaustive.root = DraftNodeId::new(3);
+
+    let mut incompatible = exact_generic_maybe_match_draft(some, none, value_field, type_parameter);
+    let DraftNode::Match { arms, .. } = &mut incompatible.nodes[4] else {
+        panic!("generic match draft root")
+    };
+    arms[0].pattern.nodes[0] = DraftPatternNode::Bool(true);
+    incompatible.nodes[2] = DraftNode::I64(1);
+
+    let mut missing_field =
+        exact_generic_maybe_match_draft(some, none, value_field, type_parameter);
+    let DraftNode::Match { arms, .. } = &mut missing_field.nodes[4] else {
+        panic!("generic match draft root")
+    };
+    let DraftPatternNode::EnumVariant { fields, .. } = &mut arms[0].pattern.nodes[1] else {
+        panic!("generic some pattern")
+    };
+    fields.clear();
+    missing_field.nodes[2] = DraftNode::I64(1);
+
+    let mut useless = exact_generic_maybe_match_draft(some, none, value_field, type_parameter);
+    let duplicate_body =
+        DraftNodeId::new(u64::try_from(useless.nodes.len()).expect("duplicate arm body"));
+    useless.nodes.push(DraftNode::I64(1));
+    let DraftNode::Match { arms, .. } = &mut useless.nodes[4] else {
+        panic!("generic match draft root")
+    };
+    arms.insert(
+        1,
+        MatchArmDraft {
+            pattern: PatternDraft::new(
+                vec![
+                    DraftPatternNode::Wildcard,
+                    DraftPatternNode::EnumVariant {
+                        variant: some,
+                        fields: vec![DraftPatternField {
+                            field: value_field,
+                            pattern: DraftPatternNodeId::new(0),
+                        }],
+                    },
+                ],
+                DraftPatternNodeId::new(1),
+            ),
+            body: duplicate_body,
+        },
+    );
+
+    let mut pattern_errors = Vec::new();
+    for draft in [nonexhaustive, incompatible, missing_field, useless] {
+        pattern_errors.push(
+            pattern_workspace
+                .apply(Transaction {
+                    base_revision: pattern_before.revision(),
+                    edits: vec![Edit::FillHole {
+                        hole: pattern_hole,
+                        draft,
+                    }],
+                })
+                .expect_err("invalid generic enum pattern must reject"),
+        );
+        assert!(Arc::ptr_eq(&pattern_before, &pattern_workspace.current()));
+    }
+    assert!(
+        pattern_errors[0]
+            .to_string()
+            .contains("nonexhaustive match"),
+        "{}",
+        pattern_errors[0]
+    );
+    assert!(matches!(pattern_errors[1], WorkspaceError::InvalidDraft(_)));
+    assert!(matches!(pattern_errors[2], WorkspaceError::InvalidDraft(_)));
+    assert!(
+        pattern_errors[3].to_string().contains("useless"),
+        "{}",
+        pattern_errors[3]
+    );
+    let valid = exact_generic_maybe_match_draft(some, none, value_field, type_parameter);
+    let mut control =
+        Workspace::new((*pattern_before).clone()).expect("generic pattern allocator control");
+    let retried = pattern_workspace
+        .apply(Transaction {
+            base_revision: pattern_before.revision(),
+            edits: vec![Edit::FillHole {
+                hole: pattern_hole,
+                draft: valid.clone(),
+            }],
+        })
+        .expect("retry valid generic enum match");
+    let controlled = control
+        .apply(Transaction {
+            base_revision: pattern_before.revision(),
+            edits: vec![Edit::FillHole {
+                hole: pattern_hole,
+                draft: valid,
+            }],
+        })
+        .expect("control generic enum match");
+    assert_eq!(retried.diff, controlled.diff);
+    let retried_binding = entity_named(&retried.snapshot, EntityKind::ImmutableLocal, "x");
+    let controlled_binding = entity_named(&controlled.snapshot, EntityKind::ImmutableLocal, "x");
+    assert_eq!(retried_binding, controlled_binding);
+    assert_eq!(
+        retried
+            .snapshot
+            .entity_type(retried.snapshot.revision(), retried_binding)
+            .expect("retried generic payload type")
+            .declared,
+        Some(SemanticType::I64)
+    );
+    assert_eq!(run_i64(&retried.snapshot), 42);
+}
+
+#[test]
+fn generic_enum_holes_advertise_exact_source_free_constructors() {
     let source = concat!(
         "enum/\nname/\nremove\n/name\nvariants/\nvariant/\nname/\none\n/name\n",
         "fields/\n/fields\n/variant\n/variants\n/enum\n",
@@ -20248,6 +21397,13 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
             entity.kind == EntityKind::TypeParameter && entity.owner == Some(enumeration)
         })
         .expect("generic enum binder")
+        .id;
+    let variant = introduced
+        .snapshot
+        .entities()
+        .iter()
+        .find(|entity| entity.kind == EntityKind::EnumVariant && entity.owner == Some(enumeration))
+        .expect("generic enum variant")
         .id;
     let expected = SemanticType::Enum {
         constructor: SemanticEnum::Entity(enumeration),
@@ -20295,7 +21451,7 @@ fn generic_enum_holes_do_not_advertise_unavailable_source_free_constructors() {
         .expect("generic constructors")
         .items
         .iter()
-        .all(|constructor| !matches!(constructor, LegalConstructor::EnumVariant(_))));
+        .any(|constructor| *constructor == LegalConstructor::EnumVariant(variant)));
     let main = compacted
         .snapshot
         .entities()
@@ -21126,6 +22282,7 @@ fn removing_an_earlier_match_compacts_and_preserves_a_later_plan() {
                         DraftNode::I64(9),
                         DraftNode::EnumValue {
                             variant: some,
+                            type_arguments: Vec::new(),
                             fields: vec![DraftFieldValue {
                                 field: value_field,
                                 value: DraftNodeId::new(0),

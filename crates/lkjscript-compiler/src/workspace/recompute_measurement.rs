@@ -1070,6 +1070,7 @@ fn product_enum_match_draft(
             },
             DraftNode::EnumValue {
                 variant: some,
+                type_arguments: Vec::new(),
                 fields: vec![DraftFieldValue {
                     field: payload_field,
                     value: DraftNodeId::new(4),

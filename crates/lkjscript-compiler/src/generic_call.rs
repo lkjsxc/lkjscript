@@ -708,6 +708,16 @@ fn contains_ownership_type(root: &Type) -> Result<bool, GenericCallError> {
     })
 }
 
+pub(crate) fn validate_concrete_enum_argument(argument: &Type) -> Result<(), GenericCallError> {
+    if contains_ownership_type(argument)? {
+        return Err(GenericCallError::OwnershipUnsupported);
+    }
+    if contains_type_parameter(argument)? {
+        return Err(GenericCallError::ForwardingUnsupported);
+    }
+    Ok(())
+}
+
 fn visit_type(
     root: &Type,
     mut predicate: impl FnMut(&Type) -> bool,

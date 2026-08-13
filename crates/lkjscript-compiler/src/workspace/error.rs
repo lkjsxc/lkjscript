@@ -159,14 +159,16 @@ impl fmt::Display for WorkspaceError {
                 formatter,
                 "function declaration does not use {parameter:?} in its signature"
             ),
-            Self::MissingTypeArgument { parameter } => {
-                write!(formatter, "generic call is missing type argument for {parameter:?}")
-            }
-            Self::DuplicateTypeArgument { parameter } => {
-                write!(formatter, "generic call repeats type argument for {parameter:?}")
-            }
+            Self::MissingTypeArgument { parameter } => write!(
+                formatter,
+                "generic operation is missing type argument for {parameter:?}"
+            ),
+            Self::DuplicateTypeArgument { parameter } => write!(
+                formatter,
+                "generic operation repeats type argument for {parameter:?}"
+            ),
             Self::UnexpectedTypeArgument => {
-                formatter.write_str("non-generic call does not accept type arguments")
+                formatter.write_str("non-generic operation does not accept type arguments")
             }
             Self::WrongTypeParameterOwner {
                 parameter,
@@ -196,7 +198,7 @@ impl fmt::Display for WorkspaceError {
                 "type argument {argument} for {parameter:?} does not satisfy {trait_identity:?}"
             ),
             Self::GenericForwardingUnsupported => formatter.write_str(
-                "forwarding a caller type parameter through a generic call is unavailable in the current transport route",
+                "forwarding a caller type parameter through this generic operation is unavailable in the current transport route",
             ),
             Self::InvisibleEntity {
                 operation,

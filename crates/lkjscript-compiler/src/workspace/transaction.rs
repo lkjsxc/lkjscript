@@ -5842,9 +5842,20 @@ fn lower_draft(
             DraftNode::ProductField { field, value } => {
                 lower_product_field(snapshot, program, *field, *value, &mut completed, origin)?
             }
-            DraftNode::EnumValue { variant, fields } => {
-                lower_enum_value(snapshot, program, *variant, fields, &mut completed, origin)?
-            }
+            DraftNode::EnumValue {
+                variant,
+                type_arguments,
+                fields,
+            } => lower_enum_value(
+                snapshot,
+                program,
+                callable,
+                *variant,
+                type_arguments,
+                fields,
+                &mut completed,
+                origin,
+            )?,
             DraftNode::EnumIsVariant { variant, value } => {
                 lower_enum_is_variant(snapshot, program, *variant, *value, &mut completed, origin)?
             }
@@ -6277,17 +6288,18 @@ fn lower_pattern_draft(
                     .enums
                     .get(host_index(enumeration, "enum")?)
                     .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
-                if !definition.type_parameters.is_empty() {
-                    return Err(WorkspaceError::unsupported(
-                        "match-pattern",
-                        "generic enum match authoring is not implemented",
-                    ));
-                }
-                let expected_enum = Type::Enum {
-                    id: definition.id,
-                    arguments: Vec::new(),
+                let Type::Enum { id, arguments } = &ty else {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+                        "enum variant pattern requires an enum type, got {ty}"
+                    ))));
                 };
-                require_pattern_type(&ty, &expected_enum, "enum variant")?;
+                if *id != definition.id {
+                    return Err(WorkspaceError::InvalidDraft(Arc::from(
+                        "enum pattern variant belongs to a different enum than the expected type",
+                    )));
+                }
+                validate_concrete_enum_arguments(arguments, "match-pattern")?;
+                let substitutions = enum_substitution_map(definition, arguments, "enum pattern")?;
                 let selected = definition
                     .variants
                     .get(host_index(variant_index, "enum variant")?)
@@ -6352,7 +6364,11 @@ fn lower_pattern_draft(
                     })?;
                     resolved_fields.push(ResolvedPatternField {
                         field_index: declared.source_order,
-                        ty: declared.ty.clone(),
+                        ty: substitute_enum_field_type(
+                            &declared.ty,
+                            &substitutions,
+                            "enum pattern field",
+                        )?,
                         projection: None,
                         pattern,
                     });
@@ -7476,10 +7492,13 @@ fn lower_product_field(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_enum_value(
     snapshot: &WorkspaceSnapshot,
     program: &SemanticProgram,
+    callable: EntityId,
     variant_entity: EntityId,
+    type_arguments: &[super::TypeArgumentDraft],
     fields: &[DraftFieldValue],
     completed: &mut [Option<Expr>],
     origin: Origin,
@@ -7488,6 +7507,17 @@ fn lower_enum_value(
     if header.kind != EntityKind::EnumVariant {
         return Err(wrong_kind("enum value", "enum variant", header.kind));
     }
+    let enumeration_entity = header
+        .owner
+        .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant owner")))?;
+    let enumeration_header = snapshot.workspace_entity(enumeration_entity)?;
+    if enumeration_header.kind != EntityKind::Enum {
+        return Err(wrong_kind(
+            "enum value variant owner",
+            "enum declaration",
+            enumeration_header.kind,
+        ));
+    }
     let EntityAddress::EnumVariant {
         enumeration,
         variant,
@@ -7495,16 +7525,24 @@ fn lower_enum_value(
     else {
         return Err(WorkspaceError::StaleIdentity(Arc::from("enum variant")));
     };
+    if entity_address(snapshot, enumeration_entity)? != EntityAddress::Enum(enumeration) {
+        return Err(WorkspaceError::Validation(Arc::from(
+            "enum variant owner identity is inconsistent",
+        )));
+    }
     let definition = program
         .enums
         .get(host_index(enumeration, "enum")?)
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum")))?;
-    if !definition.type_parameters.is_empty() {
-        return Err(WorkspaceError::unsupported(
-            "enum value",
-            "generic enum authoring is not implemented",
-        ));
-    }
+    let arguments = resolve_enum_type_arguments(
+        snapshot,
+        program,
+        callable,
+        enumeration_entity,
+        definition,
+        type_arguments,
+    )?;
+    let substitutions = enum_substitution_map(definition, &arguments, "enum value")?;
     let selected = definition
         .variants
         .get(host_index(variant, "enum variant")?)
@@ -7543,11 +7581,13 @@ fn lower_enum_value(
         }
         let index = host_index(field_raw, "enum field")?;
         let value = take_draft_child(completed, field.value)?;
-        let expected = selected
+        let declared = selected
             .fields
             .get(index)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
-        require_type(&value.ty, &expected.ty)?;
+        let expected =
+            substitute_enum_field_type(&declared.ty, &substitutions, "enum value field")?;
+        require_workspace_type(snapshot, program, callable, &value.ty, &expected)?;
         let slot = ordered
             .get_mut(index)
             .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum field")))?;
@@ -7564,10 +7604,11 @@ fn lower_enum_value(
     let effects = fields
         .iter()
         .fold(EffectSet::PURE, |set, field| set.union(field.effects));
+    drop(substitutions);
     Ok(Expr {
         ty: Type::Enum {
             id: definition.id,
-            arguments: Vec::new(),
+            arguments,
         },
         effects,
         origin,
@@ -7577,6 +7618,151 @@ fn lower_enum_value(
             layout: definition.layout.identity,
             fields,
         },
+    })
+}
+
+fn resolve_enum_type_arguments(
+    snapshot: &WorkspaceSnapshot,
+    program: &SemanticProgram,
+    callable: EntityId,
+    enumeration: EntityId,
+    definition: &crate::hir::EnumDefinition,
+    type_arguments: &[super::TypeArgumentDraft],
+) -> Result<Vec<Type>, WorkspaceError> {
+    if definition.type_parameters.is_empty() && !type_arguments.is_empty() {
+        return Err(WorkspaceError::UnexpectedTypeArgument);
+    }
+    let mut supplied = HashMap::new();
+    supplied
+        .try_reserve(type_arguments.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum type-argument allocation failed")))?;
+    for argument in type_arguments {
+        if argument.parameter.namespace() != snapshot.namespace {
+            return Err(WorkspaceError::ForeignNamespace(Arc::from(
+                "type parameter",
+            )));
+        }
+        let parameter = snapshot
+            .workspace_entity(argument.parameter)
+            .map_err(|_| WorkspaceError::StaleIdentity(Arc::from("type parameter")))?;
+        if parameter.kind != EntityKind::TypeParameter {
+            return Err(wrong_kind(
+                "enum value type argument",
+                "type parameter",
+                parameter.kind,
+            ));
+        }
+        if parameter.owner != Some(enumeration) {
+            return Err(WorkspaceError::WrongTypeParameterOwner {
+                parameter: Box::new(argument.parameter),
+                expected: Box::new(enumeration),
+                actual: parameter.owner.map(Box::new),
+            });
+        }
+        let resolved = super::types::resolve(
+            snapshot,
+            program,
+            &argument.argument,
+            Some(callable),
+            false,
+            false,
+            "enum type argument",
+        )?;
+        validate_concrete_enum_arguments(std::slice::from_ref(&resolved), "enum value")?;
+        if supplied.insert(argument.parameter, resolved).is_some() {
+            return Err(WorkspaceError::DuplicateTypeArgument {
+                parameter: argument.parameter,
+            });
+        }
+    }
+    let mut arguments = Vec::new();
+    arguments
+        .try_reserve(definition.type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum argument allocation failed")))?;
+    for parameter_name in &definition.type_parameters {
+        let parameter = snapshot
+            .indexes
+            .type_parameter_entities
+            .get(&enumeration)
+            .and_then(|parameters| parameters.get(parameter_name.as_str()))
+            .copied()
+            .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("type parameter")))?;
+        arguments.push(
+            supplied
+                .remove(&parameter)
+                .ok_or(WorkspaceError::MissingTypeArgument { parameter })?,
+        );
+    }
+    if !supplied.is_empty() {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "enum value contains an undeclared type argument",
+        )));
+    }
+    Ok(arguments)
+}
+
+fn validate_concrete_enum_arguments(
+    arguments: &[Type],
+    operation: &str,
+) -> Result<(), WorkspaceError> {
+    for argument in arguments {
+        crate::generic_call::validate_concrete_enum_argument(argument).map_err(
+            |error| match error {
+                crate::generic_call::GenericCallError::OwnershipUnsupported => {
+                    WorkspaceError::unsupported(
+                        operation,
+                        "ownership/reference-bearing generic enum arguments are unsupported",
+                    )
+                }
+                crate::generic_call::GenericCallError::ForwardingUnsupported => {
+                    WorkspaceError::GenericForwardingUnsupported
+                }
+                crate::generic_call::GenericCallError::Host(message) => {
+                    WorkspaceError::Host(Arc::from(message))
+                }
+                other => WorkspaceError::Validation(Arc::from(other.to_string())),
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn enum_substitution_map<'a>(
+    definition: &'a crate::hir::EnumDefinition,
+    arguments: &'a [Type],
+    subject: &str,
+) -> Result<HashMap<&'a str, &'a Type>, WorkspaceError> {
+    if definition.type_parameters.len() != arguments.len() {
+        return Err(WorkspaceError::Validation(Arc::from(format!(
+            "{subject} substitution arity is inconsistent"
+        ))));
+    }
+    let mut substitutions = HashMap::new();
+    substitutions
+        .try_reserve(definition.type_parameters.len())
+        .map_err(|_| WorkspaceError::Host(Arc::from("enum substitution allocation failed")))?;
+    for (parameter, argument) in definition.type_parameters.iter().zip(arguments) {
+        if substitutions.insert(parameter.as_str(), argument).is_some() {
+            return Err(WorkspaceError::Validation(Arc::from(format!(
+                "{subject} declaration repeats a type parameter"
+            ))));
+        }
+    }
+    Ok(substitutions)
+}
+
+fn substitute_enum_field_type(
+    declared: &Type,
+    substitutions: &HashMap<&str, &Type>,
+    subject: &str,
+) -> Result<Type, WorkspaceError> {
+    crate::generic_call::substitute_type(declared, substitutions).map_err(|error| match error {
+        crate::generic_call::GenericCallError::Host(message) => {
+            WorkspaceError::Host(Arc::from(message))
+        }
+        other => {
+            WorkspaceError::Validation(Arc::from(format!("{subject} substitution failed: {other}")))
+        }
     })
 }
 
@@ -7608,13 +7794,18 @@ fn lower_enum_is_variant(
         .get(host_index(variant, "enum variant")?)
         .ok_or_else(|| WorkspaceError::StaleIdentity(Arc::from("enum variant")))?;
     let value = take_draft_child(completed, value)?;
-    require_type(
-        &value.ty,
-        &Type::Enum {
-            id: definition.id,
-            arguments: Vec::new(),
-        },
-    )?;
+    let Type::Enum { id, arguments } = &value.ty else {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(format!(
+            "enum variant test requires an enum value, got {}",
+            value.ty
+        ))));
+    };
+    if *id != definition.id {
+        return Err(WorkspaceError::InvalidDraft(Arc::from(
+            "enum variant test belongs to a different enum than its value",
+        )));
+    }
+    validate_concrete_enum_arguments(arguments, "enum variant test")?;
     Ok(Expr {
         ty: Type::Bool,
         effects: value.effects,

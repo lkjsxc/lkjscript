@@ -1342,35 +1342,53 @@ impl WorkspaceSnapshot {
                     }
                 }
             }
-            crate::Type::Enum { id, arguments, .. } if arguments.is_empty() => {
-                if let Some((index, definition)) = self
-                    .program
-                    .enums
-                    .iter()
-                    .enumerate()
-                    .find(|(_, definition)| definition.id == *id)
-                    .filter(|(_, definition)| definition.type_parameters.is_empty())
-                {
-                    let raw = u64::try_from(index).map_err(|_| {
-                        WorkspaceError::Host(Arc::from("enum constructor index exceeds u64"))
-                    })?;
-                    for (variant, _) in definition.variants.iter().enumerate() {
-                        let variant = u64::try_from(variant).map_err(|_| {
-                            WorkspaceError::Host(Arc::from("enum variant index exceeds u64"))
+            crate::Type::Enum { id, arguments, .. } => {
+                let mut supported = true;
+                for argument in arguments {
+                    match crate::generic_call::validate_concrete_enum_argument(argument) {
+                        Ok(()) => {}
+                        Err(
+                            crate::generic_call::GenericCallError::OwnershipUnsupported
+                            | crate::generic_call::GenericCallError::ForwardingUnsupported,
+                        ) => {
+                            supported = false;
+                            break;
+                        }
+                        Err(error) => return Err(generic_query_error(error)),
+                    }
+                }
+                if supported {
+                    if let Some((index, definition)) = self
+                        .program
+                        .enums
+                        .iter()
+                        .enumerate()
+                        .find(|(_, definition)| definition.id == *id)
+                        .filter(|(_, definition)| {
+                            definition.type_parameters.len() == arguments.len()
+                        })
+                    {
+                        let raw = u64::try_from(index).map_err(|_| {
+                            WorkspaceError::Host(Arc::from("enum constructor index exceeds u64"))
                         })?;
-                        if let Some(entity) = self
-                            .indexes
-                            .address_entities
-                            .get(&super::model::EntityAddress::EnumVariant {
-                                enumeration: raw,
-                                variant,
-                            })
-                            .copied()
-                        {
-                            push_legal_constructor(
-                                &mut values,
-                                LegalConstructor::EnumVariant(entity),
-                            )?;
+                        for (variant, _) in definition.variants.iter().enumerate() {
+                            let variant = u64::try_from(variant).map_err(|_| {
+                                WorkspaceError::Host(Arc::from("enum variant index exceeds u64"))
+                            })?;
+                            if let Some(entity) = self
+                                .indexes
+                                .address_entities
+                                .get(&super::model::EntityAddress::EnumVariant {
+                                    enumeration: raw,
+                                    variant,
+                                })
+                                .copied()
+                            {
+                                push_legal_constructor(
+                                    &mut values,
+                                    LegalConstructor::EnumVariant(entity),
+                                )?;
+                            }
                         }
                     }
                 }

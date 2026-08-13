@@ -216,9 +216,9 @@ whose canonical metadata selects the ordinary runtime-operation expression route
 string conversion, and explicit-capability stdio operations), exact generic and non-generic calls,
 conditionals, ordered sequences, immutable lexical locals, explicitly typed mutable locals,
 assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`,
-copy-safe loads, byte-vector moves and shared borrows, product construction/projection, enum
-construction and variant tests, and exhaustive closed Boolean, I64, exact-product, and non-generic
-enum matches. Empty sequence is pure
+copy-safe loads, byte-vector moves and shared borrows, product construction/projection, exact generic
+and non-generic enum construction and variant tests, and exhaustive closed Boolean, I64, exact-
+product, and exact generic or non-generic enum matches. Empty sequence is pure
 `unit`; non-empty sequence yields its last value. A return value must be non-divergent and exactly
 match the owning callable's declared result type; the return node is `never`-typed, carries canonical
 divergence and child effects, and uses the existing HIR cleanup path. An explicitly moved affine
@@ -234,18 +234,22 @@ ownership control stack checks every transfer edge independently, permits local 
 borrows whose projected loop-header state is unchanged, and rejects a changed outer-owner state or
 loop-carried lexical loan. Mutable initializers activate their binding only for the body, affine live
 overwrite is rejected, and affine reinitialization after move/drop follows the canonical place
-termination, initialization, and cleanup route. Generic drafts identify binders by stable parameter
-entities and provide exact structured type arguments; the same resolver validates importer-inferred
-and explicit substitutions, argument types, ownership/reference restrictions, and trait bounds, then
-derives auto
-or explicit implementation witnesses. Each ordered match arm owns a flat `PatternDraft`; wildcard,
-named binding, Boolean literal, I64 literal, exact product, and non-generic enum-variant nodes lower
-through the canonical usefulness, exhaustiveness, match-plan, ownership, memory, SSA, and VM path.
-Product nodes select the exact stable product and every stable field identity once; submitted field
-order is non-semantic, while HIR and query fields follow declaration order. These closed patterns
-compose under product fields and enum payloads. Nested structural enum checks retain active-variant
-provenance through the canonical short-circuit SSA merge chain. Payload bindings are stable public immutable-local
-entities. Compiler-only scrutinee and field-projection locals have an explicit hidden binding kind
+termination, initialization, and cleanup route. Generic call and enum-value drafts identify binders
+by stable parameter entities and provide exact structured type arguments. Enum-value arguments and
+fields canonicalize to declaration order, and the iterative canonical substitution path checks
+concrete payload types while retaining exact enum arguments for nullary variants. The same generic
+resolver validates importer-inferred and explicit substitutions, argument types,
+ownership/reference restrictions, and trait bounds, then derives auto or explicit implementation
+witnesses where the declaration family has bounds. Each ordered match arm owns a flat `PatternDraft`;
+wildcard, named binding, Boolean literal, I64 literal, exact product, and exact generic or non-generic
+enum-variant nodes lower through the canonical usefulness, exhaustiveness, match-plan, ownership,
+memory, SSA, and VM path. Product nodes select the exact stable product and every stable field
+identity once; submitted field order is non-semantic, while HIR and query fields follow declaration
+order. Generic enum patterns derive concrete arguments from the exact expected type and pass
+canonically substituted field types to nested patterns and stable payload bindings. These closed
+patterns compose under product fields and enum payloads. Nested structural enum checks retain active-
+variant provenance through the canonical short-circuit SSA merge chain. Payload bindings are stable
+public immutable-local entities. Compiler-only scrutinee and field-projection locals have an explicit hidden binding kind
 and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
 unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
@@ -254,8 +258,9 @@ coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm resul
 storage/kinds/types/scopes, non-Boolean loops, divergent return values, wrong callable return values,
 foreign/stale/deleted callees beneath returns, control transfer outside a loop, non-exact or
 divergent break payloads, invalid loop result types, unreachable sequence/loop body entries, and
-contradictory overlapping or deletion-owned edits reject. Generic patterns, unresolved generic
-forwarding, ownership/reference generic instantiation, and executable placeholders remain absent. Imported and source-free mutable-local subtrees share stable
+contradictory overlapping or deletion-owned edits reject. Generic pattern families beyond exact
+enum variants, unresolved generic forwarding, ownership/reference generic instantiation, and
+executable placeholders remain absent. Imported and source-free mutable-local subtrees share stable
 identity, lexical visibility, ordinary replacement, tombstoning, and compaction lifecycle behavior.
 
 The authoritative `SemanticProgram` permits absent `main`, real hole expression leaves, one explicit
@@ -373,8 +378,8 @@ SSA, bytecode, or runtime phases. A complete snapshot derives one source-optiona
 compiler-owned core context only in that derived compiler value when needed, validates consistency,
 and lowers directly. Selected source-free scalar, nominal aggregate, immutable/mutable lexical-local,
 counted-loop, typed-loop/break, nested-continue, affine break/continue cleanup, early-return
-ownership-control, byte-vector-borrow-then-move, enum-payload-match, and exact generic-call edits enter
-source loading and parsing zero times, retain canonical memory-plan
+ownership-control, byte-vector-borrow-then-move, exact generic-enum value/payload-match, and exact
+generic-call edits enter source loading and parsing zero times, retain canonical memory-plan
 obligations, compile to validated bytecode, execute in the VM, and clean up on normal and trapped
 paths. The source-free ownership-control equivalent also enters the selected baseline-native path,
 returns `7`, allocates and drops one unique owner, and ends with no live owner, loan, release backlog,
@@ -396,8 +401,10 @@ enum/member identities, and payload-binding entities. Node semantics expose kind
 type, canonical operation identity, and named effect flags. Generic views expose stable binders and
 trait identities, canonical substitutions, instantiated parameters/results, derived witnesses, and named effect flags
 without compiler-dense IDs or binder strings. Copy loads are advertised only for copy-safe values;
-affine move/borrow candidates are marked `RequiresOwnershipValidation`, and unsupported generic enum
-constructors are omitted. Unresolved candidates include stable entity, current name, kind, declared
+affine move/borrow candidates are marked `RequiresOwnershipValidation`. Variants of an exact
+concrete generic enum expected at a hole are advertised when the transaction path accepts the same
+concrete argument family; unsupported ownership/reference or unresolved instantiations remain
+omitted. Unresolved candidates include stable entity, current name, kind, declared
 structured type, exact requested-name equality, and `RequiresCanonicalValidation`; exact-name
 matches sort first, then current name and stable identity. Continuations bind the unresolved node as
 part of the query identity. Hole and unresolved visibility refresh after semantic revisions.
@@ -487,16 +494,16 @@ build inputs.
   explicit capability parameters; expression construction covers immutable and mutable locals,
   ordered sequence, assignment,
   `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, early `return`, exact calls
-  to imported or source-free generic functions, the selected byte-vector move/borrow vertical, and
-  exhaustive closed Boolean, I64, exact-product, and non-generic enum matches. Source-free generic
-  function declaration authoring
+  to imported or source-free generic functions, exact values of existing generic enum declarations,
+  the selected byte-vector move/borrow vertical, and exhaustive closed Boolean, I64, exact-product,
+  and exact generic or non-generic enum matches. Source-free generic function declaration authoring
   supports ordered binders, exact builtin or stable trait bounds, nested binder-bearing signatures,
-  stable
-  lifecycle, and direct compilation/execution. Source-free flat pattern drafts support wildcard,
-  binding, Boolean literal, I64 literal, exact product, and non-generic enum-variant nodes. Product
-  and field selection uses stable identities, requires every declared field exactly once, and
-  publishes declaration-order query fields regardless of draft field order; nested closed patterns
-  compose. Generic pattern construction remains an explicit unsupported edit. Source-free nominal
+  stable lifecycle, and direct compilation/execution. Source-free flat pattern drafts support
+  wildcard, binding, Boolean literal, I64 literal, exact product, and exact generic or non-generic
+  enum-variant nodes. Product and field selection uses stable identities, requires every declared
+  field exactly once, and publishes declaration-order query fields regardless of draft field order;
+  nested closed patterns compose. Generic enum declaration creation and broader generic pattern
+  families remain unsupported. Source-free nominal
   declaration fields still reject ownership/reference types, but imported ownership-bearing product
   and enum fields remain selectable by stable identity; nested source-free patterns over those
   declarations compile and execute through the same ownership and VM route. Source-free unresolved

@@ -697,6 +697,7 @@ pub enum DraftNode {
     },
     EnumValue {
         variant: EntityId,
+        type_arguments: Vec<TypeArgumentDraft>,
         fields: Vec<DraftFieldValue>,
     },
     EnumIsVariant {

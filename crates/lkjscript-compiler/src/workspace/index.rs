@@ -1181,16 +1181,59 @@ fn expression_children<'a>(
                 ..
             } = &expression.kind
             {
-                let definition = program.enums.iter().find(|item| item.id == *enum_id);
-                let selected = definition
-                    .and_then(|item| item.variants.iter().find(|item| item.id == *variant));
-                for (index, field) in fields.iter().enumerate() {
-                    children.push((
-                        field,
-                        selected
-                            .and_then(|item| item.fields.get(index))
-                            .map(|item| item.ty.clone()),
+                let Type::Enum {
+                    id: value_enum,
+                    arguments,
+                } = &expression.ty
+                else {
+                    return Err(Error::msg("workspace enum value lost its enum type"));
+                };
+                if value_enum != enum_id {
+                    return Err(Error::msg(
+                        "workspace enum value type and constructor identity differ",
                     ));
+                }
+                let definition = program
+                    .enums
+                    .iter()
+                    .find(|item| item.id == *enum_id)
+                    .ok_or_else(|| Error::msg("workspace enum value identity is stale"))?;
+                if definition.type_parameters.len() != arguments.len() {
+                    return Err(Error::msg(
+                        "workspace enum value substitution arity is stale",
+                    ));
+                }
+                let selected = definition
+                    .variants
+                    .iter()
+                    .find(|item| item.id == *variant)
+                    .ok_or_else(|| Error::msg("workspace enum variant identity is stale"))?;
+                if selected.fields.len() != fields.len() {
+                    return Err(Error::msg("workspace enum value field count is stale"));
+                }
+                let mut substitutions = HashMap::new();
+                substitutions
+                    .try_reserve(definition.type_parameters.len())
+                    .map_err(|_| Error::host("workspace enum substitution allocation failed"))?;
+                for (parameter, argument) in definition.type_parameters.iter().zip(arguments) {
+                    if substitutions.insert(parameter.as_str(), argument).is_some() {
+                        return Err(Error::msg(
+                            "workspace enum declaration repeats a type parameter",
+                        ));
+                    }
+                }
+                for (field, declared) in fields.iter().zip(&selected.fields) {
+                    let expected =
+                        crate::generic_call::substitute_type(&declared.ty, &substitutions)
+                            .map_err(|error| match error {
+                                crate::generic_call::GenericCallError::Host(message) => {
+                                    Error::host(message)
+                                }
+                                other => Error::msg(format!(
+                                    "workspace enum value substitution failed: {other}"
+                                )),
+                            })?;
+                    children.push((field, Some(expected)));
                 }
             } else {
                 children.extend(body.iter().map(|value| (value, None)));

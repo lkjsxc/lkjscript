@@ -196,22 +196,26 @@ operation-owned metadata selects the ordinary runtime-operation expression route
 non-generic calls, `if`, ordered sequence, immutable `let`,
 explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`, nearest-lexical
 `break` and `continue`, early `return`, copy-safe loads, byte-vector move/shared borrow, product
-construction/projection, enum construction/variant testing, and ordered exhaustive closed Boolean,
-I64, exact-product, and non-generic enum matches.
+construction/projection, exact generic and non-generic enum construction/variant testing, and ordered
+exhaustive closed Boolean, I64, exact-product, and exact generic or non-generic enum matches.
 Loop lowering resolves one exact non-`never` `SemanticType`; break requires an exact non-divergent
 payload for the active loop (unit for while), while continue has no payload. Both transfers are
 `never`-typed and make later entries in the same ordered body unreachable. Return lowering looks up
 the callable's canonical declared result once from
 the root, rejects divergent or non-exact values, and constructs the existing `never`-typed HIR
-return; it creates no target identity or workspace cleanup rule. Generic drafts key exact type
-arguments by stable binder entity; importer inference and semantic edits converge at one exact
-substitution, assignability, and bound resolver, which derives auto or explicit implementation
-witnesses.
+return; it creates no target identity or workspace cleanup rule. Generic call and enum-value drafts
+key exact type arguments by stable binder entity; importer inference and semantic edits converge at
+one exact substitution and assignability law. Generic enum values canonicalize arguments and fields
+to declaration order and apply the iterative canonical substitution helper before payload checking;
+bounds and witnesses remain owned by declaration families that define them.
 Implemented patterns are wildcard, stable named binding, Boolean literal, I64 literal, exact
-product, and non-generic enum variant/field nodes. Product input uses stable declaration and field
-entities, is canonicalized to exact declaration order and coverage, and shares the same iterative
-expected-type propagation and HIR field form as enum patterns. Match preparation allocates hidden
-scrutinee/projection places and public payload bindings, establishes one lexical scope per arm,
+product, and exact generic or non-generic enum variant/field nodes. Product input uses stable
+declaration and field entities, is canonicalized to exact declaration order and coverage, and shares
+the same iterative expected-type propagation and HIR field form as enum patterns. A generic enum
+pattern derives its substitution once from the exact expected type, so nested patterns, hidden
+projections, and public payload bindings receive concrete substituted field types. Match preparation
+allocates hidden scrutinee/projection places and public payload bindings, establishes one lexical
+scope per arm,
 invokes the canonical usefulness and plan builder, and publishes only if complete-HIR ownership and
 consistency validation succeed. SSA active-variant verification traces the true paths of nested
 short-circuit Boolean merges iteratively and accepts enum projection only when every possible path
@@ -231,8 +235,9 @@ lookup instead of rescanning the expression root. A separate checked scan of ret
 private loop allocation; draft node positions never become loop or public identities. Complete-HIR
 consistency validation independently walks each callable with an explicit control stack and checks
 per-callable loop-ID uniqueness, nearest active transfer targets, exact break payload types, and
-closed control context before publication or compilation. Generic patterns, unresolved binder forwarding,
-and ownership/reference generic instantiation remain explicit unsupported edits; no executable
+closed control context before publication or compilation. Generic pattern families beyond exact enum
+variants, unresolved binder forwarding, and ownership/reference generic instantiation remain explicit
+unsupported edits; no executable
 fallback exists. After all disjoint structural
 edits and final-state dependency validation, one fallible iterative compaction pass performs callable
 and nominal removals
@@ -343,10 +348,11 @@ derived witnesses, and named effect bits. `MatchView` reports a stable match nod
 type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring
 to stable variant/field/binding entities. Parallel per-node plan, operation, effect, and direct-child
 indexes keep node and match inspection independent of expression-root size. Nominal and generic type
-views use stable semantic identities. Legal-constructor results
-distinguish established constructors from move/borrow candidates that still require canonical
-ownership validation, and do not expose hidden match temporaries or advertise generic enum
-construction. A continuation is bound to its namespace, revision, and query. Semantic diffs report
+views use stable semantic identities. Legal-constructor results distinguish established constructors
+from move/borrow candidates that still require canonical ownership validation, do not expose hidden
+match temporaries, and advertise exact concrete generic enum variants only when the transaction
+path's canonical concrete-argument restriction accepts the expected type. A continuation is bound
+to its namespace, revision, and query. Semantic diffs report
 rename, replacement, created/deleted descendants and pattern bindings, hole and unresolved-reference
 transitions, same-sequence child movement, and reference/call rewiring; invalidation currently
 reports the same conservative domains for metadata-only and semantic edits. There is no incremental
@@ -535,7 +541,7 @@ Formatting-only attachment changes preserve IDs and projection.
 
 **Target, not implemented:** later workspace expansion adds nominal member addition, deletion, or
 reordering; cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
-only when another present owner/order consumer defines it; generic patterns, generic
+only when another present owner/order consumer defines it; broader generic pattern families, generic
 ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
 imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
 analysis contexts without adding another mutable semantic AST. Persistence,

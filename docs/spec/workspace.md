@@ -80,8 +80,9 @@ operation whose operation-owned metadata selects the ordinary runtime-operation 
 exact generic and non-generic calls, conditionals, ordered sequences, lexical immutable
 `let` bindings, explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`,
 `break`, `continue`, early `return`, copy-safe loads, byte-vector moves and shared borrows, product
-construction and field projection, enum construction and enum-variant testing, and ordered
-exhaustive matches over Boolean, I64, exact-product, and non-generic enum scrutinees. A sequence
+construction and field projection, exact generic and non-generic enum construction and enum-variant
+testing, and ordered exhaustive matches over Boolean, I64, exact-product, and exact generic or non-
+generic enum scrutinees. A sequence
 evaluates its children in listed order; an empty
 sequence yields `unit`, and a non-empty sequence yields its final child's value. `while` requires a
 Boolean condition, evaluates its body children in listed order, yields `unit`, and carries the
@@ -102,12 +103,25 @@ non-semantic, while the published instantiation follows declaration order.
 The compiler validates substitution, value arguments, ownership/reference restrictions, and trait
 bounds and derives auto or explicit implementation witnesses. Source inference is an importer
 convenience that feeds the same exact resolver; workspace edits do not perform implicit inference.
-Pattern drafts cover wildcard, named binding, Boolean literal, I64 literal, exact product, and
-non-generic enum-variant nodes. Product nodes name a stable product entity and use stable product-
-field entities; every declared field occurs exactly once, input field order is non-semantic, and
-lowering plus query output use authoritative declaration order, names, types, and source ordinals.
-Enum fields retain the same exact stable-identity coverage law. Nested closed patterns compose under
-product fields and enum payloads, with exact propagated types and no coercion. Published lexical and
+An enum-value draft uses the same stable-parameter-keyed argument shape. Every declared enum binder
+must occur exactly once, no binder owned by another declaration is accepted, and canonical HIR
+argument order follows declaration order regardless of submitted order. Each argument is an exact
+resolved `SemanticType`; unresolved forwarding and ownership/reference-bearing arguments reject.
+The selected stable variant fixes the enum declaration. Every stable payload field occurs exactly
+once, field input order is non-semantic, and the canonical iterative substitution path instantiates
+each declaration field type before payload checking. The resulting expression retains the exact
+`SemanticType::Enum` arguments even for a nullary or phantom variant.
+
+Pattern drafts cover wildcard, named binding, Boolean literal, I64 literal, exact product, and exact
+generic or non-generic enum-variant nodes. Product nodes name a stable product entity and use stable
+product-field entities; every declared field occurs exactly once, input field order is non-semantic,
+and lowering plus query output use authoritative declaration order, names, types, and source
+ordinals. An enum pattern does not repeat type arguments: its exact expected scrutinee or enclosing
+field type supplies the enum constructor and ordered arguments. The stable variant must belong to
+that constructor, every stable field occurs once, and each nested pattern receives the canonically
+substituted field type. Payload binding entities therefore publish the exact concrete field type.
+Nested closed patterns compose under product fields and enum payloads, with exact propagated types
+and no coercion. Published lexical and
 payload bindings use stable entity identities; transaction-local binding handles are a separate
 checked identity domain and cannot escape the draft. Each arm has its own lexical binding scope. Mutable initializers are outside the declared binding's scope; the body is
 inside it. Mutable storage uses the canonical source/HIR restrictions, and assignment requires one
@@ -124,8 +138,9 @@ checker remain authoritative for match validity, move/borrow legality, and clean
 numeric-conversion forms, and enum constructors that require dedicated HIR lowering are not admitted
 as direct operation expressions. Canonical operation resolution still decides
 submitted arity, argument types, generic instantiation, effects, capability requirements, ownership,
-traps, divergence, and runtime lowering. Generic pattern construction, forwarding an unresolved
-caller type parameter, and ownership/reference-bearing generic instantiation are not fabricated.
+traps, divergence, and runtime lowering. Generic pattern families beyond exact enum variants,
+forwarding an unresolved caller type parameter, and ownership/reference-bearing generic
+instantiation are not fabricated.
 
 Transactions delete `main`, ordinary non-builtin functions, and user-defined product or enum
 declarations. `RenameEntity` renames functions, parameters, locals, products, product fields, enums,
@@ -256,12 +271,16 @@ value
 parameters, and result types. Call views report canonical substitutions, instantiated parameter and
 result types, derived witnesses, and named machine-readable effect bits. `MatchView` reports the
 stable match/scrutinee/body nodes, result type, exhaustiveness, ordered arms, and deterministic typed
-pattern nodes/fields with stable variant/field/payload-binding entities. Its flat stack-safe
+pattern nodes/fields with stable variant/field/payload-binding entities. Generic enum value children,
+pattern nodes, and payload bindings expose their concrete substituted types rather than declaration
+binders. Its flat stack-safe
 pattern graph uses a distinct opaque response-local label solely for links within one arm; no raw
 compiler-dense pattern/arm ID is exposed or accepted as identity. Nominal and generic type views
 preserve stable semantic identity. Move and borrow candidates are labelled as requiring canonical
-ownership validation rather than claimed legal from branch-insensitive filtering. Generic enum constructors and hidden match
-storage are not advertised. Hole scope is recomputed after later declaration creation. Continuations
+ownership validation rather than claimed legal from branch-insensitive filtering. Variants of an
+exact concrete generic enum expected at a hole are advertised only when the same canonical concrete-
+argument restrictions accepted by the transaction path hold. Hidden match storage is not advertised.
+Hole scope is recomputed after later declaration creation. Continuations
 bind namespace, revision, and query. Public containment edges are emitted in semantic child order,
 including sequence and loop evaluation order. A fallible iterative projection renders state,
 blockers, selected entity/body/type/reference/hole/unresolved-reference/match sections, declared
