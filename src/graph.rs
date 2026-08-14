@@ -1,0 +1,441 @@
+use crate::artifact;
+use crate::error::{ErrorCode, LkError, Result};
+use crate::ids::{NodeId, Revision, SnapshotHash, WorkspaceId};
+use crate::schema::{Node, NodeKind};
+use crate::validate;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Snapshot {
+    pub(crate) workspace: WorkspaceId,
+    pub(crate) revision: Revision,
+    pub(crate) root: NodeId,
+    pub(crate) next_serial: u64,
+    pub(crate) tombstones: BTreeSet<u64>,
+    pub(crate) nodes: BTreeMap<NodeId, Node>,
+    pub(crate) hash: SnapshotHash,
+}
+
+impl Snapshot {
+    pub(crate) fn initial(workspace: WorkspaceId) -> Result<Self> {
+        let root = NodeId::new(workspace, 1)
+            .map_err(|error| LkError::new(ErrorCode::InvalidContainment, error.to_string()))?;
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            root,
+            Node::WorkspaceRoot {
+                packages: Vec::new(),
+            },
+        );
+        Self::from_parts(
+            workspace,
+            Revision::INITIAL,
+            root,
+            2,
+            BTreeSet::new(),
+            nodes,
+        )
+    }
+
+    pub(crate) fn from_parts(
+        workspace: WorkspaceId,
+        revision: Revision,
+        root: NodeId,
+        next_serial: u64,
+        tombstones: BTreeSet<u64>,
+        nodes: BTreeMap<NodeId, Node>,
+    ) -> Result<Self> {
+        let mut snapshot = Self {
+            workspace,
+            revision,
+            root,
+            next_serial,
+            tombstones,
+            nodes,
+            hash: SnapshotHash::from_bytes([0; 32]),
+        };
+        validate::validate_snapshot(&snapshot)?;
+        snapshot.hash = artifact::compute_snapshot_hash(&snapshot)?;
+        Ok(snapshot)
+    }
+
+    pub const fn workspace(&self) -> WorkspaceId {
+        self.workspace
+    }
+
+    pub const fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    pub const fn root(&self) -> NodeId {
+        self.root
+    }
+
+    pub const fn hash(&self) -> SnapshotHash {
+        self.hash
+    }
+
+    pub const fn next_serial(&self) -> u64 {
+        self.next_serial
+    }
+
+    pub fn node(&self, id: NodeId) -> Result<&Node> {
+        if id.workspace() != self.workspace {
+            return Err(LkError::new(
+                ErrorCode::WrongWorkspace,
+                "node identity belongs to another workspace",
+            )
+            .for_workspace(self.workspace)
+            .for_node(id));
+        }
+        self.nodes.get(&id).ok_or_else(|| {
+            LkError::new(ErrorCode::NodeNotFound, "node is absent from this snapshot")
+                .for_workspace(self.workspace)
+                .at_revision(self.revision)
+                .for_node(id)
+        })
+    }
+
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = (NodeId, &Node)> {
+        self.nodes.iter().map(|(id, node)| (*id, node))
+    }
+
+    pub fn tombstones(&self) -> impl ExactSizeIterator<Item = u64> + '_ {
+        self.tombstones.iter().copied()
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    pub fn contains_tombstone(&self, serial: u64) -> bool {
+        self.tombstones.contains(&serial)
+    }
+}
+
+pub(crate) struct Workspace {
+    id: WorkspaceId,
+    head: Revision,
+    snapshots: BTreeMap<Revision, Arc<Snapshot>>,
+}
+
+impl Workspace {
+    pub(crate) fn new(id: WorkspaceId) -> Result<Self> {
+        let initial = Arc::new(Snapshot::initial(id)?);
+        let mut snapshots = BTreeMap::new();
+        snapshots.insert(Revision::INITIAL, initial);
+        Ok(Self {
+            id,
+            head: Revision::INITIAL,
+            snapshots,
+        })
+    }
+
+    pub(crate) fn from_snapshots(
+        id: WorkspaceId,
+        head: Revision,
+        snapshots: BTreeMap<Revision, Arc<Snapshot>>,
+    ) -> Result<Self> {
+        if !snapshots.contains_key(&head) {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace head does not name a retained snapshot",
+            )
+            .for_workspace(id)
+            .at_revision(head));
+        }
+        let expected_count = head.get().checked_add(1).ok_or_else(|| {
+            history_error(id, head, "workspace history length overflows revisions")
+        })?;
+        if u64::try_from(snapshots.len()).ok() != Some(expected_count) {
+            return Err(history_error(
+                id,
+                head,
+                "workspace history is not contiguous from revision zero",
+            ));
+        }
+        let mut expected_revision = Revision::INITIAL;
+        let mut previous: Option<&Snapshot> = None;
+        for (revision, snapshot) in &snapshots {
+            if *revision != expected_revision
+                || snapshot.workspace() != id
+                || snapshot.revision() != *revision
+            {
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "retained snapshot identity disagrees with its workspace path",
+                )
+                .for_workspace(id)
+                .at_revision(*revision));
+            }
+            if let Some(previous) = previous {
+                validate_history_transition(previous, snapshot)?;
+            } else if snapshot.node_count() != 1
+                || snapshot.next_serial() != 2
+                || snapshot.tombstones().next().is_some()
+            {
+                return Err(history_error(
+                    id,
+                    *revision,
+                    "revision zero is not the canonical empty workspace",
+                ));
+            }
+            previous = Some(snapshot);
+            expected_revision = expected_revision.next().unwrap_or(expected_revision);
+        }
+        Ok(Self {
+            id,
+            head,
+            snapshots,
+        })
+    }
+
+    pub(crate) const fn id(&self) -> WorkspaceId {
+        self.id
+    }
+
+    pub(crate) const fn head_revision(&self) -> Revision {
+        self.head
+    }
+
+    pub(crate) fn head(&self) -> Result<&Arc<Snapshot>> {
+        self.snapshots.get(&self.head).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace head invariant is broken",
+            )
+            .for_workspace(self.id)
+            .at_revision(self.head)
+        })
+    }
+
+    pub(crate) fn snapshot(&self, revision: Revision) -> Result<&Arc<Snapshot>> {
+        self.snapshots.get(&revision).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::RevisionNotFound,
+                "requested revision is not retained",
+            )
+            .for_workspace(self.id)
+            .at_revision(revision)
+        })
+    }
+
+    pub(crate) fn publish(&mut self, snapshot: Arc<Snapshot>) -> Result<()> {
+        let expected = self.head.next().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::RevisionConflict,
+                "workspace revision is exhausted",
+            )
+            .for_workspace(self.id)
+            .at_revision(self.head)
+        })?;
+        if snapshot.workspace() != self.id || snapshot.revision() != expected {
+            return Err(LkError::new(
+                ErrorCode::RevisionConflict,
+                "prepared snapshot is not the next workspace revision",
+            )
+            .for_workspace(self.id)
+            .at_revision(snapshot.revision()));
+        }
+        self.head = snapshot.revision();
+        self.snapshots.insert(snapshot.revision(), snapshot);
+        Ok(())
+    }
+}
+
+fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<()> {
+    if next.revision() != previous.revision().next().unwrap_or(previous.revision()) {
+        return Err(history_error(
+            next.workspace(),
+            next.revision(),
+            "retained revisions are not adjacent",
+        ));
+    }
+    if next.root() != previous.root() || next.next_serial() < previous.next_serial() {
+        return Err(history_error(
+            next.workspace(),
+            next.revision(),
+            "root identity or allocator state moved backward",
+        ));
+    }
+    if !previous
+        .tombstones
+        .iter()
+        .all(|serial| next.tombstones.contains(serial))
+    {
+        return Err(history_error(
+            next.workspace(),
+            next.revision(),
+            "published tombstones are not monotonic",
+        ));
+    }
+    for (id, old_node) in &previous.nodes {
+        match next.nodes.get(id) {
+            Some(new_node) => {
+                if old_node.kind() != new_node.kind()
+                    || old_node.owner() != new_node.owner()
+                    || !identity_shape_is_stable(old_node, new_node)
+                {
+                    return Err(history_error(
+                        next.workspace(),
+                        next.revision(),
+                        "surviving node changed its identity-defining kind, owner, or contract",
+                    )
+                    .for_node(*id));
+                }
+            }
+            None if next.tombstones.contains(&id.serial()) => {}
+            None => {
+                return Err(history_error(
+                    next.workspace(),
+                    next.revision(),
+                    "removed live node was not tombstoned",
+                )
+                .for_node(*id));
+            }
+        }
+    }
+    for id in next.nodes.keys() {
+        if !previous.nodes.contains_key(id) && id.serial() < previous.next_serial() {
+            return Err(history_error(
+                next.workspace(),
+                next.revision(),
+                "a prior identity was resurrected or reused",
+            )
+            .for_node(*id));
+        }
+    }
+    Ok(())
+}
+
+fn identity_shape_is_stable(old: &Node, new: &Node) -> bool {
+    match (old, new) {
+        (Node::Function { result: old, .. }, Node::Function { result: new, .. }) => old == new,
+        (
+            Node::Parameter {
+                ordinal: old_ordinal,
+                ty: old_type,
+                ..
+            },
+            Node::Parameter {
+                ordinal: new_ordinal,
+                ty: new_type,
+                ..
+            },
+        ) => old_ordinal == new_ordinal && old_type == new_type,
+        (Node::Operation { operation: old, .. }, Node::Operation { operation: new, .. }) => {
+            old.stable_tag() == new.stable_tag()
+        }
+        _ => true,
+    }
+}
+
+fn history_error(workspace: WorkspaceId, revision: Revision, message: &str) -> LkError {
+    LkError::new(ErrorCode::ArtifactCorrupt, message)
+        .for_workspace(workspace)
+        .at_revision(revision)
+}
+
+pub(crate) fn require_kind(
+    nodes: &BTreeMap<NodeId, Node>,
+    id: NodeId,
+    expected: NodeKind,
+) -> Result<&Node> {
+    let node = nodes.get(&id).ok_or_else(|| {
+        LkError::new(ErrorCode::NodeNotFound, "target node does not exist").for_node(id)
+    })?;
+    let actual = node.kind();
+    if actual != expected {
+        return Err(
+            LkError::new(ErrorCode::WrongKind, "target has the wrong node kind")
+                .for_node(id)
+                .with_kinds(expected, actual),
+        );
+    }
+    Ok(node)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_history_rejects_identity_resurrection() {
+        let workspace = WorkspaceId::from_bytes([0x31; 16]);
+        let root = NodeId::new(workspace, 1).expect("root");
+        let package = NodeId::new(workspace, 2).expect("package");
+        let revision_zero = Arc::new(Snapshot::initial(workspace).expect("initial"));
+
+        let mut live_nodes = BTreeMap::new();
+        live_nodes.insert(
+            root,
+            Node::WorkspaceRoot {
+                packages: vec![package],
+            },
+        );
+        live_nodes.insert(
+            package,
+            Node::Package {
+                owner: root,
+                name: "package".to_owned(),
+                modules: Vec::new(),
+                entry: None,
+            },
+        );
+        let revision_one = Arc::new(
+            Snapshot::from_parts(
+                workspace,
+                Revision::new(1),
+                root,
+                3,
+                BTreeSet::new(),
+                live_nodes.clone(),
+            )
+            .expect("live package snapshot"),
+        );
+
+        let mut deleted_nodes = BTreeMap::new();
+        deleted_nodes.insert(
+            root,
+            Node::WorkspaceRoot {
+                packages: Vec::new(),
+            },
+        );
+        let revision_two = Arc::new(
+            Snapshot::from_parts(
+                workspace,
+                Revision::new(2),
+                root,
+                3,
+                BTreeSet::from([2]),
+                deleted_nodes,
+            )
+            .expect("deleted package snapshot"),
+        );
+        let revision_three = Arc::new(
+            Snapshot::from_parts(
+                workspace,
+                Revision::new(3),
+                root,
+                3,
+                BTreeSet::new(),
+                live_nodes,
+            )
+            .expect("individually valid resurrected snapshot"),
+        );
+        let snapshots = BTreeMap::from([
+            (Revision::INITIAL, revision_zero),
+            (Revision::new(1), revision_one),
+            (Revision::new(2), revision_two),
+            (Revision::new(3), revision_three),
+        ]);
+        assert_eq!(
+            Workspace::from_snapshots(workspace, Revision::new(3), snapshots)
+                .err()
+                .expect("history must reject resurrection")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+}

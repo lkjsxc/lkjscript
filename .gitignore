@@ -1,6 +1,5 @@
-# Build / local
+# Build and local files
 /target/
-/target-lkjsxcdotcom-runtime/
 /tmp/
 .env
 *.swp
@@ -9,5 +8,5 @@ __pycache__/
 .DS_Store
 
 # Agent-local state
-.omx/
+/.pi/
 /.pi-subagents/

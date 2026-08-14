@@ -1,39 +1,26 @@
-[workspace]
-members = [
-    "crates/lkjscript-contracts",
-    "crates/lkjscript-ir",
-    "crates/lkjscript-core",
-    "crates/lkjscript-host",
-    "crates/lkjscript-compiler",
-    "crates/lkjscript-native",
-    "crates/mechanisms/lkjscript-executable",
-    "crates/lkjscript-jit",
-    "crates/lkjscript-sys",
-    "crates/lkjscript-vm",
-    "crates/lkjscript-app",
-]
-resolver = "2"
-
-[workspace.package]
-edition = "2021"
+[package]
+name = "lkjscript"
+version = "0.1.0"
+edition = "2024"
 license = "Apache-2.0"
-version = "0.0.0"
 publish = false
 
-[workspace.dependencies]
-serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = { version = "=1.0.151", features = ["unbounded_depth"] }
-serde_stacker = "=0.1.14"
-stacker = "=0.1.25"
+[dependencies]
+blake3 = "1.8.2"
+fs2 = "0.4.3"
+getrandom = "0.3.4"
 
-[workspace.lints.clippy]
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[lints.clippy]
 expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
 unwrap_used = "deny"
 
-[workspace.lints.rust]
+[lints.rust]
 unsafe_code = "forbid"
 
 [profile.release]

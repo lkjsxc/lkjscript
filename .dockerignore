@@ -1,8 +1,0 @@
-target
-tmp
-.git
-.env
-**/*.md
-!README.md
-!AGENTS.md
-!docs/**

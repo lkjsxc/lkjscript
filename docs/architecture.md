@@ -1,561 +1,75 @@
 # Architecture
 
-**Status: current architecture with explicitly labelled target deltas.** Cargo manifests and
-`cargo metadata` own workspace membership and dependency edges. This document explains component
-responsibility, data flow, ownership, and trust boundaries; it is not a second dependency graph.
-
-## Current compiler and execution flow
+## Current flow and ownership
 
 ```text
-Workspace::empty OR verified text/path import
-    -> one partial-capable SemanticProgram authority
-    -> optional source/presentation provenance beside semantic meaning
-    -> immutable WorkspaceSnapshot with stable IDs, tombstones, indexes, diagnostics, and blockers
-    -> optional atomic semantic transactions and one-revision Arc publication
-    -> compile_snapshot structured completeness gate
-    -> one derived source-optional complete HIR and consistency witness
-    -> HIR memory planning and captured locked-target validation
-    -> typed SSA lowering, verification, and iterative baseline normalization
-    -> bytecode lowering and unrestricted trusted validation
-    -> ExecutableProgram
-        -> check: discard without constructing execution state
-        -> run: one baseline-native group attempt, otherwise validated VM execution
+lkjscript client
+    -> typed, framed Unix-socket request
+lkjscriptd
+    -> one DurableWorkspace writer per workspace
+    -> staged typed transaction over an immutable Snapshot
+    -> canonical per-revision .lkjscript artifact and atomic HEAD
+    -> immutable published Snapshot
+    -> revision-bound query or direct SPG-to-Core-IR compilation
+    -> Core IR verifier
+    -> interpreter
+    -> typed response
 ```
 
-Text and package files remain persistent importer inputs, not semantic authority or a post-import
-compiler input. The required-package path verifies manifest, lock, selected module, source
-identities, and grants once, then moves analyzed declarations/expressions into the same
-`SemanticProgram` used by source-free construction. Optional imported `Source` records are retained
-as diagnostic provenance outside that program; presentation attachments are independently removable.
-An unedited locked import retains only target/capability facts needed at compilation. Any semantic
-edit drops locked provenance and source attachments without constructing a replacement content
-digest.
+The daemon is synchronous and is the only live writer. The client contains presentation and typed
+request construction only. `graph.rs` owns immutable snapshots and retained workspace history;
+`schema.rs` owns node and operation contracts; `transaction.rs` owns staged mutation; `validate.rs`
+owns graph acceptance; `artifact.rs` owns canonical semantic bytes; `persistence.rs` owns durable
+publication; `protocol.rs` owns IPC types and framing; `query.rs` owns derived summaries and blockers;
+`compile.rs` and private `core_ir.rs` own lowering and executable verification; `interpret.rs` owns
+the one runtime route.
 
-A semantic program owns bindings, nominal declarations, canonical match plans, functions, an
-optional `main`, and expression trees. A durable semantic `Match` node preserves its scrutinee and
-ordered arm bodies while its plan preserves typed patterns, usefulness/exhaustiveness decisions,
-field projections, and stable payload bindings. Products, enums, matches, and bindings carry explicit
-`Source`, `Semantic`, or `Builtin` origin;
-source-free nominal/layout identities derive privately from staged stable entities rather than names,
-source hashes, or compiler-dense indexes. A hole is an actual leaf with an explicit unknown effect
-bit. An unresolved value reference is a distinct childless semantic leaf carrying only a validated
-requested-name hint; its expected type lives on the expression and its effect is unknown. It contains
-no dense or stable target, executable load, or fallback. Hole and unresolved-reference records own
-only query/edit context derived from those leaves; they never retain the removed subtree.
-Fixed compiler operations, prelude enums, and core traits are excluded from mutable program-entity
-indexes. Expression operations use the canonical operation catalog directly rather than a fabricated
-editable operation binding. A source-free complete snapshot installs required fixed core metadata
-only in its ephemeral compiler HIR.
+There is no second function body, type authority, evaluator, mutable client workspace, or persisted
+compiler representation.
 
-Opaque public identities remain separate from dense compiler IDs. Tagged `EntityAddress` variants
-distinguish main, binding, product/field, enum/variant/field, trait, and implementation domains.
-`NodeAddress` adds root-local preorder only as a private reconstruction coordinate. The immutable
-snapshot carries the exact generation/free-list state, so reopening a snapshot cannot resurrect a
-tombstoned ID. After staged deletion compacts dense placement, reconciliation receives an explicit,
-one-to-one old-public-identity to new-private-address relocation for every surviving entity. A
-relocated survivor wins over the prior occupant of its new dense address; duplicate, missing,
-wrong-kind, stale, or colliding relocation fails before publication. Nodes outside removed/replaced
-subtrees and every structural target root are matched explicitly in one parent/child-ordinal pass.
-For same-sequence movement, one transaction-local permutation instead maps every old node in the
-sequence's complete direct-child blocks to its new private preorder after callable relocation; the
-sequence and all child blocks are forced one-to-one before ordinary reconciliation. The plan is not
-snapshot state or public history. Descendants rebuilt by a replacement receive new identities even
-when content coincides; fingerprints never decide semantic continuity. Removed identities are
-tombstoned and generation advances before reuse. Index construction builds
-one entity-to-address map and performs one lookup per node, then records containment, references,
-calls, dependencies, types, and diagnostics iteratively. Private enum, variant, and enum-field
-identity maps avoid repeated declaration scans while indexing aggregate references.
+## Durability
 
-`compile_snapshot` is the sole memory/SSA/bytecode boundary. It rejects blockers before any compiler
-phase, derives complete HIR once, injects fixed core context when absent, and validates origins,
-signatures, known effects, holes, unresolved references, match-plan/site correspondence, and index
-shape. Required-package
-compilation carries one fail-fast typed sum through this boundary: source producers retain their
-structured diagnostic, package validation retains its broad classified error, incompleteness retains
-its blocker list, and later compiler phases retain the core error without fabricated source facts.
-The CLI projects that same value to human or JSON check output; neither renderer parses the other.
-During this ephemeral derivation, an iterative transform replaces semantic matches with the
-canonical
-scrutinee-`Let`, ordered `If`, guarded payload projection/binding, and terminal
-`MatchUnreachable` form. Downstream memory/SSA/codegen explicitly reject a surviving semantic match.
-Source origins lower to source metadata; semantic origins remain source-free semantic memory origins
-without a synthetic `SourceId`. A semantic edit inside an imported function therefore keeps the
-function's source origin while its new match, plan, and defining locals honestly retain semantic
-origin. Native execution consumes verified SSA directly; the VM consumes
-validated bytecode. No render/parse, source identity reconstruction, compilation cache, or stale HIR
-copy exists in a snapshot.
+A workspace directory retains immutable `revisions/REVISION.lkjscript` files and one small
+non-semantic `HEAD` record. HEAD names the committed revision and hash, may retain one typed
+idempotency outcome, and has a checksum over the entire record. Workspace creation builds and
+flushes a recognized staging directory, renames it atomically, and flushes `workspaces/`; startup
+removes only well-formed abandoned staging directories.
 
-Bytecode validation decodes each function once and partitions decoded instructions at entry, jump
-targets, and control boundaries. It retains incoming abstract state only at basic-block entries,
-clones that state once per block visit, mutates one working state through the straight-line body, and
-merges only into successor block entries. A finite monotone worklist handles joins and backedges.
-Failure-cleanup ranges are already shape-validated as sorted and nonoverlapping; each block visit
-uses a local sweep cursor rather than searching all ranges per instruction. `State` maintains exact
-counts of live placed owners, non-parameter borrowed locals, and structural destinations as the
-corresponding dense facts change. Full cleanup plans and place coverage are still checked at range
-starts against the exact pre-instruction state.
+Commit order is:
 
-HIR ownership uses one iterative per-function liveness plan. The plan assigns each expression a
-half-open traversal range and indexes direct lexical uses sparsely by binding; ownership checking
-queries only future uses in the current range and expires affected loans at semantic operations and
-joins. It does not materialize a suffix-use set per expression or recurse on user depth. Memory-plan
-production walks each immutable- or mutable-local initializer before publishing that local's place,
-matching lexical evaluation order and the resolver's dense `PlaceId` allocation even when a match is
-nested in a later scrutinee. A private lexical control stack checks every break, continue, and
-ordinary reentry edge independently. It projects away places and scoped loans introduced inside the
-loop, which canonical transfer cleanup ends, while requiring the exact entry ownership and loan state
-for every outer place. Break and continue clean those control-local places before their selected
-edge; outer affine owners stay live. SSA verification applies the same exact dataflow law to cyclic
-blocks rather than rejecting move or borrow instructions merely because a block participates in a
-cycle.
+1. encode and validate the candidate snapshot;
+2. write a new revision temporary file, flush it, rename it, and flush `revisions/`;
+3. write and flush a new HEAD temporary file;
+4. atomically replace HEAD and flush the workspace directory;
+5. publish the in-memory `Arc<Snapshot>` and acknowledge.
 
-SSA bytecode lowering gathers local type, storage class, and producer kind in one per-function map.
-It also computes nonowned structural values once from block parameters and predecessor edges, then
-reuses that set for every load/store decision; emission does not rescan the whole CFG per structural
-value. Interference coloring and value emission share the derived maps. The slot map remains
-authoritative for every emitted operand and cleanup action; `FunctionProto.locals` is its checked
-highest physical color plus one, not the number of SSA values. Affine mutable reinitialization ends
-the moved or dropped ownership epoch before emitting the next place initialization, so validator and
-VM cleanup state follow the same ownership transition.
+Failure before HEAD commit leaves the old HEAD authoritative; an orphan revision is removed or
+ignored during recovery. Injected failures cover every bootstrap publication step. If post-rename
+directory sync and HEAD rollback both fail, the daemon reports `CommitOutcomeUnknown` and exits
+rather than continuing with uncertain authority.
 
-The validated VM treats sorted failure-cleanup ranges as an execution index. Unwind performs a
-binary half-open lookup. Each active frame stores one cursor for the common sequential path; it
-advances one adjacent range directly and falls back to binary lookup for forward skips, backedges,
-and other nonlocal movement. Entry, ordinary call, and tail-call frame construction initialize the
-cursor. Pre-instruction policy failure includes the unentered call plan, failed call setup cleans
-moved arguments in reverse order, and post-instruction policy failure uses the exact next boundary.
-Tail-call capacity is reserved before caller cleanup or stack truncation.
+Restart bounds files before reading, loads every contiguous retained revision through the same
+defensive artifact decoder, checks the HEAD checksum/hash, validates monotonic allocator,
+tombstone, root, kind, and owner history, restores the semantically checked idempotency outcome,
+and then opens IPC. Old revisions remain independently queryable and executable.
 
-Trusted compilation has no compiler profile, cross-phase budget ledger, source-shape quota, HIR
-memory count quota, or SSA work quota. Checked timings and work totals are observation. User-scale
-source, HIR, SSA, bytecode, structural, and runtime identities are generally wide integers or opaque
-wide tokens, and conversion to `usize` is checked before indexing. Compact native and machine
-representations are specialization boundaries: a pre-entry decline keeps the generic validated VM
-route available.
+## Trust boundaries
 
-## Current semantic editing flow
+- **same-build Rust values:** closed enums and private constructors; no serialization is added for
+  Core IR;
+- **artifact bytes:** bounded custom decoder, stable tags, graph validation, canonical hash, and
+  strict trailing-byte policy;
+- **IPC bytes:** private Unix socket, checked frame length, closed message vocabulary, correlation,
+  and structured rejection;
+- **runtime:** verified Core IR only; no native code or host capabilities exist in this slice.
 
-```text
-Arc<WorkspaceSnapshot> plus base revision
-    -> typed declaration/delete/rename/expression/movement/hole/unresolved-reference batch
-    -> namespace/generation/revision check and staged identity-allocator clone
-    -> when every nonempty edit is RefineHole:
-         clone hole records and update any unresolved state response revision
-         -> validate exact hole identity/type/goal and rebuild incomplete diagnostics
-         -> share unchanged SemanticProgram, indexes, and blockers
-    -> otherwise:
-         preflight one optional same-sequence child permutation against stable base identities
-         -> clone SemanticProgram
-         -> deletion conflict, declaration, shape, scope, type, and disjointness preflight
-         -> lower flat drafts, apply disjoint replacements, permute existing sequence children,
-            and validate final deletion closure
-         -> prune callable/nominal roots and compact/remap dense products, implementations, bindings,
-            plans, places, slots, and private enum-vector addresses once
-         -> recompute partial effects and indexes
-         -> on completion derive HIR and validate ownership/matches/consistency
-         -> reconcile explicit movement/survivor mappings, tombstones, blockers, diagnostics, and diff
-    -> publish one new Arc plus allocator state, or publish nothing
-```
+All graph walks that can scale with user nodes use loops and explicit vectors/sets. The current
+schema also has closed containment depth. Resource limits at artifact and IPC boundaries are
+reported as policy errors and do not redefine language validity.
 
-Diagnostics are revision-selected derived facts stored beside hole and unresolved-reference records
-and completeness blockers, not inside semantic index storage. Their messages include the current hole goal. An all-`RefineHole`
-transaction therefore rebuilds only those diagnostics after applying the canonical refinement checks;
-it does not clone or compact executable semantic state, infer effects, derive complete HIR, rebuild
-indexes, reconcile identities, or rediscover graph diffs. It preserves the old snapshot, stable hole
-and owner identities, blocker and index meaning, one deterministic base-to-final diff per refined
-hole with net no-ops omitted, the existing seven conservative invalidation domains, and revision-bound
-continuation failure. Mixed
-batches use the ordinary semantic staging path. As before, any semantic edit drops presentation and
-locked provenance, stages the allocator before work, and publishes allocator plus snapshot only after
-all fallible outcome copies succeed.
+## Deliberate restraint
 
-`CreateProduct` and `CreateEnum` reserve stable declaration/member entities first, derive private
-nominal and runtime-layout identities from those entities, validate all names/types/ownership laws,
-and publish the complete declaration atomically. `CreateEnum` and `CreateFunction` each accept zero
-or more ordered type-parameter drafts. A declaration-local `DraftTypeParameterId` can occur at
-arbitrary depth in the creation-only `DeclarationType`; validation resolves it only within that edit.
-Enum staging allocates stable enum and binder identities before resolving fields with the enum as
-owner. A narrow explicit current-enum context supplies that staged stable entity, private canonical
-enum identity, and exact arity only while resolving the owning `CreateEnum` fields.
-`DeclarationType::CurrentEnum` resolves to the ordinary nominal enum type with its explicit resolved
-arguments, then disappears before the canonical unbounded `EnumDefinition` is inserted. Published
-fields therefore use stable enum and binder identities, while recursive layout and memory planning
-remain the same canonical path used by imported declarations. Phantom binders are valid; no draft
-nominal identity, mutual-recursion graph, or partial enum lifecycle is introduced. Function staging
-allocates stable function, binder, and value-parameter identities in semantic order, maps the local
-handles to private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
-`Function::bounds` facts only when binders exist. It then creates a real result-typed missing-body
-hole with unknown effects. Local handles never enter the semantic program, indexes, query,
-projection, or diff. `CreateMain` reuses the parameter draft/type path for ordered exact capability
-parameters, validates the canonical source entry restrictions before staging, assigns stable
-parameter entities owned by main, and creates a real missing-body hole whose scope includes those
-parameters. Imported and source-free generic binders are reconciled identically as stable
-`TypeParameter` entities owned by their enum or function declaration. Published types use
-`SemanticType`; both recursive type boundaries
-use stable nominal references, keep compiler-local names and dense IDs private, and implement their
-depth-sensitive operations iteratively. Creation ordering is independent: tagged addresses preserve
-a function when main is added later, and hole scope refreshes when a declaration is added after main.
-Created declaration, binder, member, parameter, local, and hole IDs are returned through the diff.
-
-`ExpressionDraft` and `PatternDraft` are flat and non-recursive; iterative traversal makes physical
-node order irrelevant while validation requires one connected tree with each child used exactly
-once. Draft-local binding and pattern-binding handles have a separate transaction-scoped identity
-domain. Implemented expression constructors are scalar and byte literals, canonical operations whose
-operation-owned metadata selects the ordinary runtime-operation expression route, exact generic and
-non-generic calls, `if`, ordered sequence, immutable `let`,
-explicitly typed mutable locals, assignment, `while`, explicitly typed `loop`, nearest-lexical
-`break` and `continue`, early `return`, copy-safe loads, byte-vector move/shared borrow, product
-construction/projection, exact generic and non-generic enum construction/variant testing, and ordered
-exhaustive closed Boolean, I64, exact-product, and exact generic or non-generic enum matches.
-Loop lowering resolves one exact non-`never` `SemanticType`; break requires an exact non-divergent
-payload for the active loop (unit for while), while continue has no payload. Both transfers are
-`never`-typed and make later entries in the same ordered body unreachable. Return lowering looks up
-the callable's canonical declared result once from
-the root, rejects divergent or non-exact values, and constructs the existing `never`-typed HIR
-return; it creates no target identity or workspace cleanup rule. Generic call and enum-value drafts
-key exact type arguments by stable binder entity; importer inference and semantic edits converge at
-one exact substitution and assignability law. Generic enum values canonicalize arguments and fields
-to declaration order and apply the iterative canonical substitution helper before payload checking;
-bounds and witnesses remain owned by declaration families that define them.
-Implemented patterns are wildcard, stable named binding, Boolean literal, I64 literal, exact
-product, and exact generic or non-generic enum variant/field nodes. Product input uses stable
-declaration and field entities, is canonicalized to exact declaration order and coverage, and shares
-the same iterative expected-type propagation and HIR field form as enum patterns. A generic enum
-pattern derives its substitution once from the exact expected type, so nested patterns, hidden
-projections, and public payload bindings receive concrete substituted field types. Match preparation
-allocates hidden scrutinee/projection places and public payload bindings, establishes one lexical
-scope per arm,
-invokes the canonical usefulness and plan builder, and publishes only if complete-HIR ownership and
-consistency validation succeed. SSA active-variant verification traces the true paths of nested
-short-circuit Boolean merges iteratively and accepts enum projection only when every possible path
-retains the matching variant test. Bytecode validation rejects a known structural-variant
-contradiction; when control-flow storage leaves the bytecode-local variant unknown, the VM resolves
-the exact structural representation and checks its runtime tag before field access.
-Mutable declaration activation occurs after its initializer and before its body. Resolved draft
-bindings retain exact HIR binding kind, so assignment admits only visible mutable locals. Before
-lowering a draft, one combined iterative walk over the immutable target root derives divergent-
-replacement admissibility and the nearest published loop at the private `NodeAddress`; a while
-condition remains outside its own context. The action-ordered flat-draft walk then enters/exits new
-loops and whiles, resolves exact result types, allocates private HIR `LoopId` values, and binds each
-break/continue to the active top context before canonical HIR construction. These facts live only for
-one staged draft and are discarded on success or failure. Nested draft loops shadow the seed and pop
-back to it. No loop ID, preorder, target edge, label, or coordinate enters the public snapshot,
-projection, query continuation, or semantic diff. Before lowering a draft, one iterative callable
-scan also indexes retained parameter/local places; every stable binding use then performs one map
-lookup instead of rescanning the expression root. A separate checked scan of retained HIR initializes
-private loop allocation; draft node positions never become loop or public identities. Complete-HIR
-consistency validation independently walks each callable with an explicit control stack and checks
-per-callable loop-ID uniqueness, nearest active transfer targets, exact break payload types, and
-closed control context before publication or compilation. Generic pattern families beyond exact enum
-variants, unresolved binder forwarding, and ownership/reference generic instantiation remain explicit
-unsupported edits; no executable
-fallback exists. After all disjoint structural
-edits and final-state dependency validation, one fallible iterative compaction pass performs callable
-and nominal removals
-and removes unreachable bindings and match plans. It assigns retained `BindingId` and `MatchPlanId`
-values densely once,
-rewrites function/main headers, global layout, expression references and definitions, recursive
-match locals/plans, and rebuilds each callable's `PlaceId`, local slot, parameter-place vector, and
-`local_count`. Function-vector position remains private and memory/SSA function IDs are derived later.
-Structural replacement rebuilds the affected root iteratively and recomputes only child-derived
-sequence, conditional, local-body, and semantic-match result types. `MoveSequenceChild` is separate:
-it validates a live sequence, direct child, and distinct optional direct sibling anchor against the
-base revision, rejects a final-order no-op, and mutates only the existing staged `ExprKind::Do`
-vector. Removal precedes insertion and no anchor means append. The first vertical rejects more than
-one move and same-callable structural edits in one transaction rather than adding an edit planner.
-A checked child path propagates the changed final-child result through ancestors without recursively
-cloning the moved or shifted subtrees. An incomplete node in the moved callable may remain explicit,
-but an absent entry point or final incompleteness in another callable rejects rather than suppressing
-canonical validation of an otherwise complete moved owner. After canonical index construction, the
-movement's complete old child blocks supply explicit stable-ID-to-new-address facts; kind,
-destination, identity, and collision checks fail before reconciliation. Dense deletion compaction may
-relocate the callable root first. Holes and unresolved records then refresh from retained IDs, while pure movement consumes
-no public slot and private preorders remain unobservable. Complete state passes the ordinary
-ownership, cleanup, match, and consistency boundary; incomplete state retains blockers and never
-constructs HIR. One `SequenceChildMoved` diff reports the stable sequence, moved child, and old/new
-predecessor-successor neighborhoods; no numeric position escapes, and private relocation emits no
-replacement, descendant, or graph-rewire facts.
-
-When the program contains semantic match plans, one bounded pass over each affected root refreshes
-any existing plan's arm/result type facts; a program without match plans incurs no additional match
-scan. No generic movement framework, public path, second mutable IR, sparse dead-binding history,
-persistent movement history, persistence layer, or incremental framework was added;
-`SemanticProgram` remains the sole mutable authority and complete HIR remains one-way derived.
-
-`DeleteEntity` first collects callable, product, and enum deletion intent for the whole batch.
-`main`, ordinary functions, and user nominals are pruned only after structural replacements and one
-iterative final-state dependency traversal. That traversal covers stored signatures and fields,
-expression and hole types, aggregate operations, match patterns/plans, generic substitutions and
-witnesses, and callable references. Removing a body dependency or deleting every independent owner
-in the same batch is therefore order-independent; a surviving dependent rejects with stable public
-identity and kind/name context.
-
-Callable containment owns type parameters, value parameters, locals, payloads, nodes, holes,
-unresolved references, hidden match storage, plans, and layout participation. Product containment owns fields and the narrow target-
-implementation lifecycle; enum containment owns type parameters, variants, and fields. Other
-dependents never cascade. One concrete
-compaction result rewrites `ProductId`, `ImplId`, `BindingId`, `MatchPlanId`, local places and slots,
-and every nested signature, declaration-field, expression, pattern, hole, unresolved expectation,
-substitution, and witness occurrence. Enum vector positions relocate privately while stable enum,
-variant, field, and runtime-layout IDs remain unchanged. Reconciliation forces old public identities
-onto every surviving product/member, enum/member, implementation, binding, and structurally
-surviving node address. HIR and memory types use dense `ProductId`; enum types use stable `EnumId`
-plus explicit type arguments. Mutable display names live only on their owning definitions and member
-records. `RenameEntity` therefore changes one presentation attribute without sweeping types,
-aggregate sites, matches, witnesses, SSA types, or runtime identities. Global declaration and sibling
-collision checks remain at the transaction boundary, same-name rename rejects, same-batch same-name
-recreation cannot rebind a survivor, and immutable snapshots own separate HIR vectors. Existing
-stable product and field identities remain unchanged rather than adding another product identity.
-Direct member, trait, and implementation deletion remains unsupported;
-delete-and-same-name-create is not implicit replacement.
-
-Introducing a typed hole physically replaces and drops its subtree, including owned local/match
-facts; filling preserves the hole/root ID. Unresolved copy-load introduction accepts an existing
-typed expression or body hole, validates the requested identifier, preserves the target root ID,
-removes displaced descendants/records, and installs an unknown-effect
-`UnresolvedValueReference` leaf. Its snapshot record derives owner, context, visible scope, and
-public expected type after identity reconciliation. It creates no reference or candidate dependency.
-
-Resolution synthesizes the ordinary one-node `DraftNode::Load` proposal and sends it through the
-same lowering path as direct source-free authoring. That path owns stable target validation, exact
-lexical visibility, supported binding kind, type assignability, copy safety, and local storage
-lookup. Structural reconciliation preserves the unresolved root ID; index rebuild then creates the
-ordinary reference/dependency edge. The ordinary staged completeness rule runs whole-program
-ownership validation in this transaction only when resolution leaves no blocker; otherwise the later
-edit that reaches completeness runs it before publishing that complete revision. Explicit introduction and
-resolution diff entries sit beside the ordinary expression-kind and reference-rewiring entries.
-Ancestor replacement and callable deletion prune the record before compaction; unrelated private
-relocation refreshes its address from stable identity.
-
-Missing-entry, missing-body, typed-hole, and unresolved-value-reference blockers are structured and
-projected. Incomplete snapshots retain normal indexes and deterministic diagnostics but no compiler
-HIR. The completeness gate rejects before derivation, and `SemanticProgram::try_complete`, complete-
-HIR validation, memory planning, and SSA provide independent defense against a surviving unresolved
-leaf.
-
-Queries are revision-labelled and deterministically paginated for entities/search, references,
-calls, diagnostics, and expected- plus control-context-filtered legal constructors, including typed
-loop with its exact result type, break with the nearest loop's exact payload type, continue, early
-return, and canonical direct-operation identities marked as requiring canonical submitted-argument
-validation. Definition, structured entity/function/node
-type, exact generic signature/call instantiation, hole context with exact lexical/arm visibility,
-unresolved
-value-reference state/candidates, node semantics, and structured match inspection are direct identity
-queries. The unresolved state returns revision, stable node, fixed copy-load intent, requested name,
-expected type, owner, context, and visible stable entities. Its candidate query scans that visible set
-once, filters through the canonical type/copy preconditions, and returns stable entity/current name/
-kind/type/exact-name facts labelled `RequiresCanonicalValidation`. Exact matches precede current-name
-then stable-identity order; the query digest includes the unresolved node. Multiple candidates are a
-derived classification: a one-item page with a continuation proves multiplicity, while the unresolved
-leaf remains the only mutable incomplete authority. The current edit surface has no operation that
-adds, moves, or directly deletes an in-scope binding while preserving this site, and no consumer owns
-a deferred finite subset. Storing candidate membership would therefore duplicate revision-derived
-scope and validation facts. A future site-preserving candidate-lifecycle consumer must demonstrate
-otherwise before this architecture gains a copy-load-specific finite choice.
-Node semantics expose canonical operation identity and exact named effects alongside node kind and
-actual/expected type. Signature
-views expose stable binders and structured bounds; call views expose canonical substitutions, instantiated parameters/results,
-derived witnesses, and named effect bits. `MatchView` reports a stable match node, scrutinee node, result
-type, exhaustiveness, ordered arm/body nodes, and deterministic typed pattern nodes/fields referring
-to stable variant/field/binding entities. Parallel per-node plan, operation, effect, and direct-child
-indexes keep node and match inspection independent of expression-root size. Nominal and generic type
-views use stable semantic identities. Legal-constructor results distinguish established constructors
-from move/borrow candidates that still require canonical ownership validation, do not expose hidden
-match temporaries, and advertise exact concrete generic enum variants only when the transaction
-path's canonical concrete-argument restriction accepts the expected type. A continuation is bound
-to its namespace, revision, and query. Semantic diffs report
-rename, replacement, created/deleted descendants and pattern bindings, hole and unresolved-reference
-transitions, same-sequence child movement, and reference/call rewiring; invalidation currently
-reports the same conservative domains for metadata-only and semantic edits. There is no incremental
-cache work or consumer.
-
-Selected entity, body, type, reference, call, hole, unresolved-reference, and match sections have one
-concise deterministic projection. It traverses body, pattern, and public type structure iteratively, reports
-allocation failure, marks holes as `[HOLE]` and unresolved nodes as `[UNRESOLVED]`, and renders
-declared entity types, canonical operation identities, ordered containment, stable enum/field/binding
-identities, exact generic facts, and named node/call effects without source attachments. The selected
-unresolved slice shows compact context and a visible count, not every candidate. Projection
-labels are review/debug spellings, never identity input.
-The former syntax-shaped service, dense source-node IDs, stdio/session schemas, text publication and
-journal machinery, CLI routes, and protocol contracts are deleted. No wire replacement exists
-without a measured consumer.
-
-## Current execution and local host flow
-
-`lkjscript check` stops after required-package production compilation and drops the resulting
-`ExecutableProgram`. Its module imports no engine/JIT/VM orchestration and constructs no
-`ExecutionInputs`, `HostEnvironment`, execution policy, executable mapping, or prepared invocation.
-Package/source file reads are compiler host I/O; program-declared effects remain unreachable.
-
-`lkjscript run` selects `ExecutionPolicy::Unrestricted` and exposes no engine selection. The app
-lowers the complete eligible group reachable from `main`, installs one baseline image, and prepares
-one invocation before source effects. Eligibility, lowering, installation, setup, or typed
-`PreEntryError` decline destroys the complete native attempt before giving the unchanged bytecode,
-inputs, and policy to a fresh VM invocation.
-
-Executable installation revalidates the opaque image's structural integrity, builds its entry
-mapping, enforces object limits, relocates inside a private RW mapping, seals it RX, and publishes
-accounting only on success. `PreparedInvocation::enter` consumes the affine preparation and crosses
-the generated ABI boundary once. Entered errors and execution outcomes are post-commit and never run
-or rerun the VM.
-
-The VM handles the complete generic operation set. A retained source-free hello proof constructs
-recursive factorial plus an explicit stdio main parameter, compiles the snapshot without source
-loading or parsing, and prints the same bytes as the imported fixture through this route. Stdio and
-clock use the retained host traits.
-Filesystem, network, terminal, entropy, and SQLite operations dispatch through the VM's typed
-resource table and `lkjscript-sys`; SQLite remains a direct language capability. The former service
-database wrapper, directory provider, durable store, database tenant provider, local-control peer,
-Linux observation, scheduler, topology, and process-cell layers are absent.
-
-Runtime storage is collector-free for implemented value families. Unique storage, regions,
-segmented lists, semantic DAGs, returned snapshots, and host resources stage allocation and
-identity-map publication. Opaque handles resolve through runtime-owned wide maps rather than packed
-index arithmetic. Cleanup continues even when diagnostic retention is exhausted.
-
-A returned `SemanticValue` is a key-free owned tree, not a graph: aggregate edges move values into
-private vector storage and there is no shared owner, reference edge, or unsafe constructor through
-which a child can point to an ancestor. Clone and destruction use explicit work vectors. Fallible
-runtime equality and infallible Rust trait equality share one iterative comparison algorithm; the
-fallible route reports work allocation failure, while the trait follows ordinary Rust allocation
-behavior rather than turning failure into inequality. Symbol canonicalization pre-reserves from
-validated node metrics before iteratively rewriting leaves. Debug output is a bounded root summary.
-
-`OwnedValue::from_structural` validates kind/payload agreement, UTF-8 strings, paths, checked
-node/field/byte accounting, and work allocation before publishing the box. Because cycles are
-unrepresentable in this ownership tree, validation visits every node and field once and carries no
-ancestor set. `SemanticDagSnapshot` is a separate reverse-topological graph representation and keeps
-its graph-reference, reachability, and cycle validation. Runtime-local `StructuralImage` remains the
-flat typed owner/handle storage used by VM and native structural services; it is not another semantic
-authority.
-
-## In-process compiler authority and snapshots
-
-Verified SSA and validated bytecode are retained directly in `ExecutableProgram` as typed in-process
-values. Neither crosses a process, persistence, artifact-load, or compilation-cache boundary, so the
-compiler does not canonically traverse and hash both representations, construct a generic prepared
-descriptor, or bind a synthetic shared identity back into them. Baseline native receives the
-retained verified SSA and computes eligibility and target-specific machine facts only while building
-an actual attempt. VM execution receives the retained validated bytecode unchanged.
-
-Package validation remains separate from this deletion. The graph builder returns the root manifest
-from the same read that produced the current lock candidate; the compiler compares that candidate
-with the decoded lock, parses grants only from the bound manifest, carries the same lock and grants
-through source-closure checking, and captures its target record without rereading mutable path state.
-Required-package compilation fails when no
-root package exists. After HIR memory planning, `compile_snapshot` compares generated target memory
-and witness facts with that captured record and rejects any validated-bytecode capability omitted by
-the verified manifest; a development snapshot needs no equivalent package check.
-
-`InstallableImage` is an opaque derived typed value produced only by the current native encoder and
-moved synchronously into the installer. It crosses no persistence, cache, plugin, process, or version
-boundary and therefore carries no separate contract digest. Structural integrity and accounting are
-validated during construction and revalidated before the executable mechanism allocates memory;
-entry mapping, object limits, relocation checks, private RW construction, RX sealing, and
-failure-atomic publication remain at that named unsafe boundary.
-
-Execution outcomes are ordinary in-memory Rust values. The process outcome wire codec is deleted.
-`SemanticDagSnapshot` remains a validated in-memory graph, and `SealedSemanticDagRuntime` retains
-authenticated snapshot import/export used by VM/JIT and differential tests. Memory-plan and witness
-facts call this capability `semantic_snapshot`; it is not a process transport promise.
-
-## Contract and vocabulary ownership
-
-Persistent package files use exact direct identities for language, source, module interface,
-manifest, and lock interpretation. Canonical test-only descriptor construction derives and pins
-those values; production package lookup is a closed name match and never constructs a registry.
-Metrics and memory inventory each emit their own exact output identity directly. The memory output
-identity is separate from the typed memory-obligation and witness records consumed in-process.
-
-Diagnostics, typed HIR, verified SSA, validated bytecode, runtime-call slots, native layout, and
-structural ownership domains have no descriptor or digest. Their same-build types and validators own
-the represented properties directly. In particular, runtime-call slots belong to
-`lkjscript-native`; relocation and generated-entry checks do not consult descriptive metadata. The
-former global set, generic registration/lookup, dependency-mismatch injection, set digest, and
-`describe` projection have no active route.
-
-## Component ownership
-
-Cargo metadata currently reports 11 workspace members and one app binary. Conceptually:
-
-- `lkjscript-contracts` owns retained external identities, their canonical test derivation, shared
-  capability/resource/operation vocabulary, and semantic memory-witness records and validation;
-- `lkjscript-core` owns values, execution policy/outcomes, validated bytecode, memory witnesses,
-  structural storage, semantic snapshots, and resource tables;
-- `lkjscript-compiler` owns the public immutable semantic workspace snapshot and direct snapshot
-  compiler boundary, plus the private source/package importer, HIR, memory planning, lowering,
-  package locks, and concise semantic projection;
-- `lkjscript-ir` owns SSA, verification, normalization, and the opt-in test oracle;
-- `lkjscript-vm` owns generic validated-bytecode execution and typed host-operation dispatch;
-- `lkjscript-native`, `lkjscript-jit`, and `lkjscript-executable` own baseline-native lowering,
-  generated code, relocation, W^X mapping, and invocation;
-- `lkjscript-host` owns only retained stdio, clock, cancellation, and logging interfaces;
-- `lkjscript-sys` owns direct OS/FFI mechanisms for files, sockets, time, terminal, entropy, and
-  SQLite; and
-- `lkjscript-app` owns the sole `lkjscript` CLI and local integration wiring.
-
-The deleted runtime/resource/database/Linux-host crates and five secondary binaries have no Cargo
-edge or shadow implementation.
-
-## Retained trust boundaries
-
-Fail-closed validation remains at:
-
-- text importer and typed semantic transaction input;
-- package manifest/lock/import resolution and compiler path/symlink handling;
-- capability grants and typed host-operation dispatch;
-- bytecode validation and malformed operand/index handling;
-- relocation, W^X executable installation, generated entry, and native ABI/stack preflight; and
-- filesystem, socket, terminal, SQLite, FFI, and operating-system calls.
-
-Within one synchronous compiler pipeline, typed verified wrappers and Rust ownership carry
-validated authority. The compiler does not serialize, hash, or independently reverify those values
-to manufacture another in-process authority token.
-
-`lkjscript-executable` is the narrow unsafe executable-memory and generated-entry mechanism.
-`lkjscript-sys` is the direct operating-system/SQLite FFI mechanism. The deleted process framing,
-peer authorization, service persistence, database tenancy, directory-sandbox provider, Linux host
-observation, scheduler, and resource-plane boundaries are intentionally not claimed as retained.
-Local filesystem/network capabilities use the current process's OS authority after language
-capability checking; they are not a replacement service sandbox.
-
-## Target delta
-
-**Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
-authority. Missing entry/body, real typed-hole nodes, and first-class unresolved copy-load value
-references; non-generic product creation; generic and non-generic directly recursive or non-recursive
-enum creation; generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
-sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, and
-early `return`; selected byte-vector move/borrow and canonical operations; aggregate
-construction/observation; exhaustive closed Boolean, I64, exact-product, and exact generic or
-non-generic enum matches with stable arm-local bindings and stable nominal member selection; exact
-calls to imported or source-free generic functions with stable binders, structured types, shared
-resolution, and derived witnesses; identity-preserving direct rename for products, product fields,
-enums, variants, and enum fields, including identity-selected
-canonical memory blocker/drop paths and iterative generic memory-witness type inspection; one
-identity-preserving direct-child reorder within one semantic sequence; atomic batch edits;
-tombstone-stable identities;
-structured stable nominal, generic, and match views; deterministic
-queries/projections/diffs; one canonical complete-HIR match derivation; VM execution and eligible
-baseline-native entry after nominal rename; and direct execution are implemented. Source-loading,
-parser, and compiler-phase counters; imported scalar, nominal, local, ownership, early-return, match,
-generic function and enum declaration, generic-call, and direct-versus-resolved copy-load
-convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
-20,000-level nested-expression, typed-loop-control, local, semantic-match, published-type, and
-declaration-type small-stack release execution protect the selected vertical. A retained five-sample
-release harness measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match,
-exact-generic mixed,
-lifecycle, and incomplete-recovery edit/query/projection/compile loops, including three scale points
-through 538 representative nodes and one 2,074-node ignored stress point. Same-binary deterministic
-work and timing support sharing unchanged semantic/index state only for exact metadata refinement and
-retaining full recomputation everywhere else.
-Formatting-only attachment changes preserve IDs and projection.
-
-**Target, not implemented:** later workspace expansion adds nominal member addition, deletion, or
-reordering; cross-parent, entity, declaration, match-arm, branch, loop-body, callable, or other broader movement
-only when another present owner/order consumer defines it; broader generic pattern families, generic
-ownership/reference instantiation, unresolved moves/borrows/calls/type names/members/patterns/
-imports, ambiguities, conflicts, parser recovery nodes, richer declaration kinds, and finer
-analysis contexts without adding another mutable semantic AST. Persistence,
-collaboration, a measured wire consumer, incremental recomputation, daemon, database service,
-scheduler, and broader platform work wait for evidence after real use of the local semantic model.
+The baseline uses `BTreeMap`, vectors, and full snapshot clones. There is no database, journal,
+async runtime, generic graph framework, schema generator, query engine, cache, source projection,
+native backend, runtime cell, plugin mechanism, or remote service. A later mechanism must have a
+measured producer/consumer and preserve this single authority path.

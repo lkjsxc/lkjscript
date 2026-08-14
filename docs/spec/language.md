@@ -1,119 +1,48 @@
-# lkjscript language semantics
+# Bootstrap language specification
 
-**Status: normative intended semantics.** This specification defines language meaning independently
-of any physical source notation, compiler IR, bytecode encoding, or runtime engine. The current
-implementation is summarized in [`../status.md`](../status.md); a difference there is an
-implementation gap, not an implicit change to this document.
+## Types and values
 
-This document specifies complete executable programs. Editing-time incomplete states and semantic
-transactions belong to the separate [workspace specification](workspace.md).
+The closed semantic types are `unit`, `bool`, and signed two's-complement `i64`. There are no
+implicit conversions, null values, dynamic values, casts, exceptions, generics, or nominal types.
+Function signatures store ordered parameter Node IDs and one declared result type. The current
+daemon invocation supports only zero-parameter entry functions.
 
-## 1. Programs and resolution
+Scalar values use copy semantics. The operation contract records `Copy` for consumed bootstrap
+operands. Ownership-bearing values and borrow rules do not yet exist.
 
-A program is a finite set of modules containing declarations. A declaration has semantic identity,
-a kind, a name, and typed contents; file location, formatting, source order where semantically
-irrelevant, and physical notation are presentation attributes.
+## Operations
 
-Imports identify modules and declarations exactly. Resolution is static and deterministic. A
-complete executable program must reject duplicate declarations, unresolved or ambiguous names,
-invalid imports, and dependency cycles that cannot be assigned the required static meaning.
+`src/schema.rs` owns one exhaustive operation contract used by graph validation, type derivation,
+completeness, lowering eligibility, and result typing.
 
-Functions have typed parameters and one result type. A generic function owns ordered semantic type
-parameters; every bound names one of those parameters and one exact trait. A resolved generic call
-contains exactly one type substitution for every parameter and a compiler-derived witness for every
-bound. Substitution is structural through parameter, result, enum, list, and function types; value
-arguments are checked against the instantiated parameters. Source inference may propose the exact
-substitutions, but binder names, inference variables, display strings, and caller-supplied witnesses
-are not call semantics. An unresolved type parameter cannot remain in an executable substitution.
+- `ConstI64(value)` has no operands and produces one `i64`.
+- `ConstBool(value)` has no operands and produces one `bool`.
+- `AddI64(lhs, rhs)` copies two exact `i64` values and produces one `i64`.
+- `Hole(expected)` produces a typed semantic placeholder for graph construction but is always
+  incomplete and cannot lower.
+- `Return(value)` is the block terminator and requires the exact declared function result type.
 
-Calls are resolved before execution, including all generic and trait obligations. Source-imported
-and syntax-independent calls with equivalent exact substitutions use the same validation and have
-the same meaning. An implementation may specialize a call, but failure to specialize must use a
-complete generic correct path rather than make an otherwise valid program invalid.
+Operations are pure. `i64` addition uses checked arithmetic; overflow is a structured runtime trap.
+There are no host effects or capabilities in this slice.
 
-## 2. Types and values
+An operation result may be used only later in the same ordered block. A parameter value must belong
+to the owning function. The output index must exist in the producer's closed contract. The graph
+validator enforces these facts before publication, and the private Core IR verifier checks dense
+value definition, dominance, type agreement, and return type again before execution.
 
-Every executable expression has a static type. Foundational semantic families include:
+## Compilation and execution
 
-- unit, Boolean, signed 64-bit integer, and 64-bit IEEE-754 floating-point values;
-- symbols, text, immutable bytes, mutable byte vectors, and borrowed byte views;
-- lists;
-- nominal products and nominal enums;
-- capabilities and typed host resources; and
-- function, generic, and trait-constrained values admitted by the static type system.
+A selected entry function may compile when its body exists and its containment closure has no
+holes. Unused incomplete functions do not block that entry. The only executable path is:
 
-Products and enums are nominal: equal field shapes do not make separately declared types
-interchangeable. Enum construction names a declared variant and supplies exactly its typed fields.
-Pattern matching is type-correct, deterministic, and exhaustive. A statically useless or subsumed
-arm is invalid. `never` is the result type of control that does not return normally.
+```text
+immutable SPG snapshot -> completeness/type validation -> Core IR -> verifier -> interpreter
+```
 
-Equality is type-directed and complete for values for which equality is defined. Integer operations
-and conversions that are defined as checked must report arithmetic failure rather than wrap.
-Floating-point operations preserve IEEE-754 behavior, including bit-significant cases where an
-operation's contract requires it.
+Core IR has explicit functions, signatures, blocks, typed dense values, closed instructions, a
+separate return terminator, and semantic origin Node IDs. It is derived, same-build, and not
+serialized. The interpreter implements every current Core IR instruction and returns a typed
+`RuntimeValue`.
 
-## 3. Bindings and control
-
-Bindings are immutable unless mutation is explicitly part of their declaration. A mutable binding's
-initializer is evaluated before the binding becomes visible; assignment requires its exact declared
-type. Copy values may overwrite initialized mutable storage. Affine storage may be reinitialized only
-after its prior value has been moved or consumed by a typed operation with defined cleanup;
-assignment never hides an implicit affine release. Evaluation order is deterministic where effects,
-movement, cleanup, failure, or control flow can observe it.
-
-The language supports conditional selection, ordered blocks, loops, `while`, `break`, `continue`,
-early return, function calls, and exhaustive enum matching. An empty ordered block yields `unit`; a
-non-empty block yields its final value. `while` re-evaluates a Boolean condition before each ordered
-body iteration and yields `unit` when it terminates. Control must not read an uninitialized value, use
-an unavailable moved value, or enter an invalid control-flow state.
-
-## 4. Effects and capabilities
-
-Host effects require explicit typed capabilities supplied by the package and host. Source code has
-no ambient filesystem, network, database, terminal, process, clock, argument, or standard-I/O
-authority. A capability authorizes only operations in its declared domain; host adapters must reject
-kind or authority mismatches before performing the effect.
-
-Given the same complete semantic program, explicit inputs, capabilities, target, and options, every
-completed execution has the same language meaning. Runtime tier, scheduling, caching, or diagnostic
-mode must not reinterpret the program.
-
-## 5. Ownership and memory safety
-
-Ordinary execution is collector-free and non-tracing. Ordinary programs do not expose raw pointers,
-retain/release, a general `free`, named implementation lifetimes, or runtime-engine-specific memory
-controls.
-
-Copy values may be duplicated. Affine or unique values are moved exactly once unless a valid borrow
-is active. A borrow cannot outlive its authority or conflict with movement or mutation. Cleanup is
-deterministic where promised by the value or host-resource contract and is attempted on normal,
-error, and cancellation paths without double release. Memory safety, cancellation safety, and
-failure atomicity are semantic requirements even when internal storage strategies differ.
-
-## 6. Validity, resources, and failure
-
-Semantic validity is determined by type, effect, capability, ownership, exhaustiveness, resolution,
-and control-flow laws. Program size, source bytes, token count, nesting, declarations, parameters,
-arguments, locals, fields, variants, CFG nodes, IR nodes, runtime objects, or analysis work are not
-semantic laws.
-
-Trusted local compilation and execution continue until success, explicit cancellation, allocation
-failure, operating-system or I/O failure, a genuine external representation failure, or another real
-host failure. An untrusted host may apply explicit coarse input, memory, output, elapsed-time,
-cancellation, or concurrency policy. Exhausting that policy is a typed host-resource result, not a
-semantic error: the unchanged program may succeed under a higher or unrestricted policy.
-
-No implementation may silently truncate source, diagnostics, semantic results, generated code,
-serialization, output promised as complete, or execution. It must stream, paginate with a stable
-continuation, return an explicit partial result, or fail.
-
-Representation overflow must be checked before indexing, allocation, or publication. Compact
-encodings and optional native shapes must have a generic wide fallback where they would otherwise
-restrict an ordinary valid program.
-
-## 7. Publication and external boundaries
-
-Malformed packages, serialized artifacts, process messages, capability grants, paths, executable
-relocations, FFI values, and persisted data fail closed at their trust boundary. Validation failure,
-resource exhaustion, cancellation, backend failure, or I/O failure must not publish a partial
-artifact or poison an earlier valid program, cache entry, or runtime state.
+Calls, branches, loops, recursion, aggregates, sums, patterns, generics, effects, host operations,
+ownership-bearing values, and native execution are not implemented.

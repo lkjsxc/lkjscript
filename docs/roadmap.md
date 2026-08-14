@@ -1,34 +1,34 @@
 # Roadmap
 
-**Role: planned ordering and intent only.** This document owns no implemented fact and no normative
-semantic rule. Current capability is in [`status.md`](status.md); intended contracts are in
-[`spec/`](spec/).
+The reset scalar vertical is the only implemented product path. Work advances by evidence gates,
+not compatibility milestones.
 
-## Now
+## Next: agent query ergonomics
 
-No new implementation vertical is selected. Source-free construction now covers generic or non-
-generic enum declarations, including canonically accepted direct recursion, with exact values and
-exhaustive exact patterns through direct compilation and VM execution. Changing recursive
-instantiations reach the existing canonical memory-planning rejection; select another item only from
-a concrete current consumer and focused failing evidence.
+Add revision-bound direct uses/dependencies, bounded body slices, semantic-diff queries, exact legal
+constructors for holes/operands, and continuation-bound pagination. Acceptance requires repairing a
+type error and filling a hole without a whole-workspace dump, with measured request bytes, round
+trips, failures, elapsed time, and model tokens. Full recomputation remains the oracle; no query
+cache is added without measured repeated cost.
 
-## Next
+Before that gate closes, add property-generated transaction sequences and bounded artifact/protocol
+fuzz smoke targets so compact query work does not outrun boundary hardening.
 
-1. Reconsider broader movement only after a concrete owner/order consumer requires it; do not add
-   generic coordinates, paths, or tree-editing machinery for symmetry.
-2. Reconsider a finite explicit copy-load choice only when a current site-preserving candidate edit
-   or durable multi-turn consumer must retain a deliberate stable-identity subset that immediate
-   explicit resolution cannot preserve. Do not treat a derived candidate count as new semantic
-   state.
+## Then: structured pure programs
 
-## Later
+Add direct calls, parameters, structured `if`, and loops through the same SPG, validator, Core IR,
+verifier, and interpreter. Agents must not author predecessor lists or phi nodes. Acceptance is
+interpreter-correct branching/calls/loops, deterministic dominance rejection, and stack/resource
+policy for recursion.
 
-1. Add parser recovery only through a source-import recovery vertical; add explicit conflict state
-   only after a real merge or concurrent-writer consumer defines its lifecycle.
-2. Add persistence, crash recovery, collaboration, or distributed storage only after measurements of
-   retained scale, concurrent writers, and recovery needs justify them.
-3. Add a daemon or warm semantic service only after the local semantic snapshot, transaction, query,
-   and direct compiler input are complete and measurements show a process boundary is worthwhile.
-4. Expand package, service, database, scheduler, network, GUI, web, game, and other platform products
-   through the semantic model, capability system, and selected production runtime. Do not restore
-   the deleted Phase 2 components as compatibility layers.
+## Later evidence gates
+
+Nominal products/sums and matching precede explicit generics. Pure semantics precede effects and
+exact daemon-granted capabilities. Real resources precede ownership, borrow, cleanup, and memory
+strategy. Useful libraries precede multi-package dependency closure. Repeated measured work precedes
+incrementality or caches. Stable representative interpreter workloads precede evaluation of a mature
+baseline native backend. Isolation and daemon concurrency follow real workload pressure.
+
+Native optimization, runtime cells, host I/O, package networks, cross-platform expansion, and
+self-hosting are not current work. The active reset prompt in `prompts/202608141640.md` retains the
+full campaign gates; it is an execution artifact, not a second semantic specification.
