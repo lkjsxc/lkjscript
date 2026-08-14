@@ -6,8 +6,7 @@ costs before optimization.
 ## Environment
 
 - date: 2026-08-14;
-- code state: reset working tree based on `1f4da233367e0cd282c1e5e1c35b6f73a19880ad` (the first
-  retained post-reset commit is recorded in the next evidence update);
+- code state: `5785f650cbe11c38350a8005ba17f4bd40bb84b6`;
 - host: `devbox`, AMD Ryzen 9 9955HX, 20 logical CPUs visible, 32 GiB memory;
 - OS: Linux 7.0.0-29-generic x86-64, glibc 2.39;
 - Rust: `rustc 1.96.0 (ac68faa20 2026-05-25)`;
@@ -25,7 +24,7 @@ TIMEFORMAT='fresh_release_build_elapsed_s=%3R'
 time CARGO_TARGET_DIR="$fresh_target" cargo build --workspace --release --locked
 ```
 
-Observed elapsed time: 6.422 s. The fresh release directory occupied 7.9 MiB.
+Observed elapsed time: 6.665 s. The fresh release directory occupied 7.9 MiB.
 
 A separate fresh target ran the complete test boundary:
 
@@ -36,10 +35,8 @@ time CARGO_TARGET_DIR="$fresh_target" \
   cargo test --workspace --all-targets --all-features --locked
 ```
 
-Observed elapsed time: 1.934 s; 16 tests passed in that measured tree. Later correctness hardening
-added tests; current verification totals belong to `docs/status.md`, and these build-time figures
-were not relabelled as measurements of the later tree. `/usr/bin/time` was unavailable, so retained
-maximum-RSS evidence is not yet available.
+Observed elapsed time: 2.122 s; 29 tests passed and the manual performance baseline was ignored.
+`/usr/bin/time` was unavailable, so retained maximum-RSS evidence is not yet available.
 
 ## Product-path scalar baseline
 
@@ -56,14 +53,15 @@ cargo test --release --test semantic_vertical product_path_performance_baseline 
 
 | Measurement | Median | p95 | Samples |
 | --- | ---: | ---: | ---: |
-| workspace query, request wall | 7.384 us | 9.428 us | 31 |
-| run, request wall | 7.053 us | 8.997 us | 31 |
-| direct SPG validation/lowering/Core IR verification | 0.551 us | 0.802 us | 31 |
-| interpreter execution | 0.060 us | 0.130 us | 31 |
-| daemon restart with one retained workspace | 3,219.264 us | 3,294.475 us | 11 |
+| workspace query, request wall | 7.504 us | 9.769 us | 31 |
+| run, request wall | 7.344 us | 9.087 us | 31 |
+| direct SPG validation/lowering/Core IR verification | 0.481 us | 0.782 us | 31 |
+| interpreter execution | 0.070 us | 0.130 us | 31 |
+| daemon restart with one retained workspace | 5,314.193 us | 5,347.456 us | 11 |
 
-Single observations: initial daemon readiness 4,299.315 us; durable workspace creation 9,867.977 us;
-durable bootstrap transaction 8,057.953 us. The revision-1 artifact was 501 bytes.
+The retained run began at `2026-08-14T09:53:48Z`. Single observations: initial daemon readiness
+5,319.614 us; durable workspace creation 10,093.611 us; durable bootstrap transaction 7,900.848 us.
+The revision-1 artifact was 501 bytes. Its full wall time was 5.650 s including a release rebuild.
 
 This workload is a bootstrap microbenchmark, not representative application evidence. The suspected
 cost is synchronous full-artifact durability, not validation or execution. Reversal condition:
