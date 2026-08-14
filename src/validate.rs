@@ -1,7 +1,7 @@
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
-use crate::schema::{Node, NodeKind, OperationKind, SemanticType, ValueRef, owner_kind_is_valid};
+use crate::schema::{Node, NodeKind, SemanticType, ValueRef, owner_kind_is_valid};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn validate_snapshot(snapshot: &Snapshot) -> Result<()> {
@@ -101,7 +101,11 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
     let mut owner_counts = BTreeMap::<NodeId, usize>::new();
     for (owner_id, owner) in &snapshot.nodes {
         let mut local = BTreeSet::new();
-        for child_id in owner.owned_children() {
+        for index in 0..owner.owned_child_count() {
+            let child_id = owner.owned_child(index).ok_or_else(|| {
+                corrupt(snapshot, "owned-child accessor disagrees with its count")
+                    .for_node(*owner_id)
+            })?;
             if !local.insert(child_id) {
                 return Err(corrupt(snapshot, "owned child appears more than once")
                     .for_node(child_id)
@@ -140,22 +144,30 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
             *owner_counts.entry(child_id).or_default() += 1;
         }
         validate_slot_targets(snapshot, *owner_id, owner)?;
-        for reference in owner.direct_references() {
-            if reference.workspace() != snapshot.workspace {
+        for index in 0..owner.direct_reference_count() {
+            let reference = owner.direct_reference(index).ok_or_else(|| {
+                corrupt(
+                    snapshot,
+                    "direct-reference accessor disagrees with its count",
+                )
+                .for_node(*owner_id)
+            })?;
+            let target = reference.target();
+            if target.workspace() != snapshot.workspace {
                 return Err(LkError::new(
                     ErrorCode::WrongWorkspace,
                     "direct reference belongs to another workspace",
                 )
                 .for_workspace(snapshot.workspace)
-                .for_node(reference)
+                .for_node(target)
                 .with_related([*owner_id]));
             }
-            if !snapshot.nodes.contains_key(&reference) {
+            if !snapshot.nodes.contains_key(&target) {
                 return Err(LkError::new(
                     ErrorCode::NodeNotFound,
                     "direct reference target does not exist",
                 )
-                .for_node(reference)
+                .for_node(target)
                 .with_related([*owner_id]));
             }
         }
@@ -183,9 +195,11 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
         let node = snapshot.nodes.get(&id).ok_or_else(|| {
             corrupt(snapshot, "containment traversal reached a missing node").for_node(id)
         })?;
-        let mut children = node.owned_children();
-        children.reverse();
-        stack.extend(children);
+        for index in (0..node.owned_child_count()).rev() {
+            if let Some(child) = node.owned_child(index) {
+                stack.push(child);
+            }
+        }
     }
     if visited.len() != snapshot.nodes.len() {
         let unowned = snapshot
@@ -458,35 +472,30 @@ fn validate_operation(
     let Node::Operation { operation, .. } = node else {
         return Err(corrupt(snapshot, "block contains a non-operation node").for_node(operation_id));
     };
-    let contract = operation.contract();
-    if contract.terminator != is_terminator {
+    if operation.is_terminator() != is_terminator {
         return Err(LkError::new(
             ErrorCode::InvalidContainment,
             "operation termination contract disagrees with its block slot",
         )
         .for_node(operation_id));
     }
-    match operation {
-        OperationKind::Return { value } => {
-            let actual = value_type(snapshot, function, block, position, positions, *value)?;
-            if actual != function_result {
-                return Err(type_error(operation_id, function_result, actual, *value));
-            }
-        }
-        _ => {
-            let operands = operation.operands();
-            if operands.len() != contract.operand_types.len() {
-                return Err(
-                    corrupt(snapshot, "operation contract operand arity disagrees")
-                        .for_node(operation_id),
-                );
-            }
-            for (operand, expected) in operands.into_iter().zip(contract.operand_types) {
-                let actual = value_type(snapshot, function, block, position, positions, operand)?;
-                if actual != expected {
-                    return Err(type_error(operation_id, expected, actual, operand));
-                }
-            }
+    for index in 0..operation.operand_count() {
+        let operand = operation.operand(index).ok_or_else(|| {
+            corrupt(
+                snapshot,
+                "operation operand accessor disagrees with its descriptor",
+            )
+            .for_node(operation_id)
+        })?;
+        let expected = operation
+            .operand_type(index, Some(function_result))
+            .ok_or_else(|| {
+                corrupt(snapshot, "operation operand type rule cannot be resolved")
+                    .for_node(operation_id)
+            })?;
+        let actual = value_type(snapshot, function, block, position, positions, operand)?;
+        if actual != expected {
+            return Err(type_error(operation_id, expected, actual, operand));
         }
     }
     Ok(())
@@ -575,10 +584,7 @@ fn value_type(
                 .with_related([block]));
             }
             producer_kind
-                .contract()
-                .result_types
-                .get(usize::from(output))
-                .copied()
+                .result_type(usize::from(output), None)
                 .ok_or_else(|| {
                     LkError::new(
                         ErrorCode::InvalidOperand,

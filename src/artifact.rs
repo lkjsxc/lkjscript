@@ -2,18 +2,20 @@ use crate::codec::{CodecError, CodecErrorKind, Reader, TagDomain, Writer};
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::{ArtifactVersion, NodeId, Revision, SchemaId, SnapshotHash, WorkspaceId};
-use crate::schema::{Node, OperationKind, SemanticType, ValueRef};
+use crate::schema::{Node, OperationCode, OperationKind, SemanticType, ValueRef};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x01";
 pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(1);
 pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg001");
+const ENCODED_COUNT_BYTES: usize = 8;
+const ENCODED_TOMBSTONE_BYTES: usize = 8;
+const MINIMUM_ENCODED_NODE_RECORD_BYTES: usize = 17;
+const ENCODED_SCOPED_NODE_ID_BYTES: usize = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DecodePolicy {
     pub maximum_artifact_bytes: usize,
-    pub maximum_nodes: usize,
-    pub maximum_tombstones: usize,
     pub maximum_name_bytes: usize,
 }
 
@@ -21,8 +23,6 @@ impl Default for DecodePolicy {
     fn default() -> Self {
         Self {
             maximum_artifact_bytes: 64 * 1024 * 1024,
-            maximum_nodes: 1_000_000,
-            maximum_tombstones: 1_000_000,
             maximum_name_bytes: 1024 * 1024,
         }
     }
@@ -166,9 +166,8 @@ fn decode_payload(payload: &[u8], policy: DecodePolicy) -> Result<Snapshot> {
     let revision = Revision::new(reader.u64().map_err(artifact_codec)?);
     let next_serial = reader.u64().map_err(artifact_codec)?;
     let root = read_node_id(&mut reader, workspace)?;
-    let tombstone_count = reader
-        .count(policy.maximum_tombstones)
-        .map_err(artifact_codec)?;
+    let tombstone_count =
+        read_byte_bounded_count(&mut reader, ENCODED_TOMBSTONE_BYTES, ENCODED_COUNT_BYTES)?;
     let mut tombstones = BTreeSet::new();
     for _ in 0..tombstone_count {
         let serial = reader.u64().map_err(artifact_codec)?;
@@ -179,7 +178,7 @@ fn decode_payload(payload: &[u8], policy: DecodePolicy) -> Result<Snapshot> {
             ));
         }
     }
-    let node_count = reader.count(policy.maximum_nodes).map_err(artifact_codec)?;
+    let node_count = read_byte_bounded_count(&mut reader, MINIMUM_ENCODED_NODE_RECORD_BYTES, 0)?;
     let mut nodes = BTreeMap::new();
     for _ in 0..node_count {
         let id = read_node_id(&mut reader, workspace)?;
@@ -286,14 +285,14 @@ pub(crate) fn read_node(
         .ok_or_else(|| artifact_codec(reader.unknown_tag(TagDomain::Node, tag)))?;
     Ok(match kind {
         crate::schema::NodeKind::WorkspaceRoot => Node::WorkspaceRoot {
-            packages: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            packages: read_node_ids(reader, workspace)?,
         },
         crate::schema::NodeKind::Package => Node::Package {
             owner: read_node_id(reader, workspace)?,
             name: reader
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
-            modules: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            modules: read_node_ids(reader, workspace)?,
             entry: read_optional_node_id(reader, workspace)?,
         },
         crate::schema::NodeKind::Module => Node::Module {
@@ -301,14 +300,14 @@ pub(crate) fn read_node(
             name: reader
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
-            functions: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            functions: read_node_ids(reader, workspace)?,
         },
         crate::schema::NodeKind::Function => Node::Function {
             owner: read_node_id(reader, workspace)?,
             name: reader
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
-            parameters: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            parameters: read_node_ids(reader, workspace)?,
             result: read_type(reader)?,
             body: read_optional_node_id(reader, workspace)?,
         },
@@ -322,11 +321,11 @@ pub(crate) fn read_node(
         },
         crate::schema::NodeKind::Region => Node::Region {
             owner: read_node_id(reader, workspace)?,
-            blocks: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            blocks: read_node_ids(reader, workspace)?,
         },
         crate::schema::NodeKind::Block => Node::Block {
             owner: read_node_id(reader, workspace)?,
-            operations: read_node_ids(reader, workspace, policy.maximum_nodes)?,
+            operations: read_node_ids(reader, workspace)?,
             terminator: read_optional_node_id(reader, workspace)?,
         },
         crate::schema::NodeKind::Operation => Node::Operation {
@@ -352,26 +351,25 @@ fn put_operation(writer: &mut Writer, operation: &OperationKind) {
 
 fn read_operation(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<OperationKind> {
     let tag = reader.u8().map_err(artifact_codec)?;
-    match tag {
-        1 => Ok(OperationKind::ConstI64(
+    let code = OperationCode::from_stable_tag(tag)
+        .ok_or_else(|| artifact_codec(reader.unknown_tag(TagDomain::Operation, tag)))?;
+    match code {
+        OperationCode::ConstI64 => Ok(OperationKind::ConstI64(
             reader.i64().map_err(artifact_codec)?,
         )),
-        2 => Ok(OperationKind::ConstBool(
+        OperationCode::ConstBool => Ok(OperationKind::ConstBool(
             reader.bool().map_err(artifact_codec)?,
         )),
-        3 => Ok(OperationKind::AddI64 {
+        OperationCode::AddI64 => Ok(OperationKind::AddI64 {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
-        4 => Ok(OperationKind::Hole {
+        OperationCode::Hole => Ok(OperationKind::Hole {
             expected: read_type(reader)?,
         }),
-        5 => Ok(OperationKind::Return {
+        OperationCode::Return => Ok(OperationKind::Return {
             value: read_value(reader, workspace)?,
         }),
-        _ => Err(artifact_codec(
-            reader.unknown_tag(TagDomain::Operation, tag),
-        )),
     }
 }
 
@@ -432,12 +430,21 @@ fn put_node_ids(writer: &mut Writer, values: &[NodeId]) -> Result<()> {
     Ok(())
 }
 
-fn read_node_ids(
+fn read_byte_bounded_count(
     reader: &mut Reader<'_>,
-    workspace: WorkspaceId,
-    maximum: usize,
-) -> Result<Vec<NodeId>> {
-    let count = reader.count(maximum).map_err(artifact_codec)?;
+    minimum_item_bytes: usize,
+    reserved_trailing_bytes: usize,
+) -> Result<usize> {
+    let maximum = reader
+        .remaining()
+        .saturating_sub(ENCODED_COUNT_BYTES)
+        .saturating_sub(reserved_trailing_bytes)
+        / minimum_item_bytes;
+    reader.count(maximum).map_err(artifact_codec)
+}
+
+fn read_node_ids(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<Vec<NodeId>> {
+    let count = read_byte_bounded_count(reader, ENCODED_SCOPED_NODE_ID_BYTES, 0)?;
     let mut values = Vec::with_capacity(count);
     for _ in 0..count {
         values.push(read_node_id(reader, workspace)?);
@@ -505,6 +512,48 @@ mod tests {
     }
 
     #[test]
+    fn operation_artifact_tags_round_trip_every_closed_code() {
+        let workspace = WorkspaceId::from_bytes([0x5a; 16]);
+        let first = NodeId::new(workspace, 2).expect("first operation");
+        let second = NodeId::new(workspace, 3).expect("second operation");
+        let operations = [
+            OperationKind::ConstI64(-7),
+            OperationKind::ConstBool(true),
+            OperationKind::AddI64 {
+                lhs: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                rhs: ValueRef::OperationResult {
+                    operation: second,
+                    output: 0,
+                },
+            },
+            OperationKind::Hole {
+                expected: SemanticType::Bool,
+            },
+            OperationKind::Return {
+                value: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+            },
+        ];
+        assert_eq!(operations.len(), OperationCode::ALL.len());
+        for operation in operations {
+            let mut writer = Writer::new();
+            put_operation(&mut writer, &operation);
+            let bytes = writer.finish();
+            let mut reader = Reader::new(&bytes);
+            assert_eq!(
+                read_operation(&mut reader, workspace).expect("operation round trip"),
+                operation
+            );
+            reader.finish().expect("complete operation payload");
+        }
+    }
+
+    #[test]
     fn corrupt_truncated_and_trailing_artifacts_reject() {
         let bytes = encode(&initial()).expect("encode initial snapshot");
         let mut corrupt = bytes.clone();
@@ -564,6 +613,39 @@ mod tests {
         assert_eq!(
             decode_with_policy(&encoded, restrictive)
                 .expect_err("artifact byte policy")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+    }
+
+    #[test]
+    fn inflated_counts_reject_from_remaining_bytes_without_semantic_count_limits() {
+        let encoded = encode(&initial()).expect("encode initial snapshot");
+        let original = payload(&encoded);
+
+        let mut tombstones = original.to_vec();
+        tombstones[40..48].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert_eq!(
+            decode(&artifact_from_payload(&tombstones))
+                .expect_err("inflated tombstone count")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        let mut nodes = original.to_vec();
+        nodes[48..56].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert_eq!(
+            decode(&artifact_from_payload(&nodes))
+                .expect_err("inflated node count")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        let mut child_ids = original.to_vec();
+        child_ids[65..73].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert_eq!(
+            decode(&artifact_from_payload(&child_ids))
+                .expect_err("inflated child-list count")
                 .code,
             ErrorCode::PolicyExceeded
         );

@@ -1,29 +1,161 @@
-use crate::diff::{self, SemanticDiff};
+use crate::diff;
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, Workspace, require_kind};
-use crate::ids::{IdempotencyKey, LocalHandle, NodeId, Revision, SnapshotHash, WorkspaceId};
+use crate::ids::{
+    ChangeDigest, IdempotencyKey, LocalHandle, NodeId, Revision, SnapshotHash, WorkspaceId,
+};
+use crate::query;
 use crate::schema::{
     Node, NodeKind, OperationDraft, OperationKind, SemanticType, ValueDraft, ValueRef,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum NodeTarget {
     Existing(NodeId),
     Local(LocalHandle),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+pub const MAX_RETURNED_BINDINGS: usize = 64;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionMode {
+    Commit,
+    ValidateOnly,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Transaction {
     pub workspace: WorkspaceId,
     pub base_revision: Revision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<IdempotencyKey>,
-    pub dry_run: bool,
+    pub mode: TransactionMode,
     pub operations: Vec<TransactionOp>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransactionResponseSpec {
+    pub return_handles: Vec<LocalHandle>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyTransactionRequest {
+    pub transaction: Transaction,
+    pub response: TransactionResponseSpec,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionOpCode {
+    CreatePackage,
+    CreateModule,
+    CreateFunction,
+    CreateParameter,
+    CreateRegion,
+    CreateBlock,
+    CreateOperation,
+    SetFunctionBody,
+    SetEntryFunction,
+    RenameNode,
+    ReplaceOperation,
+    ReplaceOperand,
+    DeleteOwnedSubtree,
+    RefineHole,
+}
+impl TransactionOpCode {
+    pub const ALL: [Self; 14] = [
+        Self::CreatePackage,
+        Self::CreateModule,
+        Self::CreateFunction,
+        Self::CreateParameter,
+        Self::CreateRegion,
+        Self::CreateBlock,
+        Self::CreateOperation,
+        Self::SetFunctionBody,
+        Self::SetEntryFunction,
+        Self::RenameNode,
+        Self::ReplaceOperation,
+        Self::ReplaceOperand,
+        Self::DeleteOwnedSubtree,
+        Self::RefineHole,
+    ];
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::CreatePackage => 1,
+            Self::CreateModule => 2,
+            Self::CreateFunction => 3,
+            Self::CreateParameter => 4,
+            Self::CreateRegion => 5,
+            Self::CreateBlock => 6,
+            Self::CreateOperation => 7,
+            Self::SetFunctionBody => 8,
+            Self::SetEntryFunction => 9,
+            Self::RenameNode => 10,
+            Self::ReplaceOperation => 11,
+            Self::ReplaceOperand => 12,
+            Self::DeleteOwnedSubtree => 13,
+            Self::RefineHole => 14,
+        }
+    }
+    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(Self::CreatePackage),
+            2 => Some(Self::CreateModule),
+            3 => Some(Self::CreateFunction),
+            4 => Some(Self::CreateParameter),
+            5 => Some(Self::CreateRegion),
+            6 => Some(Self::CreateBlock),
+            7 => Some(Self::CreateOperation),
+            8 => Some(Self::SetFunctionBody),
+            9 => Some(Self::SetEntryFunction),
+            10 => Some(Self::RenameNode),
+            11 => Some(Self::ReplaceOperation),
+            12 => Some(Self::ReplaceOperand),
+            13 => Some(Self::DeleteOwnedSubtree),
+            14 => Some(Self::RefineHole),
+            _ => None,
+        }
+    }
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::CreatePackage => "create_package",
+            Self::CreateModule => "create_module",
+            Self::CreateFunction => "create_function",
+            Self::CreateParameter => "create_parameter",
+            Self::CreateRegion => "create_region",
+            Self::CreateBlock => "create_block",
+            Self::CreateOperation => "create_operation",
+            Self::SetFunctionBody => "set_function_body",
+            Self::SetEntryFunction => "set_entry_function",
+            Self::RenameNode => "rename_node",
+            Self::ReplaceOperation => "replace_operation",
+            Self::ReplaceOperand => "replace_operand",
+            Self::RefineHole => "refine_hole",
+            Self::DeleteOwnedSubtree => "delete_owned_subtree",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum TransactionOp {
     CreatePackage {
         handle: LocalHandle,
@@ -81,12 +213,34 @@ pub enum TransactionOp {
         index: u8,
         value: ValueDraft,
     },
+    RefineHole {
+        hole: NodeTarget,
+        replacement: OperationDraft,
+    },
     DeleteOwnedSubtree {
         root: NodeTarget,
     },
 }
 
 impl TransactionOp {
+    pub const fn code(&self) -> TransactionOpCode {
+        match self {
+            Self::CreatePackage { .. } => TransactionOpCode::CreatePackage,
+            Self::CreateModule { .. } => TransactionOpCode::CreateModule,
+            Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
+            Self::CreateParameter { .. } => TransactionOpCode::CreateParameter,
+            Self::CreateRegion { .. } => TransactionOpCode::CreateRegion,
+            Self::CreateBlock { .. } => TransactionOpCode::CreateBlock,
+            Self::CreateOperation { .. } => TransactionOpCode::CreateOperation,
+            Self::SetFunctionBody { .. } => TransactionOpCode::SetFunctionBody,
+            Self::SetEntryFunction { .. } => TransactionOpCode::SetEntryFunction,
+            Self::RenameNode { .. } => TransactionOpCode::RenameNode,
+            Self::ReplaceOperation { .. } => TransactionOpCode::ReplaceOperation,
+            Self::ReplaceOperand { .. } => TransactionOpCode::ReplaceOperand,
+            Self::RefineHole { .. } => TransactionOpCode::RefineHole,
+            Self::DeleteOwnedSubtree { .. } => TransactionOpCode::DeleteOwnedSubtree,
+        }
+    }
     pub const fn created_handle(&self) -> Option<LocalHandle> {
         match self {
             Self::CreatePackage { handle, .. }
@@ -101,34 +255,52 @@ impl TransactionOp {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TransactionResult {
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransactionReceipt {
     pub workspace: WorkspaceId,
     pub base_revision: Revision,
     pub revision: Revision,
     pub hash: SnapshotHash,
-    pub allocations: Vec<(LocalHandle, NodeId)>,
-    pub diff: SemanticDiff,
     pub published: bool,
+    pub created_count: u64,
+    pub returned_bindings: Vec<(LocalHandle, NodeId)>,
+    pub change_count: u64,
+    pub change_digest: ChangeDigest,
+    pub complete_before: bool,
+    pub complete_after: bool,
+    pub blocker_count_before: u64,
+    pub blocker_count_after: u64,
 }
 
 #[derive(Debug)]
 pub(crate) struct PreparedTransaction {
     pub snapshot: Arc<Snapshot>,
-    pub result: TransactionResult,
+    pub receipt: TransactionReceipt,
 }
 
 impl Workspace {
     pub(crate) fn prepare_transaction(
         &self,
-        transaction: &Transaction,
+        request: &ApplyTransactionRequest,
     ) -> Result<PreparedTransaction> {
+        let transaction = &request.transaction;
         if transaction.workspace != self.id() {
             return Err(LkError::new(
                 ErrorCode::WrongWorkspace,
                 "transaction names a different workspace",
             )
             .for_workspace(self.id()));
+        }
+        if transaction.mode == TransactionMode::ValidateOnly
+            && transaction.idempotency_key.is_some()
+        {
+            return Err(LkError::new(
+                ErrorCode::InvalidOperand,
+                "validate-only transactions cannot carry an idempotency key",
+            )
+            .for_workspace(self.id())
+            .at_revision(transaction.base_revision));
         }
         if transaction.base_revision != self.head_revision() {
             return Err(LkError::new(
@@ -148,6 +320,7 @@ impl Workspace {
         }
         let base = self.snapshot(transaction.base_revision)?;
         let (allocations, next_serial) = allocate_handles(base, &transaction.operations)?;
+        validate_response_spec(&request.response, &allocations)?;
         let mut nodes = base.nodes.clone();
         let mut tombstones = base.tombstones.clone();
 
@@ -195,20 +368,78 @@ impl Workspace {
             }
         };
         let semantic_diff = diff::between(base, &candidate);
-        let result = TransactionResult {
+        let blockers_before = query::workspace_blockers(base);
+        let blockers_after = query::workspace_blockers(&candidate);
+        let returned_bindings = request
+            .response
+            .return_handles
+            .iter()
+            .map(|handle| allocated(&allocations, *handle).map(|node| (*handle, node)))
+            .collect::<Result<Vec<_>>>()?;
+        let receipt = TransactionReceipt {
             workspace: self.id(),
             base_revision: transaction.base_revision,
             revision,
             hash: candidate.hash(),
-            allocations: allocations.into_iter().collect(),
-            diff: semantic_diff,
-            published: !transaction.dry_run,
+            published: transaction.mode == TransactionMode::Commit,
+            created_count: u64::try_from(allocations.len()).map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "created node count does not fit receipt representation",
+                )
+            })?,
+            returned_bindings,
+            change_count: semantic_diff.change_count(),
+            change_digest: semantic_diff.digest,
+            complete_before: blockers_before.is_empty(),
+            complete_after: blockers_after.is_empty(),
+            blocker_count_before: u64::try_from(blockers_before.len()).map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "prior blocker count does not fit receipt representation",
+                )
+            })?,
+            blocker_count_after: u64::try_from(blockers_after.len()).map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "result blocker count does not fit receipt representation",
+                )
+            })?,
         };
         Ok(PreparedTransaction {
             snapshot: candidate,
-            result,
+            receipt,
         })
     }
+}
+
+fn validate_response_spec(
+    response: &TransactionResponseSpec,
+    allocations: &BTreeMap<LocalHandle, NodeId>,
+) -> Result<()> {
+    if response.return_handles.len() > MAX_RETURNED_BINDINGS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "selected return handles exceed transaction response policy",
+        ));
+    }
+    let mut previous = None;
+    for handle in &response.return_handles {
+        if previous.is_some_and(|prior| *handle <= prior) {
+            return Err(LkError::new(
+                ErrorCode::InvalidHandle,
+                "selected return handles must be unique and strictly increasing",
+            ));
+        }
+        if !allocations.contains_key(handle) {
+            return Err(LkError::new(
+                ErrorCode::InvalidHandle,
+                "selected return handle is not declared by this transaction",
+            ));
+        }
+        previous = Some(*handle);
+    }
+    Ok(())
 }
 
 fn allocate_handles(
@@ -402,7 +633,7 @@ fn apply_operation(
             let block = resolve(*block, allocations, base.workspace())?;
             require_kind(nodes, block, NodeKind::Block)?;
             let operation = resolve_operation(operation, allocations, base.workspace())?;
-            let terminator = operation.contract().terminator;
+            let terminator = operation.is_terminator();
             insert_new(
                 nodes,
                 id,
@@ -492,11 +723,9 @@ fn apply_operation(
             else {
                 return Err(invariant("operation kind changed during staging"));
             };
-            let current_contract = current.contract();
-            let replacement_contract = replacement.contract();
-            if current.stable_tag() != replacement.stable_tag()
-                || current_contract.result_types != replacement_contract.result_types
-                || current_contract.terminator != replacement_contract.terminator
+            if current.code() != replacement.code()
+                || !current.same_result_contract(&replacement)
+                || current.is_terminator() != replacement.is_terminator()
             {
                 return Err(LkError::new(
                     ErrorCode::InvalidOperand,
@@ -526,6 +755,72 @@ fn apply_operation(
                 )
                 .for_node(operation));
             }
+        }
+        TransactionOp::RefineHole { hole, replacement } => {
+            let hole = resolve(*hole, allocations, base.workspace())?;
+            let replacement = resolve_operation(replacement, allocations, base.workspace())?;
+            let (owner, expected, current_result_count) =
+                match require_kind(nodes, hole, NodeKind::Operation)? {
+                    Node::Operation {
+                        owner,
+                        operation: current @ OperationKind::Hole { expected },
+                    } => (*owner, *expected, current.result_count()),
+                    Node::Operation { .. } => {
+                        return Err(LkError::new(
+                            ErrorCode::InvalidOperand,
+                            "hole refinement target is already a complete operation",
+                        )
+                        .for_node(hole));
+                    }
+                    _ => return Err(invariant("operation kind changed during staging")),
+                };
+            let Node::Block {
+                operations,
+                terminator,
+                ..
+            } = require_kind(nodes, owner, NodeKind::Block)?
+            else {
+                return Err(invariant("operation owner kind changed during staging"));
+            };
+            if !operations.contains(&hole) || *terminator == Some(hole) {
+                return Err(LkError::new(
+                    ErrorCode::InvalidContainment,
+                    "hole refinement target must occupy a regular operation slot",
+                )
+                .for_node(hole)
+                .with_related([owner]));
+            }
+            if !replacement.is_complete()
+                || replacement.is_terminator()
+                || matches!(replacement, OperationKind::Hole { .. })
+            {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "hole replacement must be a complete non-terminator operation",
+                )
+                .for_node(hole));
+            }
+            let actual = replacement.result_type(0, None);
+            if current_result_count != replacement.result_count() || actual != Some(expected) {
+                let mut error = LkError::new(
+                    ErrorCode::TypeMismatch,
+                    "hole replacement result contract does not match the expected type",
+                )
+                .for_node(hole);
+                if let Some(actual) = actual {
+                    error = error.with_types(expected, actual);
+                } else {
+                    error.expected_type = Some(expected);
+                }
+                return Err(error);
+            }
+            let Node::Operation {
+                operation: current, ..
+            } = require_kind_mut(nodes, hole, NodeKind::Operation)?
+            else {
+                return Err(invariant("operation kind changed during staging"));
+            };
+            *current = replacement;
         }
         TransactionOp::DeleteOwnedSubtree { root } => {
             let root = resolve(*root, allocations, base.workspace())?;
@@ -662,26 +957,33 @@ fn delete_subtree(
             continue;
         }
         let node = nodes.get(&id).ok_or_else(|| missing(id))?;
-        let mut children = node.owned_children();
-        children.reverse();
-        stack.extend(children);
+        for index in (0..node.owned_child_count()).rev() {
+            if let Some(child) = node.owned_child(index) {
+                stack.push(child);
+            }
+        }
     }
     for (source, node) in nodes.iter() {
         if deleted.contains(source) {
             continue;
         }
-        let blockers: Vec<NodeId> = node
-            .direct_references()
-            .into_iter()
-            .filter(|target| deleted.contains(target))
-            .collect();
-        if !blockers.is_empty() {
+        let mut blockers = (0..node.direct_reference_count())
+            .filter_map(|index| {
+                node.direct_reference(index)
+                    .map(|reference| reference.target())
+            })
+            .filter(|target| deleted.contains(target));
+        if let Some(first) = blockers.next() {
             return Err(LkError::new(
                 ErrorCode::DeleteBlocked,
                 "surviving node directly references the requested deletion subtree",
             )
             .for_node(root)
-            .with_related(std::iter::once(*source).chain(blockers)));
+            .with_related(
+                std::iter::once(*source)
+                    .chain(std::iter::once(first))
+                    .chain(blockers),
+            ));
         }
     }
     detach_child(nodes, owner, root)?;
@@ -756,13 +1058,27 @@ fn invariant(message: &str) -> LkError {
 mod tests {
     use super::*;
 
-    fn commit(workspace: &mut Workspace, transaction: &Transaction) -> Result<TransactionResult> {
-        let prepared = workspace.prepare_transaction(transaction)?;
-        let result = prepared.result.clone();
-        if !transaction.dry_run {
+    fn request(transaction: &Transaction) -> ApplyTransactionRequest {
+        let mut return_handles: Vec<LocalHandle> = transaction
+            .operations
+            .iter()
+            .filter_map(TransactionOp::created_handle)
+            .collect();
+        return_handles.sort();
+        return_handles.truncate(MAX_RETURNED_BINDINGS);
+        ApplyTransactionRequest {
+            transaction: transaction.clone(),
+            response: TransactionResponseSpec { return_handles },
+        }
+    }
+
+    fn commit(workspace: &mut Workspace, transaction: &Transaction) -> Result<TransactionReceipt> {
+        let prepared = workspace.prepare_transaction(&request(transaction))?;
+        let receipt = prepared.receipt.clone();
+        if transaction.mode == TransactionMode::Commit {
             workspace.publish(prepared.snapshot)?;
         }
-        Ok(result)
+        Ok(receipt)
     }
 
     fn create_package_and_module(id: WorkspaceId) -> Transaction {
@@ -770,7 +1086,7 @@ mod tests {
             workspace: id,
             base_revision: Revision::INITIAL,
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
                     handle: LocalHandle::new(1),
@@ -786,18 +1102,18 @@ mod tests {
     }
 
     #[test]
-    fn failed_batches_and_dry_runs_do_not_consume_node_ids() {
+    fn failed_batches_and_validate_only_do_not_consume_node_ids() {
         let id = WorkspaceId::from_bytes([11; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
         let first = commit(&mut workspace, &create_package_and_module(id)).expect("first commit");
-        let module = first.allocations[1].1;
+        let module = first.returned_bindings[1].1;
         assert_eq!(module.serial(), 3);
 
         let failed = Transaction {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreateFunction {
                     handle: LocalHandle::new(3),
@@ -814,17 +1130,17 @@ mod tests {
             ],
         };
         let error = workspace
-            .prepare_transaction(&failed)
+            .prepare_transaction(&request(&failed))
             .expect_err("duplicate names must reject");
         assert_eq!(error.code, ErrorCode::DuplicateName);
         assert_eq!(workspace.head_revision(), Revision::new(1));
         assert_eq!(workspace.head().expect("head").next_serial(), 4);
 
-        let dry_run = Transaction {
+        let validate_only = Transaction {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: true,
+            mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreateFunction {
                 handle: LocalHandle::new(5),
                 module: NodeTarget::Existing(module),
@@ -832,14 +1148,17 @@ mod tests {
                 result: SemanticType::I64,
             }],
         };
-        let predicted = commit(&mut workspace, &dry_run).expect("dry run");
-        assert_eq!(predicted.allocations[0].1.serial(), 4);
+        let predicted = commit(&mut workspace, &validate_only).expect("validate only");
+        assert_eq!(predicted.returned_bindings[0].1.serial(), 4);
         assert_eq!(workspace.head_revision(), Revision::new(1));
 
-        let mut real = dry_run;
-        real.dry_run = false;
+        let mut real = validate_only;
+        real.mode = TransactionMode::Commit;
         let committed = commit(&mut workspace, &real).expect("real commit");
-        assert_eq!(committed.allocations[0].1, predicted.allocations[0].1);
+        assert_eq!(
+            committed.returned_bindings[0].1,
+            predicted.returned_bindings[0].1
+        );
         assert_eq!(workspace.head_revision(), Revision::new(2));
     }
 
@@ -848,12 +1167,12 @@ mod tests {
         let id = WorkspaceId::from_bytes([12; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
         let first = commit(&mut workspace, &create_package_and_module(id)).expect("first commit");
-        let module = first.allocations[1].1;
+        let module = first.returned_bindings[1].1;
         let create = Transaction {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreateFunction {
                 handle: LocalHandle::new(3),
                 module: NodeTarget::Existing(module),
@@ -862,14 +1181,14 @@ mod tests {
             }],
         };
         let created = commit(&mut workspace, &create).expect("create function");
-        let function = created.allocations[0].1;
+        let function = created.returned_bindings[0].1;
         assert_eq!(function.serial(), 4);
 
         let delete = Transaction {
             workspace: id,
             base_revision: Revision::new(2),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::DeleteOwnedSubtree {
                 root: NodeTarget::Existing(function),
             }],
@@ -890,7 +1209,7 @@ mod tests {
             workspace: id,
             base_revision: Revision::new(3),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreateFunction {
                 handle: LocalHandle::new(4),
                 module: NodeTarget::Existing(module),
@@ -899,7 +1218,7 @@ mod tests {
             }],
         };
         let replacement = commit(&mut workspace, &replacement).expect("replacement function");
-        assert_eq!(replacement.allocations[0].1.serial(), 5);
+        assert_eq!(replacement.returned_bindings[0].1.serial(), 5);
     }
 
     #[test]
@@ -970,18 +1289,18 @@ mod tests {
             workspace: id,
             base_revision: Revision::INITIAL,
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations,
         };
         let created = commit(&mut workspace, &create).expect("large graph commit");
-        let package_id = created.allocations[0].1;
+        let package_id = created.returned_bindings[0].1;
         assert_eq!(workspace.head().expect("head").node_count(), 10_007);
 
         let delete = Transaction {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::DeleteOwnedSubtree {
                 root: NodeTarget::Existing(package_id),
             }],
@@ -996,18 +1315,605 @@ mod tests {
         );
     }
 
+    fn incomplete_program(id: WorkspaceId) -> Transaction {
+        let local = NodeTarget::Local;
+        let value = |handle| ValueDraft::OperationResult {
+            operation: local(handle),
+            output: 0,
+        };
+        Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".to_owned(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(LocalHandle::new(1)),
+                    name: "root".to_owned(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(LocalHandle::new(2)),
+                    name: "main".to_owned(),
+                    result: SemanticType::I64,
+                },
+                TransactionOp::CreateRegion {
+                    handle: LocalHandle::new(4),
+                    function: local(LocalHandle::new(3)),
+                },
+                TransactionOp::CreateBlock {
+                    handle: LocalHandle::new(5),
+                    region: local(LocalHandle::new(4)),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(6),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::ConstI64(40),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(7),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::ConstI64(2),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(8),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::ConstBool(true),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(9),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::Hole {
+                        expected: SemanticType::I64,
+                    },
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(10),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::ConstI64(99),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(11),
+                    block: local(LocalHandle::new(5)),
+                    before: None,
+                    operation: OperationDraft::Return {
+                        value: value(LocalHandle::new(9)),
+                    },
+                },
+                TransactionOp::SetFunctionBody {
+                    function: local(LocalHandle::new(3)),
+                    region: local(LocalHandle::new(4)),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(LocalHandle::new(1)),
+                    function: local(LocalHandle::new(3)),
+                },
+            ],
+        }
+    }
+
+    fn binding(receipt: &TransactionReceipt, handle: u32) -> NodeId {
+        receipt
+            .returned_bindings
+            .iter()
+            .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+            .expect("selected binding")
+    }
+
+    #[test]
+    fn response_projection_is_selected_bounded_and_validate_only_is_predictive() {
+        let id = WorkspaceId::from_bytes([0x71; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let transaction = create_package_and_module(id);
+        let selected = ApplyTransactionRequest {
+            transaction: transaction.clone(),
+            response: TransactionResponseSpec {
+                return_handles: vec![LocalHandle::new(2)],
+            },
+        };
+        let prepared = workspace
+            .prepare_transaction(&selected)
+            .expect("selected receipt");
+        assert_eq!(prepared.receipt.created_count, 2);
+        assert_eq!(prepared.receipt.returned_bindings.len(), 1);
+        assert_eq!(prepared.receipt.returned_bindings[0].0, LocalHandle::new(2));
+
+        for return_handles in [
+            vec![LocalHandle::new(1), LocalHandle::new(1)],
+            vec![LocalHandle::new(2), LocalHandle::new(1)],
+            vec![LocalHandle::new(3)],
+        ] {
+            let invalid = ApplyTransactionRequest {
+                transaction: transaction.clone(),
+                response: TransactionResponseSpec { return_handles },
+            };
+            assert_eq!(
+                workspace
+                    .prepare_transaction(&invalid)
+                    .expect_err("invalid response projection")
+                    .code,
+                ErrorCode::InvalidHandle
+            );
+        }
+
+        let mut too_many = Vec::new();
+        for value in 0..=MAX_RETURNED_BINDINGS {
+            too_many.push(LocalHandle::new(u32::try_from(value).expect("handle")));
+        }
+        let invalid = ApplyTransactionRequest {
+            transaction: transaction.clone(),
+            response: TransactionResponseSpec {
+                return_handles: too_many,
+            },
+        };
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("oversized response projection")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        let mut validate = selected.clone();
+        validate.transaction.mode = TransactionMode::ValidateOnly;
+        let predicted = workspace
+            .prepare_transaction(&validate)
+            .expect("validate-only receipt")
+            .receipt;
+        assert!(!predicted.published);
+        let mut commit_request = validate.clone();
+        commit_request.transaction.mode = TransactionMode::Commit;
+        let committed = workspace
+            .prepare_transaction(&commit_request)
+            .expect("commit receipt")
+            .receipt;
+        let mut expected = predicted;
+        expected.published = true;
+        assert_eq!(committed, expected);
+
+        validate.transaction.idempotency_key = Some(IdempotencyKey::from_bytes([1; 16]));
+        assert_eq!(
+            workspace
+                .prepare_transaction(&validate)
+                .expect_err("validate-only idempotency")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+    }
+
+    #[test]
+    fn change_digest_includes_exact_scalar_details() {
+        let id = WorkspaceId::from_bytes([0x76; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let two = binding(&created, 7);
+        let edit = |value| Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::ReplaceOperation {
+                operation: NodeTarget::Existing(two),
+                replacement: OperationDraft::ConstI64(value),
+            }],
+        };
+        let three = workspace
+            .prepare_transaction(&request(&edit(3)))
+            .expect("replace with three")
+            .receipt;
+        let four = workspace
+            .prepare_transaction(&request(&edit(4)))
+            .expect("replace with four")
+            .receipt;
+        assert_eq!(three.change_count, four.change_count);
+        assert_ne!(three.change_digest, four.change_digest);
+        assert_ne!(three.hash, four.hash);
+    }
+
+    #[test]
+    fn change_digest_distinguishes_refinement_payloads_and_same_typed_operands() {
+        let id = WorkspaceId::from_bytes([0x77; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let forty = binding(&created, 6);
+        let two = binding(&created, 7);
+        let hole = binding(&created, 9);
+        let refinement = |value| Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::ConstI64(value),
+            }],
+        };
+        let two_refinement = workspace
+            .prepare_transaction(&request(&refinement(2)))
+            .expect("refine to two");
+        let three_refinement = workspace
+            .prepare_transaction(&request(&refinement(3)))
+            .expect("refine to three");
+        assert_ne!(two_refinement.receipt.hash, three_refinement.receipt.hash);
+        assert_ne!(
+            two_refinement.receipt.change_digest,
+            three_refinement.receipt.change_digest
+        );
+        let two_change = diff::between(
+            workspace.snapshot(Revision::new(1)).expect("base"),
+            &two_refinement.snapshot,
+        );
+        assert!(two_change.changes.iter().any(|change| {
+            matches!(
+                &change.kind,
+                crate::diff::ChangeKind::OperationRefined {
+                    replacement: OperationKind::ConstI64(2),
+                    ..
+                }
+            )
+        }));
+
+        let add_refinement = Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(forty),
+                        output: 0,
+                    },
+                    rhs: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(two),
+                        output: 0,
+                    },
+                },
+            }],
+        };
+        commit(&mut workspace, &add_refinement).expect("publish add refinement");
+        let replacement = |index, operation| Transaction {
+            workspace: id,
+            base_revision: Revision::new(2),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::ReplaceOperand {
+                operation: NodeTarget::Existing(hole),
+                index,
+                value: ValueDraft::OperationResult {
+                    operation: NodeTarget::Existing(operation),
+                    output: 0,
+                },
+            }],
+        };
+        let replace_left = workspace
+            .prepare_transaction(&request(&replacement(0, two)))
+            .expect("replace left operand");
+        let replace_right = workspace
+            .prepare_transaction(&request(&replacement(1, forty)))
+            .expect("replace right operand");
+        assert_ne!(replace_left.receipt.hash, replace_right.receipt.hash);
+        assert_ne!(
+            replace_left.receipt.change_digest,
+            replace_right.receipt.change_digest
+        );
+        let left_diff = diff::between(
+            workspace.snapshot(Revision::new(2)).expect("refined base"),
+            &replace_left.snapshot,
+        );
+        assert!(left_diff.changes.iter().any(|change| {
+            matches!(
+                change.kind,
+                crate::diff::ChangeKind::OperandChanged {
+                    index: 0,
+                    before: Some(ValueRef::OperationResult { operation, .. }),
+                    after: Some(ValueRef::OperationResult {
+                        operation: replacement,
+                        ..
+                    }),
+                } if operation == forty && replacement == two
+            )
+        }));
+    }
+
+    #[test]
+    fn create_then_delete_returns_selected_tombstoned_identity_and_explicit_change() {
+        let id = WorkspaceId::from_bytes([0x74; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "temporary".to_owned(),
+                },
+                TransactionOp::DeleteOwnedSubtree {
+                    root: NodeTarget::Local(LocalHandle::new(1)),
+                },
+            ],
+        };
+        let prepared = workspace
+            .prepare_transaction(&request(&transaction))
+            .expect("create then delete");
+        let allocated = binding(&prepared.receipt, 1);
+        assert!(prepared.snapshot.contains_tombstone(allocated.serial()));
+        assert!(prepared.receipt.change_count > 0);
+        let before = workspace.head().expect("before");
+        let semantic_diff = diff::between(before, &prepared.snapshot);
+        assert!(semantic_diff.changes.iter().any(|change| {
+            change.node == allocated
+                && matches!(change.kind, crate::diff::ChangeKind::AllocatedAndTombstoned)
+        }));
+    }
+
+    #[test]
+    fn hole_refinement_preserves_identity_position_use_history_and_diff() {
+        let id = WorkspaceId::from_bytes([0x72; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let hole = binding(&created, 9);
+        let forty = binding(&created, 6);
+        let two = binding(&created, 7);
+        let block = binding(&created, 5);
+        let return_operation = binding(&created, 11);
+        let old = workspace
+            .snapshot(Revision::new(1))
+            .expect("old snapshot")
+            .clone();
+        let refine = Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(forty),
+                        output: 0,
+                    },
+                    rhs: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(two),
+                        output: 0,
+                    },
+                },
+            }],
+        };
+        let refined = commit(&mut workspace, &refine).expect("refine hole");
+        assert_eq!(refined.created_count, 0);
+        assert!(!refined.complete_before);
+        assert!(refined.complete_after);
+        let current = workspace.head().expect("refined snapshot");
+        assert!(matches!(
+            old.node(hole).expect("old hole"),
+            Node::Operation {
+                operation: OperationKind::Hole { .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            current.node(hole).expect("refined operation"),
+            Node::Operation {
+                operation: OperationKind::AddI64 { .. },
+                ..
+            }
+        ));
+        let Node::Block { operations, .. } = current.node(block).expect("block") else {
+            panic!("block kind");
+        };
+        assert_eq!(operations.iter().position(|id| *id == hole), Some(3));
+        let Node::Operation {
+            operation: OperationKind::Return { value },
+            ..
+        } = current.node(return_operation).expect("return")
+        else {
+            panic!("return kind");
+        };
+        assert_eq!(
+            *value,
+            ValueRef::OperationResult {
+                operation: hole,
+                output: 0,
+            }
+        );
+        let semantic_diff = diff::between(&old, current);
+        assert_eq!(semantic_diff.change_count(), refined.change_count);
+        assert_eq!(semantic_diff.digest, refined.change_digest);
+        assert!(semantic_diff.changes.iter().any(|change| {
+            change.node == hole
+                && matches!(
+                    change.kind,
+                    crate::diff::ChangeKind::OperationRefined {
+                        before: crate::schema::OperationCode::Hole,
+                        after: crate::schema::OperationCode::AddI64,
+                        result_type: SemanticType::I64,
+                        ..
+                    }
+                )
+        }));
+    }
+
+    #[test]
+    fn hole_refinement_can_use_supporting_values_created_before_it_atomically() {
+        let id = WorkspaceId::from_bytes([0x75; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let block = binding(&created, 5);
+        let forty = binding(&created, 6);
+        let hole = binding(&created, 9);
+        let support = LocalHandle::new(100);
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreateOperation {
+                    handle: support,
+                    block: NodeTarget::Existing(block),
+                    before: Some(NodeTarget::Existing(hole)),
+                    operation: OperationDraft::ConstI64(2),
+                },
+                TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(hole),
+                    replacement: OperationDraft::AddI64 {
+                        lhs: ValueDraft::OperationResult {
+                            operation: NodeTarget::Existing(forty),
+                            output: 0,
+                        },
+                        rhs: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(support),
+                            output: 0,
+                        },
+                    },
+                },
+            ],
+        };
+        let prepared = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction,
+                response: TransactionResponseSpec {
+                    return_handles: vec![support],
+                },
+            })
+            .expect("atomic support and refinement");
+        assert_eq!(prepared.receipt.created_count, 1);
+        assert!(prepared.receipt.complete_after);
+        let support_id = binding(&prepared.receipt, 100);
+        let Node::Block { operations, .. } = prepared.snapshot.node(block).expect("block") else {
+            panic!("block kind");
+        };
+        let support_position = operations
+            .iter()
+            .position(|id| *id == support_id)
+            .expect("support position");
+        let hole_position = operations
+            .iter()
+            .position(|id| *id == hole)
+            .expect("hole position");
+        assert!(support_position < hole_position);
+    }
+
+    #[test]
+    fn hole_refinement_rejects_wrong_targets_contracts_types_and_order() {
+        let id = WorkspaceId::from_bytes([0x73; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let package = binding(&created, 1);
+        let forty = binding(&created, 6);
+        let boolean = binding(&created, 8);
+        let hole = binding(&created, 9);
+        let later = binding(&created, 10);
+        let value = |operation| ValueDraft::OperationResult {
+            operation: NodeTarget::Existing(operation),
+            output: 0,
+        };
+        let cases = [
+            (package, OperationDraft::ConstI64(1), ErrorCode::WrongKind),
+            (
+                forty,
+                OperationDraft::ConstI64(1),
+                ErrorCode::InvalidOperand,
+            ),
+            (
+                hole,
+                OperationDraft::Hole {
+                    expected: SemanticType::I64,
+                },
+                ErrorCode::InvalidOperand,
+            ),
+            (
+                hole,
+                OperationDraft::Return {
+                    value: value(forty),
+                },
+                ErrorCode::InvalidOperand,
+            ),
+            (
+                hole,
+                OperationDraft::ConstBool(false),
+                ErrorCode::TypeMismatch,
+            ),
+            (
+                hole,
+                OperationDraft::AddI64 {
+                    lhs: value(forty),
+                    rhs: value(boolean),
+                },
+                ErrorCode::TypeMismatch,
+            ),
+            (
+                hole,
+                OperationDraft::AddI64 {
+                    lhs: value(forty),
+                    rhs: value(later),
+                },
+                ErrorCode::InvalidOperand,
+            ),
+            (
+                hole,
+                OperationDraft::AddI64 {
+                    lhs: value(forty),
+                    rhs: value(hole),
+                },
+                ErrorCode::InvalidOperand,
+            ),
+        ];
+        for (target, replacement, expected) in cases {
+            let refine = Transaction {
+                workspace: id,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(target),
+                    replacement,
+                }],
+            };
+            assert_eq!(
+                workspace
+                    .prepare_transaction(&request(&refine))
+                    .expect_err("invalid refinement")
+                    .code,
+                expected
+            );
+            assert_eq!(workspace.head_revision(), Revision::new(1));
+            assert!(matches!(
+                workspace.head().expect("head").node(hole).expect("hole"),
+                Node::Operation {
+                    operation: OperationKind::Hole { .. },
+                    ..
+                }
+            ));
+        }
+    }
+
     #[test]
     fn stale_revisions_wrong_workspaces_and_no_changes_reject_deterministically() {
         let id = WorkspaceId::from_bytes([13; 16]);
         let other = WorkspaceId::from_bytes([14; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
         let first = commit(&mut workspace, &create_package_and_module(id)).expect("first commit");
-        let package = first.allocations[0].1;
+        let package = first.returned_bindings[0].1;
 
         let stale = create_package_and_module(id);
         assert_eq!(
             workspace
-                .prepare_transaction(&stale)
+                .prepare_transaction(&request(&stale))
                 .expect_err("stale")
                 .code,
             ErrorCode::RevisionConflict
@@ -1016,7 +1922,7 @@ mod tests {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::RenameNode {
                 node: NodeTarget::Existing(NodeId::new(other, package.serial()).expect("node")),
                 name: "renamed".to_owned(),
@@ -1024,7 +1930,7 @@ mod tests {
         };
         assert_eq!(
             workspace
-                .prepare_transaction(&wrong)
+                .prepare_transaction(&request(&wrong))
                 .expect_err("wrong workspace")
                 .code,
             ErrorCode::WrongWorkspace
@@ -1033,7 +1939,7 @@ mod tests {
             workspace: id,
             base_revision: Revision::new(1),
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::RenameNode {
                 node: NodeTarget::Existing(package),
                 name: "package".to_owned(),
@@ -1041,7 +1947,7 @@ mod tests {
         };
         assert_eq!(
             workspace
-                .prepare_transaction(&no_change)
+                .prepare_transaction(&request(&no_change))
                 .expect_err("no change")
                 .code,
             ErrorCode::NoChange

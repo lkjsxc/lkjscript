@@ -1,3 +1,5 @@
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::num::NonZeroU64;
 use std::str::FromStr;
@@ -44,7 +46,26 @@ impl FromStr for WorkspaceId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+impl Serialize for WorkspaceId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for WorkspaceId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "workspace ID")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct Revision(u64);
 
 impl Revision {
@@ -109,7 +130,26 @@ impl FromStr for NodeId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+impl Serialize for NodeId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for NodeId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "node ID")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct LocalHandle(u32);
 
 impl LocalHandle {
@@ -136,6 +176,41 @@ impl RequestId {
         Self(value)
     }
 
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl Serialize for RequestId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for RequestId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = u64::deserialize(deserializer)?;
+        if value == 0 {
+            return Err(de::Error::custom("request ID zero is reserved"));
+        }
+        Ok(Self(value))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+pub struct QueryId(u64);
+
+impl QueryId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
     pub const fn get(self) -> u64 {
         self.0
     }
@@ -168,6 +243,24 @@ impl FromStr for IdempotencyKey {
     }
 }
 
+impl Serialize for IdempotencyKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for IdempotencyKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "idempotency key")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SnapshotHash([u8; 32]);
 
@@ -186,6 +279,79 @@ impl SnapshotHash {
 impl fmt::Display for SnapshotHash {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&encode_hex(&self.0))
+    }
+}
+
+impl FromStr for SnapshotHash {
+    type Err = IdentityError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self(decode_hex::<32>(value)?))
+    }
+}
+
+impl Serialize for SnapshotHash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SnapshotHash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "snapshot hash")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ChangeDigest([u8; 32]);
+
+impl ChangeDigest {
+    pub const BYTE_LEN: usize = 32;
+
+    pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes(self) -> [u8; Self::BYTE_LEN] {
+        self.0
+    }
+}
+
+impl fmt::Display for ChangeDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&encode_hex(&self.0))
+    }
+}
+
+impl FromStr for ChangeDigest {
+    type Err = IdentityError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self(decode_hex::<32>(value)?))
+    }
+}
+
+impl Serialize for ChangeDigest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for ChangeDigest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "change digest")
     }
 }
 
@@ -218,6 +384,48 @@ impl fmt::Display for IdentityError {
 }
 
 impl std::error::Error for IdentityError {}
+
+fn deserialize_canonical_string<'de, D, T>(
+    deserializer: D,
+    description: &'static str,
+) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr + fmt::Display,
+    T::Err: fmt::Display,
+{
+    struct CanonicalVisitor<T> {
+        description: &'static str,
+        marker: std::marker::PhantomData<T>,
+    }
+    impl<'de, T> Visitor<'de> for CanonicalVisitor<T>
+    where
+        T: FromStr + fmt::Display,
+        T::Err: fmt::Display,
+    {
+        type Value = T;
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(formatter, "a canonical {} string", self.description)
+        }
+        fn visit_str<E>(self, value: &str) -> Result<T, E>
+        where
+            E: de::Error,
+        {
+            let parsed = value.parse::<T>().map_err(E::custom)?;
+            if parsed.to_string() != value {
+                return Err(E::custom(format_args!(
+                    "{} is not canonically encoded",
+                    self.description
+                )));
+            }
+            Ok(parsed)
+        }
+    }
+    deserializer.deserialize_str(CanonicalVisitor {
+        description,
+        marker: std::marker::PhantomData,
+    })
+}
 
 fn encode_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";

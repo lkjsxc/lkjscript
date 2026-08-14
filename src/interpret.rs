@@ -3,16 +3,24 @@ use crate::core_ir::{self, CoreProgram, Instruction, Terminator, ValueId};
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum RuntimeValue {
     Unit,
     Bool(bool),
     I64(i64),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunResult {
     pub value: RuntimeValue,
     pub compile_nanoseconds: u64,

@@ -1,100 +1,119 @@
 # Semantic Program Graph specification
 
-## Authority and data classes
+## Authority and closed schema
 
-The Semantic Program Graph (SPG) is the only mutable program authority. `lkjscriptd` is its only
-live writer. A published `Snapshot` is immutable and revision-labelled.
+The Semantic Program Graph (SPG) is the only mutable program authority, and `lkjscriptd` is its
+only live writer. A published `Snapshot` is immutable and revision-labelled. Canonical semantic
+state is workspace identity, stable node identity, ownership and ordered child slots, typed
+operation data, direct value references, allocator state, tombstones, revision, and selected
+package entry. Names are presentation and lookup metadata stored in the snapshot; they are not
+identity. Derived blockers, query facts, diffs, Core IR, diagnostics, and timings are not mutable
+graph authority.
 
-Durable data is classified as follows:
-
-- **semantic/workspace state:** workspace identity, stable node identities, ownership and ordered
-  body slots, typed operation data, direct value references, allocator state, tombstones, revision,
-  and selected package entry;
-- **presentation:** package, module, function, and parameter display names; names are never identity
-  or references, but the bootstrap snapshot hash includes them so an artifact detects every stored
-  state change;
-- **derived:** completeness blockers, query summaries, semantic diffs, types derived from operation
-  contracts, Core IR, diagnostics, and timings;
-- **executable:** verified Core IR and interpreter values, which are never written into an SPG
-  artifact.
-
-No source text, syntax node, source span, arbitrary property map, arbitrary edge label, compiler
-index, runtime address, diagnostic, profile, or cache is canonical graph data.
-
-## Closed schema
-
-`src/schema.rs` owns the closed Rust schema and explicit stable boundary tags. Unknown tags reject.
-The implemented containment shape is:
+`src/schema.rs` owns the closed node and operation vocabulary and its stable boundary tags. Unknown
+kinds, operation codes, attributes, slots, value forms, and tags reject. The implemented shape is:
 
 ```text
 WorkspaceRoot -> Package -> Module -> Function -> Region -> Block -> Operation
                                       \-> Parameter
 ```
 
-A function may have no body while incomplete. An attached function region has exactly one ordered
-block in this bootstrap. A block has ordered non-terminator operations and exactly one separately
-owned `return` terminator. Direct references and operands are distinct from owned children.
+A function may have no body while incomplete. An attached region has one ordered block in the
+bootstrap. A block has ordered operations and exactly one final `return`. A value is a parameter
+Node ID or `(operation Node ID, checked output index)`. Containment, direct definition references,
+and value uses remain distinct. Every non-root live node has one owner and is reachable from the
+root. Observable graph order is explicit or sorted.
 
-A value is either a stable parameter Node ID or `(operation Node ID, checked output index)`. Dense
-Core IR value IDs never appear in a snapshot, query, diff, protocol request, or artifact.
+## Identity and history
 
-Every non-root live node has exactly one owner and occurs exactly once in that owner's typed child
-slot. All live nodes are reachable from the one root. Ordered slots use vectors; canonical table
-iteration uses `BTreeMap`, so observable order does not depend on hashing or allocation.
+A `WorkspaceId` is 128 bits. A `NodeId` is `(WorkspaceId, nonzero u64 serial)`. Root serial 1 is
+created at revision zero; allocation is monotonic. Names, positions, hashes, compiler indexes, and
+addresses never determine identity. A `LocalHandle` is a u32 transaction-local symbol and never
+enters semantic state.
 
-## Identity
+Allocation is staged. A rejected or validate-only request changes no published allocator state.
+Deletion tombstones every owned ID, retained snapshots preserve deleted nodes, and later nodes
+never reuse tombstones. Every serial below the allocator frontier is live or tombstoned. Adjacent
+history requires stable root identity, monotonic allocation and tombstones, no resurrection, stable
+kind/owner/child continuity for surviving nodes, unchanged relative order for surviving body
+children, and no clearing of a selected entry from a surviving package. `SetEntryFunction` may
+select or replace an entry. Rename and a compatible same-constructor scalar/operand update preserve
+identity.
 
-A `WorkspaceId` is 128 random bits. A `NodeId` is `(WorkspaceId, nonzero u64 serial)`. The root is
-serial 1 and allocation is monotonic. Names, content, map position, hashes, and addresses do not
-participate in Node ID allocation.
+`RefineHole` is the only identity-preserving constructor transition. It changes exactly:
 
-Transactions stage allocation. Rejection and dry-run leave the published allocator unchanged.
-Deletion tombstones every owned ID; old retained snapshots keep their nodes, and later allocation
-never reuses a tombstone. Every serial below the allocator frontier is exactly one live node or one
-tombstone. Revision zero has root serial 1 only. Durable adjacent revisions require a stable root,
-monotonic allocator and tombstones, no resurrection, and stable kind/owner/operation contract for
-surviving IDs. Rename and compatible constant replacement preserve Node ID.
+```text
+Hole(expected type) -> complete non-terminator operation with the same single result type
+```
 
-A `LocalHandle` is a u32 transaction-local symbol. All create handles are assigned staged IDs in
-operation order before mutation begins. Handles never enter a snapshot, artifact, diff, or query.
+It preserves the hole Node ID, owner, body position, and all existing uses of output zero. The
+replacement may use existing values or transaction-local values created in the same batch; the
+final structural order, scope, dominance, type, ownership, and result-index validation still
+applies.
+Refinement to a hole, a terminator, a different result contract, or from an already-complete
+operation rejects. There is no reverse refinement or generic morph operation. History validation
+recognizes only this explicit transition, and the semantic diff reports `OperationRefined` rather
+than delete/create identity churn.
 
-## Typed transactions
+## Typed transactions and compact receipts
 
-Every transaction names one workspace and base revision, optionally supplies an idempotency key,
-and carries an ordered batch of closed `TransactionOp` variants. Implemented operations create each
-bootstrap node kind, attach function bodies and package entries, rename named nodes, replace a
-contract-compatible operation, replace an operand, and delete an owned subtree.
+An `ApplyTransactionRequest` names workspace, exact base revision,
+`TransactionMode::{Commit, ValidateOnly}`, an optional committed-request idempotency key, an ordered
+closed batch of `TransactionOp` values, and a bounded `TransactionResponseSpec`. Implemented edits
+create every bootstrap node kind, attach a function body and package entry, rename a node, replace a
+compatible operation or operand, refine a hole, and delete an owned subtree.
 
-The daemon checks a retained idempotency record first only to recognize an exact already-committed
-retry whose original base revision remains retained and fingerprint-bound. That replay does not
-reapply mutation. Every unseen request then requires the current base revision. Mutation occurs in a cloned staged
-map. The final candidate is validated in deterministic ID and slot order, diffed, encoded, durably
-committed, and only then published in memory. A successful non-dry transaction publishes one
-revision. Empty and canonical no-change transactions reject with `NoChange`.
+All create handles receive staged Node IDs in operation order before edits are applied. A client may
+select at most 64 created handles for the receipt. Duplicate, undeclared, or non-created selected
+handles reject before publication. A node created and deleted in the same accepted transaction
+still contributes to `created_count`, may be selected in the receipt, and ends tombstoned in the
+new snapshot. Deletion is iterative and rejects when a surviving reference points into the
+subtree; it never cascades through independent dependents.
 
-Validation checks workspace and kind domains, ownership, typed slot targets, unique sibling lookup
-names, parameter ordinals, value scope and order, operation arity and result indexes, and exact
-operand types. Rejection returns structured fields and publishes no revision, durable head,
-allocator change, or tombstone.
+Preparation clones the current snapshot, stages identities and edits, validates the final graph,
+derives the exact deterministic semantic change list, encodes the candidate artifact and compact
+receipt, and preflights exact protocol and durable bytes. Rejection publishes no revision, artifact,
+HEAD, allocator movement, tombstone, or in-memory snapshot. Empty and semantic no-change requests
+reject. A successful commit durably publishes exactly one revision before publishing it in memory.
 
-Deletion is iterative. It rejects if any surviving direct reference points into the owned subtree;
-it never silently cascades through independent dependents.
+The receipt is deliberately bounded: workspace, base and resulting/predicted revision, snapshot
+hash, publication flag, total created count, only selected handle bindings, exact total change
+count and `ChangeDigest`, and before/after completeness facts. The digest is domain-separated and
+binds the workspace, revisions, both canonical snapshot hashes, ordered change count, and exact
+change payloads. The full change list is available only through a revision-bound paginated diff
+query.
 
-## Incompleteness
+Validate-only uses the same staging, validation, artifact encoding, response encoding, and durable
+publication preflight as commit. It returns the same predicted identity, hash, count, digest, and
+selected bindings with `published=false`, consumes no identities, and writes nothing. An
+idempotency key on validate-only rejects.
 
-A missing function body and `OperationKind::Hole { expected }` are valid incomplete states. Holes
-have stable Node IDs and exact expected types. Queries return structured blockers. Entry lowering
-walks only the selected entry dependency closure and rejects any reachable blocker; holes are never
-lowered to a value or trap. Package-wide queries also report blockers in unused definitions.
+A committed idempotency key is bound to the deterministic transaction fingerprint, including the
+response projection, and one compact receipt. Exact retry returns that receipt without reapplying
+the mutation; different reuse rejects. Only one keyed outcome is retained per workspace. A later
+keyed commit replaces it; an unkeyed commit retains the existing keyed record.
 
-## Artifact
+## Incompleteness and queries
 
-A `.lkjscript` artifact has fixed magic, artifact format version 1, a fixed semantic schema ID,
-little-endian fixed-width integers, explicit u64 section counts, canonically ordered node and
-tombstone tables, allocator state, root identity, and a BLAKE3 snapshot hash. The hash covers the
-workspace, revision, allocator, tombstones, graph, and stored display names.
+A missing function body and an exact typed `Hole` are valid incomplete semantic states. Blockers,
+incoming uses, body slices, visible values, legal constructors, and repair contexts are derived by
+full scans of an immutable revision. Entry lowering requires a complete selected-entry dependency
+closure; holes never lower. Unused incomplete definitions do not block an otherwise complete entry.
 
-Decoding applies an explicit resource policy at the artifact boundary, then rejects truncation,
-overflow, invalid UTF-8, unknown tags, duplicate IDs, invalid references, wrong kinds, invalid
-containment, hash mismatch, and trailing bytes. Decode followed by encode is byte-identical. The
-artifact contains no Core IR, machine code, cache, profile, session alias, or protocol frame.
+## Artifact and durable HEAD
+
+A `.lkjscript` artifact retains format version 1 because this campaign does not change canonical
+snapshot encoding. It has fixed magic and semantic schema ID, little-endian integers, checked u64
+counts, canonical node/tombstone order, allocator/root state, and a BLAKE3 snapshot hash. Decode
+rejects truncation, overflow, invalid UTF-8, unknown tags, duplicate or wrong-workspace IDs, invalid
+containment or references, hash mismatch, and trailing bytes. Count work is bounded from remaining
+artifact bytes and exact minimum record widths; there is no separate semantic node or tombstone
+ceiling. Durable workspace IDs and revision file names must use their one canonical path spelling.
+Accepted decode followed by encode is byte-identical. Core IR, machine code, caches, profiles,
+receipts, and protocol frames are absent.
+
+`LKJHEAD2` directly replaces the old HEAD format; there is no compatibility reader. It is a checked,
+independently bounded (16 KiB) non-semantic publication record containing head revision/hash and,
+when present, one compact keyed fingerprint/receipt. It never contains a full diff or allocation
+map. Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
+receipt facts against retained snapshots before accepting HEAD. Corrupt or old HEAD bytes reject.

@@ -160,40 +160,43 @@ impl Daemon {
                 self.workspaces.insert(id, workspace);
                 Ok(Response::WorkspaceCreated(summary))
             }
-            Request::ApplyTransaction(transaction) => {
-                let fingerprint = protocol::transaction_fingerprint(&transaction)?;
-                let workspace = self.workspace_mut(transaction.workspace)?;
-                let result = workspace.apply(&transaction, fingerprint)?;
-                Ok(Response::TransactionApplied(result))
+            Request::ApplyTransaction(request) => {
+                let fingerprint = protocol::transaction_fingerprint(&request)?;
+                let workspace = self.workspace_mut(request.transaction.workspace)?;
+                let receipt = workspace.apply(&request, fingerprint)?;
+                Ok(Response::TransactionReceipt(receipt))
             }
-            Request::WorkspaceSummary {
-                workspace,
-                revision,
-            } => {
-                let snapshot = self.workspace(workspace)?.snapshot(revision)?;
-                Ok(Response::WorkspaceSummary(query::workspace_summary(
-                    snapshot,
-                )))
-            }
-            Request::Node {
-                workspace,
-                revision,
-                node,
-                expand,
-            } => {
-                let snapshot = self.workspace(workspace)?.snapshot(revision)?;
-                Ok(Response::Node(query::node_view(snapshot, node, expand)?))
-            }
-            Request::Blockers {
-                workspace,
-                revision,
-            } => {
-                let snapshot = self.workspace(workspace)?.snapshot(revision)?;
-                Ok(Response::Blockers {
-                    workspace,
-                    revision,
-                    blockers: query::workspace_blockers(snapshot),
-                })
+            Request::QueryBatch(batch) => {
+                query::validate_batch(&batch)?;
+                let workspace = self.workspace(batch.workspace)?;
+                let snapshot = workspace.snapshot(batch.revision)?;
+                let mut results = Vec::with_capacity(batch.queries.len());
+                for item in &batch.queries {
+                    let before = match &item.query {
+                        query::Query::SemanticDiff { from, .. } => {
+                            workspace.snapshot(*from).ok().map(AsRef::as_ref)
+                        }
+                        _ => None,
+                    };
+                    let outcome = match query::execute(snapshot, &item.query, before) {
+                        Ok(result) => query::QueryOutcome::Success(Box::new(result)),
+                        Err(error) => query::QueryOutcome::Error(error),
+                    };
+                    results.push(query::QueryItemResult {
+                        id: item.id,
+                        outcome,
+                    });
+                }
+                let result = query::QueryBatchResult {
+                    workspace: batch.workspace,
+                    revision: batch.revision,
+                    results,
+                };
+                protocol::encoded_response_size(
+                    RequestId::new(0),
+                    &Response::QueryBatchResult(result.clone()),
+                )?;
+                Ok(Response::QueryBatchResult(result))
             }
             Request::Run {
                 workspace,
@@ -204,6 +207,9 @@ impl Daemon {
                 Ok(Response::Run(interpret::compile_and_run(snapshot, entry)?))
             }
             Request::Shutdown => Ok(Response::Acknowledged),
+            Request::DescribeSchema => Ok(Response::SchemaDescription(Box::new(
+                crate::machine::schema_description(),
+            ))),
         }
     }
 
@@ -292,7 +298,127 @@ impl Drop for DaemonGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::{LocalHandle, QueryId, RequestId, Revision};
+    use crate::query::{PageRequest, Query, QueryBatchRequest, QueryItem};
+    use crate::transaction::{
+        ApplyTransactionRequest, NodeTarget, Transaction, TransactionMode, TransactionOp,
+        TransactionResponseSpec,
+    };
     use std::thread;
+
+    #[test]
+    fn trailing_request_bytes_reject_before_daemon_dispatch() {
+        let temporary = tempfile::tempdir().expect("temporary state directory");
+        persistence::ensure_state_directory(temporary.path()).expect("state directory");
+        let daemon = Daemon::open(temporary.path()).expect("daemon");
+        let mut bytes = Vec::new();
+        protocol::write_request(&mut bytes, RequestId::new(1), &Request::CreateWorkspace)
+            .expect("request frame");
+        bytes.push(0xff);
+        assert_eq!(
+            protocol::read_request(&mut bytes.as_slice())
+                .expect_err("trailing connection byte")
+                .code,
+            ErrorCode::ProtocolMalformed
+        );
+        assert!(daemon.workspaces.is_empty());
+    }
+
+    #[test]
+    fn oversized_diff_read_fails_preflight_without_mutation() {
+        let temporary = tempfile::tempdir().expect("temporary state directory");
+        persistence::ensure_state_directory(temporary.path()).expect("state directory");
+        let mut daemon = Daemon::open(temporary.path()).expect("daemon");
+        let Response::WorkspaceCreated(initial) =
+            daemon.handle(Request::CreateWorkspace).expect("create")
+        else {
+            panic!("create response")
+        };
+        let workspace = initial.workspace;
+        let create_operations = (1..=9)
+            .map(|handle| TransactionOp::CreatePackage {
+                handle: LocalHandle::new(handle),
+                name: format!("p{handle}"),
+            })
+            .collect();
+        let create = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: create_operations,
+            },
+            response: TransactionResponseSpec {
+                return_handles: (1..=9).map(LocalHandle::new).collect(),
+            },
+        };
+        let Response::TransactionReceipt(created) = daemon
+            .handle(Request::ApplyTransaction(create))
+            .expect("create packages")
+        else {
+            panic!("create response")
+        };
+        let rename_operations = created
+            .returned_bindings
+            .iter()
+            .enumerate()
+            .map(|(index, (_, node))| TransactionOp::RenameNode {
+                node: NodeTarget::Existing(*node),
+                name: format!("{}-{index}", "x".repeat(1024 * 1024 - 2)),
+            })
+            .collect();
+        let rename = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: rename_operations,
+            },
+            response: TransactionResponseSpec::default(),
+        };
+        daemon
+            .handle(Request::ApplyTransaction(rename))
+            .expect("publish large renames");
+        let head_path = persistence::workspace_directory(temporary.path(), workspace).join("HEAD");
+        let head_before = fs::read(&head_path).expect("head before query");
+        let hash_before = daemon
+            .workspace(workspace)
+            .expect("workspace")
+            .head()
+            .expect("head")
+            .hash();
+        let query = Request::QueryBatch(QueryBatchRequest {
+            workspace,
+            revision: Revision::new(2),
+            queries: vec![QueryItem {
+                id: QueryId::new(1),
+                query: Query::SemanticDiff {
+                    from: Revision::new(1),
+                    page: PageRequest {
+                        after: None,
+                        limit: 256,
+                    },
+                },
+            }],
+        });
+        assert_eq!(
+            daemon
+                .handle(query)
+                .expect_err("oversized read must reject")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+        assert_eq!(fs::read(&head_path).expect("head after query"), head_before);
+        let head = daemon
+            .workspace(workspace)
+            .expect("workspace")
+            .head()
+            .expect("head");
+        assert_eq!(head.revision(), Revision::new(2));
+        assert_eq!(head.hash(), hash_before);
+    }
 
     #[test]
     fn connection_deadline_is_absolute_despite_slow_progress() {

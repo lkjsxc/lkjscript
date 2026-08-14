@@ -284,6 +284,14 @@ fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<(
                     )
                     .for_node(*id));
                 }
+                if !surviving_child_order_is_stable(old_node, new_node, previous, next) {
+                    return Err(history_error(
+                        next.workspace(),
+                        next.revision(),
+                        "surviving owned children changed relative semantic order",
+                    )
+                    .for_node(*id));
+                }
             }
             None if next.tombstones.contains(&id.serial()) => {}
             None => {
@@ -309,8 +317,45 @@ fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<(
     Ok(())
 }
 
+fn surviving_child_order_is_stable(
+    old: &Node,
+    new: &Node,
+    previous: &Snapshot,
+    next: &Snapshot,
+) -> bool {
+    let mut new_index = 0;
+    for old_index in 0..old.owned_child_count() {
+        let Some(old_child) = old.owned_child(old_index) else {
+            return false;
+        };
+        if !next.nodes.contains_key(&old_child) {
+            continue;
+        }
+        loop {
+            let Some(new_child) = new.owned_child(new_index) else {
+                return false;
+            };
+            new_index += 1;
+            if previous.nodes.contains_key(&new_child) {
+                if new_child != old_child {
+                    return false;
+                }
+                break;
+            }
+        }
+    }
+    while let Some(new_child) = new.owned_child(new_index) {
+        if previous.nodes.contains_key(&new_child) {
+            return false;
+        }
+        new_index += 1;
+    }
+    true
+}
+
 fn identity_shape_is_stable(old: &Node, new: &Node) -> bool {
     match (old, new) {
+        (Node::Package { entry: Some(_), .. }, Node::Package { entry: None, .. }) => false,
         (Node::Function { result: old, .. }, Node::Function { result: new, .. }) => old == new,
         (
             Node::Parameter {
@@ -325,10 +370,24 @@ fn identity_shape_is_stable(old: &Node, new: &Node) -> bool {
             },
         ) => old_ordinal == new_ordinal && old_type == new_type,
         (Node::Operation { operation: old, .. }, Node::Operation { operation: new, .. }) => {
-            old.stable_tag() == new.stable_tag()
+            operation_identity_shape_is_stable(old, new)
         }
         _ => true,
     }
+}
+
+fn operation_identity_shape_is_stable(
+    old: &crate::schema::OperationKind,
+    new: &crate::schema::OperationKind,
+) -> bool {
+    if old.code() == new.code() {
+        return old.same_result_contract(new) && old.is_terminator() == new.is_terminator();
+    }
+    matches!(old, crate::schema::OperationKind::Hole { .. })
+        && new.is_complete()
+        && !new.is_terminator()
+        && !matches!(new, crate::schema::OperationKind::Hole { .. })
+        && old.same_result_contract(new)
 }
 
 fn history_error(workspace: WorkspaceId, revision: Revision, message: &str) -> LkError {
@@ -359,6 +418,202 @@ pub(crate) fn require_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn operation_history_allows_only_same_contract_or_one_way_hole_refinement() {
+        use crate::schema::{OperationKind, SemanticType, ValueRef};
+
+        let workspace = WorkspaceId::from_bytes([0x30; 16]);
+        let first = NodeId::new(workspace, 2).expect("first");
+        let second = NodeId::new(workspace, 3).expect("second");
+        let value = |operation| ValueRef::OperationResult {
+            operation,
+            output: 0,
+        };
+        let hole = OperationKind::Hole {
+            expected: SemanticType::I64,
+        };
+        assert!(operation_identity_shape_is_stable(
+            &hole,
+            &OperationKind::ConstI64(1)
+        ));
+        assert!(operation_identity_shape_is_stable(
+            &hole,
+            &OperationKind::AddI64 {
+                lhs: value(first),
+                rhs: value(second),
+            }
+        ));
+        assert!(!operation_identity_shape_is_stable(
+            &hole,
+            &OperationKind::ConstBool(true)
+        ));
+        assert!(!operation_identity_shape_is_stable(
+            &hole,
+            &OperationKind::Hole {
+                expected: SemanticType::Bool,
+            }
+        ));
+        assert!(!operation_identity_shape_is_stable(
+            &OperationKind::ConstI64(1),
+            &OperationKind::AddI64 {
+                lhs: value(first),
+                rhs: value(second),
+            }
+        ));
+        assert!(!operation_identity_shape_is_stable(
+            &OperationKind::ConstI64(1),
+            &hole
+        ));
+        assert!(!operation_identity_shape_is_stable(
+            &hole,
+            &OperationKind::Return {
+                value: value(first),
+            }
+        ));
+    }
+
+    #[test]
+    fn retained_history_rejects_reordering_surviving_owned_children() {
+        let workspace = WorkspaceId::from_bytes([0x32; 16]);
+        let root = NodeId::new(workspace, 1).expect("root");
+        let first = NodeId::new(workspace, 2).expect("first package");
+        let second = NodeId::new(workspace, 3).expect("second package");
+        let package = |name: &str| Node::Package {
+            owner: root,
+            name: name.to_owned(),
+            modules: Vec::new(),
+            entry: None,
+        };
+        let nodes = BTreeMap::from([
+            (
+                root,
+                Node::WorkspaceRoot {
+                    packages: vec![first, second],
+                },
+            ),
+            (first, package("first")),
+            (second, package("second")),
+        ]);
+        let previous = Snapshot::from_parts(
+            workspace,
+            Revision::new(1),
+            root,
+            4,
+            BTreeSet::new(),
+            nodes.clone(),
+        )
+        .expect("ordered snapshot");
+        let mut reordered = nodes;
+        let Node::WorkspaceRoot { packages } = reordered.get_mut(&root).expect("workspace root")
+        else {
+            panic!("root kind");
+        };
+        packages.swap(0, 1);
+        let next = Snapshot::from_parts(
+            workspace,
+            Revision::new(2),
+            root,
+            4,
+            BTreeSet::new(),
+            reordered,
+        )
+        .expect("individually valid reordered snapshot");
+        assert_eq!(
+            validate_history_transition(&previous, &next)
+                .expect_err("history must reject surviving child reorder")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
+    fn retained_history_rejects_clearing_a_surviving_package_entry() {
+        use crate::schema::SemanticType;
+
+        let workspace = WorkspaceId::from_bytes([0x33; 16]);
+        let root = NodeId::new(workspace, 1).expect("root");
+        let package = NodeId::new(workspace, 2).expect("package");
+        let module = NodeId::new(workspace, 3).expect("module");
+        let function = NodeId::new(workspace, 4).expect("function");
+        let nodes = BTreeMap::from([
+            (
+                root,
+                Node::WorkspaceRoot {
+                    packages: vec![package],
+                },
+            ),
+            (
+                package,
+                Node::Package {
+                    owner: root,
+                    name: "package".to_owned(),
+                    modules: vec![module],
+                    entry: Some(function),
+                },
+            ),
+            (
+                module,
+                Node::Module {
+                    owner: package,
+                    name: "module".to_owned(),
+                    functions: vec![function],
+                },
+            ),
+            (
+                function,
+                Node::Function {
+                    owner: module,
+                    name: "function".to_owned(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: None,
+                },
+            ),
+        ]);
+        let previous = Arc::new(
+            Snapshot::from_parts(
+                workspace,
+                Revision::new(1),
+                root,
+                5,
+                BTreeSet::new(),
+                nodes.clone(),
+            )
+            .expect("selected entry snapshot"),
+        );
+        let mut cleared = nodes;
+        let Node::Package { entry, .. } = cleared.get_mut(&package).expect("package node") else {
+            panic!("package kind")
+        };
+        *entry = None;
+        let next = Arc::new(
+            Snapshot::from_parts(
+                workspace,
+                Revision::new(2),
+                root,
+                5,
+                BTreeSet::new(),
+                cleared,
+            )
+            .expect("individually valid cleared entry snapshot"),
+        );
+        let snapshots = BTreeMap::from([
+            (
+                Revision::INITIAL,
+                Arc::new(Snapshot::initial(workspace).expect("initial snapshot")),
+            ),
+            (Revision::new(1), previous),
+            (Revision::new(2), next),
+        ]);
+        assert_eq!(
+            Workspace::from_snapshots(workspace, Revision::new(2), snapshots)
+                .err()
+                .expect("history must reject clearing a surviving entry")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
 
     #[test]
     fn retained_history_rejects_identity_resurrection() {

@@ -1,75 +1,83 @@
 # Architecture
 
-## Current flow and ownership
+## Current flow and authority
 
 ```text
-lkjscript client
-    -> typed, framed Unix-socket request
-lkjscriptd
+strict JSON CLI projection (optional)
+    -> typed protocol-v2 frame over private Unix socket
+    -> synchronous lkjscriptd
     -> one DurableWorkspace writer per workspace
-    -> staged typed transaction over an immutable Snapshot
-    -> canonical per-revision .lkjscript artifact and atomic HEAD
-    -> immutable published Snapshot
-    -> revision-bound query or direct SPG-to-Core-IR compilation
-    -> Core IR verifier
-    -> interpreter
-    -> typed response
+    -> staged typed transaction over immutable Snapshot
+    -> full deterministic validation and derived diff
+    -> preflighted compact receipt + artifact + LKJHEAD2
+    -> durable immutable revision, then in-memory publication
+    -> revision-bound scan query or direct SPG-to-Core-IR lowering
+    -> Core IR verifier -> interpreter -> typed response
 ```
 
-The daemon is synchronous and is the only live writer. The client contains presentation and typed
-request construction only. `graph.rs` owns immutable snapshots and retained workspace history;
-`schema.rs` owns node and operation contracts; `transaction.rs` owns staged mutation; `validate.rs`
-owns graph acceptance; `artifact.rs` owns canonical semantic bytes; `persistence.rs` owns durable
-publication; `protocol.rs` owns IPC types and framing; `query.rs` owns derived summaries and blockers;
-`compile.rs` and private `core_ir.rs` own lowering and executable verification; `interpret.rs` owns
-the one runtime route.
+The daemon is the only live graph writer. `graph.rs` owns immutable snapshots and retained history;
+`schema.rs` owns closed node contracts and static operation descriptors; `transaction.rs` owns
+staging and compact receipts; `validate.rs` owns graph acceptance; `diff.rs` owns deterministic
+change facts/digests; `artifact.rs` owns canonical semantic bytes; `persistence.rs` owns durable
+publication; `protocol.rs` owns version-2 IPC types/framing; `query.rs` owns derived scan queries and
+repair-context composition; `machine.rs` owns strict bounded JSON projection and executable schema
+description; `compile.rs` and private `core_ir.rs` own lowering/verification; `interpret.rs` owns the
+one runtime route.
 
-There is no second function body, type authority, evaluator, mutable client workspace, or persisted
+Static operation descriptors are the shared fact owner for arity, operand/result rules, use modes,
+literal fields, completeness, and termination. Validators, queries, codecs, lowering, and machine
+description consume those facts without runtime registration or heap allocation for lookup. There
+is no second graph, type authority, function body, evaluator, mutable client workspace, or persisted
 compiler representation.
 
-## Durability
+Queries are pure over one retained immutable revision (or two exact revisions for diff). Incoming
+uses/references, dependencies, visible values, legal constructors, blockers, and repair contexts use
+full deterministic scans. Repair context is a bounded composition of those typed facts, not prose or
+model ranking. There is deliberately no reverse-reference index, query engine, or cache; full scans
+remain both implementation and oracle until representative repeated cost justifies a narrow index.
 
-A workspace directory retains immutable `revisions/REVISION.lkjscript` files and one small
-non-semantic `HEAD` record. HEAD names the committed revision and hash, may retain one typed
-idempotency outcome, and has a checksum over the entire record. Workspace creation builds and
-flushes a recognized staging directory, renames it atomically, and flushes `workspaces/`; startup
-removes only well-formed abandoned staging directories.
+The generic CLI is not another service. It strictly decodes one bounded JSON envelope, converts to
+the same closed Rust request, sends one private binary IPC request, and strictly encodes one typed
+response. JSON never becomes semantic state. Local `schema` and daemon `DescribeSchema` derive from
+executable descriptors and stable enums rather than a separately maintained schema file.
 
-Commit order is:
+## Durability and bounded acknowledgement
 
-1. encode and validate the candidate snapshot;
-2. write a new revision temporary file, flush it, rename it, and flush `revisions/`;
-3. write and flush a new HEAD temporary file;
-4. atomically replace HEAD and flush the workspace directory;
-5. publish the in-memory `Arc<Snapshot>` and acknowledge.
+A workspace retains immutable `revisions/REVISION.lkjscript` files and one compact non-semantic
+`LKJHEAD2`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
+compact keyed fingerprint/receipt. It stores no full semantic diff or full allocation map; unkeyed
+commits preserve an existing keyed replay record. Old `LKJHEAD1` bytes reject.
 
-Failure before HEAD commit leaves the old HEAD authoritative; an orphan revision is removed or
-ignored during recovery. Injected failures cover every bootstrap publication step. If post-rename
-directory sync and HEAD rollback both fail, the daemon reports `CommitOutcomeUnknown` and exits
-rather than continuing with uncertain authority.
+Commit preflights exact artifact, HEAD, and protocol response bytes before publication. It writes
+and flushes a revision temporary file, renames and syncs it, writes/flushes a HEAD temporary file,
+atomically replaces and syncs HEAD, then publishes the in-memory `Arc<Snapshot>` and acknowledges.
+Failures before authoritative HEAD leave the prior state authoritative. If publication and rollback
+make outcome unknowable, the daemon reports `CommitOutcomeUnknown` and stops.
 
-Restart bounds files before reading, loads every contiguous retained revision through the same
-defensive artifact decoder, checks the HEAD checksum/hash, validates monotonic allocator,
-tombstone, root, kind, and owner history, restores the semantically checked idempotency outcome,
-and then opens IPC. Old revisions remain independently queryable and executable.
+Validate-only follows the same semantic preparation and byte preflight but writes and publishes
+nothing. Restart bounds files before reading, decodes every contiguous retained artifact, validates
+history, checks HEAD checksum/hash, and recomputes compact receipt facts from retained snapshots.
+Corrupt or ambiguous durable state is rejected, not repaired heuristically.
 
 ## Trust boundaries
 
-- **same-build Rust values:** closed enums and private constructors; no serialization is added for
-  Core IR;
-- **artifact bytes:** bounded custom decoder, stable tags, graph validation, canonical hash, and
-  strict trailing-byte policy;
-- **IPC bytes:** private Unix socket, checked frame length, closed message vocabulary, correlation,
-  and structured rejection;
-- **runtime:** verified Core IR only; no native code or host capabilities exist in this slice.
+- **JSON stdin/stdout:** 8 MiB input, bounded nesting, strict fields/variants/canonical IDs/trailing
+  policy; streaming 32 MiB output cap and bounded boundary errors;
+- **binary IPC:** private socket permissions/peer filesystem boundary, checked frame/counts/tags,
+  request correlation, request-side EOF before dispatch, and response-side EOF before acceptance;
+- **artifact and HEAD bytes:** separate bounded canonical decoders, hashes/checksums, graph/history
+  validation, strict trailing-byte policy;
+- **AI proposals:** only closed typed requests reach deterministic validators;
+- **runtime:** verified Core IR only; no native code, ambient host capability, or foreign boundary.
 
-All graph walks that can scale with user nodes use loops and explicit vectors/sets. The current
-schema also has closed containment depth. Resource limits at artifact and IPC boundaries are
-reported as policy errors and do not redefine language validity.
+User-scalable graph traversals use loops and explicit work collections rather than unbounded native
+recursion. Operational page/frame/context limits protect boundaries and do not constrain semantic
+program size.
 
 ## Deliberate restraint
 
-The baseline uses `BTreeMap`, vectors, and full snapshot clones. There is no database, journal,
-async runtime, generic graph framework, schema generator, query engine, cache, source projection,
-native backend, runtime cell, plugin mechanism, or remote service. A later mechanism must have a
-measured producer/consumer and preserve this single authority path.
+The measured bootstrap retains `BTreeMap`, vectors, full snapshot clones, full semantic
+recomputation/diff materialization, and full artifact rewrites. It has no database, journal, async
+runtime, generic graph framework, runtime schema registry, reverse index, cache, source projection,
+native backend, runtime cell, plugin mechanism, or remote service. A replacement requires a current
+consumer, measurements, one preserved authority path, and evidence that supports its added cost.

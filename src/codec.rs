@@ -4,6 +4,8 @@ use std::fmt;
 pub(crate) enum TagDomain {
     Change,
     Error,
+    Query,
+    Cursor,
     Node,
     NodeTarget,
     Operation,

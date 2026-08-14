@@ -1,336 +1,176 @@
+use lkjscript::Client;
 use lkjscript::daemon;
-use lkjscript::{
-    Client, IdempotencyKey, LocalHandle, NodeId, NodeTarget, OperationDraft, Request, RequestId,
-    Response, Revision, RuntimeValue, SemanticType, Transaction, TransactionOp, ValueDraft,
-    WorkspaceId,
+use lkjscript::machine::{
+    BoundaryErrorKind, MAX_JSON_INPUT_BYTES, decode_request, encode_boundary_error,
+    encode_response, encode_schema, request_id_hint,
 };
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::str::FromStr;
+
+const EXIT_USAGE_OR_JSON: u8 = 2;
+const EXIT_TRANSPORT: u8 = 3;
+const EXIT_OUTPUT: u8 = 4;
 
 fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(message) => {
-            eprintln!("{message}");
-            ExitCode::FAILURE
-        }
+    let outcome = run(std::env::args().skip(1));
+    let mut bytes = outcome.stdout;
+    bytes.push(b'\n');
+    if let Err(error) = std::io::stdout().lock().write_all(&bytes) {
+        eprintln!("cannot write machine response: {error}");
+        return ExitCode::from(EXIT_OUTPUT);
+    }
+    if let Some(diagnostic) = outcome.diagnostic {
+        eprintln!("{diagnostic}");
+    }
+    ExitCode::from(outcome.exit)
+}
+
+struct CliOutcome {
+    stdout: Vec<u8>,
+    diagnostic: Option<String>,
+    exit: u8,
+}
+
+fn run(arguments: impl Iterator<Item = String>) -> CliOutcome {
+    match parse_command(arguments) {
+        Ok(Command::Schema { pretty }) => match encode_schema(pretty) {
+            Ok(stdout) => success(stdout),
+            Err(error) => failure(
+                EXIT_OUTPUT,
+                BoundaryErrorKind::Output,
+                error.to_string(),
+                None,
+            ),
+        },
+        Ok(Command::Rpc { state, pretty }) => run_rpc(state, pretty),
+        Err(message) => failure(EXIT_USAGE_OR_JSON, BoundaryErrorKind::Usage, message, None),
     }
 }
 
-fn run() -> Result<(), String> {
-    let mut arguments = std::env::args().skip(1);
-    if arguments.next().as_deref() != Some("--state") {
-        return Err(usage("expected --state"));
+fn run_rpc(state: PathBuf, pretty: bool) -> CliOutcome {
+    let input = match read_stdin_bounded() {
+        Ok(input) => input,
+        Err(message) => {
+            return failure(
+                EXIT_USAGE_OR_JSON,
+                BoundaryErrorKind::InputTooLarge,
+                message,
+                None,
+            );
+        }
+    };
+    let envelope = match decode_request(&input) {
+        Ok(envelope) => envelope,
+        Err(error) => {
+            let request_id = request_id_hint(&input);
+            return failure(
+                EXIT_USAGE_OR_JSON,
+                error.kind,
+                error.to_string(),
+                request_id,
+            );
+        }
+    };
+    let response = match Client::new(daemon::endpoint_path(&state))
+        .request(envelope.request_id, &envelope.request)
+    {
+        Ok(response) => response,
+        Err(error) => {
+            return failure(
+                EXIT_TRANSPORT,
+                BoundaryErrorKind::Transport,
+                error.to_string(),
+                Some(envelope.request_id),
+            );
+        }
+    };
+    match encode_response(envelope.request_id, &response, pretty) {
+        Ok(stdout) => success(stdout),
+        Err(error) => failure(
+            EXIT_OUTPUT,
+            BoundaryErrorKind::Output,
+            error.to_string(),
+            Some(envelope.request_id),
+        ),
+    }
+}
+
+fn read_stdin_bounded() -> Result<Vec<u8>, String> {
+    let mut stdin = std::io::stdin().lock();
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = stdin
+            .read(&mut buffer)
+            .map_err(|error| format!("cannot read JSON request: {error}"))?;
+        if count == 0 {
+            return Ok(bytes);
+        }
+        if bytes.len().saturating_add(count) > MAX_JSON_INPUT_BYTES {
+            return Err("JSON request exceeds input byte policy".to_owned());
+        }
+        bytes.extend_from_slice(&buffer[..count]);
+    }
+}
+
+fn success(stdout: Vec<u8>) -> CliOutcome {
+    CliOutcome {
+        stdout,
+        diagnostic: None,
+        exit: 0,
+    }
+}
+
+fn failure(
+    exit: u8,
+    kind: BoundaryErrorKind,
+    message: String,
+    request_id: Option<lkjscript::RequestId>,
+) -> CliOutcome {
+    CliOutcome {
+        stdout: encode_boundary_error(request_id, kind, &message),
+        diagnostic: Some(message),
+        exit,
+    }
+}
+
+enum Command {
+    Rpc { state: PathBuf, pretty: bool },
+    Schema { pretty: bool },
+}
+
+fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command, String> {
+    let first = arguments.next().ok_or_else(|| usage("missing command"))?;
+    if first == "schema" {
+        let pretty = parse_pretty(arguments)?;
+        return Ok(Command::Schema { pretty });
+    }
+    if first != "--state" {
+        return Err(usage("expected schema or --state"));
     }
     let state = PathBuf::from(
         arguments
             .next()
             .ok_or_else(|| usage("missing state directory"))?,
     );
-    let command = arguments.next().ok_or_else(|| usage("missing command"))?;
-    let client = Client::new(daemon::endpoint_path(&state));
-    let request = match command.as_str() {
-        "workspace-create" => Request::CreateWorkspace,
-        "bootstrap-42" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            no_more(arguments)?;
-            Request::ApplyTransaction(bootstrap_42(workspace))
-        }
-        "summary" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            let revision = Revision::new(parse::<u64>(arguments.next(), "revision")?);
-            no_more(arguments)?;
-            Request::WorkspaceSummary {
-                workspace,
-                revision,
-            }
-        }
-        "node" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            let revision = Revision::new(parse::<u64>(arguments.next(), "revision")?);
-            let serial = parse::<u64>(arguments.next(), "node serial")?;
-            let node = NodeId::new(workspace, serial).map_err(|error| error.to_string())?;
-            let expand = match arguments.next().as_deref() {
-                None => false,
-                Some("--expand") => true,
-                Some(_) => return Err(usage("node accepts only optional --expand")),
-            };
-            no_more(arguments)?;
-            Request::Node {
-                workspace,
-                revision,
-                node,
-                expand,
-            }
-        }
-        "blockers" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            let revision = Revision::new(parse::<u64>(arguments.next(), "revision")?);
-            no_more(arguments)?;
-            Request::Blockers {
-                workspace,
-                revision,
-            }
-        }
-        "run" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            let revision = Revision::new(parse::<u64>(arguments.next(), "revision")?);
-            let serial = parse::<u64>(arguments.next(), "entry node serial")?;
-            let entry = NodeId::new(workspace, serial).map_err(|error| error.to_string())?;
-            no_more(arguments)?;
-            Request::Run {
-                workspace,
-                revision,
-                entry,
-            }
-        }
-        "rename-and-set-i64" => {
-            let workspace = parse::<WorkspaceId>(arguments.next(), "workspace")?;
-            let base = Revision::new(parse::<u64>(arguments.next(), "base revision")?);
-            let function = node(workspace, arguments.next(), "function serial")?;
-            let constant = node(workspace, arguments.next(), "constant serial")?;
-            let name = arguments
-                .next()
-                .ok_or_else(|| usage("missing replacement name"))?;
-            let value = parse::<i64>(arguments.next(), "i64 value")?;
-            no_more(arguments)?;
-            Request::ApplyTransaction(Transaction {
-                workspace,
-                base_revision: base,
-                idempotency_key: None,
-                dry_run: false,
-                operations: vec![
-                    TransactionOp::RenameNode {
-                        node: NodeTarget::Existing(function),
-                        name,
-                    },
-                    TransactionOp::ReplaceOperation {
-                        operation: NodeTarget::Existing(constant),
-                        replacement: OperationDraft::ConstI64(value),
-                    },
-                ],
-            })
-        }
-        "shutdown" => {
-            no_more(arguments)?;
-            Request::Shutdown
-        }
-        _ => return Err(usage("unknown command")),
-    };
-    let response = client
-        .request(RequestId::new(1), &request)
-        .map_err(|error| error.to_string())?;
-    print_response(response)
-}
-
-fn bootstrap_42(workspace: WorkspaceId) -> Transaction {
-    let package = LocalHandle::new(1);
-    let module = LocalHandle::new(2);
-    let function = LocalHandle::new(3);
-    let region = LocalHandle::new(4);
-    let block = LocalHandle::new(5);
-    let forty = LocalHandle::new(6);
-    let two = LocalHandle::new(7);
-    let add = LocalHandle::new(8);
-    let return_operation = LocalHandle::new(9);
-    let local = NodeTarget::Local;
-    let result = |operation| ValueDraft::OperationResult {
-        operation: local(operation),
-        output: 0,
-    };
-    Transaction {
-        workspace,
-        base_revision: Revision::INITIAL,
-        idempotency_key: Some(IdempotencyKey::from_bytes([0x42; 16])),
-        dry_run: false,
-        operations: vec![
-            TransactionOp::CreatePackage {
-                handle: package,
-                name: "app".to_owned(),
-            },
-            TransactionOp::CreateModule {
-                handle: module,
-                package: local(package),
-                name: "root".to_owned(),
-            },
-            TransactionOp::CreateFunction {
-                handle: function,
-                module: local(module),
-                name: "main".to_owned(),
-                result: SemanticType::I64,
-            },
-            TransactionOp::CreateRegion {
-                handle: region,
-                function: local(function),
-            },
-            TransactionOp::CreateBlock {
-                handle: block,
-                region: local(region),
-            },
-            TransactionOp::CreateOperation {
-                handle: forty,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::ConstI64(40),
-            },
-            TransactionOp::CreateOperation {
-                handle: two,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::ConstI64(2),
-            },
-            TransactionOp::CreateOperation {
-                handle: add,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::AddI64 {
-                    lhs: result(forty),
-                    rhs: result(two),
-                },
-            },
-            TransactionOp::CreateOperation {
-                handle: return_operation,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::Return { value: result(add) },
-            },
-            TransactionOp::SetFunctionBody {
-                function: local(function),
-                region: local(region),
-            },
-            TransactionOp::SetEntryFunction {
-                package: local(package),
-                function: local(function),
-            },
-        ],
+    if arguments.next().as_deref() != Some("rpc") {
+        return Err(usage("expected rpc"));
     }
+    let pretty = parse_pretty(arguments)?;
+    Ok(Command::Rpc { state, pretty })
 }
 
-fn print_response(response: Response) -> Result<(), String> {
-    match response {
-        Response::WorkspaceCreated(summary) | Response::WorkspaceSummary(summary) => {
-            println!(
-                "workspace={} revision={} hash={} root={} nodes={} complete={} blockers={}",
-                summary.workspace,
-                summary.revision,
-                summary.hash,
-                summary.root,
-                summary.node_count,
-                summary.complete,
-                summary.blocker_count
-            );
-            for entry in summary.entries {
-                println!("entry={entry}");
-            }
-        }
-        Response::TransactionApplied(result) => {
-            println!(
-                "workspace={} revision={} hash={} published={} changes={}",
-                result.workspace,
-                result.revision,
-                result.hash,
-                result.published,
-                result.diff.changes.len()
-            );
-            for (handle, node) in result.allocations {
-                println!("handle={} node={}", handle.get(), node);
-            }
-        }
-        Response::Node(view) => {
-            println!(
-                "node={} kind={:?} revision={} complete={} children={} references={} diagnostics={} name={}",
-                view.summary.node,
-                view.summary.kind,
-                view.summary.revision,
-                view.summary.complete,
-                view.summary.child_count,
-                view.summary.reference_count,
-                view.summary.diagnostic_count,
-                view.summary.display_name.as_deref().unwrap_or("-")
-            );
-            if let Some(signature) = view.summary.signature {
-                println!(
-                    "signature_parameters={} result={:?}",
-                    signature.parameters.len(),
-                    signature.result
-                );
-            }
-            if let Some(record) = view.record {
-                println!("record={record:?}");
-            }
-        }
-        Response::Blockers { blockers, .. } => {
-            println!("blockers={}", blockers.len());
-            for blocker in blockers {
-                println!(
-                    "owner={} target={} category={:?} expected={:?}",
-                    blocker.owner,
-                    blocker
-                        .target
-                        .map(|target| target.to_string())
-                        .unwrap_or_else(|| "-".to_owned()),
-                    blocker.category,
-                    blocker.expected_type
-                );
-            }
-        }
-        Response::Run(result) => {
-            match result.value {
-                RuntimeValue::Unit => println!("unit"),
-                RuntimeValue::Bool(value) => println!("bool={value}"),
-                RuntimeValue::I64(value) => println!("i64={value}"),
-            }
-            println!(
-                "compile_ns={} execute_ns={}",
-                result.compile_nanoseconds, result.execute_nanoseconds
-            );
-        }
-        Response::Acknowledged => println!("acknowledged"),
-        Response::Error(error) => {
-            return Err(format!(
-                "code={:?} operation={:?} target={:?} expected_type={:?} actual_type={:?} message={}",
-                error.code,
-                error.operation_index,
-                error.target,
-                error.expected_type,
-                error.actual_type,
-                error.message
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn parse<T: FromStr>(value: Option<String>, name: &str) -> Result<T, String>
-where
-    T::Err: std::fmt::Display,
-{
-    value
-        .ok_or_else(|| usage(&format!("missing {name}")))?
-        .parse::<T>()
-        .map_err(|error| format!("invalid {name}: {error}"))
-}
-
-fn node(workspace: WorkspaceId, value: Option<String>, name: &str) -> Result<NodeId, String> {
-    let serial = parse::<u64>(value, name)?;
-    NodeId::new(workspace, serial).map_err(|error| error.to_string())
-}
-
-fn no_more(mut arguments: impl Iterator<Item = String>) -> Result<(), String> {
-    if arguments.next().is_some() {
-        Err(usage("too many arguments"))
-    } else {
-        Ok(())
+fn parse_pretty(mut arguments: impl Iterator<Item = String>) -> Result<bool, String> {
+    match (arguments.next(), arguments.next()) {
+        (None, None) => Ok(false),
+        (Some(flag), None) if flag == "--pretty" => Ok(true),
+        _ => Err(usage("unexpected argument")),
     }
 }
 
 fn usage(reason: &str) -> String {
     format!(
-        "{reason}\nusage: lkjscript --state DIRECTORY COMMAND [ARGS]\n\
-         commands: workspace-create | bootstrap-42 WORKSPACE | summary WORKSPACE REVISION | \
-         node WORKSPACE REVISION SERIAL [--expand] | blockers WORKSPACE REVISION | \
-         run WORKSPACE REVISION ENTRY_SERIAL | \
-         rename-and-set-i64 WORKSPACE BASE FUNCTION_SERIAL CONSTANT_SERIAL NAME VALUE | shutdown"
+        "{reason}; usage: lkjscript --state DIRECTORY rpc [--pretty] | lkjscript schema [--pretty]"
     )
 }

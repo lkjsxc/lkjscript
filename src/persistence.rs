@@ -5,8 +5,9 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, Workspace};
 use crate::ids::{IdempotencyKey, Revision, SnapshotHash, WorkspaceId};
 use crate::protocol;
-use crate::transaction::{Transaction, TransactionResult};
-use std::collections::BTreeMap;
+use crate::query;
+use crate::transaction::{ApplyTransactionRequest, TransactionMode, TransactionReceipt};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -14,15 +15,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD1";
-const MAXIMUM_HEAD_BYTES: usize = protocol::MAXIMUM_FRAME_BYTES + 4096;
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD2";
+pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub(crate) struct IdempotencyRecord {
     pub key: IdempotencyKey,
     pub fingerprint: [u8; 32],
-    pub result: TransactionResult,
+    pub receipt: TransactionReceipt,
+}
+
+struct PreparedPublication {
+    artifact_bytes: Vec<u8>,
+    head_bytes: Vec<u8>,
 }
 
 pub(crate) struct DurableWorkspace {
@@ -180,6 +186,14 @@ impl DurableWorkspace {
                 .for_workspace(id)
             })?;
             let revision = Revision::new(revision_value);
+            if file_name != revision_file_name(revision) {
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "workspace revision file name is not canonical",
+                )
+                .for_workspace(id)
+                .at_revision(revision));
+            }
             if revision > head_revision {
                 fs::remove_file(entry.path())?;
                 removed_orphans = true;
@@ -285,9 +299,19 @@ impl DurableWorkspace {
 
     pub(crate) fn apply(
         &mut self,
-        transaction: &Transaction,
+        request: &ApplyTransactionRequest,
         fingerprint: [u8; 32],
-    ) -> Result<TransactionResult> {
+    ) -> Result<TransactionReceipt> {
+        self.apply_at_step(request, fingerprint, PublicationStep::None)
+    }
+
+    fn apply_at_step(
+        &mut self,
+        request: &ApplyTransactionRequest,
+        fingerprint: [u8; 32],
+        fault: PublicationStep,
+    ) -> Result<TransactionReceipt> {
+        let transaction = &request.transaction;
         if transaction.workspace != self.id() {
             return Err(LkError::new(
                 ErrorCode::WrongWorkspace,
@@ -295,14 +319,22 @@ impl DurableWorkspace {
             )
             .for_workspace(self.id()));
         }
+        if transaction.mode == TransactionMode::ValidateOnly
+            && transaction.idempotency_key.is_some()
+        {
+            return Err(LkError::new(
+                ErrorCode::InvalidOperand,
+                "validate-only transactions cannot carry an idempotency key",
+            )
+            .for_workspace(self.id()));
+        }
         if let (Some(key), Some(record)) = (transaction.idempotency_key, &self.idempotency)
             && key == record.key
         {
-            self.workspace.snapshot(transaction.base_revision)?;
             if fingerprint == record.fingerprint
-                && record.result.base_revision == transaction.base_revision
+                && record.receipt.base_revision == transaction.base_revision
             {
-                return Ok(record.result.clone());
+                return Ok(record.receipt.clone());
             }
             return Err(LkError::new(
                 ErrorCode::IdempotencyConflict,
@@ -310,40 +342,38 @@ impl DurableWorkspace {
             )
             .for_workspace(self.id()));
         }
-        let prepared = self.workspace.prepare_transaction(transaction)?;
+        let prepared = self.workspace.prepare_transaction(request)?;
         protocol::encoded_response_size(
             crate::ids::RequestId::new(0),
-            &crate::protocol::Response::TransactionApplied(prepared.result.clone()),
+            &crate::protocol::Response::TransactionReceipt(prepared.receipt.clone()),
         )?;
-        if transaction.dry_run {
-            return Ok(prepared.result);
+        if transaction.mode == TransactionMode::ValidateOnly {
+            self.preflight_publication(&prepared.snapshot, self.idempotency.as_ref())?;
+            return Ok(prepared.receipt);
         }
         let next_idempotency = transaction.idempotency_key.map(|key| IdempotencyRecord {
             key,
             fingerprint,
-            result: prepared.result.clone(),
+            receipt: prepared.receipt.clone(),
         });
         let retained_idempotency = next_idempotency
             .clone()
             .or_else(|| self.idempotency.clone());
-        self.publish_snapshot(
-            &prepared.snapshot,
-            retained_idempotency.as_ref(),
-            PublicationStep::None,
-        )?;
+        let publication =
+            self.preflight_publication(&prepared.snapshot, retained_idempotency.as_ref())?;
+        self.publish_preflighted(&prepared.snapshot, &publication, fault)?;
         self.workspace.publish(prepared.snapshot)?;
         self.idempotency = retained_idempotency;
-        Ok(prepared.result)
+        Ok(prepared.receipt)
     }
 
-    fn publish_snapshot(
+    fn preflight_publication(
         &self,
         snapshot: &Snapshot,
         idempotency: Option<&IdempotencyRecord>,
-        fault: PublicationStep,
-    ) -> Result<()> {
-        let bytes = artifact::encode(snapshot)?;
-        if bytes.len() > artifact::DecodePolicy::default().maximum_artifact_bytes {
+    ) -> Result<PreparedPublication> {
+        let artifact_bytes = artifact::encode(snapshot)?;
+        if artifact_bytes.len() > artifact::DecodePolicy::default().maximum_artifact_bytes {
             return Err(LkError::new(
                 ErrorCode::PolicyExceeded,
                 "snapshot artifact exceeds daemon persistence policy",
@@ -351,7 +381,7 @@ impl DurableWorkspace {
             .for_workspace(snapshot.workspace())
             .at_revision(snapshot.revision()));
         }
-        let decoded = artifact::decode(&bytes)?;
+        let decoded = artifact::decode(&artifact_bytes)?;
         if decoded != *snapshot {
             return Err(LkError::new(
                 ErrorCode::ArtifactCorrupt,
@@ -360,6 +390,31 @@ impl DurableWorkspace {
             .for_workspace(snapshot.workspace())
             .at_revision(snapshot.revision()));
         }
+        let head_bytes = encode_head(snapshot.revision(), snapshot.hash(), idempotency)?;
+        Ok(PreparedPublication {
+            artifact_bytes,
+            head_bytes,
+        })
+    }
+
+    fn publish_snapshot(
+        &self,
+        snapshot: &Snapshot,
+        idempotency: Option<&IdempotencyRecord>,
+        fault: PublicationStep,
+    ) -> Result<()> {
+        let publication = self.preflight_publication(snapshot, idempotency)?;
+        self.publish_preflighted(snapshot, &publication, fault)
+    }
+
+    fn publish_preflighted(
+        &self,
+        snapshot: &Snapshot,
+        publication: &PreparedPublication,
+        fault: PublicationStep,
+    ) -> Result<()> {
+        let bytes = &publication.artifact_bytes;
+        let head_bytes = &publication.head_bytes;
         let revisions = self.directory.join("revisions");
         let revision_path = revision_path(&revisions, snapshot.revision());
         let old_head = read_head_before_publication(&self.directory, snapshot.revision())?;
@@ -391,7 +446,7 @@ impl DurableWorkspace {
                 &revision_path,
                 bytes.len(),
                 "immutable revision path exceeds canonical byte length",
-            )? != bytes
+            )? != bytes.as_slice()
             {
                 return Err(LkError::new(
                     ErrorCode::ArtifactCorrupt,
@@ -402,7 +457,7 @@ impl DurableWorkspace {
             }
         } else {
             inject(fault, PublicationStep::BeforeRevisionWrite)?;
-            let temporary = write_temporary(&revisions, &bytes)?;
+            let temporary = write_temporary(&revisions, bytes)?;
             if let Err(error) = inject(fault, PublicationStep::AfterRevisionSync) {
                 fs::remove_file(&temporary)?;
                 sync_directory(&revisions)?;
@@ -423,8 +478,7 @@ impl DurableWorkspace {
             }
         }
 
-        let head_bytes = encode_head(snapshot.revision(), snapshot.hash(), idempotency)?;
-        let head_temporary = match write_temporary(&self.directory, &head_bytes) {
+        let head_temporary = match write_temporary(&self.directory, head_bytes) {
             Ok(path) => path,
             Err(error) => {
                 if !revision_existed {
@@ -474,13 +528,11 @@ impl DurableWorkspace {
     #[cfg(test)]
     fn apply_with_fault(
         &mut self,
-        transaction: &Transaction,
+        request: &ApplyTransactionRequest,
+        fingerprint: [u8; 32],
         fault: PublicationStep,
-    ) -> Result<TransactionResult> {
-        let prepared = self.workspace.prepare_transaction(transaction)?;
-        self.publish_snapshot(&prepared.snapshot, None, fault)?;
-        self.workspace.publish(prepared.snapshot)?;
-        Ok(prepared.result)
+    ) -> Result<TransactionReceipt> {
+        self.apply_at_step(request, fingerprint, fault)
     }
 }
 
@@ -490,44 +542,54 @@ fn validate_idempotency_record(
     head: Revision,
     snapshots: &BTreeMap<Revision, Arc<Snapshot>>,
 ) -> Result<()> {
-    let result = &record.result;
-    let expected_revision = result.base_revision.next();
-    if !result.published
-        || result.workspace != workspace
-        || result.revision > head
-        || expected_revision != Some(result.revision)
+    let receipt = &record.receipt;
+    let expected_revision = receipt.base_revision.next();
+    if !receipt.published
+        || receipt.workspace != workspace
+        || receipt.revision > head
+        || expected_revision != Some(receipt.revision)
     {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
-            "persisted idempotency result has invalid publication identity",
+            "persisted idempotency receipt has invalid publication identity",
         )
         .for_workspace(workspace));
     }
-    let base = snapshots.get(&result.base_revision).ok_or_else(|| {
+    let base = snapshots.get(&receipt.base_revision).ok_or_else(|| {
         LkError::new(
             ErrorCode::ArtifactCorrupt,
             "persisted idempotency base revision is not retained",
         )
         .for_workspace(workspace)
-        .at_revision(result.base_revision)
+        .at_revision(receipt.base_revision)
     })?;
-    let published = snapshots.get(&result.revision).ok_or_else(|| {
+    let published = snapshots.get(&receipt.revision).ok_or_else(|| {
         LkError::new(
             ErrorCode::ArtifactCorrupt,
             "persisted idempotency result revision is not retained",
         )
         .for_workspace(workspace)
-        .at_revision(result.revision)
+        .at_revision(receipt.revision)
     })?;
-    if published.hash() != result.hash || diff::between(base, published) != result.diff {
+    let semantic_diff = diff::between(base, published);
+    let blockers_before = query::workspace_blockers(base);
+    let blockers_after = query::workspace_blockers(published);
+    if published.hash() != receipt.hash
+        || semantic_diff.change_count() != receipt.change_count
+        || semantic_diff.digest != receipt.change_digest
+        || blockers_before.is_empty() != receipt.complete_before
+        || blockers_after.is_empty() != receipt.complete_after
+        || u64::try_from(blockers_before.len()).ok() != Some(receipt.blocker_count_before)
+        || u64::try_from(blockers_after.len()).ok() != Some(receipt.blocker_count_after)
+    {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
-            "persisted idempotency result disagrees with retained snapshots",
+            "persisted idempotency receipt disagrees with retained snapshots",
         )
         .for_workspace(workspace)
-        .at_revision(result.revision));
+        .at_revision(receipt.revision));
     }
-    let expected_allocations = published
+    let expected_created = published
         .next_serial()
         .checked_sub(base.next_serial())
         .ok_or_else(|| {
@@ -537,18 +599,25 @@ fn validate_idempotency_record(
             )
             .for_workspace(workspace)
         })?;
-    if u64::try_from(result.allocations.len()).ok() != Some(expected_allocations) {
+    if receipt.created_count != expected_created {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
-            "persisted idempotency allocations do not cover the allocator transition",
+            "persisted idempotency created count disagrees with allocator transition",
+        )
+        .for_workspace(workspace));
+    }
+    if receipt.returned_bindings.len() > crate::transaction::MAX_RETURNED_BINDINGS {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "persisted idempotency bindings exceed response policy",
         )
         .for_workspace(workspace));
     }
     let mut previous_handle = None;
-    let mut allocated_serials = std::collections::BTreeSet::new();
-    for (handle, node) in &result.allocations {
+    let mut selected_serials = std::collections::BTreeSet::new();
+    for (handle, node) in &receipt.returned_bindings {
         if previous_handle.is_some_and(|previous| *handle <= previous)
-            || !allocated_serials.insert(node.serial())
+            || !selected_serials.insert(node.serial())
             || node.workspace() != workspace
             || node.serial() < base.next_serial()
             || node.serial() >= published.next_serial()
@@ -556,27 +625,12 @@ fn validate_idempotency_record(
         {
             return Err(LkError::new(
                 ErrorCode::ArtifactCorrupt,
-                "persisted idempotency allocation mapping is invalid",
+                "persisted idempotency selected binding is invalid",
             )
             .for_workspace(workspace)
             .for_node(*node));
         }
         previous_handle = Some(*handle);
-    }
-    for (offset, serial) in allocated_serials.into_iter().enumerate() {
-        let offset = u64::try_from(offset).map_err(|_| {
-            LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "persisted allocation offset overflows node serials",
-            )
-        })?;
-        if base.next_serial().checked_add(offset) != Some(serial) {
-            return Err(LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "persisted idempotency allocation serials are not contiguous",
-            )
-            .for_workspace(workspace));
-        }
     }
     Ok(())
 }
@@ -584,7 +638,7 @@ fn validate_idempotency_record(
 pub(crate) fn list_workspace_ids(state_directory: &Path) -> Result<Vec<WorkspaceId>> {
     let directory = state_directory.join("workspaces");
     ensure_private_directory(&directory)?;
-    let mut ids = Vec::new();
+    let mut ids = BTreeSet::new();
     let mut removed_staging = false;
     for entry in fs::read_dir(&directory)? {
         let entry = entry?;
@@ -619,13 +673,23 @@ pub(crate) fn list_workspace_ids(state_directory: &Path) -> Result<Vec<Workspace
                 format!("workspace directory identity is invalid: {error}"),
             )
         })?;
-        ids.push(id);
+        if name != id.to_string() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace directory identity is not canonical",
+            ));
+        }
+        if !ids.insert(id) {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace directory identities are ambiguous",
+            ));
+        }
     }
     if removed_staging {
         sync_directory(&directory)?;
     }
-    ids.sort();
-    Ok(ids)
+    Ok(ids.into_iter().collect())
 }
 
 fn cleanup_workspace_temporary_files(directory: &Path) -> Result<()> {
@@ -758,7 +822,7 @@ fn encode_head(
     if let Some(record) = idempotency {
         writer.fixed(&record.key.as_bytes());
         writer.fixed(&record.fingerprint);
-        protocol::put_transaction_result(&mut writer, &record.result)?;
+        protocol::put_transaction_receipt(&mut writer, &record.receipt)?;
     }
     let body = writer.finish();
     let checksum = blake3::hash(&body);
@@ -805,7 +869,7 @@ fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<Idempoten
         key.copy_from_slice(reader.fixed(16).map_err(head_codec)?);
         let mut fingerprint = [0_u8; 32];
         fingerprint.copy_from_slice(reader.fixed(32).map_err(head_codec)?);
-        let result = protocol::read_transaction_result(&mut reader).map_err(|mut error| {
+        let receipt = protocol::read_transaction_receipt(&mut reader).map_err(|mut error| {
             if error.code != ErrorCode::PolicyExceeded {
                 error.code = ErrorCode::ArtifactCorrupt;
             }
@@ -818,7 +882,7 @@ fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<Idempoten
         Some(IdempotencyRecord {
             key: IdempotencyKey::from_bytes(key),
             fingerprint,
-            result,
+            receipt,
         })
     } else {
         None
@@ -882,8 +946,12 @@ fn reject_symlink(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn revision_file_name(revision: Revision) -> String {
+    format!("{:020}.lkjscript", revision.get())
+}
+
 fn revision_path(directory: &Path, revision: Revision) -> PathBuf {
-    directory.join(format!("{:020}.lkjscript", revision.get()))
+    directory.join(revision_file_name(revision))
 }
 
 fn read_bounded_regular_file(path: &Path, maximum: usize, policy_message: &str) -> Result<Vec<u8>> {
@@ -984,19 +1052,32 @@ fn inject(actual: PublicationStep, expected: PublicationStep) -> Result<()> {
 mod tests {
     use super::*;
     use crate::ids::LocalHandle;
-    use crate::schema::SemanticType;
-    use crate::transaction::TransactionOp;
+    use crate::schema::{Node, SemanticType};
+    use crate::transaction::{NodeTarget, Transaction, TransactionOp, TransactionResponseSpec};
 
     fn create_package(id: WorkspaceId) -> Transaction {
         Transaction {
             workspace: id,
             base_revision: Revision::INITIAL,
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreatePackage {
                 handle: LocalHandle::new(1),
                 name: "package".to_owned(),
             }],
+        }
+    }
+
+    fn request(transaction: &Transaction) -> ApplyTransactionRequest {
+        let mut return_handles: Vec<LocalHandle> = transaction
+            .operations
+            .iter()
+            .filter_map(TransactionOp::created_handle)
+            .collect();
+        return_handles.sort();
+        ApplyTransactionRequest {
+            transaction: transaction.clone(),
+            response: TransactionResponseSpec { return_handles },
         }
     }
 
@@ -1043,6 +1124,44 @@ mod tests {
     }
 
     #[test]
+    fn noncanonical_workspace_and_revision_path_aliases_reject() {
+        let workspace_state = tempfile::tempdir().expect("workspace alias state");
+        ensure_state_directory(workspace_state.path()).expect("state directory");
+        let workspace_id = WorkspaceId::from_bytes([0xab; 16]);
+        DurableWorkspace::create(workspace_state.path(), workspace_id).expect("workspace");
+        let canonical = workspace_directory(workspace_state.path(), workspace_id);
+        let alias = canonical
+            .parent()
+            .expect("workspaces directory")
+            .join(workspace_id.to_string().to_uppercase());
+        fs::rename(&canonical, &alias).expect("rename to uppercase alias");
+        assert_eq!(
+            list_workspace_ids(workspace_state.path())
+                .expect_err("uppercase workspace alias must reject")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+
+        let revision_state = tempfile::tempdir().expect("revision alias state");
+        ensure_state_directory(revision_state.path()).expect("state directory");
+        let revision_id = WorkspaceId::from_bytes([0x44; 16]);
+        DurableWorkspace::create(revision_state.path(), revision_id).expect("workspace");
+        let revisions = workspace_directory(revision_state.path(), revision_id).join("revisions");
+        fs::rename(
+            revision_path(&revisions, Revision::INITIAL),
+            revisions.join("0.lkjscript"),
+        )
+        .expect("rename to decimal alias");
+        assert_eq!(
+            DurableWorkspace::open(revision_state.path(), revision_id)
+                .err()
+                .expect("decimal revision alias must reject")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
     fn only_strictly_named_temporary_files_are_recovered() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
@@ -1059,6 +1178,88 @@ mod tests {
             DurableWorkspace::open(temporary.path(), id)
                 .err()
                 .expect("unknown temporary must reject")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
+    fn restart_rejects_history_that_clears_a_surviving_package_entry() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x45; 16]);
+        let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "package".to_owned(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    name: "module".to_owned(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    name: "function".to_owned(),
+                    result: SemanticType::I64,
+                },
+                TransactionOp::SetEntryFunction {
+                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    function: NodeTarget::Local(LocalHandle::new(3)),
+                },
+            ],
+        };
+        let accepted_request = request(&transaction);
+        let fingerprint =
+            protocol::transaction_fingerprint(&accepted_request).expect("fingerprint");
+        workspace
+            .apply(&accepted_request, fingerprint)
+            .expect("selected entry commit");
+        let previous = workspace.head().expect("revision one").clone();
+        let mut nodes = previous.nodes.clone();
+        let package = nodes
+            .iter_mut()
+            .find_map(|(id, node)| match node {
+                Node::Package { entry: Some(_), .. } => Some((*id, node)),
+                _ => None,
+            })
+            .expect("selected package");
+        let Node::Package { entry, .. } = package.1 else {
+            panic!("package kind")
+        };
+        *entry = None;
+        let forged = Snapshot::from_parts(
+            id,
+            Revision::new(2),
+            previous.root,
+            previous.next_serial,
+            previous.tombstones.clone(),
+            nodes,
+        )
+        .expect("individually valid cleared entry snapshot");
+        let directory = workspace_directory(temporary.path(), id);
+        fs::write(
+            revision_path(&directory.join("revisions"), forged.revision()),
+            artifact::encode(&forged).expect("forged artifact"),
+        )
+        .expect("write forged revision");
+        fs::write(
+            directory.join("HEAD"),
+            encode_head(forged.revision(), forged.hash(), None).expect("forged HEAD"),
+        )
+        .expect("write forged HEAD");
+        drop(workspace);
+        assert_eq!(
+            DurableWorkspace::open(temporary.path(), id)
+                .err()
+                .expect("restart must reject cleared entry history")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
@@ -1082,6 +1283,23 @@ mod tests {
                 .expect("corrupt HEAD must reject")
                 .code,
             ErrorCode::ArtifactCorrupt
+        );
+
+        let oversized_head_id = WorkspaceId::from_bytes([0x70; 16]);
+        DurableWorkspace::create(temporary.path(), oversized_head_id).expect("workspace");
+        let oversized_head = workspace_directory(temporary.path(), oversized_head_id).join("HEAD");
+        OpenOptions::new()
+            .write(true)
+            .open(&oversized_head)
+            .expect("HEAD file")
+            .set_len(u64::try_from(MAXIMUM_HEAD_BYTES).expect("HEAD policy") + 1)
+            .expect("extend HEAD");
+        assert_eq!(
+            DurableWorkspace::open(temporary.path(), oversized_head_id)
+                .err()
+                .expect("oversized HEAD must reject before read")
+                .code,
+            ErrorCode::PolicyExceeded
         );
 
         let size_id = WorkspaceId::from_bytes([7; 16]);
@@ -1110,17 +1328,100 @@ mod tests {
     }
 
     #[test]
-    fn persisted_idempotency_result_is_semantically_validated() {
+    fn maximum_compact_receipt_keeps_head_below_explicit_policy() {
+        let workspace = WorkspaceId::from_bytes([0x17; 16]);
+        let returned_bindings = (0..crate::transaction::MAX_RETURNED_BINDINGS)
+            .map(|index| {
+                (
+                    LocalHandle::new(u32::try_from(index).expect("handle")),
+                    crate::ids::NodeId::new(workspace, u64::try_from(index).expect("serial") + 2)
+                        .expect("node"),
+                )
+            })
+            .collect();
+        let record = IdempotencyRecord {
+            key: IdempotencyKey::from_bytes([0x17; 16]),
+            fingerprint: [0x23; 32],
+            receipt: TransactionReceipt {
+                workspace,
+                base_revision: Revision::new(1),
+                revision: Revision::new(2),
+                hash: SnapshotHash::from_bytes([0x34; 32]),
+                published: true,
+                created_count: u64::MAX,
+                returned_bindings,
+                change_count: u64::MAX,
+                change_digest: crate::ids::ChangeDigest::from_bytes([0x45; 32]),
+                complete_before: false,
+                complete_after: true,
+                blocker_count_before: u64::MAX,
+                blocker_count_after: 0,
+            },
+        };
+        let bytes = encode_head(
+            Revision::new(2),
+            SnapshotHash::from_bytes([0x34; 32]),
+            Some(&record),
+        )
+        .expect("maximum compact HEAD");
+        assert!(bytes.len() < MAXIMUM_HEAD_BYTES);
+        assert!(bytes.len() < 4096);
+        let (_, _, decoded) = decode_head(&bytes).expect("decode compact HEAD");
+        assert_eq!(decoded.expect("idempotency").receipt, record.receipt);
+    }
+
+    #[test]
+    fn head_version_one_magic_is_rejected_without_compatibility_reader() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x18; 16]);
+        DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let head_path = workspace_directory(temporary.path(), id).join("HEAD");
+        let mut bytes = fs::read(&head_path).expect("head bytes");
+        bytes[..8].copy_from_slice(b"LKJHEAD1");
+        let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
+        let checksum = blake3::hash(&bytes[..body_length]);
+        bytes[body_length..].copy_from_slice(checksum.as_bytes());
+        fs::write(&head_path, bytes).expect("old head magic");
+        assert_eq!(
+            DurableWorkspace::open(temporary.path(), id)
+                .err()
+                .expect("HEAD1 must reject")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
+    fn persisted_idempotency_receipt_is_semantically_validated() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([9; 16]);
         let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
         let mut transaction = create_package(id);
         transaction.idempotency_key = Some(IdempotencyKey::from_bytes([0x91; 16]));
-        let fingerprint = protocol::transaction_fingerprint(&transaction).expect("fingerprint");
-        workspace
-            .apply(&transaction, fingerprint)
+        let request = request(&transaction);
+        let fingerprint = protocol::transaction_fingerprint(&request).expect("fingerprint");
+        let accepted = workspace
+            .apply(&request, fingerprint)
             .expect("keyed transaction");
+        let mut conflicting = request.clone();
+        conflicting.transaction.base_revision = Revision::new(999);
+        let conflicting_fingerprint =
+            protocol::transaction_fingerprint(&conflicting).expect("conflicting fingerprint");
+        assert_eq!(
+            workspace
+                .apply(&conflicting, conflicting_fingerprint)
+                .expect_err("matching key with a future base must conflict")
+                .code,
+            ErrorCode::IdempotencyConflict
+        );
+        assert_eq!(
+            workspace
+                .apply(&request, fingerprint)
+                .expect("exact replay"),
+            accepted
+        );
         let valid_record = workspace.idempotency.clone().expect("idempotency record");
         let head = workspace.head().expect("head");
         let head_revision = head.revision();
@@ -1129,7 +1430,7 @@ mod tests {
         let head_path = workspace.directory.join("HEAD");
 
         let mut unpublished = valid_record.clone();
-        unpublished.result.published = false;
+        unpublished.receipt.published = false;
         let forged =
             encode_head(head_revision, head_hash, Some(&unpublished)).expect("forged HEAD");
         fs::write(&head_path, forged).expect("write forged HEAD");
@@ -1142,19 +1443,32 @@ mod tests {
         );
 
         let mut missing = valid_record.clone();
-        missing.result.allocations.clear();
+        missing.receipt.created_count = 0;
         let forged = encode_head(head_revision, head_hash, Some(&missing)).expect("forged HEAD");
         fs::write(&head_path, forged).expect("write forged HEAD");
         assert_eq!(
             DurableWorkspace::open(temporary.path(), id)
                 .err()
-                .expect("missing idempotency allocation")
+                .expect("wrong idempotency created count")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+
+        let mut wrong_digest = valid_record.clone();
+        wrong_digest.receipt.change_digest = crate::ids::ChangeDigest::from_bytes([0xff; 32]);
+        let forged =
+            encode_head(head_revision, head_hash, Some(&wrong_digest)).expect("forged HEAD");
+        fs::write(&head_path, forged).expect("write forged HEAD");
+        assert_eq!(
+            DurableWorkspace::open(temporary.path(), id)
+                .err()
+                .expect("wrong idempotency digest")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
 
         let mut prior = valid_record;
-        prior.result.allocations[0].1 = root;
+        prior.receipt.returned_bindings[0].1 = root;
         let forged = encode_head(head_revision, head_hash, Some(&prior)).expect("forged HEAD");
         fs::write(head_path, forged).expect("write forged HEAD");
         assert_eq!(
@@ -1167,40 +1481,56 @@ mod tests {
     }
 
     #[test]
-    fn persistence_policy_rejects_unreopenable_names_before_commit() {
+    fn validate_only_and_commit_share_persistence_policy_preflight() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([8; 16]);
         let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
-        let head_path = workspace_directory(temporary.path(), id).join("HEAD");
-        let before = fs::read(&head_path).expect("initial head");
-        let transaction = Transaction {
+        let directory = workspace_directory(temporary.path(), id);
+        let head_path = directory.join("HEAD");
+        let before_head = fs::read(&head_path).expect("initial head");
+        let revision_files = || {
+            let mut names: Vec<_> = fs::read_dir(directory.join("revisions"))
+                .expect("revision directory")
+                .map(|entry| entry.expect("revision entry").file_name())
+                .collect();
+            names.sort();
+            names
+        };
+        let before_revisions = revision_files();
+        let mut transaction = Transaction {
             workspace: id,
             base_revision: Revision::INITIAL,
             idempotency_key: None,
-            dry_run: false,
+            mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreatePackage {
                 handle: LocalHandle::new(1),
                 name: "x".repeat(artifact::DecodePolicy::default().maximum_name_bytes + 1),
             }],
         };
-        let fingerprint = protocol::transaction_fingerprint(&transaction).expect("fingerprint");
-        assert_eq!(
-            workspace
-                .apply(&transaction, fingerprint)
-                .expect_err("unreopenable artifact must reject")
-                .code,
-            ErrorCode::PolicyExceeded
-        );
-        assert_eq!(fs::read(head_path).expect("unchanged head"), before);
-        assert_eq!(
-            workspace.head().expect("head").revision(),
-            Revision::INITIAL
-        );
+        for mode in [TransactionMode::ValidateOnly, TransactionMode::Commit] {
+            transaction.mode = mode;
+            let request = request(&transaction);
+            let fingerprint = protocol::transaction_fingerprint(&request).expect("fingerprint");
+            assert_eq!(
+                workspace
+                    .apply(&request, fingerprint)
+                    .expect_err("unreopenable artifact must reject in both modes")
+                    .code,
+                ErrorCode::PolicyExceeded
+            );
+            assert_eq!(fs::read(&head_path).expect("unchanged head"), before_head);
+            assert_eq!(revision_files(), before_revisions);
+            assert_eq!(
+                workspace.head().expect("head").revision(),
+                Revision::INITIAL
+            );
+            assert_eq!(workspace.head().expect("head").next_serial(), 2);
+        }
     }
 
     #[test]
-    fn failures_before_commit_leave_head_and_allocator_unchanged() {
+    fn keyed_head2_publication_faults_preserve_prior_replay_and_allocator() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([5; 16]);
@@ -1217,22 +1547,71 @@ mod tests {
             }
             let mut workspace =
                 DurableWorkspace::create(temporary.path(), id).expect("durable workspace creation");
-            let before = fs::read(path.join("HEAD")).expect("read original head");
+            let mut prior_transaction = create_package(id);
+            prior_transaction.idempotency_key = Some(IdempotencyKey::from_bytes([0x51; 16]));
+            let prior_request = request(&prior_transaction);
+            let prior_fingerprint =
+                protocol::transaction_fingerprint(&prior_request).expect("prior fingerprint");
+            let prior_receipt = workspace
+                .apply(&prior_request, prior_fingerprint)
+                .expect("prior keyed commit");
+            let package = prior_receipt.returned_bindings[0].1;
+            let before = fs::read(path.join("HEAD")).expect("read prior keyed HEAD");
+
+            let candidate = ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: id,
+                    base_revision: Revision::new(1),
+                    idempotency_key: Some(IdempotencyKey::from_bytes([0x52; 16])),
+                    mode: TransactionMode::Commit,
+                    operations: vec![TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: crate::transaction::NodeTarget::Existing(package),
+                        name: "module".to_owned(),
+                    }],
+                },
+                response: TransactionResponseSpec {
+                    return_handles: vec![LocalHandle::new(2)],
+                },
+            };
+            let candidate_fingerprint =
+                protocol::transaction_fingerprint(&candidate).expect("candidate fingerprint");
             let error = workspace
-                .apply_with_fault(&create_package(id), fault)
+                .apply_with_fault(&candidate, candidate_fingerprint, fault)
                 .expect_err("fault must reject publication");
             assert_eq!(error.code, ErrorCode::Io);
+            assert_eq!(workspace.head().expect("head").revision(), Revision::new(1));
+            assert_eq!(workspace.head().expect("head").next_serial(), 3);
             assert_eq!(
-                workspace.head().expect("head").revision(),
-                Revision::INITIAL
+                workspace
+                    .idempotency
+                    .as_ref()
+                    .expect("prior idempotency")
+                    .receipt,
+                prior_receipt
             );
             assert_eq!(
                 fs::read(path.join("HEAD")).expect("read head after fault"),
                 before
             );
-            let reopened =
-                DurableWorkspace::open(temporary.path(), id).expect("old head must reopen");
-            assert_eq!(reopened.head().expect("head").next_serial(), 2);
+
+            let mut reopened =
+                DurableWorkspace::open(temporary.path(), id).expect("prior HEAD must reopen");
+            assert_eq!(reopened.head().expect("head").next_serial(), 3);
+            assert_eq!(
+                reopened
+                    .idempotency
+                    .as_ref()
+                    .expect("reopened idempotency")
+                    .receipt,
+                prior_receipt
+            );
+            assert_eq!(
+                reopened
+                    .apply(&prior_request, prior_fingerprint)
+                    .expect("prior exact replay after fault"),
+                prior_receipt
+            );
         }
         let _ = SemanticType::Unit;
     }

@@ -78,18 +78,13 @@ pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram>
                     .for_node(*operation_id),
             );
         };
-        let result_type = operation
-            .contract()
-            .result_types
-            .first()
-            .copied()
-            .ok_or_else(|| {
-                LkError::new(
-                    ErrorCode::CoreIrInvalid,
-                    "non-terminator operation has no result contract",
-                )
-                .for_node(*operation_id)
-            })?;
+        let result_type = operation.result_type(0, None).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::CoreIrInvalid,
+                "non-terminator operation has no result contract",
+            )
+            .for_node(*operation_id)
+        })?;
         let result_index = u32::try_from(value_types.len()).map_err(|_| {
             LkError::new(
                 ErrorCode::PolicyExceeded,

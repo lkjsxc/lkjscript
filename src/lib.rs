@@ -12,6 +12,7 @@ pub mod error;
 pub mod graph;
 pub mod ids;
 pub mod interpret;
+pub mod machine;
 mod persistence;
 pub mod protocol;
 pub mod query;
@@ -19,13 +20,22 @@ pub mod schema;
 pub mod transaction;
 mod validate;
 
+#[cfg(test)]
+mod campaign_tests;
+
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
-    IdempotencyKey, LocalHandle, NodeId, RequestId, Revision, SnapshotHash, WorkspaceId,
+    ChangeDigest, IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, SnapshotHash,
+    WorkspaceId,
 };
 pub use interpret::RuntimeValue;
-pub use protocol::{Client, Request, Response};
+pub use protocol::{Client, Request, RequestCode, Response, ResponseCode};
 pub use schema::{
-    Node, NodeKind, OperationDraft, OperationKind, SemanticType, ValueDraft, ValueRef,
+    DirectReference, LiteralField, Node, NodeKind, OperandDescriptor, OperandUse, OperationCode,
+    OperationDescriptor, OperationDraft, OperationKind, SemanticType, TypeRule, ValueDraft,
+    ValueRef,
 };
-pub use transaction::{NodeTarget, Transaction, TransactionOp, TransactionResult};
+pub use transaction::{
+    ApplyTransactionRequest, MAX_RETURNED_BINDINGS, NodeTarget, Transaction, TransactionMode,
+    TransactionOp, TransactionOpCode, TransactionReceipt, TransactionResponseSpec,
+};

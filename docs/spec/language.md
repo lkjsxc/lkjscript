@@ -3,46 +3,48 @@
 ## Types and values
 
 The closed semantic types are `unit`, `bool`, and signed two's-complement `i64`. There are no
-implicit conversions, null values, dynamic values, casts, exceptions, generics, or nominal types.
-Function signatures store ordered parameter Node IDs and one declared result type. The current
-daemon invocation supports only zero-parameter entry functions.
+implicit conversions, null or dynamic values, casts, exceptions, generics, or nominal types.
+Functions store ordered parameter Node IDs and one result type. Daemon entry invocation currently
+supports only zero-parameter functions.
 
-Scalar values use copy semantics. The operation contract records `Copy` for consumed bootstrap
-operands. Ownership-bearing values and borrow rules do not yet exist.
+Scalar values have copy semantics. Operation contracts record `copy` operand use; ownership-bearing
+values and borrow rules do not exist yet.
 
 ## Operations
 
-`src/schema.rs` owns one exhaustive operation contract used by graph validation, type derivation,
-completeness, lowering eligibility, and result typing.
+`src/schema.rs` owns one exhaustive static operation contract used by graph validation, schema
+queries, result typing, completeness, lowering, codecs, and machine description.
 
-- `ConstI64(value)` has no operands and produces one `i64`.
-- `ConstBool(value)` has no operands and produces one `bool`.
-- `AddI64(lhs, rhs)` copies two exact `i64` values and produces one `i64`.
-- `Hole(expected)` produces a typed semantic placeholder for graph construction but is always
-  incomplete and cannot lower.
-- `Return(value)` is the block terminator and requires the exact declared function result type.
+- `const_i64(value)` has no operands and produces one `i64`;
+- `const_bool(value)` has no operands and produces one `bool`;
+- `add_i64(lhs, rhs)` copies two exact `i64` values and produces one `i64`;
+- `hole(expected)` produces one value of its exact expected type but remains incomplete and cannot
+  lower;
+- `return(value)` is the terminator and requires the exact function result type.
 
-Operations are pure. `i64` addition uses checked arithmetic; overflow is a structured runtime trap.
-There are no host effects or capabilities in this slice.
+This campaign adds no language operation. `RefineHole` is a semantic graph edit, not an executable
+operation. It is the sole identity-preserving constructor transition: a typed hole may become a
+complete non-terminator operation with the same one-result contract while retaining its Node ID,
+body position, owner, and uses. Refining to another hole, a terminator, a different result type, or
+refining an already-complete operation rejects. There is no reverse transition or general operation
+morph. Replacement operands still obey same-function scope, earlier-in-block order, result-index,
+and exact-type rules.
 
-An operation result may be used only later in the same ordered block. A parameter value must belong
-to the owning function. The output index must exist in the producer's closed contract. The graph
-validator enforces these facts before publication, and the private Core IR verifier checks dense
-value definition, dominance, type agreement, and return type again before execution.
+Operations are pure. `i64` addition uses checked arithmetic and overflow is a structured runtime
+trap. There are no host effects or capabilities.
 
 ## Compilation and execution
 
-A selected entry function may compile when its body exists and its containment closure has no
-holes. Unused incomplete functions do not block that entry. The only executable path is:
+A selected entry may compile when its body exists and its dependency closure contains no holes.
+Unused incomplete definitions do not block that entry. The single executable route is:
 
 ```text
 immutable SPG snapshot -> completeness/type validation -> Core IR -> verifier -> interpreter
 ```
 
-Core IR has explicit functions, signatures, blocks, typed dense values, closed instructions, a
-separate return terminator, and semantic origin Node IDs. It is derived, same-build, and not
-serialized. The interpreter implements every current Core IR instruction and returns a typed
-`RuntimeValue`.
+Core IR uses typed dense values and semantic origin Node IDs, is derived same-build state, and is
+never serialized. The verifier rechecks definition, order/dominance, type, and return agreement
+before interpretation.
 
 Calls, branches, loops, recursion, aggregates, sums, patterns, generics, effects, host operations,
 ownership-bearing values, and native execution are not implemented.

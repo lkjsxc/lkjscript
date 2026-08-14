@@ -1,15 +1,16 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
-use lkjscript::artifact;
 use lkjscript::daemon;
+use lkjscript::query::{
+    ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, QueryOutcome, QueryResult,
+    RepairTarget, VisibleCursorPurpose,
+};
 use lkjscript::{
-    Client, ErrorCode, IdempotencyKey, LocalHandle, NodeId, NodeTarget, OperationDraft, Request,
-    RequestId, Response, Revision, RuntimeValue, SemanticType, Transaction, TransactionOp,
-    ValueDraft, WorkspaceId,
+    ApplyTransactionRequest, Client, ErrorCode, IdempotencyKey, LocalHandle, NodeId, NodeTarget,
+    OperationDraft, QueryId, Request, RequestId, Response, Revision, RuntimeValue, SemanticType,
+    Transaction, TransactionMode, TransactionOp, TransactionResponseSpec, ValueDraft, WorkspaceId,
 };
 use std::fs;
-use std::io::Write;
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -72,372 +73,6 @@ impl Drop for RunningDaemon {
 }
 
 #[test]
-fn source_free_durable_client_daemon_vertical_executes_old_and_new_snapshots() {
-    let temporary = tempfile::tempdir().expect("temporary state directory");
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
-    abandon_query_response(temporary.path());
-
-    let cli_create = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
-        .args([
-            "--state",
-            temporary.path().to_str().expect("UTF-8 state path"),
-            "workspace-create",
-        ])
-        .output()
-        .expect("run documented workspace-create command");
-    assert!(
-        cli_create.status.success(),
-        "workspace-create stderr: {}",
-        String::from_utf8_lossy(&cli_create.stderr)
-    );
-    let create_output = String::from_utf8(cli_create.stdout).expect("UTF-8 client output");
-    let workspace = create_output
-        .split_whitespace()
-        .find_map(|field| field.strip_prefix("workspace="))
-        .expect("workspace field")
-        .parse::<WorkspaceId>()
-        .expect("workspace identity");
-    let initial = workspace_summary(&client, workspace, Revision::INITIAL);
-    assert_eq!(initial.revision, Revision::INITIAL);
-    assert!(!initial.complete);
-
-    let bootstrap = bootstrap_transaction(workspace, false);
-    let applied = client
-        .request(
-            RequestId::new(2),
-            &Request::ApplyTransaction(bootstrap.clone()),
-        )
-        .expect("bootstrap request");
-    let Response::TransactionApplied(first) = applied else {
-        panic!("unexpected transaction response: {applied:?}");
-    };
-    assert_eq!(first.revision, Revision::new(1));
-    assert!(first.published);
-    let function = allocation(&first, 3);
-    let module = allocation(&first, 2);
-    let constant_two = allocation(&first, 7);
-    let add = allocation(&first, 8);
-    assert_eq!(function.serial(), 4);
-
-    let exact_retry = client
-        .request(
-            RequestId::new(3),
-            &Request::ApplyTransaction(bootstrap.clone()),
-        )
-        .expect("idempotent retry");
-    assert_eq!(exact_retry, Response::TransactionApplied(first.clone()));
-    let cli_bootstrap = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
-        .args([
-            "--state",
-            temporary.path().to_str().expect("UTF-8 state path"),
-            "bootstrap-42",
-            &workspace.to_string(),
-        ])
-        .output()
-        .expect("run documented bootstrap client command");
-    assert!(
-        cli_bootstrap.status.success(),
-        "bootstrap stderr: {}",
-        String::from_utf8_lossy(&cli_bootstrap.stderr)
-    );
-    assert!(String::from_utf8_lossy(&cli_bootstrap.stdout).contains("handle=3"));
-    let mut conflicting = bootstrap.clone();
-    if let TransactionOp::CreatePackage { name, .. } = &mut conflicting.operations[0] {
-        *name = "different".to_owned();
-    }
-    let conflict = client
-        .request(RequestId::new(4), &Request::ApplyTransaction(conflicting))
-        .expect("conflicting retry response");
-    assert_error(conflict, ErrorCode::IdempotencyConflict);
-
-    let summary = workspace_summary(&client, workspace, Revision::new(1));
-    assert!(summary.complete);
-    assert_eq!(summary.node_count, 10);
-    let node = client
-        .request(
-            RequestId::new(5),
-            &Request::Node {
-                workspace,
-                revision: Revision::new(1),
-                node: function,
-                expand: true,
-            },
-        )
-        .expect("function query");
-    let Response::Node(view) = node else {
-        panic!("unexpected node response: {node:?}");
-    };
-    assert_eq!(view.summary.node, function);
-    assert_eq!(view.summary.display_name.as_deref(), Some("main"));
-    assert_eq!(
-        view.summary
-            .signature
-            .as_ref()
-            .map(|signature| signature.result),
-        Some(SemanticType::I64)
-    );
-    assert!(view.record.is_some());
-    assert_run(&client, workspace, Revision::new(1), function, 42);
-
-    let cli = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
-        .args([
-            "--state",
-            temporary.path().to_str().expect("UTF-8 state path"),
-            "run",
-            &workspace.to_string(),
-            "1",
-            &function.serial().to_string(),
-        ])
-        .output()
-        .expect("run real client binary");
-    assert!(
-        cli.status.success(),
-        "client stderr: {}",
-        String::from_utf8_lossy(&cli.stderr)
-    );
-    assert!(String::from_utf8_lossy(&cli.stdout).contains("i64=42"));
-
-    let revision_one_path = revision_path(temporary.path(), workspace, Revision::new(1));
-    let revision_one_bytes = fs::read(&revision_one_path).expect("read revision artifact");
-    let decoded = artifact::decode(&revision_one_bytes).expect("decode revision artifact");
-    assert_eq!(
-        artifact::encode(&decoded).expect("re-encode artifact"),
-        revision_one_bytes
-    );
-
-    let second = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
-        .args([
-            "--state",
-            temporary.path().to_str().expect("UTF-8 state path"),
-            "--foreground",
-        ])
-        .output()
-        .expect("run competing daemon");
-    assert!(!second.status.success());
-
-    daemon.shutdown();
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
-    assert_run(&client, workspace, Revision::new(1), function, 42);
-    let persisted_retry = client
-        .request(
-            RequestId::new(6),
-            &Request::ApplyTransaction(bootstrap.clone()),
-        )
-        .expect("persisted idempotent retry");
-    assert_eq!(persisted_retry, Response::TransactionApplied(first.clone()));
-
-    let edit = Transaction {
-        workspace,
-        base_revision: Revision::new(1),
-        idempotency_key: Some(IdempotencyKey::from_bytes([0x43; 16])),
-        dry_run: false,
-        operations: vec![
-            TransactionOp::RenameNode {
-                node: NodeTarget::Existing(function),
-                name: "answer".to_owned(),
-            },
-            TransactionOp::ReplaceOperation {
-                operation: NodeTarget::Existing(constant_two),
-                replacement: OperationDraft::ConstI64(3),
-            },
-        ],
-    };
-    let edited = client
-        .request(RequestId::new(7), &Request::ApplyTransaction(edit))
-        .expect("edit request");
-    let Response::TransactionApplied(second_revision) = edited else {
-        panic!("unexpected edit response: {edited:?}");
-    };
-    assert_eq!(second_revision.revision, Revision::new(2));
-    assert!(second_revision.allocations.is_empty());
-    assert_run(&client, workspace, Revision::new(1), function, 42);
-    assert_run(&client, workspace, Revision::new(2), function, 43);
-    let renamed = client
-        .request(
-            RequestId::new(8),
-            &Request::Node {
-                workspace,
-                revision: Revision::new(2),
-                node: function,
-                expand: false,
-            },
-        )
-        .expect("renamed function query");
-    let Response::Node(renamed) = renamed else {
-        panic!("unexpected renamed node response");
-    };
-    assert_eq!(renamed.summary.node, function);
-    assert_eq!(renamed.summary.display_name.as_deref(), Some("answer"));
-
-    let head_path = workspace_path(temporary.path(), workspace).join("HEAD");
-    let head_before_failure = fs::read(&head_path).expect("read durable head");
-    let revisions_before_failure = revision_files(temporary.path(), workspace);
-    let bool_handle = LocalHandle::new(100);
-    let invalid = Transaction {
-        workspace,
-        base_revision: Revision::new(2),
-        idempotency_key: None,
-        dry_run: false,
-        operations: vec![
-            TransactionOp::CreateOperation {
-                handle: bool_handle,
-                block: NodeTarget::Existing(NodeId::new(workspace, 6).expect("block id")),
-                before: Some(NodeTarget::Existing(add)),
-                operation: OperationDraft::ConstBool(true),
-            },
-            TransactionOp::ReplaceOperand {
-                operation: NodeTarget::Existing(add),
-                index: 1,
-                value: ValueDraft::OperationResult {
-                    operation: NodeTarget::Local(bool_handle),
-                    output: 0,
-                },
-            },
-        ],
-    };
-    let rejected = client
-        .request(RequestId::new(9), &Request::ApplyTransaction(invalid))
-        .expect("invalid transaction response");
-    let error = assert_error(rejected, ErrorCode::TypeMismatch);
-    assert_eq!(error.expected_type, Some(SemanticType::I64));
-    assert_eq!(error.actual_type, Some(SemanticType::Bool));
-    assert_eq!(
-        workspace_summary(&client, workspace, Revision::new(2)).revision,
-        Revision::new(2)
-    );
-    assert_eq!(
-        fs::read(&head_path).expect("head after rejection"),
-        head_before_failure
-    );
-    assert_eq!(
-        revision_files(temporary.path(), workspace),
-        revisions_before_failure
-    );
-
-    let create_incomplete = Transaction {
-        workspace,
-        base_revision: Revision::new(2),
-        idempotency_key: None,
-        dry_run: true,
-        operations: vec![TransactionOp::CreateFunction {
-            handle: LocalHandle::new(200),
-            module: NodeTarget::Existing(module),
-            name: "unfinished".to_owned(),
-            result: SemanticType::I64,
-        }],
-    };
-    let dry = client
-        .request(
-            RequestId::new(10),
-            &Request::ApplyTransaction(create_incomplete.clone()),
-        )
-        .expect("dry-run response");
-    let Response::TransactionApplied(dry) = dry else {
-        panic!("unexpected dry-run response");
-    };
-    assert!(!dry.published);
-    let future_id = allocation(&dry, 200);
-    assert_eq!(future_id.serial(), 11);
-    assert_eq!(
-        workspace_summary(&client, workspace, Revision::new(2)).revision,
-        Revision::new(2)
-    );
-
-    let mut commit_incomplete = create_incomplete;
-    commit_incomplete.dry_run = false;
-    let committed = client
-        .request(
-            RequestId::new(11),
-            &Request::ApplyTransaction(commit_incomplete),
-        )
-        .expect("commit after dry run");
-    let Response::TransactionApplied(committed) = committed else {
-        panic!("unexpected commit response");
-    };
-    assert_eq!(allocation(&committed, 200), future_id);
-    assert_eq!(committed.revision, Revision::new(3));
-    assert_run(&client, workspace, Revision::new(1), function, 42);
-    assert_run(&client, workspace, Revision::new(2), function, 43);
-
-    daemon.shutdown();
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
-    assert_run(&client, workspace, Revision::new(1), function, 42);
-    assert_run(&client, workspace, Revision::new(2), function, 43);
-    let unfinished = client
-        .request(
-            RequestId::new(12),
-            &Request::Node {
-                workspace,
-                revision: Revision::new(3),
-                node: future_id,
-                expand: false,
-            },
-        )
-        .expect("stable node after restart");
-    assert!(matches!(unfinished, Response::Node(_)));
-    let deleted = client
-        .request(
-            RequestId::new(13),
-            &Request::ApplyTransaction(Transaction {
-                workspace,
-                base_revision: Revision::new(3),
-                idempotency_key: None,
-                dry_run: false,
-                operations: vec![TransactionOp::DeleteOwnedSubtree {
-                    root: NodeTarget::Existing(future_id),
-                }],
-            }),
-        )
-        .expect("durable deletion");
-    assert!(matches!(deleted, Response::TransactionApplied(_)));
-    daemon.shutdown();
-
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
-    let deleted_artifact = fs::read(revision_path(temporary.path(), workspace, Revision::new(4)))
-        .expect("deleted revision artifact");
-    let deleted_snapshot = artifact::decode(&deleted_artifact).expect("deleted snapshot");
-    assert!(deleted_snapshot.contains_tombstone(future_id.serial()));
-    let old_node = client
-        .request(
-            RequestId::new(14),
-            &Request::Node {
-                workspace,
-                revision: Revision::new(3),
-                node: future_id,
-                expand: false,
-            },
-        )
-        .expect("old deleted node snapshot");
-    assert!(matches!(old_node, Response::Node(_)));
-    let replacement = client
-        .request(
-            RequestId::new(15),
-            &Request::ApplyTransaction(Transaction {
-                workspace,
-                base_revision: Revision::new(4),
-                idempotency_key: None,
-                dry_run: false,
-                operations: vec![TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(201),
-                    module: NodeTarget::Existing(module),
-                    name: "after-delete".to_owned(),
-                    result: SemanticType::I64,
-                }],
-            }),
-        )
-        .expect("allocate after durable deletion");
-    let Response::TransactionApplied(replacement) = replacement else {
-        panic!("unexpected replacement response");
-    };
-    assert_eq!(allocation(&replacement, 201).serial(), 12);
-    daemon.shutdown();
-}
-
-#[test]
 #[ignore = "manual retained performance baseline"]
 fn product_path_performance_baseline() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
@@ -458,10 +93,13 @@ fn product_path_performance_baseline() {
     let transaction = bootstrap_transaction(workspace, false);
     let transaction_started = Instant::now();
     let applied = client
-        .request(RequestId::new(701), &Request::ApplyTransaction(transaction))
+        .request(
+            RequestId::new(701),
+            &Request::ApplyTransaction(apply(transaction)),
+        )
         .expect("bootstrap transaction");
     let transaction_time = transaction_started.elapsed().as_nanos();
-    let Response::TransactionApplied(applied) = applied else {
+    let Response::TransactionReceipt(applied) = applied else {
         panic!("unexpected transaction response");
     };
     let entry = allocation(&applied, 3);
@@ -477,13 +115,13 @@ fn product_path_performance_baseline() {
         let response = client
             .request(
                 RequestId::new(800 + sample),
-                &Request::WorkspaceSummary {
-                    workspace,
-                    revision: Revision::new(1),
-                },
+                &query_request(workspace, Revision::new(1), Query::WorkspaceSummary),
             )
             .expect("summary sample");
-        assert!(matches!(response, Response::WorkspaceSummary(_)));
+        assert!(matches!(
+            one_query(response),
+            QueryResult::WorkspaceSummary(_)
+        ));
         query_samples.push(query_started.elapsed().as_nanos());
     }
     for sample in 0..31_u64 {
@@ -543,25 +181,24 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
     let transaction = bootstrap_transaction(workspace, false);
     let transaction_bytes = lkjscript::protocol::encoded_request_size(
         RequestId::new(1),
-        &Request::ApplyTransaction(transaction.clone()),
+        &Request::ApplyTransaction(apply(transaction.clone())),
     )
     .expect("encode bootstrap request");
     let summary_bytes = lkjscript::protocol::encoded_request_size(
         RequestId::new(2),
-        &Request::WorkspaceSummary {
-            workspace,
-            revision: Revision::new(1),
-        },
+        &query_request(workspace, Revision::new(1), Query::WorkspaceSummary),
     )
     .expect("encode summary request");
     let node_bytes = lkjscript::protocol::encoded_request_size(
         RequestId::new(3),
-        &Request::Node {
+        &query_request(
             workspace,
-            revision: Revision::new(1),
-            node: NodeId::new(workspace, 4).expect("function node"),
-            expand: true,
-        },
+            Revision::new(1),
+            Query::Node {
+                node: NodeId::new(workspace, 4).expect("function node"),
+                expand: true,
+            },
+        ),
     )
     .expect("encode node request");
     let run_bytes = lkjscript::protocol::encoded_request_size(
@@ -581,6 +218,159 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
 }
 
 #[test]
+fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
+    let temporary = tempfile::tempdir().expect("temporary state directory");
+    let daemon = RunningDaemon::start(temporary.path());
+    let client = daemon.client();
+    let Response::WorkspaceCreated(initial) = client
+        .request(RequestId::new(40), &Request::CreateWorkspace)
+        .expect("create workspace")
+    else {
+        panic!("workspace response")
+    };
+    let workspace = initial.workspace;
+    let Response::TransactionReceipt(bootstrap) = client
+        .request(
+            RequestId::new(41),
+            &Request::ApplyTransaction(apply(bootstrap_transaction(workspace, false))),
+        )
+        .expect("bootstrap")
+    else {
+        panic!("bootstrap response")
+    };
+    let function = allocation(&bootstrap, 3);
+    let block = allocation(&bootstrap, 5);
+    let forty = allocation(&bootstrap, 6);
+    let add = allocation(&bootstrap, 8);
+    assert_run(&client, workspace, Revision::new(1), function, 42);
+
+    let Response::TransactionReceipt(with_bool) = client
+        .request(
+            RequestId::new(42),
+            &Request::ApplyTransaction(apply(Transaction {
+                workspace,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(100),
+                    block: NodeTarget::Existing(block),
+                    before: Some(NodeTarget::Existing(add)),
+                    operation: OperationDraft::ConstBool(true),
+                }],
+            })),
+        )
+        .expect("publish bool candidate")
+    else {
+        panic!("bool response")
+    };
+    let boolean = allocation(&with_bool, 100);
+    assert_eq!(with_bool.revision, Revision::new(2));
+    let context_response = client
+        .request(
+            RequestId::new(43),
+            &query_request(
+                workspace,
+                Revision::new(2),
+                Query::RepairContext {
+                    target: RepairTarget::Operand {
+                        operation: add,
+                        index: 1,
+                    },
+                    budget: ContextBudget {
+                        body_before: 8,
+                        body_after: 1,
+                        visible_values: 8,
+                        incoming_uses: 8,
+                        include_incompatible: true,
+                    },
+                },
+            ),
+        )
+        .expect("operand context");
+    let QueryResult::RepairContext(context) = one_query(context_response) else {
+        panic!("operand context result")
+    };
+    assert_eq!(context.expected_type, SemanticType::I64);
+    assert!(
+        context
+            .visible_values
+            .items
+            .iter()
+            .any(|candidate| candidate.producer == forty && candidate.compatible)
+    );
+    assert!(
+        context
+            .visible_values
+            .items
+            .iter()
+            .any(|candidate| candidate.producer == boolean && !candidate.compatible)
+    );
+
+    let head = workspace_path(temporary.path(), workspace).join("HEAD");
+    let head_before = fs::read(&head).expect("head before invalid repair");
+    let revisions_before = revision_files(temporary.path(), workspace);
+    let rejected = client
+        .request(
+            RequestId::new(44),
+            &Request::ApplyTransaction(apply(Transaction {
+                workspace,
+                base_revision: Revision::new(2),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::ReplaceOperand {
+                    operation: NodeTarget::Existing(add),
+                    index: 1,
+                    value: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(boolean),
+                        output: 0,
+                    },
+                }],
+            })),
+        )
+        .expect("invalid operand repair response");
+    let error = assert_error(rejected, ErrorCode::TypeMismatch);
+    assert_eq!(error.expected_type, Some(SemanticType::I64));
+    assert_eq!(error.actual_type, Some(SemanticType::Bool));
+    assert_eq!(
+        fs::read(&head).expect("head after invalid repair"),
+        head_before
+    );
+    assert_eq!(
+        revision_files(temporary.path(), workspace),
+        revisions_before
+    );
+
+    let Response::TransactionReceipt(repaired) = client
+        .request(
+            RequestId::new(45),
+            &Request::ApplyTransaction(apply(Transaction {
+                workspace,
+                base_revision: Revision::new(2),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::ReplaceOperand {
+                    operation: NodeTarget::Existing(add),
+                    index: 1,
+                    value: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(forty),
+                        output: 0,
+                    },
+                }],
+            })),
+        )
+        .expect("valid operand repair")
+    else {
+        panic!("repair response")
+    };
+    assert_eq!(repaired.revision, Revision::new(3));
+    assert_run(&client, workspace, Revision::new(3), function, 80);
+    assert_run(&client, workspace, Revision::new(2), function, 42);
+    assert_run(&client, workspace, Revision::new(1), function, 42);
+    daemon.shutdown();
+}
+
+#[test]
 fn explicit_hole_is_queryable_and_cannot_execute() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
     let daemon = RunningDaemon::start(temporary.path());
@@ -593,31 +383,178 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
     };
     let workspace = initial.workspace;
     let transaction = bootstrap_transaction(workspace, true);
-    let Response::TransactionApplied(result) = client
-        .request(RequestId::new(21), &Request::ApplyTransaction(transaction))
+    let Response::TransactionReceipt(result) = client
+        .request(
+            RequestId::new(21),
+            &Request::ApplyTransaction(apply(transaction)),
+        )
         .expect("publish hole snapshot")
     else {
         panic!("unexpected transaction response");
     };
     let function = allocation(&result, 3);
-    let block = allocation(&result, 5);
     let hole = allocation(&result, 7);
-    let add = allocation(&result, 8);
     let blockers = client
         .request(
             RequestId::new(22),
-            &Request::Blockers {
+            &query_request(
                 workspace,
-                revision: Revision::new(1),
-            },
+                Revision::new(1),
+                Query::Blockers {
+                    page: PageRequest {
+                        after: None,
+                        limit: 256,
+                    },
+                },
+            ),
         )
         .expect("blocker query");
-    let Response::Blockers { blockers, .. } = blockers else {
+    let QueryResult::Blockers(blockers) = one_query(blockers) else {
         panic!("unexpected blockers response");
     };
-    assert!(blockers.iter().any(|blocker| {
+    assert!(blockers.items.iter().any(|blocker| {
         blocker.target == Some(hole) && blocker.expected_type == Some(SemanticType::I64)
     }));
+    let head_before_query = fs::read(workspace_path(temporary.path(), workspace).join("HEAD"))
+        .expect("head before query");
+    let batch = client
+        .request(
+            RequestId::new(29),
+            &Request::QueryBatch(QueryBatchRequest {
+                workspace,
+                revision: Revision::new(1),
+                queries: vec![
+                    QueryItem {
+                        id: QueryId::new(1),
+                        query: Query::WorkspaceSummary,
+                    },
+                    QueryItem {
+                        id: QueryId::new(2),
+                        query: Query::Body {
+                            block: hole,
+                            page: PageRequest {
+                                after: None,
+                                limit: 1,
+                            },
+                        },
+                    },
+                ],
+            }),
+        )
+        .expect("partial query batch");
+    let Response::QueryBatchResult(batch) = batch else {
+        panic!("query batch response")
+    };
+    assert!(matches!(batch.results[0].outcome, QueryOutcome::Success(_)));
+    assert!(matches!(batch.results[1].outcome, QueryOutcome::Error(_)));
+    assert_eq!(
+        fs::read(workspace_path(temporary.path(), workspace).join("HEAD"))
+            .expect("head after query"),
+        head_before_query
+    );
+    let context = client
+        .request(
+            RequestId::new(30),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::RepairContext {
+                    target: lkjscript::query::RepairTarget::Hole(hole),
+                    budget: lkjscript::query::ContextBudget {
+                        body_before: 2,
+                        body_after: 2,
+                        visible_values: 8,
+                        incoming_uses: 8,
+                        include_incompatible: true,
+                    },
+                },
+            ),
+        )
+        .expect("repair context query");
+    let QueryResult::RepairContext(context) = one_query(context) else {
+        panic!("repair context result")
+    };
+    assert_eq!(context.expected_type, SemanticType::I64);
+    assert_eq!(
+        context.refinement_operation,
+        Some(lkjscript::TransactionOpCode::RefineHole)
+    );
+    let revision_one_context = (*context).clone();
+    let zero_context = client
+        .request(
+            RequestId::new(33),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::RepairContext {
+                    target: RepairTarget::Hole(hole),
+                    budget: ContextBudget {
+                        body_before: 0,
+                        body_after: 0,
+                        visible_values: 0,
+                        incoming_uses: 0,
+                        include_incompatible: true,
+                    },
+                },
+            ),
+        )
+        .expect("zero-budget repair context");
+    let QueryResult::RepairContext(zero_context) = one_query(zero_context) else {
+        panic!("zero context result")
+    };
+    let visible_cursor = zero_context
+        .visible_values
+        .next
+        .expect("zero visible cursor");
+    let continued = client
+        .request(
+            RequestId::new(34),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::VisibleValues {
+                    purpose: VisibleCursorPurpose::RepairContext,
+                    target: RepairTarget::Hole(hole),
+                    include_incompatible: true,
+                    page: PageRequest {
+                        after: Some(visible_cursor),
+                        limit: 1,
+                    },
+                },
+            ),
+        )
+        .expect("continue context visible values");
+    let QueryResult::VisibleValues(continued) = one_query(continued) else {
+        panic!("continued visible values")
+    };
+    assert_eq!(continued.items.len(), 1);
+    let incoming_cursor = zero_context
+        .incoming_uses
+        .next
+        .expect("zero incoming cursor");
+    let continued_uses = client
+        .request(
+            RequestId::new(35),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::IncomingUses {
+                    value: lkjscript::ValueRef::OperationResult {
+                        operation: hole,
+                        output: 0,
+                    },
+                    page: PageRequest {
+                        after: Some(incoming_cursor),
+                        limit: 1,
+                    },
+                },
+            ),
+        )
+        .expect("continue context incoming uses");
+    let QueryResult::IncomingUses(continued_uses) = one_query(continued_uses) else {
+        panic!("continued uses")
+    };
+    assert_eq!(continued_uses.items.len(), 1);
     let run = client
         .request(
             RequestId::new(23),
@@ -630,40 +567,57 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
         .expect("incomplete run response");
     assert_error(run, ErrorCode::CompileIncomplete);
 
-    let replacement = LocalHandle::new(100);
     let fill = Transaction {
         workspace,
         base_revision: Revision::new(1),
-        idempotency_key: None,
-        dry_run: false,
-        operations: vec![
-            TransactionOp::CreateOperation {
-                handle: replacement,
-                block: NodeTarget::Existing(block),
-                before: Some(NodeTarget::Existing(add)),
-                operation: OperationDraft::ConstI64(2),
-            },
-            TransactionOp::ReplaceOperand {
-                operation: NodeTarget::Existing(add),
-                index: 1,
-                value: ValueDraft::OperationResult {
-                    operation: NodeTarget::Local(replacement),
-                    output: 0,
-                },
-            },
-            TransactionOp::DeleteOwnedSubtree {
-                root: NodeTarget::Existing(hole),
-            },
-        ],
+        idempotency_key: Some(IdempotencyKey::from_bytes([0x45; 16])),
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::RefineHole {
+            hole: NodeTarget::Existing(hole),
+            replacement: OperationDraft::ConstI64(2),
+        }],
     };
     let filled = client
-        .request(RequestId::new(24), &Request::ApplyTransaction(fill))
+        .request(
+            RequestId::new(24),
+            &Request::ApplyTransaction(apply(fill.clone())),
+        )
         .expect("fill hole transaction");
-    let Response::TransactionApplied(filled) = filled else {
+    let Response::TransactionReceipt(filled) = filled else {
         panic!("unexpected fill-hole response");
     };
     assert_eq!(filled.revision, Revision::new(2));
+    assert_eq!(filled.created_count, 0);
+    assert!(!filled.complete_before);
+    assert!(filled.complete_after);
+    let revision_diff = collect_diff(&client, workspace, Revision::new(1), Revision::new(2));
+    assert_eq!(revision_diff.0, filled.change_count);
+    assert_eq!(revision_diff.1, filled.change_digest);
     assert_run(&client, workspace, Revision::new(2), function, 42);
+    let refined = client
+        .request(
+            RequestId::new(26),
+            &query_request(
+                workspace,
+                Revision::new(2),
+                Query::Node {
+                    node: hole,
+                    expand: true,
+                },
+            ),
+        )
+        .expect("refined node response");
+    let QueryResult::Node(refined) = one_query(refined) else {
+        panic!("unexpected refined node response");
+    };
+    assert_eq!(refined.summary.node, hole);
+    assert!(matches!(
+        refined.record,
+        Some(lkjscript::Node::Operation {
+            operation: lkjscript::OperationKind::ConstI64(2),
+            ..
+        })
+    ));
     let old_run = client
         .request(
             RequestId::new(25),
@@ -676,30 +630,65 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
         .expect("old incomplete run response");
     assert_error(old_run, ErrorCode::CompileIncomplete);
     daemon.shutdown();
-}
 
-fn abandon_query_response(state: &Path) {
-    let workspace = WorkspaceId::from_bytes([0xee; 16]);
-    let mut body = Vec::new();
-    body.extend_from_slice(&lkjscript::protocol::PROTOCOL_VERSION.to_le_bytes());
-    body.extend_from_slice(&999_u64.to_le_bytes());
-    body.push(3);
-    body.extend_from_slice(&workspace.as_bytes());
-    body.extend_from_slice(&Revision::INITIAL.get().to_le_bytes());
-    let mut stream =
-        UnixStream::connect(daemon::endpoint_path(state)).expect("connect abandoned client");
-    stream
-        .write_all(
-            &u32::try_from(body.len())
-                .expect("frame length")
-                .to_le_bytes(),
+    let daemon = RunningDaemon::start(temporary.path());
+    let client = daemon.client();
+    assert_run(&client, workspace, Revision::new(2), function, 42);
+    let restarted_context = client
+        .request(
+            RequestId::new(32),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::RepairContext {
+                    target: RepairTarget::Hole(hole),
+                    budget: ContextBudget {
+                        body_before: 2,
+                        body_after: 2,
+                        visible_values: 8,
+                        incoming_uses: 8,
+                        include_incompatible: true,
+                    },
+                },
+            ),
         )
-        .expect("write abandoned frame header");
-    stream.write_all(&body).expect("write abandoned frame body");
-    stream
-        .shutdown(std::net::Shutdown::Both)
-        .expect("close abandoned client");
-    thread::sleep(Duration::from_millis(10));
+        .expect("revision-one context after restart");
+    let QueryResult::RepairContext(restarted_context) = one_query(restarted_context) else {
+        panic!("repair context after restart")
+    };
+    assert_eq!(*restarted_context, revision_one_context);
+    assert_eq!(
+        collect_diff(&client, workspace, Revision::new(1), Revision::new(2)),
+        revision_diff
+    );
+    let retry = client
+        .request(RequestId::new(27), &Request::ApplyTransaction(apply(fill)))
+        .expect("refinement retry after restart");
+    assert_eq!(retry, Response::TransactionReceipt(filled));
+    let old_hole = client
+        .request(
+            RequestId::new(28),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::Node {
+                    node: hole,
+                    expand: true,
+                },
+            ),
+        )
+        .expect("old hole after restart");
+    let QueryResult::Node(old_hole) = one_query(old_hole) else {
+        panic!("unexpected old hole response");
+    };
+    assert!(matches!(
+        old_hole.record,
+        Some(lkjscript::Node::Operation {
+            operation: lkjscript::OperationKind::Hole { .. },
+            ..
+        })
+    ));
+    daemon.shutdown();
 }
 
 fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
@@ -725,7 +714,7 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
         } else {
             [0x42; 16]
         })),
-        dry_run: false,
+        mode: TransactionMode::Commit,
         operations: vec![
             TransactionOp::CreatePackage {
                 handle: package,
@@ -795,12 +784,85 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
     }
 }
 
-fn allocation(result: &lkjscript::TransactionResult, handle: u32) -> NodeId {
+fn apply(transaction: Transaction) -> ApplyTransactionRequest {
+    let mut return_handles: Vec<LocalHandle> = transaction
+        .operations
+        .iter()
+        .filter_map(TransactionOp::created_handle)
+        .collect();
+    return_handles.sort();
+    ApplyTransactionRequest {
+        transaction,
+        response: TransactionResponseSpec { return_handles },
+    }
+}
+
+fn allocation(result: &lkjscript::TransactionReceipt, handle: u32) -> NodeId {
     result
-        .allocations
+        .returned_bindings
         .iter()
         .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
         .expect("allocation handle exists")
+}
+
+fn query_request(workspace: WorkspaceId, revision: Revision, query: Query) -> Request {
+    Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision,
+        queries: vec![QueryItem {
+            id: QueryId::new(1),
+            query,
+        }],
+    })
+}
+fn one_query(response: Response) -> QueryResult {
+    let Response::QueryBatchResult(mut batch) = response else {
+        panic!("unexpected query response")
+    };
+    let item = batch.results.pop().expect("one result");
+    match item.outcome {
+        QueryOutcome::Success(result) => *result,
+        QueryOutcome::Error(error) => panic!("query error: {error}"),
+    }
+}
+fn collect_diff(
+    client: &Client,
+    workspace: WorkspaceId,
+    from: Revision,
+    to: Revision,
+) -> (u64, lkjscript::ChangeDigest, Vec<lkjscript::diff::Change>) {
+    let mut after = None;
+    let mut changes = Vec::new();
+    let mut metadata = None;
+    loop {
+        let response = client
+            .request(
+                RequestId::new(510),
+                &query_request(
+                    workspace,
+                    to,
+                    Query::SemanticDiff {
+                        from,
+                        page: PageRequest { after, limit: 1 },
+                    },
+                ),
+            )
+            .expect("diff page");
+        let QueryResult::SemanticDiff(diff) = one_query(response) else {
+            panic!("semantic diff result")
+        };
+        let current = (diff.change_count, diff.change_digest);
+        assert!(metadata.is_none_or(|expected| expected == current));
+        metadata = Some(current);
+        changes.extend(diff.page.items);
+        after = diff.page.next;
+        if after.is_none() {
+            break;
+        }
+    }
+    let (count, digest) = metadata.expect("at least one diff page");
+    assert_eq!(changes.len() as u64, count);
+    (count, digest, changes)
 }
 
 fn workspace_summary(
@@ -811,14 +873,11 @@ fn workspace_summary(
     let response = client
         .request(
             RequestId::new(500),
-            &Request::WorkspaceSummary {
-                workspace,
-                revision,
-            },
+            &query_request(workspace, revision, Query::WorkspaceSummary),
         )
         .expect("workspace summary response");
-    let Response::WorkspaceSummary(summary) = response else {
-        panic!("unexpected workspace summary: {response:?}");
+    let QueryResult::WorkspaceSummary(summary) = one_query(response) else {
+        panic!("unexpected workspace summary")
     };
     summary
 }

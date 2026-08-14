@@ -1,0 +1,1856 @@
+use crate::artifact;
+use crate::diff;
+use crate::error::ErrorCode;
+use crate::graph::{Snapshot, Workspace};
+use crate::ids::{IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, WorkspaceId};
+use crate::machine::{self, RequestEnvelope};
+use crate::persistence::{self, DurableWorkspace};
+use crate::protocol::{self, Request};
+use crate::query::{
+    ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, QueryResult, RepairTarget,
+    VisibleCursorPurpose,
+};
+use crate::schema::{OperationDraft, SemanticType, ValueDraft, ValueRef};
+use crate::transaction::{
+    ApplyTransactionRequest, NodeTarget, Transaction, TransactionMode, TransactionOp,
+    TransactionReceipt, TransactionResponseSpec,
+};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::Cursor;
+use std::sync::Arc;
+
+#[derive(Clone, Copy)]
+struct Prng(u64);
+
+impl Prng {
+    fn new(seed: u64) -> Self {
+        Self(seed.max(1))
+    }
+
+    fn next(&mut self) -> u64 {
+        let mut value = self.0;
+        value ^= value << 13;
+        value ^= value >> 7;
+        value ^= value << 17;
+        self.0 = value;
+        value
+    }
+
+    fn index(&mut self, length: usize) -> usize {
+        usize::try_from(self.next() % u64::try_from(length).expect("bounded length"))
+            .expect("bounded index")
+    }
+}
+
+fn local(handle: u32) -> NodeTarget {
+    NodeTarget::Local(LocalHandle::new(handle))
+}
+
+fn existing(id: NodeId) -> NodeTarget {
+    NodeTarget::Existing(id)
+}
+
+fn local_value(handle: u32) -> ValueDraft {
+    ValueDraft::OperationResult {
+        operation: local(handle),
+        output: 0,
+    }
+}
+
+fn existing_value(operation: NodeId, output: u8) -> ValueDraft {
+    ValueDraft::OperationResult {
+        operation: existing(operation),
+        output,
+    }
+}
+
+fn request(transaction: Transaction, selected: &[u32]) -> ApplyTransactionRequest {
+    ApplyTransactionRequest {
+        transaction,
+        response: TransactionResponseSpec {
+            return_handles: selected.iter().copied().map(LocalHandle::new).collect(),
+        },
+    }
+}
+
+fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTransactionRequest {
+    let suffix = seed % 10_000;
+    request(
+        Transaction {
+            workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: format!("package-{suffix}"),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "module".to_owned(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "main".to_owned(),
+                    result: SemanticType::I64,
+                },
+                TransactionOp::CreateParameter {
+                    handle: LocalHandle::new(4),
+                    function: local(3),
+                    name: "input".to_owned(),
+                    ty: SemanticType::I64,
+                },
+                TransactionOp::CreateRegion {
+                    handle: LocalHandle::new(5),
+                    function: local(3),
+                },
+                TransactionOp::CreateBlock {
+                    handle: LocalHandle::new(6),
+                    region: local(5),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(7),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::ConstI64(
+                        40 + i64::try_from(seed % 3).expect("small"),
+                    ),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(8),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::ConstI64(2),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(9),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::ConstBool(true),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(10),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::Hole {
+                        expected: SemanticType::I64,
+                    },
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(11),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::ConstI64(99),
+                },
+                TransactionOp::CreateOperation {
+                    handle: LocalHandle::new(12),
+                    block: local(6),
+                    before: None,
+                    operation: OperationDraft::Return {
+                        value: local_value(10),
+                    },
+                },
+                TransactionOp::SetFunctionBody {
+                    function: local(3),
+                    region: local(5),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(3),
+                },
+            ],
+        },
+        &(1..=12).collect::<Vec<_>>(),
+    )
+}
+
+fn binding(receipt: &TransactionReceipt, handle: u32) -> NodeId {
+    receipt
+        .returned_bindings
+        .iter()
+        .find_map(|(candidate, id)| (candidate.get() == handle).then_some(*id))
+        .expect("selected binding")
+}
+
+fn assert_snapshot_invariants(snapshot: &Snapshot) {
+    crate::validate::validate_snapshot(snapshot).expect("production snapshot validator");
+    let bytes = artifact::encode(snapshot).expect("canonical artifact encode");
+    let decoded = artifact::decode(&bytes).expect("canonical artifact decode");
+    assert_eq!(decoded, *snapshot);
+    assert_eq!(
+        artifact::encode(&decoded).expect("canonical re-encode"),
+        bytes
+    );
+    let live: BTreeSet<u64> = snapshot.nodes().map(|(id, _)| id.serial()).collect();
+    let tombstones: BTreeSet<u64> = snapshot.tombstones().collect();
+    assert!(live.is_disjoint(&tombstones));
+    for serial in 1..snapshot.next_serial() {
+        assert!(
+            live.contains(&serial) || tombstones.contains(&serial),
+            "allocated serial {serial} is neither live nor tombstoned"
+        );
+    }
+}
+
+fn commit_checked(
+    workspace: &mut Workspace,
+    request: &ApplyTransactionRequest,
+) -> TransactionReceipt {
+    let before = workspace.head().expect("head").clone();
+    let retained_before: Vec<_> = (0..=workspace.head_revision().get())
+        .map(|revision| {
+            let revision = Revision::new(revision);
+            (
+                revision,
+                artifact::encode(workspace.snapshot(revision).expect("retained snapshot"))
+                    .expect("retained artifact"),
+            )
+        })
+        .collect();
+    let before_revision = workspace.head_revision();
+    let before_next = before.next_serial();
+    let prepared = workspace
+        .prepare_transaction(request)
+        .expect("generated accepted action");
+    assert_eq!(
+        prepared.snapshot.revision(),
+        before_revision.next().expect("next revision")
+    );
+    let created_handles: Vec<_> = request
+        .transaction
+        .operations
+        .iter()
+        .filter_map(TransactionOp::created_handle)
+        .collect();
+    assert_eq!(
+        prepared.snapshot.next_serial(),
+        before_next + u64::try_from(created_handles.len()).expect("created count")
+    );
+    assert_eq!(
+        prepared.receipt.created_count,
+        u64::try_from(created_handles.len()).expect("created count")
+    );
+    assert_snapshot_invariants(&prepared.snapshot);
+    let semantic_diff = diff::between(&before, &prepared.snapshot);
+    assert_eq!(prepared.receipt.change_count, semantic_diff.change_count());
+    assert_eq!(prepared.receipt.change_digest, semantic_diff.digest);
+    let mut cursor = None;
+    let mut queried_changes = Vec::new();
+    loop {
+        let QueryResult::SemanticDiff(queried_diff) = crate::query::execute(
+            &prepared.snapshot,
+            &Query::SemanticDiff {
+                from: before.revision(),
+                page: PageRequest {
+                    after: cursor,
+                    limit: 1,
+                },
+            },
+            Some(&before),
+        )
+        .expect("snapshot-derived paginated diff query") else {
+            panic!("semantic diff query result")
+        };
+        assert_eq!(queried_diff.change_count, prepared.receipt.change_count);
+        assert_eq!(queried_diff.change_digest, prepared.receipt.change_digest);
+        queried_changes.extend(queried_diff.page.items);
+        cursor = queried_diff.page.next;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(queried_changes, semantic_diff.changes);
+    assert_eq!(
+        prepared
+            .receipt
+            .returned_bindings
+            .iter()
+            .map(|(handle, _)| *handle)
+            .collect::<Vec<_>>(),
+        request.response.return_handles
+    );
+    for (handle, node) in &prepared.receipt.returned_bindings {
+        let allocation_index = created_handles
+            .iter()
+            .position(|candidate| candidate == handle)
+            .expect("selected declared handle");
+        assert_eq!(
+            node.serial(),
+            before_next + u64::try_from(allocation_index).expect("allocation index")
+        );
+    }
+    let receipt = prepared.receipt.clone();
+    workspace
+        .publish(prepared.snapshot)
+        .expect("publish accepted snapshot");
+    assert_eq!(
+        workspace.head_revision(),
+        before_revision.next().expect("next revision")
+    );
+    for (revision, bytes) in retained_before {
+        assert_eq!(
+            artifact::encode(workspace.snapshot(revision).expect("retained snapshot"))
+                .expect("retained old artifact"),
+            bytes
+        );
+    }
+    assert_snapshot_invariants(workspace.head().expect("published head"));
+    let snapshots: BTreeMap<_, _> = (0..=workspace.head_revision().get())
+        .map(|revision| {
+            let revision = Revision::new(revision);
+            (
+                revision,
+                Arc::new(
+                    artifact::decode(
+                        &artifact::encode(workspace.snapshot(revision).expect("history snapshot"))
+                            .expect("history artifact"),
+                    )
+                    .expect("history decode"),
+                ),
+            )
+        })
+        .collect();
+    Workspace::from_snapshots(workspace.id(), workspace.head_revision(), snapshots)
+        .expect("complete retained history reconstructs");
+    receipt
+}
+
+fn predict_next(workspace: &Workspace, name: &str) -> NodeId {
+    let prediction = request(
+        Transaction {
+            workspace: workspace.id(),
+            base_revision: workspace.head_revision(),
+            idempotency_key: None,
+            mode: TransactionMode::ValidateOnly,
+            operations: vec![TransactionOp::CreatePackage {
+                handle: LocalHandle::new(60_000),
+                name: name.to_owned(),
+            }],
+        },
+        &[60_000],
+    );
+    let prepared = workspace
+        .prepare_transaction(&prediction)
+        .expect("next allocation prediction");
+    assert!(!prepared.receipt.published);
+    binding(&prepared.receipt, 60_000)
+}
+
+fn reject_checked(
+    workspace: &Workspace,
+    request: &ApplyTransactionRequest,
+    prediction_name: &str,
+    expected: ErrorCode,
+) {
+    let before = workspace.head().expect("head");
+    let revision = before.revision();
+    let hash = before.hash();
+    let next_serial = before.next_serial();
+    let tombstones: Vec<_> = before.tombstones().collect();
+    let bytes = artifact::encode(before).expect("before artifact");
+    let predicted = predict_next(workspace, prediction_name);
+    let error = workspace
+        .prepare_transaction(request)
+        .expect_err("generated invalid transaction must reject");
+    assert_eq!(error.code, expected);
+    let after = workspace.head().expect("head after rejection");
+    assert_eq!(after.revision(), revision);
+    assert_eq!(after.hash(), hash);
+    assert_eq!(after.next_serial(), next_serial);
+    assert_eq!(after.tombstones().collect::<Vec<_>>(), tombstones);
+    assert_eq!(artifact::encode(after).expect("after artifact"), bytes);
+    assert_eq!(predict_next(workspace, prediction_name), predicted);
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum Action {
+    Rename,
+    ScalarEdit,
+    InvalidRefinement,
+    InvalidType,
+    InvalidOrder,
+    InvalidOutput,
+    Refine,
+    OperandEdit,
+    CreateDelete,
+    ValidateThenCommit,
+    StaleRevision,
+    WrongWorkspace,
+    DuplicateHandle,
+    DuplicateName,
+    InvalidSelected,
+}
+
+impl Action {
+    const ALL: [Self; 15] = [
+        Self::Rename,
+        Self::ScalarEdit,
+        Self::InvalidRefinement,
+        Self::InvalidType,
+        Self::InvalidOrder,
+        Self::InvalidOutput,
+        Self::Refine,
+        Self::OperandEdit,
+        Self::CreateDelete,
+        Self::ValidateThenCommit,
+        Self::StaleRevision,
+        Self::WrongWorkspace,
+        Self::DuplicateHandle,
+        Self::DuplicateName,
+        Self::InvalidSelected,
+    ];
+}
+
+#[test]
+fn deterministic_generated_transaction_sequences() {
+    const SEEDS: [u64; 5] = [1, 0x5eed, 0xdecafbad, 0x9e37_79b9, u32::MAX as u64];
+    for seed in SEEDS {
+        let mut trace = Vec::new();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            generated_sequence(seed, &mut trace);
+        }));
+        if let Err(payload) = result {
+            eprintln!("generated transaction sequence failed: seed={seed} trace={trace:?}");
+            std::panic::resume_unwind(payload);
+        }
+    }
+}
+
+fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
+    let mut random = Prng::new(seed);
+    let workspace_id =
+        WorkspaceId::from_bytes(seed.to_le_bytes().repeat(2).try_into().expect("ID"));
+    let other = WorkspaceId::from_bytes([0xee; 16]);
+    let mut workspace = Workspace::new(workspace_id).expect("workspace");
+    let predicted = workspace
+        .prepare_transaction(&fixture(workspace_id, seed, TransactionMode::ValidateOnly))
+        .expect("fixture validate-only");
+    let committed = commit_checked(
+        &mut workspace,
+        &fixture(workspace_id, seed, TransactionMode::Commit),
+    );
+    let mut expected_prediction = predicted.receipt;
+    expected_prediction.published = true;
+    assert_eq!(committed, expected_prediction);
+
+    let package = binding(&committed, 1);
+    let module = binding(&committed, 2);
+    let forty = binding(&committed, 7);
+    let two = binding(&committed, 8);
+    let boolean = binding(&committed, 9);
+    let hole = binding(&committed, 10);
+    let later = binding(&committed, 11);
+    let mut completed = BTreeSet::new();
+    while completed.len() < Action::ALL.len() {
+        let invalid_refinement_done = [
+            Action::InvalidRefinement,
+            Action::InvalidType,
+            Action::InvalidOrder,
+            Action::InvalidOutput,
+        ]
+        .into_iter()
+        .all(|action| completed.contains(&action));
+        let applicable: Vec<_> = Action::ALL
+            .into_iter()
+            .filter(|action| !completed.contains(action))
+            .filter(|action| match action {
+                Action::Refine => invalid_refinement_done,
+                Action::OperandEdit => completed.contains(&Action::Refine),
+                _ => true,
+            })
+            .collect();
+        let action = applicable[random.index(applicable.len())];
+        trace.push(action);
+        let revision = workspace.head_revision();
+        match action {
+            Action::Rename => {
+                commit_checked(
+                    &mut workspace,
+                    &request(
+                        Transaction {
+                            workspace: workspace_id,
+                            base_revision: revision,
+                            idempotency_key: None,
+                            mode: TransactionMode::Commit,
+                            operations: vec![TransactionOp::RenameNode {
+                                node: existing(module),
+                                name: format!("renamed-{}", random.next() % 1000),
+                            }],
+                        },
+                        &[],
+                    ),
+                );
+            }
+            Action::ScalarEdit => {
+                commit_checked(
+                    &mut workspace,
+                    &request(
+                        Transaction {
+                            workspace: workspace_id,
+                            base_revision: revision,
+                            idempotency_key: None,
+                            mode: TransactionMode::Commit,
+                            operations: vec![TransactionOp::ReplaceOperation {
+                                operation: existing(forty),
+                                replacement: OperationDraft::ConstI64(
+                                    100 + i64::try_from(random.next() % 100).expect("small"),
+                                ),
+                            }],
+                        },
+                        &[],
+                    ),
+                );
+            }
+            Action::Refine => {
+                let from = workspace.head().expect("pre-refinement").clone();
+                commit_checked(
+                    &mut workspace,
+                    &request(
+                        Transaction {
+                            workspace: workspace_id,
+                            base_revision: revision,
+                            idempotency_key: None,
+                            mode: TransactionMode::Commit,
+                            operations: vec![TransactionOp::RefineHole {
+                                hole: existing(hole),
+                                replacement: OperationDraft::AddI64 {
+                                    lhs: existing_value(forty, 0),
+                                    rhs: existing_value(two, 0),
+                                },
+                            }],
+                        },
+                        &[],
+                    ),
+                );
+                assert!(
+                    diff::between(&from, workspace.head().expect("refined"))
+                        .changes
+                        .iter()
+                        .any(|change| matches!(
+                            change.kind,
+                            diff::ChangeKind::OperationRefined { .. }
+                        ))
+                );
+            }
+            Action::OperandEdit => {
+                commit_checked(
+                    &mut workspace,
+                    &request(
+                        Transaction {
+                            workspace: workspace_id,
+                            base_revision: revision,
+                            idempotency_key: None,
+                            mode: TransactionMode::Commit,
+                            operations: vec![TransactionOp::ReplaceOperand {
+                                operation: existing(hole),
+                                index: 1,
+                                value: existing_value(forty, 0),
+                            }],
+                        },
+                        &[],
+                    ),
+                );
+            }
+            Action::CreateDelete => {
+                let from = workspace.head().expect("pre-tombstone").clone();
+                let receipt = commit_checked(
+                    &mut workspace,
+                    &request(
+                        Transaction {
+                            workspace: workspace_id,
+                            base_revision: revision,
+                            idempotency_key: None,
+                            mode: TransactionMode::Commit,
+                            operations: vec![
+                                TransactionOp::CreatePackage {
+                                    handle: LocalHandle::new(30),
+                                    name: format!("temporary-{seed}"),
+                                },
+                                TransactionOp::DeleteOwnedSubtree { root: local(30) },
+                            ],
+                        },
+                        &[30],
+                    ),
+                );
+                let tombstone = binding(&receipt, 30);
+                assert!(
+                    workspace
+                        .head()
+                        .expect("head")
+                        .contains_tombstone(tombstone.serial())
+                );
+                assert!(
+                    diff::between(&from, workspace.head().expect("tombstone"))
+                        .changes
+                        .iter()
+                        .any(|change| change.node == tombstone
+                            && matches!(change.kind, diff::ChangeKind::AllocatedAndTombstoned))
+                );
+            }
+            Action::ValidateThenCommit => {
+                let mut candidate = request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::ValidateOnly,
+                        operations: vec![TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(31),
+                            name: format!("validated-{seed}"),
+                        }],
+                    },
+                    &[31],
+                );
+                let predicted = workspace
+                    .prepare_transaction(&candidate)
+                    .expect("state-aware validate-only")
+                    .receipt;
+                candidate.transaction.mode = TransactionMode::Commit;
+                let committed = commit_checked(&mut workspace, &candidate);
+                let mut expected = predicted;
+                expected.published = true;
+                assert_eq!(committed, expected);
+            }
+            Action::StaleRevision => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: Revision::INITIAL,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RenameNode {
+                            node: existing(package),
+                            name: "stale".to_owned(),
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::RevisionConflict,
+            ),
+            Action::WrongWorkspace => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RenameNode {
+                            node: existing(NodeId::new(other, package.serial()).expect("foreign")),
+                            name: "foreign".to_owned(),
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::WrongWorkspace,
+            ),
+            Action::DuplicateHandle => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![
+                            TransactionOp::CreatePackage {
+                                handle: LocalHandle::new(40),
+                                name: "duplicate-a".to_owned(),
+                            },
+                            TransactionOp::CreatePackage {
+                                handle: LocalHandle::new(40),
+                                name: "duplicate-b".to_owned(),
+                            },
+                        ],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::DuplicateHandle,
+            ),
+            Action::DuplicateName => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::CreateFunction {
+                            handle: LocalHandle::new(41),
+                            module: existing(module),
+                            name: "main".to_owned(),
+                            result: SemanticType::I64,
+                        }],
+                    },
+                    &[41],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::DuplicateName,
+            ),
+            Action::InvalidSelected => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(42),
+                            name: "selected".to_owned(),
+                        }],
+                    },
+                    &[43],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::InvalidHandle,
+            ),
+            Action::InvalidRefinement => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RefineHole {
+                            hole: existing(hole),
+                            replacement: OperationDraft::Hole {
+                                expected: SemanticType::I64,
+                            },
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::InvalidOperand,
+            ),
+            Action::InvalidType => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RefineHole {
+                            hole: existing(hole),
+                            replacement: OperationDraft::AddI64 {
+                                lhs: existing_value(forty, 0),
+                                rhs: existing_value(boolean, 0),
+                            },
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::TypeMismatch,
+            ),
+            Action::InvalidOrder => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RefineHole {
+                            hole: existing(hole),
+                            replacement: OperationDraft::AddI64 {
+                                lhs: existing_value(forty, 0),
+                                rhs: existing_value(later, 0),
+                            },
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::InvalidOperand,
+            ),
+            Action::InvalidOutput => reject_checked(
+                &workspace,
+                &request(
+                    Transaction {
+                        workspace: workspace_id,
+                        base_revision: revision,
+                        idempotency_key: None,
+                        mode: TransactionMode::Commit,
+                        operations: vec![TransactionOp::RefineHole {
+                            hole: existing(hole),
+                            replacement: OperationDraft::AddI64 {
+                                lhs: existing_value(forty, 1),
+                                rhs: existing_value(two, 0),
+                            },
+                        }],
+                    },
+                    &[],
+                ),
+                &format!("prediction-{seed}"),
+                ErrorCode::InvalidOperand,
+            ),
+        }
+        completed.insert(action);
+    }
+}
+
+fn directory_files(path: &std::path::Path) -> Vec<std::ffi::OsString> {
+    let mut names: Vec<_> = fs::read_dir(path)
+        .expect("directory")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    names.sort();
+    names
+}
+
+fn durable_reject_checked(
+    durable: &mut DurableWorkspace,
+    directory: &std::path::Path,
+    request: &ApplyTransactionRequest,
+    expected: ErrorCode,
+) {
+    let before_head = fs::read(directory.join("HEAD")).expect("HEAD");
+    let before_files = directory_files(&directory.join("revisions"));
+    let before = durable.head().expect("head").clone();
+    let before_tombstones: Vec<_> = before.tombstones().collect();
+    let fingerprint = protocol::transaction_fingerprint(request).expect("fingerprint");
+    assert_eq!(
+        durable
+            .apply(request, fingerprint)
+            .expect_err("invalid durable transaction")
+            .code,
+        expected
+    );
+    assert_eq!(fs::read(directory.join("HEAD")).expect("HEAD"), before_head);
+    assert_eq!(directory_files(&directory.join("revisions")), before_files);
+    let after = durable.head().expect("head");
+    assert_eq!(after.revision(), before.revision());
+    assert_eq!(after.hash(), before.hash());
+    assert_eq!(after.next_serial(), before.next_serial());
+    assert_eq!(after.tombstones().collect::<Vec<_>>(), before_tombstones);
+}
+
+#[test]
+fn durable_invalid_transaction_corpus_is_atomic_and_restart_stable() {
+    let temporary = tempfile::tempdir().expect("state");
+    persistence::ensure_state_directory(temporary.path()).expect("state directory");
+    let id = WorkspaceId::from_bytes([0xd1; 16]);
+    let mut durable = DurableWorkspace::create(temporary.path(), id).expect("durable workspace");
+    let directory = persistence::workspace_directory(temporary.path(), id);
+    let mut valid = fixture(id, 17, TransactionMode::Commit);
+    valid.transaction.idempotency_key = Some(IdempotencyKey::from_bytes([0xa1; 16]));
+    let mut prediction = valid.clone();
+    prediction.transaction.idempotency_key = None;
+    prediction.transaction.mode = TransactionMode::ValidateOnly;
+    let prediction_fingerprint =
+        protocol::transaction_fingerprint(&prediction).expect("prediction fingerprint");
+    let predicted = durable
+        .apply(&prediction, prediction_fingerprint)
+        .expect("fixture prediction");
+    let fingerprint = protocol::transaction_fingerprint(&valid).expect("fixture fingerprint");
+    let committed = durable.apply(&valid, fingerprint).expect("fixture commit");
+    assert_eq!(committed.returned_bindings, predicted.returned_bindings);
+    assert_eq!(
+        durable.apply(&valid, fingerprint).expect("exact replay"),
+        committed
+    );
+    let hole = binding(&committed, 10);
+    let forty = binding(&committed, 7);
+    let two = binding(&committed, 8);
+    let boolean = binding(&committed, 9);
+    let later = binding(&committed, 11);
+    let revision_one = artifact::encode(durable.snapshot(Revision::new(1)).expect("revision one"))
+        .expect("revision one artifact");
+
+    drop(durable);
+    let mut durable = DurableWorkspace::open(temporary.path(), id).expect("meaningful restart");
+    assert_eq!(
+        durable
+            .apply(&valid, fingerprint)
+            .expect("replay after restart"),
+        committed
+    );
+    assert_eq!(
+        artifact::encode(durable.snapshot(Revision::new(1)).expect("revision one"))
+            .expect("revision one artifact"),
+        revision_one
+    );
+
+    let invalids = [
+        (
+            request(
+                Transaction {
+                    workspace: id,
+                    base_revision: Revision::new(1),
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![TransactionOp::RefineHole {
+                        hole: existing(hole),
+                        replacement: OperationDraft::AddI64 {
+                            lhs: existing_value(forty, 0),
+                            rhs: existing_value(boolean, 0),
+                        },
+                    }],
+                },
+                &[],
+            ),
+            ErrorCode::TypeMismatch,
+        ),
+        (
+            request(
+                Transaction {
+                    workspace: id,
+                    base_revision: Revision::new(1),
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![TransactionOp::RefineHole {
+                        hole: existing(hole),
+                        replacement: OperationDraft::AddI64 {
+                            lhs: existing_value(forty, 0),
+                            rhs: existing_value(later, 0),
+                        },
+                    }],
+                },
+                &[],
+            ),
+            ErrorCode::InvalidOperand,
+        ),
+        (
+            request(
+                Transaction {
+                    workspace: id,
+                    base_revision: Revision::new(1),
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![TransactionOp::RefineHole {
+                        hole: existing(hole),
+                        replacement: OperationDraft::AddI64 {
+                            lhs: existing_value(forty, 1),
+                            rhs: existing_value(two, 0),
+                        },
+                    }],
+                },
+                &[],
+            ),
+            ErrorCode::InvalidOperand,
+        ),
+        (
+            request(
+                Transaction {
+                    workspace: id,
+                    base_revision: Revision::new(1),
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![TransactionOp::RefineHole {
+                        hole: existing(hole),
+                        replacement: OperationDraft::Hole {
+                            expected: SemanticType::I64,
+                        },
+                    }],
+                },
+                &[],
+            ),
+            ErrorCode::InvalidOperand,
+        ),
+    ];
+    let mut random = Prng::new(0xd17);
+    let mut remaining: Vec<_> = (0..invalids.len()).collect();
+    while !remaining.is_empty() {
+        let selected = random.index(remaining.len());
+        let index = remaining.swap_remove(selected);
+        let (invalid, expected) = &invalids[index];
+        durable_reject_checked(&mut durable, &directory, invalid, *expected);
+    }
+    let mut conflict = valid.clone();
+    conflict.transaction.operations[0] = TransactionOp::CreatePackage {
+        handle: LocalHandle::new(1),
+        name: "conflict".to_owned(),
+    };
+    durable_reject_checked(
+        &mut durable,
+        &directory,
+        &conflict,
+        ErrorCode::IdempotencyConflict,
+    );
+
+    let refinement = request(
+        Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: Some(IdempotencyKey::from_bytes([0xa2; 16])),
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: existing_value(forty, 0),
+                    rhs: existing_value(two, 0),
+                },
+            }],
+        },
+        &[],
+    );
+    let refinement_fingerprint =
+        protocol::transaction_fingerprint(&refinement).expect("refinement fingerprint");
+    let refined = durable
+        .apply(&refinement, refinement_fingerprint)
+        .expect("durable refinement");
+    assert_eq!(
+        durable
+            .apply(&refinement, refinement_fingerprint)
+            .expect("refinement replay"),
+        refined
+    );
+    let revision_two = artifact::encode(durable.snapshot(Revision::new(2)).expect("revision two"))
+        .expect("revision two artifact");
+    let expected_diff = diff::between(
+        durable.snapshot(Revision::new(1)).expect("revision one"),
+        durable.snapshot(Revision::new(2)).expect("revision two"),
+    );
+    assert!(expected_diff.changes.iter().any(|change| {
+        change.node == hole && matches!(change.kind, diff::ChangeKind::OperationRefined { .. })
+    }));
+    drop(durable);
+    let mut reopened = DurableWorkspace::open(temporary.path(), id).expect("refined restart");
+    assert_eq!(
+        artifact::encode(reopened.snapshot(Revision::new(1)).expect("revision one"))
+            .expect("revision one artifact"),
+        revision_one
+    );
+    assert_eq!(
+        artifact::encode(reopened.snapshot(Revision::new(2)).expect("revision two"))
+            .expect("revision two artifact"),
+        revision_two
+    );
+    assert_eq!(
+        diff::between(
+            reopened.snapshot(Revision::new(1)).expect("revision one"),
+            reopened.snapshot(Revision::new(2)).expect("revision two"),
+        ),
+        expected_diff
+    );
+    assert_eq!(
+        reopened
+            .apply(&refinement, refinement_fingerprint)
+            .expect("refinement replay after restart"),
+        refined
+    );
+}
+
+fn artifact_corpus() -> Vec<Vec<u8>> {
+    let id = WorkspaceId::from_bytes([0xc1; 16]);
+    let mut workspace = Workspace::new(id).expect("workspace");
+    let empty = artifact::encode(workspace.head().expect("empty")).expect("empty artifact");
+    let fixture_receipt = commit_checked(&mut workspace, &fixture(id, 1, TransactionMode::Commit));
+    let incomplete = artifact::encode(workspace.head().expect("incomplete")).expect("artifact");
+    let hole = binding(&fixture_receipt, 10);
+    let forty = binding(&fixture_receipt, 7);
+    let two = binding(&fixture_receipt, 8);
+    commit_checked(
+        &mut workspace,
+        &request(
+            Transaction {
+                workspace: id,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: existing(hole),
+                    replacement: OperationDraft::AddI64 {
+                        lhs: existing_value(forty, 0),
+                        rhs: existing_value(two, 0),
+                    },
+                }],
+            },
+            &[],
+        ),
+    );
+    let refined = artifact::encode(workspace.head().expect("refined")).expect("artifact");
+    commit_checked(
+        &mut workspace,
+        &request(
+            Transaction {
+                workspace: id,
+                base_revision: Revision::new(2),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(100),
+                        name: "discarded".to_owned(),
+                    },
+                    TransactionOp::DeleteOwnedSubtree { root: local(100) },
+                ],
+            },
+            &[100],
+        ),
+    );
+    let tombstoned = artifact::encode(workspace.head().expect("tombstoned")).expect("artifact");
+
+    let block = binding(&fixture_receipt, 6);
+    let mut operations = Vec::new();
+    for offset in 0..128_u32 {
+        operations.push(TransactionOp::CreateOperation {
+            handle: LocalHandle::new(1000 + offset),
+            block: existing(block),
+            before: Some(existing(hole)),
+            operation: OperationDraft::ConstI64(i64::from(offset)),
+        });
+    }
+    commit_checked(
+        &mut workspace,
+        &request(
+            Transaction {
+                workspace: id,
+                base_revision: Revision::new(3),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations,
+            },
+            &[1000],
+        ),
+    );
+    let moderate = artifact::encode(workspace.head().expect("moderate")).expect("artifact");
+    vec![empty, incomplete, refined, tombstoned, moderate]
+}
+
+fn request_corpus() -> Vec<Request> {
+    let workspace = WorkspaceId::from_bytes([0xb1; 16]);
+    let node = NodeId::new(workspace, 2).expect("node");
+    let page = PageRequest {
+        after: None,
+        limit: 1,
+    };
+    let queries = vec![
+        Query::WorkspaceSummary,
+        Query::Node { node, expand: true },
+        Query::Blockers { page },
+        Query::OwnerChain { node, page },
+        Query::Body { block: node, page },
+        Query::IncomingUses {
+            value: ValueRef::OperationResult {
+                operation: node,
+                output: 0,
+            },
+            page,
+        },
+        Query::DefinitionReferences { target: node, page },
+        Query::Dependencies { node, page },
+        Query::VisibleValues {
+            purpose: VisibleCursorPurpose::VisibleValues,
+            target: RepairTarget::Hole(node),
+            include_incompatible: true,
+            page,
+        },
+        Query::LegalConstructors {
+            target: RepairTarget::Hole(node),
+            include_incompatible: true,
+            values: page,
+        },
+        Query::SemanticDiff {
+            from: Revision::INITIAL,
+            page,
+        },
+        Query::RepairContext {
+            target: RepairTarget::Operand {
+                operation: node,
+                index: 0,
+            },
+            budget: ContextBudget {
+                body_before: 1,
+                body_after: 1,
+                visible_values: 1,
+                incoming_uses: 1,
+                include_incompatible: true,
+            },
+        },
+    ];
+    assert_eq!(
+        queries.iter().map(Query::code).collect::<Vec<_>>(),
+        crate::query::QueryCode::ALL
+    );
+    let transaction_operations = vec![
+        TransactionOp::CreatePackage {
+            handle: LocalHandle::new(1),
+            name: "package".to_owned(),
+        },
+        TransactionOp::CreateModule {
+            handle: LocalHandle::new(2),
+            package: local(1),
+            name: "module".to_owned(),
+        },
+        TransactionOp::CreateFunction {
+            handle: LocalHandle::new(3),
+            module: local(2),
+            name: "main".to_owned(),
+            result: SemanticType::I64,
+        },
+        TransactionOp::CreateParameter {
+            handle: LocalHandle::new(4),
+            function: local(3),
+            name: "parameter".to_owned(),
+            ty: SemanticType::I64,
+        },
+        TransactionOp::CreateRegion {
+            handle: LocalHandle::new(5),
+            function: local(3),
+        },
+        TransactionOp::CreateBlock {
+            handle: LocalHandle::new(6),
+            region: local(5),
+        },
+        TransactionOp::CreateOperation {
+            handle: LocalHandle::new(7),
+            block: local(6),
+            before: None,
+            operation: OperationDraft::Hole {
+                expected: SemanticType::I64,
+            },
+        },
+        TransactionOp::SetFunctionBody {
+            function: local(3),
+            region: local(5),
+        },
+        TransactionOp::SetEntryFunction {
+            package: local(1),
+            function: local(3),
+        },
+        TransactionOp::RenameNode {
+            node: local(2),
+            name: "renamed".to_owned(),
+        },
+        TransactionOp::ReplaceOperation {
+            operation: local(7),
+            replacement: OperationDraft::ConstI64(1),
+        },
+        TransactionOp::ReplaceOperand {
+            operation: local(7),
+            index: 0,
+            value: local_value(7),
+        },
+        TransactionOp::DeleteOwnedSubtree { root: local(4) },
+        TransactionOp::RefineHole {
+            hole: local(7),
+            replacement: OperationDraft::Hole {
+                expected: SemanticType::I64,
+            },
+        },
+    ];
+    assert_eq!(
+        transaction_operations
+            .iter()
+            .map(TransactionOp::code)
+            .collect::<Vec<_>>(),
+        crate::transaction::TransactionOpCode::ALL
+    );
+    vec![
+        Request::CreateWorkspace,
+        Request::ApplyTransaction(request(
+            Transaction {
+                workspace,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: transaction_operations,
+            },
+            &[1],
+        )),
+        Request::QueryBatch(QueryBatchRequest {
+            workspace,
+            revision: Revision::new(1),
+            queries: queries
+                .into_iter()
+                .enumerate()
+                .map(|(index, query)| QueryItem {
+                    id: QueryId::new(u64::try_from(index).expect("query index") + 1),
+                    query,
+                })
+                .collect(),
+        }),
+        Request::Run {
+            workspace,
+            revision: Revision::new(1),
+            entry: node,
+        },
+        Request::Shutdown,
+        Request::DescribeSchema,
+    ]
+}
+
+fn mutate_bytes(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
+    let mut random = Prng::new(seed ^ case.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+    let mut bytes = source.to_vec();
+    match case % 10 {
+        0 => bytes.truncate(random.index(bytes.len().max(1)).min(bytes.len())),
+        1 if !bytes.is_empty() => {
+            let index = random.index(bytes.len());
+            bytes[index] ^= 1 << (random.next() % 8);
+        }
+        2 => bytes.extend_from_slice(&[0xde, 0xad]),
+        3 if bytes.len() >= 4 => bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes()),
+        4 if bytes.len() >= 8 => {
+            let start = bytes.len() - 8;
+            bytes[start..].fill(0xff);
+        }
+        5 if bytes.len() >= 2 => bytes[..2].fill(0xff),
+        6 if bytes.len() >= 16 => bytes[8..16].fill(0),
+        7 if !bytes.is_empty() => {
+            let index = random.index(bytes.len());
+            bytes[index] = 0xff;
+        }
+        8 if bytes.len() >= 8 => {
+            let index = random.index(bytes.len() - 7);
+            bytes[index..index + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        }
+        _ => {
+            let index = random.index(bytes.len().max(1)).min(bytes.len());
+            bytes.insert(index, 0);
+        }
+    }
+    bytes
+}
+
+fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
+    let text = String::from_utf8(source.to_vec()).expect("valid corpus JSON");
+    match case % 10 {
+        0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
+        1 => text
+            .replacen("\"version\":2", "\"version\":2,\"version\":2", 1)
+            .into_bytes(),
+        2 => text
+            .replacen("\"request_id\":1", "\"request_id\":-1", 1)
+            .into_bytes(),
+        3 => text
+            .replacen("\"kind\":", "\"kind\":\"unknown\",\"old_kind\":", 1)
+            .into_bytes(),
+        4 => text
+            .replacen("\"request\":", "\"request\":null,\"old_request\":", 1)
+            .into_bytes(),
+        5 => format!("{text}{{}}").into_bytes(),
+        6 => text.to_uppercase().into_bytes(),
+        7 => text.replacen(":2", ":18446744073709551616", 1).into_bytes(),
+        8 => format!("{}{}{}", "[".repeat(160), text, "]".repeat(160)).into_bytes(),
+        _ => mutate_bytes(source, seed, case),
+    }
+}
+
+fn exercise_artifact_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
+    let source = &corpus
+        [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
+    let mutated = mutate_bytes(source, seed, case);
+    let first = artifact::decode(&mutated);
+    let second = artifact::decode(&mutated);
+    match (first, second) {
+        (Ok(decoded), Ok(repeated)) => {
+            assert_eq!(decoded, repeated);
+            let canonical = artifact::encode(&decoded).expect("accepted artifact re-encodes");
+            assert_eq!(
+                canonical, mutated,
+                "noncanonical artifact accepted: seed={seed} case={case}"
+            );
+        }
+        (Err(first), Err(second)) => {
+            assert_eq!(first.code, second.code);
+            assert_eq!(first.message, second.message);
+        }
+        _ => panic!("artifact mutation classification changed: seed={seed} case={case}"),
+    }
+}
+
+fn encode_protocol(request: &Request) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    protocol::write_request(&mut bytes, RequestId::new(1), request).expect("protocol corpus");
+    bytes
+}
+
+fn mutate_protocol(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
+    let mut bytes = source.to_vec();
+    match case % 10 {
+        0 => bytes.truncate(bytes.len().saturating_sub(1)),
+        1 => return mutate_bytes(source, seed, case),
+        2 if bytes.len() >= 4 => bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes()),
+        3 if bytes.len() >= 6 => bytes[4..6].copy_from_slice(&u16::MAX.to_le_bytes()),
+        4 if bytes.len() >= 14 => bytes[6..14].fill(0),
+        5 if bytes.len() >= 15 => bytes[14] = 0xff,
+        6 if bytes.len() >= 49 && bytes[14] == 2 => bytes[41..49].fill(0xff),
+        6 if bytes.len() >= 47 && bytes[14] == 3 => bytes[39..47].fill(0xff),
+        7 if bytes.len() >= 50 && bytes[14] == 2 => bytes[49] = 0xff,
+        7 if bytes.len() >= 56 && bytes[14] == 3 => bytes[55] = 0xff,
+        8 => {
+            let workspace = [0xb1; 16];
+            let serial = 2_u64.to_le_bytes();
+            if let Some(index) = bytes
+                .windows(24)
+                .position(|window| window[..16] == workspace && window[16..] == serial)
+            {
+                bytes[index + 16..index + 24].fill(0);
+            } else {
+                return mutate_bytes(source, seed, case);
+            }
+        }
+        9 if bytes.len() >= 23 && bytes[14] == 2 => {
+            let start = bytes.len() - 8;
+            bytes[start..].fill(0xff);
+        }
+        _ => bytes.extend_from_slice(&[0xde, 0xad]),
+    }
+    bytes
+}
+
+fn decode_protocol_exact(bytes: &[u8]) -> crate::Result<(RequestId, Request)> {
+    let mut cursor = Cursor::new(bytes);
+    let decoded = protocol::read_request(&mut cursor)?.ok_or_else(|| {
+        crate::error::LkError::new(ErrorCode::ProtocolMalformed, "protocol request is empty")
+    })?;
+    if usize::try_from(cursor.position()).ok() != Some(bytes.len()) {
+        return Err(crate::error::LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "protocol request has trailing bytes",
+        ));
+    }
+    Ok(decoded)
+}
+
+fn exercise_protocol_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
+    let source = &corpus
+        [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
+    let mutated = mutate_protocol(source, seed, case);
+    let first = decode_protocol_exact(&mutated);
+    let second = decode_protocol_exact(&mutated);
+    match (first, second) {
+        (Ok((id, request)), Ok(repeated)) => {
+            assert_eq!((id, request.clone()), repeated);
+            let mut canonical = Vec::new();
+            protocol::write_request(&mut canonical, id, &request)
+                .expect("accepted request re-encodes");
+            assert_eq!(
+                canonical, mutated,
+                "noncanonical protocol accepted: seed={seed} case={case}"
+            );
+        }
+        (Err(first), Err(second)) => {
+            assert_eq!(first.code, second.code);
+            assert_eq!(first.message, second.message);
+        }
+        _ => panic!("protocol mutation classification changed: seed={seed} case={case}"),
+    }
+}
+
+fn exercise_json_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
+    let source = &corpus
+        [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
+    let mutated = mutate_json(source, seed, case);
+    let first = machine::decode_request(&mutated);
+    let second = machine::decode_request(&mutated);
+    match (first, second) {
+        (Ok(decoded), Ok(repeated)) => {
+            assert_eq!(decoded, repeated);
+            let canonical = serde_json::to_vec(&decoded).expect("accepted JSON re-encodes");
+            let canonical_decoded =
+                machine::decode_request(&canonical).expect("canonical JSON decodes");
+            assert_eq!(canonical_decoded, decoded);
+        }
+        (Err(first), Err(second)) => {
+            assert_eq!(first.kind, second.kind);
+            assert_eq!(first.message, second.message);
+        }
+        _ => panic!("JSON mutation classification changed: seed={seed} case={case}"),
+    }
+}
+
+#[derive(Debug)]
+struct NamedMutation {
+    name: String,
+    bytes: Vec<u8>,
+}
+
+fn push_mutation(
+    mutations: &mut Vec<NamedMutation>,
+    name: impl Into<String>,
+    source: &[u8],
+    bytes: Vec<u8>,
+) {
+    assert_ne!(bytes, source, "targeted mutation must change bytes");
+    mutations.push(NamedMutation {
+        name: name.into(),
+        bytes,
+    });
+}
+
+fn artifact_payload(bytes: &[u8]) -> Vec<u8> {
+    let mut encoded = [0_u8; 8];
+    encoded.copy_from_slice(&bytes[26..34]);
+    let length = usize::try_from(u64::from_le_bytes(encoded)).expect("payload length");
+    bytes[34..34 + length].to_vec()
+}
+
+fn rebuild_artifact(payload: &[u8]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&artifact::MAGIC);
+    bytes.extend_from_slice(&artifact::FORMAT_VERSION.0.to_le_bytes());
+    bytes.extend_from_slice(&artifact::SCHEMA_ID.0);
+    bytes.extend_from_slice(
+        &u64::try_from(payload.len())
+            .expect("payload length")
+            .to_le_bytes(),
+    );
+    bytes.extend_from_slice(payload);
+    bytes.extend_from_slice(blake3::hash(payload).as_bytes());
+    bytes
+}
+
+fn targeted_artifact_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
+    let empty = &corpus[0];
+    let incomplete = &corpus[1];
+    let mut mutations = Vec::new();
+    for boundary in [0, 8, 10, 26, 34, empty.len() - 32, empty.len() - 1] {
+        push_mutation(
+            &mut mutations,
+            format!("artifact-truncate-{boundary}"),
+            empty,
+            empty[..boundary].to_vec(),
+        );
+    }
+    let mut length = empty.clone();
+    length[26..34].copy_from_slice(&u64::MAX.to_le_bytes());
+    push_mutation(&mut mutations, "artifact-length-inflation", empty, length);
+    let mut count_payload = artifact_payload(empty);
+    count_payload[48..56].copy_from_slice(&u64::MAX.to_le_bytes());
+    push_mutation(
+        &mut mutations,
+        "artifact-node-count-inflation",
+        empty,
+        rebuild_artifact(&count_payload),
+    );
+    let mut trailing = empty.clone();
+    trailing.push(0);
+    push_mutation(&mut mutations, "artifact-trailing", empty, trailing);
+    let mut hash = empty.clone();
+    *hash.last_mut().expect("hash byte") ^= 1;
+    push_mutation(&mut mutations, "artifact-hash", empty, hash);
+    let mut workspace = empty.clone();
+    workspace[34] ^= 1;
+    push_mutation(&mut mutations, "artifact-workspace", empty, workspace);
+    let mut invalid_utf8_payload = artifact_payload(incomplete);
+    let name = invalid_utf8_payload
+        .windows(b"package-1".len())
+        .position(|window| window == b"package-1")
+        .expect("fixture name");
+    invalid_utf8_payload[name] = 0xff;
+    push_mutation(
+        &mut mutations,
+        "artifact-invalid-utf8-name",
+        incomplete,
+        rebuild_artifact(&invalid_utf8_payload),
+    );
+    let mut duplicate_payload = artifact_payload(empty);
+    duplicate_payload[48..56].copy_from_slice(&2_u64.to_le_bytes());
+    duplicate_payload.extend_from_slice(&artifact_payload(empty)[56..]);
+    push_mutation(
+        &mut mutations,
+        "artifact-duplicate-id",
+        empty,
+        rebuild_artifact(&duplicate_payload),
+    );
+    mutations
+}
+
+fn targeted_protocol_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
+    let mut mutations = Vec::new();
+    for (index, source) in corpus.iter().enumerate() {
+        push_mutation(
+            &mut mutations,
+            format!("protocol-family-{index}-truncation"),
+            source,
+            source[..source.len() - 1].to_vec(),
+        );
+    }
+    let source = &corpus[1];
+    let mut frame = source.clone();
+    frame[..4].copy_from_slice(&u32::MAX.to_le_bytes());
+    push_mutation(&mut mutations, "protocol-frame-length", source, frame);
+    let mut version = source.clone();
+    version[4..6].copy_from_slice(&u16::MAX.to_le_bytes());
+    push_mutation(&mut mutations, "protocol-version", source, version);
+    let mut request_id = source.clone();
+    request_id[6..14].fill(0);
+    push_mutation(
+        &mut mutations,
+        "protocol-request-id-zero",
+        source,
+        request_id,
+    );
+    let mut message = source.clone();
+    message[14] = 0xff;
+    push_mutation(&mut mutations, "protocol-message-tag", source, message);
+    let mut transaction_count = source.clone();
+    transaction_count[41..49].fill(0xff);
+    push_mutation(
+        &mut mutations,
+        "protocol-transaction-count",
+        source,
+        transaction_count,
+    );
+    let mut transaction_tag = source.clone();
+    transaction_tag[49] = 0xff;
+    push_mutation(
+        &mut mutations,
+        "protocol-transaction-operation-tag",
+        source,
+        transaction_tag,
+    );
+    let main = source
+        .windows(b"main".len())
+        .position(|window| window == b"main")
+        .expect("function name");
+    let mut type_tag = source.clone();
+    type_tag[main + b"main".len()] = 0xff;
+    push_mutation(&mut mutations, "protocol-type-tag", source, type_tag);
+    let selected_count = source.len() - 12;
+    let mut selected = source.clone();
+    selected[selected_count..selected_count + 8].fill(0xff);
+    push_mutation(&mut mutations, "protocol-selected-count", source, selected);
+
+    let query = &corpus[2];
+    let mut query_count = query.clone();
+    query_count[39..47].fill(0xff);
+    push_mutation(&mut mutations, "protocol-query-count", query, query_count);
+    let mut query_tag = query.clone();
+    query_tag[55] = 0xff;
+    push_mutation(&mut mutations, "protocol-query-tag", query, query_tag);
+    let run = &corpus[3];
+    let needle = [0xb1; 16]
+        .into_iter()
+        .chain(2_u64.to_le_bytes())
+        .collect::<Vec<_>>();
+    let node = run
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .expect("run node");
+    let mut zero_node = run.clone();
+    zero_node[node + 16..node + 24].fill(0);
+    push_mutation(&mut mutations, "protocol-zero-node", run, zero_node);
+    let mut trailing = query.clone();
+    trailing.push(0);
+    push_mutation(&mut mutations, "protocol-trailing", query, trailing);
+    mutations
+}
+
+fn replace_json(source: &[u8], from: &str, to: &str) -> Vec<u8> {
+    String::from_utf8(source.to_vec())
+        .expect("JSON source")
+        .replacen(from, to, 1)
+        .into_bytes()
+}
+
+fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
+    let encoded: Vec<_> = requests
+        .iter()
+        .cloned()
+        .map(|request| {
+            serde_json::to_vec(&RequestEnvelope {
+                version: machine::JSON_ENVELOPE_VERSION,
+                request_id: RequestId::new(1),
+                request,
+            })
+            .expect("JSON request")
+        })
+        .collect();
+    let query = &encoded[2];
+    let run = &encoded[3];
+    let mut mutations = Vec::new();
+    for (index, source) in encoded.iter().enumerate() {
+        push_mutation(
+            &mut mutations,
+            format!("json-family-{index}-missing-required"),
+            source,
+            replace_json(source, "\"request_id\":1,", ""),
+        );
+    }
+    push_mutation(
+        &mut mutations,
+        "json-unknown-field",
+        query,
+        replace_json(query, "{", "{\"unknown\":0,"),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-duplicate-field",
+        query,
+        replace_json(query, "\"version\":2", "\"version\":2,\"version\":2"),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-wrong-type",
+        query,
+        replace_json(query, "\"request_id\":1", "\"request_id\":\"one\""),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-negative-unsigned",
+        query,
+        replace_json(query, "\"request_id\":1", "\"request_id\":-1"),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-overflow-unsigned",
+        query,
+        replace_json(
+            query,
+            "\"request_id\":1",
+            "\"request_id\":18446744073709551616",
+        ),
+    );
+    let workspace = WorkspaceId::from_bytes([0xb1; 16]).to_string();
+    push_mutation(
+        &mut mutations,
+        "json-invalid-hex",
+        query,
+        replace_json(query, &workspace, &format!("g{}", &workspace[1..])),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-uppercase-noncanonical-hex",
+        query,
+        replace_json(query, &workspace, &workspace.to_uppercase()),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-zero-node",
+        run,
+        replace_json(run, ":2\"", ":0\""),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-page-zero",
+        query,
+        replace_json(query, "\"limit\":1", "\"limit\":0"),
+    );
+    push_mutation(
+        &mut mutations,
+        "json-page-257",
+        query,
+        replace_json(query, "\"limit\":1", "\"limit\":257"),
+    );
+    let mut trailing = query.clone();
+    trailing.extend_from_slice(b"{}");
+    push_mutation(&mut mutations, "json-trailing", query, trailing);
+    let deep = format!(
+        "{}{}{}",
+        "[".repeat(160),
+        String::from_utf8(query.clone()).expect("query JSON"),
+        "]".repeat(160)
+    )
+    .into_bytes();
+    push_mutation(&mut mutations, "json-deep", query, deep);
+    let oversized = vec![b' '; machine::MAX_JSON_INPUT_BYTES + 1];
+    push_mutation(&mut mutations, "json-limit-plus-one", query, oversized);
+    mutations
+}
+
+fn assert_targeted_artifact(mutation: &NamedMutation) {
+    let first = artifact::decode(&mutation.bytes).expect_err(&mutation.name);
+    let second = artifact::decode(&mutation.bytes).expect_err(&mutation.name);
+    assert_eq!(first.code, second.code, "{}", mutation.name);
+    assert_eq!(first.message, second.message, "{}", mutation.name);
+}
+
+fn assert_targeted_protocol(mutation: &NamedMutation) {
+    let first = decode_protocol_exact(&mutation.bytes).expect_err(&mutation.name);
+    let second = decode_protocol_exact(&mutation.bytes).expect_err(&mutation.name);
+    assert_eq!(first.code, second.code, "{}", mutation.name);
+    assert_eq!(first.message, second.message, "{}", mutation.name);
+}
+
+fn assert_targeted_json(mutation: &NamedMutation) {
+    let first = machine::decode_request(&mutation.bytes);
+    let second = machine::decode_request(&mutation.bytes);
+    match (first, second) {
+        (Ok(first), Ok(second)) => {
+            assert_eq!(first, second, "{}", mutation.name);
+            let canonical = serde_json::to_vec(&first).expect("canonical JSON");
+            assert_eq!(
+                machine::decode_request(&canonical).expect("canonical JSON decode"),
+                first,
+                "{}",
+                mutation.name
+            );
+        }
+        (Err(first), Err(second)) => {
+            assert_eq!(first.kind, second.kind, "{}", mutation.name);
+            assert_eq!(first.message, second.message, "{}", mutation.name);
+        }
+        _ => panic!("JSON mutation classification changed: {}", mutation.name),
+    }
+}
+
+#[test]
+fn named_targeted_boundary_mutations_are_stable() {
+    let artifacts = artifact_corpus();
+    for mutation in targeted_artifact_mutations(&artifacts) {
+        assert_targeted_artifact(&mutation);
+    }
+    let requests = request_corpus();
+    let protocol: Vec<_> = requests.iter().map(encode_protocol).collect();
+    for mutation in targeted_protocol_mutations(&protocol) {
+        assert_targeted_protocol(&mutation);
+    }
+    for mutation in targeted_json_mutations(&requests) {
+        assert_targeted_json(&mutation);
+    }
+}
+
+fn run_boundary_mutation(seed: u64, cases: u64) {
+    let artifacts = artifact_corpus();
+    let requests = request_corpus();
+    let protocol: Vec<_> = requests.iter().map(encode_protocol).collect();
+    let json: Vec<_> = requests
+        .into_iter()
+        .map(|request| {
+            serde_json::to_vec(&RequestEnvelope {
+                version: machine::JSON_ENVELOPE_VERSION,
+                request_id: RequestId::new(1),
+                request,
+            })
+            .expect("JSON corpus")
+        })
+        .collect();
+    for case in 0..cases {
+        let boundary_case = case / 3;
+        match case % 3 {
+            0 => exercise_artifact_mutation(&artifacts, seed, boundary_case),
+            1 => exercise_protocol_mutation(&protocol, seed, boundary_case),
+            _ => exercise_json_mutation(&json, seed, boundary_case),
+        }
+    }
+}
+
+#[test]
+fn deterministic_boundary_mutation_normal_smoke() {
+    run_boundary_mutation(0x1bad_c0de, 600);
+}
+
+/// Deterministic mutation smoke, not coverage-guided fuzzing.
+///
+/// Reproduce with:
+/// `LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 cargo test --release boundary_mutation_smoke -- --ignored --nocapture --test-threads=1`
+#[test]
+#[ignore = "bounded manual deterministic mutation smoke"]
+fn boundary_mutation_smoke() {
+    let seed = std::env::var("LKJSCRIPT_MUTATION_SEED")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1);
+    let cases = std::env::var("LKJSCRIPT_MUTATION_CASES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(10_000);
+    eprintln!("deterministic mutation smoke (not coverage-guided): seed={seed} cases={cases}");
+    run_boundary_mutation(seed, cases);
+}
