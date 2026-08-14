@@ -103,7 +103,7 @@ impl Analyzer {
                 name,
                 source_order: u64::try_from(order)
                     .map_err(|_| self.error(source, "field order exceeds u64"))?,
-                indirect: contains_enum_type(&ty),
+                indirect: contains_enum_type(&ty)?,
                 ty,
             });
         }
@@ -123,20 +123,52 @@ pub(super) fn enum_layout(id: EnumId, recursive: bool) -> EnumLayoutFacts {
     }
 }
 
-pub(super) fn type_contains_enum(ty: &Type, expected: EnumId) -> bool {
-    match ty {
-        Type::Enum { id, arguments, .. } => {
-            *id == expected || arguments.iter().any(|ty| type_contains_enum(ty, expected))
+pub(crate) fn type_contains_enum(root: &Type, expected: EnumId) -> Result<bool> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Error::host("recursive enum type work allocation failed"))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Enum { id, arguments, .. } => {
+                if *id == expected {
+                    return Ok(true);
+                }
+                pending
+                    .try_reserve(arguments.len())
+                    .map_err(|_| Error::host("recursive enum type work allocation failed"))?;
+                pending.extend(arguments);
+            }
+            Type::List(inner) => {
+                pending
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("recursive enum type work allocation failed"))?;
+                pending.push(inner);
+            }
+            _ => {}
         }
-        Type::List(inner) => type_contains_enum(inner, expected),
-        _ => false,
     }
+    Ok(false)
 }
 
-fn contains_enum_type(ty: &Type) -> bool {
-    match ty {
-        Type::Enum { .. } => true,
-        Type::List(inner) => contains_enum_type(inner),
-        _ => false,
+fn contains_enum_type(root: &Type) -> Result<bool> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| Error::host("enum storage type work allocation failed"))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            Type::Enum { .. } => return Ok(true),
+            Type::List(inner) => {
+                pending
+                    .try_reserve(1)
+                    .map_err(|_| Error::host("enum storage type work allocation failed"))?;
+                pending.push(inner);
+            }
+            _ => {}
+        }
     }
+    Ok(false)
 }

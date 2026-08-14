@@ -167,3 +167,37 @@ fn recursive_enum_graph_has_no_depth_or_work_admission_quota() {
     let wide = canonical_source(&format!("{}{}", recursive_chain(300), unit_main_source()));
     analyze_one(&wide).expect("enum recursion beyond former depth and work geometry");
 }
+
+#[test]
+fn deeply_wrapped_recursive_enum_metadata_is_stack_safe() {
+    std::thread::Builder::new()
+        .name("analyze-deep-recursive-enum-metadata".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let depth = 256;
+            let mut ty = "e0/\n/e0".to_owned();
+            for _ in 0..depth {
+                ty = format!("list/\n{ty}\n/list");
+            }
+            let declaration = format!(
+                concat!(
+                    "enum/\nname/\ne0\n/name\nvariants/\nvariant/\nname/\nnode\n/name\n",
+                    "fields/\nvariant-field/\nname/\nnext\n/name\ntype/\n{}\n/type\n",
+                    "/variant-field\n/fields\n/variant\n/variants\n/enum\n"
+                ),
+                ty
+            );
+            let source = canonical_source(&format!("{declaration}{}", unit_main_source()));
+            let program = analyze_one(&source).expect("analyze deep recursive enum metadata");
+            let enumeration = program
+                .enums
+                .iter()
+                .find(|enumeration| enumeration.name == "e0")
+                .expect("deep recursive enum");
+            assert!(enumeration.layout.recursive);
+            assert!(enumeration.variants[0].fields[0].indirect);
+        })
+        .expect("spawn deep recursive enum metadata worker")
+        .join()
+        .expect("deep recursive enum metadata worker completes");
+}

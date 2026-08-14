@@ -3082,7 +3082,8 @@ fn create_main(
         .try_reserve(parameters.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("main parameter type allocation failed")))?;
     for parameter in &parameters {
-        let semantic = declaration_type_to_semantic(&parameter.ty, &draft_entities)?;
+        let semantic =
+            declaration_type_to_semantic(&parameter.ty, &draft_entities, None, "main parameter")?;
         resolved_parameter_types.push(resolve_semantic_type(
             base,
             program,
@@ -3329,9 +3330,17 @@ fn create_function(
             &parameter.ty,
             &draft_parameters,
             &mut used_parameters,
+            None,
+            "function parameter",
         )?;
     }
-    collect_declaration_type_parameters(&return_type, &draft_parameters, &mut used_parameters)?;
+    collect_declaration_type_parameters(
+        &return_type,
+        &draft_parameters,
+        &mut used_parameters,
+        None,
+        "function return",
+    )?;
     for parameter in &type_parameters {
         if !used_parameters.contains(&parameter.id) {
             return Err(WorkspaceError::UnusedDraftTypeParameter {
@@ -3419,25 +3428,33 @@ fn create_function(
         .try_reserve(parameters.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("parameter type allocation failed")))?;
     for parameter in &parameters {
-        let semantic = declaration_type_to_semantic(&parameter.ty, &draft_entities)?;
+        let semantic = declaration_type_to_semantic(
+            &parameter.ty,
+            &draft_entities,
+            None,
+            "function parameter",
+        )?;
         resolved_parameter_types.push(super::types::resolve_with_staged_type_parameters(
             base,
             program,
             &semantic,
             Some(function_entity),
             &staged_type_parameters,
+            None,
             false,
             false,
             "function parameter",
         )?);
     }
-    let semantic_return = declaration_type_to_semantic(&return_type, &draft_entities)?;
+    let semantic_return =
+        declaration_type_to_semantic(&return_type, &draft_entities, None, "function return")?;
     let resolved_return = super::types::resolve_with_staged_type_parameters(
         base,
         program,
         &semantic_return,
         Some(function_entity),
         &staged_type_parameters,
+        None,
         false,
         false,
         "function return",
@@ -3512,6 +3529,8 @@ fn collect_declaration_type_parameters<'a>(
     root: &'a DeclarationType,
     declared: &HashMap<DraftTypeParameterId, &'a str>,
     used: &mut HashSet<DraftTypeParameterId>,
+    current_enum_arity: Option<usize>,
+    subject: &str,
 ) -> Result<(), WorkspaceError> {
     let mut pending = Vec::new();
     pending
@@ -3532,6 +3551,28 @@ fn collect_declaration_type_parameters<'a>(
                 used.insert(*parameter);
             }
             DeclarationType::Enum { arguments, .. } => {
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    WorkspaceError::Host(Arc::from("declaration type work allocation failed"))
+                })?;
+                pending.extend(arguments);
+            }
+            DeclarationType::CurrentEnum { arguments } => {
+                let arity =
+                    current_enum_arity.ok_or_else(|| WorkspaceError::InvalidSemanticType {
+                        position: Arc::from(subject.to_owned()),
+                        reason: Arc::from(
+                            "the current enum type is valid only in its own enum field declaration",
+                        ),
+                    })?;
+                if arguments.len() != arity {
+                    return Err(WorkspaceError::InvalidSemanticType {
+                        position: Arc::from(subject.to_owned()),
+                        reason: Arc::from(format!(
+                            "current enum type requires {arity} argument(s), got {}",
+                            arguments.len()
+                        )),
+                    });
+                }
                 pending.try_reserve(arguments.len()).map_err(|_| {
                     WorkspaceError::Host(Arc::from("declaration type work allocation failed"))
                 })?;
@@ -3562,6 +3603,8 @@ fn collect_declaration_type_parameters<'a>(
 fn declaration_type_to_semantic(
     root: &DeclarationType,
     draft_entities: &HashMap<DraftTypeParameterId, EntityId>,
+    current_enum: Option<EntityId>,
+    subject: &str,
 ) -> Result<SemanticType, WorkspaceError> {
     enum Work<'a> {
         Visit(&'a DeclarationType),
@@ -3618,6 +3661,29 @@ fn declaration_type_to_semantic(
                             ))
                         })?;
                         work.push(Work::Enum(*constructor, arguments.len()));
+                        work.extend(arguments.iter().rev().map(Work::Visit));
+                    }
+                    DeclarationType::CurrentEnum { arguments } => {
+                        let constructor = current_enum.ok_or_else(|| {
+                            WorkspaceError::InvalidSemanticType {
+                                position: Arc::from(subject.to_owned()),
+                                reason: Arc::from(
+                                    "the current enum type is valid only in its own enum field declaration",
+                                ),
+                            }
+                        })?;
+                        let additional = arguments.len().checked_add(1).ok_or_else(|| {
+                            WorkspaceError::Host(Arc::from("declaration enum child count overflow"))
+                        })?;
+                        work.try_reserve(additional).map_err(|_| {
+                            WorkspaceError::Host(Arc::from(
+                                "declaration type conversion work allocation failed",
+                            ))
+                        })?;
+                        work.push(Work::Enum(
+                            super::SemanticEnum::Entity(constructor),
+                            arguments.len(),
+                        ));
                         work.extend(arguments.iter().rev().map(Work::Visit));
                     }
                     DeclarationType::TypeParameter(entity) => {
@@ -3939,6 +4005,8 @@ fn create_enum(
                 &field.ty,
                 &draft_parameters,
                 &mut referenced_parameters,
+                Some(type_parameters.len()),
+                "enum field",
             )?;
         }
     }
@@ -4005,10 +4073,12 @@ fn create_enum(
         });
     }
 
+    let staged_enum = super::types::StagedEnumType::new(entity, enum_id, type_parameters.len());
     let mut resolved_variants = Vec::new();
     resolved_variants
         .try_reserve(variants.len())
         .map_err(|_| WorkspaceError::Host(Arc::from("enum variant allocation failed")))?;
+    let mut recursive = false;
     for (variant_index, variant) in variants.into_iter().enumerate() {
         let variant_raw = u64::try_from(variant_index)
             .map_err(|_| WorkspaceError::Host(Arc::from("enum variant index exceeds u64")))?;
@@ -4031,18 +4101,26 @@ fn create_enum(
             .try_reserve(variant.fields.len())
             .map_err(|_| WorkspaceError::Host(Arc::from("enum field allocation failed")))?;
         for (field_index, field) in variant.fields.into_iter().enumerate() {
-            let semantic = declaration_type_to_semantic(&field.ty, &draft_entities)?;
+            let semantic = declaration_type_to_semantic(
+                &field.ty,
+                &draft_entities,
+                Some(entity),
+                "enum field",
+            )?;
             let ty = super::types::resolve_with_staged_type_parameters(
                 base,
                 program,
                 &semantic,
                 Some(entity),
                 &staged_type_parameters,
+                Some(staged_enum),
                 false,
                 false,
                 "enum field",
             )?;
             reject_ownership_field(&ty, "enum field")?;
+            recursive |= crate::analyze::type_contains_enum(&ty, enum_id)
+                .map_err(WorkspaceError::from_core)?;
             let field_raw = u64::try_from(field_index)
                 .map_err(|_| WorkspaceError::Host(Arc::from("enum field index exceeds u64")))?;
             let field_address = EntityAddress::EnumField {
@@ -4086,7 +4164,7 @@ fn create_enum(
         variants: resolved_variants,
         layout: crate::hir::EnumLayoutFacts {
             identity: layout,
-            recursive: false,
+            recursive,
         },
     });
     Ok(())

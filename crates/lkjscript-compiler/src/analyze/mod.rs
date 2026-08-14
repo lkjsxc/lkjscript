@@ -94,6 +94,7 @@ mod diagnostics;
 mod interface;
 mod resolution;
 
+pub(crate) use declarations::type_contains_enum;
 pub(crate) use interface::analyze_interface_program;
 
 use declarations::*;

@@ -102,7 +102,13 @@ fn field_projection_input(
     let source = vm.pop()?;
     let (owner, record) = invocation(vm)?.owner(source)?;
     require_owner_representation(vm.chunk, record, reference.representation)?;
-    require_active_variant(vm, owner, record.value_type, reference.active_variant)?;
+    require_active_variant(
+        vm,
+        owner,
+        reference.representation,
+        record.value_type,
+        reference.active_variant,
+    )?;
     let expected = reference
         .result
         .runtime_type

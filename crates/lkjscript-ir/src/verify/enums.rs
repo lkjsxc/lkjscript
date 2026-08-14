@@ -45,11 +45,14 @@ pub(crate) fn verify_enum_metadata(program: &Program) -> crate::Result<()> {
                 return fail("SSA enum has malformed physical tags");
             }
         }
-        let recursive = definition
+        let mut recursive = false;
+        for field in definition
             .variants
             .iter()
-            .flat_map(|v| &v.fields)
-            .any(|field| contains_enum(&field.ty, definition.id));
+            .flat_map(|variant| &variant.fields)
+        {
+            recursive |= contains_enum(&field.ty, definition.id)?;
+        }
         if recursive != definition.layout.recursive {
             return fail("SSA enum recursive layout fact is invalid");
         }
@@ -114,44 +117,304 @@ pub(crate) fn check_layout(
     }
 }
 
-pub(crate) fn substitute(ty: &SsaType, parameters: &[String], arguments: &[SsaType]) -> SsaType {
-    match ty {
-        SsaType::TypeParameter(name) => parameters
-            .iter()
-            .position(|parameter| parameter == name)
-            .and_then(|index| arguments.get(index))
-            .cloned()
-            .unwrap_or_else(|| ty.clone()),
-        SsaType::List(inner) => SsaType::List(Box::new(substitute(inner, parameters, arguments))),
-        SsaType::Enum {
-            id,
-            arguments: nested,
-        } => SsaType::Enum {
-            id: *id,
-            arguments: nested
-                .iter()
-                .map(|item| substitute(item, parameters, arguments))
-                .collect(),
+pub(crate) fn substitute(
+    ty: &SsaType,
+    parameters: &[String],
+    arguments: &[SsaType],
+) -> crate::Result<SsaType> {
+    enum Work<'a> {
+        Visit(&'a SsaType),
+        Enter(&'a [String]),
+        Exit(&'a [String]),
+        Enum(crate::EnumId, usize),
+        List,
+        Function {
+            type_parameters: &'a [String],
+            bounds: &'a [crate::TraitBound],
+            witnesses: &'a [crate::MemoryWitnessParameter],
+            parameter_count: usize,
         },
-        _ => ty.clone(),
+    }
+
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| crate::IrError::new("SSA enum substitution work allocation failed"))?;
+    pending.push(Work::Visit(ty));
+    let mut completed = Vec::new();
+    let mut bound = std::collections::HashMap::<&str, usize>::new();
+    while let Some(item) = pending.pop() {
+        match item {
+            Work::Visit(ty) => match ty {
+                SsaType::TypeParameter(name) => {
+                    let substitution = if bound.contains_key(name.as_str()) {
+                        None
+                    } else {
+                        parameters
+                            .iter()
+                            .position(|parameter| parameter == name)
+                            .and_then(|index| arguments.get(index))
+                    };
+                    let substituted = substitution.cloned().unwrap_or_else(|| ty.clone());
+                    completed.try_reserve(1).map_err(|_| {
+                        crate::IrError::new("SSA enum substitution result allocation failed")
+                    })?;
+                    completed.push(substituted);
+                }
+                SsaType::List(inner) => {
+                    pending.try_reserve(2).map_err(|_| {
+                        crate::IrError::new("SSA enum substitution work allocation failed")
+                    })?;
+                    pending.push(Work::List);
+                    pending.push(Work::Visit(inner));
+                }
+                SsaType::Enum {
+                    id,
+                    arguments: nested,
+                } => {
+                    let additional = nested.len().checked_add(1).ok_or_else(|| {
+                        crate::IrError::new("SSA enum substitution child count overflow")
+                    })?;
+                    pending.try_reserve(additional).map_err(|_| {
+                        crate::IrError::new("SSA enum substitution work allocation failed")
+                    })?;
+                    pending.push(Work::Enum(*id, nested.len()));
+                    pending.extend(nested.iter().rev().map(Work::Visit));
+                }
+                SsaType::Function(signature) => {
+                    let additional =
+                        signature.parameters.len().checked_add(5).ok_or_else(|| {
+                            crate::IrError::new("SSA enum substitution child count overflow")
+                        })?;
+                    pending.try_reserve(additional).map_err(|_| {
+                        crate::IrError::new("SSA enum substitution work allocation failed")
+                    })?;
+                    pending.push(Work::Function {
+                        type_parameters: &signature.type_parameters,
+                        bounds: &signature.bounds,
+                        witnesses: &signature.memory_witness_parameters,
+                        parameter_count: signature.parameters.len(),
+                    });
+                    pending.push(Work::Exit(&signature.type_parameters));
+                    pending.push(Work::Visit(&signature.result));
+                    pending.extend(signature.parameters.iter().rev().map(Work::Visit));
+                    pending.push(Work::Enter(&signature.type_parameters));
+                }
+                _ => {
+                    completed.try_reserve(1).map_err(|_| {
+                        crate::IrError::new("SSA enum substitution result allocation failed")
+                    })?;
+                    completed.push(ty.clone());
+                }
+            },
+            Work::Enter(parameters) => {
+                for parameter in parameters {
+                    if !bound.contains_key(parameter.as_str()) {
+                        bound.try_reserve(1).map_err(|_| {
+                            crate::IrError::new("SSA enum substitution scope allocation failed")
+                        })?;
+                    }
+                    *bound.entry(parameter).or_default() += 1;
+                }
+            }
+            Work::Exit(parameters) => {
+                for parameter in parameters {
+                    let count = bound.get_mut(parameter.as_str()).ok_or_else(|| {
+                        crate::IrError::new("SSA enum substitution scope exit is invalid")
+                    })?;
+                    *count -= 1;
+                    if *count == 0 {
+                        bound.remove(parameter.as_str());
+                    }
+                }
+            }
+            Work::Enum(id, count) => {
+                let split = completed.len().checked_sub(count).ok_or_else(|| {
+                    crate::IrError::new("SSA enum substitution omitted arguments")
+                })?;
+                let arguments = completed.split_off(split);
+                completed.try_reserve(1).map_err(|_| {
+                    crate::IrError::new("SSA enum substitution result allocation failed")
+                })?;
+                completed.push(SsaType::Enum { id, arguments });
+            }
+            Work::List => {
+                let inner = completed.pop().ok_or_else(|| {
+                    crate::IrError::new("SSA enum substitution omitted list element")
+                })?;
+                completed.try_reserve(1).map_err(|_| {
+                    crate::IrError::new("SSA enum substitution result allocation failed")
+                })?;
+                completed.push(SsaType::List(Box::new(inner)));
+            }
+            Work::Function {
+                type_parameters,
+                bounds,
+                witnesses,
+                parameter_count,
+            } => {
+                let result = completed.pop().ok_or_else(|| {
+                    crate::IrError::new("SSA enum substitution omitted function result")
+                })?;
+                let split = completed
+                    .len()
+                    .checked_sub(parameter_count)
+                    .ok_or_else(|| {
+                        crate::IrError::new("SSA enum substitution omitted function parameters")
+                    })?;
+                let parameters = completed.split_off(split);
+                completed.try_reserve(1).map_err(|_| {
+                    crate::IrError::new("SSA enum substitution result allocation failed")
+                })?;
+                completed.push(SsaType::Function(Box::new(crate::Signature {
+                    type_parameters: type_parameters.to_vec(),
+                    bounds: bounds.to_vec(),
+                    memory_witness_parameters: witnesses.to_vec(),
+                    parameters,
+                    result: Box::new(result),
+                })));
+            }
+        }
+    }
+    let result = completed
+        .pop()
+        .ok_or_else(|| crate::IrError::new("SSA enum substitution omitted its root"))?;
+    if completed.is_empty() {
+        Ok(result)
+    } else {
+        fail("SSA enum substitution left disconnected results")
     }
 }
 
-fn contains_enum(ty: &SsaType, id: crate::EnumId) -> bool {
-    match ty {
-        SsaType::Enum {
-            id: nested,
-            arguments,
-        } => *nested == id || arguments.iter().any(|t| contains_enum(t, id)),
-        SsaType::List(t) => contains_enum(t, id),
-        _ => false,
+fn contains_enum(root: &SsaType, id: crate::EnumId) -> crate::Result<bool> {
+    let mut pending = Vec::new();
+    pending
+        .try_reserve(1)
+        .map_err(|_| crate::IrError::new("SSA recursive enum work allocation failed"))?;
+    pending.push(root);
+    while let Some(ty) = pending.pop() {
+        match ty {
+            SsaType::Enum {
+                id: nested,
+                arguments,
+            } => {
+                if *nested == id {
+                    return Ok(true);
+                }
+                pending.try_reserve(arguments.len()).map_err(|_| {
+                    crate::IrError::new("SSA recursive enum work allocation failed")
+                })?;
+                pending.extend(arguments);
+            }
+            SsaType::List(inner) => {
+                pending.try_reserve(1).map_err(|_| {
+                    crate::IrError::new("SSA recursive enum work allocation failed")
+                })?;
+                pending.push(inner);
+            }
+            _ => {}
+        }
+    }
+    Ok(false)
+}
+
+fn contains_any_enum(root: &SsaType) -> bool {
+    let mut ty = root;
+    loop {
+        match ty {
+            SsaType::Enum { .. } => return true,
+            SsaType::List(inner) => ty = inner,
+            _ => return false,
+        }
     }
 }
 
-fn contains_any_enum(ty: &SsaType) -> bool {
-    match ty {
-        SsaType::Enum { .. } => true,
-        SsaType::List(t) => contains_any_enum(t),
-        _ => false,
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn deep_enum_metadata_type_work_is_stack_safe() {
+        std::thread::Builder::new()
+            .name("ssa-deep-enum-metadata-type".to_owned())
+            .stack_size(128 * 1024)
+            .spawn(|| {
+                let depth = 1_024;
+                let enumeration = crate::EnumId::new([7; 32]);
+                let mut recursive = SsaType::Enum {
+                    id: enumeration,
+                    arguments: Vec::new(),
+                };
+                for _ in 0..depth {
+                    recursive = SsaType::List(Box::new(recursive));
+                }
+                assert!(contains_enum(&recursive, enumeration).expect("recursive enum search"));
+                assert!(contains_any_enum(&recursive));
+
+                let mut parameter = SsaType::TypeParameter("t".to_owned());
+                for _ in 0..depth {
+                    parameter = SsaType::List(Box::new(parameter));
+                }
+                let substituted = substitute(&parameter, &["t".to_owned()], &[SsaType::I64])
+                    .expect("deep enum substitution");
+                let mut found = &substituted;
+                for _ in 0..depth {
+                    let SsaType::List(inner) = found else {
+                        panic!("deep substitution lost list structure")
+                    };
+                    found = inner;
+                }
+                assert!(matches!(found, SsaType::I64));
+
+                let function = SsaType::Function(Box::new(crate::Signature {
+                    type_parameters: vec!["u".to_owned()],
+                    bounds: Vec::new(),
+                    memory_witness_parameters: Vec::new(),
+                    parameters: vec![
+                        SsaType::TypeParameter("t".to_owned()),
+                        SsaType::TypeParameter("u".to_owned()),
+                    ],
+                    result: Box::new(SsaType::TypeParameter("t".to_owned())),
+                }));
+                let substituted = substitute(
+                    &function,
+                    &["t".to_owned(), "u".to_owned()],
+                    &[SsaType::I64, SsaType::Bool],
+                )
+                .expect("function field substitution");
+                let SsaType::Function(ref signature) = substituted else {
+                    panic!("function substitution lost its signature")
+                };
+                assert_eq!(signature.parameters[0], SsaType::I64);
+                assert_eq!(
+                    signature.parameters[1],
+                    SsaType::TypeParameter("u".to_owned())
+                );
+                assert_eq!(*signature.result, SsaType::I64);
+
+                let mut nested_function = SsaType::TypeParameter("t".to_owned());
+                for _ in 0..512 {
+                    nested_function = SsaType::Function(Box::new(crate::Signature::monomorphic(
+                        vec![nested_function],
+                        SsaType::Unit,
+                    )));
+                }
+                let nested_function =
+                    substitute(&nested_function, &["t".to_owned()], &[SsaType::I64])
+                        .expect("deep function field substitution");
+                let mut found = &nested_function;
+                for _ in 0..512 {
+                    let SsaType::Function(signature) = found else {
+                        panic!("deep function substitution lost signature structure")
+                    };
+                    found = &signature.parameters[0];
+                }
+                assert!(matches!(found, SsaType::I64));
+            })
+            .expect("spawn deep enum metadata worker")
+            .join()
+            .expect("deep enum metadata worker completes");
     }
 }

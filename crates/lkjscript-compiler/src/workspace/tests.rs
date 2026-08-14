@@ -12308,10 +12308,17 @@ fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
 
 fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
     let parameter = DraftTypeParameterId::new(0);
-    let mut ty = DeclarationType::DraftTypeParameter(parameter);
+    let mut ty = DeclarationType::CurrentEnum {
+        arguments: vec![DeclarationType::DraftTypeParameter(parameter)],
+    };
     for _ in 0..depth {
         ty = DeclarationType::List(Box::new(ty));
     }
+    let cloned = ty.clone();
+    assert_eq!(cloned, ty);
+    let debug = format!("{cloned:?}");
+    assert!(debug.ends_with("current-enum draft-type-parameter(0)"));
+    assert_eq!(debug.matches("list ").count(), depth);
     let mut workspace = Workspace::empty_deterministic(seed).expect("empty generic enum workspace");
     let created = workspace
         .apply(Transaction {
@@ -12326,7 +12333,7 @@ fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
                     name: "value".to_owned(),
                     fields: vec![EnumFieldDraft {
                         name: "payload".to_owned(),
-                        ty,
+                        ty: cloned,
                     }],
                 }],
             }],
@@ -12335,7 +12342,10 @@ fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
     let enumeration = created_entity(&created.diff, EntityKind::Enum, "deep-generic-enum");
     let stable_parameter = created_entity(&created.diff, EntityKind::TypeParameter, "t");
     let field = created_entity(&created.diff, EntityKind::EnumField, "payload");
-    let mut expected = SemanticType::TypeParameter(stable_parameter);
+    let mut expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::TypeParameter(stable_parameter)],
+    };
     for _ in 0..depth {
         expected = SemanticType::List(Box::new(expected));
     }
@@ -20329,6 +20339,735 @@ fn imported_nominal_local_and_ownership_programs_converge() {
     }
 }
 
+fn recursive_chain_declaration_edit(name: &str) -> Edit {
+    Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters: Vec::new(),
+        variants: vec![
+            EnumVariantDraft {
+                name: "leaf".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::I64,
+                }],
+            },
+            EnumVariantDraft {
+                name: "branch".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "next".to_owned(),
+                    ty: DeclarationType::CurrentEnum {
+                        arguments: Vec::new(),
+                    },
+                }],
+            },
+        ],
+    }
+}
+
+fn recursive_tree_declaration_edit(name: &str, binder: DraftTypeParameterId) -> Edit {
+    Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters: vec![EnumTypeParameterDraft {
+            id: binder,
+            name: "t".to_owned(),
+        }],
+        variants: vec![
+            EnumVariantDraft {
+                name: "leaf".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::DraftTypeParameter(binder),
+                }],
+            },
+            EnumVariantDraft {
+                name: "branch".to_owned(),
+                fields: vec![
+                    EnumFieldDraft {
+                        name: "left".to_owned(),
+                        ty: DeclarationType::CurrentEnum {
+                            arguments: vec![DeclarationType::DraftTypeParameter(binder)],
+                        },
+                    },
+                    EnumFieldDraft {
+                        name: "right".to_owned(),
+                        ty: DeclarationType::CurrentEnum {
+                            arguments: vec![DeclarationType::DraftTypeParameter(binder)],
+                        },
+                    },
+                ],
+            },
+        ],
+    }
+}
+
+#[test]
+fn source_free_recursive_enum_declarations_publish_stable_self_types() {
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace = Workspace::empty_deterministic(320).expect("recursive enum workspace");
+
+    let chain = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![recursive_chain_declaration_edit("chain")],
+        })
+        .expect("create recursive chain");
+    let chain_enum = created_entity(&chain.diff, EntityKind::Enum, "chain");
+    let chain_branch = created_entity(&chain.diff, EntityKind::EnumVariant, "branch");
+    let chain_next = created_entity(&chain.diff, EntityKind::EnumField, "next");
+    assert_eq!(
+        chain
+            .snapshot
+            .entity(chain_next)
+            .expect("chain field")
+            .owner,
+        Some(chain_branch)
+    );
+    assert_eq!(
+        chain
+            .snapshot
+            .entity_type(chain.snapshot.revision(), chain_next)
+            .expect("recursive chain field type")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(chain_enum),
+            arguments: Vec::new(),
+        })
+    );
+    let chain_definition = chain
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "chain")
+        .expect("canonical recursive chain");
+    assert!(chain_definition.layout.recursive);
+    assert!(chain_definition.variants[1].fields[0].indirect);
+
+    let binder = DraftTypeParameterId::new(0);
+    let tree = workspace
+        .apply(Transaction {
+            base_revision: chain.snapshot.revision(),
+            edits: vec![recursive_tree_declaration_edit("tree", binder)],
+        })
+        .expect("create recursive generic tree");
+    let tree_enum = created_entity(&tree.diff, EntityKind::Enum, "tree");
+    let stable_binder = created_entity(&tree.diff, EntityKind::TypeParameter, "t");
+    let left = created_entity(&tree.diff, EntityKind::EnumField, "left");
+    let right = created_entity(&tree.diff, EntityKind::EnumField, "right");
+    let expected = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(tree_enum),
+        arguments: vec![SemanticType::TypeParameter(stable_binder)],
+    };
+    for field in [left, right] {
+        assert_eq!(
+            tree.snapshot
+                .entity_type(tree.snapshot.revision(), field)
+                .expect("recursive tree field type")
+                .declared,
+            Some(expected.clone())
+        );
+    }
+    assert_eq!(
+        tree.snapshot
+            .entity(stable_binder)
+            .expect("tree binder")
+            .owner,
+        Some(tree_enum)
+    );
+    let tree_definition = tree
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "tree")
+        .expect("canonical recursive tree");
+    assert!(tree_definition.layout.recursive);
+    assert!(tree_definition.variants[1]
+        .fields
+        .iter()
+        .all(|field| field.indirect));
+    let projection = tree
+        .snapshot
+        .project(&[
+            ProjectionSlice::Entity(tree_enum),
+            ProjectionSlice::Entity(stable_binder),
+            ProjectionSlice::Entity(left),
+            ProjectionSlice::Entity(right),
+        ])
+        .expect("project recursive tree");
+    assert!(!projection.contains("current-enum"), "{projection}");
+    tree.snapshot
+        .check_consistency()
+        .expect("validate recursive declarations");
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+fn recursive_chain_match_source() -> &'static str {
+    concat!(
+        "enum/\nname/\nchain\n/name\nvariants/\n",
+        "variant/\nname/\nleaf\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
+        "type/\ni64\n/type\n/variant-field\n/fields\n/variant\n",
+        "variant/\nname/\nbranch\n/name\nfields/\nvariant-field/\nname/\nnext\n/name\n",
+        "type/\nchain/\n/chain\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nchain/\n/chain\n/type\nvariant/\nbranch\n/variant\n",
+        "fields/\nvariant-field/\nname/\nnext\n/name\n",
+        "variant-value/\ntype/\nchain/\n/chain\n/type\nvariant/\nleaf\n/variant\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\n41\n/variant-field\n/fields\n/variant-value\n",
+        "/variant-field\n/fields\n/variant-value\narms/\n",
+        "arm/\nvariant-pattern/\ntype/\nchain/\n/chain\n/type\nvariant/\nleaf\n/variant\n",
+        "fields/\nvariant-field-pattern/\nname/\nvalue\n/name\nwildcard/\n/wildcard\n",
+        "/variant-field-pattern\n/fields\n/variant-pattern\n0\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nchain/\n/chain\n/type\nvariant/\nbranch\n/variant\n",
+        "fields/\nvariant-field-pattern/\nname/\nnext\n/name\nwildcard/\n/wildcard\n",
+        "/variant-field-pattern\n/fields\n/variant-pattern\n42\n/arm\n",
+        "/arms\n/match\n/main\n",
+    )
+}
+
+fn recursive_tree_match_source() -> &'static str {
+    concat!(
+        "enum/\nname/\ntree\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nleaf\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
+        "type/\nt\n/type\n/variant-field\n/fields\n/variant\n",
+        "variant/\nname/\nbranch\n/name\nfields/\n",
+        "variant-field/\nname/\nleft\n/name\ntype/\ntree/\nt\n/tree\n/type\n/variant-field\n",
+        "variant-field/\nname/\nright\n/name\ntype/\ntree/\nt\n/tree\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nbranch-value\n",
+        "variant-value/\ntype/\ntree/\ni64\n/tree\n/type\nvariant/\nbranch\n/variant\nfields/\n",
+        "variant-field/\nname/\nleft\n/name\nvariant-value/\ntype/\ntree/\ni64\n/tree\n/type\n",
+        "variant/\nleaf\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n41\n",
+        "/variant-field\n/fields\n/variant-value\n/variant-field\n",
+        "variant-field/\nname/\nright\n/name\nvariant-value/\ntype/\ntree/\ni64\n/tree\n/type\n",
+        "variant/\nleaf\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n2\n",
+        "/variant-field\n/fields\n/variant-value\n/variant-field\n/fields\n/variant-value\n/bind\n",
+        "match/\nvariant-value/\ntype/\ntree/\ni64\n/tree\n/type\nvariant/\nleaf\n/variant\n",
+        "fields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\ntree/\ni64\n/tree\n/type\nvariant/\nleaf\n/variant\n",
+        "fields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n",
+        "/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\ntree/\ni64\n/tree\n/type\nvariant/\nbranch\n/variant\nfields/\n",
+        "variant-field-pattern/\nname/\nleft\n/name\nwildcard/\n/wildcard\n/variant-field-pattern\n",
+        "variant-field-pattern/\nname/\nright\n/name\nwildcard/\n/wildcard\n/variant-field-pattern\n",
+        "/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/let\n/main\n",
+    )
+}
+
+fn recursive_chain_match_draft(
+    leaf: EntityId,
+    branch: EntityId,
+    value: EntityId,
+    next: EntityId,
+) -> ExpressionDraft {
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(41),
+            DraftNode::EnumValue {
+                variant: leaf,
+                type_arguments: Vec::new(),
+                fields: vec![DraftFieldValue {
+                    field: value,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::EnumValue {
+                variant: branch,
+                type_arguments: Vec::new(),
+                fields: vec![DraftFieldValue {
+                    field: next,
+                    value: DraftNodeId::new(1),
+                }],
+            },
+            DraftNode::I64(0),
+            DraftNode::I64(42),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(2),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::EnumVariant {
+                                    variant: leaf,
+                                    fields: vec![DraftPatternField {
+                                        field: value,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(3),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::EnumVariant {
+                                    variant: branch,
+                                    fields: vec![DraftPatternField {
+                                        field: next,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(4),
+                    },
+                ],
+            },
+        ],
+        DraftNodeId::new(5),
+    )
+}
+
+fn recursive_tree_match_draft(
+    leaf: EntityId,
+    branch: EntityId,
+    value: EntityId,
+    left: EntityId,
+    right: EntityId,
+    parameter: EntityId,
+) -> ExpressionDraft {
+    let arguments = || {
+        vec![TypeArgumentDraft {
+            parameter,
+            argument: SemanticType::I64,
+        }]
+    };
+    let branch_value = DraftBindingId::new(0);
+    let payload = DraftBindingId::new(1);
+    ExpressionDraft::new(
+        vec![
+            DraftNode::I64(41),
+            DraftNode::EnumValue {
+                variant: leaf,
+                type_arguments: arguments(),
+                fields: vec![DraftFieldValue {
+                    field: value,
+                    value: DraftNodeId::new(0),
+                }],
+            },
+            DraftNode::I64(2),
+            DraftNode::EnumValue {
+                variant: leaf,
+                type_arguments: arguments(),
+                fields: vec![DraftFieldValue {
+                    field: value,
+                    value: DraftNodeId::new(2),
+                }],
+            },
+            DraftNode::EnumValue {
+                variant: branch,
+                type_arguments: arguments(),
+                fields: vec![
+                    DraftFieldValue {
+                        field: left,
+                        value: DraftNodeId::new(1),
+                    },
+                    DraftFieldValue {
+                        field: right,
+                        value: DraftNodeId::new(3),
+                    },
+                ],
+            },
+            DraftNode::I64(42),
+            DraftNode::EnumValue {
+                variant: leaf,
+                type_arguments: arguments(),
+                fields: vec![DraftFieldValue {
+                    field: value,
+                    value: DraftNodeId::new(5),
+                }],
+            },
+            DraftNode::Load(DraftBindingRef::Local(payload)),
+            DraftNode::I64(0),
+            DraftNode::Match {
+                scrutinee: DraftNodeId::new(6),
+                arms: vec![
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Binding {
+                                    binding: payload,
+                                    name: "x".to_owned(),
+                                },
+                                DraftPatternNode::EnumVariant {
+                                    variant: leaf,
+                                    fields: vec![DraftPatternField {
+                                        field: value,
+                                        pattern: DraftPatternNodeId::new(0),
+                                    }],
+                                },
+                            ],
+                            DraftPatternNodeId::new(1),
+                        ),
+                        body: DraftNodeId::new(7),
+                    },
+                    MatchArmDraft {
+                        pattern: PatternDraft::new(
+                            vec![
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::Wildcard,
+                                DraftPatternNode::EnumVariant {
+                                    variant: branch,
+                                    fields: vec![
+                                        DraftPatternField {
+                                            field: left,
+                                            pattern: DraftPatternNodeId::new(0),
+                                        },
+                                        DraftPatternField {
+                                            field: right,
+                                            pattern: DraftPatternNodeId::new(1),
+                                        },
+                                    ],
+                                },
+                            ],
+                            DraftPatternNodeId::new(2),
+                        ),
+                        body: DraftNodeId::new(8),
+                    },
+                ],
+            },
+            DraftNode::Let {
+                bindings: vec![LocalDraft {
+                    binding: branch_value,
+                    name: "branch-value".to_owned(),
+                    value: DraftNodeId::new(4),
+                }],
+                body: DraftNodeId::new(9),
+            },
+        ],
+        DraftNodeId::new(10),
+    )
+}
+
+fn assert_recursive_i64_on_evaluator_and_vm(snapshot: &WorkspaceSnapshot, expected: i64) {
+    let executable = crate::compile_snapshot(snapshot).expect("compile recursive enum snapshot");
+    assert_eq!(
+        evaluate(executable.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::I64(expected))
+    );
+    let outcome = run_chunk(
+        executable.bytecode(),
+        &ExecutionInputs::default(),
+        &ExecutionPolicy::unrestricted(),
+    );
+    assert!(outcome.cleanup_failures().is_none());
+    assert!(
+        matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(expected))
+    );
+}
+
+#[test]
+fn source_free_recursive_enum_values_and_patterns_compile_execute_and_converge() {
+    let imported_chain = import_source(
+        recursive_chain_match_source(),
+        "source-free-recursive-chain-oracle.lkjscript",
+    )
+    .expect("import recursive chain oracle");
+    let imported_tree = import_source(
+        recursive_tree_match_source(),
+        "source-free-recursive-tree-oracle.lkjscript",
+    )
+    .expect("import recursive tree oracle");
+    assert_recursive_i64_on_evaluator_and_vm(&imported_chain, 42);
+    assert_recursive_i64_on_evaluator_and_vm(&imported_tree, 42);
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut chain_workspace =
+        Workspace::empty_deterministic(321).expect("source-free recursive chain");
+    let chain_declaration = chain_workspace
+        .apply(Transaction {
+            base_revision: chain_workspace.current().revision(),
+            edits: vec![recursive_chain_declaration_edit("chain")],
+        })
+        .expect("declare source-free recursive chain");
+    let chain_enum = created_entity(&chain_declaration.diff, EntityKind::Enum, "chain");
+    let chain_leaf = created_entity(&chain_declaration.diff, EntityKind::EnumVariant, "leaf");
+    let chain_branch = created_entity(&chain_declaration.diff, EntityKind::EnumVariant, "branch");
+    let chain_value = created_entity(&chain_declaration.diff, EntityKind::EnumField, "value");
+    let chain_next = created_entity(&chain_declaration.diff, EntityKind::EnumField, "next");
+    let chain_main = chain_workspace
+        .apply(Transaction {
+            base_revision: chain_declaration.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create recursive chain main");
+    let chain_hole = chain_main
+        .snapshot
+        .holes()
+        .next()
+        .expect("chain main hole")
+        .id;
+    let completed_chain = chain_workspace
+        .apply(Transaction {
+            base_revision: chain_main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: chain_hole,
+                draft: recursive_chain_match_draft(
+                    chain_leaf,
+                    chain_branch,
+                    chain_value,
+                    chain_next,
+                ),
+            }],
+        })
+        .expect("construct and match source-free recursive chain");
+    assert_eq!(completed_chain.snapshot.state(), ProgramState::Complete);
+    assert_eq!(
+        completed_chain
+            .snapshot
+            .entity_type(completed_chain.snapshot.revision(), chain_next)
+            .expect("published recursive chain field")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(chain_enum),
+            arguments: Vec::new(),
+        })
+    );
+    assert_eq!(
+        canonical_workspace_observation(&completed_chain.snapshot),
+        canonical_workspace_observation(&imported_chain)
+    );
+    assert_recursive_i64_on_evaluator_and_vm(&completed_chain.snapshot, 42);
+
+    let mut tree_workspace =
+        Workspace::empty_deterministic(322).expect("source-free recursive tree");
+    let draft_parameter = DraftTypeParameterId::new(0);
+    let tree_declaration = tree_workspace
+        .apply(Transaction {
+            base_revision: tree_workspace.current().revision(),
+            edits: vec![recursive_tree_declaration_edit("tree", draft_parameter)],
+        })
+        .expect("declare source-free recursive tree");
+    let tree_enum = created_entity(&tree_declaration.diff, EntityKind::Enum, "tree");
+    let tree_parameter = created_entity(&tree_declaration.diff, EntityKind::TypeParameter, "t");
+    let tree_leaf = created_entity(&tree_declaration.diff, EntityKind::EnumVariant, "leaf");
+    let tree_branch = created_entity(&tree_declaration.diff, EntityKind::EnumVariant, "branch");
+    let tree_value = created_entity(&tree_declaration.diff, EntityKind::EnumField, "value");
+    let tree_left = created_entity(&tree_declaration.diff, EntityKind::EnumField, "left");
+    let tree_right = created_entity(&tree_declaration.diff, EntityKind::EnumField, "right");
+    let tree_main = tree_workspace
+        .apply(Transaction {
+            base_revision: tree_declaration.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
+                return_type: SemanticType::I64,
+            }],
+        })
+        .expect("create recursive tree main");
+    let tree_hole = tree_main
+        .snapshot
+        .holes()
+        .next()
+        .expect("tree main hole")
+        .id;
+    let completed_tree = tree_workspace
+        .apply(Transaction {
+            base_revision: tree_main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole: tree_hole,
+                draft: recursive_tree_match_draft(
+                    tree_leaf,
+                    tree_branch,
+                    tree_value,
+                    tree_left,
+                    tree_right,
+                    tree_parameter,
+                ),
+            }],
+        })
+        .expect("construct and match source-free recursive tree");
+    assert_eq!(completed_tree.snapshot.state(), ProgramState::Complete);
+    assert_eq!(
+        canonical_workspace_observation(&completed_tree.snapshot),
+        canonical_workspace_observation(&imported_tree)
+    );
+    let match_site = completed_tree
+        .snapshot
+        .nodes()
+        .iter()
+        .find(|node| node.kind == NodeKind::Match)
+        .expect("recursive tree match")
+        .id;
+    let match_view = completed_tree
+        .snapshot
+        .match_view(completed_tree.snapshot.revision(), match_site)
+        .expect("recursive tree match view");
+    assert!(match_view.exhaustive);
+    assert_eq!(
+        completed_tree
+            .snapshot
+            .node_semantics(completed_tree.snapshot.revision(), match_view.scrutinee)
+            .expect("exact recursive tree scrutinee")
+            .actual,
+        SemanticType::Enum {
+            constructor: SemanticEnum::Entity(tree_enum),
+            arguments: vec![SemanticType::I64],
+        }
+    );
+    let payload_binding = match_view.arms[0]
+        .patterns
+        .iter()
+        .find_map(|pattern| match pattern.kind {
+            MatchPatternKindView::Binding { binding } => Some(binding),
+            _ => None,
+        })
+        .expect("recursive leaf payload binding");
+    assert_eq!(
+        completed_tree
+            .snapshot
+            .entity_type(completed_tree.snapshot.revision(), payload_binding)
+            .expect("substituted recursive leaf payload")
+            .declared,
+        Some(SemanticType::I64)
+    );
+    assert!(match_view.arms[1]
+        .patterns
+        .iter()
+        .any(|pattern| matches!(pattern.kind, MatchPatternKindView::EnumVariant { .. })));
+    assert_recursive_i64_on_evaluator_and_vm(&completed_tree.snapshot, 42);
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
+#[test]
+fn source_free_non_regular_recursive_enum_rejects_at_canonical_memory_planning() {
+    let source = concat!(
+        "enum/\nname/\ngrow\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nend\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nnext\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\n",
+        "type/\ngrow/\nlist/\nt\n/list\n/grow\n/type\n/variant-field\n",
+        "/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ngrow/\ni64\n/grow\n/output\n/sig\n",
+        "variant-value/\ntype/\ngrow/\ni64\n/grow\n/type\nvariant/\nend\n/variant\n",
+        "fields/\n/fields\n/variant-value\n/main\n",
+    );
+    let imported = import_source(source, "non-regular-recursive-enum-oracle.lkjscript")
+        .expect("import non-regular recursive enum");
+    let imported_error = crate::compile_snapshot(&imported)
+        .expect_err("canonical memory planning rejects non-regular recursive instantiation")
+        .to_string();
+    assert!(
+        imported_error.contains("LKJ-MEM-AGGREGATE-UNRESOLVED")
+            && imported_error.contains("RegionDomainBoundary"),
+        "{imported_error}"
+    );
+
+    crate::source::reset_parser_invocation_count();
+    crate::source::reset_source_load_invocation_count();
+    let mut workspace =
+        Workspace::empty_deterministic(325).expect("non-regular recursive workspace");
+    let binder = DraftTypeParameterId::new(0);
+    let declaration = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "grow".to_owned(),
+                type_parameters: vec![EnumTypeParameterDraft {
+                    id: binder,
+                    name: "t".to_owned(),
+                }],
+                variants: vec![
+                    EnumVariantDraft {
+                        name: "end".to_owned(),
+                        fields: Vec::new(),
+                    },
+                    EnumVariantDraft {
+                        name: "next".to_owned(),
+                        fields: vec![EnumFieldDraft {
+                            name: "value".to_owned(),
+                            ty: DeclarationType::CurrentEnum {
+                                arguments: vec![DeclarationType::List(Box::new(
+                                    DeclarationType::DraftTypeParameter(binder),
+                                ))],
+                            },
+                        }],
+                    },
+                ],
+            }],
+        })
+        .expect("declare non-regular recursive enum");
+    let enumeration = created_entity(&declaration.diff, EntityKind::Enum, "grow");
+    let parameter = created_entity(&declaration.diff, EntityKind::TypeParameter, "t");
+    let end = created_entity(&declaration.diff, EntityKind::EnumVariant, "end");
+    let field = created_entity(&declaration.diff, EntityKind::EnumField, "value");
+    assert_eq!(
+        declaration
+            .snapshot
+            .entity_type(declaration.snapshot.revision(), field)
+            .expect("non-regular recursive field")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Entity(enumeration),
+            arguments: vec![SemanticType::List(Box::new(SemanticType::TypeParameter(
+                parameter,
+            )))],
+        })
+    );
+    let main = workspace
+        .apply(Transaction {
+            base_revision: declaration.snapshot.revision(),
+            edits: vec![Edit::CreateMain {
+                parameters: Vec::new(),
+                return_type: SemanticType::Enum {
+                    constructor: SemanticEnum::Entity(enumeration),
+                    arguments: vec![SemanticType::I64],
+                },
+            }],
+        })
+        .expect("create non-regular recursive main");
+    let hole = main.snapshot.holes().next().expect("main hole").id;
+    let completed = workspace
+        .apply(Transaction {
+            base_revision: main.snapshot.revision(),
+            edits: vec![Edit::FillHole {
+                hole,
+                draft: ExpressionDraft::new(
+                    vec![DraftNode::EnumValue {
+                        variant: end,
+                        type_arguments: vec![TypeArgumentDraft {
+                            parameter,
+                            argument: SemanticType::I64,
+                        }],
+                        fields: Vec::new(),
+                    }],
+                    DraftNodeId::new(0),
+                ),
+            }],
+        })
+        .expect("complete non-regular recursive program");
+    assert_eq!(
+        canonical_workspace_observation(&completed.snapshot),
+        canonical_workspace_observation(&imported)
+    );
+    let published = workspace.current();
+    let source_free_error = crate::compile_snapshot(&completed.snapshot)
+        .expect_err("source-free non-regular recursion reaches canonical rejection")
+        .to_string();
+    assert!(
+        source_free_error.contains("LKJ-MEM-AGGREGATE-UNRESOLVED")
+            && source_free_error.contains("RegionDomainBoundary"),
+        "{source_free_error}"
+    );
+    assert!(Arc::ptr_eq(&published, &workspace.current()));
+    assert_eq!(
+        workspace.current().revision(),
+        completed.snapshot.revision()
+    );
+    assert_eq!(crate::source::parser_invocation_count(), 0);
+    assert_eq!(crate::source::source_load_invocation_count(), 0);
+}
+
 #[test]
 fn source_free_generic_enum_declaration_publishes_stable_binders() {
     crate::source::reset_parser_invocation_count();
@@ -21879,6 +22618,174 @@ fn generic_enum_declaration_lifecycle_preserves_binders_and_old_snapshots() {
 }
 
 #[test]
+fn recursive_enum_lifecycle_preserves_identity_and_owned_self_deletion() {
+    let mut workspace = Workspace::empty_deterministic(324).expect("recursive enum lifecycle");
+    let binder = DraftTypeParameterId::new(0);
+    let created = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![recursive_tree_declaration_edit("tree", binder)],
+        })
+        .expect("create recursive tree lifecycle fixture");
+    let enumeration = created_entity(&created.diff, EntityKind::Enum, "tree");
+    let parameter = created_entity(&created.diff, EntityKind::TypeParameter, "t");
+    let leaf = created_entity(&created.diff, EntityKind::EnumVariant, "leaf");
+    let branch = created_entity(&created.diff, EntityKind::EnumVariant, "branch");
+    let value = created_entity(&created.diff, EntityKind::EnumField, "value");
+    let left = created_entity(&created.diff, EntityKind::EnumField, "left");
+    let right = created_entity(&created.diff, EntityKind::EnumField, "right");
+    let members = [enumeration, parameter, leaf, branch, value, left, right];
+    let old = created.snapshot;
+    let recursive_type = SemanticType::Enum {
+        constructor: SemanticEnum::Entity(enumeration),
+        arguments: vec![SemanticType::TypeParameter(parameter)],
+    };
+
+    let renamed = workspace
+        .apply(Transaction {
+            base_revision: old.revision(),
+            edits: vec![Edit::RenameEntity {
+                entity: enumeration,
+                new_name: "renamed-tree".to_owned(),
+            }],
+        })
+        .expect("rename recursive tree");
+    for entity in members {
+        assert_eq!(
+            renamed
+                .snapshot
+                .entity(entity)
+                .expect("renamed survivor")
+                .id,
+            entity
+        );
+    }
+    for field in [left, right] {
+        assert_eq!(
+            renamed
+                .snapshot
+                .entity_type(renamed.snapshot.revision(), field)
+                .expect("renamed recursive field")
+                .declared,
+            Some(recursive_type.clone())
+        );
+    }
+    assert!(renamed.diff.entries.iter().any(|entry| matches!(
+        entry,
+        SemanticDiffEntry::EntityRenamed { entity, old_name, new_name }
+            if *entity == enumeration
+                && old_name.as_ref() == "tree"
+                && new_name.as_ref() == "renamed-tree"
+    )));
+    assert_eq!(
+        old.entity(enumeration).expect("old enum").name.as_ref(),
+        "tree"
+    );
+    assert_eq!(
+        old.entity_type(old.revision(), left)
+            .expect("old recursive field")
+            .declared,
+        Some(recursive_type)
+    );
+
+    let before_delete = renamed.snapshot;
+    let deleted = workspace
+        .apply(Transaction {
+            base_revision: before_delete.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: enumeration,
+            }],
+        })
+        .expect("delete recursive enum with only owned self dependencies");
+    for entity in members {
+        assert!(deleted.snapshot.entity(entity).is_err());
+        assert_eq!(
+            before_delete.entity(entity).expect("old deleted entity").id,
+            entity
+        );
+        assert!(deleted.diff.entries.iter().any(|entry| matches!(
+            entry,
+            SemanticDiffEntry::EntityDeleted { entity: removed, .. } if *removed == entity
+        )));
+    }
+
+    let recreated = workspace
+        .apply(Transaction {
+            base_revision: deleted.snapshot.revision(),
+            edits: vec![recursive_tree_declaration_edit(
+                "renamed-tree",
+                DraftTypeParameterId::new(1),
+            )],
+        })
+        .expect("recreate recursive enum display name");
+    let recreated_enum = created_entity(&recreated.diff, EntityKind::Enum, "renamed-tree");
+    let recreated_parameter = created_entity(&recreated.diff, EntityKind::TypeParameter, "t");
+    let recreated_leaf = created_entity(&recreated.diff, EntityKind::EnumVariant, "leaf");
+    let recreated_branch = created_entity(&recreated.diff, EntityKind::EnumVariant, "branch");
+    let recreated_value = created_entity(&recreated.diff, EntityKind::EnumField, "value");
+    let recreated_left = created_entity(&recreated.diff, EntityKind::EnumField, "left");
+    let recreated_right = created_entity(&recreated.diff, EntityKind::EnumField, "right");
+    for (old_entity, new_entity) in members.into_iter().zip([
+        recreated_enum,
+        recreated_parameter,
+        recreated_leaf,
+        recreated_branch,
+        recreated_value,
+        recreated_left,
+        recreated_right,
+    ]) {
+        assert_ne!(old_entity, new_entity);
+        assert!(recreated.snapshot.entity(old_entity).is_err());
+    }
+
+    let dependent = workspace
+        .apply(Transaction {
+            base_revision: recreated.snapshot.revision(),
+            edits: vec![Edit::CreateFunction {
+                name: "consume-tree".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: DeclarationType::Enum {
+                        constructor: SemanticEnum::Entity(recreated_enum),
+                        arguments: vec![DeclarationType::I64],
+                    },
+                }],
+                return_type: DeclarationType::Unit,
+            }],
+        })
+        .expect("create independent recursive enum dependent");
+    let function = created_entity(&dependent.diff, EntityKind::Function, "consume-tree");
+    let before_blocked_delete = workspace.current();
+    let error = workspace
+        .apply(Transaction {
+            base_revision: before_blocked_delete.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: recreated_enum,
+            }],
+        })
+        .expect_err("surviving signature dependency blocks recursive enum deletion")
+        .to_string();
+    assert!(error.contains("renamed-tree"), "{error}");
+    assert!(error.contains("signature type"), "{error}");
+    assert!(Arc::ptr_eq(&before_blocked_delete, &workspace.current()));
+
+    let closed = workspace
+        .apply(Transaction {
+            base_revision: before_blocked_delete.revision(),
+            edits: vec![
+                Edit::DeleteEntity {
+                    entity: recreated_enum,
+                },
+                Edit::DeleteEntity { entity: function },
+            ],
+        })
+        .expect("delete recursive enum dependency closure");
+    assert!(closed.snapshot.entity(recreated_enum).is_err());
+    assert!(closed.snapshot.entity(function).is_err());
+}
+
+#[test]
 fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
     let seed = 312;
     let mut workspace = Workspace::empty_deterministic(seed).expect("generic enum error workspace");
@@ -21888,6 +22795,19 @@ fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
     let declared = DraftTypeParameterId::new(1);
     let unknown = DraftTypeParameterId::new(2);
     let same_name = DraftTypeParameterId::new(3);
+    let current_enum = |name: &str,
+                        type_parameters: Vec<EnumTypeParameterDraft>,
+                        arguments: Vec<DeclarationType>| Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters,
+        variants: vec![EnumVariantDraft {
+            name: "one".to_owned(),
+            fields: vec![EnumFieldDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::CurrentEnum { arguments },
+            }],
+        }],
+    };
     let invalid_cases = vec![
         (
             Edit::CreateEnum {
@@ -21950,6 +22870,85 @@ fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
                 }],
             },
             WorkspaceError::UnknownDraftTypeParameter { parameter: unknown },
+        ),
+        (
+            current_enum("non-generic-extra", Vec::new(), vec![DeclarationType::I64]),
+            WorkspaceError::InvalidSemanticType {
+                position: Arc::from("enum field"),
+                reason: Arc::from("current enum type requires 0 argument(s), got 1"),
+            },
+        ),
+        (
+            current_enum(
+                "generic-missing",
+                vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                Vec::new(),
+            ),
+            WorkspaceError::InvalidSemanticType {
+                position: Arc::from("enum field"),
+                reason: Arc::from("current enum type requires 1 argument(s), got 0"),
+            },
+        ),
+        (
+            current_enum(
+                "generic-extra",
+                vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                vec![
+                    DeclarationType::DraftTypeParameter(declared),
+                    DeclarationType::I64,
+                ],
+            ),
+            WorkspaceError::InvalidSemanticType {
+                position: Arc::from("enum field"),
+                reason: Arc::from("current enum type requires 1 argument(s), got 2"),
+            },
+        ),
+        (
+            current_enum(
+                "current-unknown",
+                vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                vec![DeclarationType::DraftTypeParameter(unknown)],
+            ),
+            WorkspaceError::UnknownDraftTypeParameter { parameter: unknown },
+        ),
+        (
+            current_enum(
+                "current-invalid",
+                vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                vec![DeclarationType::Never],
+            ),
+            WorkspaceError::InvalidSemanticType {
+                position: Arc::from("enum field"),
+                reason: Arc::from("never is not valid in this type position"),
+            },
+        ),
+        (
+            current_enum(
+                "current-owned",
+                vec![EnumTypeParameterDraft {
+                    id: declared,
+                    name: "t".to_owned(),
+                }],
+                vec![DeclarationType::ByteVector],
+            ),
+            WorkspaceError::UnsupportedEdit {
+                operation: Arc::from("create-declaration"),
+                reason: Arc::from(
+                    "enum field cannot store ownership or reference type byte-vector",
+                ),
+            },
         ),
     ];
     for (edit, expected) in invalid_cases {
@@ -22034,6 +23033,89 @@ fn generic_enum_declaration_failures_are_structured_atomic_and_retry_stable() {
     assert_eq!(retry.snapshot.entities(), control.snapshot.entities());
     assert_eq!(retry.snapshot.containment(), control.snapshot.containment());
     assert_eq!(retry.diff, control.diff);
+}
+
+#[test]
+fn current_enum_type_rejects_outside_enum_creation_atomically() {
+    let seed = 323;
+    let mut workspace = Workspace::empty_deterministic(seed).expect("current enum error workspace");
+    let before = workspace.current();
+    let current = || DeclarationType::CurrentEnum {
+        arguments: Vec::new(),
+    };
+    let failures = [
+        (
+            Edit::CreateFunction {
+                name: "parameter-owner".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: current(),
+                }],
+                return_type: DeclarationType::Unit,
+            },
+            "function parameter",
+        ),
+        (
+            Edit::CreateFunction {
+                name: "return-owner".to_owned(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                return_type: current(),
+            },
+            "function return",
+        ),
+        (
+            Edit::CreateMain {
+                parameters: vec![ParameterDraft {
+                    name: "value".to_owned(),
+                    ty: current(),
+                }],
+                return_type: SemanticType::Unit,
+            },
+            "main parameter",
+        ),
+    ];
+    for (edit, position) in failures {
+        assert_eq!(
+            workspace
+                .apply(Transaction {
+                    base_revision: before.revision(),
+                    edits: vec![edit],
+                })
+                .expect_err("current enum outside CreateEnum must reject"),
+            WorkspaceError::InvalidSemanticType {
+                position: Arc::from(position),
+                reason: Arc::from(
+                    "the current enum type is valid only in its own enum field declaration",
+                ),
+            }
+        );
+        assert!(Arc::ptr_eq(&before, &workspace.current()));
+        assert_eq!(workspace.current().revision(), before.revision());
+        assert_eq!(workspace.current().diagnostics(), before.diagnostics());
+        assert_eq!(
+            workspace.current().completeness_blockers(),
+            before.completeness_blockers()
+        );
+        assert_eq!(workspace.current().attachments(), before.attachments());
+    }
+
+    let corrected = Transaction {
+        base_revision: before.revision(),
+        edits: vec![recursive_chain_declaration_edit("chain")],
+    };
+    let retried = workspace
+        .apply(corrected.clone())
+        .expect("valid recursive retry");
+    let mut control = Workspace::empty_deterministic(seed).expect("current enum control");
+    let controlled = control.apply(corrected).expect("clean recursive creation");
+    assert_eq!(retried.snapshot.entities(), controlled.snapshot.entities());
+    assert_eq!(
+        retried.snapshot.containment(),
+        controlled.snapshot.containment()
+    );
+    assert_eq!(retried.diff, controlled.diff);
 }
 
 #[test]
@@ -22132,6 +23214,59 @@ fn generic_enum_declaration_type_identities_and_fields_fail_closed_atomically() 
     });
     assert!(matches!(
         foreign_failure,
+        Err(WorkspaceError::ForeignNamespace(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
+    let current_argument = |name: &str, argument: DeclarationType| Edit::CreateEnum {
+        name: name.to_owned(),
+        type_parameters: vec![EnumTypeParameterDraft {
+            id: DraftTypeParameterId::new(9),
+            name: "t".to_owned(),
+        }],
+        variants: vec![EnumVariantDraft {
+            name: "one".to_owned(),
+            fields: vec![EnumFieldDraft {
+                name: "value".to_owned(),
+                ty: DeclarationType::CurrentEnum {
+                    arguments: vec![argument],
+                },
+            }],
+        }],
+    };
+    let current_wrong_kind = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![current_argument(
+            "current-wrong-kind",
+            DeclarationType::TypeParameter(owner_entity),
+        )],
+    });
+    assert!(matches!(
+        current_wrong_kind,
+        Err(WorkspaceError::WrongEntityKind { .. })
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let current_stale = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![current_argument(
+            "current-stale",
+            DeclarationType::TypeParameter(stale),
+        )],
+    });
+    assert!(matches!(
+        current_stale,
+        Err(WorkspaceError::StaleIdentity(_))
+    ));
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+    let current_foreign = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![current_argument(
+            "current-foreign",
+            DeclarationType::TypeParameter(foreign),
+        )],
+    });
+    assert!(matches!(
+        current_foreign,
         Err(WorkspaceError::ForeignNamespace(_))
     ));
     assert!(Arc::ptr_eq(&before, &workspace.current()));

@@ -78,8 +78,11 @@ impl DraftTypeParameterId {
 ///
 /// Published type parameters use stable [`EntityId`] values. A type parameter
 /// declared by the same creation edit instead uses [`DraftTypeParameterId`]
-/// until staging allocates its stable entity. Recursive operations are
-/// iterative so declaration depth does not consume unbounded native stack.
+/// until staging allocates its stable entity. [`DeclarationType::CurrentEnum`]
+/// refers only to the enum owned by the same `CreateEnum` edit; staging resolves
+/// it to that enum's stable identity, and the marker never enters a snapshot.
+/// Recursive operations are iterative so declaration depth does not consume
+/// unbounded native stack.
 #[non_exhaustive]
 pub enum DeclarationType {
     Never,
@@ -101,6 +104,10 @@ pub enum DeclarationType {
         constructor: SemanticEnum,
         arguments: Vec<DeclarationType>,
     },
+    /// The enum currently owned by the surrounding `CreateEnum` edit.
+    CurrentEnum {
+        arguments: Vec<DeclarationType>,
+    },
     TypeParameter(EntityId),
     DraftTypeParameter(DraftTypeParameterId),
     List(Box<DeclarationType>),
@@ -115,6 +122,7 @@ impl Clone for DeclarationType {
         enum Work<'a> {
             Visit(&'a DeclarationType),
             Enum(SemanticEnum, usize),
+            CurrentEnum(usize),
             List,
             Function(usize),
         }
@@ -153,6 +161,10 @@ impl Clone for DeclarationType {
                         work.push(Work::Enum(*constructor, arguments.len()));
                         work.extend(arguments.iter().rev().map(Work::Visit));
                     }
+                    DeclarationType::CurrentEnum { arguments } => {
+                        work.push(Work::CurrentEnum(arguments.len()));
+                        work.extend(arguments.iter().rev().map(Work::Visit));
+                    }
                     DeclarationType::TypeParameter(entity) => {
                         completed.push(DeclarationType::TypeParameter(*entity));
                     }
@@ -178,6 +190,13 @@ impl Clone for DeclarationType {
                         constructor,
                         arguments,
                     });
+                }
+                Work::CurrentEnum(count) => {
+                    let Some(split) = completed.len().checked_sub(count) else {
+                        unreachable!("current enum declaration type clone completion order")
+                    };
+                    let arguments = completed.split_off(split);
+                    completed.push(DeclarationType::CurrentEnum { arguments });
                 }
                 Work::List => {
                     let Some(inner) = completed.pop() else {
@@ -373,7 +392,9 @@ impl Drop for DeclarationType {
 
 fn take_declaration_type_children(ty: &mut DeclarationType, pending: &mut Vec<DeclarationType>) {
     match ty {
-        DeclarationType::Enum { arguments, .. } => pending.append(arguments),
+        DeclarationType::Enum { arguments, .. } | DeclarationType::CurrentEnum { arguments } => {
+            pending.append(arguments)
+        }
         DeclarationType::List(inner) => {
             pending.push(std::mem::replace(inner.as_mut(), DeclarationType::Unit));
         }
@@ -426,6 +447,16 @@ impl PartialEq for DeclarationType {
                 ) if left_constructor == right_constructor
                     && left_arguments.len() == right_arguments.len() =>
                 {
+                    pending.extend(left_arguments.iter().zip(right_arguments));
+                }
+                (
+                    DeclarationType::CurrentEnum {
+                        arguments: left_arguments,
+                    },
+                    DeclarationType::CurrentEnum {
+                        arguments: right_arguments,
+                    },
+                ) if left_arguments.len() == right_arguments.len() => {
                     pending.extend(left_arguments.iter().zip(right_arguments));
                 }
                 (DeclarationType::List(left), DeclarationType::List(right)) => {
@@ -486,6 +517,13 @@ impl fmt::Debug for DeclarationType {
                         arguments,
                     } => {
                         write!(formatter, "enum({constructor:?})")?;
+                        for argument in arguments.iter().rev() {
+                            pending.push(Work::Type(argument));
+                            pending.push(Work::Text(" "));
+                        }
+                    }
+                    DeclarationType::CurrentEnum { arguments } => {
+                        formatter.write_str("current-enum")?;
                         for argument in arguments.iter().rev() {
                             pending.push(Work::Type(argument));
                             pending.push(Work::Text(" "));

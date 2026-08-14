@@ -23,13 +23,14 @@ fn require_owner_representation(
 fn require_active_variant(
     vm: &Vm<'_>,
     owner: StructuralValueKey,
+    representation: StructuralRepresentationId,
     value_type: StructuralType,
     variant: Option<VariantId>,
 ) -> Result<()> {
     let Some(variant) = variant else {
         return Ok(());
     };
-    let expected_tag = physical_tag(vm.chunk, value_type, variant)?;
+    let expected_tag = physical_tag(vm.chunk, representation, variant)?;
     let node = invocation(vm)?
         .runtime
         .value_node(owner, value_type)
@@ -51,7 +52,7 @@ fn preflight_payload(
     value_type: StructuralType,
     reference: StructuralPayloadRef,
 ) -> Result<()> {
-    let expected_tag = physical_tag(vm.chunk, value_type, reference.variant)?;
+    let expected_tag = physical_tag(vm.chunk, reference.representation, reference.variant)?;
     let expected_type = reference
         .result
         .runtime_type
@@ -79,18 +80,19 @@ fn preflight_payload(
 
 fn physical_tag(
     chunk: &ValidatedChunk,
-    value_type: StructuralType,
+    representation_id: StructuralRepresentationId,
     variant: VariantId,
 ) -> Result<u64> {
+    let representation = representation(chunk, representation_id)?;
     let ty = chunk
         .structural_types()
-        .iter()
-        .find(|item| item.runtime_type == value_type)
+        .get_structural(representation.type_id)
+        .filter(|ty| ty.id == representation.type_id && ty.layout == representation.layout)
         .ok_or_else(|| Error::msg("structural enum type metadata is missing"))?;
     let layout = chunk
         .structural_layouts()
-        .get_structural(ty.layout)
-        .filter(|layout| layout.id == ty.layout)
+        .get_structural(representation.layout)
+        .filter(|layout| layout.id == representation.layout && layout.id == ty.layout)
         .ok_or_else(|| Error::msg("structural enum layout metadata is missing"))?;
     let lkjscript_core::StructuralLayoutKind::Enum { variants, .. } = &layout.kind else {
         return Err(Error::msg("structural active variant requires enum layout"));

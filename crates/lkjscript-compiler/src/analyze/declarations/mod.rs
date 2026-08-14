@@ -14,6 +14,7 @@ mod products;
 mod type_facts;
 
 pub(in crate::analyze) use bindings::*;
+pub(crate) use enum_fields::type_contains_enum;
 pub(in crate::analyze) use enums::*;
 pub(in crate::analyze) use forms::*;
 pub(in crate::analyze) use function_headers::*;

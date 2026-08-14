@@ -658,6 +658,19 @@ pub(super) fn view(
     }
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct StagedEnumType {
+    entity: EntityId,
+    id: crate::hir::EnumId,
+    arity: usize,
+}
+
+impl StagedEnumType {
+    pub(super) const fn new(entity: EntityId, id: crate::hir::EnumId, arity: usize) -> Self {
+        Self { entity, id, arity }
+    }
+}
+
 pub(super) fn resolve(
     snapshot: &WorkspaceSnapshot,
     program: &SemanticProgram,
@@ -673,6 +686,7 @@ pub(super) fn resolve(
         ty,
         context,
         &HashMap::new(),
+        None,
         allow_never,
         allow_forall,
         subject,
@@ -686,6 +700,7 @@ pub(super) fn resolve_with_staged_type_parameters(
     ty: &SemanticType,
     context: Option<EntityId>,
     staged_type_parameters: &HashMap<EntityId, String>,
+    staged_enum: Option<StagedEnumType>,
     allow_never: bool,
     allow_forall: bool,
     subject: &str,
@@ -760,21 +775,33 @@ pub(super) fn resolve_with_staged_type_parameters(
                     let (id, arity) = match constructor {
                         SemanticEnum::Builtin(kind) => builtin_enum_facts(*kind),
                         SemanticEnum::Entity(entity) => {
-                            let header = semantic_entity(snapshot, *entity, "enum type")?;
-                            if header.kind != EntityKind::Enum {
-                                return Err(wrong_kind(subject, "enum declaration", header.kind));
-                            }
-                            let EntityAddress::Enum(raw) = entity_address(snapshot, *entity)?
-                            else {
-                                return Err(WorkspaceError::StaleIdentity(Arc::from("enum type")));
-                            };
-                            let definition = program
-                                .enums
-                                .get(host_index(raw, "enum type")?)
-                                .ok_or_else(|| {
+                            if let Some(staged) =
+                                staged_enum.filter(|staged| staged.entity == *entity)
+                            {
+                                (staged.id, staged.arity)
+                            } else {
+                                let header = semantic_entity(snapshot, *entity, "enum type")?;
+                                if header.kind != EntityKind::Enum {
+                                    return Err(wrong_kind(
+                                        subject,
+                                        "enum declaration",
+                                        header.kind,
+                                    ));
+                                }
+                                let EntityAddress::Enum(raw) = entity_address(snapshot, *entity)?
+                                else {
+                                    return Err(WorkspaceError::StaleIdentity(Arc::from(
+                                        "enum type",
+                                    )));
+                                };
+                                let definition = program
+                                    .enums
+                                    .get(host_index(raw, "enum type")?)
+                                    .ok_or_else(|| {
                                     WorkspaceError::StaleIdentity(Arc::from("enum type"))
                                 })?;
-                            (definition.id, definition.type_parameters.len())
+                                (definition.id, definition.type_parameters.len())
+                            }
                         }
                     };
                     if arguments.len() != arity {

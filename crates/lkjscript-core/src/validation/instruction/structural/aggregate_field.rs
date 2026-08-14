@@ -117,7 +117,10 @@ fn aggregate_field_input(
         proto,
         instruction,
     )?;
-    if active_variant != reference.active_variant {
+    // SSA proves compiler-produced projection provenance. At the bytecode boundary an
+    // independently supplied owner may retain an unknown variant, so the VM performs
+    // the exact tag check before access; validation rejects only a known contradiction.
+    if active_variant.is_some() && active_variant != reference.active_variant {
         return fail(
             proto,
             instruction,

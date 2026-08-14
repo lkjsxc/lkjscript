@@ -175,10 +175,15 @@ and publish the complete declaration atomically. `CreateEnum` and `CreateFunctio
 or more ordered type-parameter drafts. A declaration-local `DraftTypeParameterId` can occur at
 arbitrary depth in the creation-only `DeclarationType`; validation resolves it only within that edit.
 Enum staging allocates stable enum and binder identities before resolving fields with the enum as
-owner, then constructs the canonical unbounded `EnumDefinition`; phantom binders are valid and the
-operation deliberately has no local nominal self handle for recursion. Function staging allocates
-stable function, binder, and value-parameter identities in semantic order, maps the local handles to
-private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
+owner. A narrow explicit current-enum context supplies that staged stable entity, private canonical
+enum identity, and exact arity only while resolving the owning `CreateEnum` fields.
+`DeclarationType::CurrentEnum` resolves to the ordinary nominal enum type with its explicit resolved
+arguments, then disappears before the canonical unbounded `EnumDefinition` is inserted. Published
+fields therefore use stable enum and binder identities, while recursive layout and memory planning
+remain the same canonical path used by imported declarations. Phantom binders are valid; no draft
+nominal identity, mutual-recursion graph, or partial enum lifecycle is introduced. Function staging
+allocates stable function, binder, and value-parameter identities in semantic order, maps the local
+handles to private binder names, and constructs canonical `Type::Forall { Type::Fn }` and exact
 `Function::bounds` facts only when binders exist. It then creates a real result-typed missing-body
 hole with unknown effects. Local handles never enter the semantic program, indexes, query,
 projection, or diff. `CreateMain` reuses the parameter draft/type path for ordered exact capability
@@ -223,7 +228,9 @@ scope per arm,
 invokes the canonical usefulness and plan builder, and publishes only if complete-HIR ownership and
 consistency validation succeed. SSA active-variant verification traces the true paths of nested
 short-circuit Boolean merges iteratively and accepts enum projection only when every possible path
-retains the matching variant test.
+retains the matching variant test. Bytecode validation rejects a known structural-variant
+contradiction; when control-flow storage leaves the bytecode-local variant unknown, the VM resolves
+the exact structural representation and checks its runtime tag before field access.
 Mutable declaration activation occurs after its initializer and before its body. Resolved draft
 bindings retain exact HIR binding kind, so assignment admits only visible mutable locals. Before
 lowering a draft, one combined iterative walk over the immutable target root derives divergent-
@@ -516,8 +523,8 @@ capability checking; they are not a replacement service sandbox.
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
 authority. Missing entry/body, real typed-hole nodes, and first-class unresolved copy-load value
-references; non-generic product creation; generic and non-generic non-recursive enum creation;
-generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
+references; non-generic product creation; generic and non-generic directly recursive or non-recursive
+enum creation; generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
 sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, and
 early `return`; selected byte-vector move/borrow and canonical operations; aggregate
 construction/observation; exhaustive closed Boolean, I64, exact-product, and exact generic or

@@ -171,6 +171,25 @@ fn inactive_enum_payload_is_rejected() {
     chunk.structural_types[0].kind = crate::StructuralTypeKind::Enum(enum_id);
     chunk.structural_types[0].runtime_type.kind = crate::StructuralKind::Enum;
     chunk.structural_destinations[0].active_variant = Some(first);
+    let mut inactive_field = chunk.clone();
+    inactive_field.structural_aggregate_fields = vec![crate::StructuralAggregateFieldRef {
+        representation: crate::StructuralRepresentationId::new(1),
+        active_variant: Some(second),
+        field: 0,
+        result: copy_field(),
+        result_representation: None,
+    }];
+    emit_finished_product(&mut inactive_field);
+    inactive_field
+        .main
+        .emit_op_u8(Op::LoadStructuralOwnerLocal, 1);
+    inactive_field
+        .main
+        .emit_op_u64(Op::StructuralAggregateFieldCopy, 0);
+    inactive_field.main.emit(Op::Return);
+    let field_message = error(inactive_field);
+    assert!(field_message.contains("inactive payload"), "{field_message}");
+
     chunk.structural_payloads = vec![crate::StructuralPayloadRef {
         representation: crate::StructuralRepresentationId::new(0),
         variant: second,

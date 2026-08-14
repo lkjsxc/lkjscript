@@ -197,10 +197,16 @@ parameters, locals, products, product fields, enums, variants, and enum fields; 
 operations; and unresolved copy-load value-reference introduction and resolution.
 Enum and function creation use one ordered declaration-local binder handle domain and a creation-
 only `DeclarationType`; staged validation allocates stable declaration and type-parameter entities
-before resolving binder-bearing types. Enum parameters are unbounded and may be phantom; enum fields
-publish stable enum-owned parameter identities and lower to the canonical generic `EnumDefinition`.
-Functions additionally publish value-parameter entities before canonical universal-signature
-construction. Local handles never enter published state. Products, enums, variants, fields,
+before resolving binder-bearing types. Enum parameters are unbounded and may be phantom. Within the
+owning `CreateEnum`, `DeclarationType::CurrentEnum` carries exact explicit arguments and resolves to
+the staged enum's stable constructor plus canonical private enum identity. It rejects in function or
+main declarations and never enters published state. Enum fields publish ordinary stable enum-owned
+parameter and nominal identities and lower to the canonical recursive or non-recursive generic
+`EnumDefinition`; imported and source-free declarations share recursive memory planning. A changing
+recursive instantiation such as `grow<t> -> grow<list<t>>` may be declared, but a complete use reaches
+the same canonical `RegionDomainBoundary` memory-planning rejection on both routes. Functions
+additionally publish value-parameter entities before canonical universal-signature construction.
+Local handles never enter published state. Products, enums, variants, fields,
 functions, function or enum type parameters, value parameters,
 locals, bodies, and holes receive opaque stable entities independent of compiler-dense nominal/layout
 identities. Public published inputs and queries use one exact structured `SemanticType`; products,
@@ -506,10 +512,13 @@ build inputs.
   wildcard, binding, Boolean literal, I64 literal, exact product, and exact generic or non-generic
   enum-variant nodes. Product and field selection uses stable identities, requires every declared
   field exactly once, and publishes declaration-order query fields regardless of draft field order;
-  nested closed patterns compose. Source-free generic enum declaration authoring supports ordered
-  unbounded binders, phantom binders, nested binder-bearing fields, stable lifecycle, and direct
-  compilation/execution. Recursive source-free enum declarations, enum bounds, and broader generic
-  pattern families remain unsupported. Source-free nominal
+  nested closed patterns compose. Source-free generic and non-generic enum declaration authoring
+  supports direct self recursion, ordered unbounded binders, phantom binders, exact current-enum
+  arguments, nested binder-bearing fields, stable lifecycle, and direct compilation/execution.
+  Recursive fields publish ordinary stable nominal types; finite recursive values and exhaustive
+  exact patterns use the shared memory-plan, SSA, validated-bytecode, evaluator-oracle, and VM paths.
+  Mutual recursion through creation handles, enum bounds, and broader generic pattern families remain
+  unsupported. Source-free nominal
   declaration fields still reject ownership/reference types, but imported ownership-bearing product
   and enum fields remain selectable by stable identity; nested source-free patterns over those
   declarations compile and execute through the same ownership and VM route. Source-free unresolved

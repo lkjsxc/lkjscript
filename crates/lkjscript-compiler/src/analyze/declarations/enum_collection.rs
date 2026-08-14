@@ -136,10 +136,10 @@ impl Analyzer {
                         fields,
                     });
                 }
-                let recursive = variants
-                    .iter()
-                    .flat_map(|variant| &variant.fields)
-                    .any(|field| super::enum_fields::type_contains_enum(&field.ty, id));
+                let mut recursive = false;
+                for field in variants.iter().flat_map(|variant| &variant.fields) {
+                    recursive |= super::enum_fields::type_contains_enum(&field.ty, id)?;
+                }
                 let layout = super::enum_fields::enum_layout(id, recursive);
                 self.enums.push(EnumDefinition {
                     id,

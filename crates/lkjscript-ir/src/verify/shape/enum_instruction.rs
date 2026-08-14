@@ -84,7 +84,7 @@ fn projection(
     let SsaType::Enum { arguments, .. } = input else {
         return fail("SSA resource-result projection input is not enum");
     };
-    let expected = substitute(&field.ty, &definition.type_parameters, arguments);
+    let expected = substitute(&field.ty, &definition.type_parameters, arguments)?;
     if instruction.ty != expected {
         return fail("SSA enum projection identity/substitution/type mismatch");
     }
