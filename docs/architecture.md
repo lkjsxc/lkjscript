@@ -184,8 +184,9 @@ hole with unknown effects. Local handles never enter the semantic program, index
 projection, or diff. `CreateMain` reuses the parameter draft/type path for ordered exact capability
 parameters, validates the canonical source entry restrictions before staging, assigns stable
 parameter entities owned by main, and creates a real missing-body hole whose scope includes those
-parameters. Imported and source-free generic binders are reconciled identically as stable `TypeParameter`
-entities owned by the function. Published types use `SemanticType`; both recursive type boundaries
+parameters. Imported and source-free generic binders are reconciled identically as stable
+`TypeParameter` entities owned by their enum or function declaration. Published types use
+`SemanticType`; both recursive type boundaries
 use stable nominal references, keep compiler-local names and dense IDs private, and implement their
 depth-sensitive operations iteratively. Creation ordering is independent: tagged addresses preserve
 a function when main is added later, and hole scope refreshes when a declaration is added after main.
@@ -515,23 +516,24 @@ capability checking; they are not a replacement service sandbox.
 
 **Current fact:** source-free genesis and text import share one revision-labelled `SemanticProgram`
 authority. Missing entry/body, real typed-hole nodes, and first-class unresolved copy-load value
-references; non-generic product and enum creation;
+references; non-generic product creation; generic and non-generic non-recursive enum creation;
 generic and non-generic function plus entry creation; immutable and mutable lexical locals, ordered
 sequence, assignment, `while`, explicitly typed `loop`, nearest-lexical `break` and `continue`, and
 early `return`; selected byte-vector move/borrow and canonical operations; aggregate
-construction/observation; exhaustive closed non-generic Boolean, I64, product, and enum matches
-with stable arm-local bindings and stable nominal member selection; exact calls to imported or
-source-free generic functions with stable
-binders, structured types, shared resolution, and derived witnesses; identity-preserving direct
-rename for products, product fields, enums, variants, and enum fields, including identity-selected
+construction/observation; exhaustive closed Boolean, I64, exact-product, and exact generic or
+non-generic enum matches with stable arm-local bindings and stable nominal member selection; exact
+calls to imported or source-free generic functions with stable binders, structured types, shared
+resolution, and derived witnesses; identity-preserving direct rename for products, product fields,
+enums, variants, and enum fields, including identity-selected
 canonical memory blocker/drop paths and iterative generic memory-witness type inspection; one
 identity-preserving direct-child reorder within one semantic sequence; atomic batch edits;
 tombstone-stable identities;
 structured stable nominal, generic, and match views; deterministic
 queries/projections/diffs; one canonical complete-HIR match derivation; VM execution and eligible
-baseline-native entry after nominal rename; and direct execution are implemented. Source-loading, parser, and compiler-phase counters; imported scalar, nominal, local,
-ownership, early-return, match, generic-declaration, generic-call, and direct-versus-resolved copy-
-load convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
+baseline-native entry after nominal rename; and direct execution are implemented. Source-loading,
+parser, and compiler-phase counters; imported scalar, nominal, local, ownership, early-return, match,
+generic function and enum declaration, generic-call, and direct-versus-resolved copy-load
+convergence; unresolved candidate pagination/atomicity tests; exact per-node index work; and
 20,000-level nested-expression, typed-loop-control, local, semantic-match, published-type, and
 declaration-type small-stack release execution protect the selected vertical. A retained five-sample
 release harness measures scalar, hole-only, counted-loop, ownership/early-return, nominal-match,

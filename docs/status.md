@@ -255,8 +255,9 @@ variant provenance through the canonical short-circuit SSA merge chain. Payload 
 public immutable-local entities. Compiler-only scrutinee and field-projection locals have an explicit hidden binding kind
 and never enter entity/search/constructor results.
 Malformed/disconnected/cyclic/reused pattern or expression trees, duplicate handles/names/fields,
-unknown or duplicate declaration-local type binders, invalid or unused binders, malformed bounds,
-foreign/stale/wrong-kind type and trait identities, forward or cross-arm binding uses, field
+unknown or duplicate declaration-local type binders, invalid binders, unused function binders,
+malformed function bounds, foreign/stale/wrong-kind type and trait identities, forward or cross-arm
+binding uses, field
 coverage/type failures, empty/nonexhaustive/useless arms, incompatible arm results, invalid mutable
 storage/kinds/types/scopes, non-Boolean loops, divergent return values, wrong callable return values,
 foreign/stale/deleted callees beneath returns, control transfer outside a loop, non-exact or
