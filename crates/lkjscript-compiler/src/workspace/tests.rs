@@ -12308,21 +12308,57 @@ fn run_deep_semantic_type_boundary(depth: usize, seed: u64) {
 
 fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
     let parameter = DraftTypeParameterId::new(0);
-    let mut ty = DeclarationType::CurrentEnum {
-        arguments: vec![DeclarationType::DraftTypeParameter(parameter)],
+    let wrap = |argument| {
+        let mut ty = DeclarationType::Enum {
+            constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+            arguments: vec![DeclarationType::CurrentEnum {
+                arguments: vec![argument],
+            }],
+        };
+        for _ in 0..depth {
+            ty = DeclarationType::List(Box::new(ty));
+        }
+        ty
     };
-    for _ in 0..depth {
-        ty = DeclarationType::List(Box::new(ty));
-    }
+    let ty = wrap(DeclarationType::DraftTypeParameter(parameter));
     let cloned = ty.clone();
     assert_eq!(cloned, ty);
+    let unequal = wrap(DeclarationType::I64);
+    assert_ne!(cloned, unequal);
     let debug = format!("{cloned:?}");
-    assert!(debug.ends_with("current-enum draft-type-parameter(0)"));
+    assert!(debug.contains("current-enum draft-type-parameter(0)"));
     assert_eq!(debug.matches("list ").count(), depth);
+    drop(unequal);
+
     let mut workspace = Workspace::empty_deterministic(seed).expect("empty generic enum workspace");
+    let before = workspace.current();
+    let unknown = DraftTypeParameterId::new(1);
+    let failure = workspace.apply(Transaction {
+        base_revision: before.revision(),
+        edits: vec![Edit::CreateEnum {
+            name: "invalid-deep-generic-enum".to_owned(),
+            type_parameters: vec![EnumTypeParameterDraft {
+                id: parameter,
+                name: "t".to_owned(),
+            }],
+            variants: vec![EnumVariantDraft {
+                name: "value".to_owned(),
+                fields: vec![EnumFieldDraft {
+                    name: "payload".to_owned(),
+                    ty: wrap(DeclarationType::DraftTypeParameter(unknown)),
+                }],
+            }],
+        }],
+    });
+    assert_eq!(
+        failure.expect_err("deep unknown binder must reject"),
+        WorkspaceError::UnknownDraftTypeParameter { parameter: unknown }
+    );
+    assert!(Arc::ptr_eq(&before, &workspace.current()));
+
     let created = workspace
         .apply(Transaction {
-            base_revision: workspace.current().revision(),
+            base_revision: before.revision(),
             edits: vec![Edit::CreateEnum {
                 name: "deep-generic-enum".to_owned(),
                 type_parameters: vec![EnumTypeParameterDraft {
@@ -12343,8 +12379,11 @@ fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
     let stable_parameter = created_entity(&created.diff, EntityKind::TypeParameter, "t");
     let field = created_entity(&created.diff, EntityKind::EnumField, "payload");
     let mut expected = SemanticType::Enum {
-        constructor: SemanticEnum::Entity(enumeration),
-        arguments: vec![SemanticType::TypeParameter(stable_parameter)],
+        constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+        arguments: vec![SemanticType::Enum {
+            constructor: SemanticEnum::Entity(enumeration),
+            arguments: vec![SemanticType::TypeParameter(stable_parameter)],
+        }],
     };
     for _ in 0..depth {
         expected = SemanticType::List(Box::new(expected));
@@ -12357,6 +12396,19 @@ fn run_deep_generic_enum_declaration_type_boundary(depth: usize, seed: u64) {
             .declared,
         Some(expected)
     );
+    let definition = created
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "deep-generic-enum")
+        .expect("deep generic enum definition");
+    assert!(definition.layout.recursive);
+    assert!(definition.variants[0].fields[0].indirect);
+    created
+        .snapshot
+        .check_consistency()
+        .expect("validate deep generic enum declaration");
     let projection = created
         .snapshot
         .project(&[
@@ -12431,6 +12483,23 @@ fn modest_generic_enum_declaration_types_are_stack_safe() {
         .expect("spawn generic enum declaration type boundary")
         .join()
         .expect("generic enum declaration type boundary completes");
+}
+
+// Proves clone, unequal comparison, debug, binder collection, failed cleanup, conversion,
+// projection, and drop remain bounded on a 128 KiB stack at stress depth.
+// Run: cargo test --locked -p lkjscript-compiler \
+//   workspace::tests::twenty_thousand_level_current_enum_declaration_types_are_stack_safe \
+//   -- --ignored --exact
+#[test]
+#[ignore = "20k-level current-enum declaration type small-stack stress geometry"]
+fn twenty_thousand_level_current_enum_declaration_types_are_stack_safe() {
+    std::thread::Builder::new()
+        .name("workspace-deep-current-enum-declaration-type".to_owned())
+        .stack_size(128 * 1024)
+        .spawn(|| run_deep_generic_enum_declaration_type_boundary(20_000, 196))
+        .expect("spawn deep current-enum declaration type boundary")
+        .join()
+        .expect("deep current-enum declaration type boundary completes");
 }
 
 #[test]
@@ -21182,6 +21251,13 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
                                 result: Box::new(DeclarationType::DraftTypeParameter(second)),
                             },
                         },
+                        EnumFieldDraft {
+                            name: "other-enum".to_owned(),
+                            ty: DeclarationType::Enum {
+                                constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+                                arguments: vec![DeclarationType::I64],
+                            },
+                        },
                     ],
                 }],
             }],
@@ -21193,6 +21269,7 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
     let first_field = created_entity(&pair.diff, EntityKind::EnumField, "first");
     let second_field = created_entity(&pair.diff, EntityKind::EnumField, "second");
     let project_field = created_entity(&pair.diff, EntityKind::EnumField, "project");
+    let other_enum_field = created_entity(&pair.diff, EntityKind::EnumField, "other-enum");
     let parameter_children = pair
         .snapshot
         .containment()
@@ -21260,10 +21337,21 @@ fn generic_enum_declarations_preserve_parameter_order_nested_types_and_phantoms(
             result: Box::new(SemanticType::TypeParameter(stable_second)),
         })
     );
+    assert_eq!(
+        pair.snapshot
+            .entity_type(pair.snapshot.revision(), other_enum_field)
+            .expect("unrelated enum field type")
+            .declared,
+        Some(SemanticType::Enum {
+            constructor: SemanticEnum::Builtin(BuiltinEnum::Option),
+            arguments: vec![SemanticType::I64],
+        })
+    );
     assert_eq!(definition.type_parameters, ["a", "b"]);
     assert_eq!(definition.origin, crate::hir::Origin::Semantic);
     assert!(!definition.layout.recursive);
     assert!(!definition.variants[0].fields[2].indirect);
+    assert!(definition.variants[0].fields[3].indirect);
     pair.snapshot
         .check_consistency()
         .expect("validate generic pair snapshot");
@@ -22620,10 +22708,24 @@ fn generic_enum_declaration_lifecycle_preserves_binders_and_old_snapshots() {
 #[test]
 fn recursive_enum_lifecycle_preserves_identity_and_owned_self_deletion() {
     let mut workspace = Workspace::empty_deterministic(324).expect("recursive enum lifecycle");
+    let earlier = workspace
+        .apply(Transaction {
+            base_revision: workspace.current().revision(),
+            edits: vec![Edit::CreateEnum {
+                name: "earlier".to_owned(),
+                type_parameters: Vec::new(),
+                variants: vec![EnumVariantDraft {
+                    name: "only".to_owned(),
+                    fields: Vec::new(),
+                }],
+            }],
+        })
+        .expect("create earlier enum compaction fixture");
+    let earlier_enum = created_entity(&earlier.diff, EntityKind::Enum, "earlier");
     let binder = DraftTypeParameterId::new(0);
     let created = workspace
         .apply(Transaction {
-            base_revision: workspace.current().revision(),
+            base_revision: earlier.snapshot.revision(),
             edits: vec![recursive_tree_declaration_edit("tree", binder)],
         })
         .expect("create recursive tree lifecycle fixture");
@@ -22636,6 +22738,13 @@ fn recursive_enum_lifecycle_preserves_identity_and_owned_self_deletion() {
     let right = created_entity(&created.diff, EntityKind::EnumField, "right");
     let members = [enumeration, parameter, leaf, branch, value, left, right];
     let old = created.snapshot;
+    let original_definition = old
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "tree")
+        .expect("original recursive tree definition")
+        .clone();
     let recursive_type = SemanticType::Enum {
         constructor: SemanticEnum::Entity(enumeration),
         arguments: vec![SemanticType::TypeParameter(parameter)],
@@ -22688,7 +22797,49 @@ fn recursive_enum_lifecycle_preserves_identity_and_owned_self_deletion() {
         Some(recursive_type)
     );
 
-    let before_delete = renamed.snapshot;
+    let compacted = workspace
+        .apply(Transaction {
+            base_revision: renamed.snapshot.revision(),
+            edits: vec![Edit::DeleteEntity {
+                entity: earlier_enum,
+            }],
+        })
+        .expect("compact earlier enum before recursive tree");
+    for entity in members {
+        assert_eq!(
+            compacted
+                .snapshot
+                .entity(entity)
+                .expect("compacted recursive survivor")
+                .id,
+            entity
+        );
+    }
+    for field in [left, right] {
+        assert_eq!(
+            compacted
+                .snapshot
+                .entity_type(compacted.snapshot.revision(), field)
+                .expect("compacted recursive field")
+                .declared,
+            Some(SemanticType::Enum {
+                constructor: SemanticEnum::Entity(enumeration),
+                arguments: vec![SemanticType::TypeParameter(parameter)],
+            })
+        );
+    }
+    let compacted_definition = compacted
+        .snapshot
+        .program
+        .enums
+        .iter()
+        .find(|definition| definition.name == "renamed-tree")
+        .expect("compacted recursive definition");
+    assert_eq!(compacted_definition.id, original_definition.id);
+    assert_eq!(compacted_definition.layout, original_definition.layout);
+    assert!(compacted_definition.layout.recursive);
+
+    let before_delete = compacted.snapshot;
     let deleted = workspace
         .apply(Transaction {
             base_revision: before_delete.revision(),

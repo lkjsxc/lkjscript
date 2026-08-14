@@ -175,7 +175,7 @@ fn deeply_wrapped_recursive_enum_metadata_is_stack_safe() {
         .stack_size(128 * 1024)
         .spawn(|| {
             let depth = 256;
-            let mut ty = "e0/\n/e0".to_owned();
+            let mut ty = "option/\ne0/\n/e0\n/option".to_owned();
             for _ in 0..depth {
                 ty = format!("list/\n{ty}\n/list");
             }
