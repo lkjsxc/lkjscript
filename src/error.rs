@@ -1,9 +1,13 @@
-use crate::ids::{NodeId, Revision, WorkspaceId};
+use crate::ids::{LocalHandle, NodeId, Revision, WorkspaceId};
 use crate::schema::{NodeKind, SemanticType};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub type Result<T> = std::result::Result<T, LkError>;
+
+/// Maximum semantic identities carried inline by any diagnostic. Exact larger detail belongs in
+/// revision-bound paginated queries.
+pub const MAX_ERROR_RELATED_IDS: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +35,9 @@ pub enum ErrorCode {
     RevisionConflict,
     RevisionNotFound,
     RuntimeTrap,
+    RunArgumentMismatch,
+    ExecutionFuelExhausted,
+    ExecutionFrameExhausted,
     TypeMismatch,
     WorkspaceExists,
     WorkspaceNotFound,
@@ -39,7 +46,7 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 31] = [
         Self::ArtifactCorrupt,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
@@ -68,6 +75,9 @@ impl ErrorCode {
         Self::CommitOutcomeUnknown,
         Self::InvalidCursor,
         Self::InvalidQuery,
+        Self::RunArgumentMismatch,
+        Self::ExecutionFuelExhausted,
+        Self::ExecutionFrameExhausted,
     ];
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -99,10 +109,13 @@ impl ErrorCode {
             Self::CommitOutcomeUnknown => 26,
             Self::InvalidCursor => 27,
             Self::InvalidQuery => 28,
+            Self::RunArgumentMismatch => 29,
+            Self::ExecutionFuelExhausted => 30,
+            Self::ExecutionFrameExhausted => 31,
         }
     }
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        if tag >= 1 && tag <= 28 {
+        if tag >= 1 && tag <= 31 {
             Some(Self::ALL[(tag - 1) as usize])
         } else {
             None
@@ -133,6 +146,9 @@ impl ErrorCode {
             Self::RevisionConflict => "revision_conflict",
             Self::RevisionNotFound => "revision_not_found",
             Self::RuntimeTrap => "runtime_trap",
+            Self::RunArgumentMismatch => "run_argument_mismatch",
+            Self::ExecutionFuelExhausted => "execution_fuel_exhausted",
+            Self::ExecutionFrameExhausted => "execution_frame_exhausted",
             Self::TypeMismatch => "type_mismatch",
             Self::WorkspaceExists => "workspace_exists",
             Self::WorkspaceNotFound => "workspace_not_found",
@@ -153,6 +169,8 @@ pub struct LkError {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_index: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_handle: Option<LocalHandle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<NodeId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_kind: Option<NodeKind>,
@@ -162,7 +180,7 @@ pub struct LkError {
     pub expected_type: Option<SemanticType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actual_type: Option<SemanticType>,
-    pub related: Vec<NodeId>,
+    pub related: Box<[NodeId]>,
     pub retryable: bool,
     pub message: String,
 }
@@ -174,12 +192,13 @@ impl LkError {
             workspace: None,
             revision: None,
             operation_index: None,
+            local_handle: None,
             target: None,
             expected_kind: None,
             actual_kind: None,
             expected_type: None,
             actual_type: None,
-            related: Vec::new(),
+            related: Vec::new().into_boxed_slice(),
             retryable: false,
             message: message.into(),
         }
@@ -187,6 +206,11 @@ impl LkError {
 
     pub fn at_operation(mut self, operation_index: usize) -> Self {
         self.operation_index = u32::try_from(operation_index).ok();
+        self
+    }
+
+    pub fn for_handle(mut self, handle: LocalHandle) -> Self {
+        self.local_handle = Some(handle);
         self
     }
 
@@ -218,9 +242,20 @@ impl LkError {
     }
 
     pub fn with_related(mut self, related: impl IntoIterator<Item = NodeId>) -> Self {
-        self.related = related.into_iter().collect();
-        self.related.sort();
-        self.related.dedup();
+        let mut bounded = Vec::with_capacity(MAX_ERROR_RELATED_IDS);
+        for id in related {
+            match bounded.binary_search(&id) {
+                Ok(_) => {}
+                Err(index) if index < MAX_ERROR_RELATED_IDS => {
+                    if bounded.len() == MAX_ERROR_RELATED_IDS {
+                        bounded.pop();
+                    }
+                    bounded.insert(index, id);
+                }
+                Err(_) => {}
+            }
+        }
+        self.related = bounded.into_boxed_slice();
         self
     }
 }
@@ -236,5 +271,25 @@ impl std::error::Error for LkError {}
 impl From<std::io::Error> for LkError {
     fn from(error: std::io::Error) -> Self {
         Self::new(ErrorCode::Io, error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn related_ids_are_sorted_deduplicated_and_allocation_bounded() {
+        let workspace = WorkspaceId::from_bytes([7; 16]);
+        let error = LkError::new(ErrorCode::CompileIncomplete, "many").with_related(
+            (1..=200).rev().flat_map(|serial| {
+                let id = NodeId::new(workspace, serial).expect("node");
+                [id, id]
+            }),
+        );
+        assert_eq!(error.related.len(), MAX_ERROR_RELATED_IDS);
+        assert!(error.related.windows(2).all(|ids| ids[0] < ids[1]));
+        assert_eq!(error.related[0].serial(), 1);
+        assert_eq!(error.related[MAX_ERROR_RELATED_IDS - 1].serial(), 64);
     }
 }

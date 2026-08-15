@@ -28,14 +28,17 @@ pub use ids::{
     ChangeDigest, IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, SnapshotHash,
     WorkspaceId,
 };
-pub use interpret::RuntimeValue;
+pub use interpret::{RunPolicy, RuntimeValue};
 pub use protocol::{Client, Request, RequestCode, Response, ResponseCode};
 pub use schema::{
-    DirectReference, LiteralField, Node, NodeKind, OperandDescriptor, OperandUse, OperationCode,
-    OperationDescriptor, OperationDraft, OperationKind, SemanticType, TypeRule, ValueDraft,
-    ValueRef,
+    BlockArgumentDescriptor, BlockArgumentRole, DirectReference, LiteralField, Node, NodeKind,
+    OperandArity, OperandDescriptor, OperandUse, OperationCode, OperationDescriptor,
+    OperationDraft, OperationKind, RegionDescriptor, RegionRole, SemanticType, TypeRule,
+    ValueDraft, ValueRef,
 };
 pub use transaction::{
-    ApplyTransactionRequest, MAX_RETURNED_BINDINGS, NodeTarget, Transaction, TransactionMode,
-    TransactionOp, TransactionOpCode, TransactionReceipt, TransactionResponseSpec,
+    ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
+    FunctionParameterDraft, MAX_RETURNED_BINDINGS, MAX_STRUCTURED_DRAFT_DEPTH,
+    MAX_STRUCTURED_DRAFT_ITEMS, NodeTarget, Transaction, TransactionMode, TransactionOp,
+    TransactionOpCode, TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
 };

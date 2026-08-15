@@ -1,124 +1,149 @@
 # lkjscript
 
-`lkjscript` is a source-free, semantic-graph-first programming system. Agents send typed queries and
-revision-checked transactions to `lkjscriptd`; the daemon owns durable immutable Semantic Program
-Graph revisions and compiles complete entries directly to one verified Core IR and interpreter.
-A `.lkjscript` file is a canonical semantic snapshot, not source code.
+`lkjscript` is an experimental, source-free programming system designed primarily for programs built
+and maintained by AI coding agents. Its canonical program is a closed, strongly typed Semantic
+Program Graph owned by one local daemon—not a source file, syntax tree, or arbitrary property graph.
 
-There is no parser, syntax tree, bytecode VM, JIT, native tier, compatibility reader, or public
-network service in the active product.
+The project exists to test a different programming interface: an agent discovers an exact machine
+schema, proposes bounded typed changes, receives deterministic validation and repair facts, and runs
+immutable retained revisions without generating or round-tripping source text. Humans remain the
+users at the level of intent, review, governance, and operation; they are not expected to hand-author
+the canonical graph.
 
-## Build and verify
+## What is unusual
 
-```sh
-cargo build --workspace --locked
-cargo test --workspace --all-targets --all-features --locked
+```text
+human intent
+    -> AI coding agent
+    -> typed versioned requests
+    -> lkjscriptd (sole graph writer)
+    -> immutable .lkjscript revisions
+    -> verified Core IR -> explicit-frame interpreter
 ```
 
-A larger deterministic malformed-boundary mutation smoke (not coverage-guided fuzzing) is available
-as an ignored release test:
+Names and JSON are presentation or transport. Stable graph identities survive rename and
+identity-preserving hole refinement. Calls, structured conditionals, and counted loops lower directly
+from an immutable graph snapshot to one private verified Core IR. The interpreter uses explicit call
+frames plus bounded fuel, frame count, and aggregate live value slots rather than user-depth native
+recursion.
 
-```sh
-LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 \
-  cargo test --release boundary_mutation_smoke --locked -- \
-  --ignored --nocapture --test-threads=1
+A human typically asks an AI coding agent to create or change a program, reviews the compact receipt
+and semantic diff, and runs the selected revision. The agent can query bounded repair context instead
+of reconstructing a workspace from source files or requesting a whole-graph dump.
+
+The following is **explanatory pseudocode, not lkjscript source syntax and not canonical data**:
+
+```text
+range_sum(n):
+  carried = 0
+  for index in 0 .. n:
+    carried = carried + index
+  return carried
+
+normalize_and_sum(n):
+  if n < 0: return 0
+  return range_sum(n)
 ```
 
-Linux x86-64 with a current stable Rust toolchain is the bootstrap host.
+The retained [structured pure program example](examples/structured-pure/) creates this meaning through
+typed structured transactions, discovers a nested typed hole, rejects an invalid repair, refines it
+without changing identity, executes `5050`, `0`, and `55`, and verifies retained revisions after a
+daemon restart.
 
-## Generic machine interface
+## How agents interact
 
-Start the daemon with a private explicit state directory:
+`lkjscriptd` is a private local daemon and the only live writer of durable workspace state. The
+production `lkjscript` CLI accepts one strict version-3 JSON envelope, sends the corresponding closed
+binary request over local Unix IPC, and emits one typed JSON response. JSON is transport only; it is
+never persisted as a second program representation.
 
-```sh
-STATE=/tmp/lkjscript-state
-mkdir -p "$STATE"
-cargo run --locked --bin lkjscriptd -- --state "$STATE" --foreground
-```
-
-In another shell, create a workspace. `rpc` reads exactly one strict version-2 JSON envelope from
-stdin and emits exactly one typed response:
-
-```sh
-STATE=/tmp/lkjscript-state
-printf '%s' '{"version":2,"request_id":1,"request":{"kind":"create_workspace"}}' |
-  cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
-```
-
-Inspect the complete runtime-derived operation, transaction, query, error, ID, and limit vocabulary
-without starting a daemon (or send the `describe_schema` request through `rpc`):
+From the repository root, agents should begin with runtime schema discovery:
 
 ```sh
 cargo run --quiet --locked --bin lkjscript -- schema --pretty
-printf '%s' '{"version":2,"request_id":2,"request":{"kind":"describe_schema"}}' |
-  cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
 ```
 
-Use the workspace ID from creation to commit a complete program that returns `42`. This exact fresh
-workspace transaction requests the stable function binding for local handle 3; no source text or
-whole-workspace replacement is accepted:
+An installed or otherwise absolute `lkjscript` binary path can be used from elsewhere.
+
+The generated description includes operation and transaction variants, structured draft fields,
+Run arguments and policy, query/error vocabularies, stable tags, ID formats, and active boundary
+limits. Agents can then create structured functions, query exact revision-bound context, refine holes,
+query paginated semantic diffs, and run entries with ordered `unit`/`bool`/`i64` arguments.
+
+## What is a `.lkjscript` file?
+
+A `.lkjscript` file is a canonical, checksummed immutable Semantic Program Graph snapshot for one
+workspace revision. It records program meaning, stable identities, ownership, ordered child slots,
+typed operations, and explicit holes. It is not source code, a JSON document, bytecode, or a mutable
+compiler cache. Private dense Core IR is derived again from a selected complete revision and is not
+serialized into the semantic artifact.
+
+## Current implementation
+
+The current Linux x86-64 bootstrap implements:
+
+- durable workspaces with immutable revisions, stable IDs, tombstones, strict artifact format 2, and
+  compact `LKJHEAD3` publication;
+- direct structured authoring for functions, parameters, calls, `if`, `for_i64`, constants, checked
+  `add_i64`, `lt_i64`, typed holes, yields, and returns;
+- atomic commit and validate-only transactions, bounded receipts, idempotent committed retry, and
+  identity-preserving scalar hole refinement;
+- revision-bound paginated queries, semantic diff, legal constructors, visible values, incoming uses,
+  and bounded nested repair context;
+- deterministic multi-function Core IR lowering and verification;
+- ordered invocation arguments, calls, finite or bounded recursive execution, lazy branches, loops,
+  checked overflow traps, and exact fuel/frame/live-value-slot exhaustion;
+- strict generic JSON CLI projection over private version-3 local IPC, persistence, and restart.
+
+It does **not** currently provide a source language or parser, public network service, sandbox,
+native backend or JIT, optimizer tiers, package ecosystem, effects or host capabilities, aggregates,
+nominal products or sums, pattern matching, generics, ownership-bearing values, debugger, daemon
+request concurrency, or a production-ready platform. The daemon relies on local filesystem/socket
+permissions; executed pure programs have no ambient host authority. The supported bootstrap platform
+is Linux x86-64 with a current stable Rust toolchain.
+
+## Try the real product path
+
+From the repository root, run the retained end-to-end example:
 
 ```sh
-WORKSPACE=0123456789abcdef0123456789abcdef  # replace with returned workspace
-cat <<JSON | cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
-{
-  "version": 2,
-  "request_id": 3,
-  "request": {
-    "kind": "apply_transaction",
-    "data": {
-      "transaction": {
-        "workspace": "$WORKSPACE",
-        "base_revision": 0,
-        "mode": "commit",
-        "operations": [
-          {"kind":"create_package","data":{"handle":1,"name":"app"}},
-          {"kind":"create_module","data":{"handle":2,"package":{"kind":"local","data":1},"name":"main"}},
-          {"kind":"create_function","data":{"handle":3,"module":{"kind":"local","data":2},"name":"main","result":"i64"}},
-          {"kind":"create_region","data":{"handle":4,"function":{"kind":"local","data":3}}},
-          {"kind":"create_block","data":{"handle":5,"region":{"kind":"local","data":4}}},
-          {"kind":"create_operation","data":{"handle":6,"block":{"kind":"local","data":5},"before":null,"operation":{"kind":"const_i64","data":42}}},
-          {"kind":"create_operation","data":{"handle":7,"block":{"kind":"local","data":5},"before":null,"operation":{"kind":"return","data":{"value":{"kind":"operation_result","data":{"operation":{"kind":"local","data":6},"output":0}}}}}},
-          {"kind":"set_function_body","data":{"function":{"kind":"local","data":3},"region":{"kind":"local","data":4}}},
-          {"kind":"set_entry_function","data":{"package":{"kind":"local","data":1},"function":{"kind":"local","data":3}}}
-        ]
-      },
-      "response": {"return_handles":[3]}
-    }
-  }
-}
-JSON
+./examples/structured-pure/run.sh
 ```
 
-Query the committed immutable revision:
+From another directory, invoke `run.sh` by its absolute repository path.
+
+It builds production release binaries, uses a private temporary state directory, drives typed JSON
+through the generic CLI, prints typed results, shuts down and restarts the daemon, and cleans only its
+own state. It requires a POSIX shell and Python 3 standard library in addition to Rust.
+
+## Project documentation
+
+- [Language semantics](docs/spec/language.md)
+- [Semantic graph, identity, transactions, and artifacts](docs/spec/semantic-graph.md)
+- [Daemon and machine protocol](docs/spec/protocol.md)
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Implemented status and limitations](docs/status.md)
+- [Performance and interaction-cost evidence](docs/performance.md)
+- [Evidence-gated roadmap](docs/roadmap.md)
+
+## Development verification
 
 ```sh
-printf '%s' \
-  "{\"version\":2,\"request_id\":4,\"request\":{\"kind\":\"query_batch\",\"data\":{\"workspace\":\"$WORKSPACE\",\"revision\":1,\"queries\":[{\"id\":1,\"query\":{\"kind\":\"workspace_summary\"}}]}}}" |
-  cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --all-features --locked
+cargo build --workspace --release --locked
 ```
 
-Run that retained revision using the returned handle-3 binding. For the exact fresh-workspace
-transaction above it is the canonical decimal Node ID `$WORKSPACE:4`:
+The larger deterministic malformed-boundary smoke is an ignored release test and is explicitly not
+coverage-guided fuzzing:
 
 ```sh
-REVISION=1
-ENTRY="$WORKSPACE:4"
-printf '%s' \
-  "{\"version\":2,\"request_id\":5,\"request\":{\"kind\":\"run\",\"data\":{\"workspace\":\"$WORKSPACE\",\"revision\":$REVISION,\"entry\":\"$ENTRY\"}}}" |
-  cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
+LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 \
+  cargo test --release --lib campaign_tests::boundary_mutation_smoke --locked -- \
+  --ignored --nocapture --test-threads=1
 ```
 
-Shut down only through the typed request:
+## License
 
-```sh
-printf '%s' '{"version":2,"request_id":6,"request":{"kind":"shutdown"}}' |
-  cargo run --quiet --locked --bin lkjscript -- --state "$STATE" rpc
-```
-
-Machine stdout is one JSON response; local usage/JSON errors exit 2, transport errors 3, and
-output/conversion errors 4. Typed daemon rejection is still a valid response and exits 0.
-
-The current language implements `unit`, `bool`, `i64`, constants, checked `add_i64`, typed holes,
-and `return`. See [status](docs/status.md), [protocol](docs/spec/protocol.md), and the
-[evidence-gated roadmap](docs/roadmap.md).
+Licensed under the [Apache License 2.0](LICENSE).

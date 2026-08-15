@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD2";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD3";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub(crate) struct IdempotencyRecord {
     pub key: IdempotencyKey,
     pub fingerprint: [u8; 32],
@@ -311,6 +311,7 @@ impl DurableWorkspace {
         fingerprint: [u8; 32],
         fault: PublicationStep,
     ) -> Result<TransactionReceipt> {
+        self.verify_live_head()?;
         let transaction = &request.transaction;
         if transaction.workspace != self.id() {
             return Err(LkError::new(
@@ -367,6 +368,30 @@ impl DurableWorkspace {
         Ok(prepared.receipt)
     }
 
+    fn verify_live_head(&self) -> Result<()> {
+        let bytes =
+            read_head_before_publication(&self.directory, Revision::new(1))?.ok_or_else(|| {
+                LkError::new(ErrorCode::ArtifactCorrupt, "live workspace HEAD is missing")
+            })?;
+        let (revision, hash, idempotency) = decode_head(&bytes).map_err(|mut error| {
+            error.workspace = Some(self.id());
+            error
+        })?;
+        let expected = self.workspace.head()?;
+        if revision != expected.revision()
+            || hash != expected.hash()
+            || idempotency != self.idempotency
+        {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "live workspace HEAD changed after daemon authority was established",
+            )
+            .for_workspace(self.id())
+            .at_revision(revision));
+        }
+        Ok(())
+    }
+
     fn preflight_publication(
         &self,
         snapshot: &Snapshot,
@@ -418,6 +443,15 @@ impl DurableWorkspace {
         let revisions = self.directory.join("revisions");
         let revision_path = revision_path(&revisions, snapshot.revision());
         let old_head = read_head_before_publication(&self.directory, snapshot.revision())?;
+        if old_head.is_some() {
+            self.verify_live_head()?;
+        } else if self.directory.join("HEAD").exists() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "live workspace HEAD disappeared during publication preflight",
+            )
+            .for_workspace(snapshot.workspace()));
+        }
         let revision_existed = match fs::symlink_metadata(&revision_path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
                 return Err(LkError::new(
@@ -1208,7 +1242,9 @@ mod tests {
                     handle: LocalHandle::new(3),
                     module: NodeTarget::Local(LocalHandle::new(2)),
                     name: "function".to_owned(),
+                    parameters: Vec::new(),
                     result: SemanticType::I64,
+                    body: None,
                 },
                 TransactionOp::SetEntryFunction {
                     package: NodeTarget::Local(LocalHandle::new(1)),
@@ -1371,14 +1407,140 @@ mod tests {
     }
 
     #[test]
-    fn head_version_one_magic_is_rejected_without_compatibility_reader() {
+    fn publication_rejects_live_head_tampering_before_replacement() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x19; 16]);
+        let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let head = workspace.head().expect("head");
+        let forged = encode_head(head.revision(), SnapshotHash::from_bytes([0x55; 32]), None)
+            .expect("forged but decodable HEAD");
+        let head_path = workspace_directory(temporary.path(), id).join("HEAD");
+        fs::write(&head_path, &forged).expect("tamper live HEAD");
+        let revision_before =
+            fs::read_dir(workspace_directory(temporary.path(), id).join("revisions"))
+                .expect("revisions")
+                .count();
+        let error = workspace
+            .apply(&request(&create_package(id)), [0x22; 32])
+            .expect_err("tampered live HEAD must reject");
+        assert_eq!(error.code, ErrorCode::ArtifactCorrupt);
+        assert_eq!(fs::read(&head_path).expect("HEAD remains tampered"), forged);
+        assert_eq!(
+            fs::read_dir(workspace_directory(temporary.path(), id).join("revisions"))
+                .expect("revisions")
+                .count(),
+            revision_before
+        );
+        assert_eq!(
+            workspace.head().expect("in-memory head").revision(),
+            Revision::INITIAL
+        );
+    }
+
+    #[test]
+    fn every_apply_path_verifies_live_head_before_replay_or_validation() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        ensure_state_directory(temporary.path()).expect("state directory");
+
+        let replay_id = WorkspaceId::from_bytes([0x1a; 16]);
+        let mut replay =
+            DurableWorkspace::create(temporary.path(), replay_id).expect("replay workspace");
+        let mut keyed = create_package(replay_id);
+        keyed.idempotency_key = Some(IdempotencyKey::from_bytes([0x31; 16]));
+        let keyed_request = request(&keyed);
+        let fingerprint = protocol::transaction_fingerprint(&keyed_request).expect("fingerprint");
+        replay
+            .apply(&keyed_request, fingerprint)
+            .expect("keyed commit");
+        let replay_head = workspace_directory(temporary.path(), replay_id).join("HEAD");
+        let mut corrupt = fs::read(&replay_head).expect("HEAD");
+        *corrupt.last_mut().expect("checksum") ^= 1;
+        fs::write(&replay_head, corrupt).expect("corrupt replay HEAD");
+        assert_eq!(
+            replay
+                .apply(&keyed_request, fingerprint)
+                .expect_err("corrupt exact replay")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+
+        let conflict_id = WorkspaceId::from_bytes([0x1b; 16]);
+        let mut conflict =
+            DurableWorkspace::create(temporary.path(), conflict_id).expect("conflict workspace");
+        let mut first = create_package(conflict_id);
+        first.idempotency_key = Some(IdempotencyKey::from_bytes([0x32; 16]));
+        let first_request = request(&first);
+        let first_fingerprint =
+            protocol::transaction_fingerprint(&first_request).expect("fingerprint");
+        conflict
+            .apply(&first_request, first_fingerprint)
+            .expect("keyed commit");
+        let head = conflict.head().expect("head");
+        let forged = encode_head(
+            head.revision(),
+            SnapshotHash::from_bytes([0x77; 32]),
+            conflict.idempotency.as_ref(),
+        )
+        .expect("forged HEAD");
+        fs::write(
+            workspace_directory(temporary.path(), conflict_id).join("HEAD"),
+            forged,
+        )
+        .expect("replace HEAD");
+        let mut different = first_request.clone();
+        different.transaction.operations[0] = TransactionOp::RenameNode {
+            node: NodeTarget::Existing(head.root()),
+            name: "different".into(),
+        };
+        let different_fingerprint =
+            protocol::transaction_fingerprint(&different).expect("fingerprint");
+        assert_eq!(
+            conflict
+                .apply(&different, different_fingerprint)
+                .expect_err("replaced conflict HEAD")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+
+        let validate_id = WorkspaceId::from_bytes([0x1c; 16]);
+        let mut validate =
+            DurableWorkspace::create(temporary.path(), validate_id).expect("validate workspace");
+        fs::remove_file(workspace_directory(temporary.path(), validate_id).join("HEAD"))
+            .expect("remove HEAD");
+        let mut validate_transaction = create_package(validate_id);
+        validate_transaction.mode = TransactionMode::ValidateOnly;
+        assert_eq!(
+            validate
+                .apply(&request(&validate_transaction), [0x44; 32])
+                .expect_err("missing validate HEAD")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+
+        let prepare_id = WorkspaceId::from_bytes([0x1d; 16]);
+        let mut prepare =
+            DurableWorkspace::create(temporary.path(), prepare_id).expect("prepare workspace");
+        let prepare_head = workspace_directory(temporary.path(), prepare_id).join("HEAD");
+        fs::write(&prepare_head, b"not a HEAD").expect("corrupt HEAD");
+        assert_eq!(
+            prepare
+                .apply(&request(&create_package(prepare_id)), [0x55; 32])
+                .expect_err("corrupt preparation HEAD")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
+    fn head_version_two_magic_is_rejected_without_compatibility_reader() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x18; 16]);
         DurableWorkspace::create(temporary.path(), id).expect("workspace");
         let head_path = workspace_directory(temporary.path(), id).join("HEAD");
         let mut bytes = fs::read(&head_path).expect("head bytes");
-        bytes[..8].copy_from_slice(b"LKJHEAD1");
+        bytes[..8].copy_from_slice(b"LKJHEAD2");
         let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
         let checksum = blake3::hash(&bytes[..body_length]);
         bytes[body_length..].copy_from_slice(checksum.as_bytes());
@@ -1386,7 +1548,7 @@ mod tests {
         assert_eq!(
             DurableWorkspace::open(temporary.path(), id)
                 .err()
-                .expect("HEAD1 must reject")
+                .expect("HEAD2 must reject")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
@@ -1530,7 +1692,7 @@ mod tests {
     }
 
     #[test]
-    fn keyed_head2_publication_faults_preserve_prior_replay_and_allocator() {
+    fn keyed_head3_publication_faults_preserve_prior_replay_and_allocator() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([5; 16]);

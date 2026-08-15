@@ -202,9 +202,13 @@ impl Daemon {
                 workspace,
                 revision,
                 entry,
+                arguments,
+                policy,
             } => {
                 let snapshot = self.workspace(workspace)?.snapshot(revision)?;
-                Ok(Response::Run(interpret::compile_and_run(snapshot, entry)?))
+                Ok(Response::Run(interpret::compile_and_run(
+                    snapshot, entry, &arguments, policy,
+                )?))
             }
             Request::Shutdown => Ok(Response::Acknowledged),
             Request::DescribeSchema => Ok(Response::SchemaDescription(Box::new(

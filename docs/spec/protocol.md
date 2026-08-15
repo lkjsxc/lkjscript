@@ -7,11 +7,11 @@
 lock, and OS filesystem ownership form the bootstrap local access boundary. There is no HTTP, TCP,
 or public JSON listener.
 
-Each connection carries exactly one request and one response and then closes. Protocol version 2
-directly replaces version 1; old versions reject and no legacy reader remains. A binary frame is:
+Each connection carries exactly one request and one response and then closes. Protocol version 3
+directly replaces prior versions; old versions reject and no legacy reader remains. A binary frame is:
 
 ```text
-u32 little-endian body length | u16 version=2 | nonzero u64 request ID | closed typed message
+u32 little-endian body length | u16 version=3 | nonzero u64 request ID | closed typed message
 ```
 
 The response repeats the request ID. Frames are limited to 8 MiB and encoded collections to 100,000
@@ -27,19 +27,36 @@ The complete public request families are:
 - `ApplyTransaction`, carrying the typed transaction, commit/validate-only mode, optional commit
   idempotency key, and bounded response projection;
 - `QueryBatch`, binding independent read items to one workspace and exact retained revision;
-- `Run`, naming workspace, exact revision, and entry function Node ID;
+- `Run`, naming workspace, exact revision, entry function Node ID, ordered invocation arguments, and
+  a closed positive bounded policy containing `fuel` and `maximum_frames`;
 - `DescribeSchema`;
 - `Shutdown`.
 
 Responses are `WorkspaceCreated`, compact `TransactionReceipt`, `QueryBatchResult`, typed `Run`,
 `SchemaDescription`, `Acknowledged`, or structured `Error`. Errors include a stable code and typed
-optional workspace, revision, transaction operation index, target, expected/actual kind or type,
-related IDs, and retryability; prose is presentation only.
+optional workspace, revision, public transaction operation index, offending explicit local handle,
+target, expected/actual kind or type, at most 64 deterministically ordered related IDs, and
+retryability; prose is presentation only. Exact larger blocker detail remains available through the
+paginated blockers query. Run argument mismatch, execution-fuel exhaustion, and execution-frame exhaustion have distinct stable
+error codes; arithmetic overflow remains a runtime trap.
+
+Initial public construction uses structured `CreateFunction`, optional structured bodies,
+`DefineFunctionBody`, and base-block-only `InsertExpression`. Parameter, expression, loop-index,
+and loop-carried handles are explicit; implied regions, blocks, block arguments, and terminators
+are expanded once into canonical nodes and the draft is discarded. The displaced low-level
+parameter/region/block/operation creation messages are not public variants. Expansion scans and
+allocates every explicit and implicit identity before applying canonical edits, so forward and
+mutual function references resolve deterministically. Structured requests allow at most 16 nested
+structured bodies and 65,536 exactly counted draft items; the conservative depth remains below the
+strict JSON parser recursion boundary and binary decoding enforces the same value. The item total is
+the checked aggregate of top-level transaction operations, function parameters, function bodies,
+yielding bodies, expressions, and call arguments. Deeper semantic graphs remain constructible by inserting into blocks retained by prior transactions.
 
 A transaction receipt never contains the full semantic diff or every allocation by default. It
-contains bounded identity/publication/completeness facts, exact change count/digest, total created
-count, and only requested local-handle bindings. The response projection is part of the idempotency
-fingerprint. Validate-only returns a predicted compact receipt but does not publish.
+contains bounded identity/publication/completeness facts, exact change count/digest, total explicit
+and implicit created-node count, and only requested explicit-handle bindings. The response
+projection is part of the idempotency fingerprint. Validate-only returns an identical predicted
+allocation/hash with `published=false` and does not publish.
 
 A query batch contains at most 32 client-labelled items and an aggregate requested-item budget of
 2048. Every item observes the same immutable revision and results remain in request order with the
@@ -58,12 +75,17 @@ change-count/digest facts on every page. Repair context composes bounded structu
 to 64 items per category. Full scans and recomputation are the correctness oracle.
 
 `DescribeSchema` is derived from executable enums and descriptors and exposes stable names/tags,
-operation contracts, transaction/query/error/request/response vocabularies, and active boundary
-limits. This specification does not duplicate its exhaustive payload catalogue.
+operation contracts, structured expression/value variants, depth-first allocation and implicit-node
+facts, transaction/query/error/request/response vocabularies, unit/newtype/record payload shapes,
+exact required and optional field names with stable type expressions, request/response/boundary
+envelopes, required Run and RunPolicy fields, runtime value tags and payload forms, and active
+boundary limits. Runtime limits are 1,024 ordered arguments, 10,000,000 fuel units, 100,000 frames,
+and 65,536 aggregate live frame-value slots. This specification does not duplicate its exhaustive
+payload catalogue.
 
 ## Strict generic JSON CLI
 
-`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-2 request envelope
+`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-3 request envelope
 from stdin, projects it to the same typed binary request, invokes the private daemon, and writes
 exactly one JSON response envelope to stdout. `lkjscript schema [--pretty]` emits the same runtime
 description locally; `DescribeSchema` provides it through the daemon. JSON is transport only and

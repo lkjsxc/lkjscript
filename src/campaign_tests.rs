@@ -12,8 +12,9 @@ use crate::query::{
 };
 use crate::schema::{OperationDraft, SemanticType, ValueDraft, ValueRef};
 use crate::transaction::{
-    ApplyTransactionRequest, NodeTarget, Transaction, TransactionMode, TransactionOp,
-    TransactionReceipt, TransactionResponseSpec,
+    ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
+    FunctionParameterDraft, NodeTarget, Transaction, TransactionMode, TransactionOp,
+    TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -96,67 +97,41 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
                     handle: LocalHandle::new(3),
                     module: local(2),
                     name: "main".to_owned(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(4),
+                        name: "input".to_owned(),
+                        ty: SemanticType::I64,
+                    }],
                     result: SemanticType::I64,
-                },
-                TransactionOp::CreateParameter {
-                    handle: LocalHandle::new(4),
-                    function: local(3),
-                    name: "input".to_owned(),
-                    ty: SemanticType::I64,
-                },
-                TransactionOp::CreateRegion {
-                    handle: LocalHandle::new(5),
-                    function: local(3),
-                },
-                TransactionOp::CreateBlock {
-                    handle: LocalHandle::new(6),
-                    region: local(5),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(7),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::ConstI64(
-                        40 + i64::try_from(seed % 3).expect("small"),
-                    ),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(8),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::ConstI64(2),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(9),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::ConstBool(true),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(10),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::Hole {
-                        expected: SemanticType::I64,
-                    },
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(11),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::ConstI64(99),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(12),
-                    block: local(6),
-                    before: None,
-                    operation: OperationDraft::Return {
-                        value: local_value(10),
-                    },
-                },
-                TransactionOp::SetFunctionBody {
-                    function: local(3),
-                    region: local(5),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(7),
+                                operation: ExpressionKindDraft::ConstI64(
+                                    40 + i64::try_from(seed % 3).expect("small"),
+                                ),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(8),
+                                operation: ExpressionKindDraft::ConstI64(2),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(9),
+                                operation: ExpressionKindDraft::ConstBool(true),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(10),
+                                operation: ExpressionKindDraft::Hole {
+                                    expected: SemanticType::I64,
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(11),
+                                operation: ExpressionKindDraft::ConstI64(99),
+                            },
+                        ],
+                        return_value: local_value(10),
+                    }),
                 },
                 TransactionOp::SetEntryFunction {
                     package: local(1),
@@ -164,7 +139,7 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
                 },
             ],
         },
-        &(1..=12).collect::<Vec<_>>(),
+        &[1, 2, 3, 4, 7, 8, 9, 10, 11],
     )
 }
 
@@ -220,19 +195,9 @@ fn commit_checked(
         prepared.snapshot.revision(),
         before_revision.next().expect("next revision")
     );
-    let created_handles: Vec<_> = request
-        .transaction
-        .operations
-        .iter()
-        .filter_map(TransactionOp::created_handle)
-        .collect();
     assert_eq!(
         prepared.snapshot.next_serial(),
-        before_next + u64::try_from(created_handles.len()).expect("created count")
-    );
-    assert_eq!(
-        prepared.receipt.created_count,
-        u64::try_from(created_handles.len()).expect("created count")
+        before_next + prepared.receipt.created_count
     );
     assert_snapshot_invariants(&prepared.snapshot);
     let semantic_diff = diff::between(&before, &prepared.snapshot);
@@ -273,14 +238,12 @@ fn commit_checked(
             .collect::<Vec<_>>(),
         request.response.return_handles
     );
-    for (handle, node) in &prepared.receipt.returned_bindings {
-        let allocation_index = created_handles
-            .iter()
-            .position(|candidate| candidate == handle)
-            .expect("selected declared handle");
-        assert_eq!(
-            node.serial(),
-            before_next + u64::try_from(allocation_index).expect("allocation index")
+    for (_, node) in &prepared.receipt.returned_bindings {
+        assert!(node.serial() >= before_next);
+        assert!(node.serial() < prepared.snapshot.next_serial());
+        assert!(
+            prepared.snapshot.node(*node).is_ok()
+                || prepared.snapshot.contains_tombstone(node.serial())
         );
     }
     let receipt = prepared.receipt.clone();
@@ -383,10 +346,11 @@ enum Action {
     DuplicateHandle,
     DuplicateName,
     InvalidSelected,
+    StructuredScenario,
 }
 
 impl Action {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 16] = [
         Self::Rename,
         Self::ScalarEdit,
         Self::InvalidRefinement,
@@ -402,6 +366,7 @@ impl Action {
         Self::DuplicateHandle,
         Self::DuplicateName,
         Self::InvalidSelected,
+        Self::StructuredScenario,
     ];
 }
 
@@ -687,7 +652,9 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                             handle: LocalHandle::new(41),
                             module: existing(module),
                             name: "main".to_owned(),
+                            parameters: Vec::new(),
                             result: SemanticType::I64,
+                            body: None,
                         }],
                     },
                     &[41],
@@ -713,6 +680,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                 &format!("prediction-{seed}"),
                 ErrorCode::InvalidHandle,
             ),
+            Action::StructuredScenario => generated_structured_scenario(seed),
             Action::InvalidRefinement => reject_checked(
                 &workspace,
                 &request(
@@ -835,6 +803,180 @@ fn durable_reject_checked(
     assert_eq!(after.hash(), before.hash());
     assert_eq!(after.next_serial(), before.next_serial());
     assert_eq!(after.tombstones().collect::<Vec<_>>(), before_tombstones);
+}
+
+fn generated_structured_scenario(seed: u64) {
+    let mut bytes = [0x6d; 16];
+    bytes[..8].copy_from_slice(&seed.to_le_bytes());
+    let workspace_id = WorkspaceId::from_bytes(bytes);
+    let mut workspace = Workspace::new(workspace_id).expect("structured workspace");
+    let value = |handle| ValueDraft::OperationResult {
+        operation: local(handle),
+        output: 0,
+    };
+    let expression = |handle, operation| ExpressionDraft {
+        handle: LocalHandle::new(handle),
+        operation,
+    };
+    let created = commit_checked(
+        &mut workspace,
+        &request(
+            Transaction {
+                workspace: workspace_id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(1),
+                        name: "structured".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: local(1),
+                        name: "root".into(),
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(10),
+                        module: local(2),
+                        name: "forward".into(),
+                        parameters: Vec::new(),
+                        result: SemanticType::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![expression(
+                                11,
+                                ExpressionKindDraft::Call {
+                                    function: local(20),
+                                    arguments: Vec::new(),
+                                },
+                            )],
+                            return_value: value(11),
+                        }),
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(20),
+                        module: local(2),
+                        name: "mutual".into(),
+                        parameters: Vec::new(),
+                        result: SemanticType::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![expression(
+                                21,
+                                ExpressionKindDraft::Call {
+                                    function: local(10),
+                                    arguments: Vec::new(),
+                                },
+                            )],
+                            return_value: value(21),
+                        }),
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(30),
+                        module: local(2),
+                        name: "nested".into(),
+                        parameters: Vec::new(),
+                        result: SemanticType::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![
+                                expression(31, ExpressionKindDraft::ConstI64(0)),
+                                expression(32, ExpressionKindDraft::ConstBool(true)),
+                                expression(
+                                    33,
+                                    ExpressionKindDraft::If {
+                                        condition: value(32),
+                                        result: SemanticType::I64,
+                                        then_body: YieldingBodyDraft {
+                                            operations: vec![expression(
+                                                34,
+                                                ExpressionKindDraft::ForI64 {
+                                                    start: value(31),
+                                                    end_exclusive: value(31),
+                                                    step: 1,
+                                                    initial: value(31),
+                                                    carried: SemanticType::I64,
+                                                    index_handle: LocalHandle::new(35),
+                                                    carried_handle: LocalHandle::new(36),
+                                                    body: YieldingBodyDraft {
+                                                        operations: vec![expression(
+                                                            37,
+                                                            ExpressionKindDraft::Hole {
+                                                                expected: SemanticType::I64,
+                                                            },
+                                                        )],
+                                                        yield_value: value(37),
+                                                    },
+                                                },
+                                            )],
+                                            yield_value: value(34),
+                                        },
+                                        else_body: YieldingBodyDraft {
+                                            operations: vec![expression(
+                                                38,
+                                                ExpressionKindDraft::ConstI64(0),
+                                            )],
+                                            yield_value: value(38),
+                                        },
+                                    },
+                                ),
+                            ],
+                            return_value: value(33),
+                        }),
+                    },
+                    TransactionOp::SetEntryFunction {
+                        package: local(1),
+                        function: local(30),
+                    },
+                ],
+            },
+            &[10, 20, 30, 35, 36, 37],
+        ),
+    );
+    let hole = binding(&created, 37);
+    let index = binding(&created, 35);
+    let carried = binding(&created, 36);
+    reject_checked(
+        &workspace,
+        &request(
+            Transaction {
+                workspace: workspace_id,
+                base_revision: workspace.head_revision(),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: existing(hole),
+                    replacement: OperationDraft::Hole {
+                        expected: SemanticType::I64,
+                    },
+                }],
+            },
+            &[],
+        ),
+        &format!("structured-prediction-{seed}"),
+        ErrorCode::InvalidOperand,
+    );
+    let refinement_revision = workspace.head_revision();
+    commit_checked(
+        &mut workspace,
+        &request(
+            Transaction {
+                workspace: workspace_id,
+                base_revision: refinement_revision,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: existing(hole),
+                    replacement: OperationDraft::AddI64 {
+                        lhs: ValueDraft::BlockArgument(existing(carried)),
+                        rhs: ValueDraft::BlockArgument(existing(index)),
+                    },
+                }],
+            },
+            &[],
+        ),
+    );
+    assert!(
+        crate::query::workspace_blockers(workspace.head().expect("structured head")).is_empty()
+    );
 }
 
 #[test]
@@ -1093,14 +1235,19 @@ fn artifact_corpus() -> Vec<Vec<u8>> {
     );
     let tombstoned = artifact::encode(workspace.head().expect("tombstoned")).expect("artifact");
 
-    let block = binding(&fixture_receipt, 6);
+    let block = match workspace.head().expect("head").node(hole).expect("hole") {
+        crate::schema::Node::Operation { owner, .. } => *owner,
+        _ => panic!("hole operation"),
+    };
     let mut operations = Vec::new();
     for offset in 0..128_u32 {
-        operations.push(TransactionOp::CreateOperation {
-            handle: LocalHandle::new(1000 + offset),
-            block: existing(block),
-            before: Some(existing(hole)),
-            operation: OperationDraft::ConstI64(i64::from(offset)),
+        operations.push(TransactionOp::InsertExpression {
+            block,
+            before: Some(hole),
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(1000 + offset),
+                operation: ExpressionKindDraft::ConstI64(i64::from(offset)),
+            },
         });
     }
     commit_checked(
@@ -1151,6 +1298,7 @@ fn request_corpus() -> Vec<Request> {
         Query::LegalConstructors {
             target: RepairTarget::Hole(node),
             include_incompatible: true,
+            constructors: page,
             values: page,
         },
         Query::SemanticDiff {
@@ -1189,33 +1337,33 @@ fn request_corpus() -> Vec<Request> {
             handle: LocalHandle::new(3),
             module: local(2),
             name: "main".to_owned(),
+            parameters: vec![FunctionParameterDraft {
+                handle: LocalHandle::new(4),
+                name: "parameter".to_owned(),
+                ty: SemanticType::I64,
+            }],
             result: SemanticType::I64,
+            body: None,
         },
-        TransactionOp::CreateParameter {
-            handle: LocalHandle::new(4),
+        TransactionOp::DefineFunctionBody {
             function: local(3),
-            name: "parameter".to_owned(),
-            ty: SemanticType::I64,
-        },
-        TransactionOp::CreateRegion {
-            handle: LocalHandle::new(5),
-            function: local(3),
-        },
-        TransactionOp::CreateBlock {
-            handle: LocalHandle::new(6),
-            region: local(5),
-        },
-        TransactionOp::CreateOperation {
-            handle: LocalHandle::new(7),
-            block: local(6),
-            before: None,
-            operation: OperationDraft::Hole {
-                expected: SemanticType::I64,
+            body: FunctionBodyDraft {
+                operations: vec![ExpressionDraft {
+                    handle: LocalHandle::new(7),
+                    operation: ExpressionKindDraft::Hole {
+                        expected: SemanticType::I64,
+                    },
+                }],
+                return_value: local_value(7),
             },
         },
-        TransactionOp::SetFunctionBody {
-            function: local(3),
-            region: local(5),
+        TransactionOp::InsertExpression {
+            block: node,
+            before: None,
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(8),
+                operation: ExpressionKindDraft::ConstI64(1),
+            },
         },
         TransactionOp::SetEntryFunction {
             package: local(1),
@@ -1277,6 +1425,15 @@ fn request_corpus() -> Vec<Request> {
             workspace,
             revision: Revision::new(1),
             entry: node,
+            arguments: vec![
+                crate::RuntimeValue::Unit,
+                crate::RuntimeValue::Bool(true),
+                crate::RuntimeValue::I64(-9),
+            ],
+            policy: crate::interpret::RunPolicy {
+                fuel: 777,
+                maximum_frames: 33,
+            },
         },
         Request::Shutdown,
         Request::DescribeSchema,
@@ -1321,7 +1478,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":2", "\"version\":2,\"version\":2", 1)
+            .replacen("\"version\":3", "\"version\":3,\"version\":3", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1683,7 +1840,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":2", "\"version\":2,\"version\":2"),
+        replace_json(query, "\"version\":3", "\"version\":3,\"version\":3"),
     );
     push_mutation(
         &mut mutations,

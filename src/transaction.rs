@@ -63,11 +63,8 @@ pub enum TransactionOpCode {
     CreatePackage,
     CreateModule,
     CreateFunction,
-    CreateParameter,
-    CreateRegion,
-    CreateBlock,
-    CreateOperation,
-    SetFunctionBody,
+    DefineFunctionBody,
+    InsertExpression,
     SetEntryFunction,
     RenameNode,
     ReplaceOperation,
@@ -76,15 +73,12 @@ pub enum TransactionOpCode {
     RefineHole,
 }
 impl TransactionOpCode {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 11] = [
         Self::CreatePackage,
         Self::CreateModule,
         Self::CreateFunction,
-        Self::CreateParameter,
-        Self::CreateRegion,
-        Self::CreateBlock,
-        Self::CreateOperation,
-        Self::SetFunctionBody,
+        Self::DefineFunctionBody,
+        Self::InsertExpression,
         Self::SetEntryFunction,
         Self::RenameNode,
         Self::ReplaceOperation,
@@ -97,17 +91,14 @@ impl TransactionOpCode {
             Self::CreatePackage => 1,
             Self::CreateModule => 2,
             Self::CreateFunction => 3,
-            Self::CreateParameter => 4,
-            Self::CreateRegion => 5,
-            Self::CreateBlock => 6,
-            Self::CreateOperation => 7,
-            Self::SetFunctionBody => 8,
-            Self::SetEntryFunction => 9,
-            Self::RenameNode => 10,
-            Self::ReplaceOperation => 11,
-            Self::ReplaceOperand => 12,
-            Self::DeleteOwnedSubtree => 13,
-            Self::RefineHole => 14,
+            Self::DefineFunctionBody => 4,
+            Self::InsertExpression => 5,
+            Self::SetEntryFunction => 6,
+            Self::RenameNode => 7,
+            Self::ReplaceOperation => 8,
+            Self::ReplaceOperand => 9,
+            Self::DeleteOwnedSubtree => 10,
+            Self::RefineHole => 11,
         }
     }
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
@@ -115,17 +106,14 @@ impl TransactionOpCode {
             1 => Some(Self::CreatePackage),
             2 => Some(Self::CreateModule),
             3 => Some(Self::CreateFunction),
-            4 => Some(Self::CreateParameter),
-            5 => Some(Self::CreateRegion),
-            6 => Some(Self::CreateBlock),
-            7 => Some(Self::CreateOperation),
-            8 => Some(Self::SetFunctionBody),
-            9 => Some(Self::SetEntryFunction),
-            10 => Some(Self::RenameNode),
-            11 => Some(Self::ReplaceOperation),
-            12 => Some(Self::ReplaceOperand),
-            13 => Some(Self::DeleteOwnedSubtree),
-            14 => Some(Self::RefineHole),
+            4 => Some(Self::DefineFunctionBody),
+            5 => Some(Self::InsertExpression),
+            6 => Some(Self::SetEntryFunction),
+            7 => Some(Self::RenameNode),
+            8 => Some(Self::ReplaceOperation),
+            9 => Some(Self::ReplaceOperand),
+            10 => Some(Self::DeleteOwnedSubtree),
+            11 => Some(Self::RefineHole),
             _ => None,
         }
     }
@@ -134,11 +122,8 @@ impl TransactionOpCode {
             Self::CreatePackage => "create_package",
             Self::CreateModule => "create_module",
             Self::CreateFunction => "create_function",
-            Self::CreateParameter => "create_parameter",
-            Self::CreateRegion => "create_region",
-            Self::CreateBlock => "create_block",
-            Self::CreateOperation => "create_operation",
-            Self::SetFunctionBody => "set_function_body",
+            Self::DefineFunctionBody => "define_function_body",
+            Self::InsertExpression => "insert_expression",
             Self::SetEntryFunction => "set_entry_function",
             Self::RenameNode => "rename_node",
             Self::ReplaceOperation => "replace_operation",
@@ -147,6 +132,180 @@ impl TransactionOpCode {
             Self::DeleteOwnedSubtree => "delete_owned_subtree",
         }
     }
+}
+
+pub const MAX_STRUCTURED_DRAFT_DEPTH: usize = 16;
+pub const MAX_STRUCTURED_DRAFT_ITEMS: usize = 65_536;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExpressionDraftCode {
+    ConstUnit,
+    ConstBool,
+    ConstI64,
+    AddI64,
+    LtI64,
+    Call,
+    Hole,
+    If,
+    ForI64,
+}
+impl ExpressionDraftCode {
+    pub const ALL: [Self; 9] = [
+        Self::ConstUnit,
+        Self::ConstBool,
+        Self::ConstI64,
+        Self::AddI64,
+        Self::LtI64,
+        Self::Call,
+        Self::Hole,
+        Self::If,
+        Self::ForI64,
+    ];
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::ConstUnit => 1,
+            Self::ConstBool => 2,
+            Self::ConstI64 => 3,
+            Self::AddI64 => 4,
+            Self::LtI64 => 5,
+            Self::Call => 6,
+            Self::Hole => 7,
+            Self::If => 8,
+            Self::ForI64 => 9,
+        }
+    }
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::ConstUnit => "const_unit",
+            Self::ConstBool => "const_bool",
+            Self::ConstI64 => "const_i64",
+            Self::AddI64 => "add_i64",
+            Self::LtI64 => "lt_i64",
+            Self::Call => "call",
+            Self::Hole => "hole",
+            Self::If => "if",
+            Self::ForI64 => "for_i64",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ValueDraftCode {
+    FunctionParameter,
+    OperationResult,
+    BlockArgument,
+}
+impl ValueDraftCode {
+    pub const ALL: [Self; 3] = [
+        Self::FunctionParameter,
+        Self::OperationResult,
+        Self::BlockArgument,
+    ];
+    pub const fn stable_tag(self) -> u8 {
+        match self {
+            Self::FunctionParameter => 1,
+            Self::OperationResult => 2,
+            Self::BlockArgument => 3,
+        }
+    }
+    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(Self::FunctionParameter),
+            2 => Some(Self::OperationResult),
+            3 => Some(Self::BlockArgument),
+            _ => None,
+        }
+    }
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::FunctionParameter => "function_parameter",
+            Self::OperationResult => "operation_result",
+            Self::BlockArgument => "block_argument",
+        }
+    }
+}
+
+impl ValueDraft {
+    pub const fn code(self) -> ValueDraftCode {
+        match self {
+            Self::FunctionParameter(_) => ValueDraftCode::FunctionParameter,
+            Self::OperationResult { .. } => ValueDraftCode::OperationResult,
+            Self::BlockArgument(_) => ValueDraftCode::BlockArgument,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionParameterDraft {
+    pub handle: LocalHandle,
+    pub name: String,
+    pub ty: SemanticType,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionBodyDraft {
+    pub operations: Vec<ExpressionDraft>,
+    pub return_value: ValueDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct YieldingBodyDraft {
+    pub operations: Vec<ExpressionDraft>,
+    pub yield_value: ValueDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExpressionDraft {
+    pub handle: LocalHandle,
+    pub operation: ExpressionKindDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum ExpressionKindDraft {
+    ConstUnit,
+    ConstBool(bool),
+    ConstI64(i64),
+    AddI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    LtI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    Call {
+        function: NodeTarget,
+        arguments: Vec<ValueDraft>,
+    },
+    Hole {
+        expected: SemanticType,
+    },
+    If {
+        condition: ValueDraft,
+        result: SemanticType,
+        then_body: YieldingBodyDraft,
+        else_body: YieldingBodyDraft,
+    },
+    ForI64 {
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        step: i64,
+        initial: ValueDraft,
+        carried: SemanticType,
+        index_handle: LocalHandle,
+        carried_handle: LocalHandle,
+        body: YieldingBodyDraft,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -170,6 +329,87 @@ pub enum TransactionOp {
         handle: LocalHandle,
         module: NodeTarget,
         name: String,
+        parameters: Vec<FunctionParameterDraft>,
+        result: SemanticType,
+        body: Option<FunctionBodyDraft>,
+    },
+    DefineFunctionBody {
+        function: NodeTarget,
+        body: FunctionBodyDraft,
+    },
+    InsertExpression {
+        block: NodeId,
+        before: Option<NodeId>,
+        expression: ExpressionDraft,
+    },
+    SetEntryFunction {
+        package: NodeTarget,
+        function: NodeTarget,
+    },
+    RenameNode {
+        node: NodeTarget,
+        name: String,
+    },
+    ReplaceOperation {
+        operation: NodeTarget,
+        replacement: OperationDraft,
+    },
+    ReplaceOperand {
+        operation: NodeTarget,
+        index: u64,
+        value: ValueDraft,
+    },
+    RefineHole {
+        hole: NodeTarget,
+        replacement: OperationDraft,
+    },
+    DeleteOwnedSubtree {
+        root: NodeTarget,
+    },
+}
+
+impl TransactionOp {
+    pub const fn code(&self) -> TransactionOpCode {
+        match self {
+            Self::CreatePackage { .. } => TransactionOpCode::CreatePackage,
+            Self::CreateModule { .. } => TransactionOpCode::CreateModule,
+            Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
+            Self::DefineFunctionBody { .. } => TransactionOpCode::DefineFunctionBody,
+            Self::InsertExpression { .. } => TransactionOpCode::InsertExpression,
+            Self::SetEntryFunction { .. } => TransactionOpCode::SetEntryFunction,
+            Self::RenameNode { .. } => TransactionOpCode::RenameNode,
+            Self::ReplaceOperation { .. } => TransactionOpCode::ReplaceOperation,
+            Self::ReplaceOperand { .. } => TransactionOpCode::ReplaceOperand,
+            Self::RefineHole { .. } => TransactionOpCode::RefineHole,
+            Self::DeleteOwnedSubtree { .. } => TransactionOpCode::DeleteOwnedSubtree,
+        }
+    }
+    pub const fn created_handle(&self) -> Option<LocalHandle> {
+        match self {
+            Self::CreatePackage { handle, .. }
+            | Self::CreateModule { handle, .. }
+            | Self::CreateFunction { handle, .. } => Some(*handle),
+            Self::InsertExpression { expression, .. } => Some(expression.handle),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum CanonicalEdit {
+    CreatePackage {
+        handle: LocalHandle,
+        name: String,
+    },
+    CreateModule {
+        handle: LocalHandle,
+        package: NodeTarget,
+        name: String,
+    },
+    CreateFunction {
+        handle: LocalHandle,
+        module: NodeTarget,
+        name: String,
         result: SemanticType,
     },
     CreateParameter {
@@ -180,11 +420,16 @@ pub enum TransactionOp {
     },
     CreateRegion {
         handle: LocalHandle,
-        function: NodeTarget,
+        owner: NodeTarget,
     },
     CreateBlock {
         handle: LocalHandle,
         region: NodeTarget,
+    },
+    CreateBlockArgument {
+        handle: LocalHandle,
+        block: NodeTarget,
+        ty: SemanticType,
     },
     CreateOperation {
         handle: LocalHandle,
@@ -210,7 +455,7 @@ pub enum TransactionOp {
     },
     ReplaceOperand {
         operation: NodeTarget,
-        index: u8,
+        index: u64,
         value: ValueDraft,
     },
     RefineHole {
@@ -220,39 +465,6 @@ pub enum TransactionOp {
     DeleteOwnedSubtree {
         root: NodeTarget,
     },
-}
-
-impl TransactionOp {
-    pub const fn code(&self) -> TransactionOpCode {
-        match self {
-            Self::CreatePackage { .. } => TransactionOpCode::CreatePackage,
-            Self::CreateModule { .. } => TransactionOpCode::CreateModule,
-            Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
-            Self::CreateParameter { .. } => TransactionOpCode::CreateParameter,
-            Self::CreateRegion { .. } => TransactionOpCode::CreateRegion,
-            Self::CreateBlock { .. } => TransactionOpCode::CreateBlock,
-            Self::CreateOperation { .. } => TransactionOpCode::CreateOperation,
-            Self::SetFunctionBody { .. } => TransactionOpCode::SetFunctionBody,
-            Self::SetEntryFunction { .. } => TransactionOpCode::SetEntryFunction,
-            Self::RenameNode { .. } => TransactionOpCode::RenameNode,
-            Self::ReplaceOperation { .. } => TransactionOpCode::ReplaceOperation,
-            Self::ReplaceOperand { .. } => TransactionOpCode::ReplaceOperand,
-            Self::RefineHole { .. } => TransactionOpCode::RefineHole,
-            Self::DeleteOwnedSubtree { .. } => TransactionOpCode::DeleteOwnedSubtree,
-        }
-    }
-    pub const fn created_handle(&self) -> Option<LocalHandle> {
-        match self {
-            Self::CreatePackage { handle, .. }
-            | Self::CreateModule { handle, .. }
-            | Self::CreateFunction { handle, .. }
-            | Self::CreateParameter { handle, .. }
-            | Self::CreateRegion { handle, .. }
-            | Self::CreateBlock { handle, .. }
-            | Self::CreateOperation { handle, .. } => Some(*handle),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -277,6 +489,612 @@ pub struct TransactionReceipt {
 pub(crate) struct PreparedTransaction {
     pub snapshot: Arc<Snapshot>,
     pub receipt: TransactionReceipt,
+}
+
+struct ExpandedTransaction {
+    edits: Vec<CanonicalEdit>,
+    edit_sources: Vec<usize>,
+    explicit_handles: BTreeSet<LocalHandle>,
+}
+
+#[derive(Clone)]
+enum ExpandEvent {
+    Source(usize),
+    Edit(CanonicalEdit),
+    FunctionBody {
+        function: NodeTarget,
+        body: FunctionBodyDraft,
+    },
+    YieldingBody {
+        owner: NodeTarget,
+        region: LocalHandle,
+        arguments: Vec<(LocalHandle, SemanticType)>,
+        body: YieldingBodyDraft,
+    },
+    Expression {
+        block: NodeTarget,
+        before: Option<NodeTarget>,
+        expression: ExpressionDraft,
+    },
+}
+
+fn expand_transaction(
+    base: &Snapshot,
+    operations: &[TransactionOp],
+) -> Result<ExpandedTransaction> {
+    let explicit_handles = scan_explicit_handles(operations)?;
+    let mut synthetic = SyntheticHandles::new(&explicit_handles);
+    let mut events = Vec::new();
+    for (source, operation) in operations.iter().enumerate().rev() {
+        match operation {
+            TransactionOp::CreatePackage { handle, name } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreatePackage {
+                    handle: *handle,
+                    name: name.clone(),
+                }))
+            }
+            TransactionOp::CreateModule {
+                handle,
+                package,
+                name,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::CreateModule {
+                handle: *handle,
+                package: *package,
+                name: name.clone(),
+            })),
+            TransactionOp::CreateFunction {
+                handle,
+                module,
+                name,
+                parameters,
+                result,
+                body,
+            } => {
+                if let Some(body) = body {
+                    events.push(ExpandEvent::FunctionBody {
+                        function: NodeTarget::Local(*handle),
+                        body: body.clone(),
+                    });
+                }
+                for parameter in parameters.iter().rev() {
+                    events.push(ExpandEvent::Edit(CanonicalEdit::CreateParameter {
+                        handle: parameter.handle,
+                        function: NodeTarget::Local(*handle),
+                        name: parameter.name.clone(),
+                        ty: parameter.ty,
+                    }));
+                }
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateFunction {
+                    handle: *handle,
+                    module: *module,
+                    name: name.clone(),
+                    result: *result,
+                }));
+            }
+            TransactionOp::DefineFunctionBody { function, body } => {
+                events.push(ExpandEvent::FunctionBody {
+                    function: *function,
+                    body: body.clone(),
+                })
+            }
+            TransactionOp::InsertExpression {
+                block,
+                before,
+                expression,
+            } => {
+                let block_node = base
+                    .node(*block)
+                    .map_err(|error| error.at_operation(source))?;
+                if block_node.kind() != NodeKind::Block {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "insert target must be a block",
+                    )
+                    .for_node(*block)
+                    .with_kinds(NodeKind::Block, block_node.kind())
+                    .at_operation(source));
+                }
+                if let Some(before) = before {
+                    let Node::Block { operations, .. } = block_node else {
+                        unreachable!()
+                    };
+                    if !operations.contains(before) {
+                        return Err(LkError::new(
+                            ErrorCode::InvalidContainment,
+                            "insert anchor must be a regular operation in the base block",
+                        )
+                        .for_node(*before)
+                        .with_related([*block])
+                        .at_operation(source));
+                    }
+                }
+                events.push(ExpandEvent::Expression {
+                    block: NodeTarget::Existing(*block),
+                    before: before.map(NodeTarget::Existing),
+                    expression: expression.clone(),
+                });
+            }
+            TransactionOp::SetEntryFunction { package, function } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::SetEntryFunction {
+                    package: *package,
+                    function: *function,
+                }))
+            }
+            TransactionOp::RenameNode { node, name } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::RenameNode {
+                    node: *node,
+                    name: name.clone(),
+                }))
+            }
+            TransactionOp::ReplaceOperation {
+                operation,
+                replacement,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::ReplaceOperation {
+                operation: *operation,
+                replacement: replacement.clone(),
+            })),
+            TransactionOp::ReplaceOperand {
+                operation,
+                index,
+                value,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::ReplaceOperand {
+                operation: *operation,
+                index: *index,
+                value: *value,
+            })),
+            TransactionOp::RefineHole { hole, replacement } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::RefineHole {
+                    hole: *hole,
+                    replacement: replacement.clone(),
+                }))
+            }
+            TransactionOp::DeleteOwnedSubtree { root } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::DeleteOwnedSubtree {
+                    root: *root,
+                }))
+            }
+        }
+        events.push(ExpandEvent::Source(source));
+    }
+    let mut edits = Vec::new();
+    let mut edit_sources = Vec::new();
+    let mut current_source = 0;
+    while let Some(event) = events.pop() {
+        match event {
+            ExpandEvent::Source(source) => current_source = source,
+            ExpandEvent::Edit(edit) => edits.push(edit),
+            ExpandEvent::FunctionBody { function, body } => {
+                let region = synthetic.next(current_source)?;
+                let block = synthetic.next(current_source)?;
+                let terminator = synthetic.next(current_source)?;
+                edits.push(CanonicalEdit::CreateRegion {
+                    handle: region,
+                    owner: function,
+                });
+                edits.push(CanonicalEdit::CreateBlock {
+                    handle: block,
+                    region: NodeTarget::Local(region),
+                });
+                events.push(ExpandEvent::Edit(CanonicalEdit::SetFunctionBody {
+                    function,
+                    region: NodeTarget::Local(region),
+                }));
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
+                    handle: terminator,
+                    block: NodeTarget::Local(block),
+                    before: None,
+                    operation: OperationDraft::Return {
+                        value: body.return_value,
+                    },
+                }));
+                for expression in body.operations.into_iter().rev() {
+                    events.push(ExpandEvent::Expression {
+                        block: NodeTarget::Local(block),
+                        before: None,
+                        expression,
+                    });
+                }
+            }
+            ExpandEvent::YieldingBody {
+                owner,
+                region,
+                arguments,
+                body,
+            } => {
+                let block = synthetic.next(current_source)?;
+                edits.push(CanonicalEdit::CreateRegion {
+                    handle: region,
+                    owner,
+                });
+                edits.push(CanonicalEdit::CreateBlock {
+                    handle: block,
+                    region: NodeTarget::Local(region),
+                });
+                for (handle, ty) in arguments {
+                    edits.push(CanonicalEdit::CreateBlockArgument {
+                        handle,
+                        block: NodeTarget::Local(block),
+                        ty,
+                    });
+                }
+                let terminator = synthetic.next(current_source)?;
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
+                    handle: terminator,
+                    block: NodeTarget::Local(block),
+                    before: None,
+                    operation: OperationDraft::Yield {
+                        value: body.yield_value,
+                    },
+                }));
+                for expression in body.operations.into_iter().rev() {
+                    events.push(ExpandEvent::Expression {
+                        block: NodeTarget::Local(block),
+                        before: None,
+                        expression,
+                    });
+                }
+            }
+            ExpandEvent::Expression {
+                block,
+                before,
+                expression,
+            } => match expression.operation {
+                ExpressionKindDraft::ConstUnit => edits.push(CanonicalEdit::CreateOperation {
+                    handle: expression.handle,
+                    block,
+                    before,
+                    operation: OperationDraft::ConstUnit,
+                }),
+                ExpressionKindDraft::ConstBool(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstBool(value),
+                    })
+                }
+                ExpressionKindDraft::ConstI64(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstI64(value),
+                    })
+                }
+                ExpressionKindDraft::AddI64 { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::AddI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::LtI64 { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::LtI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::Call {
+                    function,
+                    arguments,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    handle: expression.handle,
+                    block,
+                    before,
+                    operation: OperationDraft::Call {
+                        function,
+                        arguments,
+                    },
+                }),
+                ExpressionKindDraft::Hole { expected } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::Hole { expected },
+                    })
+                }
+                ExpressionKindDraft::If {
+                    condition,
+                    result,
+                    then_body,
+                    else_body,
+                } => {
+                    let then_region = synthetic.next(current_source)?;
+                    let else_region = synthetic.next(current_source)?;
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::If {
+                            condition,
+                            result,
+                            then_region: NodeTarget::Local(then_region),
+                            else_region: NodeTarget::Local(else_region),
+                        },
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Local(expression.handle),
+                        region: else_region,
+                        arguments: Vec::new(),
+                        body: else_body,
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Local(expression.handle),
+                        region: then_region,
+                        arguments: Vec::new(),
+                        body: then_body,
+                    });
+                }
+                ExpressionKindDraft::ForI64 {
+                    start,
+                    end_exclusive,
+                    step,
+                    initial,
+                    carried,
+                    index_handle,
+                    carried_handle,
+                    body,
+                } => {
+                    let body_region = synthetic.next(current_source)?;
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ForI64 {
+                            start,
+                            end_exclusive,
+                            step,
+                            initial,
+                            carried,
+                            body_region: NodeTarget::Local(body_region),
+                        },
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Local(expression.handle),
+                        region: body_region,
+                        arguments: vec![
+                            (index_handle, SemanticType::I64),
+                            (carried_handle, carried),
+                        ],
+                        body,
+                    });
+                }
+            },
+        }
+        edit_sources.resize(edits.len(), current_source);
+    }
+    debug_assert_eq!(edits.len(), edit_sources.len());
+    Ok(ExpandedTransaction {
+        edits,
+        edit_sources,
+        explicit_handles,
+    })
+}
+
+struct SyntheticHandles {
+    used: BTreeSet<LocalHandle>,
+    next: u32,
+}
+impl SyntheticHandles {
+    fn new(explicit: &BTreeSet<LocalHandle>) -> Self {
+        Self {
+            used: explicit.clone(),
+            next: u32::MAX,
+        }
+    }
+    fn next(&mut self, source: usize) -> Result<LocalHandle> {
+        while self.next != 0 && self.used.contains(&LocalHandle::new(self.next)) {
+            self.next -= 1;
+        }
+        if self.next == 0 {
+            return Err(LkError::new(
+                ErrorCode::PolicyExceeded,
+                "private structured handle space exhausted",
+            )
+            .at_operation(source));
+        }
+        let handle = LocalHandle::new(self.next);
+        self.used.insert(handle);
+        self.next -= 1;
+        Ok(handle)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn validate_structured_request(operations: &[TransactionOp]) -> Result<()> {
+    scan_explicit_handles(operations).map(|_| ())
+}
+
+fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalHandle>> {
+    enum Scan<'a> {
+        Expression(&'a ExpressionDraft, usize, usize),
+        Body(&'a [ExpressionDraft], ValueDraft, usize, usize),
+    }
+    struct DraftBudget(usize);
+    impl DraftBudget {
+        fn add(&mut self, count: usize, source: usize) -> Result<()> {
+            self.0 = self.0.checked_add(count).ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "structured draft item count overflow",
+                )
+                .at_operation(source)
+            })?;
+            if self.0 > MAX_STRUCTURED_DRAFT_ITEMS {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "structured draft exceeds request item policy",
+                )
+                .at_operation(source));
+            }
+            Ok(())
+        }
+    }
+    fn declare(
+        handles: &mut BTreeSet<LocalHandle>,
+        handle: LocalHandle,
+        source: usize,
+    ) -> Result<()> {
+        if handle.get() == 0 {
+            return Err(
+                LkError::new(ErrorCode::InvalidHandle, "local handle zero is reserved")
+                    .at_operation(source)
+                    .for_handle(handle),
+            );
+        }
+        if !handles.insert(handle) {
+            return Err(LkError::new(
+                ErrorCode::DuplicateHandle,
+                "transaction-local handle is declared more than once",
+            )
+            .at_operation(source)
+            .for_handle(handle));
+        }
+        Ok(())
+    }
+    let mut handles = BTreeSet::new();
+    let mut stack = Vec::new();
+    let mut budget = DraftBudget(0);
+    for (source, operation) in operations.iter().enumerate() {
+        budget.add(1, source)?;
+        match operation {
+            TransactionOp::CreatePackage { handle, .. }
+            | TransactionOp::CreateModule { handle, .. } => declare(&mut handles, *handle, source)?,
+            TransactionOp::CreateFunction {
+                handle,
+                parameters,
+                body,
+                ..
+            } => {
+                declare(&mut handles, *handle, source)?;
+                budget.add(parameters.len(), source)?;
+                for parameter in parameters {
+                    declare(&mut handles, parameter.handle, source)?;
+                }
+                if let Some(body) = body {
+                    budget.add(1, source)?;
+                    stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
+                }
+            }
+            TransactionOp::DefineFunctionBody { body, .. } => {
+                budget.add(1, source)?;
+                stack.push(Scan::Body(&body.operations, body.return_value, 0, source))
+            }
+            TransactionOp::InsertExpression { expression, .. } => {
+                stack.push(Scan::Expression(expression, 0, source))
+            }
+            TransactionOp::ReplaceOperation { replacement, .. }
+            | TransactionOp::RefineHole { replacement, .. } => {
+                if let OperationDraft::Call { arguments, .. } = replacement {
+                    budget.add(arguments.len(), source)?;
+                    for value in arguments {
+                        validate_draft_value(*value, source)?;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    while let Some(event) = stack.pop() {
+        match event {
+            Scan::Body(expressions, terminal, depth, source) => {
+                validate_draft_value(terminal, source)?;
+                if depth > MAX_STRUCTURED_DRAFT_DEPTH {
+                    return Err(LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "structured draft nesting exceeds request depth policy",
+                    )
+                    .at_operation(source));
+                }
+                for expression in expressions.iter().rev() {
+                    stack.push(Scan::Expression(expression, depth, source));
+                }
+            }
+            Scan::Expression(expression, depth, source) => {
+                budget.add(1, source)?;
+                declare(&mut handles, expression.handle, source)?;
+                match &expression.operation {
+                    ExpressionKindDraft::AddI64 { lhs, rhs }
+                    | ExpressionKindDraft::LtI64 { lhs, rhs } => {
+                        validate_draft_value(*lhs, source)?;
+                        validate_draft_value(*rhs, source)?;
+                    }
+                    ExpressionKindDraft::Call { arguments, .. } => {
+                        budget.add(arguments.len(), source)?;
+                        for value in arguments {
+                            validate_draft_value(*value, source)?;
+                        }
+                    }
+                    ExpressionKindDraft::If {
+                        condition,
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        validate_draft_value(*condition, source)?;
+                        budget.add(2, source)?;
+                        stack.push(Scan::Body(
+                            &else_body.operations,
+                            else_body.yield_value,
+                            depth + 1,
+                            source,
+                        ));
+                        stack.push(Scan::Body(
+                            &then_body.operations,
+                            then_body.yield_value,
+                            depth + 1,
+                            source,
+                        ));
+                    }
+                    ExpressionKindDraft::ForI64 {
+                        start,
+                        end_exclusive,
+                        initial,
+                        index_handle,
+                        carried_handle,
+                        body,
+                        ..
+                    } => {
+                        validate_draft_value(*start, source)?;
+                        validate_draft_value(*end_exclusive, source)?;
+                        validate_draft_value(*initial, source)?;
+                        declare(&mut handles, *index_handle, source)?;
+                        declare(&mut handles, *carried_handle, source)?;
+                        budget.add(1, source)?;
+                        stack.push(Scan::Body(
+                            &body.operations,
+                            body.yield_value,
+                            depth + 1,
+                            source,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    Ok(handles)
+}
+
+fn validate_draft_value(value: ValueDraft, source: usize) -> Result<()> {
+    if let ValueDraft::OperationResult { operation, output } = value
+        && output != 0
+    {
+        let mut error = LkError::new(
+            ErrorCode::InvalidOperand,
+            "structured operation result output must be zero for the closed single-result schema",
+        )
+        .at_operation(source);
+        if let NodeTarget::Local(handle) = operation {
+            error = error.for_handle(handle);
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 impl Workspace {
@@ -319,20 +1137,28 @@ impl Workspace {
             .at_revision(transaction.base_revision));
         }
         let base = self.snapshot(transaction.base_revision)?;
-        let (allocations, next_serial) = allocate_handles(base, &transaction.operations)?;
-        validate_response_spec(&request.response, &allocations)?;
+        let expanded = expand_transaction(base, &transaction.operations)?;
+        let (allocations, next_serial) = allocate_handles(
+            base,
+            &expanded.edits,
+            &expanded.edit_sources,
+            &expanded.explicit_handles,
+        )?;
+        validate_response_spec(&request.response, &allocations, &expanded.explicit_handles)?;
         let mut nodes = base.nodes.clone();
         let mut tombstones = base.tombstones.clone();
+        let mut provenance = BTreeMap::new();
 
-        for (index, operation) in transaction.operations.iter().enumerate() {
+        for (operation, source) in expanded.edits.iter().zip(&expanded.edit_sources) {
             if let Err(mut error) =
                 apply_operation(base, &mut nodes, &mut tombstones, &allocations, operation)
             {
                 if error.operation_index.is_none() {
-                    error = error.at_operation(index);
+                    error = error.at_operation(*source);
                 }
                 return Err(error);
             }
+            record_edit_provenance(operation, *source, &allocations, &mut provenance)?;
         }
 
         if nodes == base.nodes && tombstones == base.tombstones && next_serial == base.next_serial {
@@ -362,11 +1188,38 @@ impl Workspace {
             Ok(candidate) => Arc::new(candidate),
             Err(mut error) => {
                 if error.operation_index.is_none() {
-                    error = error.at_operation(transaction.operations.len().saturating_sub(1));
+                    let source = error_source_from_provenance(&error, &provenance)
+                        .unwrap_or_else(|| transaction.operations.len().saturating_sub(1));
+                    error = error.at_operation(source);
+                    if error.local_handle.is_none() {
+                        error.local_handle = error_handle_from_provenance(
+                            &error,
+                            &provenance,
+                            &allocations,
+                            &expanded.explicit_handles,
+                        );
+                    }
                 }
                 return Err(error);
             }
         };
+        if let Err(mut error) = crate::graph::validate_history_transition(base, &candidate) {
+            error.code = ErrorCode::InvalidOperand;
+            if error.operation_index.is_none() {
+                let source = error_source_from_provenance(&error, &provenance)
+                    .unwrap_or_else(|| transaction.operations.len().saturating_sub(1));
+                error = error.at_operation(source);
+                if error.local_handle.is_none() {
+                    error.local_handle = error_handle_from_provenance(
+                        &error,
+                        &provenance,
+                        &allocations,
+                        &expanded.explicit_handles,
+                    );
+                }
+            }
+            return Err(error);
+        }
         let semantic_diff = diff::between(base, &candidate);
         let blockers_before = query::workspace_blockers(base);
         let blockers_after = query::workspace_blockers(&candidate);
@@ -413,9 +1266,130 @@ impl Workspace {
     }
 }
 
+#[derive(Clone, Copy)]
+struct NodeProvenance {
+    source: usize,
+    offending_use: bool,
+}
+
+fn record_edit_provenance(
+    edit: &CanonicalEdit,
+    source: usize,
+    allocations: &BTreeMap<LocalHandle, NodeId>,
+    provenance: &mut BTreeMap<NodeId, NodeProvenance>,
+) -> Result<()> {
+    let (target, offending_use) = match edit {
+        CanonicalEdit::CreateOperation { handle, .. } => {
+            (Some(allocated(allocations, *handle)?), true)
+        }
+        CanonicalEdit::CreatePackage { handle, .. }
+        | CanonicalEdit::CreateModule { handle, .. }
+        | CanonicalEdit::CreateFunction { handle, .. }
+        | CanonicalEdit::CreateParameter { handle, .. }
+        | CanonicalEdit::CreateRegion { handle, .. }
+        | CanonicalEdit::CreateBlock { handle, .. }
+        | CanonicalEdit::CreateBlockArgument { handle, .. } => {
+            (Some(allocated(allocations, *handle)?), false)
+        }
+        CanonicalEdit::ReplaceOperation { operation, .. }
+        | CanonicalEdit::ReplaceOperand { operation, .. } => {
+            (Some(resolve_for_provenance(*operation, allocations)?), true)
+        }
+        CanonicalEdit::RefineHole { hole, .. } => {
+            (Some(resolve_for_provenance(*hole, allocations)?), true)
+        }
+        CanonicalEdit::SetFunctionBody { function, .. } => {
+            (Some(resolve_for_provenance(*function, allocations)?), false)
+        }
+        CanonicalEdit::SetEntryFunction { package, .. } => {
+            (Some(resolve_for_provenance(*package, allocations)?), false)
+        }
+        CanonicalEdit::RenameNode { node, .. } => {
+            (Some(resolve_for_provenance(*node, allocations)?), false)
+        }
+        CanonicalEdit::DeleteOwnedSubtree { root } => {
+            (Some(resolve_for_provenance(*root, allocations)?), false)
+        }
+    };
+    if let Some(target) = target {
+        provenance.insert(
+            target,
+            NodeProvenance {
+                source,
+                offending_use,
+            },
+        );
+    }
+    Ok(())
+}
+
+fn resolve_for_provenance(
+    target: NodeTarget,
+    allocations: &BTreeMap<LocalHandle, NodeId>,
+) -> Result<NodeId> {
+    match target {
+        NodeTarget::Existing(node) => Ok(node),
+        NodeTarget::Local(handle) => allocated(allocations, handle),
+    }
+}
+
+fn preferred_error_provenance<'a>(
+    error: &LkError,
+    provenance: &'a BTreeMap<NodeId, NodeProvenance>,
+) -> Option<(NodeId, &'a NodeProvenance)> {
+    error
+        .related
+        .iter()
+        .find_map(|node| {
+            provenance
+                .get(node)
+                .filter(|fact| fact.offending_use)
+                .map(|fact| (*node, fact))
+        })
+        .or_else(|| {
+            error.target.and_then(|node| {
+                provenance
+                    .get(&node)
+                    .filter(|fact| fact.offending_use)
+                    .map(|fact| (node, fact))
+            })
+        })
+        .or_else(|| {
+            error
+                .target
+                .and_then(|node| provenance.get(&node).map(|fact| (node, fact)))
+        })
+        .or_else(|| {
+            error
+                .related
+                .iter()
+                .find_map(|node| provenance.get(node).map(|fact| (*node, fact)))
+        })
+}
+
+fn error_source_from_provenance(
+    error: &LkError,
+    provenance: &BTreeMap<NodeId, NodeProvenance>,
+) -> Option<usize> {
+    preferred_error_provenance(error, provenance).map(|(_, fact)| fact.source)
+}
+
+fn error_handle_from_provenance(
+    error: &LkError,
+    provenance: &BTreeMap<NodeId, NodeProvenance>,
+    allocations: &BTreeMap<LocalHandle, NodeId>,
+    explicit_handles: &BTreeSet<LocalHandle>,
+) -> Option<LocalHandle> {
+    let (node, _) = preferred_error_provenance(error, provenance)?;
+    allocations.iter().find_map(|(handle, allocated)| {
+        (*allocated == node && explicit_handles.contains(handle)).then_some(*handle)
+    })
+}
+
 fn validate_response_spec(
     response: &TransactionResponseSpec,
     allocations: &BTreeMap<LocalHandle, NodeId>,
+    explicit_handles: &BTreeSet<LocalHandle>,
 ) -> Result<()> {
     if response.return_handles.len() > MAX_RETURNED_BINDINGS {
         return Err(LkError::new(
@@ -429,53 +1403,92 @@ fn validate_response_spec(
             return Err(LkError::new(
                 ErrorCode::InvalidHandle,
                 "selected return handles must be unique and strictly increasing",
-            ));
+            )
+            .for_handle(*handle));
         }
-        if !allocations.contains_key(handle) {
+        if !explicit_handles.contains(handle) || !allocations.contains_key(handle) {
             return Err(LkError::new(
                 ErrorCode::InvalidHandle,
                 "selected return handle is not declared by this transaction",
-            ));
+            )
+            .for_handle(*handle));
         }
         previous = Some(*handle);
     }
     Ok(())
 }
 
+fn allocation_error(
+    code: ErrorCode,
+    message: impl Into<String>,
+    source: usize,
+    handle: LocalHandle,
+    explicit_handles: &BTreeSet<LocalHandle>,
+) -> LkError {
+    let error = LkError::new(code, message).at_operation(source);
+    if explicit_handles.contains(&handle) {
+        error.for_handle(handle)
+    } else {
+        error
+    }
+}
+
 fn allocate_handles(
     base: &Snapshot,
-    operations: &[TransactionOp],
+    operations: &[CanonicalEdit],
+    edit_sources: &[usize],
+    explicit_handles: &BTreeSet<LocalHandle>,
 ) -> Result<(BTreeMap<LocalHandle, NodeId>, u64)> {
     let mut allocations = BTreeMap::new();
     let mut next = base.next_serial;
-    for (index, operation) in operations.iter().enumerate() {
-        let Some(handle) = operation.created_handle() else {
+    for (operation, source) in operations.iter().zip(edit_sources) {
+        let Some(handle) = canonical_created_handle(operation) else {
             continue;
         };
         if allocations.contains_key(&handle) {
-            return Err(LkError::new(
+            return Err(allocation_error(
                 ErrorCode::DuplicateHandle,
                 "transaction-local handle is declared more than once",
-            )
-            .at_operation(index));
+                *source,
+                handle,
+                explicit_handles,
+            ));
         }
         let id = NodeId::new(base.workspace(), next).map_err(|error| {
-            LkError::new(
+            allocation_error(
                 ErrorCode::PolicyExceeded,
                 format!("node identity allocation failed: {error}"),
+                *source,
+                handle,
+                explicit_handles,
             )
-            .at_operation(index)
         })?;
         next = next.checked_add(1).ok_or_else(|| {
-            LkError::new(
+            allocation_error(
                 ErrorCode::PolicyExceeded,
                 "node identity serial is exhausted",
+                *source,
+                handle,
+                explicit_handles,
             )
-            .at_operation(index)
         })?;
         allocations.insert(handle, id);
     }
     Ok((allocations, next))
+}
+
+fn canonical_created_handle(operation: &CanonicalEdit) -> Option<LocalHandle> {
+    match operation {
+        CanonicalEdit::CreatePackage { handle, .. }
+        | CanonicalEdit::CreateModule { handle, .. }
+        | CanonicalEdit::CreateFunction { handle, .. }
+        | CanonicalEdit::CreateParameter { handle, .. }
+        | CanonicalEdit::CreateRegion { handle, .. }
+        | CanonicalEdit::CreateBlock { handle, .. }
+        | CanonicalEdit::CreateBlockArgument { handle, .. }
+        | CanonicalEdit::CreateOperation { handle, .. } => Some(*handle),
+        _ => None,
+    }
 }
 
 fn apply_operation(
@@ -483,10 +1496,10 @@ fn apply_operation(
     nodes: &mut BTreeMap<NodeId, Node>,
     tombstones: &mut BTreeSet<u64>,
     allocations: &BTreeMap<LocalHandle, NodeId>,
-    operation: &TransactionOp,
+    operation: &CanonicalEdit,
 ) -> Result<()> {
     match operation {
-        TransactionOp::CreatePackage { handle, name } => {
+        CanonicalEdit::CreatePackage { handle, name } => {
             let id = allocated(allocations, *handle)?;
             insert_new(
                 nodes,
@@ -504,7 +1517,7 @@ fn apply_operation(
             };
             packages.push(id);
         }
-        TransactionOp::CreateModule {
+        CanonicalEdit::CreateModule {
             handle,
             package,
             name,
@@ -528,7 +1541,7 @@ fn apply_operation(
             };
             modules.push(id);
         }
-        TransactionOp::CreateFunction {
+        CanonicalEdit::CreateFunction {
             handle,
             module,
             name,
@@ -554,7 +1567,7 @@ fn apply_operation(
             };
             functions.push(id);
         }
-        TransactionOp::CreateParameter {
+        CanonicalEdit::CreateParameter {
             handle,
             function,
             name,
@@ -591,20 +1604,37 @@ fn apply_operation(
             };
             parameters.push(id);
         }
-        TransactionOp::CreateRegion { handle, function } => {
+        CanonicalEdit::CreateRegion { handle, owner } => {
             let id = allocated(allocations, *handle)?;
-            let function = resolve(*function, allocations, base.workspace())?;
-            require_kind(nodes, function, NodeKind::Function)?;
+            let owner = resolve(*owner, allocations, base.workspace())?;
+            match require_kind(
+                nodes,
+                owner,
+                nodes
+                    .get(&owner)
+                    .map(Node::kind)
+                    .unwrap_or(NodeKind::WorkspaceRoot),
+            )? {
+                Node::Function { .. } | Node::Operation { .. } => {}
+                node => {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "region owner must be a function or structured operation",
+                    )
+                    .for_node(owner)
+                    .with_kinds(NodeKind::Operation, node.kind()));
+                }
+            }
             insert_new(
                 nodes,
                 id,
                 Node::Region {
-                    owner: function,
+                    owner,
                     blocks: Vec::new(),
                 },
             )?;
         }
-        TransactionOp::CreateBlock { handle, region } => {
+        CanonicalEdit::CreateBlock { handle, region } => {
             let id = allocated(allocations, *handle)?;
             let region = resolve(*region, allocations, base.workspace())?;
             require_kind(nodes, region, NodeKind::Region)?;
@@ -613,6 +1643,7 @@ fn apply_operation(
                 id,
                 Node::Block {
                     owner: region,
+                    arguments: Vec::new(),
                     operations: Vec::new(),
                     terminator: None,
                 },
@@ -623,7 +1654,35 @@ fn apply_operation(
             };
             blocks.push(id);
         }
-        TransactionOp::CreateOperation {
+        CanonicalEdit::CreateBlockArgument { handle, block, ty } => {
+            let id = allocated(allocations, *handle)?;
+            let block = resolve(*block, allocations, base.workspace())?;
+            let ordinal = match require_kind(nodes, block, NodeKind::Block)? {
+                Node::Block { arguments, .. } => u32::try_from(arguments.len()).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "block argument ordinal exceeds representation",
+                    )
+                    .for_node(block)
+                })?,
+                _ => unreachable!(),
+            };
+            insert_new(
+                nodes,
+                id,
+                Node::BlockArgument {
+                    owner: block,
+                    ordinal,
+                    ty: *ty,
+                },
+            )?;
+            let Node::Block { arguments, .. } = require_kind_mut(nodes, block, NodeKind::Block)?
+            else {
+                unreachable!()
+            };
+            arguments.push(id);
+        }
+        CanonicalEdit::CreateOperation {
             handle,
             block,
             before,
@@ -679,7 +1738,7 @@ fn apply_operation(
                 operations.push(id);
             }
         }
-        TransactionOp::SetFunctionBody { function, region } => {
+        CanonicalEdit::SetFunctionBody { function, region } => {
             let function = resolve(*function, allocations, base.workspace())?;
             let region = resolve(*region, allocations, base.workspace())?;
             require_kind(nodes, region, NodeKind::Region)?;
@@ -688,9 +1747,16 @@ fn apply_operation(
             else {
                 return Err(invariant("function kind changed during staging"));
             };
+            if body.is_some() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidContainment,
+                    "function body is already defined",
+                )
+                .for_node(function));
+            }
             *body = Some(region);
         }
-        TransactionOp::SetEntryFunction { package, function } => {
+        CanonicalEdit::SetEntryFunction { package, function } => {
             let package = resolve(*package, allocations, base.workspace())?;
             let function = resolve(*function, allocations, base.workspace())?;
             require_kind(nodes, function, NodeKind::Function)?;
@@ -700,7 +1766,7 @@ fn apply_operation(
             };
             *entry = Some(function);
         }
-        TransactionOp::RenameNode { node, name } => {
+        CanonicalEdit::RenameNode { node, name } => {
             let node = resolve(*node, allocations, base.workspace())?;
             let target = nodes.get_mut(&node).ok_or_else(|| missing(node))?;
             if !target.set_name(name.clone()) {
@@ -711,31 +1777,41 @@ fn apply_operation(
                 .for_node(node));
             }
         }
-        TransactionOp::ReplaceOperation {
+        CanonicalEdit::ReplaceOperation {
             operation,
             replacement,
         } => {
             let operation = resolve(*operation, allocations, base.workspace())?;
             let replacement = resolve_operation(replacement, allocations, base.workspace())?;
+            let current = match require_kind(nodes, operation, NodeKind::Operation)? {
+                Node::Operation { operation, .. } => operation.clone(),
+                _ => return Err(invariant("operation kind changed during staging")),
+            };
+            let current_results = operation_result_types_in_nodes(nodes, &current);
+            let replacement_results = operation_result_types_in_nodes(nodes, &replacement);
+            if current.code() != replacement.code()
+                || current_results.is_none()
+                || current_results != replacement_results
+                || current.is_terminator() != replacement.is_terminator()
+                || current.owned_region_count() != replacement.owned_region_count()
+                || !(0..current.owned_region_count())
+                    .all(|index| current.owned_region(index) == replacement.owned_region(index))
+            {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "identity-preserving operation replacement requires the same operation, result, and region contract",
+                )
+                .for_node(operation));
+            }
             let Node::Operation {
-                operation: current, ..
+                operation: target, ..
             } = require_kind_mut(nodes, operation, NodeKind::Operation)?
             else {
                 return Err(invariant("operation kind changed during staging"));
             };
-            if current.code() != replacement.code()
-                || !current.same_result_contract(&replacement)
-                || current.is_terminator() != replacement.is_terminator()
-            {
-                return Err(LkError::new(
-                    ErrorCode::InvalidOperand,
-                    "identity-preserving operation replacement requires the same operation contract",
-                )
-                .for_node(operation));
-            }
-            *current = replacement;
+            *target = replacement;
         }
-        TransactionOp::ReplaceOperand {
+        CanonicalEdit::ReplaceOperand {
             operation,
             index,
             value,
@@ -756,7 +1832,7 @@ fn apply_operation(
                 .for_node(operation));
             }
         }
-        TransactionOp::RefineHole { hole, replacement } => {
+        CanonicalEdit::RefineHole { hole, replacement } => {
             let hole = resolve(*hole, allocations, base.workspace())?;
             let replacement = resolve_operation(replacement, allocations, base.workspace())?;
             let (owner, expected, current_result_count) =
@@ -792,6 +1868,7 @@ fn apply_operation(
             }
             if !replacement.is_complete()
                 || replacement.is_terminator()
+                || replacement.owned_region_count() != 0
                 || matches!(replacement, OperationKind::Hole { .. })
             {
                 return Err(LkError::new(
@@ -800,7 +1877,8 @@ fn apply_operation(
                 )
                 .for_node(hole));
             }
-            let actual = replacement.result_type(0, None);
+            let actual = operation_result_types_in_nodes(nodes, &replacement)
+                .and_then(|types| types.first().copied());
             if current_result_count != replacement.result_count() || actual != Some(expected) {
                 let mut error = LkError::new(
                     ErrorCode::TypeMismatch,
@@ -822,7 +1900,7 @@ fn apply_operation(
             };
             *current = replacement;
         }
-        TransactionOp::DeleteOwnedSubtree { root } => {
+        CanonicalEdit::DeleteOwnedSubtree { root } => {
             let root = resolve(*root, allocations, base.workspace())?;
             delete_subtree(base.root, nodes, tombstones, root)?;
         }
@@ -836,16 +1914,61 @@ fn resolve_operation(
     workspace: WorkspaceId,
 ) -> Result<OperationKind> {
     Ok(match operation {
+        OperationDraft::ConstUnit => OperationKind::ConstUnit,
         OperationDraft::ConstI64(value) => OperationKind::ConstI64(*value),
         OperationDraft::ConstBool(value) => OperationKind::ConstBool(*value),
         OperationDraft::AddI64 { lhs, rhs } => OperationKind::AddI64 {
             lhs: resolve_value(*lhs, allocations, workspace)?,
             rhs: resolve_value(*rhs, allocations, workspace)?,
         },
+        OperationDraft::LtI64 { lhs, rhs } => OperationKind::LtI64 {
+            lhs: resolve_value(*lhs, allocations, workspace)?,
+            rhs: resolve_value(*rhs, allocations, workspace)?,
+        },
+        OperationDraft::Call {
+            function,
+            arguments,
+        } => OperationKind::Call {
+            function: resolve(*function, allocations, workspace)?,
+            arguments: arguments
+                .iter()
+                .copied()
+                .map(|value| resolve_value(value, allocations, workspace))
+                .collect::<Result<Vec<_>>>()?,
+        },
         OperationDraft::Hole { expected } => OperationKind::Hole {
             expected: *expected,
         },
+        OperationDraft::If {
+            condition,
+            result,
+            then_region,
+            else_region,
+        } => OperationKind::If {
+            condition: resolve_value(*condition, allocations, workspace)?,
+            result: *result,
+            then_region: resolve(*then_region, allocations, workspace)?,
+            else_region: resolve(*else_region, allocations, workspace)?,
+        },
+        OperationDraft::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            body_region,
+        } => OperationKind::ForI64 {
+            start: resolve_value(*start, allocations, workspace)?,
+            end_exclusive: resolve_value(*end_exclusive, allocations, workspace)?,
+            step: *step,
+            initial: resolve_value(*initial, allocations, workspace)?,
+            carried: *carried,
+            body_region: resolve(*body_region, allocations, workspace)?,
+        },
         OperationDraft::Return { value } => OperationKind::Return {
+            value: resolve_value(*value, allocations, workspace)?,
+        },
+        OperationDraft::Yield { value } => OperationKind::Yield {
             value: resolve_value(*value, allocations, workspace)?,
         },
     })
@@ -860,11 +1983,29 @@ fn resolve_value(
         ValueDraft::FunctionParameter(parameter) => {
             ValueRef::FunctionParameter(resolve(parameter, allocations, workspace)?)
         }
+        ValueDraft::BlockArgument(argument) => {
+            ValueRef::BlockArgument(resolve(argument, allocations, workspace)?)
+        }
         ValueDraft::OperationResult { operation, output } => ValueRef::OperationResult {
             operation: resolve(operation, allocations, workspace)?,
             output,
         },
     })
+}
+
+fn operation_result_types_in_nodes(
+    nodes: &BTreeMap<NodeId, Node>,
+    operation: &OperationKind,
+) -> Option<Vec<SemanticType>> {
+    (0..operation.result_count())
+        .map(|index| match operation {
+            OperationKind::Call { function, .. } => match nodes.get(function) {
+                Some(Node::Function { result, .. }) if index == 0 => Some(*result),
+                _ => None,
+            },
+            _ => operation.result_type(index, None),
+        })
+        .collect()
 }
 
 fn resolve(
@@ -889,6 +2030,7 @@ fn resolve(
                 ErrorCode::InvalidHandle,
                 "transaction references an undeclared local handle",
             )
+            .for_handle(handle)
         }),
     }
 }
@@ -899,6 +2041,7 @@ fn allocated(allocations: &BTreeMap<LocalHandle, NodeId>, handle: LocalHandle) -
             ErrorCode::InvalidHandle,
             "create operation has no staged node allocation",
         )
+        .for_handle(handle)
     })
 }
 
@@ -1014,6 +2157,7 @@ fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId
         }
         Node::Region { blocks, .. } => remove_one(blocks, child),
         Node::Block {
+            arguments,
             operations,
             terminator,
             ..
@@ -1022,10 +2166,10 @@ fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId
                 *terminator = None;
                 true
             } else {
-                remove_one(operations, child)
+                remove_one(arguments, child) || remove_one(operations, child)
             }
         }
-        Node::Parameter { .. } | Node::Operation { .. } => false,
+        Node::Parameter { .. } | Node::BlockArgument { .. } | Node::Operation { .. } => false,
     };
     if !removed {
         return Err(LkError::new(
@@ -1057,12 +2201,12 @@ fn invariant(message: &str) -> LkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::artifact;
 
     fn request(transaction: &Transaction) -> ApplyTransactionRequest {
-        let mut return_handles: Vec<LocalHandle> = transaction
-            .operations
-            .iter()
-            .filter_map(TransactionOp::created_handle)
+        let mut return_handles: Vec<LocalHandle> = scan_explicit_handles(&transaction.operations)
+            .expect("valid test handles")
+            .into_iter()
             .collect();
         return_handles.sort();
         return_handles.truncate(MAX_RETURNED_BINDINGS);
@@ -1101,6 +2245,298 @@ mod tests {
         }
     }
 
+    fn local_handle(value: u32) -> NodeTarget {
+        NodeTarget::Local(LocalHandle::new(value))
+    }
+    fn draft_result(value: u32) -> ValueDraft {
+        ValueDraft::OperationResult {
+            operation: local_handle(value),
+            output: 0,
+        }
+    }
+    fn draft_expression(handle: u32, operation: ExpressionKindDraft) -> ExpressionDraft {
+        ExpressionDraft {
+            handle: LocalHandle::new(handle),
+            operation,
+        }
+    }
+    fn structured_semantic_request(
+        id: WorkspaceId,
+        mut operations: Vec<TransactionOp>,
+    ) -> ApplyTransactionRequest {
+        let mut all = vec![
+            TransactionOp::CreatePackage {
+                handle: LocalHandle::new(1),
+                name: "package".into(),
+            },
+            TransactionOp::CreateModule {
+                handle: LocalHandle::new(2),
+                package: local_handle(1),
+                name: "module".into(),
+            },
+        ];
+        all.append(&mut operations);
+        ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: all,
+            },
+            response: TransactionResponseSpec::default(),
+        }
+    }
+
+    #[test]
+    fn negative_for_step_rejects_atomically() {
+        let id = WorkspaceId::from_bytes([0xa1; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateFunction {
+                handle: LocalHandle::new(3),
+                module: local_handle(2),
+                name: "negative".into(),
+                parameters: Vec::new(),
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        draft_expression(4, ExpressionKindDraft::ConstI64(0)),
+                        draft_expression(5, ExpressionKindDraft::ConstI64(2)),
+                        draft_expression(
+                            6,
+                            ExpressionKindDraft::ForI64 {
+                                start: draft_result(4),
+                                end_exclusive: draft_result(5),
+                                step: -1,
+                                initial: draft_result(4),
+                                carried: SemanticType::I64,
+                                index_handle: LocalHandle::new(7),
+                                carried_handle: LocalHandle::new(8),
+                                body: YieldingBodyDraft {
+                                    operations: Vec::new(),
+                                    yield_value: ValueDraft::BlockArgument(local_handle(8)),
+                                },
+                            },
+                        ),
+                    ],
+                    return_value: draft_result(6),
+                }),
+            }],
+        );
+        let error = workspace
+            .prepare_transaction(&request)
+            .expect_err("negative step");
+        assert_eq!(error.code, ErrorCode::InvalidOperand);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn sibling_if_arm_local_capture_rejects_atomically() {
+        let id = WorkspaceId::from_bytes([0xa2; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateFunction {
+                handle: LocalHandle::new(3),
+                module: local_handle(2),
+                name: "sibling".into(),
+                parameters: Vec::new(),
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        draft_expression(4, ExpressionKindDraft::ConstBool(true)),
+                        draft_expression(
+                            5,
+                            ExpressionKindDraft::If {
+                                condition: draft_result(4),
+                                result: SemanticType::I64,
+                                then_body: YieldingBodyDraft {
+                                    operations: vec![draft_expression(
+                                        6,
+                                        ExpressionKindDraft::ConstI64(1),
+                                    )],
+                                    yield_value: draft_result(6),
+                                },
+                                else_body: YieldingBodyDraft {
+                                    operations: Vec::new(),
+                                    yield_value: draft_result(6),
+                                },
+                            },
+                        ),
+                    ],
+                    return_value: draft_result(5),
+                }),
+            }],
+        );
+        let error = workspace
+            .prepare_transaction(&request)
+            .expect_err("sibling capture");
+        assert_eq!(error.code, ErrorCode::InvalidOperand);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn nested_local_escape_after_owning_operation_rejects_atomically() {
+        let id = WorkspaceId::from_bytes([0xa3; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateFunction {
+                handle: LocalHandle::new(3),
+                module: local_handle(2),
+                name: "escape".into(),
+                parameters: Vec::new(),
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        draft_expression(4, ExpressionKindDraft::ConstBool(true)),
+                        draft_expression(
+                            5,
+                            ExpressionKindDraft::If {
+                                condition: draft_result(4),
+                                result: SemanticType::I64,
+                                then_body: YieldingBodyDraft {
+                                    operations: vec![draft_expression(
+                                        6,
+                                        ExpressionKindDraft::ConstI64(1),
+                                    )],
+                                    yield_value: draft_result(6),
+                                },
+                                else_body: YieldingBodyDraft {
+                                    operations: vec![draft_expression(
+                                        7,
+                                        ExpressionKindDraft::ConstI64(2),
+                                    )],
+                                    yield_value: draft_result(7),
+                                },
+                            },
+                        ),
+                        draft_expression(
+                            8,
+                            ExpressionKindDraft::AddI64 {
+                                lhs: draft_result(6),
+                                rhs: draft_result(5),
+                            },
+                        ),
+                    ],
+                    return_value: draft_result(8),
+                }),
+            }],
+        );
+        let error = workspace
+            .prepare_transaction(&request)
+            .expect_err("nested escape");
+        assert_eq!(error.code, ErrorCode::InvalidOperand);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn cross_function_direct_value_use_rejects_atomically() {
+        let id = WorkspaceId::from_bytes([0xa4; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "producer".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![draft_expression(4, ExpressionKindDraft::ConstI64(1))],
+                        return_value: draft_result(4),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(5),
+                    module: local_handle(2),
+                    name: "consumer".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: Vec::new(),
+                        return_value: draft_result(4),
+                    }),
+                },
+            ],
+        );
+        let error = workspace
+            .prepare_transaction(&request)
+            .expect_err("cross function value");
+        assert_eq!(error.code, ErrorCode::InvalidOperand);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn same_workspace_cross_module_call_succeeds() {
+        let id = WorkspaceId::from_bytes([0xa5; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(1),
+                        name: "package".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: local_handle(1),
+                        name: "left".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(3),
+                        package: local_handle(1),
+                        name: "right".into(),
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(4),
+                        module: local_handle(2),
+                        name: "callee".into(),
+                        parameters: Vec::new(),
+                        result: SemanticType::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![draft_expression(5, ExpressionKindDraft::ConstI64(7))],
+                            return_value: draft_result(5),
+                        }),
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(6),
+                        module: local_handle(3),
+                        name: "caller".into(),
+                        parameters: Vec::new(),
+                        result: SemanticType::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![draft_expression(
+                                7,
+                                ExpressionKindDraft::Call {
+                                    function: local_handle(4),
+                                    arguments: Vec::new(),
+                                },
+                            )],
+                            return_value: draft_result(7),
+                        }),
+                    },
+                    TransactionOp::SetEntryFunction {
+                        package: local_handle(1),
+                        function: local_handle(6),
+                    },
+                ],
+            },
+            response: TransactionResponseSpec::default(),
+        };
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("cross-module call");
+        assert!(query::workspace_blockers(&prepared.snapshot).is_empty());
+    }
+
     #[test]
     fn failed_batches_and_validate_only_do_not_consume_node_ids() {
         let id = WorkspaceId::from_bytes([11; 16]);
@@ -1119,13 +2555,17 @@ mod tests {
                     handle: LocalHandle::new(3),
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
+                    parameters: Vec::new(),
                     result: SemanticType::I64,
+                    body: None,
                 },
                 TransactionOp::CreateFunction {
                     handle: LocalHandle::new(4),
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
+                    parameters: Vec::new(),
                     result: SemanticType::I64,
+                    body: None,
                 },
             ],
         };
@@ -1145,7 +2585,9 @@ mod tests {
                 handle: LocalHandle::new(5),
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
+                parameters: Vec::new(),
                 result: SemanticType::I64,
+                body: None,
             }],
         };
         let predicted = commit(&mut workspace, &validate_only).expect("validate only");
@@ -1177,7 +2619,9 @@ mod tests {
                 handle: LocalHandle::new(3),
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
+                parameters: Vec::new(),
                 result: SemanticType::I64,
+                body: None,
             }],
         };
         let created = commit(&mut workspace, &create).expect("create function");
@@ -1214,7 +2658,9 @@ mod tests {
                 handle: LocalHandle::new(4),
                 module: NodeTarget::Existing(module),
                 name: "replacement".to_owned(),
+                parameters: Vec::new(),
                 result: SemanticType::I64,
+                body: None,
             }],
         };
         let replacement = commit(&mut workspace, &replacement).expect("replacement function");
@@ -1228,9 +2674,14 @@ mod tests {
         let package = LocalHandle::new(1);
         let module = LocalHandle::new(2);
         let function = LocalHandle::new(3);
-        let region = LocalHandle::new(4);
-        let block = LocalHandle::new(5);
-        let mut operations = vec![
+        let first_value = LocalHandle::new(6);
+        let body_operations = (0..10_000_u32)
+            .map(|offset| ExpressionDraft {
+                handle: LocalHandle::new(6 + offset),
+                operation: ExpressionKindDraft::ConstI64(i64::from(offset)),
+            })
+            .collect();
+        let operations = vec![
             TransactionOp::CreatePackage {
                 handle: package,
                 name: "package".to_owned(),
@@ -1244,47 +2695,21 @@ mod tests {
                 handle: function,
                 module: NodeTarget::Local(module),
                 name: "main".to_owned(),
+                parameters: Vec::new(),
                 result: SemanticType::I64,
-            },
-            TransactionOp::CreateRegion {
-                handle: region,
-                function: NodeTarget::Local(function),
-            },
-            TransactionOp::CreateBlock {
-                handle: block,
-                region: NodeTarget::Local(region),
-            },
-        ];
-        let first_value = LocalHandle::new(6);
-        for offset in 0..10_000_u32 {
-            operations.push(TransactionOp::CreateOperation {
-                handle: LocalHandle::new(6 + offset),
-                block: NodeTarget::Local(block),
-                before: None,
-                operation: OperationDraft::ConstI64(i64::from(offset)),
-            });
-        }
-        operations.extend([
-            TransactionOp::CreateOperation {
-                handle: LocalHandle::new(10_006),
-                block: NodeTarget::Local(block),
-                before: None,
-                operation: OperationDraft::Return {
-                    value: ValueDraft::OperationResult {
+                body: Some(FunctionBodyDraft {
+                    operations: body_operations,
+                    return_value: ValueDraft::OperationResult {
                         operation: NodeTarget::Local(first_value),
                         output: 0,
                     },
-                },
-            },
-            TransactionOp::SetFunctionBody {
-                function: NodeTarget::Local(function),
-                region: NodeTarget::Local(region),
+                }),
             },
             TransactionOp::SetEntryFunction {
                 package: NodeTarget::Local(package),
                 function: NodeTarget::Local(function),
             },
-        ]);
+        ];
         let create = Transaction {
             workspace: id,
             base_revision: Revision::INITIAL,
@@ -1340,65 +2765,48 @@ mod tests {
                     handle: LocalHandle::new(3),
                     module: local(LocalHandle::new(2)),
                     name: "main".to_owned(),
+                    parameters: Vec::new(),
                     result: SemanticType::I64,
-                },
-                TransactionOp::CreateRegion {
-                    handle: LocalHandle::new(4),
-                    function: local(LocalHandle::new(3)),
-                },
-                TransactionOp::CreateBlock {
-                    handle: LocalHandle::new(5),
-                    region: local(LocalHandle::new(4)),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(6),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstI64(40),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(7),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstI64(2),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(8),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstBool(true),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(9),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::Hole {
-                        expected: SemanticType::I64,
-                    },
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(10),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstI64(99),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(11),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::Return {
-                        value: value(LocalHandle::new(9)),
-                    },
-                },
-                TransactionOp::SetFunctionBody {
-                    function: local(LocalHandle::new(3)),
-                    region: local(LocalHandle::new(4)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(6),
+                                operation: ExpressionKindDraft::ConstI64(40),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(7),
+                                operation: ExpressionKindDraft::ConstI64(2),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(8),
+                                operation: ExpressionKindDraft::ConstBool(true),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(9),
+                                operation: ExpressionKindDraft::Hole {
+                                    expected: SemanticType::I64,
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(10),
+                                operation: ExpressionKindDraft::ConstI64(99),
+                            },
+                        ],
+                        return_value: value(LocalHandle::new(9)),
+                    }),
                 },
                 TransactionOp::SetEntryFunction {
                     package: local(LocalHandle::new(1)),
                     function: local(LocalHandle::new(3)),
                 },
             ],
+        }
+    }
+
+    fn prepared_operation_owner(snapshot: &Snapshot, operation: NodeId) -> NodeId {
+        match snapshot.node(operation).expect("operation") {
+            Node::Operation { owner, .. } => *owner,
+            _ => panic!("operation kind"),
         }
     }
 
@@ -1668,8 +3076,14 @@ mod tests {
         let hole = binding(&created, 9);
         let forty = binding(&created, 6);
         let two = binding(&created, 7);
-        let block = binding(&created, 5);
-        let return_operation = binding(&created, 11);
+        let block = prepared_operation_owner(workspace.head().expect("head"), hole);
+        let return_operation = match workspace.head().expect("head").node(block).expect("block") {
+            Node::Block {
+                terminator: Some(terminator),
+                ..
+            } => *terminator,
+            _ => panic!("block terminator"),
+        };
         let old = workspace
             .snapshot(Revision::new(1))
             .expect("old snapshot")
@@ -1748,13 +3162,783 @@ mod tests {
     }
 
     #[test]
+    fn hole_refinement_to_identity_targeted_call_uses_snapshot_signature() {
+        let id = WorkspaceId::from_bytes([0x79; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
+        let module = binding(&created, 2);
+        let hole = binding(&created, 9);
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(12),
+                    module: NodeTarget::Existing(module),
+                    name: "callee".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: None,
+                },
+                TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(hole),
+                    replacement: OperationDraft::Call {
+                        function: NodeTarget::Local(LocalHandle::new(12)),
+                        arguments: vec![],
+                    },
+                },
+            ],
+        };
+        let prepared = workspace
+            .prepare_transaction(&request(&transaction))
+            .expect("call refinement");
+        let Node::Operation {
+            operation:
+                OperationKind::Call {
+                    function,
+                    arguments,
+                },
+            ..
+        } = prepared.snapshot.node(hole).expect("refined call")
+        else {
+            panic!("call refinement kind")
+        };
+        assert_eq!(*function, binding(&prepared.receipt, 12));
+        assert!(arguments.is_empty());
+        assert!(
+            diff::between(workspace.head().expect("old head"), &prepared.snapshot)
+                .changes
+                .iter()
+                .any(|change| matches!(
+                    change.kind,
+                    crate::diff::ChangeKind::OperationRefined {
+                        after: crate::schema::OperationCode::Call,
+                        ..
+                    }
+                ))
+        );
+    }
+
+    #[test]
+    fn structured_expansion_is_depth_first_predictive_and_supports_forward_calls() {
+        let id = WorkspaceId::from_bytes([0x7a; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let result = |handle| ValueDraft::OperationResult {
+            operation: local(handle),
+            output: 0,
+        };
+        let block_argument = |handle| ValueDraft::BlockArgument(local(handle));
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::ValidateOnly,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(5),
+                    module: local(2),
+                    name: "main".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(6),
+                                operation: ExpressionKindDraft::ConstI64(0),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(7),
+                                operation: ExpressionKindDraft::ConstI64(10),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(8),
+                                operation: ExpressionKindDraft::LtI64 {
+                                    lhs: result(6),
+                                    rhs: result(7),
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(9),
+                                operation: ExpressionKindDraft::ForI64 {
+                                    start: result(6),
+                                    end_exclusive: result(7),
+                                    step: 1,
+                                    initial: result(6),
+                                    carried: SemanticType::I64,
+                                    index_handle: LocalHandle::new(10),
+                                    carried_handle: LocalHandle::new(11),
+                                    body: YieldingBodyDraft {
+                                        operations: vec![ExpressionDraft {
+                                            handle: LocalHandle::new(12),
+                                            operation: ExpressionKindDraft::AddI64 {
+                                                lhs: block_argument(11),
+                                                rhs: block_argument(10),
+                                            },
+                                        }],
+                                        yield_value: result(12),
+                                    },
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(13),
+                                operation: ExpressionKindDraft::If {
+                                    condition: result(8),
+                                    result: SemanticType::I64,
+                                    then_body: YieldingBodyDraft {
+                                        operations: vec![ExpressionDraft {
+                                            handle: LocalHandle::new(14),
+                                            operation: ExpressionKindDraft::Call {
+                                                function: local(20),
+                                                arguments: vec![result(9)],
+                                            },
+                                        }],
+                                        yield_value: result(14),
+                                    },
+                                    else_body: YieldingBodyDraft {
+                                        operations: vec![ExpressionDraft {
+                                            handle: LocalHandle::new(15),
+                                            operation: ExpressionKindDraft::ConstI64(0),
+                                        }],
+                                        yield_value: result(15),
+                                    },
+                                },
+                            },
+                        ],
+                        return_value: result(13),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(20),
+                    module: local(2),
+                    name: "later".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(21),
+                        name: "value".into(),
+                        ty: SemanticType::I64,
+                    }],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: Vec::new(),
+                        return_value: ValueDraft::FunctionParameter(local(21)),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(5),
+                },
+            ],
+        };
+        let response = TransactionResponseSpec {
+            return_handles: [1, 2, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20, 21]
+                .into_iter()
+                .map(LocalHandle::new)
+                .collect(),
+        };
+        let predicted = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: transaction.clone(),
+                response: response.clone(),
+            })
+            .expect("validate structured");
+        assert_eq!(predicted.receipt.created_count, 30);
+        assert_eq!(binding(&predicted.receipt, 5).serial(), 4);
+        assert_eq!(binding(&predicted.receipt, 10).serial(), 13);
+        assert_eq!(binding(&predicted.receipt, 11).serial(), 14);
+        assert_eq!(binding(&predicted.receipt, 20).serial(), 27);
+        let Node::Operation {
+            operation: OperationKind::Call { function, .. },
+            ..
+        } = predicted
+            .snapshot
+            .node(binding(&predicted.receipt, 14))
+            .expect("call")
+        else {
+            panic!("call kind")
+        };
+        assert_eq!(*function, binding(&predicted.receipt, 20));
+        let mut committed_transaction = transaction;
+        committed_transaction.mode = TransactionMode::Commit;
+        let committed = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: committed_transaction,
+                response,
+            })
+            .expect("commit structured");
+        let mut expected = predicted.receipt;
+        expected.published = true;
+        assert_eq!(committed.receipt, expected);
+    }
+
+    #[test]
+    fn structured_handles_reject_zero_duplicates_undeclared_and_private_selection_atomically() {
+        let id = WorkspaceId::from_bytes([0x7b; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let base_transaction = |expression: ExpressionDraft| Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    name: "main".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![expression],
+                        return_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(LocalHandle::new(4)),
+                            output: 0,
+                        },
+                    }),
+                },
+            ],
+        };
+        let unchecked = |transaction| ApplyTransactionRequest {
+            transaction,
+            response: TransactionResponseSpec::default(),
+        };
+        let zero = base_transaction(ExpressionDraft {
+            handle: LocalHandle::new(0),
+            operation: ExpressionKindDraft::ConstI64(1),
+        });
+        let error = workspace
+            .prepare_transaction(&unchecked(zero))
+            .expect_err("zero");
+        assert_eq!(error.code, ErrorCode::InvalidHandle);
+        assert_eq!(error.operation_index, Some(2));
+        assert_eq!(error.local_handle, Some(LocalHandle::new(0)));
+        let duplicate = base_transaction(ExpressionDraft {
+            handle: LocalHandle::new(3),
+            operation: ExpressionKindDraft::ConstI64(1),
+        });
+        let error = workspace
+            .prepare_transaction(&unchecked(duplicate))
+            .expect_err("duplicate");
+        assert_eq!(error.code, ErrorCode::DuplicateHandle);
+        assert_eq!(error.operation_index, Some(2));
+        assert_eq!(error.local_handle, Some(LocalHandle::new(3)));
+        let undeclared = base_transaction(ExpressionDraft {
+            handle: LocalHandle::new(4),
+            operation: ExpressionKindDraft::AddI64 {
+                lhs: ValueDraft::OperationResult {
+                    operation: NodeTarget::Local(LocalHandle::new(99)),
+                    output: 0,
+                },
+                rhs: ValueDraft::OperationResult {
+                    operation: NodeTarget::Local(LocalHandle::new(4)),
+                    output: 0,
+                },
+            },
+        });
+        let error = workspace
+            .prepare_transaction(&unchecked(undeclared))
+            .expect_err("undeclared");
+        assert_eq!(error.code, ErrorCode::InvalidHandle);
+        assert_eq!(error.operation_index, Some(2));
+        assert_eq!(error.local_handle, Some(LocalHandle::new(99)));
+        let valid = base_transaction(ExpressionDraft {
+            handle: LocalHandle::new(4),
+            operation: ExpressionKindDraft::ConstI64(1),
+        });
+        let private = ApplyTransactionRequest {
+            transaction: valid,
+            response: TransactionResponseSpec {
+                return_handles: vec![LocalHandle::new(u32::MAX)],
+            },
+        };
+        assert_eq!(
+            workspace
+                .prepare_transaction(&private)
+                .expect_err("private binding")
+                .code,
+            ErrorCode::InvalidHandle
+        );
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn canonical_allocation_errors_remap_to_public_source_and_explicit_handle() {
+        let id = WorkspaceId::from_bytes([0x7a; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let handle = LocalHandle::new(77);
+        let edits = vec![
+            CanonicalEdit::CreatePackage {
+                handle,
+                name: "first".into(),
+            },
+            CanonicalEdit::CreatePackage {
+                handle,
+                name: "duplicate".into(),
+            },
+        ];
+        let error = allocate_handles(
+            workspace.head().expect("head"),
+            &edits,
+            &[3, 8],
+            &BTreeSet::from([handle]),
+        )
+        .expect_err("duplicate canonical allocation");
+        assert_eq!(error.code, ErrorCode::DuplicateHandle);
+        assert_eq!(error.operation_index, Some(8));
+        assert_eq!(error.local_handle, Some(handle));
+    }
+
+    #[test]
+    fn insert_expression_rejects_staged_block_and_anchor_with_public_source_atomically() {
+        let id = WorkspaceId::from_bytes([0x7e; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let staged_block = NodeId::new(id, 6).expect("predicted staged block");
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "main".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(4),
+                            operation: ExpressionKindDraft::ConstI64(1),
+                        }],
+                        return_value: ValueDraft::OperationResult {
+                            operation: local(4),
+                            output: 0,
+                        },
+                    }),
+                },
+                TransactionOp::InsertExpression {
+                    block: staged_block,
+                    before: None,
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(5),
+                        operation: ExpressionKindDraft::ConstI64(2),
+                    },
+                },
+            ],
+        };
+        let error = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction,
+                response: TransactionResponseSpec::default(),
+            })
+            .expect_err("staged block");
+        assert_eq!(error.operation_index, Some(3));
+        assert_eq!(error.target, Some(staged_block));
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+
+        let committed_id = WorkspaceId::from_bytes([0x7f; 16]);
+        let mut committed = Workspace::new(committed_id).expect("workspace");
+        let created = commit(&mut committed, &incomplete_program(committed_id)).expect("fixture");
+        let hole = binding(&created, 9);
+        let block = prepared_operation_owner(committed.head().expect("head"), hole);
+        let predicted_anchor = NodeId::new(
+            committed.id(),
+            committed.head().expect("head").next_serial(),
+        )
+        .expect("predicted anchor");
+        let transaction = Transaction {
+            workspace: committed.id(),
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::InsertExpression {
+                    block,
+                    before: Some(hole),
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(100),
+                        operation: ExpressionKindDraft::ConstI64(1),
+                    },
+                },
+                TransactionOp::InsertExpression {
+                    block,
+                    before: Some(predicted_anchor),
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(101),
+                        operation: ExpressionKindDraft::ConstI64(2),
+                    },
+                },
+            ],
+        };
+        let frontier = committed.head().expect("head").next_serial();
+        let error = committed
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction,
+                response: TransactionResponseSpec::default(),
+            })
+            .expect_err("staged anchor");
+        assert_eq!(error.operation_index, Some(1));
+        assert_eq!(error.target, Some(predicted_anchor));
+        assert_eq!(committed.head().expect("head").next_serial(), frontier);
+    }
+
+    #[test]
+    fn final_validation_maps_bad_use_to_non_last_public_operation() {
+        let id = WorkspaceId::from_bytes([0x80; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "bad".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(4),
+                            operation: ExpressionKindDraft::Call {
+                                function: local(1),
+                                arguments: Vec::new(),
+                            },
+                        }],
+                        return_value: ValueDraft::OperationResult {
+                            operation: local(4),
+                            output: 0,
+                        },
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(5),
+                    module: local(2),
+                    name: "later".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: None,
+                },
+            ],
+        };
+        let error = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction,
+                response: TransactionResponseSpec::default(),
+            })
+            .expect_err("bad call target");
+        assert_eq!(error.code, ErrorCode::WrongKind);
+        assert_eq!(error.operation_index, Some(2));
+        assert_eq!(error.local_handle, Some(LocalHandle::new(4)));
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn structured_request_depth_item_and_output_policies_reject_before_allocation() {
+        let id = WorkspaceId::from_bytes([0x7d; 16]);
+        let block = NodeId::new(id, 2).expect("block ID");
+        let existing = NodeTarget::Existing(block);
+
+        let top_level = (0..=MAX_STRUCTURED_DRAFT_ITEMS)
+            .map(|_| TransactionOp::RenameNode {
+                node: existing,
+                name: "x".into(),
+            })
+            .collect::<Vec<_>>();
+        let error = scan_explicit_handles(&top_level).expect_err("top-level item policy");
+        assert_eq!(error.code, ErrorCode::PolicyExceeded);
+        assert_eq!(
+            error.operation_index,
+            Some(MAX_STRUCTURED_DRAFT_ITEMS as u32)
+        );
+
+        let mut mixed = (0..MAX_STRUCTURED_DRAFT_ITEMS - 2)
+            .map(|_| TransactionOp::RenameNode {
+                node: existing,
+                name: "x".into(),
+            })
+            .collect::<Vec<_>>();
+        mixed.push(TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(40_000),
+                operation: ExpressionKindDraft::Call {
+                    function: existing,
+                    arguments: vec![ValueDraft::FunctionParameter(existing); 3],
+                },
+            },
+        });
+        let error = scan_explicit_handles(&mixed).expect_err("mixed item policy");
+        assert_eq!(error.code, ErrorCode::PolicyExceeded);
+        assert_eq!(
+            error.operation_index,
+            Some((MAX_STRUCTURED_DRAFT_ITEMS - 2) as u32)
+        );
+
+        let mut expression = ExpressionDraft {
+            handle: LocalHandle::new(1),
+            operation: ExpressionKindDraft::ConstI64(1),
+        };
+        for depth in 0..=MAX_STRUCTURED_DRAFT_DEPTH {
+            let inner_handle = expression.handle;
+            let else_handle = LocalHandle::new(10_000 + depth as u32);
+            expression = ExpressionDraft {
+                handle: LocalHandle::new(20_000 + depth as u32),
+                operation: ExpressionKindDraft::If {
+                    condition: ValueDraft::OperationResult {
+                        operation: existing,
+                        output: 0,
+                    },
+                    result: SemanticType::I64,
+                    then_body: YieldingBodyDraft {
+                        operations: vec![expression],
+                        yield_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(inner_handle),
+                            output: 0,
+                        },
+                    },
+                    else_body: YieldingBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: else_handle,
+                            operation: ExpressionKindDraft::ConstI64(0),
+                        }],
+                        yield_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(else_handle),
+                            output: 0,
+                        },
+                    },
+                },
+            };
+        }
+        let too_deep = [TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression,
+        }];
+        assert_eq!(
+            scan_explicit_handles(&too_deep)
+                .expect_err("depth policy")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        let oversized = [TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(1),
+                operation: ExpressionKindDraft::Call {
+                    function: existing,
+                    arguments: vec![
+                        ValueDraft::FunctionParameter(existing);
+                        MAX_STRUCTURED_DRAFT_ITEMS + 1
+                    ],
+                },
+            },
+        }];
+        assert_eq!(
+            scan_explicit_handles(&oversized)
+                .expect_err("item policy")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        for fine_grained in [
+            TransactionOp::ReplaceOperation {
+                operation: existing,
+                replacement: OperationDraft::Call {
+                    function: existing,
+                    arguments: vec![
+                        ValueDraft::FunctionParameter(existing);
+                        MAX_STRUCTURED_DRAFT_ITEMS
+                    ],
+                },
+            },
+            TransactionOp::RefineHole {
+                hole: existing,
+                replacement: OperationDraft::Call {
+                    function: existing,
+                    arguments: vec![
+                        ValueDraft::FunctionParameter(existing);
+                        MAX_STRUCTURED_DRAFT_ITEMS
+                    ],
+                },
+            },
+        ] {
+            let request = ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![fine_grained],
+                },
+                response: TransactionResponseSpec::default(),
+            };
+            let workspace = Workspace::new(id).expect("workspace");
+            let before = artifact::encode(workspace.head().expect("head")).expect("artifact");
+            let error = workspace
+                .prepare_transaction(&request)
+                .expect_err("fine-grained call aggregate policy");
+            assert_eq!(error.code, ErrorCode::PolicyExceeded);
+            assert_eq!(workspace.head_revision(), Revision::INITIAL);
+            assert_eq!(workspace.head().expect("head").next_serial(), 2);
+            assert_eq!(
+                artifact::encode(workspace.head().expect("head")).expect("artifact"),
+                before
+            );
+        }
+
+        let invalid_output = [TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(1),
+                operation: ExpressionKindDraft::AddI64 {
+                    lhs: ValueDraft::OperationResult {
+                        operation: existing,
+                        output: 1,
+                    },
+                    rhs: ValueDraft::OperationResult {
+                        operation: existing,
+                        output: 0,
+                    },
+                },
+            },
+        }];
+        assert_eq!(
+            scan_explicit_handles(&invalid_output)
+                .expect_err("output index")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+    }
+
+    #[test]
+    fn mutual_function_bodies_resolve_local_calls_in_one_transaction() {
+        let id = WorkspaceId::from_bytes([0x7c; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let call_body = |handle, target| FunctionBodyDraft {
+            operations: vec![ExpressionDraft {
+                handle: LocalHandle::new(handle),
+                operation: ExpressionKindDraft::Call {
+                    function: local(target),
+                    arguments: Vec::new(),
+                },
+            }],
+            return_value: ValueDraft::OperationResult {
+                operation: local(handle),
+                output: 0,
+            },
+        };
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "a".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(call_body(5, 4)),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(4),
+                    module: local(2),
+                    name: "b".into(),
+                    parameters: Vec::new(),
+                    result: SemanticType::I64,
+                    body: Some(call_body(6, 3)),
+                },
+            ],
+        };
+        let receipt = commit(&mut workspace, &transaction).expect("one-transaction mutual calls");
+        let function_a = binding(&receipt, 3);
+        let function_b = binding(&receipt, 4);
+        assert_eq!(function_a.serial(), 4);
+        assert_eq!(function_b.serial(), 9);
+        for (call_handle, expected_target) in [(5, function_b), (6, function_a)] {
+            let Node::Operation {
+                operation:
+                    OperationKind::Call {
+                        function,
+                        arguments,
+                    },
+                ..
+            } = workspace
+                .head()
+                .expect("head")
+                .node(binding(&receipt, call_handle))
+                .expect("call")
+            else {
+                panic!("call operation")
+            };
+            assert_eq!(*function, expected_target);
+            assert!(arguments.is_empty());
+        }
+    }
+
+    #[test]
     fn hole_refinement_can_use_supporting_values_created_before_it_atomically() {
         let id = WorkspaceId::from_bytes([0x75; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
         let created = commit(&mut workspace, &incomplete_program(id)).expect("incomplete program");
-        let block = binding(&created, 5);
         let forty = binding(&created, 6);
         let hole = binding(&created, 9);
+        let block = prepared_operation_owner(workspace.head().expect("head"), hole);
         let support = LocalHandle::new(100);
         let transaction = Transaction {
             workspace: id,
@@ -1762,11 +3946,13 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::Commit,
             operations: vec![
-                TransactionOp::CreateOperation {
-                    handle: support,
-                    block: NodeTarget::Existing(block),
-                    before: Some(NodeTarget::Existing(hole)),
-                    operation: OperationDraft::ConstI64(2),
+                TransactionOp::InsertExpression {
+                    block,
+                    before: Some(hole),
+                    expression: ExpressionDraft {
+                        handle: support,
+                        operation: ExpressionKindDraft::ConstI64(2),
+                    },
                 },
                 TransactionOp::RefineHole {
                     hole: NodeTarget::Existing(hole),

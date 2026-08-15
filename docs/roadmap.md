@@ -1,51 +1,49 @@
 # Roadmap
 
-Work advances through dependency-closed evidence gates, not compatibility milestones.
+Work advances through dependency-closed evidence gates, not compatibility milestones or promises.
 
-## Complete: agent-native semantic repair
+## Complete: agent-native repair and structured pure programs
 
-The source-free scalar vertical now supports an external agent through the real generic CLI and
-daemon without a workspace dump:
+The source-free vertical now lets an external agent use the real generic CLI and daemon to:
 
-- discover typed incompleteness and exact repair targets;
-- inspect bounded owner/body/use/dependency/visibility/constructor context;
-- submit one-way identity-preserving hole refinement;
-- receive a compact bounded receipt and query the exact paginated diff;
-- execute the completed retained revision, restart, and observe the same identities/history;
-- use strict versioned JSON over the complete typed protocol vocabulary;
-- reject malformed bytes/JSON and invalid generated transaction sequences without partial
-  publication;
-- measure actual request/response bytes, three correct repair round trips, rejected edits, CLI and
-  query elapsed time, build/dependency cost, and deterministic mutation smoke.
+- discover the closed runtime schema and submit one structured transaction for multiple functions,
+  parameters, calls, conditionals, loops, holes, and entry selection;
+- inspect bounded nested repair context, including persistent loop-index and loop-carried identities;
+- reject invalid repairs atomically and refine a scalar hole while preserving identity and uses;
+- query exact retained-revision semantic diffs and execute ordered scalar arguments;
+- run calls, lazy branches, loops, and bounded recursion through one verified Core IR and explicit
+  interpreter frame vector;
+- restart and query both incomplete and repaired immutable revisions with unchanged IDs;
+- observe distinct argument, policy, trap, fuel, and frame failures without losing daemon usability;
+- measure real JSON and binary bytes, round trips, artifact size, CLI wall time, repeated product-path
+  latency, fresh build/test cost, and deterministic malformed-boundary mutation.
 
-Full scans remain the oracle and implementation. Measurements at 3,011 nodes do not justify a
-reverse index or cache. Model tokens were not measured because no controlled model was invoked; no
-token claim is part of this gate.
+The retained representative example and principal integration produce `main() = 5050`,
+`normalize_and_sum(-3) = 0`, and `normalize_and_sum(11) = 55`. Full scans remain the correctness
+oracle and implementation; current measurements do not justify an index, cache, journal, database,
+async runtime, or second executable route. No model tokens were measured and no token claim is made.
 
-The active campaign in `prompts/202608141917.md` is the execution artifact for this completed gate;
-it is not another semantic specification.
+## Next gate: nominal immutable products, sums, and matching
 
-## Next gate: structured pure programs
+The next evidence gate is the smallest closed extension needed to express ordinary immutable domain
+values without introducing effects, ownership, or a general type framework. Acceptance requires:
 
-Do not begin this gate as collateral to repair ergonomics. Add direct pure calls with parameters,
-structured `if`, and structured loops through the same SPG, validator, direct lowering, Core IR
-verifier, and interpreter. Agents must not author predecessor lists, phi nodes, compiler indexes, or
-source text. Acceptance requires:
+- code-owned nominal product and closed sum declarations with stable semantic identity;
+- exact construction, field projection, variant construction, and exhaustive structured matching;
+- deterministic layouts as derived state, with no serialized compiler indexes;
+- structured authoring and bounded repair context that do not expose CFG or layout scaffolding;
+- direct lowering through the existing Core IR route and explicit-frame interpreter;
+- malformed schema, scope, type, match-exhaustiveness, artifact, protocol, and runtime evidence;
+- one representative application that demonstrates reduced agent scaffolding and measures bytes,
+  round trips, compile/execute cost, and artifact growth;
+- a human-first README/status update only after that vertical is verified.
 
-- deterministic typed construction/query/repair of calls and structured regions;
-- interpreter-correct calls, branching, and loops over retained revisions;
-- exact scope, dominance, signature, and structured-control rejection;
-- explicit stack/resource policy for recursion and user-controlled depth without unbounded native
-  stack;
-- differential/generated sequences and real daemon/CLI evidence;
-- representative bytes, round trips, latency, artifact size, and runtime measurements.
-
-Keep one executable IR route. Do not add effects, ownership, native code, an optimizer tier, query
-cache, database, or daemon concurrency in this gate.
+Do not add generics, effects, capabilities, heap ownership, native code, package infrastructure, or a
+pattern framework beyond the closed consumers required by this gate.
 
 ## Later evidence gates
 
-Nominal products/sums and matching precede explicit generics. Pure semantics precede effects and
+Explicit generics follow real repeated nominal-type consumers. Pure semantics precede effects and
 exact daemon-granted capabilities. Real external resources precede ownership, borrow, cleanup, and
 memory strategy. Useful libraries precede multi-package dependency closure. Repeated measured work
 precedes incremental validation, indexes, caches, journals, or databases. Stable representative

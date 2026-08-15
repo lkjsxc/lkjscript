@@ -47,7 +47,11 @@ fn every_closed_machine_variant_round_trips() {
     for target in [existing, local] {
         round_trip(&target);
     }
-    for value in [ValueDraft::FunctionParameter(existing), value] {
+    for value in [
+        ValueDraft::FunctionParameter(existing),
+        ValueDraft::BlockArgument(local),
+        value,
+    ] {
         round_trip(&value);
     }
     for value in [
@@ -73,6 +77,58 @@ fn every_closed_machine_variant_round_trips() {
     ];
     for draft in &drafts {
         round_trip(draft);
+    }
+    let yielding = |handle| YieldingBodyDraft {
+        operations: vec![ExpressionDraft {
+            handle: LocalHandle::new(handle),
+            operation: ExpressionKindDraft::ConstI64(1),
+        }],
+        yield_value: ValueDraft::OperationResult {
+            operation: NodeTarget::Local(LocalHandle::new(handle)),
+            output: 0,
+        },
+    };
+    let expression_variants = vec![
+        ExpressionKindDraft::ConstUnit,
+        ExpressionKindDraft::ConstBool(true),
+        ExpressionKindDraft::ConstI64(1),
+        ExpressionKindDraft::AddI64 {
+            lhs: value,
+            rhs: value,
+        },
+        ExpressionKindDraft::LtI64 {
+            lhs: value,
+            rhs: value,
+        },
+        ExpressionKindDraft::Call {
+            function: local,
+            arguments: vec![value],
+        },
+        ExpressionKindDraft::Hole {
+            expected: SemanticType::I64,
+        },
+        ExpressionKindDraft::If {
+            condition: value,
+            result: SemanticType::I64,
+            then_body: yielding(30),
+            else_body: yielding(31),
+        },
+        ExpressionKindDraft::ForI64 {
+            start: value,
+            end_exclusive: value,
+            step: 1,
+            initial: value,
+            carried: SemanticType::I64,
+            index_handle: LocalHandle::new(32),
+            carried_handle: LocalHandle::new(33),
+            body: yielding(34),
+        },
+    ];
+    for (index, operation) in expression_variants.into_iter().enumerate() {
+        round_trip(&ExpressionDraft {
+            handle: LocalHandle::new(100 + u32::try_from(index).expect("index")),
+            operation,
+        });
     }
     for kind in [
         OperationKind::ConstI64(1),
@@ -125,31 +181,57 @@ fn every_closed_machine_variant_round_trips() {
             handle: LocalHandle::new(3),
             module: existing,
             name: "f".to_owned(),
+            parameters: vec![FunctionParameterDraft {
+                handle: LocalHandle::new(4),
+                name: "x".to_owned(),
+                ty: SemanticType::Bool,
+            }],
             result: SemanticType::I64,
+            body: None,
         },
-        TransactionOp::CreateParameter {
-            handle: LocalHandle::new(4),
+        TransactionOp::DefineFunctionBody {
             function: existing,
-            name: "x".to_owned(),
-            ty: SemanticType::Bool,
+            body: FunctionBodyDraft {
+                operations: vec![ExpressionDraft {
+                    handle: LocalHandle::new(5),
+                    operation: ExpressionKindDraft::ConstI64(1),
+                }],
+                return_value: ValueDraft::OperationResult {
+                    operation: NodeTarget::Local(LocalHandle::new(5)),
+                    output: 0,
+                },
+            },
         },
-        TransactionOp::CreateRegion {
-            handle: LocalHandle::new(5),
-            function: existing,
-        },
-        TransactionOp::CreateBlock {
-            handle: LocalHandle::new(6),
-            region: existing,
-        },
-        TransactionOp::CreateOperation {
-            handle: LocalHandle::new(7),
-            block: existing,
-            before: Some(local),
-            operation: drafts[2].clone(),
-        },
-        TransactionOp::SetFunctionBody {
-            function: existing,
-            region: local,
+        TransactionOp::InsertExpression {
+            block: first,
+            before: Some(second),
+            expression: ExpressionDraft {
+                handle: LocalHandle::new(6),
+                operation: ExpressionKindDraft::If {
+                    condition: ValueDraft::FunctionParameter(existing),
+                    result: SemanticType::I64,
+                    then_body: YieldingBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(8),
+                            operation: ExpressionKindDraft::ConstI64(1),
+                        }],
+                        yield_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(LocalHandle::new(8)),
+                            output: 0,
+                        },
+                    },
+                    else_body: YieldingBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(9),
+                            operation: ExpressionKindDraft::ConstI64(2),
+                        }],
+                        yield_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Local(LocalHandle::new(9)),
+                            output: 0,
+                        },
+                    },
+                },
+            },
         },
         TransactionOp::SetEntryFunction {
             package: existing,
@@ -308,6 +390,7 @@ fn every_closed_machine_variant_round_trips() {
         Query::LegalConstructors {
             target: repair,
             include_incompatible: true,
+            constructors: page(None),
             values: page(None),
         },
         Query::SemanticDiff {
@@ -366,8 +449,14 @@ fn every_closed_machine_variant_round_trips() {
         },
         Node::Block {
             owner: first,
+            arguments: Vec::new(),
             operations: vec![second],
             terminator: Some(second),
+        },
+        Node::BlockArgument {
+            owner: first,
+            ordinal: 0,
+            ty: SemanticType::I64,
         },
         Node::Operation {
             owner: first,
@@ -406,6 +495,10 @@ fn every_closed_machine_variant_round_trips() {
                 operation: first,
                 output: 0,
             }),
+        },
+        ChangeKind::DefinitionChanged {
+            before: first,
+            after: second,
         },
         ChangeKind::EntryFunctionChanged {
             before: None,
@@ -486,6 +579,26 @@ fn every_closed_machine_variant_round_trips() {
             result: SemanticType::I64,
         },
         owner_chain: Vec::new(),
+        enclosing_regions: vec![
+            EnclosingRegionFact {
+                region: first,
+                owner_operation: second,
+                role: RegionRole::IfThen,
+            },
+            EnclosingRegionFact {
+                region: second,
+                owner_operation: first,
+                role: RegionRole::ForBody,
+            },
+        ],
+        visible_block_arguments: vec![BlockArgumentFact {
+            argument: first,
+            block: second,
+            region: second,
+            ordinal: 0,
+            role: BlockArgumentRole::LoopIndex,
+            ty: SemanticType::I64,
+        }],
         body_window: Vec::new(),
         visible_values: Page {
             items: Vec::new(),
@@ -497,6 +610,7 @@ fn every_closed_machine_variant_round_trips() {
             next: None,
             total: Some(0),
         },
+        legal_constructor_count: 0,
         legal_constructors: Vec::new(),
         blocker: None,
         refinement_operation: Some(TransactionOpCode::RefineHole),
@@ -544,7 +658,11 @@ fn every_closed_machine_variant_round_trips() {
         QueryResult::LegalConstructors(LegalConstructorsResult {
             target: RepairTarget::Hole(first),
             expected_type: SemanticType::I64,
-            constructors: Vec::new(),
+            constructors: Page {
+                items: Vec::new(),
+                next: None,
+                total: Some(0),
+            },
             visible_values: Page {
                 items: Vec::new(),
                 next: None,
@@ -598,6 +716,15 @@ fn every_closed_machine_variant_round_trips() {
             workspace,
             revision: Revision::new(1),
             entry: first,
+            arguments: vec![
+                RuntimeValue::Unit,
+                RuntimeValue::Bool(false),
+                RuntimeValue::I64(-7),
+            ],
+            policy: lkjscript::RunPolicy {
+                fuel: 777,
+                maximum_frames: 33,
+            },
         },
         Request::Shutdown,
         Request::DescribeSchema,
@@ -654,7 +781,11 @@ fn every_closed_machine_variant_round_trips() {
             execute_nanoseconds: 2,
         }),
         Response::Acknowledged,
-        Response::Error(LkError::new(ErrorCode::InvalidOperand, "invalid")),
+        Response::Error(
+            LkError::new(ErrorCode::InvalidOperand, "invalid")
+                .at_operation(2)
+                .for_handle(LocalHandle::new(7)),
+        ),
         Response::SchemaDescription(Box::new(lkjscript::machine::schema_description())),
     ];
     assert_eq!(responses.len(), ResponseCode::ALL.len());
@@ -671,13 +802,25 @@ fn every_closed_machine_variant_round_trips() {
 
 #[test]
 fn strict_json_rejects_malformed_shapes_values_and_limits() {
+    assert!(
+        serde_json::from_str::<ExpressionDraft>(
+            r#"{"handle":1,"operation":{"kind":"unknown","data":null}}"#
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<ExpressionDraft>(
+            r#"{"handle":1,"operation":{"kind":"const_unit","extra":1}}"#
+        )
+        .is_err()
+    );
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":2,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":3,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":2", "\"version\":3", 1),
+        valid.replacen("\"version\":3", "\"version\":2", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),
@@ -698,7 +841,7 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
         ),
         format!("{valid}{{}}"),
         "[]".to_owned(),
-        "{\"version\":2}".to_owned(),
+        "{\"version\":3}".to_owned(),
     ];
     for input in invalid {
         assert!(
@@ -725,6 +868,35 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     assert!(serde_json::from_str::<TransactionOp>(&strict_nested[2]).is_err());
     assert!(serde_json::from_str::<Query>(&strict_nested[3]).is_err());
     assert!(serde_json::from_str::<PageCursor>(&strict_nested[4]).is_err());
+    let run = format!(
+        "{{\"kind\":\"run\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":1,\"entry\":\"{node}\",\"arguments\":[],\"policy\":{{\"fuel\":1,\"maximum_frames\":1}}}}}}"
+    );
+    assert!(serde_json::from_str::<Request>(&run).is_ok());
+    assert!(serde_json::from_str::<Request>(&run.replacen("\"arguments\":[],", "", 1)).is_err());
+    assert!(
+        serde_json::from_str::<Request>(&run.replacen(
+            ",\"policy\":{\"fuel\":1,\"maximum_frames\":1}",
+            "",
+            1
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<Request>(&run.replacen(
+            "\"maximum_frames\":1",
+            "\"maximum_frames\":1,\"extra\":0",
+            1
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<Request>(&run.replacen(
+            "\"arguments\":[]",
+            "\"arguments\":[{\"kind\":\"unknown\"}]",
+            1
+        ))
+        .is_err()
+    );
     assert!(serde_json::from_str::<Transaction>(&format!("{{\"workspace\":\"{workspace}\",\"base_revision\":0,\"mode\":\"commit\",\"operations\":[],\"extra\":0}}")).is_err());
     assert!(serde_json::from_str::<LocalHandle>("4294967296").is_err());
     assert!(serde_json::from_str::<Revision>("-1").is_err());

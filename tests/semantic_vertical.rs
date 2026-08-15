@@ -6,11 +6,14 @@ use lkjscript::query::{
     RepairTarget, VisibleCursorPurpose,
 };
 use lkjscript::{
-    ApplyTransactionRequest, Client, ErrorCode, IdempotencyKey, LocalHandle, NodeId, NodeTarget,
+    ApplyTransactionRequest, Client, ErrorCode, ExpressionDraft, ExpressionKindDraft,
+    FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle, NodeId, NodeTarget,
     OperationDraft, QueryId, Request, RequestId, Response, Revision, RuntimeValue, SemanticType,
     Transaction, TransactionMode, TransactionOp, TransactionResponseSpec, ValueDraft, WorkspaceId,
+    YieldingBodyDraft,
 };
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -70,6 +73,43 @@ impl Drop for RunningDaemon {
             let _ = self.child.wait();
         }
     }
+}
+
+fn assert_daemon_start_rejects(state: &Path, expected: &str) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
+        .args([
+            "--state",
+            state.to_str().expect("UTF-8 state path"),
+            "--foreground",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn rejecting daemon");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("query rejecting daemon") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("rejecting daemon did not exit before deadline");
+        }
+        thread::sleep(Duration::from_millis(1));
+    };
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .expect("rejecting daemon stderr")
+        .read_to_string(&mut stderr)
+        .expect("read rejecting daemon stderr");
+    assert!(!status.success(), "rejecting daemon unexpectedly succeeded");
+    assert!(
+        stderr.contains(expected),
+        "daemon rejection did not contain {expected:?}: {stderr}"
+    );
 }
 
 #[test]
@@ -133,6 +173,11 @@ fn product_path_performance_baseline() {
                     workspace,
                     revision: Revision::new(1),
                     entry,
+                    arguments: vec![],
+                    policy: lkjscript::RunPolicy {
+                        fuel: 1_000_000,
+                        maximum_frames: 10_000,
+                    },
                 },
             )
             .expect("run sample");
@@ -207,13 +252,18 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
             workspace,
             revision: Revision::new(1),
             entry: NodeId::new(workspace, 4).expect("function node"),
+            arguments: vec![],
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 10_000,
+            },
         },
     )
     .expect("encode run request");
-    assert_eq!(transaction.operations.len(), 11);
+    assert_eq!(transaction.operations.len(), 4);
     assert!(transaction_bytes < 4096);
     println!(
-        "bootstrap_agent_cost operations=11 construction_round_trips=1 first_run_round_trips=5 request_bytes={{transaction:{transaction_bytes},summary:{summary_bytes},node:{node_bytes},run:{run_bytes}}}"
+        "bootstrap_agent_cost operations=4 construction_round_trips=1 first_run_round_trips=5 request_bytes={{transaction:{transaction_bytes},summary:{summary_bytes},node:{node_bytes},run:{run_bytes}}}"
     );
 }
 
@@ -239,9 +289,39 @@ fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
         panic!("bootstrap response")
     };
     let function = allocation(&bootstrap, 3);
-    let block = allocation(&bootstrap, 5);
     let forty = allocation(&bootstrap, 6);
     let add = allocation(&bootstrap, 8);
+    let Response::QueryBatchResult(owner_batch) = client
+        .request(
+            RequestId::new(46),
+            &query_request(
+                workspace,
+                Revision::new(1),
+                Query::OwnerChain {
+                    node: add,
+                    page: PageRequest {
+                        after: None,
+                        limit: 8,
+                    },
+                },
+            ),
+        )
+        .expect("owner query")
+    else {
+        panic!("owner response")
+    };
+    let QueryOutcome::Success(owner_result) = &owner_batch.results[0].outcome else {
+        panic!("owner outcome")
+    };
+    let QueryResult::OwnerChain(owners) = owner_result.as_ref() else {
+        panic!("owner result")
+    };
+    let block = owners
+        .items
+        .iter()
+        .find(|owner| owner.kind == lkjscript::NodeKind::Block)
+        .expect("block owner")
+        .node;
     assert_run(&client, workspace, Revision::new(1), function, 42);
 
     let Response::TransactionReceipt(with_bool) = client
@@ -252,11 +332,13 @@ fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
                 base_revision: Revision::new(1),
                 idempotency_key: None,
                 mode: TransactionMode::Commit,
-                operations: vec![TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(100),
-                    block: NodeTarget::Existing(block),
-                    before: Some(NodeTarget::Existing(add)),
-                    operation: OperationDraft::ConstBool(true),
+                operations: vec![TransactionOp::InsertExpression {
+                    block,
+                    before: Some(add),
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(100),
+                        operation: ExpressionKindDraft::ConstBool(true),
+                    },
                 }],
             })),
         )
@@ -562,6 +644,11 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
                 workspace,
                 revision: Revision::new(1),
                 entry: function,
+                arguments: vec![],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 10_000,
+                },
             },
         )
         .expect("incomplete run response");
@@ -625,6 +712,11 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
                 workspace,
                 revision: Revision::new(1),
                 entry: function,
+                arguments: vec![],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 10_000,
+                },
             },
         )
         .expect("old incomplete run response");
@@ -691,16 +783,402 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
     daemon.shutdown();
 }
 
+#[test]
+fn real_daemon_executes_repaired_structured_program_across_restart() {
+    let temporary = tempfile::tempdir().expect("temporary state directory");
+    let daemon = RunningDaemon::start(temporary.path());
+    assert_daemon_start_rejects(temporary.path(), "WorkspaceExists");
+    let client = daemon.client();
+    let Response::WorkspaceCreated(initial) = client
+        .request(RequestId::new(500), &Request::CreateWorkspace)
+        .expect("create")
+    else {
+        panic!("create response")
+    };
+    let workspace = initial.workspace;
+    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+    let result = |handle| ValueDraft::OperationResult {
+        operation: local(handle),
+        output: 0,
+    };
+    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
+    let transaction = Transaction {
+        workspace,
+        base_revision: Revision::INITIAL,
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![
+            TransactionOp::CreatePackage {
+                handle: LocalHandle::new(1),
+                name: "app".into(),
+            },
+            TransactionOp::CreateModule {
+                handle: LocalHandle::new(2),
+                package: local(1),
+                name: "root".into(),
+            },
+            TransactionOp::CreateFunction {
+                handle: LocalHandle::new(10),
+                module: local(2),
+                name: "range_sum".into(),
+                parameters: vec![FunctionParameterDraft {
+                    handle: LocalHandle::new(11),
+                    name: "end".into(),
+                    ty: SemanticType::I64,
+                }],
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        ExpressionDraft {
+                            handle: LocalHandle::new(12),
+                            operation: ExpressionKindDraft::ConstI64(0),
+                        },
+                        ExpressionDraft {
+                            handle: LocalHandle::new(13),
+                            operation: ExpressionKindDraft::ForI64 {
+                                start: result(12),
+                                end_exclusive: parameter(11),
+                                step: 1,
+                                initial: result(12),
+                                carried: SemanticType::I64,
+                                index_handle: LocalHandle::new(14),
+                                carried_handle: LocalHandle::new(15),
+                                body: YieldingBodyDraft {
+                                    operations: vec![ExpressionDraft {
+                                        handle: LocalHandle::new(16),
+                                        operation: ExpressionKindDraft::Hole {
+                                            expected: SemanticType::I64,
+                                        },
+                                    }],
+                                    yield_value: result(16),
+                                },
+                            },
+                        },
+                    ],
+                    return_value: result(13),
+                }),
+            },
+            TransactionOp::CreateFunction {
+                handle: LocalHandle::new(20),
+                module: local(2),
+                name: "normalize_and_sum".into(),
+                parameters: vec![FunctionParameterDraft {
+                    handle: LocalHandle::new(21),
+                    name: "n".into(),
+                    ty: SemanticType::I64,
+                }],
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        ExpressionDraft {
+                            handle: LocalHandle::new(22),
+                            operation: ExpressionKindDraft::ConstI64(0),
+                        },
+                        ExpressionDraft {
+                            handle: LocalHandle::new(23),
+                            operation: ExpressionKindDraft::LtI64 {
+                                lhs: parameter(21),
+                                rhs: result(22),
+                            },
+                        },
+                        ExpressionDraft {
+                            handle: LocalHandle::new(24),
+                            operation: ExpressionKindDraft::If {
+                                condition: result(23),
+                                result: SemanticType::I64,
+                                then_body: YieldingBodyDraft {
+                                    operations: vec![],
+                                    yield_value: result(22),
+                                },
+                                else_body: YieldingBodyDraft {
+                                    operations: vec![ExpressionDraft {
+                                        handle: LocalHandle::new(25),
+                                        operation: ExpressionKindDraft::Call {
+                                            function: local(10),
+                                            arguments: vec![parameter(21)],
+                                        },
+                                    }],
+                                    yield_value: result(25),
+                                },
+                            },
+                        },
+                    ],
+                    return_value: result(24),
+                }),
+            },
+            TransactionOp::CreateFunction {
+                handle: LocalHandle::new(30),
+                module: local(2),
+                name: "main".into(),
+                parameters: vec![],
+                result: SemanticType::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        ExpressionDraft {
+                            handle: LocalHandle::new(31),
+                            operation: ExpressionKindDraft::ConstI64(101),
+                        },
+                        ExpressionDraft {
+                            handle: LocalHandle::new(32),
+                            operation: ExpressionKindDraft::Call {
+                                function: local(10),
+                                arguments: vec![result(31)],
+                            },
+                        },
+                    ],
+                    return_value: result(32),
+                }),
+            },
+            TransactionOp::SetEntryFunction {
+                package: local(1),
+                function: local(30),
+            },
+        ],
+    };
+    let Response::TransactionReceipt(created) = client
+        .request(
+            RequestId::new(501),
+            &Request::ApplyTransaction(apply(transaction)),
+        )
+        .expect("create program")
+    else {
+        panic!("receipt")
+    };
+    let range = allocation(&created, 10);
+    let normalize = allocation(&created, 20);
+    let main = allocation(&created, 30);
+    let main_call = allocation(&created, 32);
+    let hole = allocation(&created, 16);
+    let index = allocation(&created, 14);
+    let carried = allocation(&created, 15);
+    assert!(!created.complete_after);
+    let refine = Transaction {
+        workspace,
+        base_revision: Revision::new(1),
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::RefineHole {
+            hole: NodeTarget::Existing(hole),
+            replacement: OperationDraft::AddI64 {
+                lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried)),
+                rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index)),
+            },
+        }],
+    };
+    let Response::TransactionReceipt(refined) = client
+        .request(
+            RequestId::new(502),
+            &Request::ApplyTransaction(apply(refine)),
+        )
+        .expect("refine")
+    else {
+        panic!("refine receipt")
+    };
+    assert!(refined.complete_after);
+    assert_eq!(refined.created_count, 0);
+    let rename = Transaction {
+        workspace,
+        base_revision: Revision::new(2),
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::RenameNode {
+            node: NodeTarget::Existing(range),
+            name: "renamed_range_sum".into(),
+        }],
+    };
+    let Response::TransactionReceipt(renamed) = client
+        .request(
+            RequestId::new(508),
+            &Request::ApplyTransaction(apply(rename)),
+        )
+        .expect("rename")
+    else {
+        panic!("rename receipt")
+    };
+    assert_eq!(renamed.created_count, 0);
+    let request_run = |request_id, entry, arguments, policy| {
+        client
+            .request(
+                RequestId::new(request_id),
+                &Request::Run {
+                    workspace,
+                    revision: Revision::new(3),
+                    entry,
+                    arguments,
+                    policy,
+                },
+            )
+            .expect("run response")
+    };
+    assert_eq!(
+        assert_error(
+            request_run(
+                510,
+                main,
+                vec![RuntimeValue::I64(1)],
+                lkjscript::RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10
+                }
+            ),
+            ErrorCode::RunArgumentMismatch
+        )
+        .target,
+        Some(main)
+    );
+    assert_eq!(
+        assert_error(
+            request_run(
+                511,
+                normalize,
+                vec![RuntimeValue::Bool(true)],
+                lkjscript::RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10
+                }
+            ),
+            ErrorCode::RunArgumentMismatch
+        )
+        .actual_type,
+        Some(SemanticType::Bool)
+    );
+    assert_error(
+        request_run(
+            512,
+            main,
+            vec![],
+            lkjscript::RunPolicy {
+                fuel: 0,
+                maximum_frames: 10,
+            },
+        ),
+        ErrorCode::PolicyExceeded,
+    );
+    let fuel = assert_error(
+        request_run(
+            513,
+            main,
+            vec![],
+            lkjscript::RunPolicy {
+                fuel: 1,
+                maximum_frames: 10,
+            },
+        ),
+        ErrorCode::ExecutionFuelExhausted,
+    );
+    assert_eq!(fuel.target, Some(main_call));
+    let frames = assert_error(
+        request_run(
+            514,
+            main,
+            vec![],
+            lkjscript::RunPolicy {
+                fuel: 100,
+                maximum_frames: 1,
+            },
+        ),
+        ErrorCode::ExecutionFrameExhausted,
+    );
+    assert_eq!(frames.target, Some(main_call));
+
+    let run = |client: &Client, request_id, entry, arguments| {
+        let response = client
+            .request(
+                RequestId::new(request_id),
+                &Request::Run {
+                    workspace,
+                    revision: Revision::new(3),
+                    entry,
+                    arguments,
+                    policy: lkjscript::RunPolicy {
+                        fuel: 1_000_000,
+                        maximum_frames: 10_000,
+                    },
+                },
+            )
+            .expect("run");
+        let Response::Run(result) = response else {
+            panic!("run response")
+        };
+        result.value
+    };
+    assert_eq!(run(&client, 503, main, vec![]), RuntimeValue::I64(5050));
+    assert_eq!(
+        run(&client, 504, normalize, vec![RuntimeValue::I64(-3)]),
+        RuntimeValue::I64(0)
+    );
+    assert_eq!(
+        run(&client, 505, normalize, vec![RuntimeValue::I64(11)]),
+        RuntimeValue::I64(55)
+    );
+    assert_eq!(
+        run(&client, 506, range, vec![RuntimeValue::I64(5)]),
+        RuntimeValue::I64(10)
+    );
+    let envelope = lkjscript::machine::RequestEnvelope {
+        version: lkjscript::machine::JSON_ENVELOPE_VERSION,
+        request_id: RequestId::new(509),
+        request: Request::Run {
+            workspace,
+            revision: Revision::new(3),
+            entry: main,
+            arguments: vec![],
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 10_000,
+            },
+        },
+    };
+    let mut cli = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "--state",
+            temporary.path().to_str().expect("state path"),
+            "rpc",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn generic CLI");
+    cli.stdin
+        .as_mut()
+        .expect("CLI stdin")
+        .write_all(&serde_json::to_vec(&envelope).expect("request JSON"))
+        .expect("write CLI request");
+    let output = cli.wait_with_output().expect("CLI output");
+    assert!(
+        output.status.success(),
+        "CLI stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: lkjscript::machine::ResponseEnvelope =
+        serde_json::from_slice(&output.stdout).expect("response JSON");
+    let Response::Run(result) = response.response else {
+        panic!("CLI run response")
+    };
+    assert_eq!(result.value, RuntimeValue::I64(5050));
+    daemon.shutdown();
+    let restarted = RunningDaemon::start(temporary.path());
+    assert_eq!(
+        run(&restarted.client(), 507, main, vec![]),
+        RuntimeValue::I64(5050)
+    );
+    restarted.shutdown();
+
+    let repaired_revision = revision_path(temporary.path(), workspace, Revision::new(2));
+    let mut corrupt = fs::read(&repaired_revision).expect("read repaired structured revision");
+    *corrupt.last_mut().expect("structured revision hash byte") ^= 1;
+    fs::write(&repaired_revision, corrupt).expect("corrupt repaired structured revision");
+    assert_daemon_start_rejects(temporary.path(), "ArtifactCorrupt");
+}
+
 fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
     let package = LocalHandle::new(1);
     let module = LocalHandle::new(2);
     let function = LocalHandle::new(3);
-    let region = LocalHandle::new(4);
-    let block = LocalHandle::new(5);
     let forty = LocalHandle::new(6);
     let two_or_hole = LocalHandle::new(7);
     let add = LocalHandle::new(8);
-    let return_operation = LocalHandle::new(9);
     let local = NodeTarget::Local;
     let result = |operation| ValueDraft::OperationResult {
         operation: local(operation),
@@ -729,52 +1207,34 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
                 handle: function,
                 module: local(module),
                 name: "main".to_owned(),
+                parameters: Vec::new(),
                 result: SemanticType::I64,
-            },
-            TransactionOp::CreateRegion {
-                handle: region,
-                function: local(function),
-            },
-            TransactionOp::CreateBlock {
-                handle: block,
-                region: local(region),
-            },
-            TransactionOp::CreateOperation {
-                handle: forty,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::ConstI64(40),
-            },
-            TransactionOp::CreateOperation {
-                handle: two_or_hole,
-                block: local(block),
-                before: None,
-                operation: if hole {
-                    OperationDraft::Hole {
-                        expected: SemanticType::I64,
-                    }
-                } else {
-                    OperationDraft::ConstI64(2)
-                },
-            },
-            TransactionOp::CreateOperation {
-                handle: add,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::AddI64 {
-                    lhs: result(forty),
-                    rhs: result(two_or_hole),
-                },
-            },
-            TransactionOp::CreateOperation {
-                handle: return_operation,
-                block: local(block),
-                before: None,
-                operation: OperationDraft::Return { value: result(add) },
-            },
-            TransactionOp::SetFunctionBody {
-                function: local(function),
-                region: local(region),
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        ExpressionDraft {
+                            handle: forty,
+                            operation: ExpressionKindDraft::ConstI64(40),
+                        },
+                        ExpressionDraft {
+                            handle: two_or_hole,
+                            operation: if hole {
+                                ExpressionKindDraft::Hole {
+                                    expected: SemanticType::I64,
+                                }
+                            } else {
+                                ExpressionKindDraft::ConstI64(2)
+                            },
+                        },
+                        ExpressionDraft {
+                            handle: add,
+                            operation: ExpressionKindDraft::AddI64 {
+                                lhs: result(forty),
+                                rhs: result(two_or_hole),
+                            },
+                        },
+                    ],
+                    return_value: result(add),
+                }),
             },
             TransactionOp::SetEntryFunction {
                 package: local(package),
@@ -785,12 +1245,54 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
 }
 
 fn apply(transaction: Transaction) -> ApplyTransactionRequest {
-    let mut return_handles: Vec<LocalHandle> = transaction
-        .operations
-        .iter()
-        .filter_map(TransactionOp::created_handle)
-        .collect();
+    let mut return_handles = Vec::new();
+    let mut expressions = Vec::new();
+    for operation in &transaction.operations {
+        if let Some(handle) = operation.created_handle() {
+            return_handles.push(handle);
+        }
+        match operation {
+            TransactionOp::CreateFunction {
+                parameters, body, ..
+            } => {
+                return_handles.extend(parameters.iter().map(|parameter| parameter.handle));
+                if let Some(body) = body {
+                    expressions.extend(body.operations.iter());
+                }
+            }
+            TransactionOp::DefineFunctionBody { body, .. } => {
+                expressions.extend(body.operations.iter())
+            }
+            TransactionOp::InsertExpression { expression, .. } => expressions.push(expression),
+            _ => {}
+        }
+    }
+    while let Some(expression) = expressions.pop() {
+        return_handles.push(expression.handle);
+        match &expression.operation {
+            ExpressionKindDraft::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                expressions.extend(then_body.operations.iter());
+                expressions.extend(else_body.operations.iter());
+            }
+            ExpressionKindDraft::ForI64 {
+                index_handle,
+                carried_handle,
+                body,
+                ..
+            } => {
+                return_handles.push(*index_handle);
+                return_handles.push(*carried_handle);
+                expressions.extend(body.operations.iter());
+            }
+            _ => {}
+        }
+    }
     return_handles.sort();
+    return_handles.dedup();
     ApplyTransactionRequest {
         transaction,
         response: TransactionResponseSpec { return_handles },
@@ -896,6 +1398,11 @@ fn assert_run(
                 workspace,
                 revision,
                 entry,
+                arguments: vec![],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 10_000,
+                },
             },
         )
         .expect("run response");

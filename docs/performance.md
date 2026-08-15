@@ -3,6 +3,187 @@
 No performance leadership claim is made. These are bootstrap baselines whose purpose is to expose
 costs before optimization.
 
+## Structured pure-program campaign
+
+### Environment and method
+
+Measurements were retained on 2026-08-15 from the final campaign tree based on
+`dc541eb3ebb7a54006e8057d0f76b0596cf012e4`: `devbox`, Linux 7.0.0-29-generic x86-64,
+Rust/Cargo 1.96.0, AMD Ryzen 9 9955HX, 32 GiB memory. Runtime harnesses use release binaries and one
+warm-up before reported samples. Oracles are typed `i64(5050)`, `i64(0)`, `i64(55)`,
+finite-recursion `i64(1)`, and `execution_fuel_exhausted`. Percentiles use nearest rank. Shell
+`time` measured fresh commands because `/usr/bin/time` is unavailable; maximum RSS therefore
+remains unmeasured.
+
+The retained real generic-CLI interaction harness is:
+
+```sh
+cargo test --release --test agent_repair_json structured_agent_interaction_cost_measurement \
+  --locked -- --ignored --nocapture --test-threads=1
+```
+
+It launches the production CLI for every request. The one structured creation has 6 public
+transaction items, requests 4 explicit bindings, and expands to 36 canonical nodes. Revision-1 and
+revision-2 artifacts are 1,584 B and 1,601 B. The complete measured sequence uses 11 CLI
+invocations/daemon round trips: schema discovery, workspace creation, structured creation, repair
+context, invalid repair, valid repair, semantic diff, three runs, and one retained query after
+restart.
+
+| Request | JSON request | JSON stdout | Binary request | Binary response | CLI wall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| schema discovery | 67 B | 21,516 B | 15 B | 9,166 B | 655,402 ns |
+| workspace creation | 68 B | 324 B | 15 B | 120 B | 10,098,864 ns |
+| structured creation | 3,106 B | 660 B | 527 B | 266 B | 8,934,375 ns |
+| repair context | 375 B | 5,472 B | 98 B | 1,761 B | 440,939 ns |
+| invalid repair | 375 B | 310 B | 85 B | 137 B | 430,550 ns |
+| valid repair | 577 B | 487 B | 136 B | 154 B | 9,040,735 ns |
+| semantic diff | 224 B | 1,215 B | 69 B | 356 B | 477,839 ns |
+| main run | 234 B | 157 B | 83 B | 40 B | 411,544 ns |
+| direct `-3` run | 258 B | 151 B | 92 B | 40 B | 318,298 ns |
+| direct `11` run | 258 B | 153 B | 92 B | 40 B | 301,657 ns |
+| restart retained query | 246 B | 503 B | 81 B | 161 B | 385,344 ns |
+| **total** | **5,788 B** | **30,948 B** | **1,293 B** | **12,241 B** | **31,495,547 ns** |
+
+Daemon cold readiness was 6,429,787 ns and restart readiness with the retained workspace was
+4,294,382 ns. These are byte, process, and round-trip measurements, not model-token or API-cost
+measurements. Schema discovery is intentionally included because the runtime-generated schema is the
+agent's authoritative vocabulary.
+
+The retained repeated product-path harness is:
+
+```sh
+cargo test --release --test agent_repair_json structured_product_path_performance_measurement \
+  --locked -- --ignored --nocapture --test-threads=1
+```
+
+| Measurement | Median | p95 | Samples |
+| --- | ---: | ---: | ---: |
+| daemon cold start | 5,315,642 ns | 5,334,448 ns | 11 |
+| workspace creation, generic CLI wall | 10,313,819 ns | 10,988,907 ns | 31 |
+| structured incomplete commit, generic CLI wall | 9,015,217 ns | 9,959,452 ns | 11 |
+| nested repair context, generic CLI wall | 353,384 ns | 459,944 ns | 31 |
+| main request wall | 297,600 ns | 490,022 ns | 31 |
+| main compile/lower/verify | 3,927 ns | 15,068 ns | 31 |
+| main interpreter execution | 14,898 ns | 17,633 ns | 31 |
+| direct parameterized run wall | 295,776 ns | 393,129 ns | 31 |
+| finite recursion wall | 274,135 ns | 358,234 ns | 31 |
+| controlled fuel exhaustion wall | 293,812 ns | 348,896 ns | 31 |
+| daemon restart with retained workspaces | 5,327,895 ns | 6,374,162 ns | 11 |
+
+CLI startup dominates sub-millisecond request rows. Main execution is materially larger than the old
+scalar `42` interpreter micro-observation because it performs calls, a conditional, 101 loop
+iterations, checked increments, and branch transfers; this is a different representative workload,
+not a regression ratio for equal work.
+
+### Fresh build, test, and binary observations
+
+Fresh targets were separate `mktemp` directories; repository targets were not deleted or reused:
+
+```sh
+FRESH_RELEASE_TARGET="$(mktemp -d /tmp/lkjscript-structured-build.XXXXXX)"
+FRESH_TEST_TARGET="$(mktemp -d /tmp/lkjscript-structured-test.XXXXXX)"
+printf '%s\n' "$FRESH_RELEASE_TARGET" "$FRESH_TEST_TARGET"
+
+TIMEFORMAT='fresh_release_build_elapsed_s=%3R'
+time CARGO_TARGET_DIR="$FRESH_RELEASE_TARGET" cargo build --workspace --release --locked
+
+TIMEFORMAT='fresh_full_test_elapsed_s=%3R'
+time CARGO_TARGET_DIR="$FRESH_TEST_TARGET" \
+  cargo test --workspace --all-targets --all-features --locked
+
+du -sk "$FRESH_RELEASE_TARGET" "$FRESH_TEST_TARGET"
+stat -c '%n %s' "$FRESH_RELEASE_TARGET/release/lkjscript" \
+  "$FRESH_RELEASE_TARGET/release/lkjscriptd"
+rm -rf -- "$FRESH_RELEASE_TARGET" "$FRESH_TEST_TARGET"
+
+# Unchanged-worktree incremental release observation:
+TIMEFORMAT='incremental_release_build_elapsed_s=%3R'
+time cargo build --workspace --release --locked
+stat -c '%n %s' target/release/lkjscript target/release/lkjscriptd
+```
+
+The final fresh release build was 28.519 s and 38,095 KiB. Its separate final fresh full test was
+13.212 s and 249,828 KiB, with 121 active tests passing and 6 ignored manual tests. Unchanged
+incremental release build was 0.033 s. Release binaries are `lkjscript` 1,786,936 B and
+`lkjscriptd` 1,184,712 B.
+
+Against the audited reset baseline, fresh release time increased from 6.665 s to 28.519 s and target
+size from 7.9 MiB to about 37.2 MiB. Fresh test time increased from 2.122 s to 13.212 s. The client
+binary increased from 418,416 B by 1,368,520 B (+327.1%); the daemon increased from 806,920 B by
+377,792 B (+46.8%). Against the prior JSON/repair campaign observation, the client grew 384,984 B
+(+27.5%), the daemon 263,112 B (+28.5%), and incremental release moved from 0.023 s to 0.033 s.
+These are accepted capability/build regressions, not performance wins. Reversal conditions remain a
+material distribution/build constraint plus an alternative that preserves strict JSON, generated
+schema, structured semantics, and one executable route.
+
+### Authoring baseline comparison
+
+The audited scalar low-level baseline required 11 public transaction items for its small `40 + 2`
+program. The new representative request uses 6 items (45.5% fewer) while defining three functions,
+two parameters, calls, an `if`, a loop, and a nested hole. This item-count comparison is semantic
+interaction evidence across different capabilities, not equal-work latency or wire evidence. Calls
+and structured control were not expressible, so there is no honest production old wire measurement
+for the complete representative program.
+
+A disposable detached worktree at `dc541eb3` was temporarily instrumented and removed after measuring
+the largest directly comparable old production subset used here: one package, one module, and three
+zero-parameter functions, each with an explicit region, block, constant, return terminator, and body
+attachment; `main` returns a constant `5050`. The old product had no parameters, calls, `if`, loop,
+block arguments, or nested hole with which to encode the missing representative meaning. One release
+sample through the real generic CLI/daemon produced:
+
+| Old production subset dimension | Observation |
+| --- | ---: |
+| public transaction items | 21 |
+| returned handles / created nodes | 17 / 17 |
+| semantic nodes including initial workspace root | 18 |
+| functions / regions / blocks | 3 / 3 / 3 |
+| operation nodes / return terminators | 6 / 3 |
+| function-body / package-entry attachments | 3 / 1 |
+| compact JSON request / stdout response | 2,849 B / 1,210 B |
+| framed binary request / response | 477 B / 630 B |
+| one transaction CLI wall | 8,961,607 ns |
+| revision artifact | 813 B |
+
+The disposable procedure was `git worktree add --detach "$OLD_WT" dc541eb3`, append the temporary
+focused test `temporary_old_low_level_representative_subset_measurement` to
+`tests/agent_repair_json.rs`, run `cargo test --release --test agent_repair_json
+ temporary_old_low_level_representative_subset_measurement --locked -- --nocapture
+ --test-threads=1`, then run `git worktree remove --force "$OLD_WT"` and `git worktree prune`.
+Temporary instrumentation and its build directory were removed; the table retains its complete typed
+shape assumptions and observed dimensions without turning measurement code into an active old API.
+
+The implemented structured creation uses 6 items, returns only 4 selected bindings, creates 36 nodes,
+and measures 3,106/660 JSON request/response bytes, 527/266 binary request/response bytes,
+8,971,224 ns one-transaction CLI wall, and a 1,584 B incomplete artifact. It therefore uses 71.4%
+fewer public items while expressing materially more semantics. Its request is 9.0% larger in JSON and
+10.5% larger in binary than the inexpressive old subset; its selected-binding response is 45.5%
+smaller in JSON and 57.8% smaller in binary. Artifact and latency observations are different-workload
+context, not equal-work regressions or wins.
+
+No exact old binary dimension exists for the nested call/control scaffolding: the old production
+binary codec has no variant tags or payload grammar for parameters, calls, `if`, loops, block
+arguments, or structured holes. An "exact synthetic binary" would therefore require inventing a
+non-production protocol and is intentionally not reported. The JSON structural model below is kept
+explicitly synthetic because JSON can at least state named hypothetical records without claiming the
+old decoder accepted them.
+
+For structural comparison only, an exact synthetic compact-JSON encoder counted the representative
+canonical shape as 36 created nodes: 1 package, 1 module, 3 functions, 2 parameters, 6 regions,
+6 blocks, 2 block arguments, and 15 operations/terminators. Under the stated assumption that the old
+shape needed one explicit create item per canonical node, three explicit function-body attachments,
+and one entry selection, it produced 40 transaction items and 6,804 compact JSON bytes. The
+synthetic payload used full field names (`create_canonical_node`, `local_handle`,
+`canonical_node_kind`, `owner`, `owner_slot`), excluded the semantic payloads for calls/control that
+the old product could not express, and omitted a versioned envelope. It is therefore a lower-bound
+structural estimate, not old production bytes and not an old binary measurement.
+
+The implemented structured request uses 6 semantic transaction items and 3,106 JSON bytes including
+the versioned envelope and all call/control payloads: 85.0% fewer public items than the synthetic
+shape and 54.4% fewer bytes than that deliberately incomplete structural lower bound. This is
+semantic compression from implied regions/blocks/arguments/terminators and aggregate function
+bodies, not abbreviated naming. No token saving is inferred.
+
 ## Retained reset baseline
 
 ### Environment
@@ -192,9 +373,9 @@ median/p95 5,341.233/5,413.289 us (11 samples); artifact 501 B.
 
 Fresh target directories avoided cleaning repository state. Current fresh release build took
 21.790 s and 34 MiB, compared with retained 6.665 s / 7.9 MiB. A separate fresh full test took
-6.556 s and 119 MiB, compared with 2.122 s; 70 active tests passed and four manual tests were
-ignored. That fresh test preceded test-only measurement refinement and the final focused boundary
-hardening; the final cached full boundary passed with 76 active tests and four ignored manual tests. An unchanged incremental release observation was 0.023 s.
+6.556 s and 119 MiB, compared with 2.122 s. Those were historical intermediate campaign
+observations; their test counts are superseded by the structured campaign boundary above. The
+historical unchanged incremental release observation was 0.023 s.
 
 Direct normal dependencies increased from 3 to 5; unique normal `cargo tree` packages from 10 to 21.
 The two direct additions are `serde` with only `derive,std` and `serde_json` with only `std`, both
@@ -218,7 +399,7 @@ coverage and one typed authority.
 
 ### Durability, mutation, and remaining baselines
 
-Compact default receipts are preflighted independently of full diff size, and HEAD2 remains under
+Compact default receipts are preflighted independently of full diff size, and `LKJHEAD3` remains under
 16 KiB even at maximum 64 selected bindings (the focused test asserts it is under 4 KiB). A
 moderate 200-create transaction proves receipt size remains selected-projection bounded. Persistence
 still clones the full snapshot, materializes the full semantic diff during preparation, and rewrites
@@ -226,7 +407,7 @@ a full canonical artifact; the scalar transaction/restart observations above do 
 journal, database, or incremental store.
 
 The final deterministic malformed-boundary release smoke completed 10,000 cases with seed 1 in
-0.02 s of reported test time (release compilation excluded):
+0.03 s of reported test time (release compilation excluded):
 
 ```sh
 LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 \

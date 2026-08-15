@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
-const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v1\0";
+const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v2\0";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -55,9 +55,13 @@ pub enum ChangeKind {
         after_count: u64,
     },
     OperandChanged {
-        index: u8,
+        index: u64,
         before: Option<ValueRef>,
         after: Option<ValueRef>,
+    },
+    DefinitionChanged {
+        before: NodeId,
+        after: NodeId,
     },
     EntryFunctionChanged {
         before: Option<NodeId>,
@@ -97,6 +101,7 @@ impl ChangeKind {
             Self::ScalarAttributeChanged { .. } => 4,
             Self::ContainmentChanged { .. } => 5,
             Self::OperandChanged { .. } => 6,
+            Self::DefinitionChanged { .. } => 7,
             Self::EntryFunctionChanged { .. } => 8,
             Self::CompletenessChanged { .. } => 9,
             Self::OperationRefined { .. } => 10,
@@ -205,9 +210,13 @@ fn hash_change_kind(hasher: &mut blake3::Hasher, kind: &ChangeKind) {
             before,
             after,
         } => {
-            hasher.update(&[*index]);
+            hasher.update(&index.to_le_bytes());
             hash_optional_value(hasher, *before);
             hash_optional_value(hasher, *after);
+        }
+        ChangeKind::DefinitionChanged { before, after } => {
+            hash_node(hasher, *before);
+            hash_node(hasher, *after);
         }
         ChangeKind::EntryFunctionChanged { before, after } => {
             hash_optional_node(hasher, *before);
@@ -251,20 +260,63 @@ fn hash_scalar_value(hasher: &mut blake3::Hasher, value: &ScalarValue) {
 fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
     hasher.update(&[operation.code().stable_tag()]);
     match operation {
+        OperationKind::ConstUnit => {}
         OperationKind::ConstI64(value) => {
             hasher.update(&value.to_le_bytes());
         }
         OperationKind::ConstBool(value) => {
             hasher.update(&[u8::from(*value)]);
         }
-        OperationKind::AddI64 { lhs, rhs } => {
+        OperationKind::AddI64 { lhs, rhs } | OperationKind::LtI64 { lhs, rhs } => {
             hash_value(hasher, *lhs);
             hash_value(hasher, *rhs);
+        }
+        OperationKind::Call {
+            function,
+            arguments,
+        } => {
+            hash_node(hasher, *function);
+            hasher.update(
+                &u64::try_from(arguments.len())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            for argument in arguments {
+                hash_value(hasher, *argument);
+            }
         }
         OperationKind::Hole { expected } => {
             hasher.update(&[expected.stable_tag()]);
         }
-        OperationKind::Return { value } => hash_value(hasher, *value),
+        OperationKind::If {
+            condition,
+            result,
+            then_region,
+            else_region,
+        } => {
+            hash_value(hasher, *condition);
+            hasher.update(&[result.stable_tag()]);
+            hash_node(hasher, *then_region);
+            hash_node(hasher, *else_region);
+        }
+        OperationKind::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            body_region,
+        } => {
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+            hasher.update(&step.to_le_bytes());
+            hash_value(hasher, *initial);
+            hasher.update(&[carried.stable_tag()]);
+            hash_node(hasher, *body_region);
+        }
+        OperationKind::Return { value } | OperationKind::Yield { value } => {
+            hash_value(hasher, *value)
+        }
     }
 }
 
@@ -285,6 +337,10 @@ fn hash_value(hasher: &mut blake3::Hasher, value: ValueRef) {
             hasher.update(&[2]);
             hash_node(hasher, operation);
             hasher.update(&[output]);
+        }
+        ValueRef::BlockArgument(argument) => {
+            hasher.update(&[3]);
+            hash_node(hasher, argument);
         }
     }
 }
@@ -363,7 +419,7 @@ fn classify_change(id: NodeId, old: &Node, new: &Node, changes: &mut Vec<Change>
             let before = old_operation.operand(index);
             let after = new_operation.operand(index);
             if before != after {
-                let Ok(index) = u8::try_from(index) else {
+                let Ok(index) = u64::try_from(index) else {
                     continue;
                 };
                 changes.push(Change {
@@ -375,6 +431,24 @@ fn classify_change(id: NodeId, old: &Node, new: &Node, changes: &mut Vec<Change>
                     },
                 });
             }
+        }
+        if let (
+            OperationKind::Call {
+                function: before, ..
+            },
+            OperationKind::Call {
+                function: after, ..
+            },
+        ) = (old_operation, new_operation)
+            && before != after
+        {
+            changes.push(Change {
+                node: id,
+                kind: ChangeKind::DefinitionChanged {
+                    before: *before,
+                    after: *after,
+                },
+            });
         }
         if let OperationKind::Hole { expected } = old_operation
             && old_operation.code() != new_operation.code()
@@ -413,6 +487,11 @@ fn scalar_operation_change(
             if left != right =>
         {
             Some((ScalarValue::Type(*left), ScalarValue::Type(*right)))
+        }
+        (OperationKind::ForI64 { step: left, .. }, OperationKind::ForI64 { step: right, .. })
+            if left != right =>
+        {
+            Some((ScalarValue::I64(*left), ScalarValue::I64(*right)))
         }
         _ => None,
     }

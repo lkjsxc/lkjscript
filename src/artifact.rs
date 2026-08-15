@@ -5,9 +5,9 @@ use crate::ids::{ArtifactVersion, NodeId, Revision, SchemaId, SnapshotHash, Work
 use crate::schema::{Node, OperationCode, OperationKind, SemanticType, ValueRef};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x01";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(1);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg001");
+pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x02";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(2);
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg002");
 const ENCODED_COUNT_BYTES: usize = 8;
 const ENCODED_TOMBSTONE_BYTES: usize = 8;
 const MINIMUM_ENCODED_NODE_RECORD_BYTES: usize = 17;
@@ -259,18 +259,25 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
         }
         Node::Block {
             owner,
+            arguments,
             operations,
             terminator,
         } => {
             put_node_id(writer, *owner);
+            put_node_ids(writer, arguments)?;
             put_node_ids(writer, operations)?;
             put_optional_node_id(writer, *terminator);
             Ok(())
         }
+        Node::BlockArgument { owner, ordinal, ty } => {
+            put_node_id(writer, *owner);
+            writer.u32(*ordinal);
+            put_type(writer, *ty);
+            Ok(())
+        }
         Node::Operation { owner, operation } => {
             put_node_id(writer, *owner);
-            put_operation(writer, operation);
-            Ok(())
+            put_operation(writer, operation)
         }
     }
 }
@@ -325,8 +332,14 @@ pub(crate) fn read_node(
         },
         crate::schema::NodeKind::Block => Node::Block {
             owner: read_node_id(reader, workspace)?,
+            arguments: read_node_ids(reader, workspace)?,
             operations: read_node_ids(reader, workspace)?,
             terminator: read_optional_node_id(reader, workspace)?,
+        },
+        crate::schema::NodeKind::BlockArgument => Node::BlockArgument {
+            owner: read_node_id(reader, workspace)?,
+            ordinal: reader.u32().map_err(artifact_codec)?,
+            ty: read_type(reader)?,
         },
         crate::schema::NodeKind::Operation => Node::Operation {
             owner: read_node_id(reader, workspace)?,
@@ -335,25 +348,69 @@ pub(crate) fn read_node(
     })
 }
 
-fn put_operation(writer: &mut Writer, operation: &OperationKind) {
+pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> Result<()> {
     writer.u8(operation.stable_tag());
     match operation {
+        OperationKind::ConstUnit => {}
         OperationKind::ConstI64(value) => writer.i64(*value),
         OperationKind::ConstBool(value) => writer.bool(*value),
-        OperationKind::AddI64 { lhs, rhs } => {
+        OperationKind::AddI64 { lhs, rhs } | OperationKind::LtI64 { lhs, rhs } => {
             put_value(writer, *lhs);
             put_value(writer, *rhs);
         }
+        OperationKind::Call {
+            function,
+            arguments,
+        } => {
+            put_node_id(writer, *function);
+            put_count(writer, arguments.len())?;
+            for argument in arguments {
+                put_value(writer, *argument);
+            }
+        }
         OperationKind::Hole { expected } => put_type(writer, *expected),
-        OperationKind::Return { value } => put_value(writer, *value),
+        OperationKind::If {
+            condition,
+            result,
+            then_region,
+            else_region,
+        } => {
+            put_value(writer, *condition);
+            put_type(writer, *result);
+            put_node_id(writer, *then_region);
+            put_node_id(writer, *else_region);
+        }
+        OperationKind::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            body_region,
+        } => {
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+            writer.i64(*step);
+            put_value(writer, *initial);
+            put_type(writer, *carried);
+            put_node_id(writer, *body_region);
+        }
+        OperationKind::Return { value } | OperationKind::Yield { value } => {
+            put_value(writer, *value)
+        }
     }
+    Ok(())
 }
 
-fn read_operation(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<OperationKind> {
+pub(crate) fn read_operation(
+    reader: &mut Reader<'_>,
+    workspace: WorkspaceId,
+) -> Result<OperationKind> {
     let tag = reader.u8().map_err(artifact_codec)?;
     let code = OperationCode::from_stable_tag(tag)
         .ok_or_else(|| artifact_codec(reader.unknown_tag(TagDomain::Operation, tag)))?;
     match code {
+        OperationCode::ConstUnit => Ok(OperationKind::ConstUnit),
         OperationCode::ConstI64 => Ok(OperationKind::ConstI64(
             reader.i64().map_err(artifact_codec)?,
         )),
@@ -364,16 +421,49 @@ fn read_operation(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<Ope
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
+        OperationCode::LtI64 => Ok(OperationKind::LtI64 {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::Call => {
+            let function = read_node_id(reader, workspace)?;
+            let count = read_byte_bounded_count(reader, 9, 0)?;
+            let mut arguments = Vec::with_capacity(count);
+            for _ in 0..count {
+                arguments.push(read_value(reader, workspace)?);
+            }
+            Ok(OperationKind::Call {
+                function,
+                arguments,
+            })
+        }
         OperationCode::Hole => Ok(OperationKind::Hole {
             expected: read_type(reader)?,
         }),
+        OperationCode::If => Ok(OperationKind::If {
+            condition: read_value(reader, workspace)?,
+            result: read_type(reader)?,
+            then_region: read_node_id(reader, workspace)?,
+            else_region: read_node_id(reader, workspace)?,
+        }),
+        OperationCode::ForI64 => Ok(OperationKind::ForI64 {
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+            step: reader.i64().map_err(artifact_codec)?,
+            initial: read_value(reader, workspace)?,
+            carried: read_type(reader)?,
+            body_region: read_node_id(reader, workspace)?,
+        }),
         OperationCode::Return => Ok(OperationKind::Return {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::Yield => Ok(OperationKind::Yield {
             value: read_value(reader, workspace)?,
         }),
     }
 }
 
-fn put_value(writer: &mut Writer, value: ValueRef) {
+pub(crate) fn put_value(writer: &mut Writer, value: ValueRef) {
     match value {
         ValueRef::FunctionParameter(parameter) => {
             writer.u8(1);
@@ -384,10 +474,14 @@ fn put_value(writer: &mut Writer, value: ValueRef) {
             put_node_id(writer, operation);
             writer.u8(output);
         }
+        ValueRef::BlockArgument(argument) => {
+            writer.u8(3);
+            put_node_id(writer, argument);
+        }
     }
 }
 
-fn read_value(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<ValueRef> {
+pub(crate) fn read_value(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<ValueRef> {
     let tag = reader.u8().map_err(artifact_codec)?;
     match tag {
         1 => Ok(ValueRef::FunctionParameter(read_node_id(
@@ -397,6 +491,7 @@ fn read_value(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<ValueRe
             operation: read_node_id(reader, workspace)?,
             output: reader.u8().map_err(artifact_codec)?,
         }),
+        3 => Ok(ValueRef::BlockArgument(read_node_id(reader, workspace)?)),
         _ => Err(artifact_codec(reader.unknown_tag(TagDomain::Value, tag))),
     }
 }
@@ -517,6 +612,7 @@ mod tests {
         let first = NodeId::new(workspace, 2).expect("first operation");
         let second = NodeId::new(workspace, 3).expect("second operation");
         let operations = [
+            OperationKind::ConstUnit,
             OperationKind::ConstI64(-7),
             OperationKind::ConstBool(true),
             OperationKind::AddI64 {
@@ -529,8 +625,48 @@ mod tests {
                     output: 0,
                 },
             },
+            OperationKind::LtI64 {
+                lhs: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                rhs: ValueRef::OperationResult {
+                    operation: second,
+                    output: 0,
+                },
+            },
+            OperationKind::Call {
+                function: first,
+                arguments: vec![ValueRef::BlockArgument(second)],
+            },
             OperationKind::Hole {
                 expected: SemanticType::Bool,
+            },
+            OperationKind::If {
+                condition: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                result: SemanticType::I64,
+                then_region: first,
+                else_region: second,
+            },
+            OperationKind::ForI64 {
+                start: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                end_exclusive: ValueRef::OperationResult {
+                    operation: second,
+                    output: 0,
+                },
+                step: 1,
+                initial: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                carried: SemanticType::I64,
+                body_region: second,
             },
             OperationKind::Return {
                 value: ValueRef::OperationResult {
@@ -538,11 +674,14 @@ mod tests {
                     output: 0,
                 },
             },
+            OperationKind::Yield {
+                value: ValueRef::BlockArgument(second),
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
             let mut writer = Writer::new();
-            put_operation(&mut writer, &operation);
+            put_operation(&mut writer, &operation).expect("operation encode");
             let bytes = writer.finish();
             let mut reader = Reader::new(&bytes);
             assert_eq!(
@@ -551,6 +690,17 @@ mod tests {
             );
             reader.finish().expect("complete operation payload");
         }
+    }
+
+    #[test]
+    fn artifact_format_one_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format two artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x01");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&1_u16.to_le_bytes());
+        assert_eq!(
+            decode(&bytes).expect_err("format one must reject").code,
+            ErrorCode::ArtifactCorrupt
+        );
     }
 
     #[test]

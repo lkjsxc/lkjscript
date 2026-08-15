@@ -244,7 +244,7 @@ impl Workspace {
     }
 }
 
-fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<()> {
+pub(crate) fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<()> {
     if next.revision() != previous.revision().next().unwrap_or(previous.revision()) {
         return Err(history_error(
             next.workspace(),
@@ -275,7 +275,7 @@ fn validate_history_transition(previous: &Snapshot, next: &Snapshot) -> Result<(
             Some(new_node) => {
                 if old_node.kind() != new_node.kind()
                     || old_node.owner() != new_node.owner()
-                    || !identity_shape_is_stable(old_node, new_node)
+                    || !identity_shape_is_stable(previous, next, *id, old_node, new_node)
                 {
                     return Err(history_error(
                         next.workspace(),
@@ -353,7 +353,13 @@ fn surviving_child_order_is_stable(
     true
 }
 
-fn identity_shape_is_stable(old: &Node, new: &Node) -> bool {
+fn identity_shape_is_stable(
+    previous: &Snapshot,
+    next: &Snapshot,
+    id: NodeId,
+    old: &Node,
+    new: &Node,
+) -> bool {
     match (old, new) {
         (Node::Package { entry: Some(_), .. }, Node::Package { entry: None, .. }) => false,
         (Node::Function { result: old, .. }, Node::Function { result: new, .. }) => old == new,
@@ -368,26 +374,84 @@ fn identity_shape_is_stable(old: &Node, new: &Node) -> bool {
                 ty: new_type,
                 ..
             },
+        )
+        | (
+            Node::BlockArgument {
+                ordinal: old_ordinal,
+                ty: old_type,
+                ..
+            },
+            Node::BlockArgument {
+                ordinal: new_ordinal,
+                ty: new_type,
+                ..
+            },
         ) => old_ordinal == new_ordinal && old_type == new_type,
         (Node::Operation { operation: old, .. }, Node::Operation { operation: new, .. }) => {
-            operation_identity_shape_is_stable(old, new)
+            operation_identity_shape_is_stable(previous, next, id, old, new)
         }
         _ => true,
     }
 }
 
 fn operation_identity_shape_is_stable(
+    previous: &Snapshot,
+    next: &Snapshot,
+    id: NodeId,
     old: &crate::schema::OperationKind,
     new: &crate::schema::OperationKind,
 ) -> bool {
+    let same_results = operation_result_types(previous, id, old).ok()
+        == operation_result_types(next, id, new).ok();
     if old.code() == new.code() {
-        return old.same_result_contract(new) && old.is_terminator() == new.is_terminator();
+        return same_results
+            && old.is_terminator() == new.is_terminator()
+            && old.owned_region_count() == new.owned_region_count()
+            && (0..old.owned_region_count())
+                .all(|index| old.owned_region(index) == new.owned_region(index));
     }
     matches!(old, crate::schema::OperationKind::Hole { .. })
         && new.is_complete()
         && !new.is_terminator()
+        && new.owned_region_count() == 0
         && !matches!(new, crate::schema::OperationKind::Hole { .. })
-        && old.same_result_contract(new)
+        && same_results
+}
+
+pub(crate) fn operation_result_types(
+    snapshot: &Snapshot,
+    operation_id: NodeId,
+    operation: &crate::schema::OperationKind,
+) -> Result<Vec<crate::schema::SemanticType>> {
+    (0..operation.result_count())
+        .map(|index| {
+            operation_result_type(snapshot, operation_id, operation, index).ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "operation result type cannot be resolved",
+                )
+                .for_node(operation_id)
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn operation_result_type(
+    snapshot: &Snapshot,
+    _operation_id: NodeId,
+    operation: &crate::schema::OperationKind,
+    index: usize,
+) -> Option<crate::schema::SemanticType> {
+    if index >= operation.result_count() {
+        return None;
+    }
+    match operation {
+        crate::schema::OperationKind::Call { function, .. } => match snapshot.nodes.get(function) {
+            Some(Node::Function { result, .. }) => Some(*result),
+            _ => None,
+        },
+        _ => operation.result_type(index, None),
+    }
 }
 
 fn history_error(workspace: WorkspaceId, revision: Revision, message: &str) -> LkError {
@@ -424,51 +488,46 @@ mod tests {
         use crate::schema::{OperationKind, SemanticType, ValueRef};
 
         let workspace = WorkspaceId::from_bytes([0x30; 16]);
+        let snapshot = Snapshot::initial(workspace).expect("snapshot");
         let first = NodeId::new(workspace, 2).expect("first");
         let second = NodeId::new(workspace, 3).expect("second");
         let value = |operation| ValueRef::OperationResult {
             operation,
             output: 0,
         };
+        let stable = |old: &OperationKind, new: &OperationKind| {
+            operation_identity_shape_is_stable(&snapshot, &snapshot, first, old, new)
+        };
         let hole = OperationKind::Hole {
             expected: SemanticType::I64,
         };
-        assert!(operation_identity_shape_is_stable(
-            &hole,
-            &OperationKind::ConstI64(1)
-        ));
-        assert!(operation_identity_shape_is_stable(
+        assert!(stable(&hole, &OperationKind::ConstI64(1)));
+        assert!(stable(
             &hole,
             &OperationKind::AddI64 {
                 lhs: value(first),
-                rhs: value(second),
+                rhs: value(second)
             }
         ));
-        assert!(!operation_identity_shape_is_stable(
-            &hole,
-            &OperationKind::ConstBool(true)
-        ));
-        assert!(!operation_identity_shape_is_stable(
+        assert!(!stable(&hole, &OperationKind::ConstBool(true)));
+        assert!(!stable(
             &hole,
             &OperationKind::Hole {
-                expected: SemanticType::Bool,
+                expected: SemanticType::Bool
             }
         ));
-        assert!(!operation_identity_shape_is_stable(
+        assert!(!stable(
             &OperationKind::ConstI64(1),
             &OperationKind::AddI64 {
                 lhs: value(first),
-                rhs: value(second),
+                rhs: value(second)
             }
         ));
-        assert!(!operation_identity_shape_is_stable(
-            &OperationKind::ConstI64(1),
-            &hole
-        ));
-        assert!(!operation_identity_shape_is_stable(
+        assert!(!stable(&OperationKind::ConstI64(1), &hole));
+        assert!(!stable(
             &hole,
             &OperationKind::Return {
-                value: value(first),
+                value: value(first)
             }
         ));
     }

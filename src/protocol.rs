@@ -6,19 +6,25 @@ use crate::ids::{
     ChangeDigest, IdempotencyKey, LocalHandle, NodeId, RequestId, Revision, SnapshotHash,
     WorkspaceId,
 };
-use crate::interpret::{RunResult, RuntimeValue};
+use crate::interpret::{RunPolicy, RunResult, RuntimeValue, RuntimeValueCode};
 use crate::machine::{
-    BoundaryLimits, CodeDescription, IdFormats, OperandDescription, OperationDescription,
-    SchemaDescription,
+    BlockArgumentDescription, BoundaryLimits, CodeDescription, DraftFieldDescription,
+    DraftFieldType, DraftRecordDescription, DraftVariantDescription, IdFormats,
+    MachineFieldDescription, NamedPayloadDescription, OperandDescription, OperationDescription,
+    PayloadShapeDescription, PayloadShapeKind, RegionDescription, RunDescription,
+    RunFieldDescription, RunFieldType, RuntimeValueDescription, RuntimeValuePayload,
+    SchemaDescription, StructuredAuthoringDescription, VariantPayloadDescription,
 };
 use crate::query::*;
 use crate::schema::{
-    LiteralField, NodeKind, OperandUse, OperationCode, OperationDraft, OperationKind, SemanticType,
-    TypeRule, ValueDraft, ValueRef,
+    BlockArgumentRole, LiteralField, NodeKind, OperandArity, OperandUse, OperationCode,
+    OperationDraft, OperationKind, RegionRole, SemanticType, TypeRule, ValueDraft, ValueRef,
 };
 use crate::transaction::{
-    ApplyTransactionRequest, MAX_RETURNED_BINDINGS, NodeTarget, Transaction, TransactionMode,
-    TransactionOp, TransactionOpCode, TransactionReceipt, TransactionResponseSpec,
+    ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
+    FunctionParameterDraft, MAX_RETURNED_BINDINGS, MAX_STRUCTURED_DRAFT_ITEMS, NodeTarget,
+    Transaction, TransactionMode, TransactionOp, TransactionOpCode, TransactionReceipt,
+    TransactionResponseSpec, ValueDraftCode, YieldingBodyDraft,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -27,7 +33,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub const PROTOCOL_VERSION: u16 = 2;
+pub const PROTOCOL_VERSION: u16 = 3;
 pub const MAXIMUM_FRAME_BYTES: usize = 8 * 1024 * 1024;
 pub const MAXIMUM_FRAME_ITEMS: usize = 100_000;
 const CLIENT_IO_TIMEOUT: Duration = Duration::from_secs(30);
@@ -156,6 +162,8 @@ pub enum Request {
         workspace: WorkspaceId,
         revision: Revision,
         entry: NodeId,
+        arguments: Vec<RuntimeValue>,
+        policy: RunPolicy,
     },
     Shutdown,
     DescribeSchema,
@@ -315,7 +323,7 @@ fn require_connection_eof(reader: &mut impl Read, frame_kind: &str) -> Result<()
 
 pub(crate) fn transaction_fingerprint(request: &ApplyTransactionRequest) -> Result<[u8; 32]> {
     let mut writer = Writer::new();
-    writer.fixed(b"lkjscript.apply-transaction.v2\0");
+    writer.fixed(b"lkjscript.apply-transaction.v3\0");
     put_apply_transaction_request(&mut writer, request)?;
     Ok(*blake3::hash(&writer.finish()).as_bytes())
 }
@@ -402,11 +410,19 @@ fn put_request(writer: &mut Writer, request: &Request) -> Result<()> {
             workspace,
             revision,
             entry,
+            arguments,
+            policy,
         } => {
             writer.u8(RequestCode::Run.stable_tag());
             put_workspace(writer, *workspace);
             writer.u64(revision.get());
-            put_node_id(writer, *entry)
+            put_node_id(writer, *entry);
+            put_count(writer, arguments.len())?;
+            for argument in arguments {
+                put_runtime_value(writer, *argument);
+            }
+            writer.u64(policy.fuel);
+            writer.u32(policy.maximum_frames);
         }
         Request::Shutdown => writer.u8(RequestCode::Shutdown.stable_tag()),
         Request::DescribeSchema => writer.u8(RequestCode::DescribeSchema.stable_tag()),
@@ -425,6 +441,18 @@ fn read_request_body(reader: &mut Reader<'_>) -> Result<Request> {
             workspace: read_workspace(reader)?,
             revision: Revision::new(reader.u64().map_err(protocol_codec)?),
             entry: read_node_id(reader)?,
+            arguments: {
+                let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+                let mut arguments = Vec::with_capacity(count);
+                for _ in 0..count {
+                    arguments.push(read_runtime_value(reader)?);
+                }
+                arguments
+            },
+            policy: RunPolicy {
+                fuel: reader.u64().map_err(protocol_codec)?,
+                maximum_frames: reader.u32().map_err(protocol_codec)?,
+            },
         }),
         Some(RequestCode::Shutdown) => Ok(Request::Shutdown),
         Some(RequestCode::DescribeSchema) => Ok(Request::DescribeSchema),
@@ -494,6 +522,217 @@ fn read_response_body(reader: &mut Reader<'_>) -> Result<Response> {
     }
 }
 
+fn put_draft_fields(writer: &mut Writer, fields: &[DraftFieldDescription]) -> Result<()> {
+    put_count(writer, fields.len())?;
+    for field in fields {
+        writer.string(&field.name).map_err(protocol_codec)?;
+        writer.u8(field.field_type.stable_tag());
+        writer.bool(field.required);
+        writer.bool(field.declares_handle);
+    }
+    Ok(())
+}
+
+fn read_draft_fields(reader: &mut Reader<'_>) -> Result<Vec<DraftFieldDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut fields = Vec::with_capacity(count);
+    for _ in 0..count {
+        let name = read_protocol_string(reader)?;
+        let tag = reader.u8().map_err(protocol_codec)?;
+        let field_type = DraftFieldType::from_stable_tag(tag)
+            .ok_or_else(|| protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, tag)))?;
+        fields.push(DraftFieldDescription {
+            name,
+            field_type,
+            required: reader.bool().map_err(protocol_codec)?,
+            declares_handle: reader.bool().map_err(protocol_codec)?,
+        });
+    }
+    Ok(fields)
+}
+
+fn put_run_fields(writer: &mut Writer, fields: &[RunFieldDescription]) -> Result<()> {
+    put_count(writer, fields.len())?;
+    for field in fields {
+        writer.string(&field.name).map_err(protocol_codec)?;
+        writer.u8(field.field_type.stable_tag());
+        writer.bool(field.required);
+    }
+    Ok(())
+}
+
+fn read_run_fields(reader: &mut Reader<'_>) -> Result<Vec<RunFieldDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut fields = Vec::with_capacity(count);
+    for _ in 0..count {
+        let name = read_protocol_string(reader)?;
+        let tag = reader.u8().map_err(protocol_codec)?;
+        let field_type = RunFieldType::from_stable_tag(tag)
+            .ok_or_else(|| protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, tag)))?;
+        fields.push(RunFieldDescription {
+            name,
+            field_type,
+            required: reader.bool().map_err(protocol_codec)?,
+        });
+    }
+    Ok(fields)
+}
+
+fn put_runtime_value_descriptions(
+    writer: &mut Writer,
+    values: &[RuntimeValueDescription],
+) -> Result<()> {
+    put_count(writer, values.len())?;
+    for value in values {
+        writer.string(&value.name).map_err(protocol_codec)?;
+        writer.u8(value.tag);
+        writer.u8(value.payload.stable_tag());
+    }
+    Ok(())
+}
+
+fn read_runtime_value_descriptions(
+    reader: &mut Reader<'_>,
+) -> Result<Vec<RuntimeValueDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        let name = read_protocol_string(reader)?;
+        let tag = reader.u8().map_err(protocol_codec)?;
+        let payload_tag = reader.u8().map_err(protocol_codec)?;
+        let payload = RuntimeValuePayload::from_stable_tag(payload_tag).ok_or_else(|| {
+            protocol_codec(reader.unknown_tag(TagDomain::RuntimeValue, payload_tag))
+        })?;
+        values.push(RuntimeValueDescription { name, tag, payload });
+    }
+    Ok(values)
+}
+
+fn put_payload_shape(writer: &mut Writer, payload: &PayloadShapeDescription) -> Result<()> {
+    writer.u8(payload.shape.stable_tag());
+    writer.bool(payload.newtype.is_some());
+    if let Some(newtype) = &payload.newtype {
+        writer.string(newtype).map_err(protocol_codec)?;
+    }
+    put_count(writer, payload.fields.len())?;
+    for field in &payload.fields {
+        writer.string(&field.name).map_err(protocol_codec)?;
+        writer
+            .string(&field.type_expression)
+            .map_err(protocol_codec)?;
+        writer.bool(field.required);
+    }
+    Ok(())
+}
+fn read_payload_shape(reader: &mut Reader<'_>) -> Result<PayloadShapeDescription> {
+    let tag = reader.u8().map_err(protocol_codec)?;
+    let shape = PayloadShapeKind::from_stable_tag(tag)
+        .ok_or_else(|| protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, tag)))?;
+    let newtype = if reader.bool().map_err(protocol_codec)? {
+        Some(read_protocol_string(reader)?)
+    } else {
+        None
+    };
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut fields = Vec::with_capacity(count);
+    for _ in 0..count {
+        fields.push(MachineFieldDescription {
+            name: read_protocol_string(reader)?,
+            type_expression: read_protocol_string(reader)?,
+            required: reader.bool().map_err(protocol_codec)?,
+        });
+    }
+    Ok(PayloadShapeDescription {
+        shape,
+        newtype,
+        fields,
+    })
+}
+fn put_variant_payloads(writer: &mut Writer, values: &[VariantPayloadDescription]) -> Result<()> {
+    put_count(writer, values.len())?;
+    for value in values {
+        writer.string(&value.name).map_err(protocol_codec)?;
+        writer.u8(value.tag);
+        put_payload_shape(writer, &value.payload)?;
+    }
+    Ok(())
+}
+fn read_variant_payloads(reader: &mut Reader<'_>) -> Result<Vec<VariantPayloadDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(VariantPayloadDescription {
+            name: read_protocol_string(reader)?,
+            tag: reader.u8().map_err(protocol_codec)?,
+            payload: read_payload_shape(reader)?,
+        });
+    }
+    Ok(values)
+}
+fn put_named_payloads(writer: &mut Writer, values: &[NamedPayloadDescription]) -> Result<()> {
+    put_count(writer, values.len())?;
+    for value in values {
+        writer.string(&value.name).map_err(protocol_codec)?;
+        put_payload_shape(writer, &value.payload)?;
+    }
+    Ok(())
+}
+fn read_named_payloads(reader: &mut Reader<'_>) -> Result<Vec<NamedPayloadDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(NamedPayloadDescription {
+            name: read_protocol_string(reader)?,
+            payload: read_payload_shape(reader)?,
+        });
+    }
+    Ok(values)
+}
+
+fn put_draft_variants(writer: &mut Writer, variants: &[DraftVariantDescription]) -> Result<()> {
+    put_count(writer, variants.len())?;
+    for variant in variants {
+        writer.string(&variant.name).map_err(protocol_codec)?;
+        writer.u8(variant.tag);
+        writer.u8(variant.shape.stable_tag());
+        writer.bool(variant.newtype.is_some());
+        if let Some(newtype) = variant.newtype {
+            writer.u8(newtype.stable_tag());
+        }
+        put_draft_fields(writer, &variant.fields)?;
+    }
+    Ok(())
+}
+
+fn read_draft_variants(reader: &mut Reader<'_>) -> Result<Vec<DraftVariantDescription>> {
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut variants = Vec::with_capacity(count);
+    for _ in 0..count {
+        let name = read_protocol_string(reader)?;
+        let tag = reader.u8().map_err(protocol_codec)?;
+        let shape_tag = reader.u8().map_err(protocol_codec)?;
+        let shape = PayloadShapeKind::from_stable_tag(shape_tag).ok_or_else(|| {
+            protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, shape_tag))
+        })?;
+        let newtype = if reader.bool().map_err(protocol_codec)? {
+            let field_tag = reader.u8().map_err(protocol_codec)?;
+            Some(DraftFieldType::from_stable_tag(field_tag).ok_or_else(|| {
+                protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, field_tag))
+            })?)
+        } else {
+            None
+        };
+        variants.push(DraftVariantDescription {
+            name,
+            tag,
+            shape,
+            newtype,
+            fields: read_draft_fields(reader)?,
+        });
+    }
+    Ok(variants)
+}
+
 fn put_schema_description(writer: &mut Writer, schema: &SchemaDescription) -> Result<()> {
     writer.u16(schema.binary_protocol_version);
     writer.u16(schema.json_envelope_version);
@@ -503,6 +742,13 @@ fn put_schema_description(writer: &mut Writer, schema: &SchemaDescription) -> Re
     for operation in &schema.operations {
         writer.string(&operation.name).map_err(protocol_codec)?;
         writer.u8(operation.tag);
+        match operation.operand_arity {
+            OperandArity::Fixed(count) => {
+                writer.u8(1);
+                writer.u8(count);
+            }
+            OperandArity::CallTargetParameters => writer.u8(2),
+        }
         put_count(writer, operation.operands.len())?;
         for operand in &operation.operands {
             put_type_rule(writer, operand.ty);
@@ -520,16 +766,74 @@ fn put_schema_description(writer: &mut Writer, schema: &SchemaDescription) -> Re
                 LiteralField::I64Value => 1,
                 LiteralField::BoolValue => 2,
                 LiteralField::ExpectedType => 3,
+                LiteralField::ResultType => 4,
+                LiteralField::CarriedType => 5,
+                LiteralField::PositiveStep => 6,
             });
+        }
+        put_count(writer, operation.regions.len())?;
+        for region in &operation.regions {
+            writer.u8(region.role.stable_tag());
+            put_count(writer, region.block_arguments.len())?;
+            for argument in &region.block_arguments {
+                writer.u8(match argument.role {
+                    BlockArgumentRole::LoopIndex => 1,
+                    BlockArgumentRole::LoopCarried => 2,
+                });
+                put_type_rule(writer, argument.ty);
+            }
+            writer.u8(region.terminator.stable_tag());
+            put_type_rule(writer, region.yield_type);
         }
         writer.bool(operation.complete);
         writer.bool(operation.terminator);
     }
     put_code_descriptions(writer, &schema.transaction_operations)?;
+    put_variant_payloads(writer, &schema.transaction_operation_payloads)?;
+    put_count(writer, schema.structured_authoring.records.len())?;
+    for record in &schema.structured_authoring.records {
+        writer.string(&record.name).map_err(protocol_codec)?;
+        put_draft_fields(writer, &record.fields)?;
+    }
+    put_draft_variants(writer, &schema.structured_authoring.expression_variants)?;
+    put_draft_variants(writer, &schema.structured_authoring.value_variants)?;
+    writer
+        .string(&schema.structured_authoring.allocation_order)
+        .map_err(protocol_codec)?;
+    writer.bool(schema.structured_authoring.explicit_handles_are_selectable);
+    writer.bool(schema.structured_authoring.implicit_handles_are_selectable);
+    put_count(
+        writer,
+        schema.structured_authoring.implicit_node_kinds.len(),
+    )?;
+    for kind in &schema.structured_authoring.implicit_node_kinds {
+        writer.u8(kind.stable_tag());
+    }
+    writer.u32(schema.structured_authoring.maximum_request_depth);
+    writer.u64(schema.structured_authoring.maximum_request_items);
+    put_count(
+        writer,
+        schema.structured_authoring.counted_item_categories.len(),
+    )?;
+    for category in &schema.structured_authoring.counted_item_categories {
+        writer.string(category).map_err(protocol_codec)?;
+    }
+    put_run_fields(writer, &schema.run.fields)?;
+    put_run_fields(writer, &schema.run.policy_fields)?;
+    put_runtime_value_descriptions(writer, &schema.run.runtime_values)?;
     put_code_descriptions(writer, &schema.queries)?;
+    put_variant_payloads(writer, &schema.query_payloads)?;
     put_code_descriptions(writer, &schema.errors)?;
+    put_payload_shape(writer, &schema.error_payload)?;
     put_code_descriptions(writer, &schema.requests)?;
+    put_variant_payloads(writer, &schema.request_payloads)?;
     put_code_descriptions(writer, &schema.responses)?;
+    put_variant_payloads(writer, &schema.response_payloads)?;
+    put_named_payloads(writer, &schema.envelopes)?;
+    put_count(writer, schema.boundary_error_kinds.len())?;
+    for kind in &schema.boundary_error_kinds {
+        writer.string(kind).map_err(protocol_codec)?;
+    }
     let limits = &schema.limits;
     writer.u64(limits.maximum_frame_bytes);
     writer.u64(limits.maximum_frame_items);
@@ -540,6 +844,11 @@ fn put_schema_description(writer: &mut Writer, schema: &SchemaDescription) -> Re
     writer.u32(limits.maximum_batch_items);
     writer.u32(limits.maximum_context_items_per_category);
     writer.u32(limits.maximum_returned_bindings);
+    writer.u32(limits.maximum_run_arguments);
+    writer.u64(limits.maximum_run_fuel);
+    writer.u32(limits.maximum_run_frames);
+    writer.u64(limits.maximum_run_live_value_slots);
+    writer.u32(limits.maximum_error_related_ids);
     writer.u64(limits.maximum_persistence_head_bytes);
     let ids = &schema.id_formats;
     for value in [
@@ -568,6 +877,16 @@ fn read_schema_description(reader: &mut Reader<'_>) -> Result<SchemaDescription>
     for _ in 0..count {
         let name = read_protocol_string(reader)?;
         let tag = reader.u8().map_err(protocol_codec)?;
+        let operand_arity_tag = reader.u8().map_err(protocol_codec)?;
+        let operand_arity = match operand_arity_tag {
+            1 => OperandArity::Fixed(reader.u8().map_err(protocol_codec)?),
+            2 => OperandArity::CallTargetParameters,
+            _ => {
+                return Err(protocol_codec(
+                    reader.unknown_tag(TagDomain::ProtocolMessage, operand_arity_tag),
+                ));
+            }
+        };
         let operand_count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
         let mut operands = Vec::with_capacity(operand_count);
         for _ in 0..operand_count {
@@ -596,6 +915,9 @@ fn read_schema_description(reader: &mut Reader<'_>) -> Result<SchemaDescription>
                 1 => LiteralField::I64Value,
                 2 => LiteralField::BoolValue,
                 3 => LiteralField::ExpectedType,
+                4 => LiteralField::ResultType,
+                5 => LiteralField::CarriedType,
+                6 => LiteralField::PositiveStep,
                 _ => {
                     return Err(protocol_codec(
                         reader.unknown_tag(TagDomain::ProtocolMessage, literal_tag),
@@ -603,21 +925,119 @@ fn read_schema_description(reader: &mut Reader<'_>) -> Result<SchemaDescription>
                 }
             });
         }
+        let region_count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+        let mut regions = Vec::with_capacity(region_count);
+        for _ in 0..region_count {
+            let role_tag = reader.u8().map_err(protocol_codec)?;
+            let role = RegionRole::from_stable_tag(role_tag).ok_or_else(|| {
+                protocol_codec(reader.unknown_tag(TagDomain::ProtocolMessage, role_tag))
+            })?;
+            let argument_count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+            let mut block_arguments = Vec::with_capacity(argument_count);
+            for _ in 0..argument_count {
+                let argument_tag = reader.u8().map_err(protocol_codec)?;
+                let argument_role = match argument_tag {
+                    1 => BlockArgumentRole::LoopIndex,
+                    2 => BlockArgumentRole::LoopCarried,
+                    _ => {
+                        return Err(protocol_codec(
+                            reader.unknown_tag(TagDomain::ProtocolMessage, argument_tag),
+                        ));
+                    }
+                };
+                block_arguments.push(BlockArgumentDescription {
+                    role: argument_role,
+                    ty: read_type_rule(reader)?,
+                });
+            }
+            let terminator_tag = reader.u8().map_err(protocol_codec)?;
+            let terminator = OperationCode::from_stable_tag(terminator_tag).ok_or_else(|| {
+                protocol_codec(reader.unknown_tag(TagDomain::Operation, terminator_tag))
+            })?;
+            regions.push(RegionDescription {
+                role,
+                block_arguments,
+                terminator,
+                yield_type: read_type_rule(reader)?,
+            });
+        }
         operations.push(OperationDescription {
             name,
             tag,
+            operand_arity,
             operands,
             results,
             literal_fields,
+            regions,
             complete: reader.bool().map_err(protocol_codec)?,
             terminator: reader.bool().map_err(protocol_codec)?,
         });
     }
     let transaction_operations = read_code_descriptions(reader)?;
+    let transaction_operation_payloads = read_variant_payloads(reader)?;
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut records = Vec::with_capacity(count);
+    for _ in 0..count {
+        records.push(DraftRecordDescription {
+            name: read_protocol_string(reader)?,
+            fields: read_draft_fields(reader)?,
+        });
+    }
+    let expression_variants = read_draft_variants(reader)?;
+    let value_variants = read_draft_variants(reader)?;
+    let allocation_order = read_protocol_string(reader)?;
+    let explicit_handles_are_selectable = reader.bool().map_err(protocol_codec)?;
+    let implicit_handles_are_selectable = reader.bool().map_err(protocol_codec)?;
+    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let mut implicit_node_kinds = Vec::with_capacity(count);
+    for _ in 0..count {
+        let tag = reader.u8().map_err(protocol_codec)?;
+        implicit_node_kinds.push(
+            NodeKind::from_stable_tag(tag)
+                .ok_or_else(|| protocol_codec(reader.unknown_tag(TagDomain::Node, tag)))?,
+        );
+    }
+    let structured_authoring = StructuredAuthoringDescription {
+        records,
+        expression_variants,
+        value_variants,
+        allocation_order,
+        explicit_handles_are_selectable,
+        implicit_handles_are_selectable,
+        implicit_node_kinds,
+        maximum_request_depth: reader.u32().map_err(protocol_codec)?,
+        maximum_request_items: reader.u64().map_err(protocol_codec)?,
+        counted_item_categories: {
+            let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+            let mut categories = Vec::with_capacity(count);
+            for _ in 0..count {
+                categories.push(read_protocol_string(reader)?);
+            }
+            categories
+        },
+    };
+    let run = RunDescription {
+        fields: read_run_fields(reader)?,
+        policy_fields: read_run_fields(reader)?,
+        runtime_values: read_runtime_value_descriptions(reader)?,
+    };
     let queries = read_code_descriptions(reader)?;
+    let query_payloads = read_variant_payloads(reader)?;
     let errors = read_code_descriptions(reader)?;
+    let error_payload = read_payload_shape(reader)?;
     let requests = read_code_descriptions(reader)?;
+    let request_payloads = read_variant_payloads(reader)?;
     let responses = read_code_descriptions(reader)?;
+    let response_payloads = read_variant_payloads(reader)?;
+    let envelopes = read_named_payloads(reader)?;
+    let boundary_error_kinds = {
+        let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+        let mut kinds = Vec::with_capacity(count);
+        for _ in 0..count {
+            kinds.push(read_protocol_string(reader)?);
+        }
+        kinds
+    };
     let limits = BoundaryLimits {
         maximum_frame_bytes: reader.u64().map_err(protocol_codec)?,
         maximum_frame_items: reader.u64().map_err(protocol_codec)?,
@@ -628,6 +1048,11 @@ fn read_schema_description(reader: &mut Reader<'_>) -> Result<SchemaDescription>
         maximum_batch_items: reader.u32().map_err(protocol_codec)?,
         maximum_context_items_per_category: reader.u32().map_err(protocol_codec)?,
         maximum_returned_bindings: reader.u32().map_err(protocol_codec)?,
+        maximum_run_arguments: reader.u32().map_err(protocol_codec)?,
+        maximum_run_fuel: reader.u64().map_err(protocol_codec)?,
+        maximum_run_frames: reader.u32().map_err(protocol_codec)?,
+        maximum_run_live_value_slots: reader.u64().map_err(protocol_codec)?,
+        maximum_error_related_ids: reader.u32().map_err(protocol_codec)?,
         maximum_persistence_head_bytes: reader.u64().map_err(protocol_codec)?,
     };
     let id_formats = IdFormats {
@@ -648,10 +1073,19 @@ fn read_schema_description(reader: &mut Reader<'_>) -> Result<SchemaDescription>
         node_kinds,
         operations,
         transaction_operations,
+        transaction_operation_payloads,
+        structured_authoring,
+        run,
         queries,
+        query_payloads,
         errors,
+        error_payload,
         requests,
+        request_payloads,
         responses,
+        response_payloads,
+        envelopes,
+        boundary_error_kinds,
         limits,
         id_formats,
     })
@@ -686,6 +1120,11 @@ fn put_type_rule(writer: &mut Writer, rule: TypeRule) {
         }
         TypeRule::PayloadExpected => writer.u8(2),
         TypeRule::OwnerFunctionResult => writer.u8(3),
+        TypeRule::PayloadResult => writer.u8(4),
+        TypeRule::PayloadCarried => writer.u8(5),
+        TypeRule::CallTargetParameter => writer.u8(6),
+        TypeRule::CallTargetResult => writer.u8(7),
+        TypeRule::OwningRegionYield => writer.u8(8),
     }
 }
 
@@ -695,6 +1134,11 @@ fn read_type_rule(reader: &mut Reader<'_>) -> Result<TypeRule> {
         1 => Ok(TypeRule::Fixed(read_type(reader)?)),
         2 => Ok(TypeRule::PayloadExpected),
         3 => Ok(TypeRule::OwnerFunctionResult),
+        4 => Ok(TypeRule::PayloadResult),
+        5 => Ok(TypeRule::PayloadCarried),
+        6 => Ok(TypeRule::CallTargetParameter),
+        7 => Ok(TypeRule::CallTargetResult),
+        8 => Ok(TypeRule::OwningRegionYield),
         _ => Err(protocol_codec(
             reader.unknown_tag(TagDomain::ProtocolMessage, tag),
         )),
@@ -797,46 +1241,40 @@ fn put_transaction_operation(writer: &mut Writer, operation: &TransactionOp) -> 
             handle,
             module,
             name,
+            parameters,
             result,
+            body,
         } => {
             writer.u32(handle.get());
             put_node_target(writer, *module);
             writer.string(name).map_err(protocol_codec)?;
+            put_count(writer, parameters.len())?;
+            for parameter in parameters {
+                writer.u32(parameter.handle.get());
+                writer.string(&parameter.name).map_err(protocol_codec)?;
+                put_type(writer, parameter.ty);
+            }
             put_type(writer, *result);
+            writer.bool(body.is_some());
+            if let Some(body) = body {
+                put_function_body(writer, body)?;
+            }
         }
-        TransactionOp::CreateParameter {
-            handle,
-            function,
-            name,
-            ty,
-        } => {
-            writer.u32(handle.get());
+        TransactionOp::DefineFunctionBody { function, body } => {
             put_node_target(writer, *function);
-            writer.string(name).map_err(protocol_codec)?;
-            put_type(writer, *ty);
+            put_function_body(writer, body)?;
         }
-        TransactionOp::CreateRegion { handle, function } => {
-            writer.u32(handle.get());
-            put_node_target(writer, *function);
-        }
-        TransactionOp::CreateBlock { handle, region } => {
-            writer.u32(handle.get());
-            put_node_target(writer, *region);
-        }
-        TransactionOp::CreateOperation {
-            handle,
+        TransactionOp::InsertExpression {
             block,
             before,
-            operation,
+            expression,
         } => {
-            writer.u32(handle.get());
-            put_node_target(writer, *block);
-            put_optional_node_target(writer, *before);
-            put_operation_draft(writer, operation);
-        }
-        TransactionOp::SetFunctionBody { function, region } => {
-            put_node_target(writer, *function);
-            put_node_target(writer, *region);
+            put_node_id(writer, *block);
+            writer.bool(before.is_some());
+            if let Some(before) = before {
+                put_node_id(writer, *before);
+            }
+            put_expression(writer, expression)?;
         }
         TransactionOp::SetEntryFunction { package, function } => {
             put_node_target(writer, *package);
@@ -851,7 +1289,7 @@ fn put_transaction_operation(writer: &mut Writer, operation: &TransactionOp) -> 
             replacement,
         } => {
             put_node_target(writer, *operation);
-            put_operation_draft(writer, replacement);
+            put_operation_draft(writer, replacement)?;
         }
         TransactionOp::ReplaceOperand {
             operation,
@@ -859,7 +1297,7 @@ fn put_transaction_operation(writer: &mut Writer, operation: &TransactionOp) -> 
             value,
         } => {
             put_node_target(writer, *operation);
-            writer.u8(*index);
+            writer.u64(*index);
             put_value_draft(writer, *value);
         }
         TransactionOp::DeleteOwnedSubtree { root } => {
@@ -867,7 +1305,7 @@ fn put_transaction_operation(writer: &mut Writer, operation: &TransactionOp) -> 
         }
         TransactionOp::RefineHole { hole, replacement } => {
             put_node_target(writer, *hole);
-            put_operation_draft(writer, replacement);
+            put_operation_draft(writer, replacement)?;
         }
     }
     Ok(())
@@ -887,36 +1325,53 @@ fn read_transaction_operation(reader: &mut Reader<'_>) -> Result<TransactionOp> 
             package: read_node_target(reader)?,
             name: read_protocol_string(reader)?,
         }),
-        TransactionOpCode::CreateFunction => Ok(TransactionOp::CreateFunction {
-            handle: read_handle(reader)?,
-            module: read_node_target(reader)?,
-            name: read_protocol_string(reader)?,
-            result: read_type(reader)?,
-        }),
-        TransactionOpCode::CreateParameter => Ok(TransactionOp::CreateParameter {
-            handle: read_handle(reader)?,
+        TransactionOpCode::CreateFunction => {
+            let handle = read_handle(reader)?;
+            let module = read_node_target(reader)?;
+            let name = read_protocol_string(reader)?;
+            let count = reader
+                .count(MAX_STRUCTURED_DRAFT_ITEMS)
+                .map_err(protocol_codec)?;
+            let mut parameters = Vec::with_capacity(count);
+            for _ in 0..count {
+                parameters.push(FunctionParameterDraft {
+                    handle: read_handle(reader)?,
+                    name: read_protocol_string(reader)?,
+                    ty: read_type(reader)?,
+                });
+            }
+            let result = read_type(reader)?;
+            let body = if reader.bool().map_err(protocol_codec)? {
+                Some(read_function_body(reader)?)
+            } else {
+                None
+            };
+            Ok(TransactionOp::CreateFunction {
+                handle,
+                module,
+                name,
+                parameters,
+                result,
+                body,
+            })
+        }
+        TransactionOpCode::DefineFunctionBody => Ok(TransactionOp::DefineFunctionBody {
             function: read_node_target(reader)?,
-            name: read_protocol_string(reader)?,
-            ty: read_type(reader)?,
+            body: read_function_body(reader)?,
         }),
-        TransactionOpCode::CreateRegion => Ok(TransactionOp::CreateRegion {
-            handle: read_handle(reader)?,
-            function: read_node_target(reader)?,
-        }),
-        TransactionOpCode::CreateBlock => Ok(TransactionOp::CreateBlock {
-            handle: read_handle(reader)?,
-            region: read_node_target(reader)?,
-        }),
-        TransactionOpCode::CreateOperation => Ok(TransactionOp::CreateOperation {
-            handle: read_handle(reader)?,
-            block: read_node_target(reader)?,
-            before: read_optional_node_target(reader)?,
-            operation: read_operation_draft(reader)?,
-        }),
-        TransactionOpCode::SetFunctionBody => Ok(TransactionOp::SetFunctionBody {
-            function: read_node_target(reader)?,
-            region: read_node_target(reader)?,
-        }),
+        TransactionOpCode::InsertExpression => {
+            let block = read_node_id(reader)?;
+            let before = if reader.bool().map_err(protocol_codec)? {
+                Some(read_node_id(reader)?)
+            } else {
+                None
+            };
+            Ok(TransactionOp::InsertExpression {
+                block,
+                before,
+                expression: read_expression(reader)?,
+            })
+        }
         TransactionOpCode::SetEntryFunction => Ok(TransactionOp::SetEntryFunction {
             package: read_node_target(reader)?,
             function: read_node_target(reader)?,
@@ -931,7 +1386,7 @@ fn read_transaction_operation(reader: &mut Reader<'_>) -> Result<TransactionOp> 
         }),
         TransactionOpCode::ReplaceOperand => Ok(TransactionOp::ReplaceOperand {
             operation: read_node_target(reader)?,
-            index: reader.u8().map_err(protocol_codec)?,
+            index: reader.u64().map_err(protocol_codec)?,
             value: read_value_draft(reader)?,
         }),
         TransactionOpCode::DeleteOwnedSubtree => Ok(TransactionOp::DeleteOwnedSubtree {
@@ -944,18 +1399,58 @@ fn read_transaction_operation(reader: &mut Reader<'_>) -> Result<TransactionOp> 
     }
 }
 
-fn put_operation_draft(writer: &mut Writer, operation: &OperationDraft) {
+fn put_operation_draft(writer: &mut Writer, operation: &OperationDraft) -> Result<()> {
     writer.u8(operation.code().stable_tag());
     match operation {
+        OperationDraft::ConstUnit => {}
         OperationDraft::ConstI64(value) => writer.i64(*value),
         OperationDraft::ConstBool(value) => writer.bool(*value),
-        OperationDraft::AddI64 { lhs, rhs } => {
+        OperationDraft::AddI64 { lhs, rhs } | OperationDraft::LtI64 { lhs, rhs } => {
             put_value_draft(writer, *lhs);
             put_value_draft(writer, *rhs);
         }
+        OperationDraft::Call {
+            function,
+            arguments,
+        } => {
+            put_node_target(writer, *function);
+            put_count(writer, arguments.len())?;
+            for argument in arguments {
+                put_value_draft(writer, *argument);
+            }
+        }
         OperationDraft::Hole { expected } => put_type(writer, *expected),
-        OperationDraft::Return { value } => put_value_draft(writer, *value),
+        OperationDraft::If {
+            condition,
+            result,
+            then_region,
+            else_region,
+        } => {
+            put_value_draft(writer, *condition);
+            put_type(writer, *result);
+            put_node_target(writer, *then_region);
+            put_node_target(writer, *else_region);
+        }
+        OperationDraft::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            body_region,
+        } => {
+            put_value_draft(writer, *start);
+            put_value_draft(writer, *end_exclusive);
+            writer.i64(*step);
+            put_value_draft(writer, *initial);
+            put_type(writer, *carried);
+            put_node_target(writer, *body_region);
+        }
+        OperationDraft::Return { value } | OperationDraft::Yield { value } => {
+            put_value_draft(writer, *value)
+        }
     }
+    Ok(())
 }
 
 fn read_operation_draft(reader: &mut Reader<'_>) -> Result<OperationDraft> {
@@ -963,6 +1458,7 @@ fn read_operation_draft(reader: &mut Reader<'_>) -> Result<OperationDraft> {
     let code = OperationCode::from_stable_tag(tag)
         .ok_or_else(|| protocol_codec(reader.unknown_tag(TagDomain::Operation, tag)))?;
     match code {
+        OperationCode::ConstUnit => Ok(OperationDraft::ConstUnit),
         OperationCode::ConstI64 => Ok(OperationDraft::ConstI64(
             reader.i64().map_err(protocol_codec)?,
         )),
@@ -973,38 +1469,74 @@ fn read_operation_draft(reader: &mut Reader<'_>) -> Result<OperationDraft> {
             lhs: read_value_draft(reader)?,
             rhs: read_value_draft(reader)?,
         }),
+        OperationCode::LtI64 => Ok(OperationDraft::LtI64 {
+            lhs: read_value_draft(reader)?,
+            rhs: read_value_draft(reader)?,
+        }),
+        OperationCode::Call => {
+            let function = read_node_target(reader)?;
+            let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+            let mut arguments = Vec::with_capacity(count);
+            for _ in 0..count {
+                arguments.push(read_value_draft(reader)?);
+            }
+            Ok(OperationDraft::Call {
+                function,
+                arguments,
+            })
+        }
         OperationCode::Hole => Ok(OperationDraft::Hole {
             expected: read_type(reader)?,
         }),
+        OperationCode::If => Ok(OperationDraft::If {
+            condition: read_value_draft(reader)?,
+            result: read_type(reader)?,
+            then_region: read_node_target(reader)?,
+            else_region: read_node_target(reader)?,
+        }),
+        OperationCode::ForI64 => Ok(OperationDraft::ForI64 {
+            start: read_value_draft(reader)?,
+            end_exclusive: read_value_draft(reader)?,
+            step: reader.i64().map_err(protocol_codec)?,
+            initial: read_value_draft(reader)?,
+            carried: read_type(reader)?,
+            body_region: read_node_target(reader)?,
+        }),
         OperationCode::Return => Ok(OperationDraft::Return {
+            value: read_value_draft(reader)?,
+        }),
+        OperationCode::Yield => Ok(OperationDraft::Yield {
             value: read_value_draft(reader)?,
         }),
     }
 }
 
 fn put_value_draft(writer: &mut Writer, value: ValueDraft) {
+    writer.u8(value.code().stable_tag());
     match value {
-        ValueDraft::FunctionParameter(parameter) => {
-            writer.u8(1);
-            put_node_target(writer, parameter);
-        }
+        ValueDraft::FunctionParameter(parameter) => put_node_target(writer, parameter),
         ValueDraft::OperationResult { operation, output } => {
-            writer.u8(2);
             put_node_target(writer, operation);
             writer.u8(output);
         }
+        ValueDraft::BlockArgument(argument) => put_node_target(writer, argument),
     }
 }
 
 fn read_value_draft(reader: &mut Reader<'_>) -> Result<ValueDraft> {
     let tag = reader.u8().map_err(protocol_codec)?;
-    match tag {
-        1 => Ok(ValueDraft::FunctionParameter(read_node_target(reader)?)),
-        2 => Ok(ValueDraft::OperationResult {
+    match ValueDraftCode::from_stable_tag(tag) {
+        Some(ValueDraftCode::FunctionParameter) => {
+            Ok(ValueDraft::FunctionParameter(read_node_target(reader)?))
+        }
+        Some(ValueDraftCode::OperationResult) => Ok(ValueDraft::OperationResult {
             operation: read_node_target(reader)?,
             output: reader.u8().map_err(protocol_codec)?,
         }),
-        _ => Err(protocol_codec(reader.unknown_tag(TagDomain::Value, tag))),
+        Some(ValueDraftCode::BlockArgument) => {
+            Ok(ValueDraft::BlockArgument(read_node_target(reader)?))
+        }
+        None => Err(protocol_codec(reader.unknown_tag(TagDomain::Value, tag))),
     }
 }
 
@@ -1032,19 +1564,208 @@ fn read_node_target(reader: &mut Reader<'_>) -> Result<NodeTarget> {
     }
 }
 
-fn put_optional_node_target(writer: &mut Writer, target: Option<NodeTarget>) {
-    writer.bool(target.is_some());
-    if let Some(target) = target {
-        put_node_target(writer, target);
+fn put_function_body(writer: &mut Writer, body: &FunctionBodyDraft) -> Result<()> {
+    put_function_body_at(writer, body, 0)
+}
+fn put_function_body_at(writer: &mut Writer, body: &FunctionBodyDraft, depth: usize) -> Result<()> {
+    put_count(writer, body.operations.len())?;
+    for expression in &body.operations {
+        put_expression_at(writer, expression, depth)?;
     }
+    put_value_draft(writer, body.return_value);
+    Ok(())
 }
 
-fn read_optional_node_target(reader: &mut Reader<'_>) -> Result<Option<NodeTarget>> {
-    if reader.bool().map_err(protocol_codec)? {
-        Ok(Some(read_node_target(reader)?))
-    } else {
-        Ok(None)
+fn read_function_body(reader: &mut Reader<'_>) -> Result<FunctionBodyDraft> {
+    read_function_body_at(reader, 0)
+}
+fn read_function_body_at(reader: &mut Reader<'_>, depth: usize) -> Result<FunctionBodyDraft> {
+    let count = reader
+        .count(MAX_STRUCTURED_DRAFT_ITEMS)
+        .map_err(protocol_codec)?;
+    let mut operations = Vec::with_capacity(count);
+    for _ in 0..count {
+        operations.push(read_expression_at(reader, depth)?);
     }
+    Ok(FunctionBodyDraft {
+        operations,
+        return_value: read_value_draft(reader)?,
+    })
+}
+
+fn put_yielding_body(writer: &mut Writer, body: &YieldingBodyDraft, depth: usize) -> Result<()> {
+    put_count(writer, body.operations.len())?;
+    for expression in &body.operations {
+        put_expression_at(writer, expression, depth)?;
+    }
+    put_value_draft(writer, body.yield_value);
+    Ok(())
+}
+
+fn read_yielding_body(reader: &mut Reader<'_>, depth: usize) -> Result<YieldingBodyDraft> {
+    let count = reader
+        .count(MAX_STRUCTURED_DRAFT_ITEMS)
+        .map_err(protocol_codec)?;
+    let mut operations = Vec::with_capacity(count);
+    for _ in 0..count {
+        operations.push(read_expression_at(reader, depth)?);
+    }
+    Ok(YieldingBodyDraft {
+        operations,
+        yield_value: read_value_draft(reader)?,
+    })
+}
+
+fn put_expression(writer: &mut Writer, expression: &ExpressionDraft) -> Result<()> {
+    put_expression_at(writer, expression, 0)
+}
+fn put_expression_at(
+    writer: &mut Writer,
+    expression: &ExpressionDraft,
+    depth: usize,
+) -> Result<()> {
+    if depth > crate::transaction::MAX_STRUCTURED_DRAFT_DEPTH {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "structured draft nesting exceeds binary request depth policy",
+        ));
+    }
+    writer.u32(expression.handle.get());
+    match &expression.operation {
+        ExpressionKindDraft::ConstUnit => writer.u8(1),
+        ExpressionKindDraft::ConstBool(value) => {
+            writer.u8(2);
+            writer.bool(*value);
+        }
+        ExpressionKindDraft::ConstI64(value) => {
+            writer.u8(3);
+            writer.i64(*value);
+        }
+        ExpressionKindDraft::AddI64 { lhs, rhs } => {
+            writer.u8(4);
+            put_value_draft(writer, *lhs);
+            put_value_draft(writer, *rhs);
+        }
+        ExpressionKindDraft::LtI64 { lhs, rhs } => {
+            writer.u8(5);
+            put_value_draft(writer, *lhs);
+            put_value_draft(writer, *rhs);
+        }
+        ExpressionKindDraft::Call {
+            function,
+            arguments,
+        } => {
+            writer.u8(6);
+            put_node_target(writer, *function);
+            put_count(writer, arguments.len())?;
+            for value in arguments {
+                put_value_draft(writer, *value);
+            }
+        }
+        ExpressionKindDraft::Hole { expected } => {
+            writer.u8(7);
+            put_type(writer, *expected);
+        }
+        ExpressionKindDraft::If {
+            condition,
+            result,
+            then_body,
+            else_body,
+        } => {
+            writer.u8(8);
+            put_value_draft(writer, *condition);
+            put_type(writer, *result);
+            put_yielding_body(writer, then_body, depth + 1)?;
+            put_yielding_body(writer, else_body, depth + 1)?;
+        }
+        ExpressionKindDraft::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            index_handle,
+            carried_handle,
+            body,
+        } => {
+            writer.u8(9);
+            put_value_draft(writer, *start);
+            put_value_draft(writer, *end_exclusive);
+            writer.i64(*step);
+            put_value_draft(writer, *initial);
+            put_type(writer, *carried);
+            writer.u32(index_handle.get());
+            writer.u32(carried_handle.get());
+            put_yielding_body(writer, body, depth + 1)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_expression(reader: &mut Reader<'_>) -> Result<ExpressionDraft> {
+    read_expression_at(reader, 0)
+}
+fn read_expression_at(reader: &mut Reader<'_>, depth: usize) -> Result<ExpressionDraft> {
+    if depth > crate::transaction::MAX_STRUCTURED_DRAFT_DEPTH {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "structured draft nesting exceeds binary request depth policy",
+        ));
+    }
+    let handle = read_handle(reader)?;
+    let tag = reader.u8().map_err(protocol_codec)?;
+    let operation = match tag {
+        1 => ExpressionKindDraft::ConstUnit,
+        2 => ExpressionKindDraft::ConstBool(reader.bool().map_err(protocol_codec)?),
+        3 => ExpressionKindDraft::ConstI64(reader.i64().map_err(protocol_codec)?),
+        4 => ExpressionKindDraft::AddI64 {
+            lhs: read_value_draft(reader)?,
+            rhs: read_value_draft(reader)?,
+        },
+        5 => ExpressionKindDraft::LtI64 {
+            lhs: read_value_draft(reader)?,
+            rhs: read_value_draft(reader)?,
+        },
+        6 => {
+            let function = read_node_target(reader)?;
+            let count = reader
+                .count(MAX_STRUCTURED_DRAFT_ITEMS)
+                .map_err(protocol_codec)?;
+            let mut arguments = Vec::with_capacity(count);
+            for _ in 0..count {
+                arguments.push(read_value_draft(reader)?);
+            }
+            ExpressionKindDraft::Call {
+                function,
+                arguments,
+            }
+        }
+        7 => ExpressionKindDraft::Hole {
+            expected: read_type(reader)?,
+        },
+        8 => ExpressionKindDraft::If {
+            condition: read_value_draft(reader)?,
+            result: read_type(reader)?,
+            then_body: read_yielding_body(reader, depth + 1)?,
+            else_body: read_yielding_body(reader, depth + 1)?,
+        },
+        9 => ExpressionKindDraft::ForI64 {
+            start: read_value_draft(reader)?,
+            end_exclusive: read_value_draft(reader)?,
+            step: reader.i64().map_err(protocol_codec)?,
+            initial: read_value_draft(reader)?,
+            carried: read_type(reader)?,
+            index_handle: read_handle(reader)?,
+            carried_handle: read_handle(reader)?,
+            body: read_yielding_body(reader, depth + 1)?,
+        },
+        tag => {
+            return Err(protocol_codec(
+                reader.unknown_tag(TagDomain::Operation, tag),
+            ));
+        }
+    };
+    Ok(ExpressionDraft { handle, operation })
 }
 
 fn put_query_batch_request(w: &mut Writer, v: &QueryBatchRequest) -> Result<()> {
@@ -1060,7 +1781,7 @@ fn put_query_batch_request(w: &mut Writer, v: &QueryBatchRequest) -> Result<()> 
 fn read_query_batch_request(r: &mut Reader<'_>) -> Result<QueryBatchRequest> {
     let workspace = read_workspace(r)?;
     let revision = Revision::new(r.u64().map_err(protocol_codec)?);
-    let n = r.count(MAX_BATCH_QUERIES).map_err(protocol_codec)?;
+    let n = r.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
     let mut queries = Vec::with_capacity(n);
     for _ in 0..n {
         queries.push(QueryItem {
@@ -1101,7 +1822,7 @@ fn put_repair_target(w: &mut Writer, t: RepairTarget) {
         RepairTarget::Operand { operation, index } => {
             w.u8(2);
             put_node_id(w, operation);
-            w.u8(index)
+            w.u64(index)
         }
     }
 }
@@ -1110,7 +1831,7 @@ fn read_repair_target(r: &mut Reader<'_>) -> Result<RepairTarget> {
         1 => Ok(RepairTarget::Hole(read_node_id(r)?)),
         2 => Ok(RepairTarget::Operand {
             operation: read_node_id(r)?,
-            index: r.u8().map_err(protocol_codec)?,
+            index: r.u64().map_err(protocol_codec)?,
         }),
         tag => Err(protocol_codec(
             r.unknown_tag(TagDomain::ProtocolMessage, tag),
@@ -1160,10 +1881,12 @@ fn put_query(w: &mut Writer, q: &Query) -> Result<()> {
         Query::LegalConstructors {
             target,
             include_incompatible,
+            constructors,
             values,
         } => {
             put_repair_target(w, *target);
             w.bool(*include_incompatible);
+            put_page_request(w, *constructors);
             put_page_request(w, *values)
         }
         Query::SemanticDiff { from, page } => {
@@ -1219,6 +1942,7 @@ fn read_query(r: &mut Reader<'_>) -> Result<Query> {
         QueryCode::LegalConstructors => Query::LegalConstructors {
             target: read_repair_target(r)?,
             include_incompatible: r.bool().map_err(protocol_codec)?,
+            constructors: read_page_request(r)?,
             values: read_page_request(r)?,
         },
         QueryCode::SemanticDiff => Query::SemanticDiff {
@@ -1342,6 +2066,20 @@ fn put_cursor(w: &mut Writer, c: PageCursor) {
             w.bool(include_incompatible);
             w.u64(next)
         }
+        PageCursor::LegalConstructors {
+            workspace,
+            revision,
+            target,
+            expected,
+            next,
+        } => {
+            w.u8(9);
+            put_workspace(w, workspace);
+            w.u64(revision.get());
+            put_repair_target(w, target);
+            put_type(w, expected);
+            w.u64(next)
+        }
         PageCursor::Diff {
             workspace,
             from,
@@ -1407,6 +2145,13 @@ fn read_cursor(r: &mut Reader<'_>) -> Result<PageCursor> {
             workspace: read_workspace(r)?,
             from: Revision::new(r.u64().map_err(protocol_codec)?),
             to: Revision::new(r.u64().map_err(protocol_codec)?),
+            next: r.u64().map_err(protocol_codec)?,
+        },
+        9 => PageCursor::LegalConstructors {
+            workspace: read_workspace(r)?,
+            revision: Revision::new(r.u64().map_err(protocol_codec)?),
+            target: read_repair_target(r)?,
+            expected: read_type(r)?,
             next: r.u64().map_err(protocol_codec)?,
         },
         _ => {
@@ -1641,6 +2386,10 @@ fn put_value_ref(w: &mut Writer, v: ValueRef) {
             put_node_id(w, operation);
             w.u8(output)
         }
+        ValueRef::BlockArgument(argument) => {
+            w.u8(3);
+            put_node_id(w, argument)
+        }
     }
 }
 fn read_value_ref(r: &mut Reader<'_>) -> Result<ValueRef> {
@@ -1650,6 +2399,7 @@ fn read_value_ref(r: &mut Reader<'_>) -> Result<ValueRef> {
             operation: read_node_id(r)?,
             output: r.u8().map_err(protocol_codec)?,
         }),
+        3 => Ok(ValueRef::BlockArgument(read_node_id(r)?)),
         tag => Err(protocol_codec(r.unknown_tag(TagDomain::Value, tag))),
     }
 }
@@ -1702,6 +2452,11 @@ fn put_body(w: &mut Writer, x: &BodyItem) -> Result<()> {
     w.bool(x.complete);
     w.bool(x.terminator);
     put_literal(w, &x.literal);
+    put_count(w, x.owned_regions.len())?;
+    for region in &x.owned_regions {
+        put_node_id(w, region.region);
+        w.u8(region.role.stable_tag());
+    }
     Ok(())
 }
 fn read_body(r: &mut Reader<'_>) -> Result<BodyItem> {
@@ -1715,10 +2470,22 @@ fn read_body(r: &mut Reader<'_>) -> Result<BodyItem> {
     for _ in 0..n {
         result_types.push(read_type(r)?)
     }
-    let n = r.count(8).map_err(protocol_codec)?;
+    let n = r.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
     let mut operands = Vec::with_capacity(n);
     for _ in 0..n {
         operands.push(read_value_ref(r)?)
+    }
+    let complete = r.bool().map_err(protocol_codec)?;
+    let terminator = r.bool().map_err(protocol_codec)?;
+    let literal = read_literal(r)?;
+    let count = r.count(2).map_err(protocol_codec)?;
+    let mut owned_regions = Vec::with_capacity(count);
+    for _ in 0..count {
+        let region = read_node_id(r)?;
+        let tag = r.u8().map_err(protocol_codec)?;
+        let role = RegionRole::from_stable_tag(tag)
+            .ok_or_else(|| protocol_codec(r.unknown_tag(TagDomain::ProtocolMessage, tag)))?;
+        owned_regions.push(OwnedRegionSummary { region, role });
     }
     Ok(BodyItem {
         operation,
@@ -1726,9 +2493,10 @@ fn read_body(r: &mut Reader<'_>) -> Result<BodyItem> {
         code,
         result_types,
         operands,
-        complete: r.bool().map_err(protocol_codec)?,
-        terminator: r.bool().map_err(protocol_codec)?,
-        literal: read_literal(r)?,
+        complete,
+        terminator,
+        literal,
+        owned_regions,
     })
 }
 fn put_page_body(w: &mut Writer, p: &Page<BodyItem>) -> Result<()> {
@@ -1748,7 +2516,7 @@ fn read_page_body(r: &mut Reader<'_>) -> Result<Page<BodyItem>> {
 }
 fn put_use(w: &mut Writer, x: &UseSite) {
     put_node_id(w, x.source);
-    w.u8(x.operand_index);
+    w.u64(x.operand_index);
     put_value_ref(w, x.target);
     put_node_id(w, x.owner_block);
     put_node_id(w, x.owner_function);
@@ -1757,7 +2525,7 @@ fn put_use(w: &mut Writer, x: &UseSite) {
 }
 fn read_use(r: &mut Reader<'_>) -> Result<UseSite> {
     let source = read_node_id(r)?;
-    let operand_index = r.u8().map_err(protocol_codec)?;
+    let operand_index = r.u64().map_err(protocol_codec)?;
     let target = read_value_ref(r)?;
     let owner_block = read_node_id(r)?;
     let owner_function = read_node_id(r)?;
@@ -1793,22 +2561,31 @@ fn read_page_use(r: &mut Reader<'_>) -> Result<Page<UseSite>> {
     }
     Ok(Page { items, next, total })
 }
+fn put_definition_slot(w: &mut Writer, slot: DefinitionSlot) {
+    w.u8(match slot {
+        DefinitionSlot::PackageEntry => 1,
+        DefinitionSlot::CallTarget => 2,
+    });
+}
+fn read_definition_slot(r: &mut Reader<'_>) -> Result<DefinitionSlot> {
+    let tag = r.u8().map_err(protocol_codec)?;
+    match tag {
+        1 => Ok(DefinitionSlot::PackageEntry),
+        2 => Ok(DefinitionSlot::CallTarget),
+        _ => Err(protocol_codec(
+            r.unknown_tag(TagDomain::ProtocolMessage, tag),
+        )),
+    }
+}
 fn put_def(w: &mut Writer, x: &DefinitionReferenceSite) {
     put_node_id(w, x.source);
-    w.u8(1);
+    put_definition_slot(w, x.slot);
     put_node_id(w, x.target)
 }
 fn read_def(r: &mut Reader<'_>) -> Result<DefinitionReferenceSite> {
-    let source = read_node_id(r)?;
-    if r.u8().map_err(protocol_codec)? != 1 {
-        return Err(LkError::new(
-            ErrorCode::ProtocolMalformed,
-            "unknown definition slot",
-        ));
-    }
     Ok(DefinitionReferenceSite {
-        source,
-        slot: DefinitionSlot::PackageEntry,
+        source: read_node_id(r)?,
+        slot: read_definition_slot(r)?,
         target: read_node_id(r)?,
     })
 }
@@ -1831,12 +2608,12 @@ fn put_dep(w: &mut Writer, x: &DependencyFact) {
     match x {
         DependencyFact::ValueOperand { index, value } => {
             w.u8(1);
-            w.u8(*index);
+            w.u64(*index);
             put_value_ref(w, *value)
         }
-        DependencyFact::Definition { target, .. } => {
+        DependencyFact::Definition { slot, target } => {
             w.u8(2);
-            w.u8(1);
+            put_definition_slot(w, *slot);
             put_node_id(w, *target)
         }
     }
@@ -1844,21 +2621,13 @@ fn put_dep(w: &mut Writer, x: &DependencyFact) {
 fn read_dep(r: &mut Reader<'_>) -> Result<DependencyFact> {
     match r.u8().map_err(protocol_codec)? {
         1 => Ok(DependencyFact::ValueOperand {
-            index: r.u8().map_err(protocol_codec)?,
+            index: r.u64().map_err(protocol_codec)?,
             value: read_value_ref(r)?,
         }),
-        2 => {
-            if r.u8().map_err(protocol_codec)? != 1 {
-                return Err(LkError::new(
-                    ErrorCode::ProtocolMalformed,
-                    "unknown definition slot",
-                ));
-            }
-            Ok(DependencyFact::Definition {
-                slot: DefinitionSlot::PackageEntry,
-                target: read_node_id(r)?,
-            })
-        }
+        2 => Ok(DependencyFact::Definition {
+            slot: read_definition_slot(r)?,
+            target: read_node_id(r)?,
+        }),
         tag => Err(protocol_codec(
             r.unknown_tag(TagDomain::ProtocolMessage, tag),
         )),
@@ -1958,8 +2727,16 @@ fn put_constructor(w: &mut Writer, x: &ConstructorDescriptor) -> Result<()> {
             LiteralField::I64Value => 1,
             LiteralField::BoolValue => 2,
             LiteralField::ExpectedType => 3,
+            LiteralField::ResultType => 4,
+            LiteralField::CarriedType => 5,
+            LiteralField::PositiveStep => 6,
         })
     }
+    w.bool(x.call_target.is_some());
+    if let Some(target) = x.call_target {
+        put_node_id(w, target);
+    }
+    w.bool(x.direct_refinement);
     w.bool(x.complete);
     w.bool(x.terminator);
     Ok(())
@@ -1992,6 +2769,9 @@ fn read_constructor(r: &mut Reader<'_>) -> Result<ConstructorDescriptor> {
             1 => LiteralField::I64Value,
             2 => LiteralField::BoolValue,
             3 => LiteralField::ExpectedType,
+            4 => LiteralField::ResultType,
+            5 => LiteralField::CarriedType,
+            6 => LiteralField::PositiveStep,
             tag => {
                 return Err(protocol_codec(
                     r.unknown_tag(TagDomain::ProtocolMessage, tag),
@@ -2005,6 +2785,12 @@ fn read_constructor(r: &mut Reader<'_>) -> Result<ConstructorDescriptor> {
         operand_types,
         operand_uses,
         literal_fields,
+        call_target: if r.bool().map_err(protocol_codec)? {
+            Some(read_node_id(r)?)
+        } else {
+            None
+        },
+        direct_refinement: r.bool().map_err(protocol_codec)?,
         complete: r.bool().map_err(protocol_codec)?,
         terminator: r.bool().map_err(protocol_codec)?,
     })
@@ -2012,56 +2798,130 @@ fn read_constructor(r: &mut Reader<'_>) -> Result<ConstructorDescriptor> {
 fn put_legal(w: &mut Writer, x: &LegalConstructorsResult) -> Result<()> {
     put_repair_target(w, x.target);
     put_type(w, x.expected_type);
-    put_count(w, x.constructors.len())?;
-    for c in &x.constructors {
-        put_constructor(w, c)?
+    put_page_head(w, &x.constructors)?;
+    for constructor in &x.constructors.items {
+        put_constructor(w, constructor)?;
     }
     put_page_visible(w, &x.visible_values)
 }
 fn read_legal(r: &mut Reader<'_>) -> Result<LegalConstructorsResult> {
     let target = read_repair_target(r)?;
     let expected_type = read_type(r)?;
-    let n = r.count(8).map_err(protocol_codec)?;
-    let mut constructors = Vec::with_capacity(n);
-    for _ in 0..n {
-        constructors.push(read_constructor(r)?)
+    let (count, next, total) = read_page_head(r)?;
+    let mut items = Vec::with_capacity(count);
+    for _ in 0..count {
+        items.push(read_constructor(r)?)
     }
     Ok(LegalConstructorsResult {
         target,
         expected_type,
-        constructors,
+        constructors: Page { items, next, total },
         visible_values: read_page_visible(r)?,
     })
 }
 
-fn put_operation_kind(w: &mut Writer, o: &OperationKind) {
+fn put_operation_kind(w: &mut Writer, o: &OperationKind) -> Result<()> {
     w.u8(o.code().stable_tag());
     match o {
+        OperationKind::ConstUnit => {}
         OperationKind::ConstI64(v) => w.i64(*v),
         OperationKind::ConstBool(v) => w.bool(*v),
-        OperationKind::AddI64 { lhs, rhs } => {
+        OperationKind::AddI64 { lhs, rhs } | OperationKind::LtI64 { lhs, rhs } => {
             put_value_ref(w, *lhs);
-            put_value_ref(w, *rhs)
+            put_value_ref(w, *rhs);
+        }
+        OperationKind::Call {
+            function,
+            arguments,
+        } => {
+            put_node_id(w, *function);
+            put_count(w, arguments.len())?;
+            for argument in arguments {
+                put_value_ref(w, *argument);
+            }
         }
         OperationKind::Hole { expected } => put_type(w, *expected),
-        OperationKind::Return { value } => put_value_ref(w, *value),
+        OperationKind::If {
+            condition,
+            result,
+            then_region,
+            else_region,
+        } => {
+            put_value_ref(w, *condition);
+            put_type(w, *result);
+            put_node_id(w, *then_region);
+            put_node_id(w, *else_region);
+        }
+        OperationKind::ForI64 {
+            start,
+            end_exclusive,
+            step,
+            initial,
+            carried,
+            body_region,
+        } => {
+            put_value_ref(w, *start);
+            put_value_ref(w, *end_exclusive);
+            w.i64(*step);
+            put_value_ref(w, *initial);
+            put_type(w, *carried);
+            put_node_id(w, *body_region);
+        }
+        OperationKind::Return { value } | OperationKind::Yield { value } => {
+            put_value_ref(w, *value)
+        }
     }
+    Ok(())
 }
 fn read_operation_kind(r: &mut Reader<'_>) -> Result<OperationKind> {
     let t = r.u8().map_err(protocol_codec)?;
     let c = OperationCode::from_stable_tag(t)
         .ok_or_else(|| protocol_codec(r.unknown_tag(TagDomain::Operation, t)))?;
     Ok(match c {
+        OperationCode::ConstUnit => OperationKind::ConstUnit,
         OperationCode::ConstI64 => OperationKind::ConstI64(r.i64().map_err(protocol_codec)?),
         OperationCode::ConstBool => OperationKind::ConstBool(r.bool().map_err(protocol_codec)?),
         OperationCode::AddI64 => OperationKind::AddI64 {
             lhs: read_value_ref(r)?,
             rhs: read_value_ref(r)?,
         },
+        OperationCode::LtI64 => OperationKind::LtI64 {
+            lhs: read_value_ref(r)?,
+            rhs: read_value_ref(r)?,
+        },
+        OperationCode::Call => {
+            let function = read_node_id(r)?;
+            let n = r.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+            let mut arguments = Vec::with_capacity(n);
+            for _ in 0..n {
+                arguments.push(read_value_ref(r)?);
+            }
+            OperationKind::Call {
+                function,
+                arguments,
+            }
+        }
         OperationCode::Hole => OperationKind::Hole {
             expected: read_type(r)?,
         },
+        OperationCode::If => OperationKind::If {
+            condition: read_value_ref(r)?,
+            result: read_type(r)?,
+            then_region: read_node_id(r)?,
+            else_region: read_node_id(r)?,
+        },
+        OperationCode::ForI64 => OperationKind::ForI64 {
+            start: read_value_ref(r)?,
+            end_exclusive: read_value_ref(r)?,
+            step: r.i64().map_err(protocol_codec)?,
+            initial: read_value_ref(r)?,
+            carried: read_type(r)?,
+            body_region: read_node_id(r)?,
+        },
         OperationCode::Return => OperationKind::Return {
+            value: read_value_ref(r)?,
+        },
+        OperationCode::Yield => OperationKind::Yield {
             value: read_value_ref(r)?,
         },
     })
@@ -2128,9 +2988,13 @@ fn put_change(w: &mut Writer, x: &Change) -> Result<()> {
             before,
             after,
         } => {
-            w.u8(*index);
+            w.u64(*index);
             put_opt_value(w, *before);
             put_opt_value(w, *after)
+        }
+        ChangeKind::DefinitionChanged { before, after } => {
+            put_node_id(w, *before);
+            put_node_id(w, *after)
         }
         ChangeKind::EntryFunctionChanged { before, after } => {
             put_optional_node_id(w, *before);
@@ -2146,7 +3010,7 @@ fn put_change(w: &mut Writer, x: &Change) -> Result<()> {
             w.u8(before.stable_tag());
             w.u8(after.stable_tag());
             put_type(w, *result_type);
-            put_operation_kind(w, replacement)
+            put_operation_kind(w, replacement)?
         }
         ChangeKind::AllocatedAndTombstoned => {}
     }
@@ -2175,9 +3039,13 @@ fn read_change(r: &mut Reader<'_>) -> Result<Change> {
             after_count: r.u64().map_err(protocol_codec)?,
         },
         6 => ChangeKind::OperandChanged {
-            index: r.u8().map_err(protocol_codec)?,
+            index: r.u64().map_err(protocol_codec)?,
             before: read_opt_value(r)?,
             after: read_opt_value(r)?,
+        },
+        7 => ChangeKind::DefinitionChanged {
+            before: read_node_id(r)?,
+            after: read_node_id(r)?,
         },
         8 => ChangeKind::EntryFunctionChanged {
             before: read_optional_node_id(r)?,
@@ -2252,7 +3120,7 @@ fn put_context(w: &mut Writer, x: &RepairContext) -> Result<()> {
     w.u8(x.operation_code.stable_tag());
     w.bool(x.operand_index.is_some());
     if let Some(i) = x.operand_index {
-        w.u8(i)
+        w.u64(i)
     }
     put_type(w, x.expected_type);
     w.bool(x.use_mode.is_some());
@@ -2269,12 +3137,31 @@ fn put_context(w: &mut Writer, x: &RepairContext) -> Result<()> {
     for o in &x.owner_chain {
         put_owner(w, o)?
     }
+    put_count(w, x.enclosing_regions.len())?;
+    for region in &x.enclosing_regions {
+        put_node_id(w, region.region);
+        put_node_id(w, region.owner_operation);
+        w.u8(region.role.stable_tag());
+    }
+    put_count(w, x.visible_block_arguments.len())?;
+    for argument in &x.visible_block_arguments {
+        put_node_id(w, argument.argument);
+        put_node_id(w, argument.block);
+        put_node_id(w, argument.region);
+        w.u32(argument.ordinal);
+        w.u8(match argument.role {
+            BlockArgumentRole::LoopIndex => 1,
+            BlockArgumentRole::LoopCarried => 2,
+        });
+        put_type(w, argument.ty);
+    }
     put_count(w, x.body_window.len())?;
     for b in &x.body_window {
         put_body(w, b)?
     }
     put_page_visible(w, &x.visible_values)?;
     put_page_use(w, &x.incoming_uses)?;
+    w.u64(x.legal_constructor_count);
     put_count(w, x.legal_constructors.len())?;
     for c in &x.legal_constructors {
         put_constructor(w, c)?
@@ -2298,7 +3185,7 @@ fn read_context(r: &mut Reader<'_>) -> Result<RepairContext> {
     let operation_code = OperationCode::from_stable_tag(t)
         .ok_or_else(|| protocol_codec(r.unknown_tag(TagDomain::Operation, t)))?;
     let operand_index = if r.bool().map_err(protocol_codec)? {
-        Some(r.u8().map_err(protocol_codec)?)
+        Some(r.u64().map_err(protocol_codec)?)
     } else {
         None
     };
@@ -2320,10 +3207,57 @@ fn read_context(r: &mut Reader<'_>) -> Result<RepairContext> {
     let owner_function = read_node_id(r)?;
     let ordinal = r.u64().map_err(protocol_codec)?;
     let function_signature = read_signature(r)?;
-    let n = r.count(16).map_err(protocol_codec)?;
+    let n = r
+        .count(MAX_CONTEXT_ITEMS as usize)
+        .map_err(protocol_codec)?;
     let mut owner_chain = Vec::with_capacity(n);
     for _ in 0..n {
         owner_chain.push(read_owner(r)?)
+    }
+    let count = r
+        .count(MAX_CONTEXT_ITEMS as usize)
+        .map_err(protocol_codec)?;
+    let mut enclosing_regions = Vec::with_capacity(count);
+    for _ in 0..count {
+        let region = read_node_id(r)?;
+        let owner_operation = read_node_id(r)?;
+        let tag = r.u8().map_err(protocol_codec)?;
+        let role = RegionRole::from_stable_tag(tag)
+            .ok_or_else(|| protocol_codec(r.unknown_tag(TagDomain::ProtocolMessage, tag)))?;
+        enclosing_regions.push(EnclosingRegionFact {
+            region,
+            owner_operation,
+            role,
+        });
+    }
+    let count = r
+        .count(MAX_CONTEXT_ITEMS as usize)
+        .map_err(protocol_codec)?;
+    let mut visible_block_arguments = Vec::with_capacity(count);
+    for _ in 0..count {
+        let argument = read_node_id(r)?;
+        let block = read_node_id(r)?;
+        let region = read_node_id(r)?;
+        let ordinal = r.u32().map_err(protocol_codec)?;
+        let tag = r.u8().map_err(protocol_codec)?;
+        let role = match tag {
+            1 => BlockArgumentRole::LoopIndex,
+            2 => BlockArgumentRole::LoopCarried,
+            tag => {
+                return Err(protocol_codec(
+                    r.unknown_tag(TagDomain::ProtocolMessage, tag),
+                ));
+            }
+        };
+        let ty = read_type(r)?;
+        visible_block_arguments.push(BlockArgumentFact {
+            argument,
+            block,
+            region,
+            ordinal,
+            role,
+            ty,
+        });
     }
     let n = r
         .count((MAX_CONTEXT_ITEMS * 2 + 1) as usize)
@@ -2334,7 +3268,10 @@ fn read_context(r: &mut Reader<'_>) -> Result<RepairContext> {
     }
     let visible_values = read_page_visible(r)?;
     let incoming_uses = read_page_use(r)?;
-    let n = r.count(8).map_err(protocol_codec)?;
+    let legal_constructor_count = r.u64().map_err(protocol_codec)?;
+    let n = r
+        .count(MAX_CONTEXT_ITEMS as usize)
+        .map_err(protocol_codec)?;
     let mut legal_constructors = Vec::with_capacity(n);
     for _ in 0..n {
         legal_constructors.push(read_constructor(r)?)
@@ -2369,9 +3306,12 @@ fn read_context(r: &mut Reader<'_>) -> Result<RepairContext> {
         ordinal,
         function_signature,
         owner_chain,
+        enclosing_regions,
+        visible_block_arguments,
         body_window,
         visible_values,
         incoming_uses,
+        legal_constructor_count,
         legal_constructors,
         blocker,
         refinement_operation,
@@ -2492,46 +3432,55 @@ fn read_node_summary(r: &mut Reader<'_>) -> Result<NodeSummary> {
     })
 }
 
-fn put_run_result(writer: &mut Writer, result: &RunResult) {
-    match result.value {
-        RuntimeValue::Unit => writer.u8(1),
-        RuntimeValue::Bool(value) => {
-            writer.u8(2);
-            writer.bool(value);
-        }
-        RuntimeValue::I64(value) => {
-            writer.u8(3);
-            writer.i64(value);
-        }
+fn put_runtime_value(writer: &mut Writer, value: RuntimeValue) {
+    writer.u8(value.code().stable_tag());
+    match value {
+        RuntimeValue::Unit => {}
+        RuntimeValue::Bool(value) => writer.bool(value),
+        RuntimeValue::I64(value) => writer.i64(value),
     }
+}
+
+fn read_runtime_value(reader: &mut Reader<'_>) -> Result<RuntimeValue> {
+    let tag = reader.u8().map_err(protocol_codec)?;
+    match RuntimeValueCode::from_stable_tag(tag) {
+        Some(RuntimeValueCode::Unit) => Ok(RuntimeValue::Unit),
+        Some(RuntimeValueCode::Bool) => {
+            Ok(RuntimeValue::Bool(reader.bool().map_err(protocol_codec)?))
+        }
+        Some(RuntimeValueCode::I64) => Ok(RuntimeValue::I64(reader.i64().map_err(protocol_codec)?)),
+        None => Err(protocol_codec(
+            reader.unknown_tag(TagDomain::RuntimeValue, tag),
+        )),
+    }
+}
+
+fn put_run_result(writer: &mut Writer, result: &RunResult) {
+    put_runtime_value(writer, result.value);
     writer.u64(result.compile_nanoseconds);
     writer.u64(result.execute_nanoseconds);
 }
 
 fn read_run_result(reader: &mut Reader<'_>) -> Result<RunResult> {
-    let tag = reader.u8().map_err(protocol_codec)?;
-    let value = match tag {
-        1 => RuntimeValue::Unit,
-        2 => RuntimeValue::Bool(reader.bool().map_err(protocol_codec)?),
-        3 => RuntimeValue::I64(reader.i64().map_err(protocol_codec)?),
-        _ => {
-            return Err(protocol_codec(
-                reader.unknown_tag(TagDomain::RuntimeValue, tag),
-            ));
-        }
-    };
     Ok(RunResult {
-        value,
+        value: read_runtime_value(reader)?,
         compile_nanoseconds: reader.u64().map_err(protocol_codec)?,
         execute_nanoseconds: reader.u64().map_err(protocol_codec)?,
     })
 }
 
 fn put_error(writer: &mut Writer, error: &LkError) -> Result<()> {
+    if error.related.len() > crate::error::MAX_ERROR_RELATED_IDS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "diagnostic related identities exceed response policy",
+        ));
+    }
     writer.u8(error.code.stable_tag());
     put_optional_workspace(writer, error.workspace);
     put_optional_revision(writer, error.revision);
     put_optional_u32(writer, error.operation_index);
+    put_optional_u32(writer, error.local_handle.map(LocalHandle::get));
     put_optional_node_id(writer, error.target);
     put_optional_kind(writer, error.expected_kind);
     put_optional_kind(writer, error.actual_kind);
@@ -2553,12 +3502,15 @@ fn read_error(reader: &mut Reader<'_>) -> Result<LkError> {
     let workspace = read_optional_workspace(reader)?;
     let revision = read_optional_revision(reader)?;
     let operation_index = read_optional_u32(reader)?;
+    let local_handle = read_optional_u32(reader)?.map(LocalHandle::new);
     let target = read_optional_node_id(reader)?;
     let expected_kind = read_optional_kind(reader)?;
     let actual_kind = read_optional_kind(reader)?;
     let expected_type = read_optional_type(reader)?;
     let actual_type = read_optional_type(reader)?;
-    let count = reader.count(MAXIMUM_FRAME_ITEMS).map_err(protocol_codec)?;
+    let count = reader
+        .count(crate::error::MAX_ERROR_RELATED_IDS)
+        .map_err(protocol_codec)?;
     let mut related = Vec::with_capacity(count);
     for _ in 0..count {
         related.push(read_node_id(reader)?);
@@ -2570,12 +3522,13 @@ fn read_error(reader: &mut Reader<'_>) -> Result<LkError> {
         workspace,
         revision,
         operation_index,
+        local_handle,
         target,
         expected_kind,
         actual_kind,
         expected_type,
         actual_type,
-        related,
+        related: related.into_boxed_slice(),
         retryable,
         message,
     })
@@ -2902,6 +3855,22 @@ mod tests {
         let mut wrong_limit = canonical.clone();
         wrong_limit.limits.maximum_frame_items += 1;
         fabricated.push(wrong_limit);
+        let mut missing_run_field = canonical.clone();
+        missing_run_field.run.fields.pop();
+        fabricated.push(missing_run_field);
+        let mut wrong_runtime_tag = canonical.clone();
+        wrong_runtime_tag.run.runtime_values[0].tag = 99;
+        fabricated.push(wrong_runtime_tag);
+        let mut wrong_request_shape = canonical.clone();
+        wrong_request_shape.request_payloads[3].payload.fields[0].type_expression =
+            "fabricated".into();
+        fabricated.push(wrong_request_shape);
+        let mut wrong_draft_newtype = canonical.clone();
+        wrong_draft_newtype.structured_authoring.expression_variants[2].newtype = None;
+        fabricated.push(wrong_draft_newtype);
+        let mut wrong_envelope = canonical.clone();
+        wrong_envelope.envelopes[0].payload.fields[0].required = false;
+        fabricated.push(wrong_envelope);
         let mut duplicate = canonical;
         duplicate.queries.push(duplicate.queries[0].clone());
         fabricated.push(duplicate);
@@ -2955,10 +3924,14 @@ mod tests {
             ErrorCode::ProtocolMalformed
         );
 
-        let response = Response::Error(LkError::new(
-            ErrorCode::ProtocolMalformed,
-            "uncorrelated malformed request",
-        ));
+        let response = Response::Error(
+            LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "uncorrelated malformed request",
+            )
+            .at_operation(3)
+            .for_handle(LocalHandle::new(44)),
+        );
         let mut bytes = Vec::new();
         write_response(&mut bytes, RequestId::new(0), &response).expect("zero response ID");
         assert_eq!(
@@ -2995,6 +3968,32 @@ mod tests {
             read_request(&mut bytes.as_slice()).expect("binary query decode"),
             Some((RequestId::new(79), request))
         );
+
+        let over_policy = Request::QueryBatch(QueryBatchRequest {
+            workspace,
+            revision: Revision::INITIAL,
+            queries: (1..=MAX_BATCH_QUERIES + 1)
+                .map(|index| QueryItem {
+                    id: QueryId::new(index as u64),
+                    query: Query::WorkspaceSummary,
+                })
+                .collect(),
+        });
+        let mut bytes = Vec::new();
+        write_request(&mut bytes, RequestId::new(80), &over_policy)
+            .expect("transport-bounded query encode");
+        let (_, decoded) = read_request(&mut bytes.as_slice())
+            .expect("transport-bounded query decode")
+            .expect("request");
+        let Request::QueryBatch(decoded) = decoded else {
+            panic!("query request")
+        };
+        assert_eq!(
+            validate_batch(&decoded)
+                .expect_err("daemon batch policy")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
     }
 
     #[test]
@@ -3029,6 +4028,104 @@ mod tests {
     }
 
     #[test]
+    fn structured_draft_binary_round_trip_and_unknown_variant_rejection() {
+        let workspace = WorkspaceId::from_bytes([0x92; 16]);
+        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let value = |handle| ValueDraft::OperationResult {
+            operation: local(handle),
+            output: 0,
+        };
+        let request = Request::ApplyTransaction(ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::ValidateOnly,
+                operations: vec![TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(1),
+                    module: local(2),
+                    name: "nested".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(3),
+                        name: "input".into(),
+                        ty: SemanticType::I64,
+                    }],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(4),
+                            operation: ExpressionKindDraft::If {
+                                condition: ValueDraft::FunctionParameter(local(3)),
+                                result: SemanticType::I64,
+                                then_body: YieldingBodyDraft {
+                                    operations: vec![ExpressionDraft {
+                                        handle: LocalHandle::new(5),
+                                        operation: ExpressionKindDraft::ConstI64(1),
+                                    }],
+                                    yield_value: value(5),
+                                },
+                                else_body: YieldingBodyDraft {
+                                    operations: vec![ExpressionDraft {
+                                        handle: LocalHandle::new(6),
+                                        operation: ExpressionKindDraft::ConstI64(2),
+                                    }],
+                                    yield_value: value(6),
+                                },
+                            },
+                        }],
+                        return_value: value(4),
+                    }),
+                }],
+            },
+            response: TransactionResponseSpec {
+                return_handles: vec![LocalHandle::new(4)],
+            },
+        });
+        let mut bytes = Vec::new();
+        write_request(&mut bytes, RequestId::new(81), &request).expect("structured binary encode");
+        assert_eq!(
+            read_request(&mut bytes.as_slice()).expect("structured binary decode"),
+            Some((RequestId::new(81), request))
+        );
+
+        for value in [
+            ValueDraft::FunctionParameter(local(3)),
+            ValueDraft::OperationResult {
+                operation: local(4),
+                output: 0,
+            },
+            ValueDraft::BlockArgument(local(5)),
+        ] {
+            let mut writer = Writer::new();
+            put_value_draft(&mut writer, value);
+            let bytes = writer.finish();
+            assert_eq!(bytes[0], value.code().stable_tag());
+            assert_eq!(
+                read_value_draft(&mut Reader::new(&bytes)).expect("value draft"),
+                value
+            );
+        }
+
+        let mut writer = Writer::new();
+        put_expression(
+            &mut writer,
+            &ExpressionDraft {
+                handle: LocalHandle::new(1),
+                operation: ExpressionKindDraft::ConstUnit,
+            },
+        )
+        .expect("expression encode");
+        let mut bytes = writer.finish();
+        bytes[4] = 0xff;
+        assert_eq!(
+            read_expression(&mut Reader::new(&bytes))
+                .expect_err("unknown expression tag")
+                .code,
+            ErrorCode::ProtocolMalformed
+        );
+    }
+
+    #[test]
     fn operation_protocol_tags_round_trip_every_closed_code() {
         let handle = LocalHandle::new(7);
         let value = ValueDraft::OperationResult {
@@ -3036,21 +4133,47 @@ mod tests {
             output: 0,
         };
         let operations = [
+            OperationDraft::ConstUnit,
             OperationDraft::ConstI64(-7),
             OperationDraft::ConstBool(true),
             OperationDraft::AddI64 {
                 lhs: value,
                 rhs: value,
             },
+            OperationDraft::LtI64 {
+                lhs: value,
+                rhs: value,
+            },
+            OperationDraft::Call {
+                function: NodeTarget::Local(handle),
+                arguments: vec![value],
+            },
             OperationDraft::Hole {
                 expected: SemanticType::Bool,
             },
+            OperationDraft::If {
+                condition: value,
+                result: SemanticType::I64,
+                then_region: NodeTarget::Local(handle),
+                else_region: NodeTarget::Local(handle),
+            },
+            OperationDraft::ForI64 {
+                start: value,
+                end_exclusive: value,
+                step: 1,
+                initial: value,
+                carried: SemanticType::I64,
+                body_region: NodeTarget::Local(handle),
+            },
             OperationDraft::Return { value },
+            OperationDraft::Yield {
+                value: ValueDraft::BlockArgument(NodeTarget::Local(handle)),
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
             let mut writer = Writer::new();
-            put_operation_draft(&mut writer, &operation);
+            put_operation_draft(&mut writer, &operation).expect("operation draft encode");
             let bytes = writer.finish();
             let mut reader = Reader::new(&bytes);
             assert_eq!(
@@ -3059,6 +4182,27 @@ mod tests {
             );
             reader.finish().expect("complete operation draft payload");
         }
+    }
+
+    #[test]
+    fn binary_run_codec_preserves_semantically_excessive_argument_count_for_runtime_validation() {
+        let workspace = WorkspaceId::from_bytes([0x92; 16]);
+        let request = Request::Run {
+            workspace,
+            revision: Revision::INITIAL,
+            entry: NodeId::new(workspace, 2).expect("entry"),
+            arguments: vec![RuntimeValue::Unit; crate::interpret::MAX_RUN_ARGUMENTS + 1],
+            policy: RunPolicy {
+                fuel: 1,
+                maximum_frames: 1,
+            },
+        };
+        let mut bytes = Vec::new();
+        write_request(&mut bytes, RequestId::new(80), &request).expect("binary run encode");
+        assert_eq!(
+            read_request(&mut bytes.as_slice()).expect("binary run decode"),
+            Some((RequestId::new(80), request))
+        );
     }
 
     #[test]
@@ -3166,6 +4310,7 @@ mod tests {
             Query::LegalConstructors {
                 target,
                 include_incompatible: true,
+                constructors: page,
                 values: page,
             },
             Query::SemanticDiff {
@@ -3222,12 +4367,19 @@ mod tests {
         let body_item = BodyItem {
             operation: node,
             ordinal: 0,
-            code: OperationCode::ConstI64,
+            code: OperationCode::Call,
             result_types: vec![SemanticType::I64],
-            operands: Vec::new(),
+            operands: vec![
+                ValueRef::OperationResult {
+                    operation: node,
+                    output: 0
+                };
+                9
+            ],
             complete: true,
             terminator: false,
             literal: Some(LiteralValue::I64(1)),
+            owned_regions: Vec::new(),
         };
         let response = Response::QueryBatchResult(QueryBatchResult {
             workspace,
@@ -3252,6 +4404,69 @@ mod tests {
         assert_eq!(
             read_response(&mut bytes.as_slice()).expect("decode legal aggregate response"),
             Some((RequestId::new(9), response))
+        );
+
+        let context = RepairContext {
+            workspace,
+            revision: Revision::new(1),
+            target,
+            operation: node,
+            operation_code: OperationCode::Hole,
+            operand_index: None,
+            expected_type: SemanticType::I64,
+            use_mode: None,
+            current_value: None,
+            current_actual_type: None,
+            owner_block: node,
+            owner_function: node,
+            ordinal: 0,
+            function_signature: FunctionSignatureSummary {
+                parameter_count: 0,
+                result: SemanticType::I64,
+            },
+            owner_chain: Vec::new(),
+            enclosing_regions: vec![
+                EnclosingRegionFact {
+                    region: node,
+                    owner_operation: node,
+                    role: RegionRole::IfThen,
+                },
+                EnclosingRegionFact {
+                    region: node,
+                    owner_operation: node,
+                    role: RegionRole::ForBody,
+                },
+            ],
+            visible_block_arguments: vec![BlockArgumentFact {
+                argument: node,
+                block: node,
+                region: node,
+                ordinal: 0,
+                role: BlockArgumentRole::LoopIndex,
+                ty: SemanticType::I64,
+            }],
+            body_window: Vec::new(),
+            visible_values: Page {
+                items: Vec::new(),
+                next: None,
+                total: Some(0),
+            },
+            incoming_uses: Page {
+                items: Vec::new(),
+                next: None,
+                total: Some(0),
+            },
+            legal_constructor_count: 0,
+            legal_constructors: Vec::new(),
+            blocker: None,
+            refinement_operation: Some(TransactionOpCode::RefineHole),
+        };
+        let mut writer = Writer::new();
+        put_context(&mut writer, &context).expect("context encode");
+        let bytes = writer.finish();
+        assert_eq!(
+            read_context(&mut Reader::new(&bytes)).expect("context decode"),
+            context
         );
     }
 
@@ -3322,9 +4537,9 @@ mod tests {
     }
 
     #[test]
-    fn protocol_version_one_is_rejected_without_fallback() {
+    fn protocol_version_two_is_rejected_without_fallback() {
         let mut body = Vec::new();
-        body.extend_from_slice(&1_u16.to_le_bytes());
+        body.extend_from_slice(&2_u16.to_le_bytes());
         body.extend_from_slice(&7_u64.to_le_bytes());
         body.push(1);
         let mut frame = Vec::new();
@@ -3332,7 +4547,7 @@ mod tests {
         frame.extend_from_slice(&body);
         assert_eq!(
             read_request(&mut frame.as_slice())
-                .expect_err("version one must reject")
+                .expect_err("version two must reject")
                 .code,
             ErrorCode::ProtocolVersion
         );

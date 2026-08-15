@@ -11,10 +11,12 @@ use lkjscript::query::{
     QueryItem, QueryOutcome, QueryResult, RepairContext, RepairTarget,
 };
 use lkjscript::{
-    ApplyTransactionRequest, ChangeDigest, ErrorCode, IdempotencyKey, LocalHandle, NodeId,
-    NodeTarget, OperationCode, OperationDraft, OperationKind, QueryId, Request, RequestId,
-    Response, Revision, RuntimeValue, SemanticType, Transaction, TransactionMode, TransactionOp,
-    TransactionReceipt, TransactionResponseSpec, ValueDraft, ValueRef, WorkspaceId,
+    ApplyTransactionRequest, BlockArgumentRole, ChangeDigest, ErrorCode, ExpressionDraft,
+    ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle,
+    NodeId, NodeTarget, OperationCode, OperationDraft, OperationKind, QueryId, RegionRole, Request,
+    RequestId, Response, Revision, RuntimeValue, SemanticType, Transaction, TransactionMode,
+    TransactionOp, TransactionReceipt, TransactionResponseSpec, ValueDraft, ValueRef, WorkspaceId,
+    YieldingBodyDraft,
 };
 use serde::Deserialize;
 use std::fs;
@@ -74,7 +76,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let transport = invoke_raw(
         state,
-        br#"{"version":2,"request_id":1,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":3,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert_eq!(transport.status.code(), Some(3));
     assert_one_json(&transport.stdout);
@@ -86,7 +88,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     let daemon = JsonDaemon::start(state);
     let raw_create = invoke_raw(
         state,
-        br#"{"version":2,"request_id":2,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":3,"request_id":2,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
@@ -108,7 +110,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     ));
     assert!(!validated.published);
     assert_eq!(validated.revision, Revision::new(1));
-    assert_eq!(validated.returned_bindings.len(), 9);
+    assert_eq!(validated.returned_bindings.len(), 6);
     assert_eq!(
         fs::read(&head).expect("HEAD after validate-only"),
         head_before_validate,
@@ -127,14 +129,58 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_eq!(committed.change_count, validated.change_count);
     assert_eq!(committed.change_digest, validated.change_digest);
     assert_eq!(committed.returned_bindings, validated.returned_bindings);
+    let structured_retry = receipt(rpc(
+        state,
+        49,
+        Request::ApplyTransaction(commit_request.clone()),
+    ));
+    assert_eq!(structured_retry, committed);
     let module = binding(&committed, 2);
     let function = binding(&committed, 3);
-    let block = binding(&committed, 5);
     let forty = binding(&committed, 6);
     let two = binding(&committed, 7);
     let boolean = binding(&committed, 8);
     let hole = binding(&committed, 9);
-    let return_operation = binding(&committed, 10);
+    let QueryResult::OwnerChain(owners) = query(
+        state,
+        47,
+        workspace,
+        Revision::new(1),
+        Query::OwnerChain {
+            node: hole,
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("owner chain")
+    };
+    let block = owners
+        .items
+        .iter()
+        .find(|owner| owner.kind == lkjscript::NodeKind::Block)
+        .expect("block owner")
+        .node;
+    let QueryResult::IncomingUses(uses) = query(
+        state,
+        48,
+        workspace,
+        Revision::new(1),
+        Query::IncomingUses {
+            value: ValueRef::OperationResult {
+                operation: hole,
+                output: 0,
+            },
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("incoming uses")
+    };
+    let return_operation = uses.items[0].source;
     assert_eq!(committed.created_count, 10);
     assert!(!committed.complete_after);
 
@@ -211,7 +257,13 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
             .iter()
             .map(|constructor| constructor.code)
             .collect::<Vec<_>>(),
-        vec![OperationCode::ConstI64, OperationCode::AddI64]
+        vec![
+            OperationCode::ConstI64,
+            OperationCode::AddI64,
+            OperationCode::Call,
+            OperationCode::If,
+            OperationCode::ForI64,
+        ]
     );
     assert!(context_before.incoming_uses.items.iter().any(|site| {
         site.source == return_operation
@@ -266,6 +318,10 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         Query::LegalConstructors {
             target: RepairTarget::Hole(hole),
             include_incompatible: true,
+            constructors: PageRequest {
+                after: None,
+                limit: 16,
+            },
             values: PageRequest {
                 after: None,
                 limit: 16,
@@ -277,10 +333,17 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_eq!(
         explicit_legal
             .constructors
+            .items
             .iter()
             .map(|constructor| constructor.code)
             .collect::<Vec<_>>(),
-        vec![OperationCode::ConstI64, OperationCode::AddI64]
+        vec![
+            OperationCode::ConstI64,
+            OperationCode::AddI64,
+            OperationCode::Call,
+            OperationCode::If,
+            OperationCode::ForI64,
+        ]
     );
 
     let head_before_support_validation = fs::read(&head).expect("HEAD before support validation");
@@ -317,11 +380,13 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
             idempotency_key: None,
             mode: TransactionMode::Commit,
             operations: vec![
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(100),
-                    block: NodeTarget::Existing(block),
-                    before: Some(NodeTarget::Existing(hole)),
-                    operation: OperationDraft::ConstI64(7),
+                TransactionOp::InsertExpression {
+                    block,
+                    before: Some(hole),
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(100),
+                        operation: ExpressionKindDraft::ConstI64(7),
+                    },
                 },
                 TransactionOp::RefineHole {
                     hole: NodeTarget::Existing(hole),
@@ -605,7 +670,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":2,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":3,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -615,7 +680,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":2,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":3,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);
@@ -658,53 +723,31 @@ fn incomplete_fixture(
                     handle: LocalHandle::new(3),
                     module: local(LocalHandle::new(2)),
                     name: "main".to_owned(),
+                    parameters: Vec::new(),
                     result: SemanticType::I64,
-                },
-                TransactionOp::CreateRegion {
-                    handle: LocalHandle::new(4),
-                    function: local(LocalHandle::new(3)),
-                },
-                TransactionOp::CreateBlock {
-                    handle: LocalHandle::new(5),
-                    region: local(LocalHandle::new(4)),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(6),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstI64(40),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(7),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstI64(2),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(8),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::ConstBool(true),
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(9),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::Hole {
-                        expected: SemanticType::I64,
-                    },
-                },
-                TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(10),
-                    block: local(LocalHandle::new(5)),
-                    before: None,
-                    operation: OperationDraft::Return {
-                        value: result(LocalHandle::new(9)),
-                    },
-                },
-                TransactionOp::SetFunctionBody {
-                    function: local(LocalHandle::new(3)),
-                    region: local(LocalHandle::new(4)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(6),
+                                operation: ExpressionKindDraft::ConstI64(40),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(7),
+                                operation: ExpressionKindDraft::ConstI64(2),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(8),
+                                operation: ExpressionKindDraft::ConstBool(true),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(9),
+                                operation: ExpressionKindDraft::Hole {
+                                    expected: SemanticType::I64,
+                                },
+                            },
+                        ],
+                        return_value: result(LocalHandle::new(9)),
+                    }),
                 },
                 TransactionOp::SetEntryFunction {
                     package: local(LocalHandle::new(1)),
@@ -713,7 +756,10 @@ fn incomplete_fixture(
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: (2..=10).map(LocalHandle::new).collect(),
+            return_handles: [2, 3, 6, 7, 8, 9]
+                .into_iter()
+                .map(LocalHandle::new)
+                .collect(),
         },
     }
 }
@@ -752,11 +798,13 @@ fn support_creation(
             base_revision,
             idempotency_key: None,
             mode,
-            operations: vec![TransactionOp::CreateOperation {
-                handle: LocalHandle::new(100),
-                block: NodeTarget::Existing(block),
-                before: Some(NodeTarget::Existing(before)),
-                operation: OperationDraft::ConstI64(7),
+            operations: vec![TransactionOp::InsertExpression {
+                block,
+                before: Some(before),
+                expression: ExpressionDraft {
+                    handle: LocalHandle::new(100),
+                    operation: ExpressionKindDraft::ConstI64(7),
+                },
             }],
         },
         response: TransactionResponseSpec {
@@ -773,11 +821,13 @@ fn bulk_constants(workspace: WorkspaceId, block: NodeId, count: u32) -> ApplyTra
             idempotency_key: Some(IdempotencyKey::from_bytes([0x44; 16])),
             mode: TransactionMode::Commit,
             operations: (0..count)
-                .map(|index| TransactionOp::CreateOperation {
-                    handle: LocalHandle::new(100 + index),
-                    block: NodeTarget::Existing(block),
+                .map(|index| TransactionOp::InsertExpression {
+                    block,
                     before: None,
-                    operation: OperationDraft::ConstI64(i64::from(index)),
+                    expression: ExpressionDraft {
+                        handle: LocalHandle::new(100 + index),
+                        operation: ExpressionKindDraft::ConstI64(i64::from(index)),
+                    },
                 })
                 .collect(),
         },
@@ -992,6 +1042,11 @@ fn assert_run(
             workspace,
             revision,
             entry,
+            arguments: vec![],
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 10_000,
+            },
         },
     )
     .response
@@ -1068,6 +1123,950 @@ fn measured_rpc(
         binary_response_bytes,
     };
     (response, measurement)
+}
+
+fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
+    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+    let result = |handle| ValueDraft::OperationResult {
+        operation: local(handle),
+        output: 0,
+    };
+    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
+    ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "structured".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(10),
+                    module: local(2),
+                    name: "range_sum".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(11),
+                        name: "n".into(),
+                        ty: SemanticType::I64,
+                    }],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(12),
+                                operation: ExpressionKindDraft::ConstI64(0),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(13),
+                                operation: ExpressionKindDraft::ForI64 {
+                                    start: result(12),
+                                    end_exclusive: parameter(11),
+                                    step: 1,
+                                    initial: result(12),
+                                    carried: SemanticType::I64,
+                                    index_handle: LocalHandle::new(14),
+                                    carried_handle: LocalHandle::new(15),
+                                    body: YieldingBodyDraft {
+                                        operations: vec![ExpressionDraft {
+                                            handle: LocalHandle::new(16),
+                                            operation: ExpressionKindDraft::Hole {
+                                                expected: SemanticType::I64,
+                                            },
+                                        }],
+                                        yield_value: result(16),
+                                    },
+                                },
+                            },
+                        ],
+                        return_value: result(13),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(20),
+                    module: local(2),
+                    name: "normalize_and_sum".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(21),
+                        name: "n".into(),
+                        ty: SemanticType::I64,
+                    }],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(22),
+                                operation: ExpressionKindDraft::ConstI64(0),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(23),
+                                operation: ExpressionKindDraft::LtI64 {
+                                    lhs: parameter(21),
+                                    rhs: result(22),
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(24),
+                                operation: ExpressionKindDraft::If {
+                                    condition: result(23),
+                                    result: SemanticType::I64,
+                                    then_body: YieldingBodyDraft {
+                                        operations: vec![],
+                                        yield_value: result(22),
+                                    },
+                                    else_body: YieldingBodyDraft {
+                                        operations: vec![ExpressionDraft {
+                                            handle: LocalHandle::new(25),
+                                            operation: ExpressionKindDraft::Call {
+                                                function: local(10),
+                                                arguments: vec![parameter(21)],
+                                            },
+                                        }],
+                                        yield_value: result(25),
+                                    },
+                                },
+                            },
+                        ],
+                        return_value: result(24),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(30),
+                    module: local(2),
+                    name: "main".into(),
+                    parameters: vec![],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(31),
+                                operation: ExpressionKindDraft::ConstI64(101),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(32),
+                                operation: ExpressionKindDraft::Call {
+                                    function: local(20),
+                                    arguments: vec![result(31)],
+                                },
+                            },
+                        ],
+                        return_value: result(32),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(30),
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_handles: vec![
+                LocalHandle::new(10),
+                LocalHandle::new(16),
+                LocalHandle::new(20),
+                LocalHandle::new(30),
+            ],
+        },
+    }
+}
+
+#[test]
+fn real_json_cli_structured_program_repair_vertical() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path();
+    let daemon = JsonDaemon::start(state);
+    let Response::WorkspaceCreated(initial) = rpc(state, 500, Request::CreateWorkspace).response
+    else {
+        panic!("workspace")
+    };
+    let workspace = initial.workspace;
+    let creation = structured_creation(workspace);
+    assert_eq!(creation.transaction.operations.len(), 6);
+    let created = receipt(rpc(state, 501, Request::ApplyTransaction(creation)));
+    assert_eq!(created.returned_bindings.len(), 4);
+    assert_eq!(created.created_count, 36);
+    assert!(!created.complete_after);
+    let range = binding(&created, 10);
+    let hole = binding(&created, 16);
+    let normalize = binding(&created, 20);
+    let main = binding(&created, 30);
+    let revision_one_files = revision_files(state, workspace);
+    assert_eq!(revision_one_files.len(), 2);
+
+    let context = hole_context(state, workspace, hole, 502);
+    assert_eq!(context.operation, hole);
+    assert_eq!(context.expected_type, SemanticType::I64);
+    assert_eq!(context.owner_function, range);
+    assert_eq!(context.function_signature.parameter_count, 1);
+    assert_eq!(context.function_signature.result, SemanticType::I64);
+    assert_eq!(context.owner_chain.first().expect("hole owner").node, hole);
+    assert!(
+        context
+            .owner_chain
+            .iter()
+            .any(|fact| fact.node == context.owner_block)
+    );
+    assert!(context.owner_chain.iter().any(|fact| fact.node == range));
+    let for_region = context
+        .enclosing_regions
+        .iter()
+        .find(|fact| fact.role == RegionRole::ForBody)
+        .expect("enclosing for body");
+    assert_eq!(for_region.region, context.visible_block_arguments[0].region);
+    let hole_position = context
+        .body_window
+        .iter()
+        .position(|item| item.operation == hole && item.code == OperationCode::Hole)
+        .expect("hole body item");
+    assert_eq!(
+        context.body_window[hole_position + 1].code,
+        OperationCode::Yield
+    );
+    assert!(context.visible_values.items.iter().any(|value| {
+        matches!(value.value, ValueRef::FunctionParameter { .. })
+            && value.owner_function == range
+            && value.ty == SemanticType::I64
+    }));
+    assert!(context.visible_values.items.iter().any(|value| {
+        value.producer_code == Some(OperationCode::ConstI64)
+            && value.owner_function == range
+            && value.ordinal == Some(0)
+    }));
+    assert_eq!(
+        context.blocker.as_ref().and_then(|blocker| blocker.target),
+        Some(hole)
+    );
+    let add_constructor = context
+        .legal_constructors
+        .iter()
+        .find(|constructor| constructor.code == OperationCode::AddI64)
+        .expect("direct add_i64 constructor");
+    assert!(add_constructor.direct_refinement);
+    assert_eq!(
+        add_constructor.operand_types,
+        vec![SemanticType::I64, SemanticType::I64]
+    );
+    let index = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopIndex)
+        .expect("loop index fact");
+    let carried = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopCarried)
+        .expect("loop carried fact");
+    assert_eq!(index.ordinal, 0);
+    assert_eq!(carried.ordinal, 1);
+    assert_eq!(index.ty, SemanticType::I64);
+    assert_eq!(carried.ty, SemanticType::I64);
+    assert_eq!(index.block, carried.block);
+    assert_eq!(index.region, carried.region);
+    let yield_use = context
+        .incoming_uses
+        .items
+        .iter()
+        .find(|site| site.operand_index == 0)
+        .expect("yield use")
+        .source;
+
+    let head = workspace_path(state, workspace).join("HEAD");
+    let head_before_invalid = fs::read(&head).expect("HEAD before invalid refinement");
+    let invalid = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::ConstBool(true),
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    };
+    let Response::Error(invalid_error) =
+        rpc(state, 503, Request::ApplyTransaction(invalid)).response
+    else {
+        panic!("invalid refinement")
+    };
+    assert!(matches!(
+        invalid_error.code,
+        ErrorCode::InvalidOperand | ErrorCode::TypeMismatch
+    ));
+    assert_eq!(
+        fs::read(&head).expect("HEAD after invalid refinement"),
+        head_before_invalid
+    );
+    assert_eq!(revision_files(state, workspace), revision_one_files);
+
+    // Context returns persistent IDs, so refinement uses Existing targets rather than draft handles.
+    let valid = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried.argument)),
+                    rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index.argument)),
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    };
+    let refined = receipt(rpc(state, 504, Request::ApplyTransaction(valid)));
+    assert_eq!(refined.created_count, 0);
+    assert!(refined.complete_after);
+    let diff = collect_diff(state, workspace, Revision::new(1), Revision::new(2));
+    assert!(diff.2.iter().any(|change| change.node == hole
+        && matches!(
+            change.kind,
+            ChangeKind::OperationRefined {
+                before: OperationCode::Hole,
+                after: OperationCode::AddI64,
+                ..
+            }
+        )));
+    let QueryResult::IncomingUses(uses) = query(
+        state,
+        505,
+        workspace,
+        Revision::new(2),
+        Query::IncomingUses {
+            value: ValueRef::OperationResult {
+                operation: hole,
+                output: 0,
+            },
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("uses")
+    };
+    assert!(
+        uses.items
+            .iter()
+            .any(|site| site.source == yield_use && site.operand_index == 0)
+    );
+
+    let run = |id, revision, entry, arguments| {
+        rpc(
+            state,
+            id,
+            Request::Run {
+                workspace,
+                revision,
+                entry,
+                arguments,
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 10_000,
+                },
+            },
+        )
+    };
+    let Response::Error(incomplete) = run(506, Revision::new(1), main, vec![]).response else {
+        panic!("incomplete run")
+    };
+    assert_eq!(incomplete.code, ErrorCode::CompileIncomplete);
+    for (id, entry, arguments, expected) in [
+        (507, main, vec![], 5050),
+        (508, normalize, vec![RuntimeValue::I64(-3)], 0),
+        (509, normalize, vec![RuntimeValue::I64(11)], 55),
+    ] {
+        let Response::Run(result) = run(id, Revision::new(2), entry, arguments).response else {
+            panic!("run result")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(expected));
+    }
+
+    shutdown(state, 510);
+    daemon.wait();
+    let daemon = JsonDaemon::start(state);
+    for revision in [Revision::new(1), Revision::new(2)] {
+        for (offset, node) in [hole, range, normalize, main].into_iter().enumerate() {
+            let QueryResult::Node(view) = query(
+                state,
+                520 + revision.get() * 10 + offset as u64,
+                workspace,
+                revision,
+                Query::Node {
+                    node,
+                    expand: false,
+                },
+            ) else {
+                panic!("retained node")
+            };
+            assert_eq!(view.summary.node, node);
+            assert_eq!(view.summary.revision, revision);
+        }
+    }
+    let Response::Error(incomplete) = run(550, Revision::new(1), main, vec![]).response else {
+        panic!("retained incomplete run")
+    };
+    assert_eq!(incomplete.code, ErrorCode::CompileIncomplete);
+    let Response::Run(repaired) = run(551, Revision::new(2), main, vec![]).response else {
+        panic!("retained repaired run")
+    };
+    assert_eq!(repaired.value, RuntimeValue::I64(5050));
+    shutdown(state, 552);
+    daemon.wait();
+}
+
+#[test]
+#[ignore = "manual structured generic-CLI interaction-cost measurement"]
+fn structured_agent_interaction_cost_measurement() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path();
+    let cold_started = Instant::now();
+    let daemon = JsonDaemon::start(state);
+    let cold_start_ns = cold_started.elapsed().as_nanos();
+    let (_, schema) = measured_rpc(state, 600, "schema_discovery", Request::DescribeSchema);
+    let (workspace_response, workspace_metric) =
+        measured_rpc(state, 601, "workspace_create", Request::CreateWorkspace);
+    let Response::WorkspaceCreated(initial) = workspace_response.response else {
+        panic!("workspace")
+    };
+    let workspace = initial.workspace;
+    let creation_request = structured_creation(workspace);
+    let transaction_items = creation_request.transaction.operations.len();
+    let requested_bindings = creation_request.response.return_handles.len();
+    let (creation_response, creation_metric) = measured_rpc(
+        state,
+        602,
+        "structured_creation",
+        Request::ApplyTransaction(creation_request),
+    );
+    let Response::TransactionReceipt(created) = creation_response.response else {
+        panic!("creation")
+    };
+    let hole = binding(&created, 16);
+    let normalize = binding(&created, 20);
+    let main = binding(&created, 30);
+    let incomplete_artifact_bytes = fs::metadata(
+        workspace_path(state, workspace).join("revisions/00000000000000000001.lkjscript"),
+    )
+    .expect("incomplete artifact")
+    .len();
+
+    let context_request = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(1),
+        queries: vec![QueryItem {
+            id: QueryId::new(1),
+            query: Query::RepairContext {
+                target: RepairTarget::Hole(hole),
+                budget: context_budget(),
+            },
+        }],
+    });
+    let (context_response, context_metric) =
+        measured_rpc(state, 603, "repair_context", context_request);
+    let Response::QueryBatchResult(batch) = context_response.response else {
+        panic!("context batch")
+    };
+    let QueryOutcome::Success(context) = &batch.results[0].outcome else {
+        panic!("context outcome")
+    };
+    let QueryResult::RepairContext(context) = context.as_ref() else {
+        panic!("context")
+    };
+    let index = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopIndex)
+        .expect("index")
+        .argument;
+    let carried = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopCarried)
+        .expect("carried")
+        .argument;
+
+    let invalid_request = Request::ApplyTransaction(ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::ConstBool(true),
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    });
+    let (invalid_response, invalid_metric) =
+        measured_rpc(state, 604, "invalid_repair", invalid_request);
+    assert!(matches!(invalid_response.response, Response::Error(_)));
+    let repair_request = Request::ApplyTransaction(ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried)),
+                    rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index)),
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    });
+    let (repair_response, repair_metric) = measured_rpc(state, 605, "valid_repair", repair_request);
+    let Response::TransactionReceipt(repaired) = repair_response.response else {
+        panic!("repair")
+    };
+    assert_eq!(repaired.created_count, 0);
+    let repaired_artifact_bytes = fs::metadata(
+        workspace_path(state, workspace).join("revisions/00000000000000000002.lkjscript"),
+    )
+    .expect("repaired artifact")
+    .len();
+
+    let diff_request = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(2),
+        queries: vec![QueryItem {
+            id: QueryId::new(2),
+            query: Query::SemanticDiff {
+                from: Revision::new(1),
+                page: PageRequest {
+                    after: None,
+                    limit: 64,
+                },
+            },
+        }],
+    });
+    let (_, diff_metric) = measured_rpc(state, 606, "semantic_diff", diff_request);
+    let mut run_metrics = Vec::new();
+    for (request_id, name, entry, arguments, expected) in [
+        (607, "run_main", main, vec![], 5050),
+        (
+            608,
+            "run_negative",
+            normalize,
+            vec![RuntimeValue::I64(-3)],
+            0,
+        ),
+        (
+            609,
+            "run_eleven",
+            normalize,
+            vec![RuntimeValue::I64(11)],
+            55,
+        ),
+    ] {
+        let request = Request::Run {
+            workspace,
+            revision: Revision::new(2),
+            entry,
+            arguments,
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 10_000,
+            },
+        };
+        let (response, metric) = measured_rpc(state, request_id, name, request);
+        let Response::Run(result) = response.response else {
+            panic!("run")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(expected));
+        run_metrics.push(metric);
+    }
+    shutdown(state, 610);
+    daemon.wait();
+    let restart_started = Instant::now();
+    let daemon = JsonDaemon::start(state);
+    let restart_ns = restart_started.elapsed().as_nanos();
+    let restart_request = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(2),
+        queries: vec![QueryItem {
+            id: QueryId::new(3),
+            query: Query::Node {
+                node: hole,
+                expand: false,
+            },
+        }],
+    });
+    let (_, restart_query_metric) =
+        measured_rpc(state, 611, "restart_retained_query", restart_request);
+
+    let all_metrics = [
+        &schema,
+        &workspace_metric,
+        &creation_metric,
+        &context_metric,
+        &invalid_metric,
+        &repair_metric,
+        &diff_metric,
+        &run_metrics[0],
+        &run_metrics[1],
+        &run_metrics[2],
+        &restart_query_metric,
+    ];
+    println!(
+        "STRUCTURED_AGENT_COST {}",
+        serde_json::json!({
+            "round_trips": all_metrics.len(),
+            "cli_invocations": all_metrics.len(),
+            "daemon_cold_start_ns": cold_start_ns,
+            "restart_ns": restart_ns,
+            "public_transaction_items": transaction_items,
+            "explicit_requested_bindings": requested_bindings,
+            "canonical_created_nodes": created.created_count,
+            "incomplete_artifact_bytes": incomplete_artifact_bytes,
+            "repaired_artifact_bytes": repaired_artifact_bytes,
+            "json_request_bytes": all_metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
+            "json_stdout_bytes": all_metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
+            "binary_request_bytes": all_metrics.iter().map(|metric| metric.binary_request_bytes).sum::<usize>(),
+            "binary_response_bytes": all_metrics.iter().map(|metric| metric.binary_response_bytes).sum::<usize>(),
+            "cli_wall_ns": all_metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
+            "per_request": all_metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
+            "oracles": [5050, 0, 55],
+            "model_tokens_measured": false,
+        })
+    );
+    shutdown(state, 612);
+    daemon.wait();
+}
+
+fn percentile_ns(samples: &[u128], percentile: usize) -> u128 {
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let rank = (sorted.len() * percentile).div_ceil(100).saturating_sub(1);
+    sorted[rank.min(sorted.len() - 1)]
+}
+
+fn timed_rpc(state: &Path, request_id: u64, request: Request) -> (ResponseEnvelope, u128) {
+    let started = Instant::now();
+    let response = rpc(state, request_id, request);
+    (response, started.elapsed().as_nanos())
+}
+
+#[test]
+#[ignore = "manual repeated structured product-path performance measurement"]
+fn structured_product_path_performance_measurement() {
+    let mut cold_start = Vec::new();
+    for sample in 0..12 {
+        let temporary = tempfile::tempdir().expect("cold state");
+        let started = Instant::now();
+        let daemon = JsonDaemon::start(temporary.path());
+        let elapsed = started.elapsed().as_nanos();
+        shutdown(temporary.path(), 7000 + sample);
+        daemon.wait();
+        if sample > 0 {
+            cold_start.push(elapsed);
+        }
+    }
+
+    let temporary = tempfile::tempdir().expect("performance state");
+    let state = temporary.path();
+    let daemon = JsonDaemon::start(state);
+    let mut workspace_create = Vec::new();
+    let mut workspaces = Vec::new();
+    for sample in 0..32 {
+        let (response, elapsed) = timed_rpc(state, 7100 + sample, Request::CreateWorkspace);
+        let Response::WorkspaceCreated(summary) = response.response else {
+            panic!("workspace")
+        };
+        if sample > 0 {
+            workspace_create.push(elapsed);
+        }
+        workspaces.push(summary.workspace);
+    }
+    let mut structured_commit = Vec::new();
+    let mut selected = None;
+    for (sample, workspace) in workspaces.into_iter().take(12).enumerate() {
+        let request = Request::ApplyTransaction(structured_creation(workspace));
+        let (response, elapsed) = timed_rpc(state, 7200 + sample as u64, request);
+        let Response::TransactionReceipt(receipt) = response.response else {
+            panic!("commit")
+        };
+        if sample > 0 {
+            structured_commit.push(elapsed);
+        }
+        selected = Some((workspace, receipt));
+    }
+    let (workspace, created) = selected.expect("selected workspace");
+    let hole = binding(&created, 16);
+    let normalize = binding(&created, 20);
+    let main = binding(&created, 30);
+    let context_request = || {
+        Request::QueryBatch(QueryBatchRequest {
+            workspace,
+            revision: Revision::new(1),
+            queries: vec![QueryItem {
+                id: QueryId::new(1),
+                query: Query::RepairContext {
+                    target: RepairTarget::Hole(hole),
+                    budget: context_budget(),
+                },
+            }],
+        })
+    };
+    let mut repair_context = Vec::new();
+    let mut context_value = None;
+    for sample in 0..32 {
+        let (response, elapsed) = timed_rpc(state, 7300 + sample, context_request());
+        let Response::QueryBatchResult(batch) = response.response else {
+            panic!("context")
+        };
+        let QueryOutcome::Success(result) = &batch.results[0].outcome else {
+            panic!("context outcome")
+        };
+        let QueryResult::RepairContext(context) = result.as_ref() else {
+            panic!("context result")
+        };
+        context_value = Some(context.clone());
+        if sample > 0 {
+            repair_context.push(elapsed);
+        }
+    }
+    let context = context_value.expect("context value");
+    let index = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopIndex)
+        .expect("index")
+        .argument;
+    let carried = context
+        .visible_block_arguments
+        .iter()
+        .find(|fact| fact.role == BlockArgumentRole::LoopCarried)
+        .expect("carried")
+        .argument;
+    let repair = Request::ApplyTransaction(ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::AddI64 {
+                    lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried)),
+                    rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index)),
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    });
+    let Response::TransactionReceipt(_) = rpc(state, 7400, repair).response else {
+        panic!("repair")
+    };
+
+    let run_request = |entry, arguments, fuel| Request::Run {
+        workspace,
+        revision: Revision::new(2),
+        entry,
+        arguments,
+        policy: lkjscript::RunPolicy {
+            fuel,
+            maximum_frames: 10_000,
+        },
+    };
+    let mut main_wall = Vec::new();
+    let mut main_compile = Vec::new();
+    let mut main_execute = Vec::new();
+    let mut direct_wall = Vec::new();
+    let mut recursion_wall = Vec::new();
+    let mut fuel_wall = Vec::new();
+    for sample in 0..32 {
+        let (response, elapsed) =
+            timed_rpc(state, 7500 + sample, run_request(main, vec![], 1_000_000));
+        let Response::Run(result) = response.response else {
+            panic!("main run")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(5050));
+        if sample > 0 {
+            main_wall.push(elapsed);
+            main_compile.push(u128::from(result.compile_nanoseconds));
+            main_execute.push(u128::from(result.execute_nanoseconds));
+        }
+        let (response, elapsed) = timed_rpc(
+            state,
+            7600 + sample,
+            run_request(normalize, vec![RuntimeValue::I64(11)], 1_000_000),
+        );
+        let Response::Run(result) = response.response else {
+            panic!("direct run")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(55));
+        if sample > 0 {
+            direct_wall.push(elapsed);
+        }
+        let (response, elapsed) = timed_rpc(state, 7700 + sample, run_request(main, vec![], 1));
+        assert!(
+            matches!(response.response, Response::Error(ref error) if error.code == ErrorCode::ExecutionFuelExhausted)
+        );
+        if sample > 0 {
+            fuel_wall.push(elapsed);
+        }
+    }
+
+    let recursion_workspace = match rpc(state, 7800, Request::CreateWorkspace).response {
+        Response::WorkspaceCreated(summary) => summary.workspace,
+        _ => panic!("recursion workspace"),
+    };
+    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+    let parameter = ValueDraft::FunctionParameter(local(4));
+    let recursion_creation = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace: recursion_workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "recursion".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "once".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(4),
+                        name: "again".into(),
+                        ty: SemanticType::Bool,
+                    }],
+                    result: SemanticType::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![ExpressionDraft {
+                            handle: LocalHandle::new(5),
+                            operation: ExpressionKindDraft::If {
+                                condition: parameter,
+                                result: SemanticType::I64,
+                                then_body: YieldingBodyDraft {
+                                    operations: vec![
+                                        ExpressionDraft {
+                                            handle: LocalHandle::new(6),
+                                            operation: ExpressionKindDraft::ConstBool(false),
+                                        },
+                                        ExpressionDraft {
+                                            handle: LocalHandle::new(7),
+                                            operation: ExpressionKindDraft::Call {
+                                                function: local(3),
+                                                arguments: vec![ValueDraft::OperationResult {
+                                                    operation: local(6),
+                                                    output: 0,
+                                                }],
+                                            },
+                                        },
+                                    ],
+                                    yield_value: ValueDraft::OperationResult {
+                                        operation: local(7),
+                                        output: 0,
+                                    },
+                                },
+                                else_body: YieldingBodyDraft {
+                                    operations: vec![ExpressionDraft {
+                                        handle: LocalHandle::new(8),
+                                        operation: ExpressionKindDraft::ConstI64(1),
+                                    }],
+                                    yield_value: ValueDraft::OperationResult {
+                                        operation: local(8),
+                                        output: 0,
+                                    },
+                                },
+                            },
+                        }],
+                        return_value: ValueDraft::OperationResult {
+                            operation: local(5),
+                            output: 0,
+                        },
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(3),
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_handles: vec![LocalHandle::new(3)],
+        },
+    };
+    let recursion_receipt = receipt(rpc(
+        state,
+        7801,
+        Request::ApplyTransaction(recursion_creation),
+    ));
+    let recursion_entry = binding(&recursion_receipt, 3);
+    for sample in 0..32 {
+        let request = Request::Run {
+            workspace: recursion_workspace,
+            revision: Revision::new(1),
+            entry: recursion_entry,
+            arguments: vec![RuntimeValue::Bool(true)],
+            policy: lkjscript::RunPolicy {
+                fuel: 100,
+                maximum_frames: 10,
+            },
+        };
+        let (response, elapsed) = timed_rpc(state, 7900 + sample, request);
+        assert!(
+            matches!(response.response, Response::Run(ref result) if result.value == RuntimeValue::I64(1))
+        );
+        if sample > 0 {
+            recursion_wall.push(elapsed);
+        }
+    }
+
+    shutdown(state, 8000);
+    daemon.wait();
+    let mut restart = Vec::new();
+    for sample in 0..12 {
+        let started = Instant::now();
+        let daemon = JsonDaemon::start(state);
+        let elapsed = started.elapsed().as_nanos();
+        shutdown(state, 8010 + sample);
+        daemon.wait();
+        if sample > 0 {
+            restart.push(elapsed);
+        }
+    }
+    let row = |samples: &[u128]| serde_json::json!({"samples": samples.len(), "median_ns": percentile_ns(samples, 50), "p95_ns": percentile_ns(samples, 95)});
+    println!(
+        "STRUCTURED_PRODUCT_PATH {}",
+        serde_json::json!({
+            "warmup_samples": 1,
+            "cold_start": row(&cold_start),
+            "workspace_create": row(&workspace_create),
+            "structured_commit": row(&structured_commit),
+            "repair_context": row(&repair_context),
+            "main_request_wall": row(&main_wall),
+            "main_compile": row(&main_compile),
+            "main_execute": row(&main_execute),
+            "direct_parameterized_run": row(&direct_wall),
+            "finite_recursion": row(&recursion_wall),
+            "controlled_fuel_exhaustion": row(&fuel_wall),
+            "restart_retained_workspaces": row(&restart),
+            "oracles": {"main": 5050, "direct": 55, "recursion": 1, "fuel_error": "execution_fuel_exhausted"},
+        })
+    );
 }
 
 #[test]
@@ -1167,6 +2166,11 @@ fn agent_repair_cost_measurement() {
         workspace,
         revision: Revision::new(2),
         entry: function,
+        arguments: vec![],
+        policy: lkjscript::RunPolicy {
+            fuel: 1_000_000,
+            maximum_frames: 10_000,
+        },
     };
     let (run_response, run) = measured_rpc(state, 7, "run", run_request);
     let Response::Run(run_result) = run_response.response else {
