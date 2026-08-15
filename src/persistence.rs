@@ -1086,8 +1086,12 @@ fn inject(actual: PublicationStep, expected: PublicationStep) -> Result<()> {
 mod tests {
     use super::*;
     use crate::ids::LocalHandle;
-    use crate::schema::{Node, SemanticType};
-    use crate::transaction::{NodeTarget, Transaction, TransactionOp, TransactionResponseSpec};
+    use crate::schema::{Node, OperationKind, SemanticType, TypeDraft, ValueDraft};
+    use crate::transaction::{
+        ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft, MatchArmDraft, NodeTarget,
+        ProductFieldDraft, SumVariantDraft, Transaction, TransactionOp, TransactionResponseSpec,
+        YieldingBodyDraft,
+    };
 
     fn create_package(id: WorkspaceId) -> Transaction {
         Transaction {
@@ -1113,6 +1117,208 @@ mod tests {
             transaction: transaction.clone(),
             response: TransactionResponseSpec { return_handles },
         }
+    }
+
+    #[test]
+    fn nominal_declarations_survive_format_three_restart_and_rederive_layout() {
+        let temporary = tempfile::tempdir().expect("state");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x94; 16]);
+        let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "p".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    name: "m".into(),
+                },
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    name: "Reading".into(),
+                    fields: vec![ProductFieldDraft {
+                        handle: LocalHandle::new(4),
+                        name: "value".into(),
+                        ty: TypeDraft::I64,
+                    }],
+                },
+            ],
+        };
+        workspace
+            .apply(&request(&transaction), [0x94; 32])
+            .expect("commit");
+        drop(workspace);
+        let reopened = DurableWorkspace::open(temporary.path(), id).expect("restart");
+        let head = reopened.head().expect("head");
+        assert_eq!(head.revision(), Revision::new(1));
+        let declaration = head
+            .nodes()
+            .find_map(|(node, record)| {
+                matches!(record, Node::ProductType { name, .. } if name == "Reading")
+                    .then_some(node)
+            })
+            .expect("reading");
+        let layouts = crate::type_layout::derive_layouts(head).expect("layouts");
+        let crate::type_layout::DerivedLayout::Representable(layout) =
+            layouts.get(&declaration).expect("layout")
+        else {
+            panic!("representable")
+        };
+        assert_eq!((layout.size, layout.align, layout.cells), (8, 8, 1));
+    }
+
+    #[test]
+    fn nominal_operation_and_match_graph_survives_format_three_restart_and_retained_query() {
+        let temporary = tempfile::tempdir().expect("state");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x96; 16]);
+        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let result = |value| ValueDraft::OperationResult {
+            operation: local(value),
+            output: 0,
+        };
+        let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let transaction = Transaction {
+            workspace: id,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "p".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "m".into(),
+                },
+                TransactionOp::CreateSumType {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "Maybe".into(),
+                    variants: vec![
+                        SumVariantDraft {
+                            handle: LocalHandle::new(4),
+                            name: "none".into(),
+                            payload: None,
+                        },
+                        SumVariantDraft {
+                            handle: LocalHandle::new(5),
+                            name: "some".into(),
+                            payload: Some(TypeDraft::I64),
+                        },
+                    ],
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(6),
+                    module: local(2),
+                    name: "match_it".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                handle: LocalHandle::new(7),
+                                operation: ExpressionKindDraft::ConstI64(9),
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(8),
+                                operation: ExpressionKindDraft::ConstructVariant {
+                                    variant: local(5),
+                                    payload: Some(result(7)),
+                                },
+                            },
+                            ExpressionDraft {
+                                handle: LocalHandle::new(9),
+                                operation: ExpressionKindDraft::MatchSum {
+                                    scrutinee: result(8),
+                                    result: TypeDraft::I64,
+                                    arms: vec![
+                                        MatchArmDraft {
+                                            variant: local(5),
+                                            payload_handle: Some(LocalHandle::new(10)),
+                                            body: YieldingBodyDraft {
+                                                operations: Vec::new(),
+                                                yield_value: ValueDraft::BlockArgument(local(10)),
+                                            },
+                                        },
+                                        MatchArmDraft {
+                                            variant: local(4),
+                                            payload_handle: None,
+                                            body: YieldingBodyDraft {
+                                                operations: vec![ExpressionDraft {
+                                                    handle: LocalHandle::new(11),
+                                                    operation: ExpressionKindDraft::ConstI64(0),
+                                                }],
+                                                yield_value: result(11),
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                        return_value: result(9),
+                    }),
+                },
+            ],
+        };
+        workspace
+            .apply(&request(&transaction), [0x96; 32])
+            .expect("commit nominal match");
+        drop(workspace);
+
+        let reopened = DurableWorkspace::open(temporary.path(), id).expect("artifact3 restart");
+        let retained = reopened
+            .snapshot(Revision::new(1))
+            .expect("retained revision");
+        let declaration = retained
+            .nodes()
+            .find_map(|(node, record)| {
+                matches!(record, Node::SumType { name, .. } if name == "Maybe").then_some(node)
+            })
+            .expect("sum declaration");
+        let queried = crate::query::execute(
+            retained,
+            &crate::query::Query::NominalType {
+                declaration,
+                page: crate::query::PageRequest {
+                    after: None,
+                    limit: 2,
+                },
+            },
+            None,
+        )
+        .expect("retained nominal query");
+        let crate::query::QueryResult::NominalType(queried) = queried else {
+            panic!("nominal result")
+        };
+        assert_eq!(queried.name, "Maybe");
+        assert_eq!(queried.members.items.len(), 2);
+        let arms = retained
+            .nodes()
+            .find_map(|(_, node)| match node {
+                Node::Operation {
+                    operation: OperationKind::MatchSum { arms, .. },
+                    ..
+                } => Some(arms),
+                _ => None,
+            })
+            .expect("retained match");
+        assert_eq!(arms.len(), 2);
+        let first_variant = match &queried.members.items[0] {
+            crate::query::NominalMemberFact::SumVariant { variant, .. } => *variant,
+            _ => panic!("sum member"),
+        };
+        assert_eq!(arms[0].variant, first_variant);
     }
 
     #[test]
@@ -1243,7 +1449,7 @@ mod tests {
                     module: NodeTarget::Local(LocalHandle::new(2)),
                     name: "function".to_owned(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 },
                 TransactionOp::SetEntryFunction {
@@ -1530,6 +1736,33 @@ mod tests {
                 .code,
             ErrorCode::ArtifactCorrupt
         );
+    }
+
+    #[test]
+    fn head3_unkeyed_grammar_remains_fixed_and_deterministic() {
+        let revision = Revision::new(7);
+        let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
+        let first = encode_head(revision, hash, None).expect("HEAD3 encode");
+        assert_eq!(
+            first,
+            encode_head(revision, hash, None).expect("deterministic HEAD3")
+        );
+
+        let mut expected_body = Vec::new();
+        expected_body.extend_from_slice(b"LKJHEAD3");
+        expected_body.extend_from_slice(&7_u64.to_le_bytes());
+        expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
+        expected_body.push(0);
+        assert_eq!(&first[..expected_body.len()], expected_body.as_slice());
+        assert_eq!(first.len(), expected_body.len() + SnapshotHash::BYTE_LEN);
+        assert_eq!(
+            &first[expected_body.len()..],
+            blake3::hash(&expected_body).as_bytes()
+        );
+        let (decoded_revision, decoded_hash, decoded_record) =
+            decode_head(&first).expect("HEAD3 decode");
+        assert_eq!((decoded_revision, decoded_hash), (revision, hash));
+        assert!(decoded_record.is_none());
     }
 
     #[test]

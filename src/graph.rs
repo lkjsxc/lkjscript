@@ -362,6 +362,34 @@ fn identity_shape_is_stable(
 ) -> bool {
     match (old, new) {
         (Node::Package { entry: Some(_), .. }, Node::Package { entry: None, .. }) => false,
+        (Node::ProductType { fields: old, .. }, Node::ProductType { fields: new, .. }) => {
+            old == new
+        }
+        (Node::SumType { variants: old, .. }, Node::SumType { variants: new, .. }) => old == new,
+        (
+            Node::ProductField {
+                ordinal: old_ordinal,
+                ty: old_type,
+                ..
+            },
+            Node::ProductField {
+                ordinal: new_ordinal,
+                ty: new_type,
+                ..
+            },
+        ) => old_ordinal == new_ordinal && old_type == new_type,
+        (
+            Node::SumVariant {
+                ordinal: old_ordinal,
+                payload: old_payload,
+                ..
+            },
+            Node::SumVariant {
+                ordinal: new_ordinal,
+                payload: new_payload,
+                ..
+            },
+        ) => old_ordinal == new_ordinal && old_payload == new_payload,
         (Node::Function { result: old, .. }, Node::Function { result: new, .. }) => old == new,
         (
             Node::Parameter {
@@ -415,6 +443,17 @@ fn operation_identity_shape_is_stable(
         && !new.is_terminator()
         && new.owned_region_count() == 0
         && !matches!(new, crate::schema::OperationKind::Hole { .. })
+        && match old {
+            crate::schema::OperationKind::Hole {
+                expected: crate::schema::SemanticType::Nominal(_),
+            } => matches!(
+                new,
+                crate::schema::OperationKind::ConstructProduct { .. }
+                    | crate::schema::OperationKind::ConstructVariant { .. }
+                    | crate::schema::OperationKind::ProjectField { .. }
+            ),
+            _ => true,
+        }
         && same_results
 }
 
@@ -450,6 +489,24 @@ pub(crate) fn operation_result_type(
             Some(Node::Function { result, .. }) => Some(*result),
             _ => None,
         },
+        crate::schema::OperationKind::ConstructProduct { product, .. } => {
+            matches!(snapshot.nodes.get(product), Some(Node::ProductType { .. }))
+                .then_some(crate::schema::SemanticType::Nominal(*product))
+        }
+        crate::schema::OperationKind::ProjectField { field, .. } => match snapshot.nodes.get(field)
+        {
+            Some(Node::ProductField { ty, .. }) => Some(*ty),
+            _ => None,
+        },
+        crate::schema::OperationKind::ConstructVariant { variant, .. } => {
+            match snapshot.nodes.get(variant) {
+                Some(Node::SumVariant { owner, .. }) => {
+                    Some(crate::schema::SemanticType::Nominal(*owner))
+                }
+                _ => None,
+            }
+        }
+        crate::schema::OperationKind::MatchSum { result, .. } => Some(*result),
         _ => operation.result_type(index, None),
     }
 }
@@ -616,6 +673,7 @@ mod tests {
                 Node::Module {
                     owner: package,
                     name: "module".to_owned(),
+                    types: Vec::new(),
                     functions: vec![function],
                 },
             ),

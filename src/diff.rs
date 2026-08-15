@@ -252,7 +252,8 @@ fn hash_scalar_value(hasher: &mut blake3::Hasher, value: &ScalarValue) {
             hasher.update(&[2, u8::from(*value)]);
         }
         ScalarValue::Type(value) => {
-            hasher.update(&[3, value.stable_tag()]);
+            hasher.update(&[3]);
+            hash_type(hasher, *value);
         }
     }
 }
@@ -286,7 +287,7 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             }
         }
         OperationKind::Hole { expected } => {
-            hasher.update(&[expected.stable_tag()]);
+            hash_type(hasher, *expected);
         }
         OperationKind::If {
             condition,
@@ -295,7 +296,7 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             else_region,
         } => {
             hash_value(hasher, *condition);
-            hasher.update(&[result.stable_tag()]);
+            hash_type(hasher, *result);
             hash_node(hasher, *then_region);
             hash_node(hasher, *else_region);
         }
@@ -311,12 +312,52 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hash_value(hasher, *end_exclusive);
             hasher.update(&step.to_le_bytes());
             hash_value(hasher, *initial);
-            hasher.update(&[carried.stable_tag()]);
+            hash_type(hasher, *carried);
             hash_node(hasher, *body_region);
         }
         OperationKind::Return { value } | OperationKind::Yield { value } => {
             hash_value(hasher, *value)
         }
+        OperationKind::ConstructProduct { product, fields } => {
+            hash_node(hasher, *product);
+            hasher.update(
+                &u64::try_from(fields.len())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            for field in fields {
+                hash_node(hasher, field.field);
+                hash_value(hasher, field.value);
+            }
+        }
+        OperationKind::ProjectField { value, field } => {
+            hash_value(hasher, *value);
+            hash_node(hasher, *field);
+        }
+        OperationKind::ConstructVariant { variant, payload } => {
+            hash_node(hasher, *variant);
+            hash_optional_value(hasher, *payload);
+        }
+        OperationKind::MatchSum {
+            scrutinee,
+            result,
+            arms,
+        } => {
+            hash_value(hasher, *scrutinee);
+            hash_type(hasher, *result);
+            hasher.update(&u64::try_from(arms.len()).unwrap_or(u64::MAX).to_le_bytes());
+            for arm in arms {
+                hash_node(hasher, arm.variant);
+                hash_node(hasher, arm.region);
+            }
+        }
+    }
+}
+
+fn hash_type(hasher: &mut blake3::Hasher, ty: crate::schema::SemanticType) {
+    hasher.update(&[ty.stable_tag()]);
+    if let crate::schema::SemanticType::Nominal(target) = ty {
+        hash_node(hasher, target);
     }
 }
 
@@ -432,23 +473,20 @@ fn classify_change(id: NodeId, old: &Node, new: &Node, changes: &mut Vec<Change>
                 });
             }
         }
-        if let (
-            OperationKind::Call {
-                function: before, ..
-            },
-            OperationKind::Call {
-                function: after, ..
-            },
-        ) = (old_operation, new_operation)
-            && before != after
-        {
-            changes.push(Change {
-                node: id,
-                kind: ChangeKind::DefinitionChanged {
-                    before: *before,
-                    after: *after,
-                },
-            });
+        let definition_count = old_operation
+            .definition_target_count()
+            .max(new_operation.definition_target_count());
+        for index in 0..definition_count {
+            if let (Some(before), Some(after)) = (
+                old_operation.definition_target(index),
+                new_operation.definition_target(index),
+            ) && before != after
+            {
+                changes.push(Change {
+                    node: id,
+                    kind: ChangeKind::DefinitionChanged { before, after },
+                });
+            }
         }
         if let OperationKind::Hole { expected } = old_operation
             && old_operation.code() != new_operation.code()

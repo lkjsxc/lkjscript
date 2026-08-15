@@ -6,7 +6,8 @@ use crate::ids::{
 };
 use crate::query;
 use crate::schema::{
-    Node, NodeKind, OperationDraft, OperationKind, SemanticType, ValueDraft, ValueRef,
+    MatchArm, MatchArmOperationDraft, Node, NodeKind, OperationDraft, OperationKind,
+    ProductFieldValue, ProductFieldValueDraft, SemanticType, TypeDraft, ValueDraft, ValueRef,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -71,9 +72,11 @@ pub enum TransactionOpCode {
     ReplaceOperand,
     DeleteOwnedSubtree,
     RefineHole,
+    CreateProductType,
+    CreateSumType,
 }
 impl TransactionOpCode {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::CreatePackage,
         Self::CreateModule,
         Self::CreateFunction,
@@ -85,6 +88,8 @@ impl TransactionOpCode {
         Self::ReplaceOperand,
         Self::DeleteOwnedSubtree,
         Self::RefineHole,
+        Self::CreateProductType,
+        Self::CreateSumType,
     ];
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -99,6 +104,8 @@ impl TransactionOpCode {
             Self::ReplaceOperand => 9,
             Self::DeleteOwnedSubtree => 10,
             Self::RefineHole => 11,
+            Self::CreateProductType => 12,
+            Self::CreateSumType => 13,
         }
     }
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
@@ -114,6 +121,8 @@ impl TransactionOpCode {
             9 => Some(Self::ReplaceOperand),
             10 => Some(Self::DeleteOwnedSubtree),
             11 => Some(Self::RefineHole),
+            12 => Some(Self::CreateProductType),
+            13 => Some(Self::CreateSumType),
             _ => None,
         }
     }
@@ -130,6 +139,8 @@ impl TransactionOpCode {
             Self::ReplaceOperand => "replace_operand",
             Self::RefineHole => "refine_hole",
             Self::DeleteOwnedSubtree => "delete_owned_subtree",
+            Self::CreateProductType => "create_product_type",
+            Self::CreateSumType => "create_sum_type",
         }
     }
 }
@@ -148,9 +159,13 @@ pub enum ExpressionDraftCode {
     Hole,
     If,
     ForI64,
+    ConstructProduct,
+    ProjectField,
+    ConstructVariant,
+    MatchSum,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 13] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -160,6 +175,10 @@ impl ExpressionDraftCode {
         Self::Hole,
         Self::If,
         Self::ForI64,
+        Self::ConstructProduct,
+        Self::ProjectField,
+        Self::ConstructVariant,
+        Self::MatchSum,
     ];
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -172,6 +191,10 @@ impl ExpressionDraftCode {
             Self::Hole => 7,
             Self::If => 8,
             Self::ForI64 => 9,
+            Self::ConstructProduct => 10,
+            Self::ProjectField => 11,
+            Self::ConstructVariant => 12,
+            Self::MatchSum => 13,
         }
     }
     pub const fn machine_name(self) -> &'static str {
@@ -185,6 +208,10 @@ impl ExpressionDraftCode {
             Self::Hole => "hole",
             Self::If => "if",
             Self::ForI64 => "for_i64",
+            Self::ConstructProduct => "construct_product",
+            Self::ProjectField => "project_field",
+            Self::ConstructVariant => "construct_variant",
+            Self::MatchSum => "match_sum",
         }
     }
 }
@@ -240,7 +267,24 @@ impl ValueDraft {
 pub struct FunctionParameterDraft {
     pub handle: LocalHandle,
     pub name: String,
-    pub ty: SemanticType,
+    pub ty: TypeDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProductFieldDraft {
+    pub handle: LocalHandle,
+    pub name: String,
+    pub ty: TypeDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SumVariantDraft {
+    pub handle: LocalHandle,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<TypeDraft>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -255,6 +299,15 @@ pub struct FunctionBodyDraft {
 pub struct YieldingBodyDraft {
     pub operations: Vec<ExpressionDraft>,
     pub yield_value: ValueDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatchArmDraft {
+    pub variant: NodeTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_handle: Option<LocalHandle>,
+    pub body: YieldingBodyDraft,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -288,11 +341,11 @@ pub enum ExpressionKindDraft {
         arguments: Vec<ValueDraft>,
     },
     Hole {
-        expected: SemanticType,
+        expected: TypeDraft,
     },
     If {
         condition: ValueDraft,
-        result: SemanticType,
+        result: TypeDraft,
         then_body: YieldingBodyDraft,
         else_body: YieldingBodyDraft,
     },
@@ -301,10 +354,28 @@ pub enum ExpressionKindDraft {
         end_exclusive: ValueDraft,
         step: i64,
         initial: ValueDraft,
-        carried: SemanticType,
+        carried: TypeDraft,
         index_handle: LocalHandle,
         carried_handle: LocalHandle,
         body: YieldingBodyDraft,
+    },
+    ConstructProduct {
+        product: NodeTarget,
+        fields: Vec<ProductFieldValueDraft>,
+    },
+    ProjectField {
+        value: ValueDraft,
+        field: NodeTarget,
+    },
+    ConstructVariant {
+        variant: NodeTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload: Option<ValueDraft>,
+    },
+    MatchSum {
+        scrutinee: ValueDraft,
+        result: TypeDraft,
+        arms: Vec<MatchArmDraft>,
     },
 }
 
@@ -325,12 +396,24 @@ pub enum TransactionOp {
         package: NodeTarget,
         name: String,
     },
+    CreateProductType {
+        handle: LocalHandle,
+        module: NodeTarget,
+        name: String,
+        fields: Vec<ProductFieldDraft>,
+    },
+    CreateSumType {
+        handle: LocalHandle,
+        module: NodeTarget,
+        name: String,
+        variants: Vec<SumVariantDraft>,
+    },
     CreateFunction {
         handle: LocalHandle,
         module: NodeTarget,
         name: String,
         parameters: Vec<FunctionParameterDraft>,
-        result: SemanticType,
+        result: TypeDraft,
         body: Option<FunctionBodyDraft>,
     },
     DefineFunctionBody {
@@ -373,6 +456,8 @@ impl TransactionOp {
         match self {
             Self::CreatePackage { .. } => TransactionOpCode::CreatePackage,
             Self::CreateModule { .. } => TransactionOpCode::CreateModule,
+            Self::CreateProductType { .. } => TransactionOpCode::CreateProductType,
+            Self::CreateSumType { .. } => TransactionOpCode::CreateSumType,
             Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
             Self::DefineFunctionBody { .. } => TransactionOpCode::DefineFunctionBody,
             Self::InsertExpression { .. } => TransactionOpCode::InsertExpression,
@@ -388,6 +473,8 @@ impl TransactionOp {
         match self {
             Self::CreatePackage { handle, .. }
             | Self::CreateModule { handle, .. }
+            | Self::CreateProductType { handle, .. }
+            | Self::CreateSumType { handle, .. }
             | Self::CreateFunction { handle, .. } => Some(*handle),
             Self::InsertExpression { expression, .. } => Some(expression.handle),
             _ => None,
@@ -406,17 +493,39 @@ enum CanonicalEdit {
         package: NodeTarget,
         name: String,
     },
+    CreateProductType {
+        handle: LocalHandle,
+        module: NodeTarget,
+        name: String,
+    },
+    CreateProductField {
+        handle: LocalHandle,
+        product: NodeTarget,
+        name: String,
+        ty: TypeDraft,
+    },
+    CreateSumType {
+        handle: LocalHandle,
+        module: NodeTarget,
+        name: String,
+    },
+    CreateSumVariant {
+        handle: LocalHandle,
+        sum: NodeTarget,
+        name: String,
+        payload: Option<TypeDraft>,
+    },
     CreateFunction {
         handle: LocalHandle,
         module: NodeTarget,
         name: String,
-        result: SemanticType,
+        result: TypeDraft,
     },
     CreateParameter {
         handle: LocalHandle,
         function: NodeTarget,
         name: String,
-        ty: SemanticType,
+        ty: TypeDraft,
     },
     CreateRegion {
         handle: LocalHandle,
@@ -429,7 +538,12 @@ enum CanonicalEdit {
     CreateBlockArgument {
         handle: LocalHandle,
         block: NodeTarget,
-        ty: SemanticType,
+        ty: TypeDraft,
+    },
+    CreateMatchPayloadArgument {
+        handle: LocalHandle,
+        block: NodeTarget,
+        variant: NodeTarget,
     },
     CreateOperation {
         handle: LocalHandle,
@@ -495,6 +609,171 @@ struct ExpandedTransaction {
     edits: Vec<CanonicalEdit>,
     edit_sources: Vec<usize>,
     explicit_handles: BTreeSet<LocalHandle>,
+    nominal_catalogue: StagedNominalCatalogue,
+}
+
+#[derive(Clone, Default)]
+struct StagedNominalCatalogue {
+    products: BTreeMap<NodeTarget, Vec<NodeTarget>>,
+    sums: BTreeMap<NodeTarget, Vec<NodeTarget>>,
+    field_owners: BTreeMap<NodeTarget, NodeTarget>,
+    variants: BTreeMap<NodeTarget, (NodeTarget, Option<TypeDraft>)>,
+}
+
+impl StagedNominalCatalogue {
+    fn build(base: &Snapshot, operations: &[TransactionOp]) -> Self {
+        let mut catalogue = Self::default();
+        for (id, node) in base.nodes() {
+            match node {
+                Node::ProductType { fields, .. } => {
+                    let declaration = NodeTarget::Existing(id);
+                    let members = fields
+                        .iter()
+                        .copied()
+                        .map(NodeTarget::Existing)
+                        .collect::<Vec<_>>();
+                    for member in &members {
+                        catalogue.field_owners.insert(*member, declaration);
+                    }
+                    catalogue.products.insert(declaration, members);
+                }
+                Node::SumType { variants, .. } => {
+                    let declaration = NodeTarget::Existing(id);
+                    let members = variants
+                        .iter()
+                        .copied()
+                        .map(NodeTarget::Existing)
+                        .collect::<Vec<_>>();
+                    for member in &members {
+                        let payload = match member {
+                            NodeTarget::Existing(member) => match base.node(*member) {
+                                Ok(Node::SumVariant { payload, .. }) => {
+                                    payload.map(TypeDraft::from)
+                                }
+                                _ => None,
+                            },
+                            NodeTarget::Local(_) => None,
+                        };
+                        catalogue.variants.insert(*member, (declaration, payload));
+                    }
+                    catalogue.sums.insert(declaration, members);
+                }
+                _ => {}
+            }
+        }
+        for operation in operations {
+            match operation {
+                TransactionOp::CreateProductType { handle, fields, .. } => {
+                    let declaration = NodeTarget::Local(*handle);
+                    let members = fields
+                        .iter()
+                        .map(|field| NodeTarget::Local(field.handle))
+                        .collect::<Vec<_>>();
+                    for member in &members {
+                        catalogue.field_owners.insert(*member, declaration);
+                    }
+                    catalogue.products.insert(declaration, members);
+                }
+                TransactionOp::CreateSumType {
+                    handle, variants, ..
+                } => {
+                    let declaration = NodeTarget::Local(*handle);
+                    let members = variants
+                        .iter()
+                        .map(|variant| NodeTarget::Local(variant.handle))
+                        .collect::<Vec<_>>();
+                    for (member, variant) in members.iter().zip(variants) {
+                        catalogue
+                            .variants
+                            .insert(*member, (declaration, variant.payload));
+                    }
+                    catalogue.sums.insert(declaration, members);
+                }
+                _ => {}
+            }
+        }
+        catalogue
+    }
+
+    fn normalize_match_arms(
+        &self,
+        arms: Vec<MatchArmDraft>,
+        source: usize,
+    ) -> Result<Vec<MatchArmDraft>> {
+        let first = arms.first().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::InvalidOperand,
+                "match_sum requires exhaustive arms",
+            )
+            .at_operation(source)
+        })?;
+        let (sum, _) = self.variants.get(&first.variant).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::WrongKind,
+                "match arm does not name a known sum variant",
+            )
+            .at_operation(source)
+        })?;
+        let declared = self.sums.get(sum).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::WrongKind,
+                "match variant owner is not a known sum declaration",
+            )
+            .at_operation(source)
+        })?;
+        let mut by_variant = BTreeMap::new();
+        for arm in arms {
+            let Some((owner, payload)) = self.variants.get(&arm.variant) else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "match arm does not name a known sum variant",
+                )
+                .at_operation(source));
+            };
+            if owner != sum {
+                return Err(LkError::new(
+                    ErrorCode::OwnerMismatch,
+                    "match arm variant belongs to another sum declaration",
+                )
+                .at_operation(source));
+            }
+            if payload.is_some() != arm.payload_handle.is_some() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "match payload handle presence does not match the variant payload",
+                )
+                .at_operation(source));
+            }
+            let variant = arm.variant;
+            if by_variant.insert(variant, arm).is_some() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "match arm variant is duplicated",
+                )
+                .at_operation(source));
+            }
+        }
+        let normalized = declared
+            .iter()
+            .map(|variant| {
+                by_variant.remove(variant).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "match is missing a declared variant arm",
+                    )
+                    .at_operation(source)
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if !by_variant.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::OwnerMismatch,
+                "match contains a foreign variant arm",
+            )
+            .at_operation(source));
+        }
+        Ok(normalized)
+    }
 }
 
 #[derive(Clone)]
@@ -508,7 +787,14 @@ enum ExpandEvent {
     YieldingBody {
         owner: NodeTarget,
         region: LocalHandle,
-        arguments: Vec<(LocalHandle, SemanticType)>,
+        arguments: Vec<(LocalHandle, TypeDraft)>,
+        body: YieldingBodyDraft,
+    },
+    MatchArmBody {
+        owner: NodeTarget,
+        region: LocalHandle,
+        variant: NodeTarget,
+        payload_handle: Option<LocalHandle>,
         body: YieldingBodyDraft,
     },
     Expression {
@@ -523,6 +809,7 @@ fn expand_transaction(
     operations: &[TransactionOp],
 ) -> Result<ExpandedTransaction> {
     let explicit_handles = scan_explicit_handles(operations)?;
+    let nominal_catalogue = StagedNominalCatalogue::build(base, operations);
     let mut synthetic = SyntheticHandles::new(&explicit_handles);
     let mut events = Vec::new();
     for (source, operation) in operations.iter().enumerate().rev() {
@@ -542,6 +829,46 @@ fn expand_transaction(
                 package: *package,
                 name: name.clone(),
             })),
+            TransactionOp::CreateProductType {
+                handle,
+                module,
+                name,
+                fields,
+            } => {
+                for field in fields.iter().rev() {
+                    events.push(ExpandEvent::Edit(CanonicalEdit::CreateProductField {
+                        handle: field.handle,
+                        product: NodeTarget::Local(*handle),
+                        name: field.name.clone(),
+                        ty: field.ty,
+                    }));
+                }
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateProductType {
+                    handle: *handle,
+                    module: *module,
+                    name: name.clone(),
+                }));
+            }
+            TransactionOp::CreateSumType {
+                handle,
+                module,
+                name,
+                variants,
+            } => {
+                for variant in variants.iter().rev() {
+                    events.push(ExpandEvent::Edit(CanonicalEdit::CreateSumVariant {
+                        handle: variant.handle,
+                        sum: NodeTarget::Local(*handle),
+                        name: variant.name.clone(),
+                        payload: variant.payload,
+                    }));
+                }
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateSumType {
+                    handle: *handle,
+                    module: *module,
+                    name: name.clone(),
+                }));
+            }
             TransactionOp::CreateFunction {
                 handle,
                 module,
@@ -734,6 +1061,46 @@ fn expand_transaction(
                     });
                 }
             }
+            ExpandEvent::MatchArmBody {
+                owner,
+                region,
+                variant,
+                payload_handle,
+                body,
+            } => {
+                let block = synthetic.next(current_source)?;
+                edits.push(CanonicalEdit::CreateRegion {
+                    handle: region,
+                    owner,
+                });
+                edits.push(CanonicalEdit::CreateBlock {
+                    handle: block,
+                    region: NodeTarget::Local(region),
+                });
+                if let Some(handle) = payload_handle {
+                    edits.push(CanonicalEdit::CreateMatchPayloadArgument {
+                        handle,
+                        block: NodeTarget::Local(block),
+                        variant,
+                    });
+                }
+                let terminator = synthetic.next(current_source)?;
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
+                    handle: terminator,
+                    block: NodeTarget::Local(block),
+                    before: None,
+                    operation: OperationDraft::Yield {
+                        value: body.yield_value,
+                    },
+                }));
+                for expression in body.operations.into_iter().rev() {
+                    events.push(ExpandEvent::Expression {
+                        block: NodeTarget::Local(block),
+                        before: None,
+                        expression,
+                    });
+                }
+            }
             ExpandEvent::Expression {
                 block,
                 before,
@@ -856,12 +1223,69 @@ fn expand_transaction(
                     events.push(ExpandEvent::YieldingBody {
                         owner: NodeTarget::Local(expression.handle),
                         region: body_region,
-                        arguments: vec![
-                            (index_handle, SemanticType::I64),
-                            (carried_handle, carried),
-                        ],
+                        arguments: vec![(index_handle, TypeDraft::I64), (carried_handle, carried)],
                         body,
                     });
+                }
+                ExpressionKindDraft::ConstructProduct { product, fields } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstructProduct { product, fields },
+                    })
+                }
+                ExpressionKindDraft::ProjectField { value, field } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ProjectField { value, field },
+                    })
+                }
+                ExpressionKindDraft::ConstructVariant { variant, payload } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstructVariant { variant, payload },
+                    })
+                }
+                ExpressionKindDraft::MatchSum {
+                    scrutinee,
+                    result,
+                    arms,
+                } => {
+                    let arms = nominal_catalogue.normalize_match_arms(arms, current_source)?;
+                    let mut canonical_arms = Vec::with_capacity(arms.len());
+                    let mut arm_events = Vec::with_capacity(arms.len());
+                    for arm in arms {
+                        let region = synthetic.next(current_source)?;
+                        canonical_arms.push(MatchArmOperationDraft {
+                            variant: arm.variant,
+                            region: NodeTarget::Local(region),
+                        });
+                        arm_events.push(ExpandEvent::MatchArmBody {
+                            owner: NodeTarget::Local(expression.handle),
+                            region,
+                            variant: arm.variant,
+                            payload_handle: arm.payload_handle,
+                            body: arm.body,
+                        });
+                    }
+                    edits.push(CanonicalEdit::CreateOperation {
+                        handle: expression.handle,
+                        block,
+                        before,
+                        operation: OperationDraft::MatchSum {
+                            scrutinee,
+                            result,
+                            arms: canonical_arms,
+                        },
+                    });
+                    for event in arm_events.into_iter().rev() {
+                        events.push(event);
+                    }
                 }
             },
         }
@@ -872,6 +1296,7 @@ fn expand_transaction(
         edits,
         edit_sources,
         explicit_handles,
+        nominal_catalogue,
     })
 }
 
@@ -909,6 +1334,59 @@ pub(crate) fn validate_structured_request(operations: &[TransactionOp]) -> Resul
     scan_explicit_handles(operations).map(|_| ())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LocalHandleKind {
+    Package,
+    Module,
+    ProductType,
+    ProductField,
+    SumType,
+    SumVariant,
+    Function,
+    Parameter,
+    Region,
+    BlockArgument,
+    Operation,
+}
+
+#[derive(Clone, Copy)]
+enum LocalReferenceKind {
+    Any,
+    NominalType,
+    Package,
+    Module,
+    ProductType,
+    ProductField,
+    SumVariant,
+    Function,
+    Parameter,
+    Region,
+    BlockArgument,
+    Operation,
+}
+
+impl LocalReferenceKind {
+    fn accepts(self, actual: LocalHandleKind) -> bool {
+        match self {
+            Self::Any => true,
+            Self::NominalType => matches!(
+                actual,
+                LocalHandleKind::ProductType | LocalHandleKind::SumType
+            ),
+            Self::Package => actual == LocalHandleKind::Package,
+            Self::Module => actual == LocalHandleKind::Module,
+            Self::ProductType => actual == LocalHandleKind::ProductType,
+            Self::ProductField => actual == LocalHandleKind::ProductField,
+            Self::SumVariant => actual == LocalHandleKind::SumVariant,
+            Self::Function => actual == LocalHandleKind::Function,
+            Self::Parameter => actual == LocalHandleKind::Parameter,
+            Self::Region => actual == LocalHandleKind::Region,
+            Self::BlockArgument => actual == LocalHandleKind::BlockArgument,
+            Self::Operation => actual == LocalHandleKind::Operation,
+        }
+    }
+}
+
 fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalHandle>> {
     enum Scan<'a> {
         Expression(&'a ExpressionDraft, usize, usize),
@@ -936,7 +1414,9 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
     }
     fn declare(
         handles: &mut BTreeSet<LocalHandle>,
+        kinds: &mut BTreeMap<LocalHandle, LocalHandleKind>,
         handle: LocalHandle,
+        kind: LocalHandleKind,
         source: usize,
     ) -> Result<()> {
         if handle.get() == 0 {
@@ -954,55 +1434,357 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             .at_operation(source)
             .for_handle(handle));
         }
+        kinds.insert(handle, kind);
         Ok(())
     }
+    fn reference(
+        target: NodeTarget,
+        expected: LocalReferenceKind,
+        source: usize,
+        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+    ) {
+        if let NodeTarget::Local(handle) = target {
+            references.push((handle, expected, source));
+        }
+    }
+    fn type_reference(
+        ty: TypeDraft,
+        source: usize,
+        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+    ) {
+        if let TypeDraft::Nominal(target) = ty {
+            reference(target, LocalReferenceKind::NominalType, source, references);
+        }
+    }
+    fn value_reference(
+        value: ValueDraft,
+        source: usize,
+        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+    ) -> Result<()> {
+        validate_draft_value(value, source)?;
+        match value {
+            ValueDraft::FunctionParameter(target) => {
+                reference(target, LocalReferenceKind::Parameter, source, references)
+            }
+            ValueDraft::BlockArgument(target) => reference(
+                target,
+                LocalReferenceKind::BlockArgument,
+                source,
+                references,
+            ),
+            ValueDraft::OperationResult { operation, .. } => {
+                reference(operation, LocalReferenceKind::Operation, source, references)
+            }
+        }
+        Ok(())
+    }
+    fn operation_references(
+        operation: &OperationDraft,
+        source: usize,
+        budget: &mut DraftBudget,
+        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+    ) -> Result<()> {
+        match operation {
+            OperationDraft::ConstUnit
+            | OperationDraft::ConstI64(_)
+            | OperationDraft::ConstBool(_) => {}
+            OperationDraft::AddI64 { lhs, rhs } | OperationDraft::LtI64 { lhs, rhs } => {
+                value_reference(*lhs, source, references)?;
+                value_reference(*rhs, source, references)?;
+            }
+            OperationDraft::Call {
+                function,
+                arguments,
+            } => {
+                reference(*function, LocalReferenceKind::Function, source, references);
+                budget.add(arguments.len(), source)?;
+                for value in arguments {
+                    value_reference(*value, source, references)?;
+                }
+            }
+            OperationDraft::Hole { expected } => type_reference(*expected, source, references),
+            OperationDraft::If {
+                condition,
+                result,
+                then_region,
+                else_region,
+            } => {
+                value_reference(*condition, source, references)?;
+                type_reference(*result, source, references);
+                reference(*then_region, LocalReferenceKind::Region, source, references);
+                reference(*else_region, LocalReferenceKind::Region, source, references);
+            }
+            OperationDraft::ForI64 {
+                start,
+                end_exclusive,
+                initial,
+                carried,
+                body_region,
+                ..
+            } => {
+                value_reference(*start, source, references)?;
+                value_reference(*end_exclusive, source, references)?;
+                value_reference(*initial, source, references)?;
+                type_reference(*carried, source, references);
+                reference(*body_region, LocalReferenceKind::Region, source, references);
+            }
+            OperationDraft::Return { value } | OperationDraft::Yield { value } => {
+                value_reference(*value, source, references)?;
+            }
+            OperationDraft::ConstructProduct { product, fields } => {
+                reference(
+                    *product,
+                    LocalReferenceKind::ProductType,
+                    source,
+                    references,
+                );
+                budget.add(fields.len(), source)?;
+                for field in fields {
+                    reference(
+                        field.field,
+                        LocalReferenceKind::ProductField,
+                        source,
+                        references,
+                    );
+                    value_reference(field.value, source, references)?;
+                }
+            }
+            OperationDraft::ProjectField { value, field } => {
+                value_reference(*value, source, references)?;
+                reference(*field, LocalReferenceKind::ProductField, source, references);
+            }
+            OperationDraft::ConstructVariant { variant, payload } => {
+                reference(*variant, LocalReferenceKind::SumVariant, source, references);
+                if let Some(value) = payload {
+                    value_reference(*value, source, references)?;
+                }
+            }
+            OperationDraft::MatchSum {
+                scrutinee,
+                result,
+                arms,
+            } => {
+                value_reference(*scrutinee, source, references)?;
+                type_reference(*result, source, references);
+                budget.add(arms.len(), source)?;
+                for arm in arms {
+                    reference(
+                        arm.variant,
+                        LocalReferenceKind::SumVariant,
+                        source,
+                        references,
+                    );
+                    reference(arm.region, LocalReferenceKind::Any, source, references);
+                }
+            }
+        }
+        Ok(())
+    }
+
     let mut handles = BTreeSet::new();
+    let mut kinds = BTreeMap::new();
+    let mut references = Vec::<(LocalHandle, LocalReferenceKind, usize)>::new();
     let mut stack = Vec::new();
     let mut budget = DraftBudget(0);
     for (source, operation) in operations.iter().enumerate() {
         budget.add(1, source)?;
         match operation {
-            TransactionOp::CreatePackage { handle, .. }
-            | TransactionOp::CreateModule { handle, .. } => declare(&mut handles, *handle, source)?,
+            TransactionOp::CreatePackage { handle, .. } => declare(
+                &mut handles,
+                &mut kinds,
+                *handle,
+                LocalHandleKind::Package,
+                source,
+            )?,
+            TransactionOp::CreateModule {
+                handle, package, ..
+            } => {
+                declare(
+                    &mut handles,
+                    &mut kinds,
+                    *handle,
+                    LocalHandleKind::Module,
+                    source,
+                )?;
+                reference(
+                    *package,
+                    LocalReferenceKind::Package,
+                    source,
+                    &mut references,
+                );
+            }
+            TransactionOp::CreateProductType {
+                handle,
+                module,
+                fields,
+                ..
+            } => {
+                declare(
+                    &mut handles,
+                    &mut kinds,
+                    *handle,
+                    LocalHandleKind::ProductType,
+                    source,
+                )?;
+                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                budget.add(fields.len(), source)?;
+                for field in fields {
+                    declare(
+                        &mut handles,
+                        &mut kinds,
+                        field.handle,
+                        LocalHandleKind::ProductField,
+                        source,
+                    )?;
+                    type_reference(field.ty, source, &mut references);
+                }
+            }
+            TransactionOp::CreateSumType {
+                handle,
+                module,
+                variants,
+                ..
+            } => {
+                declare(
+                    &mut handles,
+                    &mut kinds,
+                    *handle,
+                    LocalHandleKind::SumType,
+                    source,
+                )?;
+                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                if variants.is_empty() {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "sum declarations require at least one variant",
+                    )
+                    .at_operation(source)
+                    .for_handle(*handle));
+                }
+                budget.add(variants.len(), source)?;
+                for variant in variants {
+                    declare(
+                        &mut handles,
+                        &mut kinds,
+                        variant.handle,
+                        LocalHandleKind::SumVariant,
+                        source,
+                    )?;
+                    if let Some(payload) = variant.payload {
+                        type_reference(payload, source, &mut references);
+                    }
+                }
+            }
             TransactionOp::CreateFunction {
                 handle,
+                module,
                 parameters,
+                result,
                 body,
                 ..
             } => {
-                declare(&mut handles, *handle, source)?;
+                declare(
+                    &mut handles,
+                    &mut kinds,
+                    *handle,
+                    LocalHandleKind::Function,
+                    source,
+                )?;
+                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                type_reference(*result, source, &mut references);
                 budget.add(parameters.len(), source)?;
                 for parameter in parameters {
-                    declare(&mut handles, parameter.handle, source)?;
+                    declare(
+                        &mut handles,
+                        &mut kinds,
+                        parameter.handle,
+                        LocalHandleKind::Parameter,
+                        source,
+                    )?;
+                    type_reference(parameter.ty, source, &mut references);
                 }
                 if let Some(body) = body {
                     budget.add(1, source)?;
                     stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
                 }
             }
-            TransactionOp::DefineFunctionBody { body, .. } => {
+            TransactionOp::DefineFunctionBody { function, body } => {
+                reference(
+                    *function,
+                    LocalReferenceKind::Function,
+                    source,
+                    &mut references,
+                );
                 budget.add(1, source)?;
-                stack.push(Scan::Body(&body.operations, body.return_value, 0, source))
+                stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
             }
             TransactionOp::InsertExpression { expression, .. } => {
                 stack.push(Scan::Expression(expression, 0, source))
             }
-            TransactionOp::ReplaceOperation { replacement, .. }
-            | TransactionOp::RefineHole { replacement, .. } => {
-                if let OperationDraft::Call { arguments, .. } = replacement {
-                    budget.add(arguments.len(), source)?;
-                    for value in arguments {
-                        validate_draft_value(*value, source)?;
-                    }
-                }
+            TransactionOp::SetEntryFunction { package, function } => {
+                reference(
+                    *package,
+                    LocalReferenceKind::Package,
+                    source,
+                    &mut references,
+                );
+                reference(
+                    *function,
+                    LocalReferenceKind::Function,
+                    source,
+                    &mut references,
+                );
             }
-            _ => {}
+            TransactionOp::RenameNode { node, .. } => {
+                reference(*node, LocalReferenceKind::Any, source, &mut references)
+            }
+            TransactionOp::ReplaceOperation {
+                operation,
+                replacement,
+            } => {
+                reference(
+                    *operation,
+                    LocalReferenceKind::Operation,
+                    source,
+                    &mut references,
+                );
+                if matches!(replacement, OperationDraft::MatchSum { .. }) {
+                    return Err(LkError::new(ErrorCode::InvalidOperand, "match_sum cannot be authored through a region-scaffolding maintenance operation").at_operation(source));
+                }
+                operation_references(replacement, source, &mut budget, &mut references)?;
+            }
+            TransactionOp::ReplaceOperand {
+                operation, value, ..
+            } => {
+                reference(
+                    *operation,
+                    LocalReferenceKind::Operation,
+                    source,
+                    &mut references,
+                );
+                value_reference(*value, source, &mut references)?;
+            }
+            TransactionOp::RefineHole { hole, replacement } => {
+                reference(
+                    *hole,
+                    LocalReferenceKind::Operation,
+                    source,
+                    &mut references,
+                );
+                if matches!(replacement, OperationDraft::MatchSum { .. }) {
+                    return Err(LkError::new(ErrorCode::InvalidOperand, "match_sum cannot be authored through a region-scaffolding maintenance operation").at_operation(source));
+                }
+                operation_references(replacement, source, &mut budget, &mut references)?;
+            }
+            TransactionOp::DeleteOwnedSubtree { root } => {
+                reference(*root, LocalReferenceKind::Any, source, &mut references)
+            }
         }
     }
     while let Some(event) = stack.pop() {
         match event {
             Scan::Body(expressions, terminal, depth, source) => {
-                validate_draft_value(terminal, source)?;
+                value_reference(terminal, source, &mut references)?;
                 if depth > MAX_STRUCTURED_DRAFT_DEPTH {
                     return Err(LkError::new(
                         ErrorCode::PolicyExceeded,
@@ -1016,26 +1798,48 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             }
             Scan::Expression(expression, depth, source) => {
                 budget.add(1, source)?;
-                declare(&mut handles, expression.handle, source)?;
+                declare(
+                    &mut handles,
+                    &mut kinds,
+                    expression.handle,
+                    LocalHandleKind::Operation,
+                    source,
+                )?;
                 match &expression.operation {
+                    ExpressionKindDraft::ConstUnit
+                    | ExpressionKindDraft::ConstBool(_)
+                    | ExpressionKindDraft::ConstI64(_) => {}
                     ExpressionKindDraft::AddI64 { lhs, rhs }
                     | ExpressionKindDraft::LtI64 { lhs, rhs } => {
-                        validate_draft_value(*lhs, source)?;
-                        validate_draft_value(*rhs, source)?;
+                        value_reference(*lhs, source, &mut references)?;
+                        value_reference(*rhs, source, &mut references)?;
                     }
-                    ExpressionKindDraft::Call { arguments, .. } => {
+                    ExpressionKindDraft::Call {
+                        function,
+                        arguments,
+                    } => {
+                        reference(
+                            *function,
+                            LocalReferenceKind::Function,
+                            source,
+                            &mut references,
+                        );
                         budget.add(arguments.len(), source)?;
                         for value in arguments {
-                            validate_draft_value(*value, source)?;
+                            value_reference(*value, source, &mut references)?;
                         }
+                    }
+                    ExpressionKindDraft::Hole { expected } => {
+                        type_reference(*expected, source, &mut references)
                     }
                     ExpressionKindDraft::If {
                         condition,
+                        result,
                         then_body,
                         else_body,
-                        ..
                     } => {
-                        validate_draft_value(*condition, source)?;
+                        value_reference(*condition, source, &mut references)?;
+                        type_reference(*result, source, &mut references);
                         budget.add(2, source)?;
                         stack.push(Scan::Body(
                             &else_body.operations,
@@ -1054,16 +1858,30 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         start,
                         end_exclusive,
                         initial,
+                        carried,
                         index_handle,
                         carried_handle,
                         body,
                         ..
                     } => {
-                        validate_draft_value(*start, source)?;
-                        validate_draft_value(*end_exclusive, source)?;
-                        validate_draft_value(*initial, source)?;
-                        declare(&mut handles, *index_handle, source)?;
-                        declare(&mut handles, *carried_handle, source)?;
+                        value_reference(*start, source, &mut references)?;
+                        value_reference(*end_exclusive, source, &mut references)?;
+                        value_reference(*initial, source, &mut references)?;
+                        type_reference(*carried, source, &mut references);
+                        declare(
+                            &mut handles,
+                            &mut kinds,
+                            *index_handle,
+                            LocalHandleKind::BlockArgument,
+                            source,
+                        )?;
+                        declare(
+                            &mut handles,
+                            &mut kinds,
+                            *carried_handle,
+                            LocalHandleKind::BlockArgument,
+                            source,
+                        )?;
                         budget.add(1, source)?;
                         stack.push(Scan::Body(
                             &body.operations,
@@ -1072,9 +1890,97 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                             source,
                         ));
                     }
-                    _ => {}
+                    ExpressionKindDraft::ConstructProduct { product, fields } => {
+                        reference(
+                            *product,
+                            LocalReferenceKind::ProductType,
+                            source,
+                            &mut references,
+                        );
+                        budget.add(fields.len(), source)?;
+                        for field in fields {
+                            reference(
+                                field.field,
+                                LocalReferenceKind::ProductField,
+                                source,
+                                &mut references,
+                            );
+                            value_reference(field.value, source, &mut references)?;
+                        }
+                    }
+                    ExpressionKindDraft::ProjectField { value, field } => {
+                        value_reference(*value, source, &mut references)?;
+                        reference(
+                            *field,
+                            LocalReferenceKind::ProductField,
+                            source,
+                            &mut references,
+                        );
+                    }
+                    ExpressionKindDraft::ConstructVariant { variant, payload } => {
+                        reference(
+                            *variant,
+                            LocalReferenceKind::SumVariant,
+                            source,
+                            &mut references,
+                        );
+                        if let Some(value) = payload {
+                            value_reference(*value, source, &mut references)?;
+                        }
+                    }
+                    ExpressionKindDraft::MatchSum {
+                        scrutinee,
+                        result,
+                        arms,
+                    } => {
+                        value_reference(*scrutinee, source, &mut references)?;
+                        type_reference(*result, source, &mut references);
+                        budget.add(arms.len(), source)?;
+                        for arm in arms.iter().rev() {
+                            reference(
+                                arm.variant,
+                                LocalReferenceKind::SumVariant,
+                                source,
+                                &mut references,
+                            );
+                            if let Some(handle) = arm.payload_handle {
+                                declare(
+                                    &mut handles,
+                                    &mut kinds,
+                                    handle,
+                                    LocalHandleKind::BlockArgument,
+                                    source,
+                                )?;
+                            }
+                            budget.add(1, source)?;
+                            stack.push(Scan::Body(
+                                &arm.body.operations,
+                                arm.body.yield_value,
+                                depth + 1,
+                                source,
+                            ));
+                        }
+                    }
                 }
             }
+        }
+    }
+    for (handle, expected, source) in references {
+        let Some(actual) = kinds.get(&handle).copied() else {
+            return Err(LkError::new(
+                ErrorCode::InvalidHandle,
+                "structured draft references an undeclared local handle",
+            )
+            .at_operation(source)
+            .for_handle(handle));
+        };
+        if !expected.accepts(actual) {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "transaction-local reference has the wrong declared category",
+            )
+            .at_operation(source)
+            .for_handle(handle));
         }
     }
     Ok(handles)
@@ -1150,9 +2056,14 @@ impl Workspace {
         let mut provenance = BTreeMap::new();
 
         for (operation, source) in expanded.edits.iter().zip(&expanded.edit_sources) {
-            if let Err(mut error) =
-                apply_operation(base, &mut nodes, &mut tombstones, &allocations, operation)
-            {
+            if let Err(mut error) = apply_operation(
+                base,
+                &mut nodes,
+                &mut tombstones,
+                &allocations,
+                &expanded.nominal_catalogue,
+                operation,
+            ) {
                 if error.operation_index.is_none() {
                     error = error.at_operation(*source);
                 }
@@ -1284,11 +2195,16 @@ fn record_edit_provenance(
         }
         CanonicalEdit::CreatePackage { handle, .. }
         | CanonicalEdit::CreateModule { handle, .. }
+        | CanonicalEdit::CreateProductType { handle, .. }
+        | CanonicalEdit::CreateProductField { handle, .. }
+        | CanonicalEdit::CreateSumType { handle, .. }
+        | CanonicalEdit::CreateSumVariant { handle, .. }
         | CanonicalEdit::CreateFunction { handle, .. }
         | CanonicalEdit::CreateParameter { handle, .. }
         | CanonicalEdit::CreateRegion { handle, .. }
         | CanonicalEdit::CreateBlock { handle, .. }
-        | CanonicalEdit::CreateBlockArgument { handle, .. } => {
+        | CanonicalEdit::CreateBlockArgument { handle, .. }
+        | CanonicalEdit::CreateMatchPayloadArgument { handle, .. } => {
             (Some(allocated(allocations, *handle)?), false)
         }
         CanonicalEdit::ReplaceOperation { operation, .. }
@@ -1481,11 +2397,16 @@ fn canonical_created_handle(operation: &CanonicalEdit) -> Option<LocalHandle> {
     match operation {
         CanonicalEdit::CreatePackage { handle, .. }
         | CanonicalEdit::CreateModule { handle, .. }
+        | CanonicalEdit::CreateProductType { handle, .. }
+        | CanonicalEdit::CreateProductField { handle, .. }
+        | CanonicalEdit::CreateSumType { handle, .. }
+        | CanonicalEdit::CreateSumVariant { handle, .. }
         | CanonicalEdit::CreateFunction { handle, .. }
         | CanonicalEdit::CreateParameter { handle, .. }
         | CanonicalEdit::CreateRegion { handle, .. }
         | CanonicalEdit::CreateBlock { handle, .. }
         | CanonicalEdit::CreateBlockArgument { handle, .. }
+        | CanonicalEdit::CreateMatchPayloadArgument { handle, .. }
         | CanonicalEdit::CreateOperation { handle, .. } => Some(*handle),
         _ => None,
     }
@@ -1496,6 +2417,7 @@ fn apply_operation(
     nodes: &mut BTreeMap<NodeId, Node>,
     tombstones: &mut BTreeSet<u64>,
     allocations: &BTreeMap<LocalHandle, NodeId>,
+    nominal_catalogue: &StagedNominalCatalogue,
     operation: &CanonicalEdit,
 ) -> Result<()> {
     match operation {
@@ -1531,6 +2453,7 @@ fn apply_operation(
                 Node::Module {
                     owner: package,
                     name: name.clone(),
+                    types: Vec::new(),
                     functions: Vec::new(),
                 },
             )?;
@@ -1540,6 +2463,125 @@ fn apply_operation(
                 return Err(invariant("package kind changed during staging"));
             };
             modules.push(id);
+        }
+        CanonicalEdit::CreateProductType {
+            handle,
+            module,
+            name,
+        } => {
+            let id = allocated(allocations, *handle)?;
+            let module = resolve(*module, allocations, base.workspace())?;
+            require_kind(nodes, module, NodeKind::Module)?;
+            insert_new(
+                nodes,
+                id,
+                Node::ProductType {
+                    owner: module,
+                    name: name.clone(),
+                    fields: Vec::new(),
+                },
+            )?;
+            let Node::Module { types, .. } = require_kind_mut(nodes, module, NodeKind::Module)?
+            else {
+                return Err(invariant("module kind changed during staging"));
+            };
+            types.push(id);
+        }
+        CanonicalEdit::CreateProductField {
+            handle,
+            product,
+            name,
+            ty,
+        } => {
+            let id = allocated(allocations, *handle)?;
+            let product = resolve(*product, allocations, base.workspace())?;
+            let ordinal = match require_kind(nodes, product, NodeKind::ProductType)? {
+                Node::ProductType { fields, .. } => u32::try_from(fields.len()).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "product field ordinal exceeds representation",
+                    )
+                    .for_node(product)
+                })?,
+                _ => unreachable!(),
+            };
+            let ty = resolve_type_draft(*ty, allocations, base.workspace())?;
+            insert_new(
+                nodes,
+                id,
+                Node::ProductField {
+                    owner: product,
+                    ordinal,
+                    name: name.clone(),
+                    ty,
+                },
+            )?;
+            let Node::ProductType { fields, .. } =
+                require_kind_mut(nodes, product, NodeKind::ProductType)?
+            else {
+                unreachable!()
+            };
+            fields.push(id);
+        }
+        CanonicalEdit::CreateSumType {
+            handle,
+            module,
+            name,
+        } => {
+            let id = allocated(allocations, *handle)?;
+            let module = resolve(*module, allocations, base.workspace())?;
+            require_kind(nodes, module, NodeKind::Module)?;
+            insert_new(
+                nodes,
+                id,
+                Node::SumType {
+                    owner: module,
+                    name: name.clone(),
+                    variants: Vec::new(),
+                },
+            )?;
+            let Node::Module { types, .. } = require_kind_mut(nodes, module, NodeKind::Module)?
+            else {
+                return Err(invariant("module kind changed during staging"));
+            };
+            types.push(id);
+        }
+        CanonicalEdit::CreateSumVariant {
+            handle,
+            sum,
+            name,
+            payload,
+        } => {
+            let id = allocated(allocations, *handle)?;
+            let sum = resolve(*sum, allocations, base.workspace())?;
+            let ordinal = match require_kind(nodes, sum, NodeKind::SumType)? {
+                Node::SumType { variants, .. } => u32::try_from(variants.len()).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "sum variant ordinal exceeds representation",
+                    )
+                    .for_node(sum)
+                })?,
+                _ => unreachable!(),
+            };
+            let payload = payload
+                .map(|ty| resolve_type_draft(ty, allocations, base.workspace()))
+                .transpose()?;
+            insert_new(
+                nodes,
+                id,
+                Node::SumVariant {
+                    owner: sum,
+                    ordinal,
+                    name: name.clone(),
+                    payload,
+                },
+            )?;
+            let Node::SumType { variants, .. } = require_kind_mut(nodes, sum, NodeKind::SumType)?
+            else {
+                unreachable!()
+            };
+            variants.push(id);
         }
         CanonicalEdit::CreateFunction {
             handle,
@@ -1557,7 +2599,7 @@ fn apply_operation(
                     owner: module,
                     name: name.clone(),
                     parameters: Vec::new(),
-                    result: *result,
+                    result: resolve_type_draft(*result, allocations, base.workspace())?,
                     body: None,
                 },
             )?;
@@ -1594,7 +2636,7 @@ fn apply_operation(
                     owner: function,
                     ordinal,
                     name: name.clone(),
-                    ty: *ty,
+                    ty: resolve_type_draft(*ty, allocations, base.workspace())?,
                 },
             )?;
             let Node::Function { parameters, .. } =
@@ -1673,7 +2715,53 @@ fn apply_operation(
                 Node::BlockArgument {
                     owner: block,
                     ordinal,
-                    ty: *ty,
+                    ty: resolve_type_draft(*ty, allocations, base.workspace())?,
+                },
+            )?;
+            let Node::Block { arguments, .. } = require_kind_mut(nodes, block, NodeKind::Block)?
+            else {
+                unreachable!()
+            };
+            arguments.push(id);
+        }
+        CanonicalEdit::CreateMatchPayloadArgument {
+            handle,
+            block,
+            variant,
+        } => {
+            let id = allocated(allocations, *handle)?;
+            let block = resolve(*block, allocations, base.workspace())?;
+            let variant_target = *variant;
+            let variant = resolve(variant_target, allocations, base.workspace())?;
+            let payload = nominal_catalogue
+                .variants
+                .get(&variant_target)
+                .and_then(|(_, payload)| *payload)
+                .ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "nullary match arm cannot declare a payload handle",
+                    )
+                    .for_node(variant)
+                })?;
+            let payload = resolve_type_draft(payload, allocations, base.workspace())?;
+            let ordinal = match require_kind(nodes, block, NodeKind::Block)? {
+                Node::Block { arguments, .. } => u32::try_from(arguments.len()).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "block argument ordinal exceeds representation",
+                    )
+                    .for_node(block)
+                })?,
+                _ => unreachable!(),
+            };
+            insert_new(
+                nodes,
+                id,
+                Node::BlockArgument {
+                    owner: block,
+                    ordinal,
+                    ty: payload,
                 },
             )?;
             let Node::Block { arguments, .. } = require_kind_mut(nodes, block, NodeKind::Block)?
@@ -1691,7 +2779,8 @@ fn apply_operation(
             let id = allocated(allocations, *handle)?;
             let block = resolve(*block, allocations, base.workspace())?;
             require_kind(nodes, block, NodeKind::Block)?;
-            let operation = resolve_operation(operation, allocations, base.workspace())?;
+            let operation =
+                resolve_operation(operation, allocations, base.workspace(), nominal_catalogue)?;
             let terminator = operation.is_terminator();
             insert_new(
                 nodes,
@@ -1782,7 +2871,12 @@ fn apply_operation(
             replacement,
         } => {
             let operation = resolve(*operation, allocations, base.workspace())?;
-            let replacement = resolve_operation(replacement, allocations, base.workspace())?;
+            let replacement = resolve_operation(
+                replacement,
+                allocations,
+                base.workspace(),
+                nominal_catalogue,
+            )?;
             let current = match require_kind(nodes, operation, NodeKind::Operation)? {
                 Node::Operation { operation, .. } => operation.clone(),
                 _ => return Err(invariant("operation kind changed during staging")),
@@ -1834,7 +2928,12 @@ fn apply_operation(
         }
         CanonicalEdit::RefineHole { hole, replacement } => {
             let hole = resolve(*hole, allocations, base.workspace())?;
-            let replacement = resolve_operation(replacement, allocations, base.workspace())?;
+            let replacement = resolve_operation(
+                replacement,
+                allocations,
+                base.workspace(),
+                nominal_catalogue,
+            )?;
             let (owner, expected, current_result_count) =
                 match require_kind(nodes, hole, NodeKind::Operation)? {
                     Node::Operation {
@@ -1870,6 +2969,13 @@ fn apply_operation(
                 || replacement.is_terminator()
                 || replacement.owned_region_count() != 0
                 || matches!(replacement, OperationKind::Hole { .. })
+                || (matches!(expected, SemanticType::Nominal(_))
+                    && !matches!(
+                        replacement,
+                        OperationKind::ConstructProduct { .. }
+                            | OperationKind::ConstructVariant { .. }
+                            | OperationKind::ProjectField { .. }
+                    ))
             {
                 return Err(LkError::new(
                     ErrorCode::InvalidOperand,
@@ -1912,6 +3018,7 @@ fn resolve_operation(
     operation: &OperationDraft,
     allocations: &BTreeMap<LocalHandle, NodeId>,
     workspace: WorkspaceId,
+    nominal_catalogue: &StagedNominalCatalogue,
 ) -> Result<OperationKind> {
     Ok(match operation {
         OperationDraft::ConstUnit => OperationKind::ConstUnit,
@@ -1937,7 +3044,7 @@ fn resolve_operation(
                 .collect::<Result<Vec<_>>>()?,
         },
         OperationDraft::Hole { expected } => OperationKind::Hole {
-            expected: *expected,
+            expected: resolve_type_draft(*expected, allocations, workspace)?,
         },
         OperationDraft::If {
             condition,
@@ -1946,7 +3053,7 @@ fn resolve_operation(
             else_region,
         } => OperationKind::If {
             condition: resolve_value(*condition, allocations, workspace)?,
-            result: *result,
+            result: resolve_type_draft(*result, allocations, workspace)?,
             then_region: resolve(*then_region, allocations, workspace)?,
             else_region: resolve(*else_region, allocations, workspace)?,
         },
@@ -1962,7 +3069,7 @@ fn resolve_operation(
             end_exclusive: resolve_value(*end_exclusive, allocations, workspace)?,
             step: *step,
             initial: resolve_value(*initial, allocations, workspace)?,
-            carried: *carried,
+            carried: resolve_type_draft(*carried, allocations, workspace)?,
             body_region: resolve(*body_region, allocations, workspace)?,
         },
         OperationDraft::Return { value } => OperationKind::Return {
@@ -1971,6 +3078,115 @@ fn resolve_operation(
         OperationDraft::Yield { value } => OperationKind::Yield {
             value: resolve_value(*value, allocations, workspace)?,
         },
+        OperationDraft::ConstructProduct { product, fields } => {
+            let product_target = *product;
+            let product = resolve(product_target, allocations, workspace)?;
+            let declared = nominal_catalogue
+                .products
+                .get(&product_target)
+                .ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::WrongKind,
+                        "product construction must name a staged product declaration",
+                    )
+                    .for_node(product)
+                })?;
+            let declared = declared
+                .iter()
+                .copied()
+                .map(|field| resolve(field, allocations, workspace))
+                .collect::<Result<Vec<_>>>()?;
+            let mut resolved = BTreeMap::new();
+            for field in fields {
+                let field_id = resolve(field.field, allocations, workspace)?;
+                if resolved
+                    .insert(
+                        field_id,
+                        resolve_value(field.value, allocations, workspace)?,
+                    )
+                    .is_some()
+                {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "product field binding is duplicated",
+                    )
+                    .for_node(field_id));
+                }
+            }
+            let fields = declared
+                .iter()
+                .map(|field| {
+                    resolved
+                        .remove(field)
+                        .map(|value| ProductFieldValue {
+                            field: *field,
+                            value,
+                        })
+                        .ok_or_else(|| {
+                            LkError::new(
+                                ErrorCode::InvalidOperand,
+                                "product construction is missing a declared field",
+                            )
+                            .for_node(*field)
+                            .with_related([product])
+                        })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            if let Some(foreign) = resolved.keys().next().copied() {
+                return Err(LkError::new(
+                    ErrorCode::OwnerMismatch,
+                    "product construction contains a foreign field",
+                )
+                .for_node(foreign)
+                .with_related([product]));
+            }
+            OperationKind::ConstructProduct { product, fields }
+        }
+        OperationDraft::ProjectField { value, field } => OperationKind::ProjectField {
+            value: resolve_value(*value, allocations, workspace)?,
+            field: resolve(*field, allocations, workspace)?,
+        },
+        OperationDraft::ConstructVariant { variant, payload } => OperationKind::ConstructVariant {
+            variant: resolve(*variant, allocations, workspace)?,
+            payload: payload
+                .map(|value| resolve_value(value, allocations, workspace))
+                .transpose()?,
+        },
+        OperationDraft::MatchSum {
+            scrutinee,
+            result,
+            arms,
+        } => {
+            let resolved = arms
+                .iter()
+                .map(|arm| {
+                    Ok(MatchArm {
+                        variant: resolve(arm.variant, allocations, workspace)?,
+                        region: resolve(arm.region, allocations, workspace)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            OperationKind::MatchSum {
+                scrutinee: resolve_value(*scrutinee, allocations, workspace)?,
+                result: resolve_type_draft(*result, allocations, workspace)?,
+                arms: resolved,
+            }
+        }
+    })
+}
+
+fn resolve_type_draft(
+    ty: TypeDraft,
+    allocations: &BTreeMap<LocalHandle, NodeId>,
+    workspace: WorkspaceId,
+) -> Result<SemanticType> {
+    Ok(match ty {
+        TypeDraft::Unit => SemanticType::Unit,
+        TypeDraft::Bool => SemanticType::Bool,
+        TypeDraft::I64 => SemanticType::I64,
+        TypeDraft::Nominal(target) => {
+            SemanticType::Nominal(resolve(target, allocations, workspace)?)
+        }
     })
 }
 
@@ -2003,6 +3219,21 @@ fn operation_result_types_in_nodes(
                 Some(Node::Function { result, .. }) if index == 0 => Some(*result),
                 _ => None,
             },
+            OperationKind::ConstructProduct { product, .. } if index == 0 => {
+                matches!(nodes.get(product), Some(Node::ProductType { .. }))
+                    .then_some(SemanticType::Nominal(*product))
+            }
+            OperationKind::ProjectField { field, .. } if index == 0 => match nodes.get(field) {
+                Some(Node::ProductField { ty, .. }) => Some(*ty),
+                _ => None,
+            },
+            OperationKind::ConstructVariant { variant, .. } if index == 0 => {
+                match nodes.get(variant) {
+                    Some(Node::SumVariant { owner, .. }) => Some(SemanticType::Nominal(*owner)),
+                    _ => None,
+                }
+            }
+            OperationKind::MatchSum { result, .. } if index == 0 => Some(*result),
             _ => operation.result_type(index, None),
         })
         .collect()
@@ -2144,7 +3375,11 @@ fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId
     let removed = match owner_node {
         Node::WorkspaceRoot { packages } => remove_one(packages, child),
         Node::Package { modules, .. } => remove_one(modules, child),
-        Node::Module { functions, .. } => remove_one(functions, child),
+        Node::Module {
+            types, functions, ..
+        } => remove_one(types, child) || remove_one(functions, child),
+        Node::ProductType { fields, .. } => remove_one(fields, child),
+        Node::SumType { variants, .. } => remove_one(variants, child),
         Node::Function {
             parameters, body, ..
         } => {
@@ -2169,7 +3404,11 @@ fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId
                 remove_one(arguments, child) || remove_one(operations, child)
             }
         }
-        Node::Parameter { .. } | Node::BlockArgument { .. } | Node::Operation { .. } => false,
+        Node::ProductField { .. }
+        | Node::SumVariant { .. }
+        | Node::Parameter { .. }
+        | Node::BlockArgument { .. }
+        | Node::Operation { .. } => false,
     };
     if !removed {
         return Err(LkError::new(
@@ -2299,7 +3538,7 @@ mod tests {
                 module: local_handle(2),
                 name: "negative".into(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         draft_expression(4, ExpressionKindDraft::ConstI64(0)),
@@ -2311,7 +3550,7 @@ mod tests {
                                 end_exclusive: draft_result(5),
                                 step: -1,
                                 initial: draft_result(4),
-                                carried: SemanticType::I64,
+                                carried: SemanticType::I64.into(),
                                 index_handle: LocalHandle::new(7),
                                 carried_handle: LocalHandle::new(8),
                                 body: YieldingBodyDraft {
@@ -2343,7 +3582,7 @@ mod tests {
                 module: local_handle(2),
                 name: "sibling".into(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         draft_expression(4, ExpressionKindDraft::ConstBool(true)),
@@ -2351,7 +3590,7 @@ mod tests {
                             5,
                             ExpressionKindDraft::If {
                                 condition: draft_result(4),
-                                result: SemanticType::I64,
+                                result: SemanticType::I64.into(),
                                 then_body: YieldingBodyDraft {
                                     operations: vec![draft_expression(
                                         6,
@@ -2388,7 +3627,7 @@ mod tests {
                 module: local_handle(2),
                 name: "escape".into(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         draft_expression(4, ExpressionKindDraft::ConstBool(true)),
@@ -2396,7 +3635,7 @@ mod tests {
                             5,
                             ExpressionKindDraft::If {
                                 condition: draft_result(4),
-                                result: SemanticType::I64,
+                                result: SemanticType::I64.into(),
                                 then_body: YieldingBodyDraft {
                                     operations: vec![draft_expression(
                                         6,
@@ -2444,7 +3683,7 @@ mod tests {
                     module: local_handle(2),
                     name: "producer".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![draft_expression(4, ExpressionKindDraft::ConstI64(1))],
                         return_value: draft_result(4),
@@ -2455,7 +3694,7 @@ mod tests {
                     module: local_handle(2),
                     name: "consumer".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: Vec::new(),
                         return_value: draft_result(4),
@@ -2500,7 +3739,7 @@ mod tests {
                         module: local_handle(2),
                         name: "callee".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![draft_expression(5, ExpressionKindDraft::ConstI64(7))],
                             return_value: draft_result(5),
@@ -2511,7 +3750,7 @@ mod tests {
                         module: local_handle(3),
                         name: "caller".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![draft_expression(
                                 7,
@@ -2556,7 +3795,7 @@ mod tests {
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 },
                 TransactionOp::CreateFunction {
@@ -2564,7 +3803,7 @@ mod tests {
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 },
             ],
@@ -2586,7 +3825,7 @@ mod tests {
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: None,
             }],
         };
@@ -2620,7 +3859,7 @@ mod tests {
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: None,
             }],
         };
@@ -2659,7 +3898,7 @@ mod tests {
                 module: NodeTarget::Existing(module),
                 name: "replacement".to_owned(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: None,
             }],
         };
@@ -2696,7 +3935,7 @@ mod tests {
                 module: NodeTarget::Local(module),
                 name: "main".to_owned(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: body_operations,
                     return_value: ValueDraft::OperationResult {
@@ -2766,7 +4005,7 @@ mod tests {
                     module: local(LocalHandle::new(2)),
                     name: "main".to_owned(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -2784,7 +4023,7 @@ mod tests {
                             ExpressionDraft {
                                 handle: LocalHandle::new(9),
                                 operation: ExpressionKindDraft::Hole {
-                                    expected: SemanticType::I64,
+                                    expected: SemanticType::I64.into(),
                                 },
                             },
                             ExpressionDraft {
@@ -2926,6 +4165,173 @@ mod tests {
         assert_eq!(three.change_count, four.change_count);
         assert_ne!(three.change_digest, four.change_digest);
         assert_ne!(three.hash, four.hash);
+    }
+
+    #[test]
+    fn same_typed_nominal_definition_changes_are_classified_and_hashed() {
+        let id = WorkspaceId::from_bytes([0x78; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let created = commit(
+            &mut workspace,
+            &Transaction {
+                workspace: id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(1),
+                        name: "p".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: local_handle(1),
+                        name: "m".into(),
+                    },
+                    TransactionOp::CreateProductType {
+                        handle: LocalHandle::new(3),
+                        module: local_handle(2),
+                        name: "Pair".into(),
+                        fields: vec![
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(4),
+                                name: "left".into(),
+                                ty: TypeDraft::I64,
+                            },
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(5),
+                                name: "right".into(),
+                                ty: TypeDraft::I64,
+                            },
+                        ],
+                    },
+                    TransactionOp::CreateSumType {
+                        handle: LocalHandle::new(6),
+                        module: local_handle(2),
+                        name: "Choice".into(),
+                        variants: vec![
+                            SumVariantDraft {
+                                handle: LocalHandle::new(7),
+                                name: "First".into(),
+                                payload: None,
+                            },
+                            SumVariantDraft {
+                                handle: LocalHandle::new(8),
+                                name: "Second".into(),
+                                payload: None,
+                            },
+                        ],
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(9),
+                        module: local_handle(2),
+                        name: "main".into(),
+                        parameters: Vec::new(),
+                        result: TypeDraft::I64,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![
+                                draft_expression(10, ExpressionKindDraft::ConstI64(1)),
+                                draft_expression(
+                                    11,
+                                    ExpressionKindDraft::ConstructProduct {
+                                        product: local_handle(3),
+                                        fields: vec![
+                                            ProductFieldValueDraft {
+                                                field: local_handle(4),
+                                                value: draft_result(10),
+                                            },
+                                            ProductFieldValueDraft {
+                                                field: local_handle(5),
+                                                value: draft_result(10),
+                                            },
+                                        ],
+                                    },
+                                ),
+                                draft_expression(
+                                    12,
+                                    ExpressionKindDraft::ProjectField {
+                                        value: draft_result(11),
+                                        field: local_handle(4),
+                                    },
+                                ),
+                                draft_expression(
+                                    13,
+                                    ExpressionKindDraft::ConstructVariant {
+                                        variant: local_handle(7),
+                                        payload: None,
+                                    },
+                                ),
+                            ],
+                            return_value: draft_result(12),
+                        }),
+                    },
+                ],
+            },
+        )
+        .expect("nominal definitions");
+        let field_before = binding(&created, 4);
+        let field_after = binding(&created, 5);
+        let variant_before = binding(&created, 7);
+        let variant_after = binding(&created, 8);
+        let product_value = binding(&created, 11);
+        let projection = binding(&created, 12);
+        let construction = binding(&created, 13);
+        let base = workspace.snapshot(Revision::new(1)).expect("base");
+
+        let cases = [
+            (
+                projection,
+                OperationDraft::ProjectField {
+                    value: ValueDraft::OperationResult {
+                        operation: NodeTarget::Existing(product_value),
+                        output: 0,
+                    },
+                    field: NodeTarget::Existing(field_after),
+                },
+                field_before,
+                field_after,
+            ),
+            (
+                construction,
+                OperationDraft::ConstructVariant {
+                    variant: NodeTarget::Existing(variant_after),
+                    payload: None,
+                },
+                variant_before,
+                variant_after,
+            ),
+        ];
+        for (operation, replacement, before, after) in cases {
+            let prepared = workspace
+                .prepare_transaction(&ApplyTransactionRequest {
+                    transaction: Transaction {
+                        workspace: id,
+                        base_revision: Revision::new(1),
+                        idempotency_key: None,
+                        mode: TransactionMode::ValidateOnly,
+                        operations: vec![TransactionOp::ReplaceOperation {
+                            operation: NodeTarget::Existing(operation),
+                            replacement,
+                        }],
+                    },
+                    response: TransactionResponseSpec::default(),
+                })
+                .expect("same-typed definition replacement");
+            let semantic_diff = diff::between(base, &prepared.snapshot);
+            assert_eq!(semantic_diff, diff::between(base, &prepared.snapshot));
+            assert_ne!(semantic_diff.digest.as_bytes(), [0; 32]);
+            assert_eq!(prepared.receipt.change_digest, semantic_diff.digest);
+            assert!(semantic_diff.changes.iter().any(|change| {
+                change.node == operation
+                    && matches!(
+                        change.kind,
+                        crate::diff::ChangeKind::DefinitionChanged {
+                            before: actual_before,
+                            after: actual_after,
+                        } if actual_before == before && actual_after == after
+                    )
+            }));
+        }
     }
 
     #[test]
@@ -3179,7 +4585,7 @@ mod tests {
                     module: NodeTarget::Existing(module),
                     name: "callee".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 },
                 TransactionOp::RefineHole {
@@ -3251,7 +4657,7 @@ mod tests {
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -3276,7 +4682,7 @@ mod tests {
                                     end_exclusive: result(7),
                                     step: 1,
                                     initial: result(6),
-                                    carried: SemanticType::I64,
+                                    carried: SemanticType::I64.into(),
                                     index_handle: LocalHandle::new(10),
                                     carried_handle: LocalHandle::new(11),
                                     body: YieldingBodyDraft {
@@ -3295,7 +4701,7 @@ mod tests {
                                 handle: LocalHandle::new(13),
                                 operation: ExpressionKindDraft::If {
                                     condition: result(8),
-                                    result: SemanticType::I64,
+                                    result: SemanticType::I64.into(),
                                     then_body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
                                             handle: LocalHandle::new(14),
@@ -3326,9 +4732,9 @@ mod tests {
                     parameters: vec![FunctionParameterDraft {
                         handle: LocalHandle::new(21),
                         name: "value".into(),
-                        ty: SemanticType::I64,
+                        ty: SemanticType::I64.into(),
                     }],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: Vec::new(),
                         return_value: ValueDraft::FunctionParameter(local(21)),
@@ -3405,7 +4811,7 @@ mod tests {
                     module: NodeTarget::Local(LocalHandle::new(2)),
                     name: "main".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![expression],
                         return_value: ValueDraft::OperationResult {
@@ -3532,7 +4938,7 @@ mod tests {
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
                             handle: LocalHandle::new(4),
@@ -3611,7 +5017,7 @@ mod tests {
     }
 
     #[test]
-    fn final_validation_maps_bad_use_to_non_last_public_operation() {
+    fn preallocation_scan_maps_wrong_local_call_target_to_public_operation() {
         let id = WorkspaceId::from_bytes([0x80; 16]);
         let workspace = Workspace::new(id).expect("workspace");
         let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
@@ -3635,7 +5041,7 @@ mod tests {
                     module: local(2),
                     name: "bad".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
                             handle: LocalHandle::new(4),
@@ -3655,7 +5061,7 @@ mod tests {
                     module: local(2),
                     name: "later".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 },
             ],
@@ -3668,7 +5074,7 @@ mod tests {
             .expect_err("bad call target");
         assert_eq!(error.code, ErrorCode::WrongKind);
         assert_eq!(error.operation_index, Some(2));
-        assert_eq!(error.local_handle, Some(LocalHandle::new(4)));
+        assert_eq!(error.local_handle, Some(LocalHandle::new(1)));
         assert_eq!(workspace.head().expect("head").next_serial(), 2);
     }
 
@@ -3729,7 +5135,7 @@ mod tests {
                         operation: existing,
                         output: 0,
                     },
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     then_body: YieldingBodyDraft {
                         operations: vec![expression],
                         yield_value: ValueDraft::OperationResult {
@@ -3892,7 +5298,7 @@ mod tests {
                     module: local(2),
                     name: "a".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(call_body(5, 4)),
                 },
                 TransactionOp::CreateFunction {
@@ -3900,7 +5306,7 @@ mod tests {
                     module: local(2),
                     name: "b".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(call_body(6, 3)),
                 },
             ],
@@ -4018,7 +5424,7 @@ mod tests {
             (
                 hole,
                 OperationDraft::Hole {
-                    expected: SemanticType::I64,
+                    expected: SemanticType::I64.into(),
                 },
                 ErrorCode::InvalidOperand,
             ),
@@ -4089,6 +5495,782 @@ mod tests {
     }
 
     #[test]
+    fn nominal_declarations_resolve_forward_types_and_derive_exact_layouts() {
+        let id = WorkspaceId::from_bytes([0x91; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let request = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::ValidateOnly,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(1),
+                        name: "p".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: local_handle(1),
+                        name: "m".into(),
+                    },
+                    TransactionOp::CreateProductType {
+                        handle: LocalHandle::new(3),
+                        module: local_handle(2),
+                        name: "Reading".into(),
+                        fields: vec![
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(4),
+                                name: "valid".into(),
+                                ty: TypeDraft::Bool,
+                            },
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(5),
+                                name: "value".into(),
+                                ty: TypeDraft::I64,
+                            },
+                        ],
+                    },
+                    TransactionOp::CreateSumType {
+                        handle: LocalHandle::new(6),
+                        module: local_handle(2),
+                        name: "Input".into(),
+                        variants: vec![
+                            SumVariantDraft {
+                                handle: LocalHandle::new(7),
+                                name: "missing".into(),
+                                payload: None,
+                            },
+                            SumVariantDraft {
+                                handle: LocalHandle::new(8),
+                                name: "sample".into(),
+                                payload: Some(TypeDraft::Nominal(local_handle(3))),
+                            },
+                        ],
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(9),
+                        module: local_handle(2),
+                        name: "pending".into(),
+                        parameters: vec![FunctionParameterDraft {
+                            handle: LocalHandle::new(10),
+                            name: "input".into(),
+                            ty: TypeDraft::Nominal(local_handle(6)),
+                        }],
+                        result: TypeDraft::Nominal(local_handle(3)),
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![draft_expression(
+                                11,
+                                ExpressionKindDraft::Hole {
+                                    expected: TypeDraft::Nominal(local_handle(3)),
+                                },
+                            )],
+                            return_value: draft_result(11),
+                        }),
+                    },
+                ],
+            },
+            response: TransactionResponseSpec {
+                return_handles: vec![
+                    LocalHandle::new(3),
+                    LocalHandle::new(4),
+                    LocalHandle::new(5),
+                    LocalHandle::new(6),
+                    LocalHandle::new(7),
+                    LocalHandle::new(8),
+                    LocalHandle::new(9),
+                    LocalHandle::new(11),
+                ],
+            },
+        };
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("nominal validate-only");
+        assert!(!prepared.receipt.published);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+        let reading = prepared.receipt.returned_bindings[0].1;
+        let input = prepared.receipt.returned_bindings[3].1;
+        let Node::Module {
+            types, functions, ..
+        } = prepared
+            .snapshot
+            .node(NodeId::new(id, 3).expect("module"))
+            .expect("module")
+        else {
+            panic!("module kind")
+        };
+        assert_eq!(types, &[reading, input]);
+        assert_eq!(functions.len(), 1);
+        let layouts = crate::type_layout::derive_layouts(&prepared.snapshot).expect("layouts");
+        let crate::type_layout::DerivedLayout::Representable(reading_layout) =
+            layouts.get(&reading).expect("reading layout")
+        else {
+            panic!("representable")
+        };
+        assert_eq!(
+            (
+                reading_layout.size,
+                reading_layout.align,
+                reading_layout.cells
+            ),
+            (16, 8, 2)
+        );
+        let crate::type_layout::LayoutShape::Product { fields } = &reading_layout.shape else {
+            panic!("product layout")
+        };
+        assert_eq!(
+            fields.iter().map(|field| field.offset).collect::<Vec<_>>(),
+            [0, 8]
+        );
+        let crate::type_layout::DerivedLayout::Representable(input_layout) =
+            layouts.get(&input).expect("input layout")
+        else {
+            panic!("representable")
+        };
+        assert_eq!(input_layout.cells, 3);
+    }
+
+    #[test]
+    fn by_value_cycles_and_duplicate_member_names_reject_without_identity_consumption() {
+        let id = WorkspaceId::from_bytes([0x92; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let cyclic = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "A".into(),
+                    fields: vec![ProductFieldDraft {
+                        handle: LocalHandle::new(4),
+                        name: "b".into(),
+                        ty: TypeDraft::Nominal(local_handle(5)),
+                    }],
+                },
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(5),
+                    module: local_handle(2),
+                    name: "B".into(),
+                    fields: vec![ProductFieldDraft {
+                        handle: LocalHandle::new(6),
+                        name: "a".into(),
+                        ty: TypeDraft::Nominal(local_handle(3)),
+                    }],
+                },
+            ],
+        );
+        let error = workspace.prepare_transaction(&cyclic).expect_err("cycle");
+        assert_eq!(error.code, ErrorCode::ByValueTypeCycle);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+
+        let duplicate = structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateProductType {
+                handle: LocalHandle::new(3),
+                module: local_handle(2),
+                name: "D".into(),
+                fields: vec![
+                    ProductFieldDraft {
+                        handle: LocalHandle::new(4),
+                        name: "same".into(),
+                        ty: TypeDraft::I64,
+                    },
+                    ProductFieldDraft {
+                        handle: LocalHandle::new(5),
+                        name: "same".into(),
+                        ty: TypeDraft::Bool,
+                    },
+                ],
+            }],
+        );
+        assert_eq!(
+            workspace
+                .prepare_transaction(&duplicate)
+                .expect_err("duplicate")
+                .code,
+            ErrorCode::DuplicateName
+        );
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn nominal_operations_normalize_fields_and_match_arms_and_validate_payload_scope() {
+        let id = WorkspaceId::from_bytes([0x94; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let operations = vec![
+            TransactionOp::CreateProductType {
+                handle: LocalHandle::new(3),
+                module: local_handle(2),
+                name: "Pair".into(),
+                fields: vec![
+                    ProductFieldDraft {
+                        handle: LocalHandle::new(4),
+                        name: "left".into(),
+                        ty: TypeDraft::I64,
+                    },
+                    ProductFieldDraft {
+                        handle: LocalHandle::new(5),
+                        name: "right".into(),
+                        ty: TypeDraft::I64,
+                    },
+                ],
+            },
+            TransactionOp::CreateSumType {
+                handle: LocalHandle::new(6),
+                module: local_handle(2),
+                name: "Maybe".into(),
+                variants: vec![
+                    SumVariantDraft {
+                        handle: LocalHandle::new(7),
+                        name: "none".into(),
+                        payload: None,
+                    },
+                    SumVariantDraft {
+                        handle: LocalHandle::new(8),
+                        name: "some".into(),
+                        payload: Some(TypeDraft::I64),
+                    },
+                ],
+            },
+            TransactionOp::CreateFunction {
+                handle: LocalHandle::new(9),
+                module: local_handle(2),
+                name: "main".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        draft_expression(20, ExpressionKindDraft::ConstI64(10)),
+                        draft_expression(21, ExpressionKindDraft::ConstI64(20)),
+                        draft_expression(
+                            22,
+                            ExpressionKindDraft::ConstructProduct {
+                                product: local_handle(3),
+                                fields: vec![
+                                    ProductFieldValueDraft {
+                                        field: local_handle(5),
+                                        value: draft_result(21),
+                                    },
+                                    ProductFieldValueDraft {
+                                        field: local_handle(4),
+                                        value: draft_result(20),
+                                    },
+                                ],
+                            },
+                        ),
+                        draft_expression(
+                            23,
+                            ExpressionKindDraft::ProjectField {
+                                value: draft_result(22),
+                                field: local_handle(4),
+                            },
+                        ),
+                        draft_expression(
+                            24,
+                            ExpressionKindDraft::ConstructVariant {
+                                variant: local_handle(8),
+                                payload: Some(draft_result(23)),
+                            },
+                        ),
+                        draft_expression(
+                            25,
+                            ExpressionKindDraft::MatchSum {
+                                scrutinee: draft_result(24),
+                                result: TypeDraft::I64,
+                                arms: vec![
+                                    MatchArmDraft {
+                                        variant: local_handle(8),
+                                        payload_handle: Some(LocalHandle::new(30)),
+                                        body: YieldingBodyDraft {
+                                            operations: Vec::new(),
+                                            yield_value: ValueDraft::BlockArgument(local_handle(
+                                                30,
+                                            )),
+                                        },
+                                    },
+                                    MatchArmDraft {
+                                        variant: local_handle(7),
+                                        payload_handle: None,
+                                        body: YieldingBodyDraft {
+                                            operations: vec![draft_expression(
+                                                31,
+                                                ExpressionKindDraft::ConstI64(0),
+                                            )],
+                                            yield_value: draft_result(31),
+                                        },
+                                    },
+                                ],
+                            },
+                        ),
+                    ],
+                    return_value: draft_result(25),
+                }),
+            },
+        ];
+        let request = structured_semantic_request(id, operations);
+        let mutate_expression =
+            |request: &mut ApplyTransactionRequest,
+             handle: u32,
+             mutate: &mut dyn FnMut(&mut ExpressionKindDraft)| {
+                let TransactionOp::CreateFunction {
+                    body: Some(body), ..
+                } = request.transaction.operations.last_mut().expect("function")
+                else {
+                    panic!("function")
+                };
+                let expression = body
+                    .operations
+                    .iter_mut()
+                    .find(|expression| expression.handle == LocalHandle::new(handle))
+                    .expect("expression");
+                mutate(&mut expression.operation);
+            };
+        let mut invalid = request.clone();
+        mutate_expression(&mut invalid, 22, &mut |operation| {
+            let ExpressionKindDraft::ConstructProduct { fields, .. } = operation else {
+                panic!("product")
+            };
+            fields.pop();
+        });
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("missing field")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+        let mut invalid = request.clone();
+        mutate_expression(&mut invalid, 22, &mut |operation| {
+            let ExpressionKindDraft::ConstructProduct { fields, .. } = operation else {
+                panic!("product")
+            };
+            fields.push(fields[0].clone());
+        });
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("duplicate field")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+        let mut invalid = request.clone();
+        mutate_expression(&mut invalid, 20, &mut |operation| {
+            *operation = ExpressionKindDraft::ConstBool(true)
+        });
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("wrong field type")
+                .code,
+            ErrorCode::TypeMismatch
+        );
+        let mut invalid = request.clone();
+        mutate_expression(&mut invalid, 25, &mut |operation| {
+            let ExpressionKindDraft::MatchSum { arms, .. } = operation else {
+                panic!("match")
+            };
+            arms.pop();
+        });
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("missing arm")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+        let mut invalid = request.clone();
+        mutate_expression(&mut invalid, 25, &mut |operation| {
+            let ExpressionKindDraft::MatchSum { arms, .. } = operation else {
+                panic!("match")
+            };
+            arms[0].payload_handle = None;
+        });
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("missing payload binding")
+                .code,
+            ErrorCode::InvalidHandle
+        );
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("nominal operations");
+        let product = prepared
+            .snapshot
+            .nodes()
+            .find_map(|(operation_id, node)| match node {
+                Node::Operation {
+                    operation: OperationKind::ConstructProduct { product, fields },
+                    ..
+                } => Some((operation_id, *product, fields.clone())),
+                _ => None,
+            })
+            .expect("product operation");
+        let Node::ProductType {
+            fields: declared, ..
+        } = prepared.snapshot.node(product.1).expect("product")
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            product
+                .2
+                .iter()
+                .map(|binding| binding.field)
+                .collect::<Vec<_>>(),
+            *declared
+        );
+        let second_field_context = crate::query::execute(
+            &prepared.snapshot,
+            &crate::query::Query::RepairContext {
+                target: crate::query::RepairTarget::Operand {
+                    operation: product.0,
+                    index: 1,
+                },
+                budget: crate::query::ContextBudget {
+                    body_before: 0,
+                    body_after: 0,
+                    visible_values: 1,
+                    incoming_uses: 1,
+                    include_incompatible: false,
+                },
+            },
+            None,
+        )
+        .expect("second product field context");
+        let crate::query::QueryResult::RepairContext(second_field_context) = second_field_context
+        else {
+            panic!("repair context")
+        };
+        assert_eq!(
+            second_field_context.use_mode,
+            Some(crate::schema::OperandUse::Copy)
+        );
+
+        let arms = prepared
+            .snapshot
+            .nodes()
+            .find_map(|(_, node)| match node {
+                Node::Operation {
+                    operation: OperationKind::MatchSum { arms, .. },
+                    ..
+                } => Some(arms.clone()),
+                _ => None,
+            })
+            .expect("match operation");
+        let sum = match prepared.snapshot.node(arms[0].variant).expect("variant") {
+            Node::SumVariant { owner, .. } => *owner,
+            _ => unreachable!(),
+        };
+        let Node::SumType { variants, .. } = prepared.snapshot.node(sum).expect("sum") else {
+            unreachable!()
+        };
+        assert_eq!(
+            arms.iter().map(|arm| arm.variant).collect::<Vec<_>>(),
+            *variants
+        );
+        workspace.publish(prepared.snapshot).expect("publish");
+    }
+
+    #[test]
+    fn nominal_hole_refinement_is_atomic_and_preserves_identity() {
+        let id = WorkspaceId::from_bytes([0x95; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "Pair".into(),
+                    fields: vec![
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(4),
+                            name: "left".into(),
+                            ty: TypeDraft::I64,
+                        },
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(5),
+                            name: "right".into(),
+                            ty: TypeDraft::I64,
+                        },
+                    ],
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(6),
+                    module: local_handle(2),
+                    name: "make".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::Nominal(local_handle(3)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            draft_expression(20, ExpressionKindDraft::ConstI64(1)),
+                            draft_expression(21, ExpressionKindDraft::ConstI64(2)),
+                            draft_expression(
+                                22,
+                                ExpressionKindDraft::Hole {
+                                    expected: TypeDraft::Nominal(local_handle(3)),
+                                },
+                            ),
+                        ],
+                        return_value: draft_result(22),
+                    }),
+                },
+            ],
+        );
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("incomplete product function");
+        let prior = prepared.snapshot.clone();
+        workspace
+            .publish(prepared.snapshot)
+            .expect("publish incomplete");
+        let product = prior
+            .nodes()
+            .find_map(|(id, node)| matches!(node, Node::ProductType { .. }).then_some(id))
+            .expect("product");
+        let fields = match prior.node(product).expect("product") {
+            Node::ProductType { fields, .. } => fields.clone(),
+            _ => unreachable!(),
+        };
+        let hole = prior
+            .nodes()
+            .find_map(|(id, node)| {
+                matches!(
+                    node,
+                    Node::Operation {
+                        operation: OperationKind::Hole { .. },
+                        ..
+                    }
+                )
+                .then_some(id)
+            })
+            .expect("hole");
+        let values = prior
+            .nodes()
+            .filter_map(|(id, node)| {
+                matches!(
+                    node,
+                    Node::Operation {
+                        operation: OperationKind::ConstI64(_),
+                        ..
+                    }
+                )
+                .then_some(id)
+            })
+            .collect::<Vec<_>>();
+        let field_value = |field: NodeId, value: NodeId| ProductFieldValueDraft {
+            field: NodeTarget::Existing(field),
+            value: ValueDraft::OperationResult {
+                operation: NodeTarget::Existing(value),
+                output: 0,
+            },
+        };
+        let first_page = crate::query::execute(
+            &prior,
+            &crate::query::Query::NominalType {
+                declaration: product,
+                page: crate::query::PageRequest {
+                    after: None,
+                    limit: 1,
+                },
+            },
+            None,
+        )
+        .expect("nominal page");
+        let crate::query::QueryResult::NominalType(first_page) = first_page else {
+            panic!("nominal page")
+        };
+        assert_eq!(first_page.members.items.len(), 1);
+        assert_eq!(first_page.members.total, Some(2));
+        assert!(first_page.layout.representable);
+        let cursor = first_page.members.next.expect("nominal continuation");
+        let second_page = crate::query::execute(
+            &prior,
+            &crate::query::Query::NominalType {
+                declaration: product,
+                page: crate::query::PageRequest {
+                    after: Some(cursor),
+                    limit: 1,
+                },
+            },
+            None,
+        )
+        .expect("nominal continuation");
+        let crate::query::QueryResult::NominalType(second_page) = second_page else {
+            panic!("nominal page")
+        };
+        assert_eq!(second_page.members.items.len(), 1);
+        assert!(second_page.members.next.is_none());
+        let context = crate::query::execute(
+            &prior,
+            &crate::query::Query::RepairContext {
+                target: crate::query::RepairTarget::Hole(hole),
+                budget: crate::query::ContextBudget {
+                    body_before: 1,
+                    body_after: 1,
+                    visible_values: 8,
+                    incoming_uses: 8,
+                    include_incompatible: false,
+                },
+            },
+            None,
+        )
+        .expect("nominal repair context");
+        let crate::query::QueryResult::RepairContext(context) = context else {
+            panic!("repair context")
+        };
+        assert_eq!(
+            context
+                .nominal_type
+                .as_ref()
+                .and_then(|nominal| nominal.members.total),
+            Some(2)
+        );
+        assert!(
+            context
+                .legal_constructors
+                .iter()
+                .any(|constructor| constructor.code
+                    == crate::schema::OperationCode::ConstructProduct
+                    && constructor.members == fields)
+        );
+        let invalid = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(hole),
+                    replacement: OperationDraft::ConstructProduct {
+                        product: NodeTarget::Existing(product),
+                        fields: vec![field_value(fields[0], values[0])],
+                    },
+                }],
+            },
+            response: TransactionResponseSpec::default(),
+        };
+        assert_eq!(
+            workspace
+                .prepare_transaction(&invalid)
+                .expect_err("missing field")
+                .code,
+            ErrorCode::InvalidOperand
+        );
+        assert_eq!(workspace.head_revision(), Revision::new(1));
+        let valid = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(hole),
+                    replacement: OperationDraft::ConstructProduct {
+                        product: NodeTarget::Existing(product),
+                        fields: vec![
+                            field_value(fields[1], values[1]),
+                            field_value(fields[0], values[0]),
+                        ],
+                    },
+                }],
+            },
+            response: TransactionResponseSpec::default(),
+        };
+        let mut validate_only = valid.clone();
+        validate_only.transaction.mode = TransactionMode::ValidateOnly;
+        let predicted = workspace
+            .prepare_transaction(&validate_only)
+            .expect("validate-only product refinement");
+        assert!(!predicted.receipt.published);
+        assert_eq!(workspace.head_revision(), Revision::new(1));
+        let prepared = workspace
+            .prepare_transaction(&valid)
+            .expect("valid product refinement");
+        assert!(matches!(
+            prepared.snapshot.node(hole),
+            Ok(Node::Operation {
+                operation: OperationKind::ConstructProduct { .. },
+                ..
+            })
+        ));
+        let changes = crate::diff::between(&prior, &prepared.snapshot);
+        assert!(changes.changes.iter().any(|change| change.node == hole
+            && matches!(
+                change.kind,
+                crate::diff::ChangeKind::OperationRefined {
+                    after: crate::schema::OperationCode::ConstructProduct,
+                    ..
+                }
+            )));
+        workspace
+            .publish(prepared.snapshot)
+            .expect("publish refinement");
+    }
+
+    #[test]
+    fn nominal_type_references_block_declaration_deletion() {
+        let id = WorkspaceId::from_bytes([0x93; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let mut transaction = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "Reading".into(),
+                    fields: vec![ProductFieldDraft {
+                        handle: LocalHandle::new(4),
+                        name: "value".into(),
+                        ty: TypeDraft::I64,
+                    }],
+                },
+                TransactionOp::CreateSumType {
+                    handle: LocalHandle::new(5),
+                    module: local_handle(2),
+                    name: "Input".into(),
+                    variants: vec![SumVariantDraft {
+                        handle: LocalHandle::new(6),
+                        name: "sample".into(),
+                        payload: Some(TypeDraft::Nominal(local_handle(3))),
+                    }],
+                },
+            ],
+        );
+        transaction.response.return_handles = vec![LocalHandle::new(3)];
+        let prepared = workspace
+            .prepare_transaction(&transaction)
+            .expect("declarations");
+        let reading = prepared
+            .receipt
+            .returned_bindings
+            .iter()
+            .find(|(handle, _)| *handle == LocalHandle::new(3))
+            .expect("reading binding")
+            .1;
+        workspace.publish(prepared.snapshot).expect("publish");
+        let delete = Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::DeleteOwnedSubtree {
+                root: NodeTarget::Existing(reading),
+            }],
+        };
+        assert_eq!(
+            workspace
+                .prepare_transaction(&request(&delete))
+                .expect_err("referenced declaration")
+                .code,
+            ErrorCode::DeleteBlocked
+        );
+        assert_eq!(workspace.head_revision(), Revision::new(1));
+    }
+
+    #[test]
     fn stale_revisions_wrong_workspaces_and_no_changes_reject_deterministically() {
         let id = WorkspaceId::from_bytes([13; 16]);
         let other = WorkspaceId::from_bytes([14; 16]);
@@ -4138,5 +6320,397 @@ mod tests {
                 .code,
             ErrorCode::NoChange
         );
+    }
+
+    #[test]
+    fn preallocation_scan_covers_top_level_types_values_and_maintenance_targets() {
+        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let cases = vec![
+            vec![TransactionOp::CreateModule {
+                handle: LocalHandle::new(1),
+                package: local(99),
+                name: "m".into(),
+            }],
+            vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "p".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(2),
+                    module: local(99),
+                    name: "f".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::Nominal(local(98)),
+                    body: None,
+                },
+            ],
+            vec![TransactionOp::ReplaceOperand {
+                operation: local(97),
+                index: 0,
+                value: ValueDraft::OperationResult {
+                    operation: local(96),
+                    output: 0,
+                },
+            }],
+            vec![TransactionOp::RenameNode {
+                node: local(95),
+                name: "renamed".into(),
+            }],
+        ];
+        for operations in cases {
+            assert_eq!(
+                validate_structured_request(&operations)
+                    .expect_err("undeclared scan path")
+                    .code,
+                ErrorCode::InvalidHandle
+            );
+        }
+
+        let wrong_kind = vec![
+            TransactionOp::CreatePackage {
+                handle: LocalHandle::new(1),
+                name: "p".into(),
+            },
+            TransactionOp::CreateModule {
+                handle: LocalHandle::new(2),
+                package: local(1),
+                name: "m".into(),
+            },
+            TransactionOp::CreateFunction {
+                handle: LocalHandle::new(3),
+                module: local(2),
+                name: "f".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![draft_expression(
+                        4,
+                        ExpressionKindDraft::Call {
+                            function: local(1),
+                            arguments: Vec::new(),
+                        },
+                    )],
+                    return_value: draft_result(4),
+                }),
+            },
+        ];
+        let error = validate_structured_request(&wrong_kind).expect_err("wrong local category");
+        assert_eq!(error.code, ErrorCode::WrongKind);
+        assert_eq!(error.local_handle, Some(LocalHandle::new(1)));
+    }
+
+    #[test]
+    fn preallocation_scan_rejects_non_region_if_and_for_targets() {
+        let prefix = || {
+            vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "p".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local_handle(1),
+                    name: "m".into(),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "f".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![draft_expression(4, ExpressionKindDraft::ConstI64(0))],
+                        return_value: draft_result(4),
+                    }),
+                },
+            ]
+        };
+        let value = draft_result(4);
+        let mut if_target = prefix();
+        if_target.push(TransactionOp::ReplaceOperation {
+            operation: local_handle(4),
+            replacement: OperationDraft::If {
+                condition: value,
+                result: TypeDraft::I64,
+                then_region: local_handle(3),
+                else_region: local_handle(3),
+            },
+        });
+        let mut for_target = prefix();
+        for_target.push(TransactionOp::ReplaceOperation {
+            operation: local_handle(4),
+            replacement: OperationDraft::ForI64 {
+                start: value,
+                end_exclusive: value,
+                step: 1,
+                initial: value,
+                carried: TypeDraft::I64,
+                body_region: local_handle(3),
+            },
+        });
+
+        for operations in [if_target, for_target] {
+            let error = scan_explicit_handles(&operations)
+                .expect_err("non-region target must reject during the preallocation scan");
+            assert_eq!(error.code, ErrorCode::WrongKind);
+            assert_eq!(error.operation_index, Some(3));
+            assert_eq!(error.local_handle, Some(LocalHandle::new(3)));
+        }
+    }
+
+    #[test]
+    fn later_nominal_declarations_and_permuted_match_arms_expand_identically() {
+        let id = WorkspaceId::from_bytes([0xa4; 16]);
+        let make = |permuted: bool| {
+            let none = MatchArmDraft {
+                variant: local_handle(11),
+                payload_handle: None,
+                body: YieldingBodyDraft {
+                    operations: vec![draft_expression(30, ExpressionKindDraft::ConstI64(0))],
+                    yield_value: draft_result(30),
+                },
+            };
+            let some = MatchArmDraft {
+                variant: local_handle(12),
+                payload_handle: Some(LocalHandle::new(31)),
+                body: YieldingBodyDraft {
+                    operations: Vec::new(),
+                    yield_value: ValueDraft::BlockArgument(local_handle(31)),
+                },
+            };
+            let arms = if permuted {
+                vec![some.clone(), none.clone()]
+            } else {
+                vec![none, some]
+            };
+            ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::ValidateOnly,
+                    operations: vec![
+                        TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(1),
+                            name: "p".into(),
+                        },
+                        TransactionOp::CreateModule {
+                            handle: LocalHandle::new(2),
+                            package: local_handle(1),
+                            name: "m".into(),
+                        },
+                        TransactionOp::CreateFunction {
+                            handle: LocalHandle::new(3),
+                            module: local_handle(2),
+                            name: "forward".into(),
+                            parameters: Vec::new(),
+                            result: TypeDraft::I64,
+                            body: Some(FunctionBodyDraft {
+                                operations: vec![
+                                    draft_expression(20, ExpressionKindDraft::ConstI64(7)),
+                                    draft_expression(
+                                        21,
+                                        ExpressionKindDraft::ConstructProduct {
+                                            product: local_handle(4),
+                                            fields: vec![
+                                                ProductFieldValueDraft {
+                                                    field: local_handle(6),
+                                                    value: draft_result(20),
+                                                },
+                                                ProductFieldValueDraft {
+                                                    field: local_handle(5),
+                                                    value: draft_result(20),
+                                                },
+                                            ],
+                                        },
+                                    ),
+                                    draft_expression(
+                                        22,
+                                        ExpressionKindDraft::ProjectField {
+                                            value: draft_result(21),
+                                            field: local_handle(5),
+                                        },
+                                    ),
+                                    draft_expression(
+                                        23,
+                                        ExpressionKindDraft::ConstructVariant {
+                                            variant: local_handle(12),
+                                            payload: Some(draft_result(22)),
+                                        },
+                                    ),
+                                    draft_expression(
+                                        24,
+                                        ExpressionKindDraft::MatchSum {
+                                            scrutinee: draft_result(23),
+                                            result: TypeDraft::I64,
+                                            arms,
+                                        },
+                                    ),
+                                ],
+                                return_value: draft_result(24),
+                            }),
+                        },
+                        TransactionOp::CreateProductType {
+                            handle: LocalHandle::new(4),
+                            module: local_handle(2),
+                            name: "Pair".into(),
+                            fields: vec![
+                                ProductFieldDraft {
+                                    handle: LocalHandle::new(5),
+                                    name: "left".into(),
+                                    ty: TypeDraft::I64,
+                                },
+                                ProductFieldDraft {
+                                    handle: LocalHandle::new(6),
+                                    name: "right".into(),
+                                    ty: TypeDraft::I64,
+                                },
+                            ],
+                        },
+                        TransactionOp::CreateSumType {
+                            handle: LocalHandle::new(10),
+                            module: local_handle(2),
+                            name: "Maybe".into(),
+                            variants: vec![
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(11),
+                                    name: "none".into(),
+                                    payload: None,
+                                },
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(12),
+                                    name: "some".into(),
+                                    payload: Some(TypeDraft::I64),
+                                },
+                            ],
+                        },
+                    ],
+                },
+                response: TransactionResponseSpec::default(),
+            }
+        };
+        let workspace = Workspace::new(id).expect("workspace");
+        let canonical = workspace
+            .prepare_transaction(&make(false))
+            .expect("canonical arms");
+        let permuted = workspace
+            .prepare_transaction(&make(true))
+            .expect("permuted arms");
+        assert_eq!(canonical.snapshot.hash(), permuted.snapshot.hash());
+        assert_eq!(canonical.snapshot.nodes, permuted.snapshot.nodes);
+    }
+
+    #[test]
+    fn product_second_operand_is_copy_and_oversized_constructor_requirements_are_bounded() {
+        let id = WorkspaceId::from_bytes([0xa5; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let fields = (0..65)
+            .map(|index| ProductFieldDraft {
+                handle: LocalHandle::new(100 + index),
+                name: format!("field_{index}"),
+                ty: TypeDraft::I64,
+            })
+            .collect::<Vec<_>>();
+        let parameters = (0..65)
+            .map(|index| FunctionParameterDraft {
+                handle: LocalHandle::new(300 + index),
+                name: format!("parameter_{index}"),
+                ty: TypeDraft::I64,
+            })
+            .collect::<Vec<_>>();
+        let request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local_handle(2),
+                    name: "Wide".into(),
+                    fields,
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(4),
+                    module: local_handle(2),
+                    name: "wide_call".into(),
+                    parameters,
+                    result: TypeDraft::Nominal(local_handle(3)),
+                    body: None,
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(5),
+                    module: local_handle(2),
+                    name: "repair".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::Nominal(local_handle(3)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![draft_expression(
+                            6,
+                            ExpressionKindDraft::Hole {
+                                expected: TypeDraft::Nominal(local_handle(3)),
+                            },
+                        )],
+                        return_value: draft_result(6),
+                    }),
+                },
+            ],
+        );
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("wide product");
+        let hole = prepared
+            .snapshot
+            .nodes()
+            .find_map(|(id, node)| {
+                matches!(
+                    node,
+                    Node::Operation {
+                        operation: OperationKind::Hole { .. },
+                        ..
+                    }
+                )
+                .then_some(id)
+            })
+            .expect("hole");
+        let context = crate::query::execute(
+            &prepared.snapshot,
+            &crate::query::Query::RepairContext {
+                target: crate::query::RepairTarget::Hole(hole),
+                budget: crate::query::ContextBudget {
+                    body_before: 1,
+                    body_after: 1,
+                    visible_values: 1,
+                    incoming_uses: 1,
+                    include_incompatible: false,
+                },
+            },
+            None,
+        )
+        .expect("context");
+        let crate::query::QueryResult::RepairContext(context) = context else {
+            panic!("context")
+        };
+        assert!(context.nominal_type.is_none());
+        assert!(context.nominal_type_continuation.is_some());
+        for constructor in &context.legal_constructors {
+            assert!(constructor.operand_types.len() <= crate::query::MAX_CONTEXT_ITEMS as usize);
+            assert!(constructor.operand_uses.len() <= crate::query::MAX_CONTEXT_ITEMS as usize);
+            assert!(constructor.members.len() <= crate::query::MAX_CONTEXT_ITEMS as usize);
+        }
+        let product = context
+            .legal_constructors
+            .iter()
+            .find(|constructor| constructor.code == crate::schema::OperationCode::ConstructProduct)
+            .expect("product constructor");
+        assert_eq!(product.operand_count, 65);
+        assert_eq!(product.member_count, 65);
+        assert!(!product.requirements_complete);
+        assert!(product.nominal_type_continuation.is_some());
+        let call = context
+            .legal_constructors
+            .iter()
+            .find(|constructor| constructor.code == crate::schema::OperationCode::Call)
+            .expect("call constructor");
+        assert_eq!(call.operand_count, 65);
+        assert!(!call.requirements_complete);
     }
 }

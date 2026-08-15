@@ -8,16 +8,19 @@ pub enum SemanticType {
     Unit,
     Bool,
     I64,
+    Nominal(NodeId),
 }
 
 impl SemanticType {
-    pub const ALL: [Self; 3] = [Self::Unit, Self::Bool, Self::I64];
+    pub const PRIMITIVES: [Self; 3] = [Self::Unit, Self::Bool, Self::I64];
+    pub const ALL: [Self; 3] = Self::PRIMITIVES;
 
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::Unit => "unit",
             Self::Bool => "bool",
             Self::I64 => "i64",
+            Self::Nominal(_) => "nominal",
         }
     }
 
@@ -26,6 +29,7 @@ impl SemanticType {
             Self::Unit => 1,
             Self::Bool => 2,
             Self::I64 => 3,
+            Self::Nominal(_) => 4,
         }
     }
 
@@ -35,6 +39,33 @@ impl SemanticType {
             2 => Some(Self::Bool),
             3 => Some(Self::I64),
             _ => None,
+        }
+    }
+
+    pub const fn nominal_target(self) -> Option<NodeId> {
+        match self {
+            Self::Nominal(target) => Some(target),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TypeDraft {
+    Unit,
+    Bool,
+    I64,
+    Nominal(NodeTarget),
+}
+
+impl From<SemanticType> for TypeDraft {
+    fn from(value: SemanticType) -> Self {
+        match value {
+            SemanticType::Unit => Self::Unit,
+            SemanticType::Bool => Self::Bool,
+            SemanticType::I64 => Self::I64,
+            SemanticType::Nominal(target) => Self::Nominal(NodeTarget::Existing(target)),
         }
     }
 }
@@ -51,10 +82,14 @@ pub enum NodeKind {
     Block,
     Operation,
     BlockArgument,
+    ProductType,
+    ProductField,
+    SumType,
+    SumVariant,
 }
 
 impl NodeKind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 13] = [
         Self::WorkspaceRoot,
         Self::Package,
         Self::Module,
@@ -64,8 +99,11 @@ impl NodeKind {
         Self::Block,
         Self::Operation,
         Self::BlockArgument,
+        Self::ProductType,
+        Self::ProductField,
+        Self::SumType,
+        Self::SumVariant,
     ];
-
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::WorkspaceRoot => "workspace_root",
@@ -77,6 +115,10 @@ impl NodeKind {
             Self::Block => "block",
             Self::Operation => "operation",
             Self::BlockArgument => "block_argument",
+            Self::ProductType => "product_type",
+            Self::ProductField => "product_field",
+            Self::SumType => "sum_type",
+            Self::SumVariant => "sum_variant",
         }
     }
 
@@ -91,6 +133,10 @@ impl NodeKind {
             Self::Block => 7,
             Self::Operation => 8,
             Self::BlockArgument => 9,
+            Self::ProductType => 10,
+            Self::ProductField => 11,
+            Self::SumType => 12,
+            Self::SumVariant => 13,
         }
     }
 
@@ -105,7 +151,71 @@ impl NodeKind {
             7 => Some(Self::Block),
             8 => Some(Self::Operation),
             9 => Some(Self::BlockArgument),
+            10 => Some(Self::ProductType),
+            11 => Some(Self::ProductField),
+            12 => Some(Self::SumType),
+            13 => Some(Self::SumVariant),
             _ => None,
+        }
+    }
+}
+
+pub const MINIMUM_NAME_UTF8_BYTES: usize = 1;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum NameUniquenessGroup {
+    WorkspacePackages,
+    PackageModules,
+    ModuleTypes,
+    ModuleFunctions,
+    ProductFields,
+    SumVariants,
+    FunctionParameters,
+}
+
+impl NameUniquenessGroup {
+    pub const ALL: [Self; 7] = [
+        Self::WorkspacePackages,
+        Self::PackageModules,
+        Self::ModuleTypes,
+        Self::ModuleFunctions,
+        Self::ProductFields,
+        Self::SumVariants,
+        Self::FunctionParameters,
+    ];
+
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::WorkspacePackages => "workspace.packages",
+            Self::PackageModules => "package.modules",
+            Self::ModuleTypes => "module.types",
+            Self::ModuleFunctions => "module.functions",
+            Self::ProductFields => "product.fields",
+            Self::SumVariants => "sum.variants",
+            Self::FunctionParameters => "function.parameters",
+        }
+    }
+
+    pub const fn owner_kind(self) -> NodeKind {
+        match self {
+            Self::WorkspacePackages => NodeKind::WorkspaceRoot,
+            Self::PackageModules => NodeKind::Package,
+            Self::ModuleTypes | Self::ModuleFunctions => NodeKind::Module,
+            Self::ProductFields => NodeKind::ProductType,
+            Self::SumVariants => NodeKind::SumType,
+            Self::FunctionParameters => NodeKind::Function,
+        }
+    }
+
+    pub const fn member_kinds(self) -> &'static [NodeKind] {
+        match self {
+            Self::WorkspacePackages => &[NodeKind::Package],
+            Self::PackageModules => &[NodeKind::Module],
+            Self::ModuleTypes => &[NodeKind::ProductType, NodeKind::SumType],
+            Self::ModuleFunctions => &[NodeKind::Function],
+            Self::ProductFields => &[NodeKind::ProductField],
+            Self::SumVariants => &[NodeKind::SumVariant],
+            Self::FunctionParameters => &[NodeKind::Parameter],
         }
     }
 }
@@ -122,16 +232,18 @@ pub enum RegionRole {
     IfThen,
     IfElse,
     ForBody,
+    MatchArm(NodeId),
 }
 
 impl RegionRole {
-    pub const ALL: [Self; 3] = [Self::IfThen, Self::IfElse, Self::ForBody];
+    pub const ALL_STATIC: [Self; 3] = [Self::IfThen, Self::IfElse, Self::ForBody];
 
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::IfThen => "then",
             Self::IfElse => "else",
             Self::ForBody => "body",
+            Self::MatchArm(_) => "match_arm",
         }
     }
 
@@ -140,6 +252,7 @@ impl RegionRole {
             Self::IfThen => 1,
             Self::IfElse => 2,
             Self::ForBody => 3,
+            Self::MatchArm(_) => 4,
         }
     }
 
@@ -158,6 +271,7 @@ impl RegionRole {
 pub enum BlockArgumentRole {
     LoopIndex,
     LoopCarried,
+    MatchPayload,
 }
 
 impl BlockArgumentRole {
@@ -165,6 +279,7 @@ impl BlockArgumentRole {
         match self {
             Self::LoopIndex => "loop_index",
             Self::LoopCarried => "loop_carried",
+            Self::MatchPayload => "match_payload",
         }
     }
 }
@@ -183,10 +298,14 @@ pub enum OperationCode {
     If,
     ForI64,
     Yield,
+    ConstructProduct,
+    ProjectField,
+    ConstructVariant,
+    MatchSum,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 15] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -198,6 +317,10 @@ impl OperationCode {
         Self::ForI64,
         Self::Return,
         Self::Yield,
+        Self::ConstructProduct,
+        Self::ProjectField,
+        Self::ConstructVariant,
+        Self::MatchSum,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -217,6 +340,10 @@ impl OperationCode {
             9 => Some(Self::If),
             10 => Some(Self::ForI64),
             11 => Some(Self::Yield),
+            12 => Some(Self::ConstructProduct),
+            13 => Some(Self::ProjectField),
+            14 => Some(Self::ConstructVariant),
+            15 => Some(Self::MatchSum),
             _ => None,
         }
     }
@@ -238,6 +365,10 @@ impl OperationCode {
             Self::ForI64 => &FOR_I64_DESCRIPTOR,
             Self::Return => &RETURN_DESCRIPTOR,
             Self::Yield => &YIELD_DESCRIPTOR,
+            Self::ConstructProduct => &CONSTRUCT_PRODUCT_DESCRIPTOR,
+            Self::ProjectField => &PROJECT_FIELD_DESCRIPTOR,
+            Self::ConstructVariant => &CONSTRUCT_VARIANT_DESCRIPTOR,
+            Self::MatchSum => &MATCH_SUM_DESCRIPTOR,
         }
     }
 }
@@ -258,6 +389,14 @@ pub enum TypeRule {
     CallTargetParameter,
     CallTargetResult,
     OwningRegionYield,
+    ProductFieldType,
+    ProductDeclarationResult,
+    ProjectionOwner,
+    ProjectedFieldResult,
+    VariantPayload,
+    VariantOwnerResult,
+    MatchScrutinee,
+    MatchResult,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -281,6 +420,24 @@ pub enum LiteralField {
 pub enum OperandArity {
     Fixed(u8),
     CallTargetParameters,
+    ProductFields,
+    VariantPayload,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum RegionArity {
+    Fixed(u8),
+    MatchVariants {
+        payload_type: TypeRule,
+        terminator: OperationCode,
+        yield_type: TypeRule,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -313,6 +470,7 @@ pub struct OperationDescriptor {
     pub operands: &'static [OperandDescriptor],
     pub results: &'static [TypeRule],
     pub literal_fields: &'static [LiteralField],
+    pub region_arity: RegionArity,
     pub regions: &'static [RegionDescriptor],
     pub terminator: bool,
     pub complete: bool,
@@ -329,6 +487,26 @@ const PAYLOAD_RESULT: &[TypeRule] = &[TypeRule::PayloadExpected];
 const STRUCTURED_RESULT: &[TypeRule] = &[TypeRule::PayloadResult];
 const CARRIED_RESULT: &[TypeRule] = &[TypeRule::PayloadCarried];
 const CALL_RESULT: &[TypeRule] = &[TypeRule::CallTargetResult];
+const PRODUCT_RESULT: &[TypeRule] = &[TypeRule::ProductDeclarationResult];
+const PROJECT_RESULT: &[TypeRule] = &[TypeRule::ProjectedFieldResult];
+const VARIANT_RESULT: &[TypeRule] = &[TypeRule::VariantOwnerResult];
+const MATCH_RESULT: &[TypeRule] = &[TypeRule::MatchResult];
+const PRODUCT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::ProductFieldType,
+    use_mode: OperandUse::Copy,
+}];
+const PROJECT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::ProjectionOwner,
+    use_mode: OperandUse::Copy,
+}];
+const VARIANT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::VariantPayload,
+    use_mode: OperandUse::Copy,
+}];
+const MATCH_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::MatchScrutinee,
+    use_mode: OperandUse::Copy,
+}];
 const I64_BINARY_OPERANDS: &[OperandDescriptor] = &[
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
@@ -416,6 +594,7 @@ macro_rules! descriptor {
             operands: $operands,
             results: $results,
             literal_fields: $literals,
+            region_arity: RegionArity::Fixed($regions.len() as u8),
             regions: $regions,
             terminator: $terminator,
             complete: $complete,
@@ -566,6 +745,62 @@ descriptor!(
     true,
     true
 );
+descriptor!(
+    CONSTRUCT_PRODUCT_DESCRIPTOR,
+    ConstructProduct,
+    "construct_product",
+    12,
+    OperandArity::ProductFields,
+    PRODUCT_OPERANDS,
+    PRODUCT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    PROJECT_FIELD_DESCRIPTOR,
+    ProjectField,
+    "project_field",
+    13,
+    OperandArity::Fixed(1),
+    PROJECT_OPERANDS,
+    PROJECT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    CONSTRUCT_VARIANT_DESCRIPTOR,
+    ConstructVariant,
+    "construct_variant",
+    14,
+    OperandArity::VariantPayload,
+    VARIANT_OPERANDS,
+    VARIANT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+static MATCH_SUM_DESCRIPTOR: OperationDescriptor = OperationDescriptor {
+    code: OperationCode::MatchSum,
+    machine_name: "match_sum",
+    stable_tag: 15,
+    operand_arity: OperandArity::Fixed(1),
+    operands: MATCH_OPERANDS,
+    results: MATCH_RESULT,
+    literal_fields: NO_LITERALS,
+    region_arity: RegionArity::MatchVariants {
+        payload_type: TypeRule::VariantPayload,
+        terminator: OperationCode::Yield,
+        yield_type: TypeRule::MatchResult,
+    },
+    regions: NO_REGIONS,
+    terminator: false,
+    complete: true,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(
@@ -603,6 +838,20 @@ pub enum ValueDraft {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProductFieldValueDraft {
+    pub field: NodeTarget,
+    pub value: ValueDraft,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatchArmOperationDraft {
+    pub variant: NodeTarget,
+    pub region: NodeTarget,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
     content = "data",
@@ -626,11 +875,11 @@ pub enum OperationDraft {
         arguments: Vec<ValueDraft>,
     },
     Hole {
-        expected: SemanticType,
+        expected: TypeDraft,
     },
     If {
         condition: ValueDraft,
-        result: SemanticType,
+        result: TypeDraft,
         then_region: NodeTarget,
         else_region: NodeTarget,
     },
@@ -639,7 +888,7 @@ pub enum OperationDraft {
         end_exclusive: ValueDraft,
         step: i64,
         initial: ValueDraft,
-        carried: SemanticType,
+        carried: TypeDraft,
         body_region: NodeTarget,
     },
     Return {
@@ -647,6 +896,24 @@ pub enum OperationDraft {
     },
     Yield {
         value: ValueDraft,
+    },
+    ConstructProduct {
+        product: NodeTarget,
+        fields: Vec<ProductFieldValueDraft>,
+    },
+    ProjectField {
+        value: ValueDraft,
+        field: NodeTarget,
+    },
+    ConstructVariant {
+        variant: NodeTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload: Option<ValueDraft>,
+    },
+    MatchSum {
+        scrutinee: ValueDraft,
+        result: TypeDraft,
+        arms: Vec<MatchArmOperationDraft>,
     },
 }
 
@@ -664,8 +931,26 @@ impl OperationDraft {
             Self::ForI64 { .. } => OperationCode::ForI64,
             Self::Return { .. } => OperationCode::Return,
             Self::Yield { .. } => OperationCode::Yield,
+            Self::ConstructProduct { .. } => OperationCode::ConstructProduct,
+            Self::ProjectField { .. } => OperationCode::ProjectField,
+            Self::ConstructVariant { .. } => OperationCode::ConstructVariant,
+            Self::MatchSum { .. } => OperationCode::MatchSum,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProductFieldValue {
+    pub field: NodeId,
+    pub value: ValueRef,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatchArm {
+    pub variant: NodeId,
+    pub region: NodeId,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -714,6 +999,24 @@ pub enum OperationKind {
     Yield {
         value: ValueRef,
     },
+    ConstructProduct {
+        product: NodeId,
+        fields: Vec<ProductFieldValue>,
+    },
+    ProjectField {
+        value: ValueRef,
+        field: NodeId,
+    },
+    ConstructVariant {
+        variant: NodeId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload: Option<ValueRef>,
+    },
+    MatchSum {
+        scrutinee: ValueRef,
+        result: SemanticType,
+        arms: Vec<MatchArm>,
+    },
 }
 
 impl OperationKind {
@@ -730,6 +1033,10 @@ impl OperationKind {
             Self::ForI64 { .. } => OperationCode::ForI64,
             Self::Return { .. } => OperationCode::Return,
             Self::Yield { .. } => OperationCode::Yield,
+            Self::ConstructProduct { .. } => OperationCode::ConstructProduct,
+            Self::ProjectField { .. } => OperationCode::ProjectField,
+            Self::ConstructVariant { .. } => OperationCode::ConstructVariant,
+            Self::MatchSum { .. } => OperationCode::MatchSum,
         }
     }
 
@@ -743,9 +1050,13 @@ impl OperationKind {
     pub fn operand_count(&self) -> usize {
         match self {
             Self::Call { arguments, .. } => arguments.len(),
+            Self::ConstructProduct { fields, .. } => fields.len(),
+            Self::ConstructVariant { payload, .. } => usize::from(payload.is_some()),
             _ => match self.descriptor().operand_arity {
                 OperandArity::Fixed(count) => usize::from(count),
-                OperandArity::CallTargetParameters => 0,
+                OperandArity::CallTargetParameters
+                | OperandArity::ProductFields
+                | OperandArity::VariantPayload => 0,
             },
         }
     }
@@ -760,7 +1071,25 @@ impl OperationKind {
             (Self::ForI64 { end_exclusive, .. }, 1) => Some(*end_exclusive),
             (Self::ForI64 { initial, .. }, 2) => Some(*initial),
             (Self::Return { value } | Self::Yield { value }, 0) => Some(*value),
+            (Self::ConstructProduct { fields, .. }, index) => {
+                fields.get(index).map(|field| field.value)
+            }
+            (Self::ProjectField { value, .. }, 0) => Some(*value),
+            (Self::ConstructVariant { payload, .. }, 0) => *payload,
+            (Self::MatchSum { scrutinee, .. }, 0) => Some(*scrutinee),
             _ => None,
+        }
+    }
+
+    fn operand_descriptor(&self, index: usize) -> Option<&'static OperandDescriptor> {
+        if index >= self.operand_count() {
+            return None;
+        }
+        match self.descriptor().operand_arity {
+            OperandArity::Fixed(_) => self.descriptor().operands.get(index),
+            OperandArity::CallTargetParameters
+            | OperandArity::ProductFields
+            | OperandArity::VariantPayload => self.descriptor().operands.first(),
         }
     }
 
@@ -769,29 +1098,12 @@ impl OperationKind {
         index: usize,
         owner_function_result: Option<SemanticType>,
     ) -> Option<SemanticType> {
-        let rule = if matches!(self, Self::Call { .. }) {
-            self.descriptor().operands.first()?.ty
-        } else {
-            self.descriptor().operands.get(index)?.ty
-        };
-        self.resolve_type_rule(rule, owner_function_result)
+        self.resolve_type_rule(self.operand_descriptor(index)?.ty, owner_function_result)
     }
 
     pub fn operand_use(&self, index: usize) -> Option<OperandUse> {
-        if index >= self.operand_count() {
-            return None;
-        }
-        if matches!(self, Self::Call { .. }) {
-            self.descriptor()
-                .operands
-                .first()
-                .map(|operand| operand.use_mode)
-        } else {
-            self.descriptor()
-                .operands
-                .get(index)
-                .map(|operand| operand.use_mode)
-        }
+        self.operand_descriptor(index)
+            .map(|operand| operand.use_mode)
     }
 
     pub fn result_count(&self) -> usize {
@@ -830,40 +1142,99 @@ impl OperationKind {
             (Self::ForI64 { end_exclusive, .. }, 1) => *end_exclusive = replacement,
             (Self::ForI64 { initial, .. }, 2) => *initial = replacement,
             (Self::Return { value } | Self::Yield { value }, 0) => *value = replacement,
+            (Self::ConstructProduct { fields, .. }, index) if index < fields.len() => {
+                fields[index].value = replacement
+            }
+            (Self::ProjectField { value, .. }, 0) => *value = replacement,
+            (
+                Self::ConstructVariant {
+                    payload: Some(value),
+                    ..
+                },
+                0,
+            ) => *value = replacement,
+            (Self::MatchSum { scrutinee, .. }, 0) => *scrutinee = replacement,
             _ => return false,
         }
         true
     }
 
-    pub const fn definition_target(&self) -> Option<NodeId> {
+    pub fn definition_target_count(&self) -> usize {
         match self {
-            Self::Call { function, .. } => Some(*function),
-            _ => None,
-        }
-    }
-
-    pub const fn owned_region_count(&self) -> usize {
-        match self {
-            Self::If { .. } => 2,
-            Self::ForI64 { .. } => 1,
+            Self::Call { .. } | Self::ProjectField { .. } | Self::ConstructVariant { .. } => 1,
+            Self::ConstructProduct { fields, .. } => 1 + fields.len(),
+            Self::MatchSum { arms, .. } => arms.len(),
             _ => 0,
         }
     }
 
-    pub const fn owned_region(&self, index: usize) -> Option<NodeId> {
+    pub fn definition_target(&self, index: usize) -> Option<NodeId> {
+        match (self, index) {
+            (Self::Call { function, .. }, 0) => Some(*function),
+            (Self::ConstructProduct { product, .. }, 0) => Some(*product),
+            (Self::ConstructProduct { fields, .. }, index) => {
+                fields.get(index - 1).map(|f| f.field)
+            }
+            (Self::ProjectField { field, .. }, 0) => Some(*field),
+            (Self::ConstructVariant { variant, .. }, 0) => Some(*variant),
+            (Self::MatchSum { arms, .. }, index) => arms.get(index).map(|arm| arm.variant),
+            _ => None,
+        }
+    }
+
+    pub fn nominal_type_target_count(&self) -> usize {
+        usize::from(self.nominal_type_target(0).is_some())
+    }
+
+    pub const fn nominal_type_target(&self, index: usize) -> Option<NodeId> {
+        if index != 0 {
+            return None;
+        }
+        match self {
+            Self::Hole { expected }
+            | Self::If {
+                result: expected, ..
+            }
+            | Self::ForI64 {
+                carried: expected, ..
+            }
+            | Self::MatchSum {
+                result: expected, ..
+            } => expected.nominal_target(),
+            _ => None,
+        }
+    }
+
+    pub fn owned_region_count(&self) -> usize {
+        match self {
+            Self::If { .. } => 2,
+            Self::ForI64 { .. } => 1,
+            Self::MatchSum { arms, .. } => arms.len(),
+            _ => 0,
+        }
+    }
+
+    pub fn owned_region(&self, index: usize) -> Option<NodeId> {
         match (self, index) {
             (Self::If { then_region, .. }, 0) => Some(*then_region),
             (Self::If { else_region, .. }, 1) => Some(*else_region),
             (Self::ForI64 { body_region, .. }, 0) => Some(*body_region),
+            (Self::MatchSum { arms, .. }, index) => arms.get(index).map(|arm| arm.region),
             _ => None,
         }
     }
 
     pub fn region_role(&self, region: NodeId) -> Option<RegionRole> {
-        (0..self.owned_region_count()).find_map(|index| {
-            (self.owned_region(index) == Some(region))
-                .then_some(self.descriptor().regions[index].role)
-        })
+        match self {
+            Self::MatchSum { arms, .. } => arms
+                .iter()
+                .find(|arm| arm.region == region)
+                .map(|arm| RegionRole::MatchArm(arm.variant)),
+            _ => (0..self.owned_region_count()).find_map(|index| {
+                (self.owned_region(index) == Some(region))
+                    .then_some(self.descriptor().regions[index].role)
+            }),
+        }
     }
 
     const fn resolve_type_rule(
@@ -874,7 +1245,10 @@ impl OperationKind {
         match rule {
             TypeRule::Fixed(ty) => Some(ty),
             TypeRule::PayloadExpected => match self {
-                Self::Hole { expected } => Some(*expected),
+                Self::Hole { expected }
+                | Self::MatchSum {
+                    result: expected, ..
+                } => Some(*expected),
                 _ => None,
             },
             TypeRule::OwnerFunctionResult => owner_function_result,
@@ -886,11 +1260,36 @@ impl OperationKind {
                 Self::ForI64 { carried, .. } => Some(*carried),
                 _ => None,
             },
+            TypeRule::ProductDeclarationResult => match self {
+                Self::ConstructProduct { product, .. } => Some(SemanticType::Nominal(*product)),
+                _ => None,
+            },
+            TypeRule::MatchResult => match self {
+                Self::MatchSum { result, .. } => Some(*result),
+                _ => None,
+            },
             TypeRule::CallTargetParameter
             | TypeRule::CallTargetResult
-            | TypeRule::OwningRegionYield => None,
+            | TypeRule::OwningRegionYield
+            | TypeRule::ProductFieldType
+            | TypeRule::ProjectionOwner
+            | TypeRule::ProjectedFieldResult
+            | TypeRule::VariantPayload
+            | TypeRule::VariantOwnerResult
+            | TypeRule::MatchScrutinee => None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TypeReferenceSlot {
+    FunctionResult,
+    ParameterType,
+    ProductFieldType,
+    SumVariantPayload,
+    BlockArgumentType,
+    OperationType,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -901,14 +1300,23 @@ impl OperationKind {
     deny_unknown_fields
 )]
 pub enum DirectReference {
-    Definition { target: NodeId },
-    ValueOperand { index: u64, value: ValueRef },
+    Definition {
+        target: NodeId,
+    },
+    Type {
+        slot: TypeReferenceSlot,
+        target: NodeId,
+    },
+    ValueOperand {
+        index: u64,
+        value: ValueRef,
+    },
 }
 
 impl DirectReference {
     pub const fn target(self) -> NodeId {
         match self {
-            Self::Definition { target } => target,
+            Self::Definition { target } | Self::Type { target, .. } => target,
             Self::ValueOperand { value, .. } => value.referenced_node(),
         }
     }
@@ -934,7 +1342,30 @@ pub enum Node {
     Module {
         owner: NodeId,
         name: String,
+        types: Vec<NodeId>,
         functions: Vec<NodeId>,
+    },
+    ProductType {
+        owner: NodeId,
+        name: String,
+        fields: Vec<NodeId>,
+    },
+    ProductField {
+        owner: NodeId,
+        ordinal: u32,
+        name: String,
+        ty: SemanticType,
+    },
+    SumType {
+        owner: NodeId,
+        name: String,
+        variants: Vec<NodeId>,
+    },
+    SumVariant {
+        owner: NodeId,
+        ordinal: u32,
+        name: String,
+        payload: Option<SemanticType>,
     },
     Function {
         owner: NodeId,
@@ -970,12 +1401,31 @@ pub enum Node {
     },
 }
 
+impl NameUniquenessGroup {
+    pub fn children(self, owner: &Node) -> Option<&[NodeId]> {
+        match (self, owner) {
+            (Self::WorkspacePackages, Node::WorkspaceRoot { packages }) => Some(packages),
+            (Self::PackageModules, Node::Package { modules, .. }) => Some(modules),
+            (Self::ModuleTypes, Node::Module { types, .. }) => Some(types),
+            (Self::ModuleFunctions, Node::Module { functions, .. }) => Some(functions),
+            (Self::ProductFields, Node::ProductType { fields, .. }) => Some(fields),
+            (Self::SumVariants, Node::SumType { variants, .. }) => Some(variants),
+            (Self::FunctionParameters, Node::Function { parameters, .. }) => Some(parameters),
+            _ => None,
+        }
+    }
+}
+
 impl Node {
     pub const fn kind(&self) -> NodeKind {
         match self {
             Self::WorkspaceRoot { .. } => NodeKind::WorkspaceRoot,
             Self::Package { .. } => NodeKind::Package,
             Self::Module { .. } => NodeKind::Module,
+            Self::ProductType { .. } => NodeKind::ProductType,
+            Self::ProductField { .. } => NodeKind::ProductField,
+            Self::SumType { .. } => NodeKind::SumType,
+            Self::SumVariant { .. } => NodeKind::SumVariant,
             Self::Function { .. } => NodeKind::Function,
             Self::Parameter { .. } => NodeKind::Parameter,
             Self::Region { .. } => NodeKind::Region,
@@ -990,6 +1440,10 @@ impl Node {
             Self::WorkspaceRoot { .. } => None,
             Self::Package { owner, .. }
             | Self::Module { owner, .. }
+            | Self::ProductType { owner, .. }
+            | Self::ProductField { owner, .. }
+            | Self::SumType { owner, .. }
+            | Self::SumVariant { owner, .. }
             | Self::Function { owner, .. }
             | Self::Parameter { owner, .. }
             | Self::Region { owner, .. }
@@ -1003,6 +1457,10 @@ impl Node {
         match self {
             Self::Package { name, .. }
             | Self::Module { name, .. }
+            | Self::ProductType { name, .. }
+            | Self::ProductField { name, .. }
+            | Self::SumType { name, .. }
+            | Self::SumVariant { name, .. }
             | Self::Function { name, .. }
             | Self::Parameter { name, .. } => Some(name),
             _ => None,
@@ -1013,6 +1471,10 @@ impl Node {
         match self {
             Self::Package { name, .. }
             | Self::Module { name, .. }
+            | Self::ProductType { name, .. }
+            | Self::ProductField { name, .. }
+            | Self::SumType { name, .. }
+            | Self::SumVariant { name, .. }
             | Self::Function { name, .. }
             | Self::Parameter { name, .. } => {
                 *name = replacement;
@@ -1026,7 +1488,12 @@ impl Node {
         match self {
             Self::WorkspaceRoot { packages } => packages.len(),
             Self::Package { modules, .. } => modules.len(),
-            Self::Module { functions, .. } => functions.len(),
+            Self::Module {
+                types, functions, ..
+            } => types.len() + functions.len(),
+            Self::ProductType { fields, .. } => fields.len(),
+            Self::SumType { variants, .. } => variants.len(),
+            Self::ProductField { .. } | Self::SumVariant { .. } => 0,
             Self::Function {
                 parameters, body, ..
             } => parameters.len() + usize::from(body.is_some()),
@@ -1046,7 +1513,15 @@ impl Node {
         match self {
             Self::WorkspaceRoot { packages } => packages.get(index).copied(),
             Self::Package { modules, .. } => modules.get(index).copied(),
-            Self::Module { functions, .. } => functions.get(index).copied(),
+            Self::Module {
+                types, functions, ..
+            } => types
+                .get(index)
+                .copied()
+                .or_else(|| functions.get(index.saturating_sub(types.len())).copied()),
+            Self::ProductType { fields, .. } => fields.get(index).copied(),
+            Self::SumType { variants, .. } => variants.get(index).copied(),
+            Self::ProductField { .. } | Self::SumVariant { .. } => None,
             Self::Function {
                 parameters, body, ..
             } => parameters
@@ -1080,32 +1555,67 @@ impl Node {
     pub fn direct_reference_count(&self) -> usize {
         match self {
             Self::Package { entry, .. } => usize::from(entry.is_some()),
+            Self::Function { result, .. }
+            | Self::Parameter { ty: result, .. }
+            | Self::ProductField { ty: result, .. }
+            | Self::BlockArgument { ty: result, .. } => {
+                usize::from(result.nominal_target().is_some())
+            }
+            Self::SumVariant { payload, .. } => {
+                usize::from(payload.and_then(SemanticType::nominal_target).is_some())
+            }
             Self::Operation { operation, .. } => {
-                operation.operand_count() + usize::from(operation.definition_target().is_some())
+                operation.operand_count()
+                    + operation.definition_target_count()
+                    + operation.nominal_type_target_count()
             }
             _ => 0,
         }
     }
 
     pub fn direct_reference(&self, index: usize) -> Option<DirectReference> {
+        let type_reference = |slot, ty: SemanticType| {
+            ty.nominal_target()
+                .map(|target| DirectReference::Type { slot, target })
+        };
         match self {
             Self::Package { entry, .. } if index == 0 => {
                 entry.map(|target| DirectReference::Definition { target })
             }
+            Self::Function { result, .. } if index == 0 => {
+                type_reference(TypeReferenceSlot::FunctionResult, *result)
+            }
+            Self::Parameter { ty, .. } if index == 0 => {
+                type_reference(TypeReferenceSlot::ParameterType, *ty)
+            }
+            Self::ProductField { ty, .. } if index == 0 => {
+                type_reference(TypeReferenceSlot::ProductFieldType, *ty)
+            }
+            Self::SumVariant { payload, .. } if index == 0 => {
+                payload.and_then(|ty| type_reference(TypeReferenceSlot::SumVariantPayload, ty))
+            }
+            Self::BlockArgument { ty, .. } if index == 0 => {
+                type_reference(TypeReferenceSlot::BlockArgumentType, *ty)
+            }
             Self::Operation { operation, .. } => {
-                if let Some(target) = operation.definition_target() {
-                    if index == 0 {
-                        return Some(DirectReference::Definition { target });
-                    }
-                    let operand_index = index - 1;
-                    return operation.operand(operand_index).and_then(|value| {
-                        u64::try_from(operand_index)
-                            .ok()
-                            .map(|index| DirectReference::ValueOperand { index, value })
+                let mut current = index;
+                if current < operation.definition_target_count() {
+                    return operation
+                        .definition_target(current)
+                        .map(|target| DirectReference::Definition { target });
+                }
+                current -= operation.definition_target_count();
+                if current < operation.nominal_type_target_count() {
+                    return operation.nominal_type_target(current).map(|target| {
+                        DirectReference::Type {
+                            slot: TypeReferenceSlot::OperationType,
+                            target,
+                        }
                     });
                 }
-                operation.operand(index).and_then(|value| {
-                    u64::try_from(index)
+                current -= operation.nominal_type_target_count();
+                operation.operand(current).and_then(|value| {
+                    u64::try_from(current)
                         .ok()
                         .map(|index| DirectReference::ValueOperand { index, value })
                 })
@@ -1120,7 +1630,9 @@ pub const fn expected_owner_kind(kind: NodeKind) -> Option<NodeKind> {
         NodeKind::WorkspaceRoot => None,
         NodeKind::Package => Some(NodeKind::WorkspaceRoot),
         NodeKind::Module => Some(NodeKind::Package),
-        NodeKind::Function => Some(NodeKind::Module),
+        NodeKind::ProductType | NodeKind::SumType | NodeKind::Function => Some(NodeKind::Module),
+        NodeKind::ProductField => Some(NodeKind::ProductType),
+        NodeKind::SumVariant => Some(NodeKind::SumType),
         NodeKind::Parameter => Some(NodeKind::Function),
         NodeKind::Region => None,
         NodeKind::Block => Some(NodeKind::Region),

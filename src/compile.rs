@@ -1,12 +1,14 @@
 use crate::core_ir::{
-    self, BlockId, CoreBlock, CoreFunction, CoreProgram, FunctionId, Instruction, Terminator,
-    ValueId,
+    self, BOOL_TYPE, BlockId, CoreBlock, CoreField, CoreFunction, CoreProgram, CoreType,
+    CoreTypeId, CoreTypeKind, CoreVariant, FunctionId, I64_TYPE, Instruction, SwitchArgument,
+    SwitchArm, Terminator, UNIT_TYPE, ValueId,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
 use crate::query;
-use crate::schema::{Node, OperationKind, SemanticType, ValueRef};
+use crate::schema::{DirectReference, Node, OperationKind, SemanticType, ValueRef};
+use crate::type_layout::{self, DerivedLayout, LayoutShape, ValueLayout};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram> {
@@ -26,6 +28,8 @@ pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram>
         ));
     }
     let reachable = reachable_functions(snapshot, entry)?;
+    let nominal_types = reachable_nominal_types(snapshot, &reachable)?;
+    let (types, type_ids) = build_type_table(snapshot, &nominal_types)?;
     let mut function_ids = BTreeMap::new();
     for function in &reachable {
         function_ids.insert(
@@ -35,9 +39,16 @@ pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram>
     }
     let mut functions = Vec::with_capacity(reachable.len());
     for function in reachable {
-        functions.push(lower_function(snapshot, function, &function_ids)?);
+        functions.push(lower_function(
+            snapshot,
+            function,
+            &function_ids,
+            &type_ids,
+            &types,
+        )?);
     }
     let program = CoreProgram {
+        types,
         entry: *function_ids
             .get(&entry)
             .ok_or_else(|| invalid(entry, "entry function was not allocated"))?,
@@ -45,6 +56,213 @@ pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram>
     };
     core_ir::verify(&program)?;
     Ok(program)
+}
+
+fn reachable_nominal_types(snapshot: &Snapshot, reachable: &[NodeId]) -> Result<Vec<NodeId>> {
+    let mut declarations = BTreeSet::new();
+    let mut pending_nodes = reachable.to_vec();
+    while let Some(origin) = pending_nodes.pop() {
+        let node = snapshot.node(origin)?;
+        for index in 0..node.direct_reference_count() {
+            match node.direct_reference(index) {
+                Some(DirectReference::Type { target, .. }) => {
+                    declarations.insert(target);
+                }
+                Some(DirectReference::Definition { target }) => match snapshot.node(target)? {
+                    Node::ProductType { .. } | Node::SumType { .. } => {
+                        declarations.insert(target);
+                    }
+                    Node::ProductField { owner, .. } | Node::SumVariant { owner, .. } => {
+                        declarations.insert(*owner);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        if let Node::Operation { operation, .. } = node
+            && !operation.is_terminator()
+            && let SemanticType::Nominal(target) = semantic_result_type(snapshot, operation)?
+        {
+            declarations.insert(target);
+        }
+        for index in (0..node.owned_child_count()).rev() {
+            if let Some(child) = node.owned_child(index) {
+                pending_nodes.push(child);
+            }
+        }
+    }
+    let mut pending = declarations.iter().copied().collect::<Vec<_>>();
+    while let Some(declaration) = pending.pop() {
+        match snapshot.node(declaration)? {
+            Node::ProductType { fields, .. } => {
+                for field in fields {
+                    let Node::ProductField { ty, .. } = snapshot.node(*field)? else {
+                        return Err(invalid(*field, "product member is not a field"));
+                    };
+                    if let SemanticType::Nominal(target) = ty
+                        && declarations.insert(*target)
+                    {
+                        pending.push(*target);
+                    }
+                }
+            }
+            Node::SumType { variants, .. } => {
+                for variant in variants {
+                    let Node::SumVariant { payload, .. } = snapshot.node(*variant)? else {
+                        return Err(invalid(*variant, "sum member is not a variant"));
+                    };
+                    if let Some(SemanticType::Nominal(target)) = payload
+                        && declarations.insert(*target)
+                    {
+                        pending.push(*target);
+                    }
+                }
+            }
+            _ => {
+                return Err(invalid(
+                    declaration,
+                    "reachable nominal type is not a declaration",
+                ));
+            }
+        }
+    }
+    Ok(declarations.into_iter().collect())
+}
+
+fn build_type_table(
+    snapshot: &Snapshot,
+    declarations: &[NodeId],
+) -> Result<(Vec<CoreType>, BTreeMap<SemanticType, CoreTypeId>)> {
+    let primitive = |kind, size, align, cells| CoreType {
+        origin: None,
+        kind,
+        layout: ValueLayout {
+            size,
+            align,
+            cells,
+            shape: LayoutShape::Primitive,
+        },
+    };
+    let mut types = vec![
+        primitive(CoreTypeKind::Unit, 0, 1, 0),
+        primitive(CoreTypeKind::Bool, 1, 1, 1),
+        primitive(CoreTypeKind::I64, 8, 8, 1),
+    ];
+    let mut ids = BTreeMap::from([
+        (SemanticType::Unit, UNIT_TYPE),
+        (SemanticType::Bool, BOOL_TYPE),
+        (SemanticType::I64, I64_TYPE),
+    ]);
+    for declaration in declarations {
+        let id = CoreTypeId(dense_u32(types.len(), *declaration, "type")?);
+        ids.insert(SemanticType::Nominal(*declaration), id);
+        types.push(CoreType {
+            origin: Some(*declaration),
+            kind: CoreTypeKind::Unit,
+            layout: ValueLayout {
+                size: 0,
+                align: 1,
+                cells: 0,
+                shape: LayoutShape::Primitive,
+            },
+        });
+    }
+    let layouts = type_layout::derive_layouts(snapshot)?;
+    for declaration in declarations {
+        let id = *ids
+            .get(&SemanticType::Nominal(*declaration))
+            .ok_or_else(|| invalid(*declaration, "reachable nominal Core type ID is absent"))?;
+        let DerivedLayout::Representable(layout) = layouts
+            .get(declaration)
+            .cloned()
+            .ok_or_else(|| invalid(*declaration, "reachable nominal layout is absent"))?
+        else {
+            return Err(LkError::new(
+                ErrorCode::TypeLayoutUnrepresentable,
+                "reachable nominal type layout is unrepresentable",
+            )
+            .for_node(*declaration));
+        };
+        let kind = match snapshot.node(*declaration)? {
+            Node::ProductType { fields, .. } => {
+                let mut cell_offset = 0_u64;
+                let mut core_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let Node::ProductField { ty, .. } = snapshot.node(*field)? else {
+                        return Err(invalid(*field, "product member is not a field"));
+                    };
+                    let field_ty = *ids.get(ty).ok_or_else(|| {
+                        invalid(*field, "product field type is absent from Core closure")
+                    })?;
+                    core_fields.push(CoreField {
+                        origin: *field,
+                        ty: field_ty,
+                        cell_offset,
+                    });
+                    let DerivedLayout::Representable(field_layout) =
+                        type_layout::layout_of(snapshot, *ty, &layouts)?
+                    else {
+                        return Err(LkError::new(
+                            ErrorCode::TypeLayoutUnrepresentable,
+                            "reachable product field layout is unrepresentable",
+                        )
+                        .for_node(*field));
+                    };
+                    cell_offset = cell_offset
+                        .checked_add(field_layout.cells)
+                        .ok_or_else(|| invalid(*field, "product cell offset overflowed"))?;
+                }
+                CoreTypeKind::Product {
+                    fields: core_fields,
+                }
+            }
+            Node::SumType { variants, .. } => {
+                let mut core_variants = Vec::with_capacity(variants.len());
+                for (ordinal, variant) in variants.iter().enumerate() {
+                    let Node::SumVariant { payload, .. } = snapshot.node(*variant)? else {
+                        return Err(invalid(*variant, "sum member is not a variant"));
+                    };
+                    core_variants.push(CoreVariant {
+                        origin: *variant,
+                        payload: payload
+                            .map(|ty| {
+                                ids.get(&ty).copied().ok_or_else(|| {
+                                    invalid(
+                                        *variant,
+                                        "sum payload type is absent from Core closure",
+                                    )
+                                })
+                            })
+                            .transpose()?,
+                        discriminant: u64::try_from(ordinal)
+                            .map_err(|_| invalid(*variant, "variant discriminant overflows"))?,
+                    });
+                }
+                CoreTypeKind::Sum {
+                    variants: core_variants,
+                }
+            }
+            _ => {
+                return Err(invalid(
+                    *declaration,
+                    "Core nominal type is not a declaration",
+                ));
+            }
+        };
+        let slot = types
+            .get_mut(
+                usize::try_from(id.0)
+                    .map_err(|_| invalid(*declaration, "Core type index overflows host"))?,
+            )
+            .ok_or_else(|| invalid(*declaration, "Core type slot is absent"))?;
+        *slot = CoreType {
+            origin: Some(*declaration),
+            kind,
+            layout,
+        };
+    }
+    Ok((types, ids))
 }
 
 fn reachable_functions(snapshot: &Snapshot, entry: NodeId) -> Result<Vec<NodeId>> {
@@ -97,14 +315,14 @@ struct BuildBlock {
 }
 struct FunctionBuilder {
     origin: NodeId,
-    result: SemanticType,
+    result: CoreTypeId,
     parameters: Vec<ValueId>,
-    value_types: Vec<SemanticType>,
+    value_types: Vec<CoreTypeId>,
     blocks: Vec<BuildBlock>,
     entry: BlockId,
 }
 impl FunctionBuilder {
-    fn value(&mut self, ty: SemanticType, origin: NodeId) -> Result<ValueId> {
+    fn value(&mut self, ty: CoreTypeId, origin: NodeId) -> Result<ValueId> {
         let id = ValueId(dense_u32(self.value_types.len(), origin, "value")?);
         self.value_types.push(ty);
         Ok(id)
@@ -112,7 +330,7 @@ impl FunctionBuilder {
     fn block(
         &mut self,
         origin: NodeId,
-        parameter_types: &[SemanticType],
+        parameter_types: &[CoreTypeId],
     ) -> Result<(BlockId, Vec<ValueId>)> {
         let id = BlockId(dense_u32(self.blocks.len(), origin, "block")?);
         let mut parameters = Vec::with_capacity(parameter_types.len());
@@ -149,7 +367,21 @@ impl FunctionBuilder {
             )
             .ok_or_else(|| invalid(self.origin, "lowering referenced an absent block"))
     }
-    fn finish(self) -> Result<CoreFunction> {
+    fn finish(self, types: &[CoreType]) -> Result<CoreFunction> {
+        let mut frame_cells = 0_u64;
+        for ty in &self.value_types {
+            let cells = types
+                .get(
+                    usize::try_from(ty.0)
+                        .map_err(|_| invalid(self.origin, "Core type index overflows host"))?,
+                )
+                .ok_or_else(|| invalid(self.origin, "Core value type is absent"))?
+                .layout
+                .cells;
+            frame_cells = frame_cells
+                .checked_add(cells)
+                .ok_or_else(|| invalid(self.origin, "Core frame cell footprint overflowed"))?;
+        }
         let mut blocks = Vec::with_capacity(self.blocks.len());
         for block in self.blocks {
             blocks.push(CoreBlock {
@@ -166,6 +398,7 @@ impl FunctionBuilder {
             parameters: self.parameters,
             result: self.result,
             value_types: self.value_types,
+            frame_cells,
             blocks,
             entry: self.entry,
         })
@@ -200,6 +433,8 @@ fn lower_function(
     snapshot: &Snapshot,
     function: NodeId,
     function_ids: &BTreeMap<NodeId, FunctionId>,
+    type_ids: &BTreeMap<SemanticType, CoreTypeId>,
+    types: &[CoreType],
 ) -> Result<CoreFunction> {
     let Node::Function {
         parameters,
@@ -220,7 +455,7 @@ fn lower_function(
     let semantic_block = region_block(snapshot, body)?;
     let mut builder = FunctionBuilder {
         origin: function,
-        result: *result,
+        result: core_type(type_ids, *result, function)?,
         parameters: Vec::new(),
         value_types: Vec::new(),
         blocks: Vec::new(),
@@ -234,7 +469,7 @@ fn lower_function(
                 "function parameter slot is not a parameter",
             ));
         };
-        parameter_types.push(*ty);
+        parameter_types.push(core_type(type_ids, *ty, *parameter)?);
     }
     let (entry, core_parameters) = builder.block(semantic_block, &parameter_types)?;
     builder.entry = entry;
@@ -303,7 +538,7 @@ fn lower_function(
                     operation_id,
                     &task.environment,
                     &captures,
-                    &[*result],
+                    &[core_type(type_ids, *result, operation_id)?],
                 )?;
                 join_env.insert(
                     ValueRef::OperationResult {
@@ -368,6 +603,108 @@ fn lower_function(
                     },
                 });
             }
+            OperationKind::MatchSum {
+                scrutinee,
+                result,
+                arms,
+            } => {
+                let scrutinee = lower_value(&task.environment, *scrutinee)?;
+                let captures: Vec<_> = task.environment.keys().copied().collect();
+                let capture_arguments = capture_values(&task.environment, &captures)?;
+                let (join, mut join_env, join_parameters) = captured_block(
+                    &mut builder,
+                    operation_id,
+                    &task.environment,
+                    &captures,
+                    &[core_type(type_ids, *result, operation_id)?],
+                )?;
+                join_env.insert(
+                    ValueRef::OperationResult {
+                        operation: operation_id,
+                        output: 0,
+                    },
+                    *join_parameters.last().ok_or_else(|| {
+                        invalid(operation_id, "match join result parameter is missing")
+                    })?,
+                );
+                let mut switch_arms = Vec::with_capacity(arms.len());
+                let mut arm_tasks = Vec::with_capacity(arms.len());
+                for arm in arms {
+                    let Node::SumVariant {
+                        ordinal, payload, ..
+                    } = snapshot.node(arm.variant)?
+                    else {
+                        return Err(invalid(
+                            arm.variant,
+                            "match arm target is not a sum variant",
+                        ));
+                    };
+                    let semantic_block = region_block(snapshot, arm.region)?;
+                    let (operations, terminator, block_arguments) =
+                        semantic_block_parts(snapshot, semantic_block)?;
+                    let extra_types = payload
+                        .map(|ty| core_type(type_ids, ty, arm.variant))
+                        .transpose()?
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    if block_arguments.len() != extra_types.len() {
+                        return Err(invalid(
+                            semantic_block,
+                            "match payload block argument count is malformed",
+                        ));
+                    }
+                    let (block, mut environment, _) = captured_block(
+                        &mut builder,
+                        semantic_block,
+                        &task.environment,
+                        &captures,
+                        &extra_types,
+                    )?;
+                    if let Some(argument) = block_arguments.first() {
+                        let parameter = builder.block_mut(block)?.parameters[captures.len()];
+                        environment.insert(ValueRef::BlockArgument(*argument), parameter);
+                    }
+                    let mut edge_arguments = capture_arguments
+                        .iter()
+                        .copied()
+                        .map(SwitchArgument::Value)
+                        .collect::<Vec<_>>();
+                    if payload.is_some() {
+                        edge_arguments.push(SwitchArgument::Payload);
+                    }
+                    switch_arms.push(SwitchArm {
+                        variant: *ordinal,
+                        target: block,
+                        arguments: edge_arguments,
+                    });
+                    arm_tasks.push(Task {
+                        operations,
+                        index: 0,
+                        terminator,
+                        block,
+                        environment,
+                        end: EndAction::YieldBranch {
+                            target: join,
+                            captures: captures.clone(),
+                        },
+                    });
+                }
+                builder.terminate(
+                    task.block,
+                    Terminator::SwitchVariant {
+                        origin: operation_id,
+                        scrutinee,
+                        arms: switch_arms,
+                    },
+                )?;
+                task.index += 1;
+                task.block = join;
+                task.environment = join_env;
+                tasks.push(task);
+                for arm_task in arm_tasks.into_iter().rev() {
+                    tasks.push(arm_task);
+                }
+            }
             OperationKind::ForI64 {
                 start,
                 end_exclusive,
@@ -390,13 +727,13 @@ fn lower_function(
                 }
                 let capture_types = capture_types(&builder, &task.environment, &captures)?;
                 let mut header_types = capture_types.clone();
-                header_types.extend([SemanticType::I64, *carried]);
+                header_types.extend([I64_TYPE, core_type(type_ids, *carried, operation_id)?]);
                 let (header, header_parameters) = builder.block(operation_id, &header_types)?;
                 let header_env = environment_from_parameters(&captures, &header_parameters)?;
                 let header_index = header_parameters[captures.len()];
                 let header_carried = header_parameters[captures.len() + 1];
                 let mut body_types = capture_types.clone();
-                body_types.extend([SemanticType::I64, *carried]);
+                body_types.extend([I64_TYPE, core_type(type_ids, *carried, operation_id)?]);
                 let (body_block, body_parameters) = builder.block(body_semantic, &body_types)?;
                 let mut body_env = environment_from_parameters(&captures, &body_parameters)?;
                 body_env.insert(
@@ -408,7 +745,7 @@ fn lower_function(
                     body_parameters[captures.len() + 1],
                 );
                 let mut exit_types = capture_types;
-                exit_types.push(*carried);
+                exit_types.push(core_type(type_ids, *carried, operation_id)?);
                 let (exit, exit_parameters) = builder.block(operation_id, &exit_types)?;
                 let mut exit_env = environment_from_parameters(&captures, &exit_parameters)?;
                 exit_env.insert(
@@ -429,7 +766,7 @@ fn lower_function(
                     },
                 )?;
                 let end_value = lower_value(&header_env, *end_exclusive)?;
-                let condition = builder.value(SemanticType::Bool, operation_id)?;
+                let condition = builder.value(BOOL_TYPE, operation_id)?;
                 builder.instruction(
                     header,
                     Instruction::LtI64 {
@@ -488,14 +825,17 @@ fn lower_function(
                 .for_node(operation_id));
             }
             _ => {
-                let result_type = semantic_result_type(snapshot, operation)?;
+                let semantic_type = semantic_result_type(snapshot, operation)?;
+                let result_type = core_type(type_ids, semantic_type, operation_id)?;
                 let result = builder.value(result_type, operation_id)?;
                 let instruction = lower_instruction(
+                    snapshot,
                     operation_id,
                     operation,
                     result,
                     &task.environment,
                     function_ids,
+                    type_ids,
                 )?;
                 builder.instruction(task.block, instruction)?;
                 task.environment.insert(
@@ -510,7 +850,7 @@ fn lower_function(
             }
         }
     }
-    builder.finish()
+    builder.finish(types)
 }
 
 fn finish_task(snapshot: &Snapshot, builder: &mut FunctionBuilder, task: Task) -> Result<()> {
@@ -569,7 +909,7 @@ fn finish_task(snapshot: &Snapshot, builder: &mut FunctionBuilder, task: Task) -
                 return Err(invalid(task.terminator, "loop body must yield"));
             }
             let index_value = lower_value(&task.environment, index)?;
-            let step_value = builder.value(SemanticType::I64, origin)?;
+            let step_value = builder.value(I64_TYPE, origin)?;
             builder.instruction(
                 task.block,
                 Instruction::ConstI64 {
@@ -578,7 +918,7 @@ fn finish_task(snapshot: &Snapshot, builder: &mut FunctionBuilder, task: Task) -
                     value: step,
                 },
             )?;
-            let next_index = builder.value(SemanticType::I64, origin)?;
+            let next_index = builder.value(I64_TYPE, origin)?;
             builder.instruction(
                 task.block,
                 Instruction::AddI64 {
@@ -603,11 +943,13 @@ fn finish_task(snapshot: &Snapshot, builder: &mut FunctionBuilder, task: Task) -
 }
 
 fn lower_instruction(
+    snapshot: &Snapshot,
     origin: NodeId,
     operation: &OperationKind,
     result: ValueId,
     environment: &BTreeMap<ValueRef, ValueId>,
     function_ids: &BTreeMap<NodeId, FunctionId>,
+    type_ids: &BTreeMap<SemanticType, CoreTypeId>,
 ) -> Result<Instruction> {
     Ok(match operation {
         OperationKind::ConstUnit => Instruction::ConstUnit { origin, result },
@@ -650,9 +992,44 @@ fn lower_instruction(
                 .map(|value| lower_value(environment, *value))
                 .collect::<Result<_>>()?,
         },
+        OperationKind::ConstructProduct { product, fields } => Instruction::ConstructProduct {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*product), origin)?,
+            fields: fields
+                .iter()
+                .map(|field| lower_value(environment, field.value))
+                .collect::<Result<_>>()?,
+        },
+        OperationKind::ProjectField { value, field } => {
+            let Node::ProductField { ordinal, .. } = snapshot.node(*field)? else {
+                return Err(invalid(*field, "projection target is not a product field"));
+            };
+            Instruction::ProjectField {
+                origin,
+                result,
+                value: lower_value(environment, *value)?,
+                field: *ordinal,
+            }
+        }
+        OperationKind::ConstructVariant { variant, payload } => {
+            let Node::SumVariant { owner, ordinal, .. } = snapshot.node(*variant)? else {
+                return Err(invalid(*variant, "variant target is not a sum variant"));
+            };
+            Instruction::ConstructVariant {
+                origin,
+                result,
+                sum: core_type(type_ids, SemanticType::Nominal(*owner), origin)?,
+                variant: *ordinal,
+                payload: payload
+                    .map(|value| lower_value(environment, value))
+                    .transpose()?,
+            }
+        }
         OperationKind::Hole { .. }
         | OperationKind::If { .. }
         | OperationKind::ForI64 { .. }
+        | OperationKind::MatchSum { .. }
         | OperationKind::Return { .. }
         | OperationKind::Yield { .. } => {
             return Err(invalid(
@@ -660,6 +1037,19 @@ fn lower_instruction(
                 "structured operation entered scalar instruction lowering",
             ));
         }
+    })
+}
+
+fn core_type(
+    type_ids: &BTreeMap<SemanticType, CoreTypeId>,
+    ty: SemanticType,
+    origin: NodeId,
+) -> Result<CoreTypeId> {
+    type_ids.get(&ty).copied().ok_or_else(|| {
+        invalid(
+            origin,
+            "semantic type is absent from exact Core type closure",
+        )
     })
 }
 
@@ -675,10 +1065,20 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
         OperationKind::Hole { expected } => *expected,
         OperationKind::If { result, .. } => *result,
         OperationKind::ForI64 { carried, .. } => *carried,
+        OperationKind::ConstructProduct { product, .. } => SemanticType::Nominal(*product),
+        OperationKind::ProjectField { field, .. } => match snapshot.node(*field)? {
+            Node::ProductField { ty, .. } => *ty,
+            _ => return Err(invalid(*field, "projection target is not a product field")),
+        },
+        OperationKind::ConstructVariant { variant, .. } => match snapshot.node(*variant)? {
+            Node::SumVariant { owner, .. } => SemanticType::Nominal(*owner),
+            _ => return Err(invalid(*variant, "variant target is not a sum variant")),
+        },
+        OperationKind::MatchSum { result, .. } => *result,
         OperationKind::Return { .. } | OperationKind::Yield { .. } => {
             return Err(invalid(
                 operation
-                    .definition_target()
+                    .definition_target(0)
                     .unwrap_or_else(|| snapshot.root()),
                 "terminator has no result",
             ));
@@ -691,7 +1091,7 @@ fn captured_block(
     origin: NodeId,
     environment: &BTreeMap<ValueRef, ValueId>,
     captures: &[ValueRef],
-    extra_types: &[SemanticType],
+    extra_types: &[CoreTypeId],
 ) -> Result<(BlockId, BTreeMap<ValueRef, ValueId>, Vec<ValueId>)> {
     let mut types = capture_types(builder, environment, captures)?;
     types.extend_from_slice(extra_types);
@@ -703,7 +1103,7 @@ fn capture_types(
     builder: &FunctionBuilder,
     environment: &BTreeMap<ValueRef, ValueId>,
     captures: &[ValueRef],
-) -> Result<Vec<SemanticType>> {
+) -> Result<Vec<CoreTypeId>> {
     captures
         .iter()
         .map(|key| {
@@ -818,12 +1218,13 @@ mod tests {
     use crate::graph::Workspace;
     use crate::interpret::{RunPolicy, RuntimeValue, compile_and_run};
     use crate::query::{PageRequest, Query, QueryResult};
+    use crate::schema::ProductFieldValueDraft;
     use crate::transaction::{
         ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
-        FunctionParameterDraft, NodeTarget, Transaction, TransactionMode, TransactionOp,
-        TransactionResponseSpec, YieldingBodyDraft,
+        FunctionParameterDraft, MatchArmDraft, NodeTarget, ProductFieldDraft, SumVariantDraft,
+        Transaction, TransactionMode, TransactionOp, TransactionResponseSpec, YieldingBodyDraft,
     };
-    use crate::{LocalHandle, Revision, ValueDraft, WorkspaceId};
+    use crate::{LocalHandle, Revision, TypeDraft, ValueDraft, WorkspaceId};
 
     fn local(value: u32) -> NodeTarget {
         NodeTarget::Local(LocalHandle::new(value))
@@ -863,10 +1264,10 @@ mod tests {
                 .map(|(handle, name, ty)| FunctionParameterDraft {
                     handle: LocalHandle::new(handle),
                     name: name.into(),
-                    ty,
+                    ty: ty.into(),
                 })
                 .collect(),
-            result: result_type,
+            result: result_type.into(),
             body,
         }
     }
@@ -899,6 +1300,407 @@ mod tests {
     }
 
     #[test]
+    fn complete_reachable_nominal_signature_lowers_and_runs_with_exact_public_value() {
+        let workspace_id = WorkspaceId::from_bytes([0x95; 16]);
+        let workspace = Workspace::new(workspace_id).expect("workspace");
+        let request = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: workspace_id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        handle: LocalHandle::new(1),
+                        name: "app".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        handle: LocalHandle::new(2),
+                        package: local(1),
+                        name: "root".into(),
+                    },
+                    TransactionOp::CreateProductType {
+                        handle: LocalHandle::new(3),
+                        module: local(2),
+                        name: "Reading".into(),
+                        fields: vec![
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(4),
+                                name: "value".into(),
+                                ty: TypeDraft::I64,
+                            },
+                            ProductFieldDraft {
+                                handle: LocalHandle::new(8),
+                                name: "valid".into(),
+                                ty: TypeDraft::Bool,
+                            },
+                        ],
+                    },
+                    TransactionOp::CreateFunction {
+                        handle: LocalHandle::new(5),
+                        module: local(2),
+                        name: "identity".into(),
+                        parameters: vec![FunctionParameterDraft {
+                            handle: LocalHandle::new(6),
+                            name: "value".into(),
+                            ty: TypeDraft::Nominal(local(3)),
+                        }],
+                        result: TypeDraft::Nominal(local(3)),
+                        body: body(Vec::new(), parameter(6)),
+                    },
+                    TransactionOp::SetEntryFunction {
+                        package: local(1),
+                        function: local(5),
+                    },
+                ],
+            },
+            response: TransactionResponseSpec {
+                return_handles: vec![
+                    LocalHandle::new(3),
+                    LocalHandle::new(4),
+                    LocalHandle::new(5),
+                    LocalHandle::new(8),
+                ],
+            },
+        };
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("complete nominal function");
+        let id = |handle: u32| {
+            prepared
+                .receipt
+                .returned_bindings
+                .iter()
+                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .expect("binding")
+        };
+        let product = id(3);
+        let field = id(4);
+        let valid = id(8);
+        let entry = id(5);
+        let program = compile(&prepared.snapshot, entry).expect("nominal Core");
+        assert_eq!(program.types.len(), 4);
+        assert_eq!(program.types[3].origin, Some(product));
+        let value = RuntimeValue::Product {
+            ty: product,
+            fields: vec![
+                crate::RuntimeFieldValue {
+                    field: valid,
+                    value: RuntimeValue::Bool(true),
+                },
+                crate::RuntimeFieldValue {
+                    field,
+                    value: RuntimeValue::I64(41),
+                },
+            ],
+        };
+        let canonical = RuntimeValue::Product {
+            ty: product,
+            fields: vec![
+                crate::RuntimeFieldValue {
+                    field,
+                    value: RuntimeValue::I64(41),
+                },
+                crate::RuntimeFieldValue {
+                    field: valid,
+                    value: RuntimeValue::Bool(true),
+                },
+            ],
+        };
+        assert_eq!(
+            run(&prepared.snapshot, entry, &[value]).expect("nominal identity"),
+            canonical
+        );
+        let duplicate = RuntimeValue::Product {
+            ty: product,
+            fields: vec![
+                crate::RuntimeFieldValue {
+                    field,
+                    value: RuntimeValue::I64(1),
+                },
+                crate::RuntimeFieldValue {
+                    field,
+                    value: RuntimeValue::I64(2),
+                },
+            ],
+        };
+        assert_eq!(
+            compile_and_run(
+                &prepared.snapshot,
+                entry,
+                &[duplicate],
+                RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10
+                }
+            )
+            .expect_err("duplicate field")
+            .code,
+            ErrorCode::RunArgumentMismatch
+        );
+    }
+
+    #[test]
+    fn scalar_signature_construct_and_project_lower_directly() {
+        let workspace_id = WorkspaceId::from_bytes([0x96; 16]);
+        let workspace = Workspace::new(workspace_id).expect("workspace");
+        let prepared = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: workspace_id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![
+                        TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(1),
+                            name: "app".into(),
+                        },
+                        TransactionOp::CreateModule {
+                            handle: LocalHandle::new(2),
+                            package: local(1),
+                            name: "root".into(),
+                        },
+                        TransactionOp::CreateProductType {
+                            handle: LocalHandle::new(3),
+                            module: local(2),
+                            name: "Reading".into(),
+                            fields: vec![ProductFieldDraft {
+                                handle: LocalHandle::new(4),
+                                name: "value".into(),
+                                ty: TypeDraft::I64,
+                            }],
+                        },
+                        TransactionOp::CreateFunction {
+                            handle: LocalHandle::new(5),
+                            module: local(2),
+                            name: "main".into(),
+                            parameters: Vec::new(),
+                            result: TypeDraft::I64,
+                            body: body(
+                                vec![
+                                    expression(6, ExpressionKindDraft::ConstI64(7)),
+                                    expression(
+                                        7,
+                                        ExpressionKindDraft::ConstructProduct {
+                                            product: local(3),
+                                            fields: vec![ProductFieldValueDraft {
+                                                field: local(4),
+                                                value: result(6),
+                                            }],
+                                        },
+                                    ),
+                                    expression(
+                                        8,
+                                        ExpressionKindDraft::ProjectField {
+                                            value: result(7),
+                                            field: local(4),
+                                        },
+                                    ),
+                                ],
+                                result(8),
+                            ),
+                        },
+                        TransactionOp::SetEntryFunction {
+                            package: local(1),
+                            function: local(5),
+                        },
+                    ],
+                },
+                response: TransactionResponseSpec {
+                    return_handles: vec![
+                        LocalHandle::new(3),
+                        LocalHandle::new(5),
+                        LocalHandle::new(7),
+                    ],
+                },
+            })
+            .expect("complete scalar-signature nominal body");
+        let binding = |handle: u32| {
+            prepared
+                .receipt
+                .returned_bindings
+                .iter()
+                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .expect("selected binding")
+        };
+        let program = compile(&prepared.snapshot, binding(5)).expect("aggregate Core lowering");
+        assert!(matches!(
+            program.functions[0].blocks[0].instructions[1],
+            Instruction::ConstructProduct { .. }
+        ));
+        assert!(matches!(
+            program.functions[0].blocks[0].instructions[2],
+            Instruction::ProjectField { .. }
+        ));
+        assert_eq!(
+            run(&prepared.snapshot, binding(5), &[]).expect("aggregate execution"),
+            RuntimeValue::I64(7)
+        );
+    }
+
+    #[test]
+    fn exhaustive_sum_match_executes_only_selected_arm_with_exact_payload_binding() {
+        let workspace_id = WorkspaceId::from_bytes([0x97; 16]);
+        let workspace = Workspace::new(workspace_id).expect("workspace");
+        let prepared = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: workspace_id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![
+                        TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(1),
+                            name: "app".into(),
+                        },
+                        TransactionOp::CreateModule {
+                            handle: LocalHandle::new(2),
+                            package: local(1),
+                            name: "root".into(),
+                        },
+                        TransactionOp::CreateSumType {
+                            handle: LocalHandle::new(3),
+                            module: local(2),
+                            name: "Maybe".into(),
+                            variants: vec![
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(4),
+                                    name: "none".into(),
+                                    payload: None,
+                                },
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(5),
+                                    name: "some".into(),
+                                    payload: Some(TypeDraft::I64),
+                                },
+                            ],
+                        },
+                        TransactionOp::CreateProductType {
+                            handle: LocalHandle::new(11),
+                            module: local(2),
+                            name: "Unreachable".into(),
+                            fields: vec![ProductFieldDraft {
+                                handle: LocalHandle::new(12),
+                                name: "value".into(),
+                                ty: TypeDraft::Bool,
+                            }],
+                        },
+                        TransactionOp::CreateFunction {
+                            handle: LocalHandle::new(6),
+                            module: local(2),
+                            name: "unwrap_or_zero".into(),
+                            parameters: vec![FunctionParameterDraft {
+                                handle: LocalHandle::new(7),
+                                name: "value".into(),
+                                ty: TypeDraft::Nominal(local(3)),
+                            }],
+                            result: TypeDraft::I64,
+                            body: body(
+                                vec![expression(
+                                    8,
+                                    ExpressionKindDraft::MatchSum {
+                                        scrutinee: parameter(7),
+                                        result: TypeDraft::I64,
+                                        arms: vec![
+                                            MatchArmDraft {
+                                                variant: local(5),
+                                                payload_handle: Some(LocalHandle::new(9)),
+                                                body: yielding(vec![], argument(9)),
+                                            },
+                                            MatchArmDraft {
+                                                variant: local(4),
+                                                payload_handle: None,
+                                                body: yielding(
+                                                    vec![expression(
+                                                        10,
+                                                        ExpressionKindDraft::ConstI64(0),
+                                                    )],
+                                                    result(10),
+                                                ),
+                                            },
+                                        ],
+                                    },
+                                )],
+                                result(8),
+                            ),
+                        },
+                        TransactionOp::SetEntryFunction {
+                            package: local(1),
+                            function: local(6),
+                        },
+                    ],
+                },
+                response: TransactionResponseSpec {
+                    return_handles: vec![
+                        LocalHandle::new(3),
+                        LocalHandle::new(4),
+                        LocalHandle::new(5),
+                        LocalHandle::new(6),
+                    ],
+                },
+            })
+            .expect("nominal match transaction");
+        let id = |handle: u32| {
+            prepared
+                .receipt
+                .returned_bindings
+                .iter()
+                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .expect("binding")
+        };
+        let program = compile(&prepared.snapshot, id(6)).expect("match Core");
+        assert_eq!(
+            program.types.len(),
+            4,
+            "unreachable nominal declaration omitted"
+        );
+        assert_eq!(program.types[3].origin, Some(id(3)));
+        assert!(matches!(
+            program.functions[0].blocks[0].terminator,
+            Terminator::SwitchVariant { .. }
+        ));
+        let none = RuntimeValue::Sum {
+            ty: id(3),
+            variant: id(4),
+            payload: None,
+        };
+        let some = RuntimeValue::Sum {
+            ty: id(3),
+            variant: id(5),
+            payload: Some(Box::new(RuntimeValue::I64(37))),
+        };
+        assert_eq!(
+            run(&prepared.snapshot, id(6), &[none]).expect("none arm"),
+            RuntimeValue::I64(0)
+        );
+        assert_eq!(
+            run(&prepared.snapshot, id(6), &[some]).expect("payload arm"),
+            RuntimeValue::I64(37)
+        );
+        let missing_payload = RuntimeValue::Sum {
+            ty: id(3),
+            variant: id(5),
+            payload: None,
+        };
+        assert_eq!(
+            compile_and_run(
+                &prepared.snapshot,
+                id(6),
+                &[missing_payload],
+                RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10
+                }
+            )
+            .expect_err("missing payload")
+            .code,
+            ErrorCode::RunArgumentMismatch
+        );
+    }
+
+    #[test]
     fn compile_incomplete_diagnostic_is_bounded_while_blocker_query_remains_paginated() {
         let workspace_id = WorkspaceId::from_bytes([0x92; 16]);
         let workspace = Workspace::new(workspace_id).expect("workspace");
@@ -907,7 +1709,7 @@ mod tests {
                 expression(
                     100 + index,
                     ExpressionKindDraft::Hole {
-                        expected: SemanticType::I64,
+                        expected: SemanticType::I64.into(),
                     },
                 )
             })
@@ -1036,7 +1838,7 @@ mod tests {
                             end_exclusive: parameter(12),
                             step: 1,
                             initial: result(13),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(15),
                             carried_handle: LocalHandle::new(16),
                             body: yielding(
@@ -1075,7 +1877,7 @@ mod tests {
                         24,
                         ExpressionKindDraft::If {
                             condition: result(23),
-                            result: SemanticType::I64,
+                            result: SemanticType::I64.into(),
                             then_body: yielding(vec![], result(22)),
                             else_body: yielding(
                                 vec![expression(
@@ -1125,7 +1927,7 @@ mod tests {
                     42,
                     ExpressionKindDraft::If {
                         condition: parameter(41),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         then_body: yielding(
                             vec![expression(43, ExpressionKindDraft::ConstI64(7))],
                             result(43),
@@ -1150,7 +1952,7 @@ mod tests {
                     52,
                     ExpressionKindDraft::If {
                         condition: parameter(51),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         then_body: yielding(
                             vec![expression(53, ExpressionKindDraft::ConstI64(1))],
                             result(53),
@@ -1185,7 +1987,7 @@ mod tests {
                     62,
                     ExpressionKindDraft::If {
                         condition: parameter(61),
-                        result: SemanticType::Unit,
+                        result: SemanticType::Unit.into(),
                         then_body: yielding(
                             vec![expression(63, ExpressionKindDraft::ConstUnit)],
                             result(63),
@@ -1216,7 +2018,7 @@ mod tests {
                             end_exclusive: result(72),
                             step: 2,
                             initial: result(71),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(74),
                             carried_handle: LocalHandle::new(75),
                             body: yielding(
@@ -1253,7 +2055,7 @@ mod tests {
                             end_exclusive: result(82),
                             step: 1,
                             initial: result(81),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(85),
                             carried_handle: LocalHandle::new(86),
                             body: yielding(
@@ -1292,7 +2094,7 @@ mod tests {
                     92,
                     ExpressionKindDraft::If {
                         condition: parameter(91),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         then_body: yielding(
                             vec![
                                 expression(93, ExpressionKindDraft::ConstBool(false)),
@@ -1326,7 +2128,7 @@ mod tests {
                     102,
                     ExpressionKindDraft::If {
                         condition: parameter(101),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         then_body: yielding(
                             vec![
                                 expression(103, ExpressionKindDraft::ConstBool(false)),
@@ -1360,7 +2162,7 @@ mod tests {
                     112,
                     ExpressionKindDraft::If {
                         condition: parameter(111),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         then_body: yielding(
                             vec![
                                 expression(113, ExpressionKindDraft::ConstBool(false)),
@@ -1401,7 +2203,7 @@ mod tests {
                             end_exclusive: result(122),
                             step: 2,
                             initial: result(123),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(125),
                             carried_handle: LocalHandle::new(126),
                             body: yielding(vec![], argument(126)),
@@ -1429,7 +2231,7 @@ mod tests {
                 vec![expression(
                     141,
                     ExpressionKindDraft::Hole {
-                        expected: SemanticType::I64,
+                        expected: SemanticType::I64.into(),
                     },
                 )],
                 result(141),
@@ -1453,7 +2255,7 @@ mod tests {
                             end_exclusive: result(152),
                             step: 1,
                             initial: result(151),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(155),
                             carried_handle: LocalHandle::new(156),
                             body: yielding(
@@ -1464,7 +2266,7 @@ mod tests {
                                         end_exclusive: result(153),
                                         step: 1,
                                         initial: argument(156),
-                                        carried: SemanticType::I64,
+                                        carried: SemanticType::I64.into(),
                                         index_handle: LocalHandle::new(158),
                                         carried_handle: LocalHandle::new(159),
                                         body: yielding(
@@ -1501,7 +2303,7 @@ mod tests {
                         174,
                         ExpressionKindDraft::If {
                             condition: parameter(171),
-                            result: SemanticType::I64,
+                            result: SemanticType::I64.into(),
                             then_body: yielding(
                                 vec![expression(
                                     175,
@@ -1510,7 +2312,7 @@ mod tests {
                                         end_exclusive: result(173),
                                         step: 1,
                                         initial: result(172),
-                                        carried: SemanticType::I64,
+                                        carried: SemanticType::I64.into(),
                                         index_handle: LocalHandle::new(176),
                                         carried_handle: LocalHandle::new(177),
                                         body: yielding(
@@ -1631,7 +2433,7 @@ mod tests {
                             end_exclusive: result(262),
                             step: 1,
                             initial: result(261),
-                            carried: SemanticType::I64,
+                            carried: SemanticType::I64.into(),
                             index_handle: LocalHandle::new(265),
                             carried_handle: LocalHandle::new(266),
                             body: yielding(
@@ -1639,7 +2441,7 @@ mod tests {
                                     267,
                                     ExpressionKindDraft::If {
                                         condition: result(263),
-                                        result: SemanticType::I64,
+                                        result: SemanticType::I64.into(),
                                         then_body: yielding(
                                             vec![expression(
                                                 268,
@@ -1672,7 +2474,7 @@ mod tests {
                     252,
                     ExpressionKindDraft::If {
                         condition: parameter(251),
-                        result: SemanticType::Bool,
+                        result: SemanticType::Bool.into(),
                         then_body: yielding(
                             vec![expression(253, ExpressionKindDraft::ConstBool(true))],
                             result(253),
@@ -1718,6 +2520,134 @@ mod tests {
             .map(|(handle, node)| (handle.get(), *node))
             .collect();
         (prepared, ids)
+    }
+
+    #[test]
+    fn deeply_nested_match_lowering_uses_one_verified_core_route() {
+        const DEPTH: u32 = 7;
+        fn nested_match(depth: u32) -> ExpressionDraft {
+            let match_handle = LocalHandle::new(100 + depth * 3);
+            let payload_handle = LocalHandle::new(101 + depth * 3);
+            let selected = if depth == 1 {
+                let constant = LocalHandle::new(102 + depth * 3);
+                yielding(
+                    vec![expression(constant.get(), ExpressionKindDraft::ConstI64(7))],
+                    result(constant.get()),
+                )
+            } else {
+                yielding(vec![nested_match(depth - 1)], result(100 + (depth - 1) * 3))
+            };
+            expression(
+                match_handle.get(),
+                ExpressionKindDraft::MatchSum {
+                    scrutinee: parameter(7),
+                    result: TypeDraft::I64,
+                    arms: vec![
+                        MatchArmDraft {
+                            variant: local(5),
+                            payload_handle: Some(payload_handle),
+                            body: selected,
+                        },
+                        MatchArmDraft {
+                            variant: local(4),
+                            payload_handle: None,
+                            body: yielding(
+                                vec![expression(10_000 + depth, ExpressionKindDraft::ConstI64(0))],
+                                result(10_000 + depth),
+                            ),
+                        },
+                    ],
+                },
+            )
+        }
+
+        let workspace_id = WorkspaceId::from_bytes([0x98; 16]);
+        let workspace = Workspace::new(workspace_id).expect("workspace");
+        let prepared = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: workspace_id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::Commit,
+                    operations: vec![
+                        TransactionOp::CreatePackage {
+                            handle: LocalHandle::new(1),
+                            name: "app".into(),
+                        },
+                        TransactionOp::CreateModule {
+                            handle: LocalHandle::new(2),
+                            package: local(1),
+                            name: "root".into(),
+                        },
+                        TransactionOp::CreateSumType {
+                            handle: LocalHandle::new(3),
+                            module: local(2),
+                            name: "Maybe".into(),
+                            variants: vec![
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(4),
+                                    name: "none".into(),
+                                    payload: None,
+                                },
+                                SumVariantDraft {
+                                    handle: LocalHandle::new(5),
+                                    name: "some".into(),
+                                    payload: Some(TypeDraft::I64),
+                                },
+                            ],
+                        },
+                        TransactionOp::CreateFunction {
+                            handle: LocalHandle::new(6),
+                            module: local(2),
+                            name: "deep".into(),
+                            parameters: vec![FunctionParameterDraft {
+                                handle: LocalHandle::new(7),
+                                name: "value".into(),
+                                ty: TypeDraft::Nominal(local(3)),
+                            }],
+                            result: TypeDraft::I64,
+                            body: body(vec![nested_match(DEPTH)], result(100 + DEPTH * 3)),
+                        },
+                    ],
+                },
+                response: TransactionResponseSpec {
+                    return_handles: vec![
+                        LocalHandle::new(3),
+                        LocalHandle::new(5),
+                        LocalHandle::new(6),
+                    ],
+                },
+            })
+            .expect("deep nested match transaction");
+        let id = |handle: u32| {
+            prepared
+                .receipt
+                .returned_bindings
+                .iter()
+                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .expect("binding")
+        };
+        let program = compile(&prepared.snapshot, id(6)).expect("deep match lowering");
+        core_ir::verify(&program).expect("deep match Core verification");
+        assert_eq!(
+            program
+                .functions
+                .iter()
+                .flat_map(|function| &function.blocks)
+                .filter(|block| matches!(block.terminator, Terminator::SwitchVariant { .. }))
+                .count(),
+            usize::try_from(DEPTH).expect("depth")
+        );
+        let some = RuntimeValue::Sum {
+            ty: id(3),
+            variant: id(5),
+            payload: Some(Box::new(RuntimeValue::I64(1))),
+        };
+        assert_eq!(
+            run(&prepared.snapshot, id(6), &[some]).expect("deep selected match path"),
+            RuntimeValue::I64(7)
+        );
     }
 
     #[test]
@@ -2023,7 +2953,7 @@ mod tests {
         )
         .expect_err("loop fuel");
         assert_eq!(loop_fuel.code, ErrorCode::ExecutionFuelExhausted);
-        assert_eq!(loop_fuel.target, Some(ids[&76]));
+        assert_eq!(loop_fuel.target.expect("fuel origin").serial(), 89);
         let fuel = compile_and_run(
             snapshot,
             ids[&30],

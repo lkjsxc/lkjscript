@@ -13,8 +13,8 @@ use crate::query::{
 use crate::schema::{OperationDraft, SemanticType, ValueDraft, ValueRef};
 use crate::transaction::{
     ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
-    FunctionParameterDraft, NodeTarget, Transaction, TransactionMode, TransactionOp,
-    TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
+    FunctionParameterDraft, NodeTarget, SumVariantDraft, Transaction, TransactionMode,
+    TransactionOp, TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -100,9 +100,9 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
                     parameters: vec![FunctionParameterDraft {
                         handle: LocalHandle::new(4),
                         name: "input".to_owned(),
-                        ty: SemanticType::I64,
+                        ty: SemanticType::I64.into(),
                     }],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -122,7 +122,7 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
                             ExpressionDraft {
                                 handle: LocalHandle::new(10),
                                 operation: ExpressionKindDraft::Hole {
-                                    expected: SemanticType::I64,
+                                    expected: SemanticType::I64.into(),
                                 },
                             },
                             ExpressionDraft {
@@ -653,7 +653,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                             module: existing(module),
                             name: "main".to_owned(),
                             parameters: Vec::new(),
-                            result: SemanticType::I64,
+                            result: SemanticType::I64.into(),
                             body: None,
                         }],
                     },
@@ -692,7 +692,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                         operations: vec![TransactionOp::RefineHole {
                             hole: existing(hole),
                             replacement: OperationDraft::Hole {
-                                expected: SemanticType::I64,
+                                expected: SemanticType::I64.into(),
                             },
                         }],
                     },
@@ -841,7 +841,7 @@ fn generated_structured_scenario(seed: u64) {
                         module: local(2),
                         name: "forward".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![expression(
                                 11,
@@ -858,7 +858,7 @@ fn generated_structured_scenario(seed: u64) {
                         module: local(2),
                         name: "mutual".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![expression(
                                 21,
@@ -875,7 +875,7 @@ fn generated_structured_scenario(seed: u64) {
                         module: local(2),
                         name: "nested".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![
                                 expression(31, ExpressionKindDraft::ConstI64(0)),
@@ -884,7 +884,7 @@ fn generated_structured_scenario(seed: u64) {
                                     33,
                                     ExpressionKindDraft::If {
                                         condition: value(32),
-                                        result: SemanticType::I64,
+                                        result: SemanticType::I64.into(),
                                         then_body: YieldingBodyDraft {
                                             operations: vec![expression(
                                                 34,
@@ -893,14 +893,14 @@ fn generated_structured_scenario(seed: u64) {
                                                     end_exclusive: value(31),
                                                     step: 1,
                                                     initial: value(31),
-                                                    carried: SemanticType::I64,
+                                                    carried: SemanticType::I64.into(),
                                                     index_handle: LocalHandle::new(35),
                                                     carried_handle: LocalHandle::new(36),
                                                     body: YieldingBodyDraft {
                                                         operations: vec![expression(
                                                             37,
                                                             ExpressionKindDraft::Hole {
-                                                                expected: SemanticType::I64,
+                                                                expected: SemanticType::I64.into(),
                                                             },
                                                         )],
                                                         yield_value: value(37),
@@ -945,7 +945,7 @@ fn generated_structured_scenario(seed: u64) {
                 operations: vec![TransactionOp::RefineHole {
                     hole: existing(hole),
                     replacement: OperationDraft::Hole {
-                        expected: SemanticType::I64,
+                        expected: SemanticType::I64.into(),
                     },
                 }],
             },
@@ -1093,7 +1093,7 @@ fn durable_invalid_transaction_corpus_is_atomic_and_restart_stable() {
                     operations: vec![TransactionOp::RefineHole {
                         hole: existing(hole),
                         replacement: OperationDraft::Hole {
-                            expected: SemanticType::I64,
+                            expected: SemanticType::I64.into(),
                         },
                     }],
                 },
@@ -1318,6 +1318,10 @@ fn request_corpus() -> Vec<Request> {
                 include_incompatible: true,
             },
         },
+        Query::NominalType {
+            declaration: node,
+            page,
+        },
     ];
     assert_eq!(
         queries.iter().map(Query::code).collect::<Vec<_>>(),
@@ -1340,9 +1344,9 @@ fn request_corpus() -> Vec<Request> {
             parameters: vec![FunctionParameterDraft {
                 handle: LocalHandle::new(4),
                 name: "parameter".to_owned(),
-                ty: SemanticType::I64,
+                ty: SemanticType::I64.into(),
             }],
-            result: SemanticType::I64,
+            result: SemanticType::I64.into(),
             body: None,
         },
         TransactionOp::DefineFunctionBody {
@@ -1351,7 +1355,7 @@ fn request_corpus() -> Vec<Request> {
                 operations: vec![ExpressionDraft {
                     handle: LocalHandle::new(7),
                     operation: ExpressionKindDraft::Hole {
-                        expected: SemanticType::I64,
+                        expected: SemanticType::I64.into(),
                     },
                 }],
                 return_value: local_value(7),
@@ -1386,8 +1390,24 @@ fn request_corpus() -> Vec<Request> {
         TransactionOp::RefineHole {
             hole: local(7),
             replacement: OperationDraft::Hole {
-                expected: SemanticType::I64,
+                expected: SemanticType::I64.into(),
             },
+        },
+        TransactionOp::CreateProductType {
+            handle: LocalHandle::new(9),
+            module: local(2),
+            name: "product".to_owned(),
+            fields: Vec::new(),
+        },
+        TransactionOp::CreateSumType {
+            handle: LocalHandle::new(10),
+            module: local(2),
+            name: "sum".to_owned(),
+            variants: vec![SumVariantDraft {
+                handle: LocalHandle::new(11),
+                name: "variant".to_owned(),
+                payload: None,
+            }],
         },
     ];
     assert_eq!(
@@ -1429,6 +1449,18 @@ fn request_corpus() -> Vec<Request> {
                 crate::RuntimeValue::Unit,
                 crate::RuntimeValue::Bool(true),
                 crate::RuntimeValue::I64(-9),
+                crate::RuntimeValue::Product {
+                    ty: node,
+                    fields: vec![crate::RuntimeFieldValue {
+                        field: node,
+                        value: crate::RuntimeValue::Bool(false),
+                    }],
+                },
+                crate::RuntimeValue::Sum {
+                    ty: node,
+                    variant: node,
+                    payload: Some(Box::new(crate::RuntimeValue::I64(4))),
+                },
             ],
             policy: crate::interpret::RunPolicy {
                 fuel: 777,
@@ -1436,7 +1468,7 @@ fn request_corpus() -> Vec<Request> {
             },
         },
         Request::Shutdown,
-        Request::DescribeSchema,
+        Request::DescribeSchema(crate::machine::DescribeSchemaRequest::manifest()),
     ]
 }
 
@@ -1840,7 +1872,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":3", "\"version\":3,\"version\":3"),
+        replace_json(query, "\"version\":4", "\"version\":4,\"version\":4"),
     );
     push_mutation(
         &mut mutations,

@@ -45,21 +45,55 @@ impl fmt::Display for CodecError {
 
 pub(crate) struct Writer {
     bytes: Vec<u8>,
+    maximum_bytes: Option<usize>,
+    exceeded: bool,
 }
 
 impl Writer {
     pub(crate) fn new() -> Self {
-        Self { bytes: Vec::new() }
+        Self {
+            bytes: Vec::new(),
+            maximum_bytes: None,
+            exceeded: false,
+        }
     }
 
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             bytes: Vec::with_capacity(capacity),
+            maximum_bytes: None,
+            exceeded: false,
         }
     }
 
+    pub(crate) fn with_limit(maximum_bytes: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(maximum_bytes.min(4096)),
+            maximum_bytes: Some(maximum_bytes),
+            exceeded: false,
+        }
+    }
+
+    pub(crate) fn exceeded(&self) -> bool {
+        self.exceeded
+    }
+
+    fn append(&mut self, value: &[u8]) {
+        if self.exceeded {
+            return;
+        }
+        if self
+            .maximum_bytes
+            .is_some_and(|maximum| value.len() > maximum.saturating_sub(self.bytes.len()))
+        {
+            self.exceeded = true;
+            return;
+        }
+        self.bytes.extend_from_slice(value);
+    }
+
     pub(crate) fn u8(&mut self, value: u8) {
-        self.bytes.push(value);
+        self.append(&[value]);
     }
 
     pub(crate) fn bool(&mut self, value: bool) {
@@ -67,23 +101,23 @@ impl Writer {
     }
 
     pub(crate) fn u16(&mut self, value: u16) {
-        self.bytes.extend_from_slice(&value.to_le_bytes());
+        self.append(&value.to_le_bytes());
     }
 
     pub(crate) fn u32(&mut self, value: u32) {
-        self.bytes.extend_from_slice(&value.to_le_bytes());
+        self.append(&value.to_le_bytes());
     }
 
     pub(crate) fn u64(&mut self, value: u64) {
-        self.bytes.extend_from_slice(&value.to_le_bytes());
+        self.append(&value.to_le_bytes());
     }
 
     pub(crate) fn i64(&mut self, value: i64) {
-        self.bytes.extend_from_slice(&value.to_le_bytes());
+        self.append(&value.to_le_bytes());
     }
 
     pub(crate) fn fixed(&mut self, value: &[u8]) {
-        self.bytes.extend_from_slice(value);
+        self.append(value);
     }
 
     pub(crate) fn bytes(&mut self, value: &[u8]) -> Result<(), CodecError> {

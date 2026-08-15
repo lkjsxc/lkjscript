@@ -30,8 +30,8 @@ pub fn run_foreground(state_directory: &Path) -> Result<()> {
     loop {
         let (stream, _) = listener.accept()?;
         let mut stream = DeadlineStream::new(stream, CONNECTION_TIMEOUT);
-        match protocol::read_request(&mut stream) {
-            Ok(Some((request_id, request))) => {
+        match protocol::read_request_correlated(&mut stream) {
+            Ok(Some((request_id, Ok(request)))) => {
                 let shutdown = matches!(request, Request::Shutdown);
                 let (response, fatal_error) = match daemon.handle(request) {
                     Ok(response) => (response, None),
@@ -62,6 +62,9 @@ pub fn run_foreground(state_directory: &Path) -> Result<()> {
                 if shutdown && response_written && matches!(response, Response::Acknowledged) {
                     break;
                 }
+            }
+            Ok(Some((request_id, Err(error)))) => {
+                let _ = protocol::write_response(&mut stream, request_id, &Response::Error(error));
             }
             Ok(None) => {}
             Err(error) => {
@@ -211,9 +214,15 @@ impl Daemon {
                 )?))
             }
             Request::Shutdown => Ok(Response::Acknowledged),
-            Request::DescribeSchema => Ok(Response::SchemaDescription(Box::new(
-                crate::machine::schema_description(),
-            ))),
+            Request::DescribeSchema(request) => {
+                let result = crate::machine::describe_schema(&request)
+                    .map_err(|message| LkError::new(ErrorCode::ProtocolMalformed, message))?;
+                protocol::encoded_response_size(
+                    RequestId::new(0),
+                    &Response::DescribeSchema(Box::new(result.clone())),
+                )?;
+                Ok(Response::DescribeSchema(Box::new(result)))
+            }
         }
     }
 

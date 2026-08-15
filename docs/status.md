@@ -2,23 +2,36 @@
 
 Date: 2026-08-15
 
-Campaign base: `dc541eb3ebb7a54006e8057d0f76b0596cf012e4` on `main`
+Campaign base: `99d7ca5bbdac6bcf90fdd64721c13df1342ef67a` on `main`
 
 ## Implemented product path
 
 The repository contains one Rust package and one source-free product route:
 
 ```text
-strict generic JSON CLI (optional) -> private protocol-v3 Unix IPC -> synchronous daemon
+strict generic JSON CLI (optional) -> private protocol-v4 Unix IPC -> synchronous daemon
 -> durable workspace -> typed staged transaction -> immutable SPG snapshot
 -> scan-based revision query or direct Core IR lowering -> verifier -> interpreter
 ```
 
-The agent-native semantic repair and structured pure-program campaigns are implemented:
+The agent-native semantic repair, structured pure-program, and nominal immutable-data campaigns are
+implemented:
 
-- one code-owned static descriptor defines the closed scalar, comparison, identity-targeted call,
-  structured `if`/`for_i64`, hole, yield, and return contracts used by graph validation, queries,
-  codecs, schema output, and lowering;
+- products, product fields, closed sums, and sum variants are persistent canonical nodes with
+  immutable shape, stable member identity, exact owner/ordinal validation, atomic declaration
+  transactions, forward `TypeDraft` resolution, typed incoming references, deletion blocking, and
+  adjacent-history continuity;
+- deterministic iterative by-value cycle rejection and checked derived layouts cover field offsets,
+  variant discriminants, payload placement, and runtime-cell footprints without serializing layout;
+- canonical product construction, field projection, variant construction, and exhaustive structured match use exact declaration/member identities; a transaction-local non-persisted catalogue supports later-authored declarations/members, identity-keyed fields and arms normalize to declaration order before implied allocation, and real arm regions/payload arguments/yields validate payload, scope, and result contracts independently;
+- the paginated nominal-type query exposes declaration/member names, exact identity/type facts, and optional derived layout facts without fabricated values for unrepresentable layouts; revision/declaration-bound cursors provide continuation;
+- legal constructors and repair context bound every retained requirement vector to 64 items, report exact operand/member totals and completeness, keep fitting products one-query repairable, and provide oversized product nominal-query continuation;
+- nominal holes refine without identity churn only to valid regionless product, variant, or projection
+  operations of the same result type; match remains ineligible.
+
+The complete product path also retains:
+
+- one code-owned static descriptor defines the closed scalar, comparison, identity-targeted call, structured `if`/`for_i64`, nominal operation, hole, yield, and return contracts used by graph validation, queries, codecs, and schema output; match regions use one narrow closed dynamic variant rule consumed by validation;
 - `RefineHole` performs the sole one-way identity-preserving constructor transition, retaining the
   hole Node ID, owner, body position, and uses while rejecting another hole, terminator, mismatched
   result, invalid operand, and already-complete target;
@@ -30,7 +43,8 @@ The agent-native semantic repair and structured pure-program campaigns are imple
 - semantic changes are deterministic and distinguish hole refinement; complete changes are queried
   through exact revision-bound pagination;
 - compact checksummed `LKJHEAD3` retains head identity and at most one compact keyed replay receipt;
-  artifact format 2 and protocol/JSON version 3 are the only readers; older bytes reject directly;
+  artifact format 3 with semantic schema `lkjscript-spg003` and protocol/JSON version 4 are the only
+  readers; format 2 and version 3 bytes reject directly;
 - structured function/body/expression drafts directly replace public low-level body scaffolding;
   iterative depth-first expansion creates canonical implicit regions, blocks, block arguments, and
   terminators, allocates all identities before edits, supports forward/mutual calls, and returns
@@ -43,30 +57,49 @@ The agent-native semantic repair and structured pure-program campaigns are imple
 - all query facts use deterministic full scans and bounded composition; legal constructors and owner
   chains retain only the requested page while counting exact totals, and repair context retains only
   bounded category slices; there is no reverse index, query cache, or query framework;
-- strict version-3 JSON envelopes cover every public request/response through the generic CLI,
-  including `DescribeSchema`; the generated descriptor exhaustively identifies unit/newtype/record
-  payloads, exact required/optional field names, stable type expressions, envelopes, tags, and
-  limits; canonical IDs, unknown/trailing rejection, input/nesting bounds, streaming output bound,
-  request correlation, one-value stdout, and exit 0/2/3/4 are tested;
-- the principal real generic-CLI/daemon integration creates `range_sum`, `normalize_and_sum`, and
-  `main` in one structured transaction, requests four selected bindings, derives loop arguments from
-  bounded nested repair context, proves an invalid bool repair publishes nothing, refines the hole
-  without identity churn, queries `OperationRefined`, executes `5050`/`0`/`55`, restarts, and proves
-  both incomplete and repaired retained revisions preserve identities and behavior;
-- direct SPG lowering iteratively discovers only the complete direct-call closure, deterministically
-  lowers multi-function structured control to one private typed CFG, verifies it independently, and
-  executes arguments, calls, recursion, branches, and loops through one explicit-frame interpreter;
-- run requests require bounded ordered arguments plus positive bounded fuel and frame policy; an
-  aggregate 65,536 live frame-value-slot policy rejects before allocation and releases on return;
-  exhaustion categories and arithmetic traps are exact and leave the daemon usable;
+- strict version-4 JSON envelopes cover every public request/response through the generic CLI. The
+  payload-bearing `DescribeSchema` directly replaces the old tag-only request and supports a compact
+  manifest by default, seven closed repeatable sections, explicit full output, and strict optional
+  lowercase digest matching. The semantic section exposes the validator-owned named-kind, nonempty,
+  sibling-uniqueness, and 1 MiB artifact-name contract; errors/limits exposes the exact 64 MiB
+  artifact and 1 MiB artifact-name policies. Full output describes every request, response,
+  referenced DTO, exact required/optional field, and tagging convention as one closed type-expression graph; an automated
+  closure check rejects undefined or multiply defined named types. One BLAKE3 domain-separated digest
+  covers the complete executable descriptor through the canonical protocol schema-facts encoder;
+  selected sections and full output partition that authority exactly, matching digests return only
+  `unchanged`, and there is no cache or persisted schema response. Unknown, empty, duplicate, excessive, malformed, uppercase, truncated,
+  and trailing forms reject; request correlation and one-value stdout are tested, exit 0 and 2 have
+  focused process evidence, and the implemented exit 3/4 mappings do not yet have focused process
+  tests; schema usage and boundary errors are compact bounded envelopes;
+- the principal nominal generic-CLI/daemon integration and `examples/nominal-match` create the
+  Reading/Input application in one structured transaction, request only selected bindings, obtain
+  exact nominal repair context, prove an invalid identity-keyed product repair publishes nothing,
+  refine the hole without identity churn, query `OperationRefined`, execute scalar and public nominal
+  input/output oracles plus selected/unselected overflow, restart, and prove both incomplete and
+  repaired revisions preserve identities and behavior;
+- direct SPG lowering iteratively discovers the exact complete direct-call and transitive nominal-type
+  closures. One private type table fixes primitives first and reachable nominal declarations in
+  persistent Node-ID order, retains semantic origins, recomputes layouts, and omits unreachable types;
+- aggregate instructions and exhaustive payload-aware switches lower through the same typed CFG and
+  are independently verified; the interpreter uses flat frame cell arenas plus initialized facts;
+- Run accepts exact revision-bound primitive/product/sum values, normalizes exact owned product
+  fields to declaration order, validates exact owned variants and payload contracts, and emits
+  semantic IDs only. Depth 24 is proven through complete strict JSON Run envelopes for worst-case nested products and sums; 4,096 nested
+  items and 64 KiB encoded bytes aggregate across all arguments and also bound mandatory-result
+  preflight. The 65,536-cell policy covers peak live arenas plus exact transfer/flatten scratch and
+  prospective callee arenas before allocation or copy. Aggregate instructions use direct arena
+  ranges, switch reads only the discriminant, and block entry performs no uncharged clearing. Fuel is
+  charged before work as one base per instruction/transfer plus `max(1,cells)` for each logical copy,
+  with full-sum canonicalization plus active-payload logical copies charged for variants; exhaustion and arithmetic traps are exact and
+  leave the daemon usable;
 - inline diagnostics retain at most 64 deterministically sorted related identities while exact
   completeness blockers remain available through paginated queries.
 
 ## Evidence
 
-The locked full test boundary currently reports 121 active passing tests and six ignored manual
-measurement/smoke tests. The retained fresh-target measurement predates the final focused review
-fixes and remains labelled separately in `docs/performance.md`. Library/unit coverage includes schema/tag rejection, graph/history
+The final fresh-target locked boundary reports 166 active passing tests and eight explicitly
+ignored measurement/smoke tests. Library/unit coverage
+includes schema/tag rejection, graph/history
 continuity, stable refinement, allocator rollback, deterministic detailed diffs, selected bindings,
 receipt/HEAD bounds, validate-only parity, idempotent replay/conflict, publication failure injection,
 query pagination/cursor binding/budgets, maximum batch shape, exact uses/constructors/repair context,
@@ -77,14 +110,15 @@ boundary mutation. A 10,000-node subtree test exercises iterative validation/del
 native-stack recursion.
 
 Integration tests use the real `lkjscriptd`, production binary IPC, and real generic `lkjscript rpc`
-CLI. The retained scalar integration validates durable 42/43 history and restart. The structured
-integration covers the representative nested repair workflow, competing-daemon rejection, retained
-revisions, and corrupt structured-revision startup rejection; the retained example covers the same
-public authoring/repair/run/restart path. Ignored reproducible harnesses
-print exact structured JSON/binary bytes, CLI round trips, artifact sizes, repeated runtime latency,
-old scalar repair evidence, and scan-query cost. The seed-1, 10,000-case release mutation smoke
-passed; it is deterministic mutation testing, not coverage-guided fuzzing. Exact commands and
-observations are retained in `docs/performance.md`.
+CLI. The retained scalar integration validates durable 42/43 history and restart. Structured and
+nominal integrations cover nested repair, competing-daemon rejection, retained revisions, nominal
+Run, and corrupt-revision startup rejection; `examples/nominal-match` covers the complete public
+schema/authoring/repair/diff/run/restart path. Ignored reproducible harnesses print exact current
+schema and nominal-workflow JSON/binary bytes, CLI round trips, artifact/HEAD sizes, layout,
+compile/execute and repeated runtime latency, plus older separately labelled baselines. The seed-1,
+10,000-case release mutation smoke is required final evidence; it is deterministic mutation testing,
+not coverage-guided fuzzing. Exact commands and observations are retained in
+`docs/performance.md`.
 
 Required verification is:
 
@@ -113,11 +147,12 @@ bootstrap software using private local IPC; no sandboxing or public network serv
 Canonical semantic state, authoring, compiler, and interpreter now support unit/bool/i64 values,
 constants, checked addition, integer comparison, identity-targeted zero/one/multi-argument calls,
 structured conditionals and counted loops, entry arguments, block arguments, recursion, typed holes,
-yield, and return. Only the selected direct-call closure must be complete; unrelated incomplete
-functions remain non-blocking. There are no aggregates, sums, matching, generics, package
-dependencies, effects, capabilities, host I/O,
-ownership-bearing values, native execution, runtime cells, debugger, optimizer tiers, concurrent
-service, cross-platform contract, or source parser/projection.
+yield, return, nominal products and closed sums, aggregate construction/projection, exhaustive lazy
+matching, and public nominal Run input/output. Only the selected direct-call closure must be complete;
+unrelated incomplete functions and unreachable nominal declarations remain non-blocking. There are
+no generics, package dependencies, effects, capabilities, host I/O, ownership-bearing values,
+managed heap, native execution, debugger, optimizer tiers, concurrent service, cross-platform
+contract, or source parser/projection.
 
 The current agent evidence measures JSON/binary bytes, CLI invocations, round trips, rejected edits,
 and elapsed time. No model was invoked, so model tokens and controlled model success rates remain

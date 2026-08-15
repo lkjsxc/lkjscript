@@ -3,7 +3,170 @@
 No performance leadership claim is made. These are bootstrap baselines whose purpose is to expose
 costs before optimization.
 
-## Structured pure-program campaign
+## Nominal-data campaign environment
+
+Measurements were retained on 2026-08-15 from the dirty campaign working tree based on starting
+commit `99d7ca5bbdac6bcf90fdd64721c13df1342ef67a` on `main`: `devbox`, Linux
+7.0.0-29-generic x86-64, AMD Ryzen 9 9955HX (32 logical CPUs visible), 32 GiB memory,
+`rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The cgroup memory ceiling was
+34,359,738,368 B, CPU quota was unlimited, shell stack limit was 8 MiB, and virtual memory was
+unlimited. Runtime and schema harnesses used optimized release binaries. The machine schema has seven sections and canonical digest
+`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`.
+`/usr/bin/time` is unavailable, so maximum RSS is unmeasured. No model was invoked; bytes are not
+model tokens or API cost, and no token or performance-leadership claim is made.
+
+## Closed machine-schema projections
+
+The retained byte harness is:
+
+```sh
+cargo test --release --lib machine::tests::schema_projection_byte_measurements_are_retained \
+  --locked -- --nocapture
+```
+
+It serializes compact result JSON without a newline and the production framed binary
+`Response::DescribeSchema` with request ID 1. The six-section projection requests
+`semantic_types_and_nodes`, `nominal_declarations`, `transactions_and_expressions`,
+`queries_and_repair`, `runtime_and_run`, and `errors_and_limits` together.
+
+| Projection | Compact result JSON | Framed binary response | Local / daemon round trips |
+| --- | ---: | ---: | ---: |
+| old audited full (prior schema authority; unequal workload) | 21,516 B stdout | 9,166 B | 0 / 1 |
+| current manifest | 739 B | 736 B | 0 / 1 |
+| current six nominal sections | 86,009 B | 86,006 B | 0 / 1 |
+| current full | 126,888 B | 96,083 B | 0 / 1 |
+| current known-digest unchanged | 105 B | 48 B | 0 / 1 |
+
+The old row is retained only as a separately labelled historical observation and is not an equal-schema
+regression comparison. `lkjscript schema` computes locally; daemon `DescribeSchema` returns the same
+projection in one request/response. The current nominal interaction harness below measures enveloped
+manifest/six-section/unchanged requests and responses through the daemon.
+
+After one warm-up per command, Python `time.monotonic_ns` measured 31 new release CLI processes per
+projection. Percentiles use nearest rank; stdout includes the CLI newline.
+
+```sh
+target/release/lkjscript schema
+target/release/lkjscript schema \
+  --section semantic_types_and_nodes --section nominal_declarations \
+  --section transactions_and_expressions --section queries_and_repair \
+  --section runtime_and_run --section errors_and_limits
+target/release/lkjscript schema --full
+target/release/lkjscript schema --full --known-digest \
+  983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d
+```
+
+| Local projection | Stdout | Samples | Median | p95 |
+| --- | ---: | ---: | ---: | ---: |
+| manifest | 740 B | 31 | 882,409 ns | 1,142,849 ns |
+| six nominal sections | 86,010 B | 31 | 1,173,126 ns | 1,342,766 ns |
+| full | 126,889 B | 31 | 1,201,760 ns | 1,511,603 ns |
+| unchanged | 106 B | 31 | 852,934 ns | 980,233 ns |
+
+## Nominal Reading/Input application
+
+The retained real generic-CLI measurement is:
+
+```sh
+cargo test --release --test agent_repair_json nominal_agent_interaction_cost_measurement \
+  --locked -- --ignored --nocapture --test-threads=1
+```
+
+It uses the production daemon and launches the strict generic CLI for each measured request. One
+transaction creates Reading/Input plus seven functions, requests 18 selected bindings, expands to 97
+canonical nodes, and publishes an incomplete revision. One intentional type error is followed by an
+identity-preserving product refinement, layout and diff queries, Run, typed shutdown, restart, and a
+retained-node query. Typed shutdowns are lifecycle requests and are explicitly excluded from agent
+round trips.
+
+| Request | JSON request | JSON stdout | Binary request | Binary response | CLI + daemon wall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| schema manifest | 110 B | 817 B | 17 B | 736 B | 1,697,093 ns |
+| six schema sections | 272 B | 86,087 B | 31 B | 86,006 B | 2,343,348 ns |
+| known digest unchanged | 354 B | 183 B | 63 B | 48 B | 1,624,797 ns |
+| workspace creation | 69 B | 325 B | 15 B | 120 B | 11,220,107 ns |
+| structured nominal creation | 8,297 B | 1,256 B | 1,517 B | 658 B | 8,975,464 ns |
+| Reading repair context | 376 B | 6,556 B | 98 B | 2,298 B | 1,365,880 ns |
+| invalid identity-keyed repair | 882 B | 329 B | 221 B | 142 B | 849,348 ns |
+| valid identity-keyed repair | 935 B | 488 B | 237 B | 154 B | 8,626,779 ns |
+| Reading layout | 266 B | 741 B | 85 B | 292 B | 483,539 ns |
+| semantic diff | 224 B | 1,547 B | 69 B | 464 B | 519,407 ns |
+| main Run | 234 B | 156 B | 83 B | 40 B | 459,544 ns |
+| retained refined-hole query after restart | 247 B | 548 B | 81 B | 185 B | 447,061 ns |
+| **total** | **12,266 B** | **99,033 B** | **2,517 B** | **91,143 B** | **38,612,367 ns** |
+
+There are 12 measured CLI invocations and daemon round trips: 11 successful semantics and one expected
+semantic error. Cold daemon readiness was 5,358,601 ns and restart readiness was 5,422,811 ns.
+Revision-1 and revision-2 artifacts are 4,213 B and 4,256 B; HEAD is 268 B. The Reading layout oracle
+is size 16, alignment 8, and two runtime cells. The measured main Run returned `i64(42)` with
+52,298 ns compile/lower/verify and 11,471 ns interpreter execution. These timing rows are one
+observation each, not distributions.
+
+The retained repeated harness is:
+
+```sh
+cargo test --release --test agent_repair_json nominal_reading_performance_measurement \
+  --locked -- --ignored --nocapture --test-threads=1
+```
+
+It performs one warm-up and 31 measured generic-CLI Run requests per route.
+
+| Measurement | Samples | Median | p95 |
+| --- | ---: | ---: | ---: |
+| main request wall | 31 | 414,680 ns | 510,490 ns |
+| main compile/lower/verify | 31 | 19,987 ns | 60,103 ns |
+| main interpreter execution | 31 | 3,186 ns | 10,851 ns |
+| nominal Input match request wall | 31 | 423,266 ns | 533,664 ns |
+| nominal Reading output request wall | 31 | 414,580 ns | 498,878 ns |
+
+The typed oracles are main `42`, sample payload `5`, and returned Reading value `9`. A separate single
+layout query took 445,448 ns and reasserted size 16/alignment 8/two cells. A single restart took
+5,341,389 ns and reasserted the exact retained layout; no median or p95 is claimed for either single
+observation.
+
+### Fresh build, test, binary, and boundary evidence
+
+Fresh targets were newly allocated under `/tmp`; no Cargo target was cleaned or reused:
+
+```sh
+FRESH_RELEASE_TARGET=/tmp/lkjscript-final2-release.lrOvgc
+FRESH_TEST_TARGET=/tmp/lkjscript-final2-test.MCHhFp
+TIMEFORMAT='fresh_release_build_elapsed_s=%3R'
+time CARGO_TARGET_DIR="$FRESH_RELEASE_TARGET" cargo build --workspace --release --locked
+TIMEFORMAT='fresh_full_test_elapsed_s=%3R'
+time CARGO_TARGET_DIR="$FRESH_TEST_TARGET" \
+  cargo test --workspace --all-targets --all-features --locked
+du -sk "$FRESH_RELEASE_TARGET" "$FRESH_TEST_TARGET"
+stat -c '%n %s' "$FRESH_RELEASE_TARGET/release/lkjscript" \
+  "$FRESH_RELEASE_TARGET/release/lkjscriptd"
+TIMEFORMAT='incremental_release_build_elapsed_s=%3R'
+time cargo build --workspace --release --locked
+```
+
+The final fresh release build took 56.476 s and occupied 52,207 KiB. Its client was 3,779,472 B and
+daemon 2,245,680 B. The separate fresh full test took 17.948 s, occupied 457,561 KiB, and reported 166
+active passes with eight ignored manual measurement/smoke tests. The unchanged incremental release
+build took 0.024 s; repository release binaries had the same sizes. The temporary targets were removed
+only after sizes were recorded. Compared with the separately retained structured and reset baselines
+below, these are accepted capability/build regressions, not equal-work performance claims.
+
+The full boundary specifically passed malformed Core aggregate/switch rejection, exhaustive selected-arm
+execution, strict malformed JSON and protocol rejection, exact aggregate copy fuel, selected-large-arm
+fuel exhaustion, entry/callee/live-cell exhaustion, nominal restart, exact cycle-participant
+selection, and iterative deep match/type traversal tests. `examples/nominal-match/run.sh` additionally
+proves an overflowing arm is lazy when
+unselected and traps when selected through the public Run path. The final deterministic boundary command was:
+
+```sh
+LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 \
+  cargo test --release --lib campaign_tests::boundary_mutation_smoke --locked -- \
+  --ignored --nocapture --test-threads=1
+```
+
+It passed one test in 0.03 s and printed `seed=1 cases=10000`; this is bounded deterministic mutation
+testing, not coverage-guided fuzzing.
+
+## Structured pure-program campaign (retained older baseline)
 
 ### Environment and method
 
@@ -31,7 +194,7 @@ restart.
 
 | Request | JSON request | JSON stdout | Binary request | Binary response | CLI wall |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| schema discovery | 67 B | 21,516 B | 15 B | 9,166 B | 655,402 ns |
+| schema discovery (then-default full) | 67 B | 21,516 B | 15 B | 9,166 B | 655,402 ns |
 | workspace creation | 68 B | 324 B | 15 B | 120 B | 10,098,864 ns |
 | structured creation | 3,106 B | 660 B | 527 B | 266 B | 8,934,375 ns |
 | repair context | 375 B | 5,472 B | 98 B | 1,761 B | 440,939 ns |
@@ -46,8 +209,9 @@ restart.
 
 Daemon cold readiness was 6,429,787 ns and restart readiness with the retained workspace was
 4,294,382 ns. These are byte, process, and round-trip measurements, not model-token or API-cost
-measurements. Schema discovery is intentionally included because the runtime-generated schema is the
-agent's authoritative vocabulary.
+measurements. That campaign's then-default full schema discovery is intentionally included because
+the runtime-generated schema is the agent's authoritative vocabulary; the current default is the
+compact manifest measured above.
 
 The retained repeated product-path harness is:
 

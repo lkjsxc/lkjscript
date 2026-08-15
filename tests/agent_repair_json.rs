@@ -3,8 +3,9 @@
 use lkjscript::daemon;
 use lkjscript::diff::ChangeKind;
 use lkjscript::machine::{
-    BoundaryErrorEnvelope, BoundaryErrorKind, JSON_ENVELOPE_VERSION, RequestEnvelope,
-    ResponseEnvelope, SchemaDescription,
+    BoundaryErrorEnvelope, BoundaryErrorKind, DescribeSchemaRequest, DescribeSchemaResult,
+    JSON_ENVELOPE_VERSION, RequestEnvelope, ResponseEnvelope, SchemaProjection, SchemaSection,
+    SchemaSectionPayload,
 };
 use lkjscript::query::{
     CompletenessBlocker, ContextBudget, Page, PageCursor, PageRequest, Query, QueryBatchRequest,
@@ -13,12 +14,14 @@ use lkjscript::query::{
 use lkjscript::{
     ApplyTransactionRequest, BlockArgumentRole, ChangeDigest, ErrorCode, ExpressionDraft,
     ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle,
-    NodeId, NodeTarget, OperationCode, OperationDraft, OperationKind, QueryId, RegionRole, Request,
-    RequestId, Response, Revision, RuntimeValue, SemanticType, Transaction, TransactionMode,
-    TransactionOp, TransactionReceipt, TransactionResponseSpec, ValueDraft, ValueRef, WorkspaceId,
-    YieldingBodyDraft,
+    MatchArmDraft, NodeId, NodeKind, NodeTarget, OperationCode, OperationDraft, OperationKind,
+    ProductFieldDraft, ProductFieldValueDraft, QueryId, RegionRole, Request, RequestId, Response,
+    Revision, RuntimeFieldValue, RuntimeValue, SemanticType, SumVariantDraft, Transaction,
+    TransactionMode, TransactionOp, TransactionReceipt, TransactionResponseSpec, TypeDraft,
+    ValueDraft, ValueRef, WorkspaceId, YieldingBodyDraft,
 };
 use serde::Deserialize;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -76,7 +79,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let transport = invoke_raw(
         state,
-        br#"{"version":3,"request_id":1,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":4,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert_eq!(transport.status.code(), Some(3));
     assert_one_json(&transport.stdout);
@@ -88,7 +91,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     let daemon = JsonDaemon::start(state);
     let raw_create = invoke_raw(
         state,
-        br#"{"version":3,"request_id":2,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":4,"request_id":2,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
@@ -659,18 +662,52 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_run(state, 50, workspace, Revision::new(3), function, 80);
     assert_run(state, 51, workspace, Revision::new(2), function, 42);
 
-    let Response::SchemaDescription(daemon_schema) =
-        rpc(state, 37, Request::DescribeSchema).response
+    let Response::DescribeSchema(daemon_schema) = rpc(
+        state,
+        37,
+        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
+    )
+    .response
     else {
         panic!("daemon schema")
     };
     let local_schema = local_schema();
     assert_eq!(*daemon_schema, local_schema);
+
+    let section_request = DescribeSchemaRequest {
+        projection: SchemaProjection::Sections {
+            sections: vec![
+                SchemaSection::QueriesAndRepair,
+                SchemaSection::TransactionsAndExpressions,
+            ],
+        },
+        known_digest: None,
+    };
+    let Response::DescribeSchema(daemon_sections) =
+        rpc(state, 38, Request::DescribeSchema(section_request)).response
+    else {
+        panic!("daemon schema sections")
+    };
+    let local_sections = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "schema",
+            "--section",
+            "queries_and_repair",
+            "--section",
+            "transactions_and_expressions",
+        ])
+        .output()
+        .expect("local schema sections");
+    assert!(local_sections.status.success());
+    assert_eq!(
+        *daemon_sections,
+        serde_json::from_slice(&local_sections.stdout).expect("local section JSON")
+    );
     assert_eq!(module.workspace(), workspace);
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":3,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":4,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -680,7 +717,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":3,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":4,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);
@@ -724,7 +761,7 @@ fn incomplete_fixture(
                     module: local(LocalHandle::new(2)),
                     name: "main".to_owned(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -742,7 +779,7 @@ fn incomplete_fixture(
                             ExpressionDraft {
                                 handle: LocalHandle::new(9),
                                 operation: ExpressionKindDraft::Hole {
-                                    expected: SemanticType::I64,
+                                    expected: SemanticType::I64.into(),
                                 },
                             },
                         ],
@@ -929,29 +966,41 @@ fn query(
     revision: Revision,
     query: Query,
 ) -> QueryResult {
-    let response = rpc(
-        state,
-        request_id,
-        Request::QueryBatch(QueryBatchRequest {
-            workspace,
-            revision,
-            queries: vec![QueryItem {
-                id: QueryId::new(request_id),
-                query,
-            }],
-        }),
-    );
+    one_query_result(
+        rpc(
+            state,
+            request_id,
+            Request::QueryBatch(QueryBatchRequest {
+                workspace,
+                revision,
+                queries: vec![QueryItem {
+                    id: QueryId::new(request_id),
+                    query,
+                }],
+            }),
+        ),
+        workspace,
+        revision,
+        QueryId::new(request_id),
+    )
+}
+
+fn one_query_result(
+    response: ResponseEnvelope,
+    workspace: WorkspaceId,
+    revision: Revision,
+    query_id: QueryId,
+) -> QueryResult {
     let Response::QueryBatchResult(batch) = response.response else {
-        panic!("query batch")
+        panic!("query batch response")
     };
-    let QueryOutcome::Success(result) = batch
-        .results
-        .into_iter()
-        .next()
-        .expect("query item")
-        .outcome
-    else {
-        panic!("query outcome")
+    assert_eq!(batch.workspace, workspace);
+    assert_eq!(batch.revision, revision);
+    assert_eq!(batch.results.len(), 1);
+    let item = batch.results.into_iter().next().expect("query item");
+    assert_eq!(item.id, query_id);
+    let QueryOutcome::Success(result) = item.outcome else {
+        panic!("query outcome must be semantic success")
     };
     *result
 }
@@ -1155,9 +1204,9 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     parameters: vec![FunctionParameterDraft {
                         handle: LocalHandle::new(11),
                         name: "n".into(),
-                        ty: SemanticType::I64,
+                        ty: SemanticType::I64.into(),
                     }],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -1171,14 +1220,14 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                                     end_exclusive: parameter(11),
                                     step: 1,
                                     initial: result(12),
-                                    carried: SemanticType::I64,
+                                    carried: SemanticType::I64.into(),
                                     index_handle: LocalHandle::new(14),
                                     carried_handle: LocalHandle::new(15),
                                     body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
                                             handle: LocalHandle::new(16),
                                             operation: ExpressionKindDraft::Hole {
-                                                expected: SemanticType::I64,
+                                                expected: SemanticType::I64.into(),
                                             },
                                         }],
                                         yield_value: result(16),
@@ -1196,9 +1245,9 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     parameters: vec![FunctionParameterDraft {
                         handle: LocalHandle::new(21),
                         name: "n".into(),
-                        ty: SemanticType::I64,
+                        ty: SemanticType::I64.into(),
                     }],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -1216,7 +1265,7 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                                 handle: LocalHandle::new(24),
                                 operation: ExpressionKindDraft::If {
                                     condition: result(23),
-                                    result: SemanticType::I64,
+                                    result: SemanticType::I64.into(),
                                     then_body: YieldingBodyDraft {
                                         operations: vec![],
                                         yield_value: result(22),
@@ -1242,7 +1291,7 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     module: local(2),
                     name: "main".into(),
                     parameters: vec![],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -1533,7 +1582,12 @@ fn structured_agent_interaction_cost_measurement() {
     let cold_started = Instant::now();
     let daemon = JsonDaemon::start(state);
     let cold_start_ns = cold_started.elapsed().as_nanos();
-    let (_, schema) = measured_rpc(state, 600, "schema_discovery", Request::DescribeSchema);
+    let (_, schema) = measured_rpc(
+        state,
+        600,
+        "schema_discovery",
+        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
+    );
     let (workspace_response, workspace_metric) =
         measured_rpc(state, 601, "workspace_create", Request::CreateWorkspace);
     let Response::WorkspaceCreated(initial) = workspace_response.response else {
@@ -1950,15 +2004,15 @@ fn structured_product_path_performance_measurement() {
                     parameters: vec![FunctionParameterDraft {
                         handle: LocalHandle::new(4),
                         name: "again".into(),
-                        ty: SemanticType::Bool,
+                        ty: SemanticType::Bool.into(),
                     }],
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
                             handle: LocalHandle::new(5),
                             operation: ExpressionKindDraft::If {
                                 condition: parameter,
-                                result: SemanticType::I64,
+                                result: SemanticType::I64.into(),
                                 then_body: YieldingBodyDraft {
                                     operations: vec![
                                         ExpressionDraft {
@@ -2288,6 +2342,1962 @@ fn agent_repair_cost_measurement() {
     daemon.wait();
 }
 
+fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionRequest {
+    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+    let result = |handle| ValueDraft::OperationResult {
+        operation: local(handle),
+        output: 0,
+    };
+    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
+    let payload = |handle| ValueDraft::BlockArgument(local(handle));
+    let expression = |handle, operation| ExpressionDraft {
+        handle: LocalHandle::new(handle),
+        operation,
+    };
+    let field = |handle, value| ProductFieldValueDraft {
+        field: local(handle),
+        value,
+    };
+    ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: Some(IdempotencyKey::from_bytes([0x81; 16])),
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "reading-app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                // Functions deliberately precede their local nominal declarations and members.
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(10),
+                    module: local(2),
+                    name: "evaluate".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(11),
+                        name: "input".into(),
+                        ty: TypeDraft::Nominal(local(6)),
+                    }],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![expression(
+                            12,
+                            ExpressionKindDraft::MatchSum {
+                                scrutinee: parameter(11),
+                                result: TypeDraft::I64,
+                                arms: vec![
+                                    MatchArmDraft {
+                                        variant: local(9),
+                                        payload_handle: Some(LocalHandle::new(19)),
+                                        body: YieldingBodyDraft {
+                                            operations: vec![],
+                                            yield_value: payload(19),
+                                        },
+                                    },
+                                    MatchArmDraft {
+                                        variant: local(7),
+                                        payload_handle: Some(LocalHandle::new(13)),
+                                        body: YieldingBodyDraft {
+                                            operations: vec![
+                                                expression(
+                                                    14,
+                                                    ExpressionKindDraft::ProjectField {
+                                                        value: payload(13),
+                                                        field: local(4),
+                                                    },
+                                                ),
+                                                expression(
+                                                    15,
+                                                    ExpressionKindDraft::ProjectField {
+                                                        value: payload(13),
+                                                        field: local(5),
+                                                    },
+                                                ),
+                                                expression(16, ExpressionKindDraft::ConstI64(0)),
+                                                expression(
+                                                    17,
+                                                    ExpressionKindDraft::If {
+                                                        condition: result(15),
+                                                        result: TypeDraft::I64,
+                                                        then_body: YieldingBodyDraft {
+                                                            operations: vec![],
+                                                            yield_value: result(14),
+                                                        },
+                                                        else_body: YieldingBodyDraft {
+                                                            operations: vec![],
+                                                            yield_value: result(16),
+                                                        },
+                                                    },
+                                                ),
+                                            ],
+                                            yield_value: result(17),
+                                        },
+                                    },
+                                    MatchArmDraft {
+                                        variant: local(8),
+                                        payload_handle: None,
+                                        body: YieldingBodyDraft {
+                                            operations: vec![expression(
+                                                18,
+                                                ExpressionKindDraft::ConstI64(0),
+                                            )],
+                                            yield_value: result(18),
+                                        },
+                                    },
+                                ],
+                            },
+                        )],
+                        return_value: result(12),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(30),
+                    module: local(2),
+                    name: "main".into(),
+                    parameters: vec![],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            expression(31, ExpressionKindDraft::ConstI64(42)),
+                            expression(32, ExpressionKindDraft::ConstBool(true)),
+                            expression(
+                                33,
+                                ExpressionKindDraft::Hole {
+                                    expected: TypeDraft::Nominal(local(3)),
+                                },
+                            ),
+                            expression(
+                                34,
+                                ExpressionKindDraft::ConstructVariant {
+                                    variant: local(7),
+                                    payload: Some(result(33)),
+                                },
+                            ),
+                            expression(
+                                35,
+                                ExpressionKindDraft::Call {
+                                    function: local(10),
+                                    arguments: vec![result(34)],
+                                },
+                            ),
+                        ],
+                        return_value: result(35),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(40),
+                    module: local(2),
+                    name: "evaluate_disabled".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(41),
+                        name: "value".into(),
+                        ty: TypeDraft::I64,
+                    }],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            expression(42, ExpressionKindDraft::ConstBool(false)),
+                            expression(
+                                43,
+                                ExpressionKindDraft::ConstructProduct {
+                                    product: local(3),
+                                    fields: vec![field(5, result(42)), field(4, parameter(41))],
+                                },
+                            ),
+                            expression(
+                                44,
+                                ExpressionKindDraft::ConstructVariant {
+                                    variant: local(7),
+                                    payload: Some(result(43)),
+                                },
+                            ),
+                            expression(
+                                45,
+                                ExpressionKindDraft::Call {
+                                    function: local(10),
+                                    arguments: vec![result(44)],
+                                },
+                            ),
+                        ],
+                        return_value: result(45),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(50),
+                    module: local(2),
+                    name: "evaluate_missing".into(),
+                    parameters: vec![],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            expression(
+                                51,
+                                ExpressionKindDraft::ConstructVariant {
+                                    variant: local(8),
+                                    payload: None,
+                                },
+                            ),
+                            expression(
+                                52,
+                                ExpressionKindDraft::Call {
+                                    function: local(10),
+                                    arguments: vec![result(51)],
+                                },
+                            ),
+                        ],
+                        return_value: result(52),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(55),
+                    module: local(2),
+                    name: "evaluate_override".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(56),
+                        name: "value".into(),
+                        ty: TypeDraft::I64,
+                    }],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![
+                            expression(
+                                57,
+                                ExpressionKindDraft::ConstructVariant {
+                                    variant: local(9),
+                                    payload: Some(parameter(56)),
+                                },
+                            ),
+                            expression(
+                                58,
+                                ExpressionKindDraft::Call {
+                                    function: local(10),
+                                    arguments: vec![result(57)],
+                                },
+                            ),
+                        ],
+                        return_value: result(58),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(60),
+                    module: local(2),
+                    name: "make_reading".into(),
+                    parameters: vec![
+                        FunctionParameterDraft {
+                            handle: LocalHandle::new(61),
+                            name: "value".into(),
+                            ty: TypeDraft::I64,
+                        },
+                        FunctionParameterDraft {
+                            handle: LocalHandle::new(62),
+                            name: "valid".into(),
+                            ty: TypeDraft::Bool,
+                        },
+                    ],
+                    result: TypeDraft::Nominal(local(3)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![expression(
+                            63,
+                            ExpressionKindDraft::ConstructProduct {
+                                product: local(3),
+                                fields: vec![field(5, parameter(62)), field(4, parameter(61))],
+                            },
+                        )],
+                        return_value: result(63),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(70),
+                    module: local(2),
+                    name: "lazy_match_probe".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(71),
+                        name: "input".into(),
+                        ty: TypeDraft::Nominal(local(6)),
+                    }],
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![expression(
+                            72,
+                            ExpressionKindDraft::MatchSum {
+                                scrutinee: parameter(71),
+                                result: TypeDraft::I64,
+                                arms: vec![
+                                    MatchArmDraft {
+                                        variant: local(7),
+                                        payload_handle: Some(LocalHandle::new(73)),
+                                        body: YieldingBodyDraft {
+                                            operations: vec![expression(
+                                                74,
+                                                ExpressionKindDraft::ConstI64(0),
+                                            )],
+                                            yield_value: result(74),
+                                        },
+                                    },
+                                    MatchArmDraft {
+                                        variant: local(8),
+                                        payload_handle: None,
+                                        body: YieldingBodyDraft {
+                                            operations: vec![expression(
+                                                75,
+                                                ExpressionKindDraft::ConstI64(0),
+                                            )],
+                                            yield_value: result(75),
+                                        },
+                                    },
+                                    MatchArmDraft {
+                                        variant: local(9),
+                                        payload_handle: Some(LocalHandle::new(76)),
+                                        body: YieldingBodyDraft {
+                                            operations: vec![
+                                                expression(
+                                                    77,
+                                                    ExpressionKindDraft::ConstI64(i64::MAX),
+                                                ),
+                                                expression(78, ExpressionKindDraft::ConstI64(1)),
+                                                expression(
+                                                    79,
+                                                    ExpressionKindDraft::AddI64 {
+                                                        lhs: result(77),
+                                                        rhs: result(78),
+                                                    },
+                                                ),
+                                            ],
+                                            yield_value: result(79),
+                                        },
+                                    },
+                                ],
+                            },
+                        )],
+                        return_value: result(72),
+                    }),
+                },
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "Reading".into(),
+                    fields: vec![
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(4),
+                            name: "value".into(),
+                            ty: TypeDraft::I64,
+                        },
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(5),
+                            name: "valid".into(),
+                            ty: TypeDraft::Bool,
+                        },
+                    ],
+                },
+                TransactionOp::CreateSumType {
+                    handle: LocalHandle::new(6),
+                    module: local(2),
+                    name: "Input".into(),
+                    variants: vec![
+                        SumVariantDraft {
+                            handle: LocalHandle::new(7),
+                            name: "sample".into(),
+                            payload: Some(TypeDraft::Nominal(local(3))),
+                        },
+                        SumVariantDraft {
+                            handle: LocalHandle::new(8),
+                            name: "missing".into(),
+                            payload: None,
+                        },
+                        SumVariantDraft {
+                            handle: LocalHandle::new(9),
+                            name: "override".into(),
+                            payload: Some(TypeDraft::I64),
+                        },
+                    ],
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(30),
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_handles: [
+                3, 4, 5, 6, 7, 8, 9, 10, 30, 31, 32, 33, 40, 50, 55, 60, 70, 79,
+            ]
+            .into_iter()
+            .map(LocalHandle::new)
+            .collect(),
+        },
+    }
+}
+
+fn reading_value(
+    reading: NodeId,
+    value_field: NodeId,
+    valid_field: NodeId,
+    value: i64,
+    valid: bool,
+) -> RuntimeValue {
+    RuntimeValue::Product {
+        ty: reading,
+        // Deliberately reversed to prove identity-keyed input normalization.
+        fields: vec![
+            RuntimeFieldValue {
+                field: valid_field,
+                value: RuntimeValue::Bool(valid),
+            },
+            RuntimeFieldValue {
+                field: value_field,
+                value: RuntimeValue::I64(value),
+            },
+        ],
+    }
+}
+
+fn input_value(input: NodeId, variant: NodeId, payload: Option<RuntimeValue>) -> RuntimeValue {
+    RuntimeValue::Sum {
+        ty: input,
+        variant,
+        payload: payload.map(Box::new),
+    }
+}
+
+fn run_value(
+    state: &Path,
+    request_id: u64,
+    workspace: WorkspaceId,
+    revision: Revision,
+    entry: NodeId,
+    arguments: Vec<RuntimeValue>,
+) -> ResponseEnvelope {
+    run_value_observed(state, request_id, workspace, revision, entry, arguments).0
+}
+
+fn run_value_observed(
+    state: &Path,
+    request_id: u64,
+    workspace: WorkspaceId,
+    revision: Revision,
+    entry: NodeId,
+    arguments: Vec<RuntimeValue>,
+) -> (ResponseEnvelope, usize) {
+    rpc_observed(
+        state,
+        request_id,
+        Request::Run {
+            workspace,
+            revision,
+            entry,
+            arguments,
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 1_000,
+            },
+        },
+    )
+}
+
+#[test]
+fn real_json_cli_nominal_reading_repair_application_vertical() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path();
+    let daemon = JsonDaemon::start(state);
+
+    let Response::DescribeSchema(manifest) = rpc(
+        state,
+        900,
+        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
+    )
+    .response
+    else {
+        panic!("schema manifest")
+    };
+    let DescribeSchemaResult::Manifest(manifest) = *manifest else {
+        panic!("default schema projection must be manifest")
+    };
+    let digest = manifest.digest;
+    let six_sections = vec![
+        SchemaSection::SemanticTypesAndNodes,
+        SchemaSection::NominalDeclarations,
+        SchemaSection::TransactionsAndExpressions,
+        SchemaSection::QueriesAndRepair,
+        SchemaSection::RuntimeAndRun,
+        SchemaSection::ErrorsAndLimits,
+    ];
+    let Response::DescribeSchema(sections) = rpc(
+        state,
+        901,
+        Request::DescribeSchema(DescribeSchemaRequest {
+            projection: SchemaProjection::Sections {
+                sections: six_sections.clone(),
+            },
+            known_digest: None,
+        }),
+    )
+    .response
+    else {
+        panic!("schema sections")
+    };
+    let DescribeSchemaResult::Sections(sections) = *sections else {
+        panic!("section projection")
+    };
+    assert_eq!(sections.digest, digest);
+    assert_eq!(sections.sections.len(), six_sections.len());
+    let Response::DescribeSchema(unchanged) = rpc(
+        state,
+        902,
+        Request::DescribeSchema(DescribeSchemaRequest {
+            projection: SchemaProjection::Sections {
+                sections: six_sections,
+            },
+            known_digest: Some(digest),
+        }),
+    )
+    .response
+    else {
+        panic!("known digest response")
+    };
+    assert_eq!(*unchanged, DescribeSchemaResult::Unchanged { digest });
+
+    let Response::WorkspaceCreated(created) = rpc(state, 903, Request::CreateWorkspace).response
+    else {
+        panic!("workspace")
+    };
+    let workspace = created.workspace;
+    let creation = nominal_reading_application(workspace);
+    assert_eq!(creation.transaction.operations.len(), 12);
+    let created = receipt(rpc(state, 904, Request::ApplyTransaction(creation)));
+    assert!(created.published);
+    assert!(!created.complete_after);
+    assert_eq!(created.returned_bindings.len(), 18);
+    let reading = binding(&created, 3);
+    let value_field = binding(&created, 4);
+    let valid_field = binding(&created, 5);
+    let input = binding(&created, 6);
+    let sample = binding(&created, 7);
+    let missing = binding(&created, 8);
+    let override_variant = binding(&created, 9);
+    let evaluate = binding(&created, 10);
+    let main = binding(&created, 30);
+    let hole = binding(&created, 33);
+    let disabled = binding(&created, 40);
+    let evaluate_missing = binding(&created, 50);
+    let evaluate_override = binding(&created, 55);
+    let make_reading = binding(&created, 60);
+    let lazy_probe = binding(&created, 70);
+    let overflow = binding(&created, 79);
+    println!(
+        "NOMINAL_READING_IDS {}",
+        serde_json::json!({
+            "reading": reading.serial(),
+            "value_field": value_field.serial(),
+            "valid_field": valid_field.serial(),
+            "input": input.serial(),
+            "sample": sample.serial(),
+            "missing": missing.serial(),
+            "override": override_variant.serial(),
+            "evaluate": evaluate.serial(),
+            "main": main.serial(),
+            "hole": hole.serial(),
+            "make_reading": make_reading.serial(),
+            "lazy_probe": lazy_probe.serial(),
+            "overflow_origin": overflow.serial(),
+        })
+    );
+
+    let QueryResult::RepairContext(context) = query(
+        state,
+        905,
+        workspace,
+        Revision::new(1),
+        Query::RepairContext {
+            target: RepairTarget::Hole(hole),
+            budget: ContextBudget {
+                body_before: 8,
+                body_after: 8,
+                visible_values: 16,
+                incoming_uses: 8,
+                include_incompatible: true,
+            },
+        },
+    ) else {
+        panic!("Reading repair context")
+    };
+    assert_eq!(context.expected_type, SemanticType::Nominal(reading));
+    assert_eq!(context.operation, hole);
+    assert_eq!(context.owner_function, main);
+    let nominal = context.nominal_type.as_ref().expect("nominal context");
+    assert_eq!(nominal.declaration, reading);
+    assert_eq!(nominal.name, "Reading");
+    assert_eq!(nominal.kind, NodeKind::ProductType);
+    assert_eq!(nominal.members.items.len(), 2);
+    assert!(matches!(
+        nominal.members.items[0],
+        lkjscript::query::NominalMemberFact::ProductField {
+            field,
+            ordinal: 0,
+            ref name,
+            ty: SemanticType::I64,
+            ..
+        } if field == value_field && name == "value"
+    ));
+    assert!(matches!(
+        nominal.members.items[1],
+        lkjscript::query::NominalMemberFact::ProductField {
+            field,
+            ordinal: 1,
+            ref name,
+            ty: SemanticType::Bool,
+            ..
+        } if field == valid_field && name == "valid"
+    ));
+    assert!(context.visible_values.items.iter().any(|visible| {
+        visible.ty == SemanticType::I64
+            && visible.producer_code == Some(OperationCode::ConstI64)
+            && visible.producer == binding(&created, 31)
+    }));
+    assert!(context.visible_values.items.iter().any(|visible| {
+        visible.ty == SemanticType::Bool
+            && visible.producer_code == Some(OperationCode::ConstBool)
+            && visible.producer == binding(&created, 32)
+    }));
+    assert!(context.body_window.iter().any(|item| {
+        item.operation == binding(&created, 31)
+            && item.literal == Some(lkjscript::query::LiteralValue::I64(42))
+    }));
+    assert!(context.body_window.iter().any(|item| {
+        item.operation == binding(&created, 32)
+            && item.literal == Some(lkjscript::query::LiteralValue::Bool(true))
+    }));
+    let product_constructor = context
+        .legal_constructors
+        .iter()
+        .find(|constructor| constructor.code == OperationCode::ConstructProduct)
+        .expect("construct_product repair contract");
+    assert_eq!(product_constructor.declaration, Some(reading));
+    assert_eq!(
+        product_constructor.result_type,
+        SemanticType::Nominal(reading)
+    );
+    assert_eq!(product_constructor.operand_count, 2);
+    assert_eq!(
+        product_constructor.operand_types,
+        vec![SemanticType::I64, SemanticType::Bool]
+    );
+    assert_eq!(product_constructor.members, vec![value_field, valid_field]);
+    assert!(product_constructor.direct_refinement);
+    let sample_use = context
+        .incoming_uses
+        .items
+        .iter()
+        .find(|site| site.expected_type == SemanticType::Nominal(reading))
+        .expect("existing sample use");
+    let sample_operation = sample_use.source;
+    assert!(context.body_window.iter().any(|item| {
+        item.operation == sample_operation
+            && item.code == OperationCode::ConstructVariant
+            && item
+                .definitions
+                .iter()
+                .any(|definition| definition.target == sample)
+    }));
+    assert_eq!(
+        context.blocker.as_ref().and_then(|item| item.target),
+        Some(hole)
+    );
+    let owner_block = context.owner_block;
+    let body_ordinal = context.ordinal;
+
+    let workspace_dir = workspace_path(state, workspace);
+    let head_path = workspace_dir.join("HEAD");
+    let artifact_path = workspace_dir.join("revisions/00000000000000000001.lkjscript");
+    let head_before_invalid = fs::read(&head_path).expect("HEAD before invalid repair");
+    let artifact_before_invalid = fs::read(&artifact_path).expect("artifact before invalid repair");
+    let files_before_invalid = revision_files(state, workspace);
+    let allocation_probe = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::ValidateOnly,
+            operations: vec![TransactionOp::CreatePackage {
+                handle: LocalHandle::new(1),
+                name: "allocator-frontier-probe".into(),
+            }],
+        },
+        response: TransactionResponseSpec {
+            return_handles: vec![LocalHandle::new(1)],
+        },
+    };
+    let probe_before = receipt(rpc(
+        state,
+        895,
+        Request::ApplyTransaction(allocation_probe.clone()),
+    ));
+    assert!(!probe_before.published);
+    assert_eq!(probe_before.base_revision, Revision::new(1));
+    assert_eq!(probe_before.revision, Revision::new(2));
+    assert_eq!(probe_before.created_count, 1);
+    assert_eq!(probe_before.returned_bindings.len(), 1);
+    assert_eq!(probe_before.returned_bindings[0].0, LocalHandle::new(1));
+    assert_eq!(
+        fs::read(&head_path).expect("HEAD after first allocation probe"),
+        head_before_invalid
+    );
+    assert_eq!(
+        fs::read(&artifact_path).expect("artifact after first allocation probe"),
+        artifact_before_invalid
+    );
+    assert_eq!(revision_files(state, workspace), files_before_invalid);
+    let invalid = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::ConstructProduct {
+                    product: NodeTarget::Existing(reading),
+                    fields: vec![
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(valid_field),
+                            value: existing_result(binding(&created, 31)),
+                        },
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(value_field),
+                            value: existing_result(binding(&created, 32)),
+                        },
+                    ],
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    };
+    let Response::Error(invalid) = rpc(state, 906, Request::ApplyTransaction(invalid)).response
+    else {
+        panic!("wrong field values must reject")
+    };
+    assert_eq!(invalid.code, ErrorCode::TypeMismatch);
+    assert_eq!(invalid.expected_type, Some(SemanticType::I64));
+    assert_eq!(invalid.actual_type, Some(SemanticType::Bool));
+    assert_eq!(
+        fs::read(&head_path).expect("HEAD after rejection"),
+        head_before_invalid
+    );
+    assert_eq!(
+        fs::read(&artifact_path).expect("artifact after rejection"),
+        artifact_before_invalid
+    );
+    assert_eq!(revision_files(state, workspace), files_before_invalid);
+    let probe_after = receipt(rpc(state, 896, Request::ApplyTransaction(allocation_probe)));
+    assert!(!probe_after.published);
+    assert_eq!(
+        probe_after.returned_bindings,
+        probe_before.returned_bindings
+    );
+    assert_eq!(probe_after.created_count, probe_before.created_count);
+    assert_eq!(probe_after.hash, probe_before.hash);
+    assert_eq!(probe_after.change_count, probe_before.change_count);
+    assert_eq!(probe_after.change_digest, probe_before.change_digest);
+    assert_eq!(probe_after, probe_before);
+    assert_eq!(
+        fs::read(&head_path).expect("HEAD after second allocation probe"),
+        head_before_invalid
+    );
+    assert_eq!(
+        fs::read(&artifact_path).expect("artifact after second allocation probe"),
+        artifact_before_invalid
+    );
+    assert_eq!(revision_files(state, workspace), files_before_invalid);
+    let QueryResult::Node(still_hole) = query(
+        state,
+        907,
+        workspace,
+        Revision::new(1),
+        Query::Node {
+            node: hole,
+            expand: true,
+        },
+    ) else {
+        panic!("hole after rejected repair")
+    };
+    assert_eq!(still_hole.summary.kind, NodeKind::Operation);
+    let Response::Run(still_usable) = run_value(
+        state,
+        908,
+        workspace,
+        Revision::new(1),
+        evaluate_missing,
+        vec![],
+    )
+    .response
+    else {
+        panic!("daemon usability after rejection")
+    };
+    assert_eq!(still_usable.value, RuntimeValue::I64(0));
+
+    let valid = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: Some(IdempotencyKey::from_bytes([0x82; 16])),
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(hole),
+                replacement: OperationDraft::ConstructProduct {
+                    product: NodeTarget::Existing(reading),
+                    fields: vec![
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(valid_field),
+                            value: existing_result(binding(&created, 32)),
+                        },
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(value_field),
+                            value: existing_result(binding(&created, 31)),
+                        },
+                    ],
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    };
+    let refined = receipt(rpc(state, 909, Request::ApplyTransaction(valid)));
+    assert_eq!(refined.revision, Revision::new(2));
+    assert_eq!(refined.created_count, 0);
+    assert!(refined.complete_after);
+    let QueryResult::Body(body) = query(
+        state,
+        910,
+        workspace,
+        Revision::new(2),
+        Query::Body {
+            block: owner_block,
+            page: PageRequest {
+                after: None,
+                limit: 16,
+            },
+        },
+    ) else {
+        panic!("repaired body")
+    };
+    let repaired_hole = body
+        .items
+        .iter()
+        .find(|item| item.operation == hole)
+        .expect("preserved hole identity");
+    assert_eq!(repaired_hole.ordinal, body_ordinal);
+    assert_eq!(repaired_hole.code, OperationCode::ConstructProduct);
+    let QueryResult::IncomingUses(repaired_uses) = query(
+        state,
+        911,
+        workspace,
+        Revision::new(2),
+        Query::IncomingUses {
+            value: ValueRef::OperationResult {
+                operation: hole,
+                output: 0,
+            },
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("repaired uses")
+    };
+    assert!(
+        repaired_uses
+            .items
+            .iter()
+            .any(|site| site.source == sample_operation)
+    );
+
+    let diff = collect_diff(state, workspace, Revision::new(1), Revision::new(2));
+    assert_eq!(diff.0, refined.change_count);
+    assert_eq!(diff.1, refined.change_digest);
+    assert_eq!(diff.2.len(), 4);
+    assert!(diff.2.iter().any(|change| {
+        change.node == hole
+            && matches!(
+                change.kind,
+                ChangeKind::OperationRefined {
+                    before: OperationCode::Hole,
+                    after: OperationCode::ConstructProduct,
+                    result_type: SemanticType::Nominal(declaration),
+                    ..
+                } if declaration == reading
+            )
+    }));
+    assert!(diff.2.iter().all(|change| !matches!(
+        change.kind,
+        ChangeKind::Created { .. } | ChangeKind::Deleted { .. }
+    )));
+
+    let repaired_head_path = workspace_dir.join("HEAD");
+    let repaired_artifact_path = workspace_dir.join("revisions/00000000000000000002.lkjscript");
+    let repaired_head = fs::read(&repaired_head_path).expect("repaired HEAD");
+    let repaired_artifact = fs::read(&repaired_artifact_path).expect("repaired artifact");
+    let repaired_revision_files = revision_files(state, workspace);
+    let foreign_workspace = WorkspaceId::from_bytes([0xa5; 16]);
+    let foreign_node = NodeId::new(foreign_workspace, 1).expect("foreign node identity");
+    let malformed_runs = vec![
+        (
+            "product_missing_field",
+            input_value(
+                input,
+                sample,
+                Some(RuntimeValue::Product {
+                    ty: reading,
+                    fields: vec![RuntimeFieldValue {
+                        field: value_field,
+                        value: RuntimeValue::I64(5),
+                    }],
+                }),
+            ),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "product_duplicate_field",
+            input_value(
+                input,
+                sample,
+                Some(RuntimeValue::Product {
+                    ty: reading,
+                    fields: vec![
+                        RuntimeFieldValue {
+                            field: value_field,
+                            value: RuntimeValue::I64(5),
+                        },
+                        RuntimeFieldValue {
+                            field: value_field,
+                            value: RuntimeValue::I64(6),
+                        },
+                    ],
+                }),
+            ),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "product_foreign_field",
+            input_value(
+                input,
+                sample,
+                Some(RuntimeValue::Product {
+                    ty: reading,
+                    fields: vec![
+                        RuntimeFieldValue {
+                            field: value_field,
+                            value: RuntimeValue::I64(5),
+                        },
+                        RuntimeFieldValue {
+                            field: foreign_node,
+                            value: RuntimeValue::Bool(true),
+                        },
+                    ],
+                }),
+            ),
+            ErrorCode::WrongWorkspace,
+        ),
+        (
+            "product_wrong_kind_field",
+            input_value(
+                input,
+                sample,
+                Some(RuntimeValue::Product {
+                    ty: reading,
+                    fields: vec![
+                        RuntimeFieldValue {
+                            field: value_field,
+                            value: RuntimeValue::I64(5),
+                        },
+                        RuntimeFieldValue {
+                            field: sample,
+                            value: RuntimeValue::Bool(true),
+                        },
+                    ],
+                }),
+            ),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "product_wrong_nested_field_type",
+            input_value(
+                input,
+                sample,
+                Some(RuntimeValue::Product {
+                    ty: reading,
+                    fields: vec![
+                        RuntimeFieldValue {
+                            field: value_field,
+                            value: RuntimeValue::Bool(true),
+                        },
+                        RuntimeFieldValue {
+                            field: valid_field,
+                            value: RuntimeValue::Bool(true),
+                        },
+                    ],
+                }),
+            ),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "nullary_variant_with_payload",
+            input_value(input, missing, Some(RuntimeValue::I64(1))),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "payload_variant_omitted",
+            input_value(input, override_variant, None),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "wrong_variant_payload_type",
+            input_value(input, override_variant, Some(RuntimeValue::Bool(true))),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "foreign_variant",
+            input_value(input, foreign_node, None),
+            ErrorCode::WrongWorkspace,
+        ),
+        (
+            "wrong_kind_variant",
+            input_value(input, value_field, None),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "wrong_kind_sum_type",
+            input_value(reading, sample, None),
+            ErrorCode::RunArgumentMismatch,
+        ),
+        (
+            "foreign_sum_type",
+            input_value(foreign_node, sample, None),
+            ErrorCode::RunArgumentMismatch,
+        ),
+    ];
+    for (index, (name, argument, expected_code)) in malformed_runs.into_iter().enumerate() {
+        let (response, stdout_bytes) = run_value_observed(
+            state,
+            2_000 + u64::try_from(index).expect("case index"),
+            workspace,
+            Revision::new(2),
+            evaluate,
+            vec![argument],
+        );
+        let Response::Error(error) = response.response else {
+            panic!("malformed nominal Run {name} must return a typed semantic error")
+        };
+        assert_eq!(error.code, expected_code, "malformed nominal Run {name}");
+        assert!(!error.retryable, "malformed nominal Run {name}");
+        assert!(
+            error.message.len() <= 256,
+            "bounded error message for {name}"
+        );
+        assert!(error.related.len() <= 64, "bounded related IDs for {name}");
+        assert!(stdout_bytes < 4 * 1024, "bounded error response for {name}");
+        assert_eq!(
+            fs::read(&repaired_head_path).expect("HEAD after malformed Run"),
+            repaired_head,
+            "malformed nominal Run {name} must not mutate HEAD"
+        );
+        assert_eq!(
+            fs::read(&repaired_artifact_path).expect("artifact after malformed Run"),
+            repaired_artifact,
+            "malformed nominal Run {name} must not mutate the artifact"
+        );
+        assert_eq!(
+            revision_files(state, workspace),
+            repaired_revision_files,
+            "malformed nominal Run {name} must not publish a revision"
+        );
+    }
+    let valid_after_malformed = input_value(
+        input,
+        sample,
+        Some(reading_value(reading, value_field, valid_field, 5, true)),
+    );
+    let Response::Run(valid_after_malformed) = run_value(
+        state,
+        2_100,
+        workspace,
+        Revision::new(2),
+        evaluate,
+        vec![valid_after_malformed],
+    )
+    .response
+    else {
+        panic!("valid nominal Run after malformed inputs")
+    };
+    assert_eq!(valid_after_malformed.value, RuntimeValue::I64(5));
+    let QueryResult::Node(still_repaired) = query(
+        state,
+        2_101,
+        workspace,
+        Revision::new(2),
+        Query::Node {
+            node: hole,
+            expand: false,
+        },
+    ) else {
+        panic!("repaired node after malformed nominal Runs")
+    };
+    assert!(still_repaired.summary.complete);
+    assert_eq!(still_repaired.summary.revision, Revision::new(2));
+
+    let run_i64 = |id, entry, arguments, expected| {
+        let Response::Run(result) =
+            run_value(state, id, workspace, Revision::new(2), entry, arguments).response
+        else {
+            panic!("i64 Run oracle")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(expected));
+    };
+    run_i64(920, main, vec![], 42);
+    run_i64(921, disabled, vec![RuntimeValue::I64(17)], 0);
+    run_i64(922, evaluate_missing, vec![], 0);
+    run_i64(923, evaluate_override, vec![RuntimeValue::I64(7)], 7);
+    let expected_reading = RuntimeValue::Product {
+        ty: reading,
+        fields: vec![
+            RuntimeFieldValue {
+                field: value_field,
+                value: RuntimeValue::I64(9),
+            },
+            RuntimeFieldValue {
+                field: valid_field,
+                value: RuntimeValue::Bool(true),
+            },
+        ],
+    };
+    let Response::Run(made) = run_value(
+        state,
+        924,
+        workspace,
+        Revision::new(2),
+        make_reading,
+        vec![RuntimeValue::I64(9), RuntimeValue::Bool(true)],
+    )
+    .response
+    else {
+        panic!("nominal output")
+    };
+    assert_eq!(made.value, expected_reading);
+    let missing_input = input_value(input, missing, None);
+    let override_input = input_value(input, override_variant, Some(RuntimeValue::I64(11)));
+    let sample_true = input_value(
+        input,
+        sample,
+        Some(reading_value(reading, value_field, valid_field, 5, true)),
+    );
+    let sample_false = input_value(
+        input,
+        sample,
+        Some(reading_value(reading, value_field, valid_field, 5, false)),
+    );
+    run_i64(925, evaluate, vec![missing_input.clone()], 0);
+    run_i64(926, evaluate, vec![override_input], 11);
+    run_i64(927, evaluate, vec![sample_true.clone()], 5);
+    run_i64(928, evaluate, vec![sample_false], 0);
+    run_i64(929, lazy_probe, vec![missing_input.clone()], 0);
+    let Response::Error(trap) = run_value(
+        state,
+        930,
+        workspace,
+        Revision::new(2),
+        lazy_probe,
+        vec![input_value(
+            input,
+            override_variant,
+            Some(RuntimeValue::I64(0)),
+        )],
+    )
+    .response
+    else {
+        panic!("selected overflow must trap")
+    };
+    assert_eq!(trap.code, ErrorCode::RuntimeTrap);
+    assert_eq!(trap.target, Some(overflow));
+    run_i64(931, lazy_probe, vec![missing_input.clone()], 0);
+
+    shutdown(state, 932);
+    daemon.wait();
+    let daemon = JsonDaemon::start(state);
+    for revision in [Revision::new(1), Revision::new(2)] {
+        for node in [
+            reading,
+            value_field,
+            valid_field,
+            input,
+            sample,
+            missing,
+            override_variant,
+            hole,
+        ] {
+            let QueryResult::Node(view) = query(
+                state,
+                940 + revision.get() + node.serial(),
+                workspace,
+                revision,
+                Query::Node {
+                    node,
+                    expand: false,
+                },
+            ) else {
+                panic!("retained nominal identity")
+            };
+            assert_eq!(view.summary.node, node);
+            assert_eq!(view.summary.revision, revision);
+            if node == hole {
+                assert_eq!(view.summary.complete, revision == Revision::new(2));
+                assert_eq!(
+                    view.summary.value_type,
+                    Some(SemanticType::Nominal(reading))
+                );
+            }
+        }
+        let QueryResult::NominalType(reading_context) = query(
+            state,
+            980 + revision.get(),
+            workspace,
+            revision,
+            Query::NominalType {
+                declaration: reading,
+                page: PageRequest {
+                    after: None,
+                    limit: 8,
+                },
+            },
+        ) else {
+            panic!("retained Reading context")
+        };
+        assert_eq!(reading_context.name, "Reading");
+        assert_eq!(reading_context.members.items.len(), 2);
+        let QueryResult::NominalType(input_context) = query(
+            state,
+            990 + revision.get(),
+            workspace,
+            revision,
+            Query::NominalType {
+                declaration: input,
+                page: PageRequest {
+                    after: None,
+                    limit: 8,
+                },
+            },
+        ) else {
+            panic!("retained Input context")
+        };
+        assert_eq!(input_context.name, "Input");
+        assert_eq!(input_context.members.items.len(), 3);
+    }
+    let Response::Error(incomplete) =
+        run_value(state, 1000, workspace, Revision::new(1), main, vec![]).response
+    else {
+        panic!("retained incomplete Run")
+    };
+    assert_eq!(incomplete.code, ErrorCode::CompileIncomplete);
+    let Response::Run(main_after_restart) =
+        run_value(state, 1001, workspace, Revision::new(2), main, vec![]).response
+    else {
+        panic!("main after restart")
+    };
+    assert_eq!(main_after_restart.value, RuntimeValue::I64(42));
+    let Response::Run(sample_after_restart) = run_value(
+        state,
+        1002,
+        workspace,
+        Revision::new(2),
+        evaluate,
+        vec![sample_true],
+    )
+    .response
+    else {
+        panic!("nominal input after restart")
+    };
+    assert_eq!(sample_after_restart.value, RuntimeValue::I64(5));
+    let Response::Run(output_after_restart) = run_value(
+        state,
+        1003,
+        workspace,
+        Revision::new(2),
+        make_reading,
+        vec![RuntimeValue::I64(9), RuntimeValue::Bool(true)],
+    )
+    .response
+    else {
+        panic!("nominal output after restart")
+    };
+    assert_eq!(output_after_restart.value, expected_reading);
+    shutdown(state, 1004);
+    daemon.wait();
+}
+
+fn nominal_reading_refinement(
+    workspace: WorkspaceId,
+    created: &TransactionReceipt,
+    valid: bool,
+) -> ApplyTransactionRequest {
+    let value_field = binding(created, 4);
+    let valid_field = binding(created, 5);
+    let value = binding(created, 31);
+    let boolean = binding(created, 32);
+    let (value_input, valid_input) = if valid {
+        (value, boolean)
+    } else {
+        (boolean, value)
+    };
+    ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::new(1),
+            idempotency_key: valid.then(|| IdempotencyKey::from_bytes([0x83; 16])),
+            mode: TransactionMode::Commit,
+            operations: vec![TransactionOp::RefineHole {
+                hole: NodeTarget::Existing(binding(created, 33)),
+                replacement: OperationDraft::ConstructProduct {
+                    product: NodeTarget::Existing(binding(created, 3)),
+                    fields: vec![
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(valid_field),
+                            value: existing_result(valid_input),
+                        },
+                        ProductFieldValueDraft {
+                            field: NodeTarget::Existing(value_field),
+                            value: existing_result(value_input),
+                        },
+                    ],
+                },
+            }],
+        },
+        response: TransactionResponseSpec::default(),
+    }
+}
+
+#[test]
+#[ignore = "manual nominal generic-CLI interaction-cost measurement"]
+fn nominal_agent_interaction_cost_measurement() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path();
+    let cold_started = Instant::now();
+    let daemon = JsonDaemon::start(state);
+    let cold_start_ns = cold_started.elapsed().as_nanos();
+    let (manifest_response, manifest_metric) = measured_rpc(
+        state,
+        1100,
+        "schema_manifest",
+        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
+    );
+    let Response::DescribeSchema(manifest) = manifest_response.response else {
+        panic!("manifest")
+    };
+    let DescribeSchemaResult::Manifest(manifest) = *manifest else {
+        panic!("manifest projection")
+    };
+    assert_eq!(
+        manifest.schema_identity,
+        lkjscript::machine::MACHINE_SCHEMA_IDENTITY
+    );
+    assert_eq!(manifest.json_envelope_version, JSON_ENVELOPE_VERSION);
+    assert_eq!(manifest.sections.len(), SchemaSection::ALL.len());
+    assert!(manifest.full_available);
+    let digest = manifest.digest;
+    let requested_sections = vec![
+        SchemaSection::SemanticTypesAndNodes,
+        SchemaSection::NominalDeclarations,
+        SchemaSection::TransactionsAndExpressions,
+        SchemaSection::QueriesAndRepair,
+        SchemaSection::RuntimeAndRun,
+        SchemaSection::ErrorsAndLimits,
+    ];
+    let section_request = DescribeSchemaRequest {
+        projection: SchemaProjection::Sections {
+            sections: requested_sections.clone(),
+        },
+        known_digest: None,
+    };
+    let (sections_response, sections_metric) = measured_rpc(
+        state,
+        1101,
+        "schema_six_sections",
+        Request::DescribeSchema(section_request.clone()),
+    );
+    let Response::DescribeSchema(sections) = sections_response.response else {
+        panic!("six schema sections")
+    };
+    let DescribeSchemaResult::Sections(sections) = *sections else {
+        panic!("six schema section projection")
+    };
+    assert_eq!(sections.digest, digest);
+    assert!(matches!(
+        sections.sections.as_slice(),
+        [
+            SchemaSectionPayload::SemanticTypesAndNodes(_),
+            SchemaSectionPayload::NominalDeclarations(_),
+            SchemaSectionPayload::TransactionsAndExpressions(_),
+            SchemaSectionPayload::QueriesAndRepair(_),
+            SchemaSectionPayload::RuntimeAndRun(_),
+            SchemaSectionPayload::ErrorsAndLimits(_),
+        ]
+    ));
+    let (unchanged_response, unchanged_metric) = measured_rpc(
+        state,
+        1102,
+        "schema_known_digest",
+        Request::DescribeSchema(DescribeSchemaRequest {
+            known_digest: Some(digest),
+            ..section_request
+        }),
+    );
+    let Response::DescribeSchema(unchanged) = unchanged_response.response else {
+        panic!("known schema digest")
+    };
+    assert_eq!(*unchanged, DescribeSchemaResult::Unchanged { digest });
+    let (workspace_response, workspace_metric) =
+        measured_rpc(state, 1103, "workspace_create", Request::CreateWorkspace);
+    let Response::WorkspaceCreated(workspace_summary) = workspace_response.response else {
+        panic!("workspace")
+    };
+    assert_eq!(workspace_summary.revision, Revision::INITIAL);
+    assert_eq!(workspace_summary.node_count, 1);
+    assert!(!workspace_summary.complete);
+    let workspace = workspace_summary.workspace;
+    let (creation_response, creation_metric) = measured_rpc(
+        state,
+        1104,
+        "nominal_structured_creation",
+        Request::ApplyTransaction(nominal_reading_application(workspace)),
+    );
+    let Response::TransactionReceipt(created) = creation_response.response else {
+        panic!("creation")
+    };
+    assert!(created.published);
+    assert_eq!(created.base_revision, Revision::INITIAL);
+    assert_eq!(created.revision, Revision::new(1));
+    assert_eq!(created.created_count, 97);
+    assert!(!created.complete_after);
+    let expected_handles = [
+        3, 4, 5, 6, 7, 8, 9, 10, 30, 31, 32, 33, 40, 50, 55, 60, 70, 79,
+    ];
+    assert_eq!(created.returned_bindings.len(), expected_handles.len());
+    assert_eq!(
+        created
+            .returned_bindings
+            .iter()
+            .map(|(handle, _)| handle.get())
+            .collect::<Vec<_>>(),
+        expected_handles
+    );
+    assert_eq!(
+        created
+            .returned_bindings
+            .iter()
+            .map(|(_, node)| *node)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        expected_handles.len()
+    );
+    assert!(
+        created
+            .returned_bindings
+            .iter()
+            .all(|(_, node)| node.workspace() == workspace)
+    );
+    let hole = binding(&created, 33);
+    let context_request = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(1),
+        queries: vec![QueryItem {
+            id: QueryId::new(1),
+            query: Query::RepairContext {
+                target: RepairTarget::Hole(hole),
+                budget: context_budget(),
+            },
+        }],
+    });
+    let (context_response, context_metric) =
+        measured_rpc(state, 1105, "reading_repair_context", context_request);
+    let context = one_query_result(
+        context_response,
+        workspace,
+        Revision::new(1),
+        QueryId::new(1),
+    );
+    let QueryResult::RepairContext(context) = context else {
+        panic!("Reading repair context")
+    };
+    assert_eq!(context.operation, hole);
+    assert_eq!(
+        context.expected_type,
+        SemanticType::Nominal(binding(&created, 3))
+    );
+    assert_eq!(context.owner_function, binding(&created, 30));
+    let nominal_context = context
+        .nominal_type
+        .as_ref()
+        .expect("Reading nominal context");
+    assert_eq!(nominal_context.declaration, binding(&created, 3));
+    assert_eq!(nominal_context.members.items.len(), 2);
+    assert!(context.legal_constructors.iter().any(|constructor| {
+        constructor.code == OperationCode::ConstructProduct
+            && constructor.declaration == Some(binding(&created, 3))
+            && constructor.members == vec![binding(&created, 4), binding(&created, 5)]
+            && constructor.direct_refinement
+    }));
+    let (invalid_response, invalid_metric) = measured_rpc(
+        state,
+        1106,
+        "wrong_identity_keyed_repair",
+        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, false)),
+    );
+    let Response::Error(invalid_error) = invalid_response.response else {
+        panic!("intentional invalid repair must be the only measured semantic error")
+    };
+    assert_eq!(invalid_error.code, ErrorCode::TypeMismatch);
+    assert_eq!(invalid_error.expected_type, Some(SemanticType::I64));
+    assert_eq!(invalid_error.actual_type, Some(SemanticType::Bool));
+    assert!(!invalid_error.retryable);
+    let (repair_response, repair_metric) = measured_rpc(
+        state,
+        1107,
+        "valid_identity_keyed_repair",
+        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, true)),
+    );
+    let Response::TransactionReceipt(repaired) = repair_response.response else {
+        panic!("valid repair receipt")
+    };
+    assert!(repaired.published);
+    assert_eq!(repaired.base_revision, Revision::new(1));
+    assert_eq!(repaired.revision, Revision::new(2));
+    assert_eq!(repaired.created_count, 0);
+    assert!(repaired.returned_bindings.is_empty());
+    assert!(repaired.complete_after);
+    assert_eq!(repaired.change_count, 4);
+    let nominal_query = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(2),
+        queries: vec![QueryItem {
+            id: QueryId::new(2),
+            query: Query::NominalType {
+                declaration: binding(&created, 3),
+                page: PageRequest {
+                    after: None,
+                    limit: 8,
+                },
+            },
+        }],
+    });
+    let (layout_response, layout_metric) =
+        measured_rpc(state, 1108, "reading_type_layout", nominal_query);
+    let layout = one_query_result(
+        layout_response,
+        workspace,
+        Revision::new(2),
+        QueryId::new(2),
+    );
+    let QueryResult::NominalType(layout) = layout else {
+        panic!("Reading type layout")
+    };
+    assert_eq!(layout.declaration, binding(&created, 3));
+    assert_eq!(layout.name, "Reading");
+    assert_eq!(layout.kind, NodeKind::ProductType);
+    assert!(layout.layout.representable);
+    assert_eq!(layout.layout.failure, None);
+    assert_eq!(layout.layout.size, Some(16));
+    assert_eq!(layout.layout.align, Some(8));
+    assert_eq!(layout.layout.cells, Some(2));
+    assert_eq!(layout.layout.discriminant_bytes, None);
+    assert_eq!(layout.layout.payload_offset, None);
+    assert!(matches!(
+        layout.members.items.as_slice(),
+        [
+            lkjscript::query::NominalMemberFact::ProductField {
+                field,
+                ordinal: 0,
+                ty: SemanticType::I64,
+                offset: Some(0),
+                cells: Some(1),
+                ..
+            },
+            lkjscript::query::NominalMemberFact::ProductField {
+                field: valid,
+                ordinal: 1,
+                ty: SemanticType::Bool,
+                offset: Some(8),
+                cells: Some(1),
+                ..
+            },
+        ] if *field == binding(&created, 4) && *valid == binding(&created, 5)
+    ));
+    let diff_request = Request::QueryBatch(QueryBatchRequest {
+        workspace,
+        revision: Revision::new(2),
+        queries: vec![QueryItem {
+            id: QueryId::new(3),
+            query: Query::SemanticDiff {
+                from: Revision::new(1),
+                page: PageRequest {
+                    after: None,
+                    limit: 8,
+                },
+            },
+        }],
+    });
+    let (diff_response, diff_metric) = measured_rpc(state, 1109, "semantic_diff", diff_request);
+    let diff = one_query_result(diff_response, workspace, Revision::new(2), QueryId::new(3));
+    let QueryResult::SemanticDiff(diff) = diff else {
+        panic!("semantic refinement diff")
+    };
+    assert_eq!(diff.from, Revision::new(1));
+    assert_eq!(diff.to, Revision::new(2));
+    assert_eq!(diff.change_count, repaired.change_count);
+    assert_eq!(diff.change_digest, repaired.change_digest);
+    assert_eq!(diff.page.items.len() as u64, diff.change_count);
+    assert!(diff.page.next.is_none());
+    assert!(diff.page.items.iter().any(|change| {
+        change.node == hole
+            && matches!(
+                change.kind,
+                ChangeKind::OperationRefined {
+                    before: OperationCode::Hole,
+                    after: OperationCode::ConstructProduct,
+                    result_type: SemanticType::Nominal(declaration),
+                    ..
+                } if declaration == binding(&created, 3)
+            )
+    }));
+    let (run_response, run_metric) = measured_rpc(
+        state,
+        1110,
+        "run_main",
+        Request::Run {
+            workspace,
+            revision: Revision::new(2),
+            entry: binding(&created, 30),
+            arguments: vec![],
+            policy: lkjscript::RunPolicy {
+                fuel: 1_000_000,
+                maximum_frames: 1_000,
+            },
+        },
+    );
+    let Response::Run(run_result) = run_response.response else {
+        panic!("Run")
+    };
+    assert_eq!(run_result.value, RuntimeValue::I64(42));
+    let incomplete_artifact_bytes = fs::metadata(
+        workspace_path(state, workspace).join("revisions/00000000000000000001.lkjscript"),
+    )
+    .expect("incomplete artifact")
+    .len();
+    let repaired_artifact_bytes = fs::metadata(
+        workspace_path(state, workspace).join("revisions/00000000000000000002.lkjscript"),
+    )
+    .expect("repaired artifact")
+    .len();
+    let head_bytes = fs::metadata(workspace_path(state, workspace).join("HEAD"))
+        .expect("HEAD")
+        .len();
+    shutdown(state, 1111);
+    daemon.wait();
+    let restart_started = Instant::now();
+    let daemon = JsonDaemon::start(state);
+    let restart_ns = restart_started.elapsed().as_nanos();
+    let (restart_response, restart_metric) = measured_rpc(
+        state,
+        1112,
+        "restart_retained_hole_query",
+        Request::QueryBatch(QueryBatchRequest {
+            workspace,
+            revision: Revision::new(2),
+            queries: vec![QueryItem {
+                id: QueryId::new(4),
+                query: Query::Node {
+                    node: hole,
+                    expand: false,
+                },
+            }],
+        }),
+    );
+    let restart_result = one_query_result(
+        restart_response,
+        workspace,
+        Revision::new(2),
+        QueryId::new(4),
+    );
+    let QueryResult::Node(retained_hole) = restart_result else {
+        panic!("retained refined hole")
+    };
+    assert_eq!(retained_hole.summary.node, hole);
+    assert_eq!(retained_hole.summary.revision, Revision::new(2));
+    assert_eq!(retained_hole.summary.kind, NodeKind::Operation);
+    assert_eq!(
+        retained_hole.summary.value_type,
+        Some(SemanticType::Nominal(binding(&created, 3)))
+    );
+    assert!(retained_hole.summary.complete);
+    let metrics = [
+        &manifest_metric,
+        &sections_metric,
+        &unchanged_metric,
+        &workspace_metric,
+        &creation_metric,
+        &context_metric,
+        &invalid_metric,
+        &repair_metric,
+        &layout_metric,
+        &diff_metric,
+        &run_metric,
+        &restart_metric,
+    ];
+    assert_eq!(metrics.len(), 12);
+    println!(
+        "NOMINAL_AGENT_COST {}",
+        serde_json::json!({
+            "workload": "single Reading/Input repair workflow through production daemon and strict generic JSON CLI",
+            "round_trips": metrics.len(),
+            "cli_invocations": metrics.len(),
+            "measured_semantic_successes": metrics.len() - 1,
+            "measured_expected_semantic_errors": 1,
+            "excluded_lifecycle_requests": {
+                "kind": "typed_shutdown",
+                "count": 2,
+                "included_in_agent_round_trips": false,
+                "included_in_cli_invocations": false,
+            },
+            "daemon_cold_start_ns": cold_start_ns,
+            "restart_ns": restart_ns,
+            "incomplete_artifact_bytes": incomplete_artifact_bytes,
+            "repaired_artifact_bytes": repaired_artifact_bytes,
+            "head_bytes": head_bytes,
+            "compile_nanoseconds": run_result.compile_nanoseconds,
+            "execute_nanoseconds": run_result.execute_nanoseconds,
+            "json_request_bytes": metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
+            "json_stdout_bytes": metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
+            "binary_request_bytes": metrics.iter().map(|metric| metric.binary_request_bytes).sum::<usize>(),
+            "binary_response_bytes": metrics.iter().map(|metric| metric.binary_response_bytes).sum::<usize>(),
+            "cli_and_daemon_wall_ns": metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
+            "per_request": metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
+            "type_layout_observed": true,
+            "compile_execute_observed": true,
+            "model_tokens_measured": false,
+        })
+    );
+    shutdown(state, 1113);
+    daemon.wait();
+}
+
+#[test]
+#[ignore = "manual repeated nominal application performance measurement"]
+fn nominal_reading_performance_measurement() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path();
+    let daemon = JsonDaemon::start(state);
+    let Response::WorkspaceCreated(workspace) = rpc(state, 1200, Request::CreateWorkspace).response
+    else {
+        panic!("workspace")
+    };
+    let workspace = workspace.workspace;
+    let created = receipt(rpc(
+        state,
+        1201,
+        Request::ApplyTransaction(nominal_reading_application(workspace)),
+    ));
+    let _ = receipt(rpc(
+        state,
+        1202,
+        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, true)),
+    ));
+    let reading = binding(&created, 3);
+    let value_field = binding(&created, 4);
+    let valid_field = binding(&created, 5);
+    let input = binding(&created, 6);
+    let sample = binding(&created, 7);
+    let evaluate = binding(&created, 10);
+    let main = binding(&created, 30);
+    let make_reading = binding(&created, 60);
+    let mut main_wall = Vec::new();
+    let mut compile = Vec::new();
+    let mut execute = Vec::new();
+    let mut nominal_input_wall = Vec::new();
+    let mut nominal_output_wall = Vec::new();
+    for sample_index in 0..32_u64 {
+        let (response, wall) = timed_rpc(
+            state,
+            1210 + sample_index,
+            Request::Run {
+                workspace,
+                revision: Revision::new(2),
+                entry: main,
+                arguments: vec![],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 1_000,
+                },
+            },
+        );
+        let Response::Run(result) = response.response else {
+            panic!("main")
+        };
+        assert_eq!(result.value, RuntimeValue::I64(42));
+        if sample_index > 0 {
+            main_wall.push(wall);
+            compile.push(u128::from(result.compile_nanoseconds));
+            execute.push(u128::from(result.execute_nanoseconds));
+        }
+        let (input_response, input_wall) = timed_rpc(
+            state,
+            1250 + sample_index,
+            Request::Run {
+                workspace,
+                revision: Revision::new(2),
+                entry: evaluate,
+                arguments: vec![input_value(
+                    input,
+                    sample,
+                    Some(reading_value(reading, value_field, valid_field, 5, true)),
+                )],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 1_000,
+                },
+            },
+        );
+        let Response::Run(input_result) = input_response.response else {
+            panic!("nominal input")
+        };
+        assert_eq!(input_result.value, RuntimeValue::I64(5));
+        let (output_response, output_wall) = timed_rpc(
+            state,
+            1290 + sample_index,
+            Request::Run {
+                workspace,
+                revision: Revision::new(2),
+                entry: make_reading,
+                arguments: vec![RuntimeValue::I64(9), RuntimeValue::Bool(true)],
+                policy: lkjscript::RunPolicy {
+                    fuel: 1_000_000,
+                    maximum_frames: 1_000,
+                },
+            },
+        );
+        let Response::Run(output_result) = output_response.response else {
+            panic!("nominal output")
+        };
+        assert_eq!(
+            output_result.value,
+            RuntimeValue::Product {
+                ty: reading,
+                fields: vec![
+                    RuntimeFieldValue {
+                        field: value_field,
+                        value: RuntimeValue::I64(9),
+                    },
+                    RuntimeFieldValue {
+                        field: valid_field,
+                        value: RuntimeValue::Bool(true),
+                    },
+                ],
+            }
+        );
+        if sample_index > 0 {
+            nominal_input_wall.push(input_wall);
+            nominal_output_wall.push(output_wall);
+        }
+    }
+    assert_eq!(main_wall.len(), 31);
+    assert_eq!(compile.len(), 31);
+    assert_eq!(execute.len(), 31);
+    assert_eq!(nominal_input_wall.len(), 31);
+    assert_eq!(nominal_output_wall.len(), 31);
+    let query_started = Instant::now();
+    let QueryResult::NominalType(layout) = query(
+        state,
+        1400,
+        workspace,
+        Revision::new(2),
+        Query::NominalType {
+            declaration: reading,
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("layout")
+    };
+    let layout_wall_ns = query_started.elapsed().as_nanos();
+    assert_eq!(layout.declaration, reading);
+    assert_eq!(layout.name, "Reading");
+    assert!(layout.layout.representable);
+    assert_eq!(layout.layout.failure, None);
+    assert_eq!(layout.layout.size, Some(16));
+    assert_eq!(layout.layout.align, Some(8));
+    assert_eq!(layout.layout.cells, Some(2));
+    assert_eq!(layout.members.items.len(), 2);
+    shutdown(state, 1401);
+    daemon.wait();
+    let restart_started = Instant::now();
+    let daemon = JsonDaemon::start(state);
+    let restart_ns = restart_started.elapsed().as_nanos();
+    let QueryResult::NominalType(retained_layout) = query(
+        state,
+        1402,
+        workspace,
+        Revision::new(2),
+        Query::NominalType {
+            declaration: reading,
+            page: PageRequest {
+                after: None,
+                limit: 8,
+            },
+        },
+    ) else {
+        panic!("retained layout after restart")
+    };
+    assert_eq!(retained_layout, layout);
+    let row = |samples: &[u128]| {
+        serde_json::json!({
+            "samples": samples.len(),
+            "median_ns": percentile_ns(samples, 50),
+            "p95_ns": percentile_ns(samples, 95),
+        })
+    };
+    println!(
+        "NOMINAL_PERFORMANCE {}",
+        serde_json::json!({
+            "workload": "Reading/Input microbenchmark; one warmup plus 31 measured generic-CLI requests per route",
+            "main_request_wall": row(&main_wall),
+            "compile": row(&compile),
+            "execute": row(&execute),
+            "nominal_input_match_wall": row(&nominal_input_wall),
+            "nominal_output_wall": row(&nominal_output_wall),
+            "type_layout_query": {
+                "sampling": "single_observation",
+                "sample_count": 1,
+                "wall_ns": layout_wall_ns,
+                "median_p95_claimed": false,
+                "output_oracle": layout.layout,
+            },
+            "restart": {
+                "sampling": "single_observation",
+                "sample_count": 1,
+                "wall_ns": restart_ns,
+                "median_p95_claimed": false,
+                "retained_layout_oracle_asserted": true,
+            },
+            "oracles": {"main": 42, "sample": 5, "output_value": 9},
+            "leadership_claim": false,
+        })
+    );
+    shutdown(state, 1403);
+    daemon.wait();
+}
+
 fn metric_json(item: &RpcMeasurement) -> serde_json::Value {
     serde_json::json!({
         "name": item.name,
@@ -2348,7 +4358,7 @@ fn invoke_raw(state: &Path, input: &[u8]) -> Output {
     child.wait_with_output().expect("JSON client output")
 }
 
-fn local_schema() -> SchemaDescription {
+fn local_schema() -> DescribeSchemaResult {
     let output = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
         .arg("schema")
         .output()

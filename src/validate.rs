@@ -2,7 +2,8 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, operation_result_type};
 use crate::ids::NodeId;
 use crate::schema::{
-    Node, NodeKind, OperationKind, SemanticType, TypeRule, ValueRef, owner_kind_is_valid,
+    DirectReference, Node, NodeKind, OperationKind, RegionArity, SemanticType, TypeRule, ValueRef,
+    owner_kind_is_valid,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,6 +12,7 @@ pub(crate) fn validate_snapshot(snapshot: &Snapshot) -> Result<()> {
     validate_containment(snapshot)?;
     validate_names(snapshot)?;
     validate_semantics(snapshot)?;
+    crate::type_layout::validate_acyclic(snapshot)?;
     Ok(())
 }
 
@@ -165,10 +167,20 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
                 .for_node(target)
                 .with_related([*owner_id]));
             }
-            if !snapshot.nodes.contains_key(&target) {
-                return Err(LkError::new(
+            let target_node = snapshot.nodes.get(&target).ok_or_else(|| {
+                LkError::new(
                     ErrorCode::NodeNotFound,
                     "direct reference target does not exist",
+                )
+                .for_node(target)
+                .with_related([*owner_id])
+            })?;
+            if matches!(reference, DirectReference::Type { .. })
+                && !matches!(target_node, Node::ProductType { .. } | Node::SumType { .. })
+            {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "nominal semantic type must target a product or sum declaration",
                 )
                 .for_node(target)
                 .with_related([*owner_id]));
@@ -235,8 +247,35 @@ fn validate_slot_targets(snapshot: &Snapshot, id: NodeId, node: &Node) -> Result
                 }
             }
         }
-        Node::Module { functions, .. } => {
-            require_children(snapshot, id, functions, NodeKind::Function)?
+        Node::Module {
+            types, functions, ..
+        } => {
+            for ty in types {
+                let node = snapshot.node(*ty)?;
+                if !matches!(node, Node::ProductType { .. } | Node::SumType { .. }) {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "module type slot must contain a nominal declaration",
+                    )
+                    .for_node(*ty)
+                    .with_related([id]));
+                }
+            }
+            require_children(snapshot, id, functions, NodeKind::Function)?;
+        }
+        Node::ProductType { fields, .. } => {
+            require_children(snapshot, id, fields, NodeKind::ProductField)?;
+        }
+        Node::ProductField { .. } | Node::SumVariant { .. } => {}
+        Node::SumType { variants, .. } => {
+            if variants.is_empty() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidContainment,
+                    "sum declarations require at least one variant",
+                )
+                .for_node(id));
+            }
+            require_children(snapshot, id, variants, NodeKind::SumVariant)?;
         }
         Node::Function {
             parameters, body, ..
@@ -277,7 +316,20 @@ fn validate_slot_targets(snapshot: &Snapshot, id: NodeId, node: &Node) -> Result
         }
         Node::Operation { operation, .. } => {
             let descriptor = operation.descriptor();
-            if operation.owned_region_count() != descriptor.regions.len() {
+            let expected_regions = match descriptor.region_arity {
+                RegionArity::Fixed(count) => usize::from(count),
+                RegionArity::MatchVariants { .. } => match operation {
+                    OperationKind::MatchSum { arms, .. } => arms.len(),
+                    _ => {
+                        return Err(corrupt(
+                            snapshot,
+                            "dynamic match-region rule belongs to the wrong operation",
+                        )
+                        .for_node(id));
+                    }
+                },
+            };
+            if operation.owned_region_count() != expected_regions {
                 return Err(corrupt(
                     snapshot,
                     "operation owned-region accessor disagrees with its descriptor",
@@ -330,16 +382,9 @@ fn require_kind(
 }
 
 fn validate_names(snapshot: &Snapshot) -> Result<()> {
-    for (owner_id, owner) in &snapshot.nodes {
-        let named_children: &[NodeId] = match owner {
-            Node::WorkspaceRoot { packages } => packages,
-            Node::Package { modules, .. } => modules,
-            Node::Module { functions, .. } => functions,
-            Node::Function { parameters, .. } => parameters,
-            _ => &[],
-        };
+    fn validate_group(snapshot: &Snapshot, owner: NodeId, children: &[NodeId]) -> Result<()> {
         let mut names = BTreeMap::<&str, NodeId>::new();
-        for child_id in named_children {
+        for child_id in children {
             let child = snapshot
                 .nodes
                 .get(child_id)
@@ -347,7 +392,7 @@ fn validate_names(snapshot: &Snapshot) -> Result<()> {
             let name = child.name().ok_or_else(|| {
                 corrupt(snapshot, "named slot contains an unnamed node").for_node(*child_id)
             })?;
-            if name.is_empty() {
+            if name.len() < crate::schema::MINIMUM_NAME_UTF8_BYTES {
                 return Err(LkError::new(
                     ErrorCode::InvalidContainment,
                     "display names must not be empty",
@@ -360,7 +405,16 @@ fn validate_names(snapshot: &Snapshot) -> Result<()> {
                     "sibling lookup names must be unique",
                 )
                 .for_node(*child_id)
-                .with_related([*owner_id, previous]));
+                .with_related([owner, previous]));
+            }
+        }
+        Ok(())
+    }
+
+    for (owner_id, owner) in &snapshot.nodes {
+        for group in crate::schema::NameUniquenessGroup::ALL {
+            if let Some(children) = group.children(owner) {
+                validate_group(snapshot, *owner_id, children)?;
             }
         }
     }
@@ -377,6 +431,52 @@ struct RegionContract {
 }
 
 fn validate_semantics(snapshot: &Snapshot) -> Result<()> {
+    for (declaration_id, node) in &snapshot.nodes {
+        match node {
+            Node::ProductType { fields, .. } => {
+                for (expected, field_id) in fields.iter().enumerate() {
+                    let Node::ProductField { owner, ordinal, .. } = snapshot.node(*field_id)?
+                    else {
+                        return Err(corrupt(snapshot, "product field slot has wrong kind")
+                            .for_node(*field_id));
+                    };
+                    let expected = u32::try_from(expected).map_err(|_| {
+                        corrupt(snapshot, "product field ordinal overflows representation")
+                            .for_node(*field_id)
+                    })?;
+                    if *owner != *declaration_id || *ordinal != expected {
+                        return Err(corrupt(
+                            snapshot,
+                            "product field owner and ordinals must be dense and ordered",
+                        )
+                        .for_node(*field_id));
+                    }
+                }
+            }
+            Node::SumType { variants, .. } => {
+                for (expected, variant_id) in variants.iter().enumerate() {
+                    let Node::SumVariant { owner, ordinal, .. } = snapshot.node(*variant_id)?
+                    else {
+                        return Err(corrupt(snapshot, "sum variant slot has wrong kind")
+                            .for_node(*variant_id));
+                    };
+                    let expected = u32::try_from(expected).map_err(|_| {
+                        corrupt(snapshot, "sum variant ordinal overflows representation")
+                            .for_node(*variant_id)
+                    })?;
+                    if *owner != *declaration_id || *ordinal != expected {
+                        return Err(corrupt(
+                            snapshot,
+                            "sum variant owner and ordinals must be dense and ordered",
+                        )
+                        .for_node(*variant_id));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     for (function_id, node) in &snapshot.nodes {
         let Node::Function {
             parameters,
@@ -456,8 +556,59 @@ fn region_contract(snapshot: &Snapshot, region_id: NodeId) -> Result<RegionContr
                     .for_node(region_id)
                     .with_related([*owner])
                 })?;
-            let descriptor = &operation.descriptor().regions[role_index];
             let function = owner_function_for_block(snapshot, *parent_block)?;
+            if let RegionArity::MatchVariants {
+                payload_type,
+                terminator,
+                yield_type,
+            } = operation.descriptor().region_arity
+            {
+                let OperationKind::MatchSum { arms, .. } = operation else {
+                    return Err(
+                        corrupt(snapshot, "dynamic match-region rule has wrong operation")
+                            .for_node(*owner),
+                    );
+                };
+                let arm = arms.get(role_index).ok_or_else(|| {
+                    corrupt(snapshot, "match arm region index is absent").for_node(region_id)
+                })?;
+                let payload = match (payload_type, snapshot.node(arm.variant)?) {
+                    (TypeRule::VariantPayload, Node::SumVariant { payload, .. }) => *payload,
+                    (TypeRule::VariantPayload, node) => {
+                        return Err(LkError::new(
+                            ErrorCode::WrongKind,
+                            "match arm must name a sum variant",
+                        )
+                        .for_node(arm.variant)
+                        .with_kinds(NodeKind::SumVariant, node.kind()));
+                    }
+                    _ => {
+                        return Err(corrupt(snapshot, "unsupported dynamic match payload rule")
+                            .for_node(*owner));
+                    }
+                };
+                let yielded =
+                    resolve_type_rule(snapshot, operation, yield_type, function, Some(region_id))?
+                        .ok_or_else(|| {
+                            corrupt(snapshot, "dynamic match yield type cannot be resolved")
+                                .for_node(region_id)
+                        })?;
+                return Ok(RegionContract {
+                    function,
+                    expected_arguments: [payload, None],
+                    argument_count: usize::from(payload.is_some()),
+                    terminator,
+                    yielded,
+                });
+            }
+            let descriptor = operation
+                .descriptor()
+                .regions
+                .get(role_index)
+                .ok_or_else(|| {
+                    corrupt(snapshot, "fixed operation region descriptor is absent")
+                        .for_node(region_id)
+                })?;
             let mut expected_arguments = [None, None];
             for (index, argument) in descriptor.block_arguments.iter().enumerate() {
                 expected_arguments[index] =
@@ -619,6 +770,7 @@ fn validate_operation(
         )
         .for_node(operation_id));
     }
+    validate_nominal_operation_contract(snapshot, operation_id, operation)?;
     let expected_types = expected_operand_types(
         snapshot,
         function,
@@ -654,6 +806,141 @@ fn validate_operation(
             )
             .for_node(operation_id));
         }
+    }
+    Ok(())
+}
+
+fn validate_nominal_operation_contract(
+    snapshot: &Snapshot,
+    operation_id: NodeId,
+    operation: &OperationKind,
+) -> Result<()> {
+    match operation {
+        OperationKind::ConstructProduct { product, fields } => {
+            let declared = match snapshot.node(*product)? {
+                Node::ProductType { fields, .. } => fields,
+                node => {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "product construction must name a product declaration",
+                    )
+                    .for_node(*product)
+                    .with_kinds(NodeKind::ProductType, node.kind())
+                    .with_related([operation_id]));
+                }
+            };
+            if fields.len() != declared.len() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "product field count does not match its declaration",
+                )
+                .for_node(operation_id)
+                .with_related([*product]));
+            }
+            for (binding, expected) in fields.iter().zip(declared) {
+                if binding.field != *expected {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "product fields must be exact and in declaration order",
+                    )
+                    .for_node(binding.field)
+                    .with_related([operation_id, *product, *expected]));
+                }
+                match snapshot.node(binding.field)? {
+                    Node::ProductField { owner, .. } if *owner == *product => {}
+                    Node::ProductField { .. } => {
+                        return Err(LkError::new(
+                            ErrorCode::OwnerMismatch,
+                            "product field belongs to another declaration",
+                        )
+                        .for_node(binding.field)
+                        .with_related([*product, operation_id]));
+                    }
+                    node => {
+                        return Err(LkError::new(
+                            ErrorCode::WrongKind,
+                            "product binding must name a product field",
+                        )
+                        .for_node(binding.field)
+                        .with_kinds(NodeKind::ProductField, node.kind()));
+                    }
+                }
+            }
+        }
+        OperationKind::ProjectField { field, .. } => {
+            if !matches!(snapshot.node(*field)?, Node::ProductField { .. }) {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "projection must name a product field",
+                )
+                .for_node(*field)
+                .with_kinds(NodeKind::ProductField, snapshot.node(*field)?.kind()));
+            }
+        }
+        OperationKind::ConstructVariant { variant, payload } => match snapshot.node(*variant)? {
+            Node::SumVariant {
+                payload: expected, ..
+            } if expected.is_some() == payload.is_some() => {}
+            Node::SumVariant { .. } => {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "variant payload presence does not match its declaration",
+                )
+                .for_node(*variant)
+                .with_related([operation_id]));
+            }
+            node => {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "variant construction must name a sum variant",
+                )
+                .for_node(*variant)
+                .with_kinds(NodeKind::SumVariant, node.kind()));
+            }
+        },
+        OperationKind::MatchSum { arms, .. } => {
+            let first = arms.first().ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "match_sum requires exhaustive arms",
+                )
+                .for_node(operation_id)
+            })?;
+            let sum = match snapshot.node(first.variant)? {
+                Node::SumVariant { owner, .. } => *owner,
+                node => {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "match arm must name a sum variant",
+                    )
+                    .for_node(first.variant)
+                    .with_kinds(NodeKind::SumVariant, node.kind()));
+                }
+            };
+            let variants = match snapshot.node(sum)? {
+                Node::SumType { variants, .. } => variants,
+                _ => unreachable!(),
+            };
+            if arms.len() != variants.len() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "match arm count is not exhaustive",
+                )
+                .for_node(operation_id)
+                .with_related([sum]));
+            }
+            for (arm, expected) in arms.iter().zip(variants) {
+                if arm.variant != *expected {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "match arms must be exact and in declaration order",
+                    )
+                    .for_node(arm.variant)
+                    .with_related([operation_id, sum, *expected]));
+                }
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -700,6 +987,58 @@ fn expected_operand_types(
             .with_kinds(NodeKind::Function, node.kind())
             .with_related([operation_id])),
         },
+        OperationKind::ConstructProduct { fields, .. } => fields
+            .iter()
+            .map(|binding| match snapshot.node(binding.field)? {
+                Node::ProductField { ty, .. } => Ok(*ty),
+                node => Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "product binding target must be a field",
+                )
+                .for_node(binding.field)
+                .with_kinds(NodeKind::ProductField, node.kind())),
+            })
+            .collect(),
+        OperationKind::ProjectField { field, .. } => match snapshot.node(*field)? {
+            Node::ProductField { owner, .. } => Ok(vec![SemanticType::Nominal(*owner)]),
+            node => Err(LkError::new(
+                ErrorCode::WrongKind,
+                "projection target must be a product field",
+            )
+            .for_node(*field)
+            .with_kinds(NodeKind::ProductField, node.kind())),
+        },
+        OperationKind::ConstructVariant {
+            variant,
+            payload: _,
+        } => match snapshot.node(*variant)? {
+            Node::SumVariant {
+                payload: expected, ..
+            } => Ok(expected.iter().copied().collect()),
+            node => Err(
+                LkError::new(ErrorCode::WrongKind, "variant target must be a sum variant")
+                    .for_node(*variant)
+                    .with_kinds(NodeKind::SumVariant, node.kind()),
+            ),
+        },
+        OperationKind::MatchSum { arms, .. } => {
+            let first = arms.first().ok_or_else(|| {
+                LkError::new(ErrorCode::InvalidOperand, "match_sum requires arms")
+                    .for_node(operation_id)
+            })?;
+            let sum = match snapshot.node(first.variant)? {
+                Node::SumVariant { owner, .. } => *owner,
+                node => {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "match arm must name a sum variant",
+                    )
+                    .for_node(first.variant)
+                    .with_kinds(NodeKind::SumVariant, node.kind()));
+                }
+            };
+            Ok(vec![SemanticType::Nominal(sum)])
+        }
         _ => (0..operation.operand_count())
             .map(|index| {
                 let rule = operation
@@ -736,7 +1075,10 @@ fn resolve_type_rule(
     Ok(match rule {
         TypeRule::Fixed(ty) => Some(ty),
         TypeRule::PayloadExpected => match operation {
-            OperationKind::Hole { expected } => Some(*expected),
+            OperationKind::Hole { expected }
+            | OperationKind::MatchSum {
+                result: expected, ..
+            } => Some(*expected),
             _ => None,
         },
         TypeRule::PayloadResult => match operation {
@@ -747,10 +1089,26 @@ fn resolve_type_rule(
             OperationKind::ForI64 { carried, .. } => Some(*carried),
             _ => None,
         },
+        TypeRule::ProductDeclarationResult => match operation {
+            OperationKind::ConstructProduct { product, .. } => {
+                Some(SemanticType::Nominal(*product))
+            }
+            _ => None,
+        },
+        TypeRule::MatchResult => match operation {
+            OperationKind::MatchSum { result, .. } => Some(*result),
+            _ => None,
+        },
         TypeRule::OwnerFunctionResult
         | TypeRule::CallTargetParameter
         | TypeRule::CallTargetResult
-        | TypeRule::OwningRegionYield => None,
+        | TypeRule::OwningRegionYield
+        | TypeRule::ProductFieldType
+        | TypeRule::ProjectionOwner
+        | TypeRule::ProjectedFieldResult
+        | TypeRule::VariantPayload
+        | TypeRule::VariantOwnerResult
+        | TypeRule::MatchScrutinee => None,
     })
 }
 
@@ -980,6 +1338,196 @@ mod tests {
     use crate::ids::{Revision, WorkspaceId};
 
     #[test]
+    fn deeply_nested_match_validation_uses_explicit_graph_work() {
+        const DEPTH: usize = 1_000;
+        let workspace = WorkspaceId::from_bytes([0x96; 16]);
+        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            id(1),
+            Node::WorkspaceRoot {
+                packages: vec![id(2)],
+            },
+        );
+        nodes.insert(
+            id(2),
+            Node::Package {
+                owner: id(1),
+                name: "p".into(),
+                modules: vec![id(3)],
+                entry: Some(id(6)),
+            },
+        );
+        nodes.insert(
+            id(3),
+            Node::Module {
+                owner: id(2),
+                name: "m".into(),
+                types: vec![id(4)],
+                functions: vec![id(6)],
+            },
+        );
+        nodes.insert(
+            id(4),
+            Node::SumType {
+                owner: id(3),
+                name: "Only".into(),
+                variants: vec![id(5)],
+            },
+        );
+        nodes.insert(
+            id(5),
+            Node::SumVariant {
+                owner: id(4),
+                ordinal: 0,
+                name: "only".into(),
+                payload: None,
+            },
+        );
+        nodes.insert(
+            id(6),
+            Node::Function {
+                owner: id(3),
+                name: "main".into(),
+                parameters: Vec::new(),
+                result: SemanticType::I64,
+                body: Some(id(7)),
+            },
+        );
+        nodes.insert(
+            id(7),
+            Node::Region {
+                owner: id(6),
+                blocks: vec![id(8)],
+            },
+        );
+        let variant_operation = id(9);
+        nodes.insert(
+            variant_operation,
+            Node::Operation {
+                owner: id(8),
+                operation: OperationKind::ConstructVariant {
+                    variant: id(5),
+                    payload: None,
+                },
+            },
+        );
+        let mut next = 10_u64;
+        let mut matches = Vec::with_capacity(DEPTH);
+        for _ in 0..DEPTH {
+            let operation = id(next);
+            next += 1;
+            let region = id(next);
+            next += 1;
+            let block = id(next);
+            next += 1;
+            let yield_operation = id(next);
+            next += 1;
+            matches.push((operation, region, block, yield_operation));
+        }
+        let constant = id(next);
+        next += 1;
+        let return_operation = id(next);
+        next += 1;
+        nodes.insert(
+            id(8),
+            Node::Block {
+                owner: id(7),
+                arguments: Vec::new(),
+                operations: vec![variant_operation, matches[0].0],
+                terminator: Some(return_operation),
+            },
+        );
+        for (index, (operation, region, block, yield_operation)) in
+            matches.iter().copied().enumerate()
+        {
+            let owner_block = if index == 0 {
+                id(8)
+            } else {
+                matches[index - 1].2
+            };
+            nodes.insert(
+                operation,
+                Node::Operation {
+                    owner: owner_block,
+                    operation: OperationKind::MatchSum {
+                        scrutinee: ValueRef::OperationResult {
+                            operation: variant_operation,
+                            output: 0,
+                        },
+                        result: SemanticType::I64,
+                        arms: vec![crate::schema::MatchArm {
+                            variant: id(5),
+                            region,
+                        }],
+                    },
+                },
+            );
+            nodes.insert(
+                region,
+                Node::Region {
+                    owner: operation,
+                    blocks: vec![block],
+                },
+            );
+            let yielded = if index + 1 == DEPTH {
+                constant
+            } else {
+                matches[index + 1].0
+            };
+            nodes.insert(
+                block,
+                Node::Block {
+                    owner: region,
+                    arguments: Vec::new(),
+                    operations: vec![yielded],
+                    terminator: Some(yield_operation),
+                },
+            );
+            nodes.insert(
+                yield_operation,
+                Node::Operation {
+                    owner: block,
+                    operation: OperationKind::Yield {
+                        value: ValueRef::OperationResult {
+                            operation: yielded,
+                            output: 0,
+                        },
+                    },
+                },
+            );
+        }
+        nodes.insert(
+            constant,
+            Node::Operation {
+                owner: matches[DEPTH - 1].2,
+                operation: OperationKind::ConstI64(1),
+            },
+        );
+        nodes.insert(
+            return_operation,
+            Node::Operation {
+                owner: id(8),
+                operation: OperationKind::Return {
+                    value: ValueRef::OperationResult {
+                        operation: matches[0].0,
+                        output: 0,
+                    },
+                },
+            },
+        );
+        Snapshot::from_parts(
+            workspace,
+            Revision::INITIAL,
+            id(1),
+            next,
+            BTreeSet::new(),
+            nodes,
+        )
+        .expect("deep match snapshot validates without native recursion");
+    }
+
+    #[test]
     fn initial_snapshot_has_one_valid_root() {
         let snapshot =
             Snapshot::initial(WorkspaceId::from_bytes([7; 16])).expect("initial graph is valid");
@@ -1040,6 +1588,7 @@ mod tests {
                 Node::Module {
                     owner: id(2),
                     name: "main".into(),
+                    types: Vec::new(),
                     functions: vec![id(4)],
                 },
             ),
@@ -1319,6 +1868,7 @@ mod tests {
                 Node::Module {
                     owner: id(2),
                     name: "m".into(),
+                    types: Vec::new(),
                     functions: vec![id(4)],
                 },
             ),

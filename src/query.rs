@@ -3,10 +3,11 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::{ChangeDigest, NodeId, QueryId, Revision, SnapshotHash, WorkspaceId};
 use crate::schema::{
-    BlockArgumentRole, LiteralField, Node, NodeKind, OperandUse, OperationCode, OperationKind,
-    RegionRole, SemanticType, TypeRule, ValueRef,
+    BlockArgumentRole, DirectReference, LiteralField, Node, NodeKind, OperandUse, OperationCode,
+    OperationKind, RegionRole, SemanticType, TypeReferenceSlot, TypeRule, ValueRef,
 };
 use crate::transaction::TransactionOpCode;
+use crate::type_layout::{DerivedLayout, LayoutShape};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -206,6 +207,12 @@ pub enum PageCursor {
         to: Revision,
         next: u64,
     },
+    NominalType {
+        workspace: WorkspaceId,
+        revision: Revision,
+        declaration: NodeId,
+        next: u64,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -239,6 +246,7 @@ pub struct BodyItem {
     pub code: OperationCode,
     pub result_types: Vec<SemanticType>,
     pub operands: Vec<ValueRef>,
+    pub definitions: Vec<DefinitionReferenceSite>,
     pub complete: bool,
     pub terminator: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -298,6 +306,16 @@ pub struct UseSite {
 pub enum DefinitionSlot {
     PackageEntry,
     CallTarget,
+    FunctionResultType,
+    ParameterType,
+    ProductFieldType,
+    SumVariantPayloadType,
+    BlockArgumentType,
+    OperationType,
+    ProductDeclaration,
+    ProductField,
+    SumVariant,
+    MatchVariant,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -347,14 +365,92 @@ pub struct VisibleValue {
 pub struct ConstructorDescriptor {
     pub code: OperationCode,
     pub result_type: SemanticType,
+    pub operand_count: u64,
     pub operand_types: Vec<SemanticType>,
     pub operand_uses: Vec<OperandUse>,
     pub literal_fields: Vec<LiteralField>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_target: Option<NodeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<NodeId>,
+    pub member_count: u64,
+    pub members: Vec<NodeId>,
+    pub requirements_complete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nominal_type_continuation: Option<NominalTypeContinuation>,
     pub direct_refinement: bool,
     pub complete: bool,
     pub terminator: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NominalTypeContinuation {
+    pub declaration: NodeId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NominalLayoutSummary {
+    pub representable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<crate::type_layout::LayoutFailure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cells: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discriminant_bytes: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_offset: Option<u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum NominalMemberFact {
+    ProductField {
+        field: NodeId,
+        name: String,
+        ordinal: u32,
+        ty: SemanticType,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        offset: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cells: Option<u64>,
+    },
+    SumVariant {
+        variant: NodeId,
+        name: String,
+        ordinal: u32,
+        payload: Option<SemanticType>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        discriminant: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload_size: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload_align: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload_cells: Option<u64>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NominalTypeResult {
+    pub declaration: NodeId,
+    pub name: String,
+    pub kind: NodeKind,
+    pub owner: NodeId,
+    pub layout: NominalLayoutSummary,
+    pub members: Page<NominalMemberFact>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -406,6 +502,10 @@ pub struct RepairContext {
     pub legal_constructor_count: u64,
     pub legal_constructors: Vec<ConstructorDescriptor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nominal_type: Option<NominalTypeResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nominal_type_continuation: Option<NominalTypeContinuation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocker: Option<CompletenessBlocker>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refinement_operation: Option<TransactionOpCode>,
@@ -436,9 +536,10 @@ pub enum QueryCode {
     LegalConstructors,
     SemanticDiff,
     RepairContext,
+    NominalType,
 }
 impl QueryCode {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::WorkspaceSummary,
         Self::Node,
         Self::Blockers,
@@ -451,6 +552,7 @@ impl QueryCode {
         Self::LegalConstructors,
         Self::SemanticDiff,
         Self::RepairContext,
+        Self::NominalType,
     ];
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -466,6 +568,7 @@ impl QueryCode {
             Self::LegalConstructors => 10,
             Self::SemanticDiff => 11,
             Self::RepairContext => 12,
+            Self::NominalType => 13,
         }
     }
     pub const fn machine_name(self) -> &'static str {
@@ -482,6 +585,7 @@ impl QueryCode {
             Self::LegalConstructors => "legal_constructors",
             Self::SemanticDiff => "semantic_diff",
             Self::RepairContext => "repair_context",
+            Self::NominalType => "nominal_type",
         }
     }
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
@@ -498,6 +602,7 @@ impl QueryCode {
             10 => Some(Self::LegalConstructors),
             11 => Some(Self::SemanticDiff),
             12 => Some(Self::RepairContext),
+            13 => Some(Self::NominalType),
             _ => None,
         }
     }
@@ -559,6 +664,10 @@ pub enum Query {
         target: RepairTarget,
         budget: ContextBudget,
     },
+    NominalType {
+        declaration: NodeId,
+        page: PageRequest,
+    },
 }
 impl Query {
     pub const fn code(&self) -> QueryCode {
@@ -575,6 +684,7 @@ impl Query {
             Self::LegalConstructors { .. } => QueryCode::LegalConstructors,
             Self::SemanticDiff { .. } => QueryCode::SemanticDiff,
             Self::RepairContext { .. } => QueryCode::RepairContext,
+            Self::NominalType { .. } => QueryCode::NominalType,
         }
     }
 }
@@ -612,6 +722,7 @@ pub enum QueryResult {
     LegalConstructors(LegalConstructorsResult),
     SemanticDiff(SemanticDiffPage),
     RepairContext(Box<RepairContext>),
+    NominalType(NominalTypeResult),
 }
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
@@ -699,7 +810,8 @@ fn query_budget(query: &Query) -> Result<u32> {
         | Query::DefinitionReferences { page, .. }
         | Query::Dependencies { page, .. }
         | Query::VisibleValues { page, .. }
-        | Query::SemanticDiff { page, .. } => validate_page(*page)?.limit,
+        | Query::SemanticDiff { page, .. }
+        | Query::NominalType { page, .. } => validate_page(*page)?.limit,
     })
 }
 fn validate_context_budget(b: ContextBudget) -> Result<()> {
@@ -894,7 +1006,195 @@ pub fn execute(
         Query::RepairContext { target, budget } => Ok(QueryResult::RepairContext(Box::new(
             repair_context(snapshot, *target, *budget)?,
         ))),
+        Query::NominalType { declaration, page } => Ok(QueryResult::NominalType(
+            nominal_type_result(snapshot, *declaration, *page)?,
+        )),
     }
+}
+
+fn nominal_type_result(
+    snapshot: &Snapshot,
+    declaration: NodeId,
+    page: PageRequest,
+) -> Result<NominalTypeResult> {
+    let (name, kind, owner, member_ids) = match snapshot.node(declaration)? {
+        Node::ProductType {
+            owner,
+            name,
+            fields,
+            ..
+        } => (
+            name.clone(),
+            NodeKind::ProductType,
+            *owner,
+            fields.as_slice(),
+        ),
+        Node::SumType {
+            owner,
+            name,
+            variants,
+            ..
+        } => (name.clone(), NodeKind::SumType, *owner, variants.as_slice()),
+        node => {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "nominal type query requires a product or sum declaration",
+            )
+            .for_node(declaration)
+            .with_kinds(NodeKind::ProductType, node.kind()));
+        }
+    };
+    let layouts = crate::type_layout::derive_layouts(snapshot)?;
+    let layout = layouts.get(&declaration).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::WrongKind,
+            "nominal declaration has no derived layout",
+        )
+        .for_node(declaration)
+    })?;
+    let summary = match layout {
+        DerivedLayout::Unrepresentable(failure) => NominalLayoutSummary {
+            representable: false,
+            failure: Some(*failure),
+            size: None,
+            align: None,
+            cells: None,
+            discriminant_bytes: None,
+            payload_offset: None,
+        },
+        DerivedLayout::Representable(value) => {
+            let (discriminant_bytes, payload_offset) = match &value.shape {
+                LayoutShape::Sum {
+                    discriminant_bytes,
+                    payload_offset,
+                    ..
+                } => (Some(*discriminant_bytes), Some(*payload_offset)),
+                _ => (None, None),
+            };
+            NominalLayoutSummary {
+                representable: true,
+                failure: None,
+                size: Some(value.size),
+                align: Some(value.align),
+                cells: Some(value.cells),
+                discriminant_bytes,
+                payload_offset,
+            }
+        }
+    };
+    let mut facts = Vec::with_capacity(member_ids.len());
+    match layout {
+        DerivedLayout::Representable(value) => match &value.shape {
+            LayoutShape::Product { fields: derived } => {
+                for (member, layout) in member_ids.iter().zip(derived) {
+                    let Node::ProductField {
+                        name, ordinal, ty, ..
+                    } = snapshot.node(*member)?
+                    else {
+                        unreachable!()
+                    };
+                    facts.push(NominalMemberFact::ProductField {
+                        field: *member,
+                        name: name.clone(),
+                        ordinal: *ordinal,
+                        ty: *ty,
+                        offset: Some(layout.offset),
+                        cells: Some(layout.cells),
+                    });
+                }
+            }
+            LayoutShape::Sum {
+                variants: derived, ..
+            } => {
+                for (member, layout) in member_ids.iter().zip(derived) {
+                    let Node::SumVariant {
+                        name,
+                        ordinal,
+                        payload,
+                        ..
+                    } = snapshot.node(*member)?
+                    else {
+                        unreachable!()
+                    };
+                    facts.push(NominalMemberFact::SumVariant {
+                        variant: *member,
+                        name: name.clone(),
+                        ordinal: *ordinal,
+                        payload: *payload,
+                        discriminant: Some(layout.discriminant),
+                        payload_size: Some(layout.payload_size),
+                        payload_align: Some(layout.payload_align),
+                        payload_cells: Some(layout.payload_cells),
+                    });
+                }
+            }
+            LayoutShape::Primitive => unreachable!(),
+        },
+        DerivedLayout::Unrepresentable(_) => {
+            for member in member_ids {
+                match snapshot.node(*member)? {
+                    Node::ProductField {
+                        name, ordinal, ty, ..
+                    } => facts.push(NominalMemberFact::ProductField {
+                        field: *member,
+                        name: name.clone(),
+                        ordinal: *ordinal,
+                        ty: *ty,
+                        offset: None,
+                        cells: None,
+                    }),
+                    Node::SumVariant {
+                        name,
+                        ordinal,
+                        payload,
+                        ..
+                    } => facts.push(NominalMemberFact::SumVariant {
+                        variant: *member,
+                        name: name.clone(),
+                        ordinal: *ordinal,
+                        payload: *payload,
+                        discriminant: None,
+                        payload_size: None,
+                        payload_align: None,
+                        payload_cells: None,
+                    }),
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+    let members = page_items(
+        facts,
+        page,
+        |next| PageCursor::NominalType {
+            workspace: snapshot.workspace(),
+            revision: snapshot.revision(),
+            declaration,
+            next,
+        },
+        |cursor| match cursor {
+            PageCursor::NominalType {
+                workspace,
+                revision,
+                declaration: cursor_declaration,
+                next,
+            } if workspace == snapshot.workspace()
+                && revision == snapshot.revision()
+                && cursor_declaration == declaration =>
+            {
+                Some(next)
+            }
+            _ => None,
+        },
+    )?;
+    Ok(NominalTypeResult {
+        declaration,
+        name,
+        kind,
+        owner,
+        layout: summary,
+        members,
+    })
 }
 
 fn page_items<T, F, G>(items: Vec<T>, page: PageRequest, make: F, read: G) -> Result<Page<T>>
@@ -948,7 +1248,17 @@ fn body_item(snapshot: &Snapshot, id: NodeId, ordinal: u64, terminator: bool) ->
         .filter_map(|index| {
             Some(OwnedRegionSummary {
                 region: operation.owned_region(index)?,
-                role: operation.descriptor().regions.get(index)?.role,
+                role: operation.region_role(operation.owned_region(index)?)?,
+            })
+        })
+        .collect();
+    let definitions = (0..operation.definition_target_count())
+        .filter_map(|index| operation.definition_target(index))
+        .filter_map(|target| {
+            operation_definition_slot(operation, target).map(|slot| DefinitionReferenceSite {
+                source: id,
+                slot,
+                target,
             })
         })
         .collect();
@@ -964,6 +1274,7 @@ fn body_item(snapshot: &Snapshot, id: NodeId, ordinal: u64, terminator: bool) ->
         code: operation.code(),
         result_types: results,
         operands,
+        definitions,
         complete: operation.is_complete(),
         terminator,
         literal,
@@ -1187,9 +1498,61 @@ fn expected_operand_type(
                     operation: OperationKind::ForI64 { carried, .. },
                     ..
                 } => Ok(*carried),
+                Node::Operation {
+                    operation: OperationKind::MatchSum { result, .. },
+                    ..
+                } => Ok(*result),
                 _ => Err(LkError::new(
                     ErrorCode::InvalidContainment,
                     "yield has no structured owner contract",
+                )
+                .for_node(operation_id)),
+            }
+        }
+        OperationKind::ConstructProduct { fields, .. } => fields
+            .get(index)
+            .and_then(|binding| match snapshot.node(binding.field).ok()? {
+                Node::ProductField { ty, .. } => Some(*ty),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "product operand index is outside field contract",
+                )
+                .for_node(operation_id)
+            }),
+        OperationKind::ProjectField { field, .. } => match snapshot.node(*field)? {
+            Node::ProductField { owner, .. } if index == 0 => Ok(SemanticType::Nominal(*owner)),
+            _ => Err(LkError::new(
+                ErrorCode::InvalidOperand,
+                "projection operand index is outside field contract",
+            )
+            .for_node(operation_id)),
+        },
+        OperationKind::ConstructVariant { variant, .. } => match snapshot.node(*variant)? {
+            Node::SumVariant {
+                payload: Some(ty), ..
+            } if index == 0 => Ok(*ty),
+            _ => Err(LkError::new(
+                ErrorCode::InvalidOperand,
+                "variant operand index is outside payload contract",
+            )
+            .for_node(operation_id)),
+        },
+        OperationKind::MatchSum { arms, .. } => {
+            let variant = arms
+                .first()
+                .ok_or_else(|| {
+                    LkError::new(ErrorCode::InvalidOperand, "match has no arms")
+                        .for_node(operation_id)
+                })?
+                .variant;
+            match snapshot.node(variant)? {
+                Node::SumVariant { owner, .. } if index == 0 => Ok(SemanticType::Nominal(*owner)),
+                _ => Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "match operand index is outside scrutinee contract",
                 )
                 .for_node(operation_id)),
             }
@@ -1292,6 +1655,21 @@ fn use_sites_page(
 fn uses_page(snapshot: &Snapshot, value: ValueRef, page: PageRequest) -> Result<Page<UseSite>> {
     use_sites_page(snapshot, value, page, false)
 }
+fn operation_definition_slot(operation: &OperationKind, target: NodeId) -> Option<DefinitionSlot> {
+    Some(match operation {
+        OperationKind::Call { .. } => DefinitionSlot::CallTarget,
+        OperationKind::ConstructProduct { product, .. } if *product == target => {
+            DefinitionSlot::ProductDeclaration
+        }
+        OperationKind::ConstructProduct { .. } | OperationKind::ProjectField { .. } => {
+            DefinitionSlot::ProductField
+        }
+        OperationKind::ConstructVariant { .. } => DefinitionSlot::SumVariant,
+        OperationKind::MatchSum { .. } => DefinitionSlot::MatchVariant,
+        _ => return None,
+    })
+}
+
 fn definition_page(
     snapshot: &Snapshot,
     target: NodeId,
@@ -1323,17 +1701,32 @@ fn definition_page(
     let mut total = 0u64;
     let mut items = Vec::with_capacity(page.limit as usize);
     for (id, node) in snapshot.nodes() {
-        let slot = match node {
-            Node::Package {
-                entry: Some(entry), ..
-            } if *entry == target => Some(DefinitionSlot::PackageEntry),
-            Node::Operation {
-                operation: OperationKind::Call { function, .. },
-                ..
-            } if *function == target => Some(DefinitionSlot::CallTarget),
-            _ => None,
-        };
-        if let Some(slot) = slot {
+        for index in 0..node.direct_reference_count() {
+            let Some(reference) = node.direct_reference(index) else {
+                continue;
+            };
+            if reference.target() != target {
+                continue;
+            }
+            let slot = match reference {
+                DirectReference::Definition { .. } => match node {
+                    Node::Package { .. } => DefinitionSlot::PackageEntry,
+                    Node::Operation { operation, .. } => {
+                        operation_definition_slot(operation, target)
+                            .unwrap_or(DefinitionSlot::CallTarget)
+                    }
+                    _ => continue,
+                },
+                DirectReference::Type { slot, .. } => match slot {
+                    TypeReferenceSlot::FunctionResult => DefinitionSlot::FunctionResultType,
+                    TypeReferenceSlot::ParameterType => DefinitionSlot::ParameterType,
+                    TypeReferenceSlot::ProductFieldType => DefinitionSlot::ProductFieldType,
+                    TypeReferenceSlot::SumVariantPayload => DefinitionSlot::SumVariantPayloadType,
+                    TypeReferenceSlot::BlockArgumentType => DefinitionSlot::BlockArgumentType,
+                    TypeReferenceSlot::OperationType => DefinitionSlot::OperationType,
+                },
+                DirectReference::ValueOperand { .. } => continue,
+            };
             if total >= start && total < end {
                 items.push(DefinitionReferenceSite {
                     source: id,
@@ -1364,34 +1757,40 @@ fn definition_page(
 }
 fn dependencies(snapshot: &Snapshot, id: NodeId) -> Result<Vec<DependencyFact>> {
     let node = snapshot.node(id)?;
-    let mut v = Vec::new();
-    match node {
-        Node::Package {
-            entry: Some(target),
-            ..
-        } => v.push(DependencyFact::Definition {
-            slot: DefinitionSlot::PackageEntry,
-            target: *target,
-        }),
-        Node::Operation { operation, .. } => {
-            if let OperationKind::Call { function, .. } = operation {
-                v.push(DependencyFact::Definition {
-                    slot: DefinitionSlot::CallTarget,
-                    target: *function,
-                });
+    let mut values = Vec::new();
+    for index in 0..node.direct_reference_count() {
+        let Some(reference) = node.direct_reference(index) else {
+            continue;
+        };
+        match reference {
+            DirectReference::Definition { target } => {
+                let slot = match node {
+                    Node::Package { .. } => DefinitionSlot::PackageEntry,
+                    Node::Operation { operation, .. } => {
+                        operation_definition_slot(operation, target)
+                            .unwrap_or(DefinitionSlot::CallTarget)
+                    }
+                    _ => continue,
+                };
+                values.push(DependencyFact::Definition { slot, target });
             }
-            for i in 0..operation.operand_count() {
-                if let Some(value) = operation.operand(i) {
-                    v.push(DependencyFact::ValueOperand {
-                        index: i as u64,
-                        value,
-                    });
-                }
+            DirectReference::Type { slot, target } => {
+                let slot = match slot {
+                    TypeReferenceSlot::FunctionResult => DefinitionSlot::FunctionResultType,
+                    TypeReferenceSlot::ParameterType => DefinitionSlot::ParameterType,
+                    TypeReferenceSlot::ProductFieldType => DefinitionSlot::ProductFieldType,
+                    TypeReferenceSlot::SumVariantPayload => DefinitionSlot::SumVariantPayloadType,
+                    TypeReferenceSlot::BlockArgumentType => DefinitionSlot::BlockArgumentType,
+                    TypeReferenceSlot::OperationType => DefinitionSlot::OperationType,
+                };
+                values.push(DependencyFact::Definition { slot, target });
+            }
+            DirectReference::ValueOperand { index, value } => {
+                values.push(DependencyFact::ValueOperand { index, value });
             }
         }
-        _ => {}
     }
-    Ok(v)
+    Ok(values)
 }
 fn dependency_page(
     snapshot: &Snapshot,
@@ -1684,20 +2083,29 @@ fn legal_constructor_slice(
                     let retain = total >= start && total < end;
                     total = total.saturating_add(1);
                     if retain {
+                        let operand_count = parameters.len() as u64;
                         let operand_types = parameters
                             .iter()
+                            .take(MAX_CONTEXT_ITEMS as usize)
                             .map(|parameter| match snapshot.node(*parameter) {
                                 Ok(Node::Parameter { ty, .. }) => *ty,
                                 _ => unreachable!("validated parameter checked above"),
                             })
                             .collect::<Vec<_>>();
+                        let requirements_complete = operand_types.len() == parameters.len();
                         items.push(ConstructorDescriptor {
                             code,
                             result_type: expected,
+                            operand_count,
                             operand_uses: vec![OperandUse::Copy; operand_types.len()],
                             operand_types,
                             literal_fields: Vec::new(),
                             call_target: Some(id),
+                            declaration: None,
+                            member_count: 0,
+                            members: Vec::new(),
+                            requirements_complete,
+                            nominal_type_continuation: None,
                             direct_refinement: true,
                             complete: true,
                             terminator: false,
@@ -1717,16 +2125,140 @@ fn legal_constructor_slice(
                     items.push(ConstructorDescriptor {
                         code,
                         result_type: expected,
+                        operand_count: operand_types.len() as u64,
                         operand_uses: vec![OperandUse::Copy; operand_types.len()],
                         operand_types,
                         literal_fields: descriptor.literal_fields.to_vec(),
                         call_target: None,
+                        declaration: None,
+                        member_count: 0,
+                        members: Vec::new(),
+                        requirements_complete: true,
+                        nominal_type_continuation: None,
                         direct_refinement: false,
                         complete: true,
                         terminator: false,
                     });
                 }
             }
+            OperationCode::ConstructProduct => {
+                let SemanticType::Nominal(declaration) = expected else {
+                    continue;
+                };
+                let Ok(Node::ProductType { fields, .. }) = snapshot.node(declaration) else {
+                    continue;
+                };
+                let retain = total >= start && total < end;
+                total = total.saturating_add(1);
+                if retain {
+                    let operand_types = fields
+                        .iter()
+                        .take(MAX_CONTEXT_ITEMS as usize)
+                        .map(|field| match snapshot.node(*field) {
+                            Ok(Node::ProductField { ty, .. }) => *ty,
+                            _ => unreachable!("validated product declaration"),
+                        })
+                        .collect::<Vec<_>>();
+                    let members = fields
+                        .iter()
+                        .take(MAX_CONTEXT_ITEMS as usize)
+                        .copied()
+                        .collect::<Vec<_>>();
+                    let requirements_complete = members.len() == fields.len();
+                    items.push(ConstructorDescriptor {
+                        code,
+                        result_type: expected,
+                        operand_count: fields.len() as u64,
+                        operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                        operand_types,
+                        literal_fields: Vec::new(),
+                        call_target: None,
+                        declaration: Some(declaration),
+                        member_count: fields.len() as u64,
+                        members,
+                        requirements_complete,
+                        nominal_type_continuation: (!requirements_complete).then_some(
+                            NominalTypeContinuation {
+                                declaration,
+                                page: PageRequest {
+                                    after: None,
+                                    limit: MAX_CONTEXT_ITEMS,
+                                },
+                            },
+                        ),
+                        direct_refinement: true,
+                        complete: true,
+                        terminator: false,
+                    });
+                }
+            }
+            OperationCode::ConstructVariant => {
+                let SemanticType::Nominal(declaration) = expected else {
+                    continue;
+                };
+                let Ok(Node::SumType { variants, .. }) = snapshot.node(declaration) else {
+                    continue;
+                };
+                for variant in variants {
+                    let Ok(Node::SumVariant { payload, .. }) = snapshot.node(*variant) else {
+                        continue;
+                    };
+                    let retain = total >= start && total < end;
+                    total = total.saturating_add(1);
+                    if retain {
+                        let operand_types = payload.iter().copied().collect::<Vec<_>>();
+                        items.push(ConstructorDescriptor {
+                            code,
+                            result_type: expected,
+                            operand_count: operand_types.len() as u64,
+                            operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                            operand_types,
+                            literal_fields: Vec::new(),
+                            call_target: None,
+                            declaration: Some(declaration),
+                            member_count: 1,
+                            members: vec![*variant],
+                            requirements_complete: true,
+                            nominal_type_continuation: None,
+                            direct_refinement: true,
+                            complete: true,
+                            terminator: false,
+                        });
+                    }
+                }
+            }
+            OperationCode::ProjectField => {
+                for (field, node) in snapshot.nodes() {
+                    let Node::ProductField { owner, ty, .. } = node else {
+                        continue;
+                    };
+                    if *ty != expected {
+                        continue;
+                    }
+                    let retain = total >= start && total < end;
+                    total = total.saturating_add(1);
+                    if retain {
+                        items.push(ConstructorDescriptor {
+                            code,
+                            result_type: expected,
+                            operand_count: 1,
+                            operand_types: vec![SemanticType::Nominal(*owner)],
+                            operand_uses: vec![OperandUse::Copy],
+                            literal_fields: Vec::new(),
+                            call_target: None,
+                            declaration: Some(*owner),
+                            member_count: 1,
+                            members: vec![field],
+                            requirements_complete: true,
+                            nominal_type_continuation: None,
+                            direct_refinement: true,
+                            complete: true,
+                            terminator: false,
+                        });
+                    }
+                }
+            }
+            OperationCode::MatchSum => continue,
             _ => {
                 let Some(result) = (match descriptor.results[0] {
                     TypeRule::Fixed(ty) => Some(ty),
@@ -1740,17 +2272,19 @@ fn legal_constructor_slice(
                 let retain = total >= start && total < end;
                 total = total.saturating_add(1);
                 if retain {
+                    let operand_types = descriptor
+                        .operands
+                        .iter()
+                        .filter_map(|operand| match operand.ty {
+                            TypeRule::Fixed(ty) => Some(ty),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>();
                     items.push(ConstructorDescriptor {
                         code,
                         result_type: result,
-                        operand_types: descriptor
-                            .operands
-                            .iter()
-                            .filter_map(|operand| match operand.ty {
-                                TypeRule::Fixed(ty) => Some(ty),
-                                _ => None,
-                            })
-                            .collect(),
+                        operand_count: operand_types.len() as u64,
+                        operand_types,
                         operand_uses: descriptor
                             .operands
                             .iter()
@@ -1758,6 +2292,11 @@ fn legal_constructor_slice(
                             .collect(),
                         literal_fields: descriptor.literal_fields.to_vec(),
                         call_target: None,
+                        declaration: None,
+                        member_count: 0,
+                        members: Vec::new(),
+                        requirements_complete: true,
+                        nominal_type_continuation: None,
                         direct_refinement: true,
                         complete: descriptor.complete,
                         terminator: descriptor.terminator,
@@ -1913,21 +2452,13 @@ fn derived_region_fact(snapshot: &Snapshot, region: NodeId) -> Result<Option<Enc
     let Node::Operation { operation, .. } = snapshot.node(*owner)? else {
         return Ok(None);
     };
-    Ok((0..operation.owned_region_count()).find_map(|index| {
-        (operation.owned_region(index) == Some(region))
-            .then(|| {
-                operation
-                    .descriptor()
-                    .regions
-                    .get(index)
-                    .map(|descriptor| EnclosingRegionFact {
-                        region,
-                        owner_operation: *owner,
-                        role: descriptor.role,
-                    })
-            })
-            .flatten()
-    }))
+    Ok(operation
+        .region_role(region)
+        .map(|role| EnclosingRegionFact {
+            region,
+            owner_operation: *owner,
+            role,
+        }))
 }
 
 fn structured_context_facts(
@@ -1947,8 +2478,16 @@ fn structured_context_facts(
             return Err(wrong(block, NodeKind::Block, snapshot.node(block)?.kind()));
         };
         let fact = derived_region_fact(snapshot, *region)?;
-        if fact.is_some_and(|fact| fact.role == RegionRole::ForBody) {
-            let roles = [BlockArgumentRole::LoopIndex, BlockArgumentRole::LoopCarried];
+        if fact
+            .is_some_and(|fact| matches!(fact.role, RegionRole::ForBody | RegionRole::MatchArm(_)))
+        {
+            let roles: &[BlockArgumentRole] = match fact.map(|fact| fact.role) {
+                Some(RegionRole::ForBody) => {
+                    &[BlockArgumentRole::LoopIndex, BlockArgumentRole::LoopCarried]
+                }
+                Some(RegionRole::MatchArm(_)) => &[BlockArgumentRole::MatchPayload],
+                _ => &[],
+            };
             for (index, argument) in arguments.iter().enumerate() {
                 if visible_arguments.len() == MAX_CONTEXT_ITEMS as usize {
                     break;
@@ -2086,6 +2625,36 @@ fn repair_context(
         legal_constructor_slice(snapshot, expected, 0, MAX_CONTEXT_ITEMS as usize);
     let (enclosing_regions, visible_block_arguments) =
         structured_context_facts(snapshot, loc.block)?;
+    let (nominal_type, nominal_type_continuation) =
+        if let SemanticType::Nominal(declaration) = expected {
+            let count = snapshot.node(declaration)?.owned_child_count();
+            if count <= MAX_CONTEXT_ITEMS as usize {
+                (
+                    Some(nominal_type_result(
+                        snapshot,
+                        declaration,
+                        PageRequest {
+                            after: None,
+                            limit: u32::try_from(count.max(1)).unwrap_or(MAX_CONTEXT_ITEMS),
+                        },
+                    )?),
+                    None,
+                )
+            } else {
+                (
+                    None,
+                    Some(NominalTypeContinuation {
+                        declaration,
+                        page: PageRequest {
+                            after: None,
+                            limit: MAX_CONTEXT_ITEMS,
+                        },
+                    }),
+                )
+            }
+        } else {
+            (None, None)
+        };
     Ok(RepairContext {
         workspace: snapshot.workspace(),
         revision: snapshot.revision(),
@@ -2112,6 +2681,8 @@ fn repair_context(
         incoming_uses: incoming,
         legal_constructor_count,
         legal_constructors,
+        nominal_type,
+        nominal_type_continuation,
         blocker,
         refinement_operation: matches!(target, RepairTarget::Hole(_))
             .then_some(TransactionOpCode::RefineHole),
@@ -2292,11 +2863,11 @@ mod tests {
     use super::*;
     use crate::graph::Workspace;
     use crate::ids::{LocalHandle, WorkspaceId};
-    use crate::schema::{OperationDraft, ValueDraft};
+    use crate::schema::{OperationDraft, TypeDraft, ValueDraft};
     use crate::transaction::{
         ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
-        NodeTarget, Transaction, TransactionMode, TransactionOp, TransactionResponseSpec,
-        YieldingBodyDraft,
+        NodeTarget, ProductFieldDraft, Transaction, TransactionMode, TransactionOp,
+        TransactionResponseSpec, YieldingBodyDraft,
     };
 
     fn fixture() -> (Workspace, Vec<NodeId>) {
@@ -2327,7 +2898,7 @@ mod tests {
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
@@ -2345,7 +2916,7 @@ mod tests {
                             ExpressionDraft {
                                 handle: LocalHandle::new(9),
                                 operation: ExpressionKindDraft::Hole {
-                                    expected: SemanticType::I64,
+                                    expected: SemanticType::I64.into(),
                                 },
                             },
                         ],
@@ -2957,7 +3528,7 @@ mod tests {
                     module: NodeTarget::Existing(module),
                     name: format!("callee-{index:02}"),
                     parameters: Vec::new(),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     body: None,
                 })
                 .collect(),
@@ -3042,7 +3613,7 @@ mod tests {
                         module: local(2),
                         name: "main".into(),
                         parameters: Vec::new(),
-                        result: SemanticType::I64,
+                        result: SemanticType::I64.into(),
                         body: Some(FunctionBodyDraft {
                             operations: vec![
                                 ExpressionDraft {
@@ -3064,7 +3635,7 @@ mod tests {
                                         end_exclusive: result(7),
                                         step: 1,
                                         initial: result(6),
-                                        carried: SemanticType::I64,
+                                        carried: SemanticType::I64.into(),
                                         index_handle: LocalHandle::new(10),
                                         carried_handle: LocalHandle::new(11),
                                         body: YieldingBodyDraft {
@@ -3072,12 +3643,12 @@ mod tests {
                                                 handle: LocalHandle::new(12),
                                                 operation: ExpressionKindDraft::If {
                                                     condition: result(8),
-                                                    result: SemanticType::I64,
+                                                    result: SemanticType::I64.into(),
                                                     then_body: YieldingBodyDraft {
                                                         operations: vec![ExpressionDraft {
                                                             handle: LocalHandle::new(13),
                                                             operation: ExpressionKindDraft::Hole {
-                                                                expected: SemanticType::I64,
+                                                                expected: SemanticType::I64.into(),
                                                             },
                                                         }],
                                                         yield_value: result(13),
@@ -3228,7 +3799,7 @@ mod tests {
                 module: local(2),
                 name: "main".into(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: body_operations,
                     return_value: value,
@@ -3835,6 +4406,134 @@ mod tests {
                     "incoming_uses": measurement(unrelated_uses),
                 },
             })
+        );
+    }
+
+    #[test]
+    fn nominal_query_names_unrepresentable_member_facts_and_binds_cursor() {
+        let id = WorkspaceId::from_bytes([0xb4; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let mut operations = vec![
+            TransactionOp::CreatePackage {
+                handle: LocalHandle::new(1),
+                name: "p".into(),
+            },
+            TransactionOp::CreateModule {
+                handle: LocalHandle::new(2),
+                package: local(1),
+                name: "m".into(),
+            },
+        ];
+        let mut previous = None;
+        for index in 0..70_u32 {
+            let declaration = LocalHandle::new(10 + index * 3);
+            let first = LocalHandle::new(11 + index * 3);
+            let second = LocalHandle::new(12 + index * 3);
+            let ty = previous.map_or(TypeDraft::I64, |prior| {
+                TypeDraft::Nominal(NodeTarget::Local(prior))
+            });
+            operations.push(TransactionOp::CreateProductType {
+                handle: declaration,
+                module: local(2),
+                name: format!("Level{index}"),
+                fields: vec![
+                    ProductFieldDraft {
+                        handle: first,
+                        name: "left".into(),
+                        ty,
+                    },
+                    ProductFieldDraft {
+                        handle: second,
+                        name: "right".into(),
+                        ty,
+                    },
+                ],
+            });
+            previous = Some(declaration);
+        }
+        let prepared = workspace
+            .prepare_transaction(&ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::ValidateOnly,
+                    operations,
+                },
+                response: TransactionResponseSpec::default(),
+            })
+            .expect("overflow layouts remain valid graph state");
+        let layouts = crate::type_layout::derive_layouts(&prepared.snapshot).expect("layouts");
+        let declaration = layouts
+            .iter()
+            .find_map(|(declaration, layout)| {
+                matches!(
+                    layout,
+                    DerivedLayout::Unrepresentable(
+                        crate::type_layout::LayoutFailure::ByteSizeOverflow
+                    )
+                )
+                .then_some(*declaration)
+            })
+            .expect("byte overflow declaration");
+        let first = nominal_type_result(
+            &prepared.snapshot,
+            declaration,
+            PageRequest {
+                after: None,
+                limit: 1,
+            },
+        )
+        .expect("first page");
+        assert!(first.name.starts_with("Level"));
+        assert!(!first.layout.representable);
+        assert_eq!(
+            first.layout.failure,
+            Some(crate::type_layout::LayoutFailure::ByteSizeOverflow)
+        );
+        let NominalMemberFact::ProductField {
+            name,
+            offset,
+            cells,
+            ..
+        } = &first.members.items[0]
+        else {
+            panic!("product field")
+        };
+        assert_eq!(name, "left");
+        assert_eq!((*offset, *cells), (None, None));
+        let cursor = first.members.next.expect("cursor");
+        let second = nominal_type_result(
+            &prepared.snapshot,
+            declaration,
+            PageRequest {
+                after: Some(cursor),
+                limit: 1,
+            },
+        )
+        .expect("second page");
+        assert_eq!(second.members.items.len(), 1);
+        assert!(second.members.next.is_none());
+        let other = prepared
+            .snapshot
+            .nodes()
+            .find_map(|(id, node)| {
+                (id != declaration && matches!(node, Node::ProductType { .. })).then_some(id)
+            })
+            .expect("other declaration");
+        assert_eq!(
+            nominal_type_result(
+                &prepared.snapshot,
+                other,
+                PageRequest {
+                    after: Some(cursor),
+                    limit: 1,
+                },
+            )
+            .expect_err("cross declaration cursor")
+            .code,
+            ErrorCode::InvalidCursor
         );
     }
 }

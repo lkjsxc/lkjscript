@@ -23,23 +23,32 @@ The retained representative example and principal integration produce `main() = 
 oracle and implementation; current measurements do not justify an index, cache, journal, database,
 async runtime, or second executable route. No model tokens were measured and no token claim is made.
 
-## Next gate: nominal immutable products, sums, and matching
+## Complete: nominal immutable products, sums, and matching
 
-The next evidence gate is the smallest closed extension needed to express ordinary immutable domain
-values without introducing effects, ownership, or a general type framework. Acceptance requires:
+The nominal gate is verified end to end: persistent product/sum/member identities, atomic
+forward-resolving declaration drafts, immutable shape, by-value cycle rejection, deterministic
+derived layouts, format/protocol/JSON cutovers, exact aggregate operations, exhaustive lazy match,
+nominal query/repair context, one verified aggregate Core/interpreter route, and exact public nominal
+Run values. Digest-aware schema manifest/section/full/unchanged projections derive from one executable
+authority. The retained Reading/Input application proves structured creation, invalid and valid
+identity-preserving repair, semantic diff, all sum arms, nominal Run input/output, selected versus
+unselected overflow, restart, and retained revisions through the real daemon and generic CLI.
 
-- code-owned nominal product and closed sum declarations with stable semantic identity;
-- exact construction, field projection, variant construction, and exhaustive structured matching;
-- deterministic layouts as derived state, with no serialized compiler indexes;
-- structured authoring and bounded repair context that do not expose CFG or layout scaffolding;
-- direct lowering through the existing Core IR route and explicit-frame interpreter;
-- malformed schema, scope, type, match-exhaustiveness, artifact, protocol, and runtime evidence;
-- one representative application that demonstrates reduced agent scaffolding and measures bytes,
-  round trips, compile/execute cost, and artifact growth;
-- a human-first README/status update only after that vertical is verified.
+Measurements retain schema and application bytes, round trips, artifacts and HEAD, layout,
+compile/execute time, repeated request distributions, fresh build/test cost, and boundary/runtime
+evidence. Full scans remain the correctness oracle; this evidence does not justify an index, cache,
+journal, database, async runtime, or second executable route. No model telemetry was collected and no
+token claim is made.
 
-Do not add generics, effects, capabilities, heap ownership, native code, package infrastructure, or a
-pattern framework beyond the closed consumers required by this gate.
+## Next gate: broader application and agent-cost evidence
+
+Before adding new language semantics, exercise the existing nominal pure system on a broader
+representative application authored through the machine interface. Measure model-facing request and
+response bytes, round trips, repeated schema discovery, repair attempts, selected bindings, elapsed
+workflow time, artifact growth, compile/execute cost, and actual model telemetry when available.
+Use that evidence to identify the smallest missing capability or interaction bottleneck. Keep the
+full-scan implementation as oracle and do not add generics, effects, capabilities, ownership, a heap,
+native code, package infrastructure, indexes, or caches merely to anticipate that workload.
 
 ## Later evidence gates
 

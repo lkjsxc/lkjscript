@@ -1,4 +1,6 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::panic, clippy::unwrap_used))]
+// Public typed diagnostics intentionally remain rich values at every deterministic boundary.
+#![allow(clippy::result_large_err)]
 
 //! Source-free semantic graph kernel, durable daemon, compiler, and interpreter.
 
@@ -18,6 +20,7 @@ pub mod protocol;
 pub mod query;
 pub mod schema;
 pub mod transaction;
+pub mod type_layout;
 mod validate;
 
 #[cfg(test)]
@@ -28,17 +31,23 @@ pub use ids::{
     ChangeDigest, IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, SnapshotHash,
     WorkspaceId,
 };
-pub use interpret::{RunPolicy, RuntimeValue};
+pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
+pub use machine::{
+    DescribeSchemaRequest, DescribeSchemaResult, MachineSchemaDigest, SchemaProjection,
+    SchemaSection,
+};
 pub use protocol::{Client, Request, RequestCode, Response, ResponseCode};
 pub use schema::{
-    BlockArgumentDescriptor, BlockArgumentRole, DirectReference, LiteralField, Node, NodeKind,
-    OperandArity, OperandDescriptor, OperandUse, OperationCode, OperationDescriptor,
-    OperationDraft, OperationKind, RegionDescriptor, RegionRole, SemanticType, TypeRule,
-    ValueDraft, ValueRef,
+    BlockArgumentDescriptor, BlockArgumentRole, DirectReference, LiteralField, MatchArm,
+    MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,
+    OperationCode, OperationDescriptor, OperationDraft, OperationKind, ProductFieldValue,
+    ProductFieldValueDraft, RegionArity, RegionDescriptor, RegionRole, SemanticType, TypeDraft,
+    TypeReferenceSlot, TypeRule, ValueDraft, ValueRef,
 };
 pub use transaction::{
     ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
     FunctionParameterDraft, MAX_RETURNED_BINDINGS, MAX_STRUCTURED_DRAFT_DEPTH,
-    MAX_STRUCTURED_DRAFT_ITEMS, NodeTarget, Transaction, TransactionMode, TransactionOp,
-    TransactionOpCode, TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
+    MAX_STRUCTURED_DRAFT_ITEMS, MatchArmDraft, NodeTarget, ProductFieldDraft, SumVariantDraft,
+    Transaction, TransactionMode, TransactionOp, TransactionOpCode, TransactionReceipt,
+    TransactionResponseSpec, YieldingBodyDraft,
 };

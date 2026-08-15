@@ -64,18 +64,67 @@ fn every_closed_machine_variant_round_trips() {
         round_trip(&value);
     }
     let drafts = vec![
+        OperationDraft::ConstUnit,
         OperationDraft::ConstI64(1),
         OperationDraft::ConstBool(true),
         OperationDraft::AddI64 {
             lhs: value,
             rhs: value,
         },
+        OperationDraft::LtI64 {
+            lhs: value,
+            rhs: value,
+        },
+        OperationDraft::Call {
+            function: existing,
+            arguments: vec![value],
+        },
         OperationDraft::Hole {
-            expected: SemanticType::I64,
+            expected: SemanticType::I64.into(),
+        },
+        OperationDraft::If {
+            condition: value,
+            result: TypeDraft::I64,
+            then_region: existing,
+            else_region: local,
+        },
+        OperationDraft::ForI64 {
+            start: value,
+            end_exclusive: value,
+            step: 1,
+            initial: value,
+            carried: TypeDraft::I64,
+            body_region: local,
         },
         OperationDraft::Return { value },
+        OperationDraft::Yield { value },
+        OperationDraft::ConstructProduct {
+            product: existing,
+            fields: vec![ProductFieldValueDraft {
+                field: local,
+                value,
+            }],
+        },
+        OperationDraft::ProjectField {
+            value,
+            field: existing,
+        },
+        OperationDraft::ConstructVariant {
+            variant: existing,
+            payload: Some(value),
+        },
+        OperationDraft::MatchSum {
+            scrutinee: value,
+            result: TypeDraft::I64,
+            arms: vec![MatchArmOperationDraft {
+                variant: existing,
+                region: local,
+            }],
+        },
     ];
-    for draft in &drafts {
+    assert_eq!(drafts.len(), OperationCode::ALL.len());
+    for (draft, code) in drafts.iter().zip(OperationCode::ALL) {
+        assert_eq!(draft.code(), code);
         round_trip(draft);
     }
     let yielding = |handle| YieldingBodyDraft {
@@ -105,11 +154,11 @@ fn every_closed_machine_variant_round_trips() {
             arguments: vec![value],
         },
         ExpressionKindDraft::Hole {
-            expected: SemanticType::I64,
+            expected: SemanticType::I64.into(),
         },
         ExpressionKindDraft::If {
             condition: value,
-            result: SemanticType::I64,
+            result: SemanticType::I64.into(),
             then_body: yielding(30),
             else_body: yielding(31),
         },
@@ -118,10 +167,34 @@ fn every_closed_machine_variant_round_trips() {
             end_exclusive: value,
             step: 1,
             initial: value,
-            carried: SemanticType::I64,
+            carried: SemanticType::I64.into(),
             index_handle: LocalHandle::new(32),
             carried_handle: LocalHandle::new(33),
             body: yielding(34),
+        },
+        ExpressionKindDraft::ConstructProduct {
+            product: existing,
+            fields: vec![ProductFieldValueDraft {
+                field: local,
+                value,
+            }],
+        },
+        ExpressionKindDraft::ProjectField {
+            value,
+            field: existing,
+        },
+        ExpressionKindDraft::ConstructVariant {
+            variant: existing,
+            payload: Some(value),
+        },
+        ExpressionKindDraft::MatchSum {
+            scrutinee: value,
+            result: TypeDraft::I64,
+            arms: vec![MatchArmDraft {
+                variant: existing,
+                payload_handle: Some(LocalHandle::new(35)),
+                body: yielding(36),
+            }],
         },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
@@ -151,6 +224,29 @@ fn every_closed_machine_variant_round_trips() {
                 operation: first,
                 output: 0,
             },
+        },
+        OperationKind::ConstructProduct {
+            product: first,
+            fields: vec![ProductFieldValue {
+                field: second,
+                value: ValueRef::FunctionParameter(first),
+            }],
+        },
+        OperationKind::ProjectField {
+            value: ValueRef::FunctionParameter(first),
+            field: second,
+        },
+        OperationKind::ConstructVariant {
+            variant: first,
+            payload: None,
+        },
+        OperationKind::MatchSum {
+            scrutinee: ValueRef::FunctionParameter(first),
+            result: SemanticType::I64,
+            arms: vec![MatchArm {
+                variant: first,
+                region: second,
+            }],
         },
     ] {
         round_trip(&kind);
@@ -184,9 +280,9 @@ fn every_closed_machine_variant_round_trips() {
             parameters: vec![FunctionParameterDraft {
                 handle: LocalHandle::new(4),
                 name: "x".to_owned(),
-                ty: SemanticType::Bool,
+                ty: SemanticType::Bool.into(),
             }],
-            result: SemanticType::I64,
+            result: SemanticType::I64.into(),
             body: None,
         },
         TransactionOp::DefineFunctionBody {
@@ -209,7 +305,7 @@ fn every_closed_machine_variant_round_trips() {
                 handle: LocalHandle::new(6),
                 operation: ExpressionKindDraft::If {
                     condition: ValueDraft::FunctionParameter(existing),
-                    result: SemanticType::I64,
+                    result: SemanticType::I64.into(),
                     then_body: YieldingBodyDraft {
                         operations: vec![ExpressionDraft {
                             handle: LocalHandle::new(8),
@@ -255,7 +351,37 @@ fn every_closed_machine_variant_round_trips() {
             hole: existing,
             replacement: drafts[2].clone(),
         },
+        TransactionOp::CreateProductType {
+            handle: LocalHandle::new(10),
+            module: local,
+            name: "Product".to_owned(),
+            fields: vec![ProductFieldDraft {
+                handle: LocalHandle::new(11),
+                name: "value".to_owned(),
+                ty: TypeDraft::I64,
+            }],
+        },
+        TransactionOp::CreateSumType {
+            handle: LocalHandle::new(12),
+            module: local,
+            name: "Sum".to_owned(),
+            variants: vec![SumVariantDraft {
+                handle: LocalHandle::new(13),
+                name: "none".to_owned(),
+                payload: None,
+            }],
+        },
     ];
+    for type_draft in [
+        TypeDraft::Unit,
+        TypeDraft::Bool,
+        TypeDraft::I64,
+        TypeDraft::Nominal(NodeTarget::Local(LocalHandle::new(14))),
+        TypeDraft::Nominal(NodeTarget::Existing(first)),
+    ] {
+        round_trip(&type_draft);
+    }
+
     assert_eq!(operations.len(), TransactionOpCode::ALL.len());
     for (operation, code) in operations.iter().zip(TransactionOpCode::ALL) {
         round_trip(operation);
@@ -319,6 +445,12 @@ fn every_closed_machine_variant_round_trips() {
             workspace,
             from: Revision::new(1),
             to: Revision::new(2),
+            next: 1,
+        },
+        PageCursor::NominalType {
+            workspace,
+            revision: Revision::new(1),
+            declaration: first,
             next: 1,
         },
     ];
@@ -407,6 +539,10 @@ fn every_closed_machine_variant_round_trips() {
                 include_incompatible: true,
             },
         },
+        Query::NominalType {
+            declaration: first,
+            page: page(None),
+        },
     ];
     assert_eq!(queries.len(), QueryCode::ALL.len());
     for (query, code) in queries.iter().zip(QueryCode::ALL) {
@@ -428,6 +564,7 @@ fn every_closed_machine_variant_round_trips() {
         Node::Module {
             owner: first,
             name: "m".to_owned(),
+            types: Vec::new(),
             functions: vec![second],
         },
         Node::Function {
@@ -530,6 +667,27 @@ fn every_closed_machine_variant_round_trips() {
     ] {
         round_trip(&value);
     }
+    round_trip(&RuntimeValue::Product {
+        ty: first,
+        fields: vec![lkjscript::RuntimeFieldValue {
+            field: second,
+            value: RuntimeValue::I64(7),
+        }],
+    });
+    round_trip(&RuntimeValue::Sum {
+        ty: first,
+        variant: second,
+        payload: Some(Box::new(RuntimeValue::Bool(true))),
+    });
+    let mut deepest = RuntimeValue::Unit;
+    for _ in 1..lkjscript::interpret::MAX_RUNTIME_VALUE_DEPTH {
+        deepest = RuntimeValue::Sum {
+            ty: first,
+            variant: second,
+            payload: Some(Box::new(deepest)),
+        };
+    }
+    round_trip(&deepest);
 
     let empty = |next| Page::<CompletenessBlocker> {
         items: Vec::new(),
@@ -612,6 +770,8 @@ fn every_closed_machine_variant_round_trips() {
         },
         legal_constructor_count: 0,
         legal_constructors: Vec::new(),
+        nominal_type: None,
+        nominal_type_continuation: None,
         blocker: None,
         refinement_operation: Some(TransactionOpCode::RefineHole),
     };
@@ -727,7 +887,7 @@ fn every_closed_machine_variant_round_trips() {
             },
         },
         Request::Shutdown,
-        Request::DescribeSchema,
+        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
     ];
     assert_eq!(requests.len(), RequestCode::ALL.len());
     for (request, code) in requests.iter().zip(RequestCode::ALL) {
@@ -786,7 +946,10 @@ fn every_closed_machine_variant_round_trips() {
                 .at_operation(2)
                 .for_handle(LocalHandle::new(7)),
         ),
-        Response::SchemaDescription(Box::new(lkjscript::machine::schema_description())),
+        Response::DescribeSchema(Box::new(
+            lkjscript::machine::describe_schema(&DescribeSchemaRequest::manifest())
+                .expect("manifest schema"),
+        )),
     ];
     assert_eq!(responses.len(), ResponseCode::ALL.len());
     for (response, code) in responses.iter().zip(ResponseCode::ALL) {
@@ -802,6 +965,14 @@ fn every_closed_machine_variant_round_trips() {
 
 #[test]
 fn strict_json_rejects_malformed_shapes_values_and_limits() {
+    for malformed in [
+        r#""unknown""#,
+        r#"{"nominal":{"kind":"unknown","data":1}}"#,
+        r#"{"nominal":{"kind":"local","data":1},"extra":true}"#,
+        r#"{"nominal":{}}"#,
+    ] {
+        assert!(serde_json::from_str::<TypeDraft>(malformed).is_err());
+    }
     assert!(
         serde_json::from_str::<ExpressionDraft>(
             r#"{"handle":1,"operation":{"kind":"unknown","data":null}}"#
@@ -814,13 +985,20 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
         )
         .is_err()
     );
+    for malformed in [
+        r#"{"kind":"construct_product","data":{"product":{"kind":"local","data":1},"fields":[],"extra":0}}"#,
+        r#"{"kind":"match_sum","data":{"scrutinee":{"kind":"operation_result","data":{"operation":{"kind":"local","data":1},"output":0}},"result":{"kind":"i64"},"arms":[{"variant":{"kind":"local","data":2}}]}}"#,
+        r#"{"kind":"construct_variant","data":{"variant":{"kind":"local","data":2},"payload":null,"extra":0}}"#,
+    ] {
+        assert!(serde_json::from_str::<OperationDraft>(malformed).is_err());
+    }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":3,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":4,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":3", "\"version\":2", 1),
+        valid.replacen("\"version\":4", "\"version\":3", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),
@@ -868,6 +1046,14 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     assert!(serde_json::from_str::<TransactionOp>(&strict_nested[2]).is_err());
     assert!(serde_json::from_str::<Query>(&strict_nested[3]).is_err());
     assert!(serde_json::from_str::<PageCursor>(&strict_nested[4]).is_err());
+    let nominal_result_missing_name = format!(
+        "{{\"declaration\":\"{node}\",\"kind\":\"product_type\",\"owner\":\"{node}\",\"layout\":{{\"representable\":false}},\"members\":{{\"items\":[]}}}}"
+    );
+    assert!(serde_json::from_str::<NominalTypeResult>(&nominal_result_missing_name).is_err());
+    let malformed_product_node = format!(
+        "{{\"kind\":\"product_field\",\"data\":{{\"owner\":\"{node}\",\"ordinal\":0,\"name\":\"x\",\"ty\":\"i64\",\"extra\":0}}}}"
+    );
+    assert!(serde_json::from_str::<Node>(&malformed_product_node).is_err());
     let run = format!(
         "{{\"kind\":\"run\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":1,\"entry\":\"{node}\",\"arguments\":[],\"policy\":{{\"fuel\":1,\"maximum_frames\":1}}}}}}"
     );
@@ -897,6 +1083,14 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
         ))
         .is_err()
     );
+    let product = format!(
+        "{{\"kind\":\"product\",\"data\":{{\"ty\":\"{node}\",\"fields\":[],\"extra\":0}}}}"
+    );
+    assert!(serde_json::from_str::<RuntimeValue>(&product).is_err());
+    let sum = format!(
+        "{{\"kind\":\"sum\",\"data\":{{\"ty\":\"{node}\",\"variant\":\"{node}\",\"payload\":{{\"kind\":\"unit\"}},\"extra\":0}}}}"
+    );
+    assert!(serde_json::from_str::<RuntimeValue>(&sum).is_err());
     assert!(serde_json::from_str::<Transaction>(&format!("{{\"workspace\":\"{workspace}\",\"base_revision\":0,\"mode\":\"commit\",\"operations\":[],\"extra\":0}}")).is_err());
     assert!(serde_json::from_str::<LocalHandle>("4294967296").is_err());
     assert!(serde_json::from_str::<Revision>("-1").is_err());
@@ -947,12 +1141,87 @@ fn cli_enforces_bounded_one_value_exit_and_pretty_contracts() {
     assert!(compact.stderr.is_empty() && pretty.stderr.is_empty());
     assert!(!compact.stdout[..compact.stdout.len() - 1].contains(&b'\n'));
     assert!(pretty.stdout[..pretty.stdout.len() - 1].contains(&b'\n'));
+    let compact_result = serde_json::from_slice::<DescribeSchemaResult>(&compact.stdout)
+        .expect("compact schema JSON");
     assert_eq!(
-        serde_json::from_slice::<lkjscript::machine::SchemaDescription>(&compact.stdout)
-            .expect("compact schema JSON"),
-        serde_json::from_slice::<lkjscript::machine::SchemaDescription>(&pretty.stdout)
-            .expect("pretty schema JSON")
+        compact_result,
+        serde_json::from_slice::<DescribeSchemaResult>(&pretty.stdout).expect("pretty schema JSON")
     );
+    let DescribeSchemaResult::Manifest(manifest) = compact_result else {
+        panic!("default schema manifest")
+    };
+
+    let sections = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "schema",
+            "--section",
+            "errors_and_limits",
+            "--section",
+            "identity_and_envelopes",
+        ])
+        .output()
+        .expect("section schema");
+    assert!(sections.status.success());
+    let DescribeSchemaResult::Sections(sections) =
+        serde_json::from_slice(&sections.stdout).expect("sections JSON")
+    else {
+        panic!("sections result")
+    };
+    assert!(matches!(
+        sections.sections.as_slice(),
+        [
+            lkjscript::machine::SchemaSectionPayload::IdentityAndEnvelopes(_),
+            lkjscript::machine::SchemaSectionPayload::ErrorsAndLimits(_)
+        ]
+    ));
+
+    let full = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args(["schema", "--full"])
+        .output()
+        .expect("full schema");
+    assert!(full.status.success());
+    assert!(matches!(
+        serde_json::from_slice::<DescribeSchemaResult>(&full.stdout).expect("full JSON"),
+        DescribeSchemaResult::Full { .. }
+    ));
+
+    let unchanged = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "schema",
+            "--full",
+            "--known-digest",
+            &manifest.digest.to_string(),
+        ])
+        .output()
+        .expect("unchanged schema");
+    assert!(unchanged.status.success());
+    assert_eq!(
+        serde_json::from_slice::<DescribeSchemaResult>(&unchanged.stdout).expect("unchanged JSON"),
+        DescribeSchemaResult::Unchanged {
+            digest: manifest.digest
+        }
+    );
+
+    for arguments in [
+        vec!["schema", "--full", "--section", "runtime_and_run"],
+        vec!["schema", "--section", "unknown"],
+        vec![
+            "schema",
+            "--section",
+            "runtime_and_run",
+            "--section",
+            "runtime_and_run",
+        ],
+        vec!["schema", "--known-digest", "ABCDEF"],
+    ] {
+        let invalid = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+            .args(arguments)
+            .output()
+            .expect("invalid schema flags");
+        assert_eq!(invalid.status.code(), Some(2));
+        assert!(invalid.stdout.len() < 2048);
+        assert_one_json(&invalid.stdout);
+    }
 
     for (size, expected_kind) in [
         (MAX_JSON_INPUT_BYTES, "invalid_json"),

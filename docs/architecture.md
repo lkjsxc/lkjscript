@@ -4,7 +4,7 @@
 
 ```text
 strict JSON CLI projection (optional)
-    -> typed protocol-v3 frame over private Unix socket
+    -> typed protocol-v4 frame over private Unix socket
     -> synchronous lkjscriptd
     -> one DurableWorkspace writer per workspace
     -> staged typed transaction over immutable Snapshot
@@ -17,13 +17,16 @@ strict JSON CLI projection (optional)
 
 The daemon is the only live graph writer. `graph.rs` owns immutable snapshots and retained history;
 `schema.rs` owns closed node contracts and static operation descriptors; `transaction.rs` owns
-staging and compact receipts; `validate.rs` owns graph acceptance; `diff.rs` owns deterministic
-change facts/digests; `artifact.rs` owns canonical semantic bytes; `persistence.rs` owns durable
-publication; `protocol.rs` owns version-3 IPC types/framing; `query.rs` owns derived scan queries and
+staging, transaction-local nominal target resolution, and compact receipts; `validate.rs` owns graph
+acceptance; `type_layout.rs` owns iterative by-value dependency validation and checked derived
+layouts; `diff.rs` owns deterministic change facts/digests; `artifact.rs` owns canonical semantic
+bytes; `persistence.rs` owns durable publication; `protocol.rs` owns version-4 IPC types/framing; `query.rs` owns derived scan queries and
 repair-context composition; `machine.rs` owns strict bounded JSON projection and executable schema
-description; `compile.rs` iteratively discovers direct-call closures and lowers structured regions;
-private `core_ir.rs` owns dense multi-function CFG contracts and independent verification;
-`interpret.rs` owns the one explicit-frame runtime route. Generated CFG blocks thread the complete
+description; `compile.rs` iteratively discovers exact direct-call and nominal-type closures and lowers
+structured regions and aggregates; private `core_ir.rs` owns the dense type table, derived layouts,
+multi-function CFG and aggregate/switch contracts, and independent verification; `interpret.rs` owns
+public revision-bound runtime-value validation plus the one flat-cell explicit-frame runtime route.
+Generated CFG blocks thread the complete
 visible semantic environment in `ValueRef` derived order: reference variant first, then canonical
 workspace/node identity, then operation output index. This is a private deterministic lowering
 choice, not a public identity or serialized contract.
@@ -44,8 +47,11 @@ remain both implementation and oracle until representative repeated cost justifi
 
 The generic CLI is not another service. It strictly decodes one bounded JSON envelope, converts to
 the same closed Rust request, sends one private binary IPC request, and strictly encodes one typed
-response. JSON never becomes semantic state. Local `schema` and daemon `DescribeSchema` derive from
-executable descriptors and stable enums rather than a separately maintained schema file.
+response. JSON never becomes semantic state. Local `schema` and daemon `DescribeSchema` derive a
+compact manifest, canonical digest, exact multi-section projections, explicit full projection, and
+matching-digest `unchanged` response from one complete executable description and the protocol's
+canonical schema-facts encoder. Projection is recomputed per request; there is no schema cache,
+persisted response, or separately maintained schema table.
 
 ## Durability and bounded acknowledgement
 
@@ -75,11 +81,15 @@ Corrupt or ambiguous durable state is rejected, not repaired heuristically.
 - **artifact and HEAD bytes:** separate bounded canonical decoders, hashes/checksums, graph/history
   validation, strict trailing-byte policy;
 - **AI proposals:** only closed typed requests reach deterministic validators;
-- **runtime:** verified Core IR only, bounded invocation arguments, positive bounded fuel and frame
-  policy, and one non-recursive interpreter loop; fuel is charged once per executed instruction and
-  once per terminator transfer, while both frame count and aggregate live value-slot capacity are
-  checked before entry/call allocation and released on return; no native
-  code, ambient host capability, or foreign boundary.
+- **runtime:** verified Core IR only, exact revision-bound primitive/product/sum values, bounded
+  nesting/items/encoded bytes/result projection, positive bounded fuel and frame policy, and one
+  non-recursive interpreter loop over explicit frames; each frame uses a flat cell arena with separate
+  initialized facts. Aggregate instructions copy or initialize exact arena ranges directly, switch
+  reads only the discriminant, and block entry invalidates facts without clearing the arena. Fuel is
+  charged before work as one base per instruction/transfer plus `max(1,cells)` per logical value copy,
+  with full-sum charging for variant canonicalization plus the active payload's logical copy. The 65,536-cell peak covers live arenas plus
+  exact argument/edge/return/public-flatten scratch and prospective callee arenas before allocation or
+  copy; no native code, ambient host capability, or foreign boundary.
 
 User-scalable graph traversals use loops and explicit work collections rather than unbounded native
 recursion. Operational page/frame/context limits protect boundaries and do not constrain semantic
@@ -90,5 +100,5 @@ program size.
 The measured bootstrap retains `BTreeMap`, vectors, full snapshot clones, full semantic
 recomputation/diff materialization, and full artifact rewrites. It has no database, journal, async
 runtime, generic graph framework, runtime schema registry, reverse index, cache, source projection,
-native backend, runtime cell, plugin mechanism, or remote service. A replacement requires a current
+native backend, managed heap, plugin mechanism, or remote service. A replacement requires a current
 consumer, measurements, one preserved authority path, and evidence that supports its added cost.

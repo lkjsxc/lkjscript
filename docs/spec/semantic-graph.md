@@ -7,22 +7,29 @@ only live writer. A published `Snapshot` is immutable and revision-labelled. Can
 state is workspace identity, stable node identity, ownership and ordered child slots, typed
 operation data, direct value references, allocator state, tombstones, revision, and selected
 package entry. Names are presentation and lookup metadata stored in the snapshot; they are not
-identity. Derived blockers, query facts, diffs, Core IR, diagnostics, and timings are not mutable
+identity. Every package, module, product type, sum type, function, product field, sum variant, and
+function parameter name is valid UTF-8 and contains at least one UTF-8 byte. Names are unique within
+the exact sibling groups `workspace.packages`, `package.modules`, `module.types` (product and sum
+declarations together), `module.functions`, `product.fields`, `sum.variants`, and
+`function.parameters`; names in different groups may coincide. Derived blockers, query facts, diffs,
+Core IR, diagnostics, and timings are not mutable
 graph authority.
 
 `src/schema.rs` owns the closed node and operation vocabulary and its stable boundary tags. Unknown
 kinds, operation codes, attributes, slots, value forms, and tags reject. The implemented shape is:
 
 ```text
-WorkspaceRoot -> Package -> Module -> Function -> Region -> Block -> Operation
-                                      \-> Parameter             \-> BlockArgument
+WorkspaceRoot -> Package -> Module -> ProductType -> ProductField
+                              \-> SumType -> SumVariant
+                              \-> Function -> Parameter / Region -> Block -> Operation
 Operation -> ordered owned Region slots -> Block -> BlockArgument / Operation
 ```
 
 A function may have no body while incomplete. Every attached region has exactly one ordered block
 in the current schema. A function-body block ends in `return`; an `if` arm or `for_i64` body ends in
 `yield`. Blocks own ordered arguments where their derived region role requires them: a loop body has
-`loop_index` and `loop_carried`, while function and conditional blocks have none. A value is a
+`loop_index` and `loop_carried`; a payload-bearing match arm has one `match_payload` argument; and
+function, conditional, and nullary match-arm blocks have none. A value is a
 function parameter Node ID, block-argument Node ID, or `(operation Node ID, checked output index)`.
 Containment, direct definition references, and value uses remain distinct. Every non-root live node has one owner and is reachable from the
 root. Observable graph order is explicit or sorted.
@@ -40,8 +47,10 @@ never reuse tombstones. Every serial below the allocator frontier is live or tom
 history requires stable root identity, monotonic allocation and tombstones, no resurrection, stable
 kind/owner/child continuity for surviving nodes, unchanged relative order for surviving body
 children, and no clearing of a selected entry from a surviving package. `SetEntryFunction` may
-select or replace an entry. Rename and a compatible same-constructor scalar/operand update preserve
-identity.
+select or replace an entry. Rename and a compatible same-constructor scalar/operand update preserve identity. A surviving
+product or sum declaration retains its exact ordered member IDs. A surviving field retains owner,
+ordinal, and type; a surviving variant retains owner, ordinal, and payload contract. Public
+transactions do not append, remove, reorder, or retype members under surviving declaration identity.
 
 `RefineHole` is the only identity-preserving constructor transition. It changes exactly:
 
@@ -54,7 +63,9 @@ replacement may use existing values or transaction-local values created in the s
 final structural order, scope, dominance, type, ownership, and result-index validation still
 applies.
 Refinement to a hole, a terminator, a different result contract, or from an already-complete
-operation rejects. There is no reverse refinement or generic morph operation. History validation
+operation rejects. A nominal hole may refine only to exact regionless product construction, variant
+construction, or projection; match is ineligible. There is no reverse refinement or generic morph
+operation. History validation
 recognizes only this explicit transition, and the semantic diff reports `OperationRefined` rather
 than delete/create identity churn.
 
@@ -63,8 +74,8 @@ than delete/create identity churn.
 An `ApplyTransactionRequest` names workspace, exact base revision,
 `TransactionMode::{Commit, ValidateOnly}`, an optional committed-request idempotency key, an ordered
 closed batch of `TransactionOp` values, and a bounded `TransactionResponseSpec`. Public creation is
-`CreatePackage`, `CreateModule`, structured `CreateFunction`, `DefineFunctionBody`, and
-`InsertExpression`; maintenance sets the entry, renames, replaces a compatible operation or operand,
+`CreatePackage`, `CreateModule`, atomic `CreateProductType`, atomic `CreateSumType`, structured
+`CreateFunction`, `DefineFunctionBody`, and `InsertExpression`; maintenance sets the entry, renames, replaces a compatible operation or operand,
 refines a regionless hole, or deletes an owned subtree. `InsertExpression` names a block that exists
 in the base snapshot, allowing deeper structured programs to be assembled across bounded
 transactions without exposing a parallel low-level scaffolding API.
@@ -77,8 +88,13 @@ request depth/item overflow, and counts every call argument whether it appears i
 expression or fine-grained operation replacement/refinement under the same 65,536-item request
 policy. It assigns collision-free private handles for implied nodes, then allocates all explicit and
 implicit Node IDs in depth-first canonical node order before applying any edit.
-Calls may therefore name later function handles and mutual references. Final graph validation is
-unchanged and authoritative; the draft and private handles are discarded.
+Calls may therefore name later function handles and mutual references. Declaration, field, variant,
+identity-keyed product binding, match-arm, and optional payload handles are scanned iteratively before
+allocation. Product bindings and match arms resolve exact staged identities and normalize into
+canonical declaration order. `TypeDraft` resolves primitive types or existing
+or transaction-local nominal declarations, so fields, payloads, signatures, block arguments, and
+operation type contracts may use forward nominal targets. Final graph validation is unchanged and
+authoritative; the draft, local targets, and private handles are discarded.
 
 A client may select at most 64 explicit created handles for the receipt. Private implied handles
 cannot be selected or returned. Duplicate, undeclared, private, or non-created selected handles
@@ -122,10 +138,13 @@ definitions do not block an otherwise complete entry.
 
 ## Artifact and durable HEAD
 
-A `.lkjscript` artifact uses format version 2 and semantic schema identity `lkjscript-spg002`;
-older artifact bytes reject without a compatibility reader. It has fixed magic and semantic schema ID, little-endian integers, checked u64
-counts, canonical node/tombstone order, allocator/root state, and a BLAKE3 snapshot hash. Decode
-rejects truncation, overflow, invalid UTF-8, unknown tags, duplicate or wrong-workspace IDs, invalid
+A `.lkjscript` artifact uses format version 3 and semantic schema identity `lkjscript-spg003`;
+format-2 and older artifact bytes reject without a compatibility reader. It has fixed magic and semantic schema ID, little-endian integers, checked u64
+counts, canonical node/tombstone order, allocator/root state, and a BLAKE3 snapshot hash. The exact
+artifact/decode policy accepts at most 67,108,864 bytes (64 MiB) for the complete artifact and at
+most 1,048,576 UTF-8 bytes (1 MiB) for each encoded name. Commit preflight applies the same artifact
+policy before publication. Decode rejects policy overflow, truncation, integer overflow, invalid
+UTF-8, unknown tags, duplicate or wrong-workspace IDs, empty or category-duplicate names, invalid
 containment or references, hash mismatch, and trailing bytes. Count work is bounded from remaining
 artifact bytes and exact minimum record widths; there is no separate semantic node or tombstone
 ceiling. Durable workspace IDs and revision file names must use their one canonical path spelling.

@@ -43,10 +43,12 @@ pub enum ErrorCode {
     WorkspaceNotFound,
     WrongKind,
     WrongWorkspace,
+    ByValueTypeCycle,
+    TypeLayoutUnrepresentable,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::ArtifactCorrupt,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
@@ -78,6 +80,8 @@ impl ErrorCode {
         Self::RunArgumentMismatch,
         Self::ExecutionFuelExhausted,
         Self::ExecutionFrameExhausted,
+        Self::ByValueTypeCycle,
+        Self::TypeLayoutUnrepresentable,
     ];
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -112,10 +116,12 @@ impl ErrorCode {
             Self::RunArgumentMismatch => 29,
             Self::ExecutionFuelExhausted => 30,
             Self::ExecutionFrameExhausted => 31,
+            Self::ByValueTypeCycle => 32,
+            Self::TypeLayoutUnrepresentable => 33,
         }
     }
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        if tag >= 1 && tag <= 31 {
+        if tag >= 1 && tag <= 33 {
             Some(Self::ALL[(tag - 1) as usize])
         } else {
             None
@@ -154,6 +160,8 @@ impl ErrorCode {
             Self::WorkspaceNotFound => "workspace_not_found",
             Self::WrongKind => "wrong_kind",
             Self::WrongWorkspace => "wrong_workspace",
+            Self::ByValueTypeCycle => "by_value_type_cycle",
+            Self::TypeLayoutUnrepresentable => "type_layout_unrepresentable",
         }
     }
 }

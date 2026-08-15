@@ -5,9 +5,11 @@ use crate::ids::{ArtifactVersion, NodeId, Revision, SchemaId, SnapshotHash, Work
 use crate::schema::{Node, OperationCode, OperationKind, SemanticType, ValueRef};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x02";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(2);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg002");
+pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x03";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(3);
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg003");
+pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
+pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
 const ENCODED_TOMBSTONE_BYTES: usize = 8;
 const MINIMUM_ENCODED_NODE_RECORD_BYTES: usize = 17;
@@ -22,8 +24,8 @@ pub struct DecodePolicy {
 impl Default for DecodePolicy {
     fn default() -> Self {
         Self {
-            maximum_artifact_bytes: 64 * 1024 * 1024,
-            maximum_name_bytes: 1024 * 1024,
+            maximum_artifact_bytes: MAXIMUM_ARTIFACT_BYTES,
+            maximum_name_bytes: MAXIMUM_ARTIFACT_NAME_BYTES,
         }
     }
 }
@@ -221,11 +223,57 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
         Node::Module {
             owner,
             name,
+            types,
             functions,
         } => {
             put_node_id(writer, *owner);
             writer.string(name).map_err(artifact_codec)?;
+            put_node_ids(writer, types)?;
             put_node_ids(writer, functions)
+        }
+        Node::ProductType {
+            owner,
+            name,
+            fields,
+        } => {
+            put_node_id(writer, *owner);
+            writer.string(name).map_err(artifact_codec)?;
+            put_node_ids(writer, fields)
+        }
+        Node::ProductField {
+            owner,
+            ordinal,
+            name,
+            ty,
+        } => {
+            put_node_id(writer, *owner);
+            writer.u32(*ordinal);
+            writer.string(name).map_err(artifact_codec)?;
+            put_type(writer, *ty)
+        }
+        Node::SumType {
+            owner,
+            name,
+            variants,
+        } => {
+            put_node_id(writer, *owner);
+            writer.string(name).map_err(artifact_codec)?;
+            put_node_ids(writer, variants)
+        }
+        Node::SumVariant {
+            owner,
+            ordinal,
+            name,
+            payload,
+        } => {
+            put_node_id(writer, *owner);
+            writer.u32(*ordinal);
+            writer.string(name).map_err(artifact_codec)?;
+            writer.bool(payload.is_some());
+            if let Some(payload) = payload {
+                put_type(writer, *payload)?;
+            }
+            Ok(())
         }
         Node::Function {
             owner,
@@ -237,7 +285,7 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
             put_node_id(writer, *owner);
             writer.string(name).map_err(artifact_codec)?;
             put_node_ids(writer, parameters)?;
-            put_type(writer, *result);
+            put_type(writer, *result)?;
             put_optional_node_id(writer, *body);
             Ok(())
         }
@@ -250,8 +298,7 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
             put_node_id(writer, *owner);
             writer.u32(*ordinal);
             writer.string(name).map_err(artifact_codec)?;
-            put_type(writer, *ty);
-            Ok(())
+            put_type(writer, *ty)
         }
         Node::Region { owner, blocks } => {
             put_node_id(writer, *owner);
@@ -272,8 +319,7 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
         Node::BlockArgument { owner, ordinal, ty } => {
             put_node_id(writer, *owner);
             writer.u32(*ordinal);
-            put_type(writer, *ty);
-            Ok(())
+            put_type(writer, *ty)
         }
         Node::Operation { owner, operation } => {
             put_node_id(writer, *owner);
@@ -307,7 +353,42 @@ pub(crate) fn read_node(
             name: reader
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
+            types: read_node_ids(reader, workspace)?,
             functions: read_node_ids(reader, workspace)?,
+        },
+        crate::schema::NodeKind::ProductType => Node::ProductType {
+            owner: read_node_id(reader, workspace)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            fields: read_node_ids(reader, workspace)?,
+        },
+        crate::schema::NodeKind::ProductField => Node::ProductField {
+            owner: read_node_id(reader, workspace)?,
+            ordinal: reader.u32().map_err(artifact_codec)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            ty: read_type(reader, workspace)?,
+        },
+        crate::schema::NodeKind::SumType => Node::SumType {
+            owner: read_node_id(reader, workspace)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            variants: read_node_ids(reader, workspace)?,
+        },
+        crate::schema::NodeKind::SumVariant => Node::SumVariant {
+            owner: read_node_id(reader, workspace)?,
+            ordinal: reader.u32().map_err(artifact_codec)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            payload: if reader.bool().map_err(artifact_codec)? {
+                Some(read_type(reader, workspace)?)
+            } else {
+                None
+            },
         },
         crate::schema::NodeKind::Function => Node::Function {
             owner: read_node_id(reader, workspace)?,
@@ -315,7 +396,7 @@ pub(crate) fn read_node(
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
             parameters: read_node_ids(reader, workspace)?,
-            result: read_type(reader)?,
+            result: read_type(reader, workspace)?,
             body: read_optional_node_id(reader, workspace)?,
         },
         crate::schema::NodeKind::Parameter => Node::Parameter {
@@ -324,7 +405,7 @@ pub(crate) fn read_node(
             name: reader
                 .string(policy.maximum_name_bytes)
                 .map_err(artifact_codec)?,
-            ty: read_type(reader)?,
+            ty: read_type(reader, workspace)?,
         },
         crate::schema::NodeKind::Region => Node::Region {
             owner: read_node_id(reader, workspace)?,
@@ -339,7 +420,7 @@ pub(crate) fn read_node(
         crate::schema::NodeKind::BlockArgument => Node::BlockArgument {
             owner: read_node_id(reader, workspace)?,
             ordinal: reader.u32().map_err(artifact_codec)?,
-            ty: read_type(reader)?,
+            ty: read_type(reader, workspace)?,
         },
         crate::schema::NodeKind::Operation => Node::Operation {
             owner: read_node_id(reader, workspace)?,
@@ -368,7 +449,7 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
                 put_value(writer, *argument);
             }
         }
-        OperationKind::Hole { expected } => put_type(writer, *expected),
+        OperationKind::Hole { expected } => put_type(writer, *expected)?,
         OperationKind::If {
             condition,
             result,
@@ -376,7 +457,7 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             else_region,
         } => {
             put_value(writer, *condition);
-            put_type(writer, *result);
+            put_type(writer, *result)?;
             put_node_id(writer, *then_region);
             put_node_id(writer, *else_region);
         }
@@ -392,11 +473,43 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             put_value(writer, *end_exclusive);
             writer.i64(*step);
             put_value(writer, *initial);
-            put_type(writer, *carried);
+            put_type(writer, *carried)?;
             put_node_id(writer, *body_region);
         }
         OperationKind::Return { value } | OperationKind::Yield { value } => {
             put_value(writer, *value)
+        }
+        OperationKind::ConstructProduct { product, fields } => {
+            put_node_id(writer, *product);
+            put_count(writer, fields.len())?;
+            for field in fields {
+                put_node_id(writer, field.field);
+                put_value(writer, field.value);
+            }
+        }
+        OperationKind::ProjectField { value, field } => {
+            put_value(writer, *value);
+            put_node_id(writer, *field);
+        }
+        OperationKind::ConstructVariant { variant, payload } => {
+            put_node_id(writer, *variant);
+            writer.bool(payload.is_some());
+            if let Some(payload) = payload {
+                put_value(writer, *payload);
+            }
+        }
+        OperationKind::MatchSum {
+            scrutinee,
+            result,
+            arms,
+        } => {
+            put_value(writer, *scrutinee);
+            put_type(writer, *result)?;
+            put_count(writer, arms.len())?;
+            for arm in arms {
+                put_node_id(writer, arm.variant);
+                put_node_id(writer, arm.region);
+            }
         }
     }
     Ok(())
@@ -438,11 +551,11 @@ pub(crate) fn read_operation(
             })
         }
         OperationCode::Hole => Ok(OperationKind::Hole {
-            expected: read_type(reader)?,
+            expected: read_type(reader, workspace)?,
         }),
         OperationCode::If => Ok(OperationKind::If {
             condition: read_value(reader, workspace)?,
-            result: read_type(reader)?,
+            result: read_type(reader, workspace)?,
             then_region: read_node_id(reader, workspace)?,
             else_region: read_node_id(reader, workspace)?,
         }),
@@ -451,7 +564,7 @@ pub(crate) fn read_operation(
             end_exclusive: read_value(reader, workspace)?,
             step: reader.i64().map_err(artifact_codec)?,
             initial: read_value(reader, workspace)?,
-            carried: read_type(reader)?,
+            carried: read_type(reader, workspace)?,
             body_region: read_node_id(reader, workspace)?,
         }),
         OperationCode::Return => Ok(OperationKind::Return {
@@ -460,6 +573,48 @@ pub(crate) fn read_operation(
         OperationCode::Yield => Ok(OperationKind::Yield {
             value: read_value(reader, workspace)?,
         }),
+        OperationCode::ConstructProduct => {
+            let product = read_node_id(reader, workspace)?;
+            let count = read_byte_bounded_count(reader, 17, 0)?;
+            let mut fields = Vec::with_capacity(count);
+            for _ in 0..count {
+                fields.push(crate::schema::ProductFieldValue {
+                    field: read_node_id(reader, workspace)?,
+                    value: read_value(reader, workspace)?,
+                });
+            }
+            Ok(OperationKind::ConstructProduct { product, fields })
+        }
+        OperationCode::ProjectField => Ok(OperationKind::ProjectField {
+            value: read_value(reader, workspace)?,
+            field: read_node_id(reader, workspace)?,
+        }),
+        OperationCode::ConstructVariant => {
+            let variant = read_node_id(reader, workspace)?;
+            let payload = if reader.bool().map_err(artifact_codec)? {
+                Some(read_value(reader, workspace)?)
+            } else {
+                None
+            };
+            Ok(OperationKind::ConstructVariant { variant, payload })
+        }
+        OperationCode::MatchSum => {
+            let scrutinee = read_value(reader, workspace)?;
+            let result = read_type(reader, workspace)?;
+            let count = read_byte_bounded_count(reader, 16, 0)?;
+            let mut arms = Vec::with_capacity(count);
+            for _ in 0..count {
+                arms.push(crate::schema::MatchArm {
+                    variant: read_node_id(reader, workspace)?,
+                    region: read_node_id(reader, workspace)?,
+                });
+            }
+            Ok(OperationKind::MatchSum {
+                scrutinee,
+                result,
+                arms,
+            })
+        }
     }
 }
 
@@ -496,12 +651,19 @@ pub(crate) fn read_value(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Res
     }
 }
 
-fn put_type(writer: &mut Writer, ty: SemanticType) {
+fn put_type(writer: &mut Writer, ty: SemanticType) -> Result<()> {
     writer.u8(ty.stable_tag());
+    if let SemanticType::Nominal(target) = ty {
+        put_node_id(writer, target);
+    }
+    Ok(())
 }
 
-fn read_type(reader: &mut Reader<'_>) -> Result<SemanticType> {
+fn read_type(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<SemanticType> {
     let tag = reader.u8().map_err(artifact_codec)?;
+    if tag == 4 {
+        return Ok(SemanticType::Nominal(read_node_id(reader, workspace)?));
+    }
     SemanticType::from_stable_tag(tag)
         .ok_or_else(|| artifact_codec(reader.unknown_tag(TagDomain::SemanticType, tag)))
 }
@@ -596,6 +758,94 @@ mod tests {
         Snapshot::initial(WorkspaceId::from_bytes([9; 16])).expect("initial snapshot must be valid")
     }
 
+    fn nominal_snapshot() -> Snapshot {
+        let workspace = WorkspaceId::from_bytes([0x33; 16]);
+        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let nodes = BTreeMap::from([
+            (
+                id(1),
+                Node::WorkspaceRoot {
+                    packages: vec![id(2)],
+                },
+            ),
+            (
+                id(2),
+                Node::Package {
+                    owner: id(1),
+                    name: "p".into(),
+                    modules: vec![id(3)],
+                    entry: None,
+                },
+            ),
+            (
+                id(3),
+                Node::Module {
+                    owner: id(2),
+                    name: "m".into(),
+                    types: vec![id(4), id(6)],
+                    functions: Vec::new(),
+                },
+            ),
+            (
+                id(4),
+                Node::ProductType {
+                    owner: id(3),
+                    name: "Reading".into(),
+                    fields: vec![id(5)],
+                },
+            ),
+            (
+                id(5),
+                Node::ProductField {
+                    owner: id(4),
+                    ordinal: 0,
+                    name: "value".into(),
+                    ty: SemanticType::I64,
+                },
+            ),
+            (
+                id(6),
+                Node::SumType {
+                    owner: id(3),
+                    name: "Input".into(),
+                    variants: vec![id(7)],
+                },
+            ),
+            (
+                id(7),
+                Node::SumVariant {
+                    owner: id(6),
+                    ordinal: 0,
+                    name: "sample".into(),
+                    payload: Some(SemanticType::Nominal(id(4))),
+                },
+            ),
+        ]);
+        Snapshot::from_parts(
+            workspace,
+            Revision::INITIAL,
+            id(1),
+            8,
+            BTreeSet::new(),
+            nodes,
+        )
+        .expect("nominal snapshot")
+    }
+
+    #[test]
+    fn nominal_nodes_and_type_references_round_trip_without_layout_bytes() {
+        let snapshot = nominal_snapshot();
+        let bytes = encode(&snapshot).expect("encode nominal");
+        let decoded = decode(&bytes).expect("decode nominal");
+        assert_eq!(decoded, snapshot);
+        assert_eq!(encode(&decoded).expect("reencode"), bytes);
+        assert!(
+            !bytes
+                .windows(b"payload_offset".len())
+                .any(|window| window == b"payload_offset")
+        );
+    }
+
     #[test]
     fn artifact_round_trip_is_byte_identical() {
         let snapshot = initial();
@@ -611,7 +861,7 @@ mod tests {
         let workspace = WorkspaceId::from_bytes([0x5a; 16]);
         let first = NodeId::new(workspace, 2).expect("first operation");
         let second = NodeId::new(workspace, 3).expect("second operation");
-        let operations = [
+        let operations = vec![
             OperationKind::ConstUnit,
             OperationKind::ConstI64(-7),
             OperationKind::ConstBool(true),
@@ -677,6 +927,29 @@ mod tests {
             OperationKind::Yield {
                 value: ValueRef::BlockArgument(second),
             },
+            OperationKind::ConstructProduct {
+                product: first,
+                fields: vec![crate::schema::ProductFieldValue {
+                    field: second,
+                    value: ValueRef::BlockArgument(second),
+                }],
+            },
+            OperationKind::ProjectField {
+                value: ValueRef::BlockArgument(second),
+                field: first,
+            },
+            OperationKind::ConstructVariant {
+                variant: first,
+                payload: Some(ValueRef::BlockArgument(second)),
+            },
+            OperationKind::MatchSum {
+                scrutinee: ValueRef::BlockArgument(second),
+                result: SemanticType::Nominal(first),
+                arms: vec![crate::schema::MatchArm {
+                    variant: first,
+                    region: second,
+                }],
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
@@ -693,12 +966,12 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_one_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format two artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x01");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&1_u16.to_le_bytes());
+    fn artifact_format_two_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format three artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x02");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&2_u16.to_le_bytes());
         assert_eq!(
-            decode(&bytes).expect_err("format one must reject").code,
+            decode(&bytes).expect_err("format two must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }

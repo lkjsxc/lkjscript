@@ -8,9 +8,9 @@ use lkjscript::query::{
 use lkjscript::{
     ApplyTransactionRequest, Client, ErrorCode, ExpressionDraft, ExpressionKindDraft,
     FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle, NodeId, NodeTarget,
-    OperationDraft, QueryId, Request, RequestId, Response, Revision, RuntimeValue, SemanticType,
-    Transaction, TransactionMode, TransactionOp, TransactionResponseSpec, ValueDraft, WorkspaceId,
-    YieldingBodyDraft,
+    OperationDraft, ProductFieldDraft, QueryId, Request, RequestId, Response, Revision,
+    RuntimeFieldValue, RuntimeValue, SemanticType, Transaction, TransactionMode, TransactionOp,
+    TransactionResponseSpec, TypeDraft, ValueDraft, WorkspaceId, YieldingBodyDraft,
 };
 use std::fs;
 use std::io::{Read, Write};
@@ -73,6 +73,166 @@ impl Drop for RunningDaemon {
             let _ = self.child.wait();
         }
     }
+}
+
+#[test]
+fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
+    let temporary = tempfile::tempdir().expect("state");
+    let daemon = RunningDaemon::start(temporary.path());
+    let client = daemon.client();
+    let Response::WorkspaceCreated(created) = client
+        .request(RequestId::new(1), &Request::CreateWorkspace)
+        .expect("create workspace")
+    else {
+        panic!("workspace response")
+    };
+    let workspace = created.workspace;
+    let local = |value| NodeTarget::Local(LocalHandle::new(value));
+    let request = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    handle: LocalHandle::new(1),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    handle: LocalHandle::new(2),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateProductType {
+                    handle: LocalHandle::new(3),
+                    module: local(2),
+                    name: "Reading".into(),
+                    fields: vec![
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(4),
+                            name: "value".into(),
+                            ty: TypeDraft::I64,
+                        },
+                        ProductFieldDraft {
+                            handle: LocalHandle::new(5),
+                            name: "valid".into(),
+                            ty: TypeDraft::Bool,
+                        },
+                    ],
+                },
+                TransactionOp::CreateFunction {
+                    handle: LocalHandle::new(6),
+                    module: local(2),
+                    name: "identity".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        handle: LocalHandle::new(7),
+                        name: "reading".into(),
+                        ty: TypeDraft::Nominal(local(3)),
+                    }],
+                    result: TypeDraft::Nominal(local(3)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![],
+                        return_value: ValueDraft::FunctionParameter(local(7)),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(6),
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_handles: vec![
+                LocalHandle::new(3),
+                LocalHandle::new(4),
+                LocalHandle::new(5),
+                LocalHandle::new(6),
+            ],
+        },
+    };
+    let Response::TransactionReceipt(receipt) = client
+        .request(RequestId::new(2), &Request::ApplyTransaction(request))
+        .expect("create nominal program")
+    else {
+        panic!("transaction response")
+    };
+    let id = |handle: u32| {
+        receipt
+            .returned_bindings
+            .iter()
+            .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+            .expect("binding")
+    };
+    let input = RuntimeValue::Product {
+        ty: id(3),
+        fields: vec![
+            RuntimeFieldValue {
+                field: id(5),
+                value: RuntimeValue::Bool(true),
+            },
+            RuntimeFieldValue {
+                field: id(4),
+                value: RuntimeValue::I64(12),
+            },
+        ],
+    };
+    let Response::Run(result) = client
+        .request(
+            RequestId::new(3),
+            &Request::Run {
+                workspace,
+                revision: Revision::new(1),
+                entry: id(6),
+                arguments: vec![input.clone()],
+                policy: lkjscript::RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10,
+                },
+            },
+        )
+        .expect("nominal Run")
+    else {
+        panic!("Run response")
+    };
+    let expected = RuntimeValue::Product {
+        ty: id(3),
+        fields: vec![
+            RuntimeFieldValue {
+                field: id(4),
+                value: RuntimeValue::I64(12),
+            },
+            RuntimeFieldValue {
+                field: id(5),
+                value: RuntimeValue::Bool(true),
+            },
+        ],
+    };
+    assert_eq!(result.value, expected);
+    daemon.shutdown();
+
+    let restarted = RunningDaemon::start(temporary.path());
+    let Response::Run(result) = restarted
+        .client()
+        .request(
+            RequestId::new(4),
+            &Request::Run {
+                workspace,
+                revision: Revision::new(1),
+                entry: id(6),
+                arguments: vec![input],
+                policy: lkjscript::RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 10,
+                },
+            },
+        )
+        .expect("nominal Run after restart")
+    else {
+        panic!("Run response after restart")
+    };
+    assert_eq!(result.value, expected);
+    restarted.shutdown();
 }
 
 fn assert_daemon_start_rejects(state: &Path, expected: &str) {
@@ -824,9 +984,9 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 parameters: vec![FunctionParameterDraft {
                     handle: LocalHandle::new(11),
                     name: "end".into(),
-                    ty: SemanticType::I64,
+                    ty: SemanticType::I64.into(),
                 }],
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
@@ -840,14 +1000,14 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                                 end_exclusive: parameter(11),
                                 step: 1,
                                 initial: result(12),
-                                carried: SemanticType::I64,
+                                carried: SemanticType::I64.into(),
                                 index_handle: LocalHandle::new(14),
                                 carried_handle: LocalHandle::new(15),
                                 body: YieldingBodyDraft {
                                     operations: vec![ExpressionDraft {
                                         handle: LocalHandle::new(16),
                                         operation: ExpressionKindDraft::Hole {
-                                            expected: SemanticType::I64,
+                                            expected: SemanticType::I64.into(),
                                         },
                                     }],
                                     yield_value: result(16),
@@ -865,9 +1025,9 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 parameters: vec![FunctionParameterDraft {
                     handle: LocalHandle::new(21),
                     name: "n".into(),
-                    ty: SemanticType::I64,
+                    ty: SemanticType::I64.into(),
                 }],
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
@@ -885,7 +1045,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                             handle: LocalHandle::new(24),
                             operation: ExpressionKindDraft::If {
                                 condition: result(23),
-                                result: SemanticType::I64,
+                                result: SemanticType::I64.into(),
                                 then_body: YieldingBodyDraft {
                                     operations: vec![],
                                     yield_value: result(22),
@@ -911,7 +1071,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 module: local(2),
                 name: "main".into(),
                 parameters: vec![],
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
@@ -1208,7 +1368,7 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
                 module: local(module),
                 name: "main".to_owned(),
                 parameters: Vec::new(),
-                result: SemanticType::I64,
+                result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
@@ -1219,7 +1379,7 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
                             handle: two_or_hole,
                             operation: if hole {
                                 ExpressionKindDraft::Hole {
-                                    expected: SemanticType::I64,
+                                    expected: SemanticType::I64.into(),
                                 }
                             } else {
                                 ExpressionKindDraft::ConstI64(2)

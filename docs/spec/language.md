@@ -2,12 +2,32 @@
 
 ## Types and values
 
-The closed semantic types are `unit`, `bool`, and signed two's-complement `i64`. There are no
-implicit conversions, null or dynamic values, casts, exceptions, generics, or nominal types.
-Functions own ordered parameters and one result type. Values are function parameters, structured
-block arguments, or the single result of an operation.
+The closed semantic types are `unit`, `bool`, signed two's-complement `i64`, and
+`nominal(declaration Node ID)`. A nominal target is exactly one product or closed-sum declaration in
+the same workspace. Primitive equality is by primitive kind; nominal equality is only by persistent
+declaration identity. Names and equal shape do not affect type equality. There are no implicit
+conversions, null or dynamic values, casts, exceptions, or generics. Functions own ordered
+parameters and one result type. Values are function parameters, structured block arguments, or the
+single result of an operation.
 
-Scalar values have copy semantics. Operation contracts record `copy` operand use;
+A product declaration owns an immutable ordered field sequence; fields have persistent identity,
+dense ordinals, names, and exact value types. A sum declaration owns a nonempty immutable ordered
+variant sequence; variants have persistent identity, dense ordinals, names, and zero or one payload
+type. Duplicate member names reject. Rename is presentation-only. Shape changes require a new
+declaration identity.
+
+Product fields and variant payloads are by-value dependencies. Direct, indirect, and mixed
+product/sum cycles reject through deterministic iterative validation. The cycle diagnostic selects
+the strongly connected cycle component whose lowest declaration ID is smallest, targets that
+participant, and reports only that component's sorted participants under the generic diagnostic
+bound; acyclic declarations that depend on the cycle are not participants. Derived layout is not
+semantic state: `unit` is size 0/alignment 1/zero cells, `bool` is 1/1/one cell, and `i64` is
+8/8/one cell.
+Products lay out fields in declaration order with checked alignment; sums use declaration ordinal as
+discriminant, the smallest 1/2/4/8-byte tag width, and maximum payload size/alignment/cells. Layout
+overflow is an explicit derived unrepresentable fact and does not invalidate the graph.
+
+Values currently retain copy semantics. Operation contracts record `copy` operand use;
 ownership-bearing values and borrow rules do not exist yet.
 
 ## Pure operation contracts
@@ -30,6 +50,16 @@ codecs, history checks, and runtime schema description.
   literal step, and an initial value of `carried`; its one body block owns ordered `loop_index: i64`
   and `loop_carried: carried` arguments, ends in `yield(carried)`, and the operation produces
   `carried`;
+- `construct_product(product, fields)` names one product declaration and one identity-keyed value
+  for every exact field; canonical storage follows declaration order and every value has the field's
+  exact type;
+- `project_field(value, field)` names an exact product field and requires a value of that field's
+  owning product type;
+- `construct_variant(variant, payload)` names an exact sum variant and carries no payload for a
+  nullary variant or exactly one value of the declared payload type;
+- `match_sum(scrutinee, result, arms)` requires a closed-sum value and owns exactly one arm for every
+  variant in declaration order. A payload arm has one exact payload block argument, a nullary arm has
+  none, every arm yields `result`, and only the selected arm is semantically evaluated;
 - `yield(value)` terminates an operation-owned structured region and must match that region's
   derived yield contract;
 - `return(value)` terminates a function body and must match the function result type.
@@ -54,7 +84,9 @@ explicit interpreter frame vector rather than user-depth Rust recursion.
 identity-preserving constructor transition: a typed hole may become a complete, regionless,
 non-terminator operation with the same one-result contract while retaining Node ID, owner, body
 position, and uses. Another hole, a terminator, a different result contract, a region-owning
-operation, or an already-complete target rejects.
+operation, or an already-complete target rejects. A nominally typed hole may refine only to a valid
+regionless product construction, variant construction, or field projection with the same result
+type; `match_sum` is never refinement-eligible.
 
 ## Compilation and execution
 
@@ -65,23 +97,44 @@ incomplete definitions do not block that entry. The single executable route is:
 immutable SPG snapshot -> completeness/type validation -> Core IR -> verifier -> interpreter
 ```
 
-The compiler iteratively discovers the exact direct-call closure, assigns dense private function IDs
-in ascending persistent Node-ID order, and lowers every reachable function into one verified
-multi-function Core program. Function-scoped blocks use typed parameters and explicit branch
-arguments; values never flow implicitly between blocks. Lowering threads the complete visible
-semantic environment through generated block parameters. `if` lowers to lazy arm blocks and a join.
-`for_i64` evaluates its three value operands once, tests the index in a header, binds index and
-carried body arguments, performs a checked step addition at the loop origin, and returns the final
-carried value through an exit block.
+The compiler iteratively discovers the exact direct-call closure and transitive nominal-type closure.
+Dense private function IDs follow persistent function Node-ID order. The private type table fixes
+`unit`, `bool`, and `i64` first, then reachable nominal declarations in persistent Node-ID order;
+unreachable declarations are omitted. Every nominal entry retains its semantic declaration/member
+origins and a fully recomputed deterministic layout. Core value types use only private type IDs.
 
-Invocation arguments are ordered `unit`/`bool`/`i64` values checked exactly against the selected
-entry signature. Execution uses one deterministic loop over an explicit frame vector. Runtime fuel
-decrements once for each executed Core instruction and once for each terminator transfer. Positive,
-bounded fuel and frame policies are required. Aggregate live frame value storage is additionally
-bounded to 65,536 typed slots; entry and call frames reject before allocation when that policy would
-be exceeded, and returned frames release their slots. Frame-count and live-slot exhaustion share the
-structured execution-frame-exhausted result at the exact entry or call origin. Exhaustion is distinct
-from an arithmetic runtime trap.
+Function-scoped blocks use typed parameters and explicit branch arguments; values never flow
+implicitly between blocks. Lowering threads the complete visible semantic environment through
+generated block parameters. `if` lowers to lazy arm blocks and a join. `for_i64` lowers through a
+header, body, and exit. Product construction, projection, and variant construction lower to exact
+aggregate instructions. `match_sum` lowers to one exhaustive variant switch, one payload marker only
+for payload variants, lazy arm blocks, deterministic captures, and one typed join. The independent
+verifier rederives type layouts and frame footprints and rejects malformed dependencies, aggregate
+instructions, switch tables, payload edges, or indexes.
 
-There are no aggregates, sums, patterns, generics, effects, capabilities, host operations,
-ownership-bearing values, native execution, or source syntax.
+Public invocation values are exact `unit`, `bool`, `i64`, product, or sum projections. Products name
+the declaration and every field Node ID; input field order may vary but is normalized to declaration
+order. Sums name the declaration and exact variant Node ID and carry a payload exactly when declared.
+Nested values are checked against the selected immutable revision and bounded to depth 24. The
+4,096-item and 64 KiB encoded-value policies aggregate across all Run arguments; componentwise
+mandatory-result maxima are preflighted before compilation or execution.
+
+Execution uses one deterministic loop over explicit frames. Each frame owns one flat cell arena plus
+separate per-value initialized facts. Unit uses zero cells, bool and i64 use one, products concatenate
+field ranges, and sums use one discriminant cell plus the maximum payload range; inactive payload
+cells are zero. The 65,536 live-cell policy applies to the peak of all live frame arenas plus exact
+argument, edge, return, and public-flatten scratch, plus a new callee arena when applicable. The peak
+is checked before allocation or copy; scratch ends at its transfer boundary and returned frame arenas
+are released immediately. Aggregate construction, projection, and discriminant reads operate directly
+on exact arena ranges, and block entry invalidates value facts without clearing the arena.
+
+Fuel is charged before work. Every executed instruction or transfer costs one base unit. Each
+logically copied value additionally costs `max(1, materialized_cells)`, so unit values, unit fields,
+and unit arguments remain metered. Product construction charges its field copies, projection charges
+the full projected result, selected match edges charge only their selected captures/payload, and call,
+branch, and return charge every transferred value. Variant construction charges the full sum cell range for canonicalization plus the active payload's logical copy, including a logical copy for zero-cell payloads. Unselected match arms consume
+neither execution work nor copy fuel. Frame/live-cell exhaustion, fuel exhaustion, and arithmetic
+overflow are distinct structured failures and do not mutate daemon state.
+
+There are no general patterns, generics, effects, capabilities, host operations, ownership-bearing
+values, native execution, or source syntax.

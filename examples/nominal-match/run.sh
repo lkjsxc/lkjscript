@@ -11,5 +11,5 @@ case "$TARGET_DIR" in
 esac
 
 cargo build --workspace --release --locked
-exec python3 "$ROOT/examples/structured-pure/driver.py" \
+exec python3 "$ROOT/examples/nominal-match/driver.py" \
   "$TARGET_DIR/release/lkjscript" "$TARGET_DIR/release/lkjscriptd"
