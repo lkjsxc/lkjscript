@@ -2,7 +2,7 @@
 
 Date: 2026-08-16
 
-Campaign base: `66e45c69143c1a1720e9ccc2b6682786f9475c8b` on `main`
+Campaign base: `5c07498a2dbb8c0a45973769eb1af1e460ac6921` on `main`
 
 ## Implemented product path
 
@@ -10,7 +10,7 @@ The repository contains one Rust package and one active route from a coding agen
 runnable program:
 
 ```text
-strict generic JSON CLI (optional) -> private protocol-v6 framed-JSON Unix IPC -> synchronous local service
+strict generic JSON CLI (optional) -> private protocol-v7 framed-JSON Unix IPC -> synchronous local service
 -> durable workspace -> typed staged transaction -> immutable typed program-model revision
 -> revision-bound scan query or direct Core IR lowering -> verifier -> interpreter
 ```
@@ -30,6 +30,8 @@ The current public path implements:
   variant through identity-keyed structured drafts normalized to declaration order;
 - structured functions, parameters, bodies, calls, `if`, counted `for_i64`, typed placeholders,
   yields, returns, checked integer addition, and integer comparison;
+- immutable `bytes`, bounded literals, length, checked index and slice, content equality, canonical
+  public base64, and byte fields/payloads in named values;
 - one identity-preserving `RefineHole` transition that fills a typed placeholder while retaining its
   Node ID, owner, body position, output zero, and incoming uses;
 - deterministic semantic diffs that report `OperationRefined` and `Renamed` rather than identity
@@ -39,15 +41,19 @@ The current public path implements:
   selected receipts with at most 64 returned bindings, and commit-only idempotency;
 - revision-bound query batches, paginated node/body/use/reference/dependency/diff/type facts, visible
   values, legal constructors, completeness blockers, owner chains, and bounded repair context;
-- immutable format-3 `.lkjscript` artifacts under semantic schema `lkjscript-spg003`, compact
-  checksummed `LKJHEAD5`, contiguous history validation, restart, and strict corruption rejection;
-- protocol and strict JSON version 6 with one request/response per private local connection;
+- immutable format-4 `.lkjscript` artifacts under semantic schema `lkjscript-spg004`, compact
+  checksummed `LKJHEAD6`, contiguous history validation, restart, and strict corruption rejection;
+- protocol and strict JSON version 7 with one request/response per private local connection;
 - direct lowering of the complete selected-entry reachable definitions and named types to one private
   Core IR, followed by independent verification and one explicit-frame interpreter route;
-- exact public `unit`, `bool`, `i64`, record, and variant Run values using semantic declaration/member
+- exact public `unit`, `bool`, `i64`, `bytes`, record, and variant Run values using semantic declaration/member
   IDs rather than display names or private layout indexes;
-- positive fuel/frame policy, checked aggregate live-cell policy, lazy branch and variant-arm
-  execution, checked overflow traps, and daemon usability after ordinary semantic rejection or trap.
+- positive fuel/frame policy, checked aggregate live-cell policy, separate managed object/visible/
+  retained backing policies, opaque checked byte handles in an invocation arena, lazy branch and
+  variant-arm execution, checked byte and arithmetic traps, owned result materialization, and daemon
+  usability after ordinary semantic rejection or trap;
+- an optional same-vocabulary line session that reuses one CLI process while keeping one daemon
+  connection and one publication boundary per request.
 
 Structured authoring remains a typed proposal. Public `DraftSymbol` strings are transaction-local
 labels, not identities. Complete, non-terminating, single-result regionless expressions may instead
@@ -59,6 +65,15 @@ proposal nesting do not affect the candidate graph, and the proposal is discarde
 persisted as a second program.
 
 ## Representative applications
+
+[`examples/release-manifest`](../examples/release-manifest/) is the managed-bytes oracle. It builds
+an exact 32-byte classifier using every retained byte operation and a bounded payload loop. Through
+production release binaries it saves an incomplete payload-policy revision, obtains bounded repair
+context, rejects a byte-for-boolean repair without publication or identity movement, validates and
+commits a call refinement without identity churn, checks stable/preview acceptance and every typed
+rejection, proves wrong-length laziness at fuel that exhausts the selected payload path, triggers an
+exact index bounds trap, renames one reason, restarts, and runs old and current revisions. It has no
+host parser or effect.
 
 [`examples/release-channel`](../examples/release-channel/) is the retained equal-task replay for the
 control-plane campaign. Its production public-path oracle creates the release policy, saves an
@@ -112,10 +127,10 @@ An iterative worklist returns every transitive named dependency once in lexical 
 `page` and its bound element type for `page<T>`. Root results
 explicitly document list, optional, tuple, and page constructors. Unknown, duplicate, empty,
 noncanonical, or excessive roots reject before digest-based `unchanged` handling. Explicit full
-projection remains available. The active machine schema is `lkjscript-machine-schema-v6` with
-protocol and JSON version 6. Artifact format 3 and `lkjscript-spg003` are unchanged. `LKJHEAD5`
-directly replaces `LKJHEAD4`; its final unreleased grammar stores exact symbolic returned bindings
-while the persisted idempotency fingerprint binds canonical JSON/v6 bytes.
+projection remains available. The active machine schema is `lkjscript-machine-schema-v7` with
+protocol and JSON version 7, artifact format 4, semantic schema `lkjscript-spg004`, and `LKJHEAD6`.
+The persisted idempotency fingerprint binds canonical JSON/v7 bytes. Old protocol, artifact, semantic
+schema, HEAD, and fingerprint forms reject directly; no compatibility reader remains.
 
 The retained examples now request 12 operational endpoint roots covering workspace creation,
 transaction application, eight relevant query families, Run, and shutdown rather than leaf payloads
@@ -129,10 +144,16 @@ second schema authority.
 ## Memory and resource safety
 
 The package keeps `[lints.rust] unsafe_code = "forbid"`. This campaign added no local unsafe
-exception, project build script, foreign linkage, generated unsafe code, or dependency. Current accepted language
+exception, project build script, foreign linkage, or generated native code. It added the locked
+`base64` crate with default features disabled and only `std` enabled for strict canonical public
+encoding. Current accepted language
 operations expose no raw pointer, arbitrary address, unchecked load/store, pointer arithmetic,
 unchecked cast, byte reinterpretation, explicit deallocation, shared mutable heap, or foreign memory.
-Current pure immutable values use independently verified layouts and bounded flat runtime cells.
+Immediate and fixed immutable values use independently verified layouts and bounded flat runtime
+cells. Bytes contributes one checked-handle cell while immutable payload and constant-depth views
+live in a bounded arena owned by one `Run`. Handles are nonzero, invocation-local, monotonic,
+unserialized, and validated before every access. Semantic copies copy cells only. Output bytes are
+owned before arena drop.
 
 That evidence does not prove the whole trusted computing base safe. Memory safety still trusts the
 Rust compiler and standard library, Cargo/build tooling, operating system, filesystem/socket
@@ -140,21 +161,25 @@ implementation, CPU behavior, and resolved dependencies. Several resolved packag
 platform-specific internals and custom build targets. There is no formal proof or sandbox claim.
 
 Resource exhaustion is separate from memory unsafety. JSON/frame/artifact/name bounds, runtime-value
-depth/items/bytes, argument count, live cells, fuel, frames, query pages, response bytes, and service
+depth/items/bytes, decoded byte input, managed visible bytes, distinct retained backing, managed
+backing/view object count, result bytes, argument count, live cells, fuel, frames, query pages, response bytes, and service
 timeouts are explicit operational policies with typed failure. User-scalable validation, deletion,
 type-cycle checks, query composition, compilation, runtime calls, and aggregate conversion use
 explicit work structures where applicable rather than user-depth native recursion.
 
-The current flat-cell/copying model is an implementation for pure immutable values. No final heap,
-garbage collection, reference counting, ownership, borrowing, region, handle, or hybrid strategy has
-been selected. There are no resource-owning values, shared mutable objects, effects, host operations,
-or concurrency semantics to which such a choice could yet apply.
+The invocation arena is the retained mechanism only for nonescaping, cycle-free immutable bytes. It
+deliberately retains dead backing until invocation end. No reference count, tracing collector,
+finalizer, surface lifetime, borrow checker, or general heap is implemented. Escaping cycle-free
+values, measured long-invocation retention, real cycles, and external resources are separate future
+gates for precise ownership/RC, lexical regions, isolated tracing, and affine cleanup respectively.
+There is no cooperative in-Run cancellation: disconnect leaves the bounded synchronous Run to finish
+or trap and drop its arena, while daemon termination relies on operating-system process reclamation.
 
 ## Evidence
 
-The final fresh all-target/all-feature campaign boundary reported 172 active passes and nine explicitly
+The final all-target/all-feature campaign boundary reported 188 active passes and nine explicitly
 ignored measurement or mutation-smoke tests. All-target/all-feature Clippy, formatting, the optimized
-release build, and diff check passed. The three production example drivers and the deterministic seed-1
+release build, and diff check passed. All four production example drivers and the deterministic seed-1
 10,000-case malformed-boundary release smoke also passed. Integration tests use the real
 `lkjscriptd`, production framed JSON IPC, and generic CLI. Focused tests cover strict JSON framing and artifact decoding, operation/schema
 coverage, stable identity and history, allocation rollback, validate-only parity, idempotency,
@@ -162,8 +187,10 @@ publication failure injection, query bounds/cursors, named layouts and values, c
 rejection, interpreter policies and traps, generated transaction sequences, restart/corruption, and
 competing writers. A 10,000-node subtree exercise proves iterative validation/deletion; the retained
 seed-1 10,000-case malformed-boundary release smoke covers artifact, framed JSON, and JSON byte
-mutations and is not coverage-guided fuzzing. Miri was unavailable because the stable toolchain has
-no `cargo-miri` component.
+mutations and is not coverage-guided fuzzing. Stable Miri is unavailable, but installed nightly Miri
+passed four focused arena/cleanup/operation/codec tests; nightly AddressSanitizer with leak detection
+passed all 12 interpreter tests. No retained coverage-guided fuzzer or installed `cargo-fuzz` command
+was available.
 
 Exact commands, environments, byte counts, artifact growth, timings, build observations, and the
 claim boundary are retained in [`docs/performance.md`](performance.md).
@@ -171,22 +198,24 @@ claim boundary are retained in [`docs/performance.md`](performance.md).
 ## Exact limitations
 
 The current verified baseline is stable Rust on Linux x86-64, one package, synchronous private local
-IPC, one request per connection, immutable full-revision artifacts, full history, full snapshot
+IPC, one request per connection (including session mode), immutable full-revision artifacts, full history, full snapshot
 cloning, full validation/diff recomputation, full artifact rewrites, scan-based queries, one verified
 Core IR, an explicit-frame interpreter, and flat cells for current values.
+Byte payload is invocation-owned derived runtime state rather than another program authority.
 
 There is no source frontend, public network service, sandbox, package system, general collection,
-generic type, effect or permission-value system, host I/O, resource-owning value, managed heap,
+generic type, string, effect or permission-value system, host I/O, resource-owning value, general managed heap,
 debugger, optimizer tier, native backend, database, journal, reverse index, cache, async runtime,
 request concurrency, or cross-platform contract. These are current absences, not permanent
 prohibitions. A concrete consumer, safety contract, measurement, preserved correctness oracle, and
 direct cutover are required before selecting one.
 
 The current machine contract is generated at runtime rather than committed as a file. The retained
-12-endpoint projection returns 111 closed definitions in 81,418 compact result bytes (81,493 bytes
-as a production response). The explicit full result is 125,995 compact bytes (126,070 bytes as a
-production response). The increase from the v5 results is 789 and 1,565 bytes respectively and
-includes the recursive value shape, exact inline eligibility, nesting metric, and maintenance rule.
+12-endpoint projection returns 112 closed definitions in 85,827 compact result bytes (85,905 bytes
+as a production framed response). The explicit full result is 133,774 compact bytes (133,852 bytes as a
+production framed response). Relative to the sealed v6 baseline, compact results grew by 4,409 and 7,779
+bytes respectively for the byte scalar/value/drafts/operations, new limits and failures, and storage
+semantics. Bytes are not converted into token claims.
 
 The equal-graph retained replay removes 44 of 111 explicit draft symbols. Its compact proposal falls
 from 22,062 to 17,974 bytes and its framed initial request from 22,247 to 18,159 bytes while selected
@@ -203,11 +232,22 @@ its foreground daemon launch blocked the harness command; that exact daemon was 
 temporary state was removed. Therefore no v6 fresh-agent success, request, error-rate, task-time, or
 provider-telemetry claim is made. The retained equal-task replay is deterministic application evidence,
 not a substitute model trial; the earlier completed protocol-v5 isolated trial remains historical
-interface evidence.
+interface evidence. A fresh v7 trial is recorded separately after the managed-bytes verification
+boundary.
+
+The fresh isolated protocol-v7 trial completed through production binaries and the retained session
+interface without implementation contamination or repository edits. Its reported workspace flow
+used 13 daemon requests, 4,298 compact request bytes, and 10,084 compact response bytes. It discovered
+bytes, saved a reachable `bool` hole, rejected an `i64` repair with unchanged validate-only candidate
+identity, refined the same hole to `bytes_equal`, inspected the exact revision diff, and returned the
+external oracle results `LKJM -> true`, `LKJN -> false`, and `LKJ -> false`. The revision-current
+confirmation had no unexpected failure or semantic correction. Provider token, cache, price, and
+hidden-reasoning telemetry were unavailable. This remains one controlled observation, not a model
+benchmark.
 
 A disposable six-tool MCP adapter was tested outside the repository with installed Codex CLI 0.144.6
 and was not retained. It preserved a small exact run oracle but added three processes, 2,084 bytes of
 tool definitions, MCP traffic, startup schema reads, and an unresolved cancellation boundary without
-reducing semantic calls, daemon connections, or forwarded request bytes. The generic CLI is therefore
-the only retained Codex programming surface; there is no adapter code, configuration, credential, or
-second request vocabulary in the repository.
+reducing semantic calls, daemon connections, or forwarded request bytes. The generic CLI and its
+same-vocabulary process session are therefore the retained Codex programming surface; there is no
+adapter code, configuration, credential, or second request vocabulary in the repository.

@@ -3,8 +3,8 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::{ChangeDigest, NodeId, QueryId, Revision, SnapshotHash, WorkspaceId};
 use crate::schema::{
-    BlockArgumentRole, DirectReference, LiteralField, Node, NodeKind, OperandUse, OperationCode,
-    OperationKind, RegionRole, SemanticType, TypeReferenceSlot, TypeRule, ValueRef,
+    BlockArgumentRole, ByteString, DirectReference, LiteralField, Node, NodeKind, OperandUse,
+    OperationCode, OperationKind, RegionRole, SemanticType, TypeReferenceSlot, TypeRule, ValueRef,
 };
 use crate::transaction::TransactionOpCode;
 use crate::type_layout::{DerivedLayout, LayoutShape};
@@ -221,6 +221,7 @@ pub enum LiteralValue {
     I64(i64),
     Bool(bool),
     ExpectedType(SemanticType),
+    Bytes(ByteString),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -1217,6 +1218,7 @@ fn body_item(snapshot: &Snapshot, id: NodeId, ordinal: u64, terminator: bool) ->
     let literal = match operation {
         OperationKind::ConstI64(v) => Some(LiteralValue::I64(*v)),
         OperationKind::ConstBool(v) => Some(LiteralValue::Bool(*v)),
+        OperationKind::ConstBytes(v) => Some(LiteralValue::Bytes(v.clone())),
         OperationKind::Hole { expected } => Some(LiteralValue::ExpectedType(*expected)),
         _ => None,
     };
@@ -1579,7 +1581,7 @@ fn use_sites_page(
                     owner_block: *block,
                     owner_function: function,
                     expected_type: expected,
-                    use_mode: operation.operand_use(i).unwrap_or(OperandUse::Copy),
+                    use_mode: operation.operand_use(i).unwrap_or(OperandUse::Read),
                 });
             }
             total += 1;
@@ -2049,7 +2051,7 @@ fn legal_constructor_slice(
                             code,
                             result_type: expected,
                             operand_count,
-                            operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                            operand_uses: vec![OperandUse::Read; operand_types.len()],
                             operand_types,
                             literal_fields: Vec::new(),
                             call_target: Some(id),
@@ -2078,7 +2080,7 @@ fn legal_constructor_slice(
                         code,
                         result_type: expected,
                         operand_count: operand_types.len() as u64,
-                        operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                        operand_uses: vec![OperandUse::Read; operand_types.len()],
                         operand_types,
                         literal_fields: descriptor.literal_fields.to_vec(),
                         call_target: None,
@@ -2121,7 +2123,7 @@ fn legal_constructor_slice(
                         code,
                         result_type: expected,
                         operand_count: fields.len() as u64,
-                        operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                        operand_uses: vec![OperandUse::Read; operand_types.len()],
                         operand_types,
                         literal_fields: Vec::new(),
                         call_target: None,
@@ -2163,7 +2165,7 @@ fn legal_constructor_slice(
                             code,
                             result_type: expected,
                             operand_count: operand_types.len() as u64,
-                            operand_uses: vec![OperandUse::Copy; operand_types.len()],
+                            operand_uses: vec![OperandUse::Read; operand_types.len()],
                             operand_types,
                             literal_fields: Vec::new(),
                             call_target: None,
@@ -2195,7 +2197,7 @@ fn legal_constructor_slice(
                             result_type: expected,
                             operand_count: 1,
                             operand_types: vec![SemanticType::Nominal(*owner)],
-                            operand_uses: vec![OperandUse::Copy],
+                            operand_uses: vec![OperandUse::Read],
                             literal_fields: Vec::new(),
                             call_target: None,
                             declaration: Some(*owner),
@@ -2818,9 +2820,94 @@ mod tests {
     use crate::schema::{OperationDraft, TypeDraft, ValueDraft};
     use crate::transaction::{
         ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
-        NodeTarget, ProductFieldDraft, Transaction, TransactionMode, TransactionOp,
-        TransactionResponseSpec, YieldingBodyDraft,
+        FunctionParameterDraft, NodeTarget, ProductFieldDraft, Transaction, TransactionMode,
+        TransactionOp, TransactionResponseSpec, YieldingBodyDraft,
     };
+
+    #[test]
+    fn byte_hole_repair_context_exposes_exact_type_and_direct_constructors() {
+        let id = WorkspaceId::from_bytes([0xb6; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
+        let request = ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::INITIAL,
+                idempotency_key: None,
+                mode: TransactionMode::Commit,
+                operations: vec![
+                    TransactionOp::CreatePackage {
+                        symbol: DraftSymbol::generated(1),
+                        name: "app".into(),
+                    },
+                    TransactionOp::CreateModule {
+                        symbol: DraftSymbol::generated(2),
+                        package: local(1),
+                        name: "root".into(),
+                    },
+                    TransactionOp::CreateFunction {
+                        symbol: DraftSymbol::generated(3),
+                        module: local(2),
+                        name: "repair_bytes".into(),
+                        parameters: vec![FunctionParameterDraft {
+                            symbol: DraftSymbol::generated(4),
+                            name: "input".into(),
+                            ty: TypeDraft::Bytes,
+                        }],
+                        result: TypeDraft::Bytes,
+                        body: Some(FunctionBodyDraft {
+                            operations: vec![ExpressionDraft {
+                                symbol: Some(DraftSymbol::generated(5)),
+                                operation: ExpressionKindDraft::Hole {
+                                    expected: TypeDraft::Bytes,
+                                },
+                            }],
+                            return_value: ValueDraft::OperationResult {
+                                operation: local(5),
+                                output: 0,
+                            },
+                        }),
+                    },
+                ],
+            },
+            response: TransactionResponseSpec {
+                return_symbols: vec![DraftSymbol::generated(5)],
+            },
+        };
+        let prepared = workspace
+            .prepare_transaction(&request)
+            .expect("byte hole proposal");
+        let hole = prepared.receipt.returned_bindings[0].1;
+        let context = repair_context(
+            &prepared.snapshot,
+            RepairTarget::Hole(hole),
+            ContextBudget {
+                body_before: 4,
+                body_after: 4,
+                visible_values: 8,
+                incoming_uses: 8,
+                include_incompatible: true,
+            },
+        )
+        .expect("byte repair context");
+        assert_eq!(context.expected_type, SemanticType::Bytes);
+        for code in [OperationCode::ConstBytes, OperationCode::BytesSlice] {
+            assert!(
+                context
+                    .legal_constructors
+                    .iter()
+                    .any(|constructor| constructor.code == code && constructor.direct_refinement),
+                "missing direct byte constructor {code:?}"
+            );
+        }
+        assert!(
+            context
+                .visible_values
+                .items
+                .iter()
+                .any(|candidate| { candidate.ty == SemanticType::Bytes && candidate.compatible })
+        );
+    }
 
     fn fixture() -> (Workspace, Vec<NodeId>) {
         let id = WorkspaceId::from_bytes([0x66; 16]);
@@ -3149,6 +3236,8 @@ mod tests {
                 OperationCode::Call,
                 OperationCode::If,
                 OperationCode::ForI64,
+                OperationCode::BytesLen,
+                OperationCode::BytesAt,
             ]
         );
         assert_eq!(
@@ -3162,6 +3251,7 @@ mod tests {
                 OperationCode::LtI64,
                 OperationCode::If,
                 OperationCode::ForI64,
+                OperationCode::BytesEqual,
             ]
         );
         assert_eq!(
@@ -3508,7 +3598,7 @@ mod tests {
             },
         )
         .expect("first constructor page");
-        assert_eq!(first.total, Some(75));
+        assert_eq!(first.total, Some(77));
         assert_eq!(first.items.len(), 64);
         let second = legal_constructor_page(
             snapshot,
@@ -3520,7 +3610,7 @@ mod tests {
             },
         )
         .expect("second constructor page");
-        assert_eq!(second.items.len(), 11);
+        assert_eq!(second.items.len(), 13);
         assert!(second.next.is_none());
         let mut all = first.items;
         all.extend(second.items);

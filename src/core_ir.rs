@@ -1,5 +1,6 @@
 use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::NodeId;
+use crate::schema::{ByteString, MAXIMUM_BYTE_LITERAL_BYTES, SemanticType, ValueStorageClass};
 use crate::type_layout::{FieldLayout, LayoutShape, ValueLayout, VariantLayout};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,6 +16,8 @@ pub(crate) struct ValueId(pub u32);
 pub(crate) const UNIT_TYPE: CoreTypeId = CoreTypeId(0);
 pub(crate) const BOOL_TYPE: CoreTypeId = CoreTypeId(1);
 pub(crate) const I64_TYPE: CoreTypeId = CoreTypeId(2);
+pub(crate) const BYTES_TYPE: CoreTypeId = CoreTypeId(3);
+pub(crate) const PRIMITIVE_TYPE_COUNT: usize = SemanticType::PRIMITIVES.len();
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CoreProgram {
@@ -35,8 +38,22 @@ pub(crate) enum CoreTypeKind {
     Unit,
     Bool,
     I64,
+    Bytes,
     Product { fields: Vec<CoreField> },
     Sum { variants: Vec<CoreVariant> },
+}
+
+impl CoreType {
+    pub(crate) const fn storage_class(&self) -> ValueStorageClass {
+        match self.kind {
+            CoreTypeKind::Unit => ValueStorageClass::ZeroCell,
+            CoreTypeKind::Bool | CoreTypeKind::I64 => ValueStorageClass::Immediate,
+            CoreTypeKind::Bytes => ValueStorageClass::ManagedHandle,
+            CoreTypeKind::Product { .. } | CoreTypeKind::Sum { .. } => {
+                ValueStorageClass::FixedAggregate
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -88,6 +105,11 @@ pub(crate) enum Instruction {
         result: ValueId,
         value: i64,
     },
+    ConstBytes {
+        origin: NodeId,
+        result: ValueId,
+        value: ByteString,
+    },
     AddI64 {
         origin: NodeId,
         result: ValueId,
@@ -95,6 +117,30 @@ pub(crate) enum Instruction {
         rhs: ValueId,
     },
     LtI64 {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    BytesLen {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    BytesAt {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        index: ValueId,
+    },
+    BytesSlice {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        start: ValueId,
+        length: ValueId,
+    },
+    BytesEqual {
         origin: NodeId,
         result: ValueId,
         lhs: ValueId,
@@ -133,8 +179,13 @@ impl Instruction {
             Self::ConstUnit { origin, .. }
             | Self::ConstBool { origin, .. }
             | Self::ConstI64 { origin, .. }
+            | Self::ConstBytes { origin, .. }
             | Self::AddI64 { origin, .. }
             | Self::LtI64 { origin, .. }
+            | Self::BytesLen { origin, .. }
+            | Self::BytesAt { origin, .. }
+            | Self::BytesSlice { origin, .. }
+            | Self::BytesEqual { origin, .. }
             | Self::Call { origin, .. }
             | Self::ConstructProduct { origin, .. }
             | Self::ProjectField { origin, .. }
@@ -224,29 +275,38 @@ pub(crate) fn verify(program: &CoreProgram) -> Result<()> {
 }
 
 fn verify_types(program: &CoreProgram) -> Result<()> {
-    if program.types.len() < 3 {
+    if program.types.len() < PRIMITIVE_TYPE_COUNT {
         return Err(invalid("Core type table omits fixed primitive types"));
     }
-    let primitive = [
-        (UNIT_TYPE, CoreTypeKind::Unit, 0_u64, 0_u64, 1_u64),
-        (BOOL_TYPE, CoreTypeKind::Bool, 1, 1, 1),
-        (I64_TYPE, CoreTypeKind::I64, 1, 8, 8),
-    ];
-    for (id, kind, cells, size, align) in primitive {
+    for (index, semantic) in SemanticType::PRIMITIVES.into_iter().enumerate() {
+        let id = CoreTypeId(
+            u32::try_from(index).map_err(|_| invalid("primitive type index overflows u32"))?,
+        );
+        let kind = match semantic {
+            SemanticType::Unit => CoreTypeKind::Unit,
+            SemanticType::Bool => CoreTypeKind::Bool,
+            SemanticType::I64 => CoreTypeKind::I64,
+            SemanticType::Bytes => CoreTypeKind::Bytes,
+            SemanticType::Nominal(_) => return Err(invalid("primitive descriptor is nominal")),
+        };
+        let layout = crate::type_layout::primitive_layout(semantic)
+            .ok_or_else(|| invalid("primitive descriptor omits a layout"))?;
         let ty = type_at(program, id)?;
         if ty.origin.is_some()
             || ty.kind != kind
-            || ty.layout.cells != cells
-            || ty.layout.size != size
-            || ty.layout.align != align
-            || ty.layout.shape != LayoutShape::Primitive
+            || ty.layout != layout
+            || ty.storage_class()
+                != semantic
+                    .primitive_descriptor()
+                    .ok_or_else(|| invalid("primitive descriptor is absent"))?
+                    .storage_class
         {
             return Err(invalid("fixed primitive Core type contract is malformed"));
         }
     }
     let mut previous = None;
     let mut origins = BTreeSet::new();
-    for ty in &program.types[3..] {
+    for ty in &program.types[PRIMITIVE_TYPE_COUNT..] {
         let origin = ty
             .origin
             .ok_or_else(|| invalid("nominal Core type omits semantic origin"))?;
@@ -265,7 +325,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
     }
 
     let mut pending = BTreeMap::<usize, BTreeSet<usize>>::new();
-    for (index, ty) in program.types.iter().enumerate().skip(3) {
+    for (index, ty) in program.types.iter().enumerate().skip(PRIMITIVE_TYPE_COUNT) {
         let mut dependencies = BTreeSet::new();
         match &ty.kind {
             CoreTypeKind::Product { fields } => {
@@ -278,7 +338,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
                     if dependency >= program.types.len() {
                         return Err(invalid("Core product field type is out of bounds"));
                     }
-                    if dependency >= 3 {
+                    if dependency >= PRIMITIVE_TYPE_COUNT {
                         dependencies.insert(dependency);
                     }
                 }
@@ -303,7 +363,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
                         if dependency >= program.types.len() {
                             return Err(invalid("Core sum payload type is out of bounds"));
                         }
-                        if dependency >= 3 {
+                        if dependency >= PRIMITIVE_TYPE_COUNT {
                             dependencies.insert(dependency);
                         }
                     }
@@ -313,7 +373,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
         }
         pending.insert(index, dependencies);
     }
-    let mut derived = program.types[..3]
+    let mut derived = program.types[..PRIMITIVE_TYPE_COUNT]
         .iter()
         .map(|ty| ty.layout.clone())
         .enumerate()
@@ -503,8 +563,13 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         Instruction::ConstUnit { result, .. }
         | Instruction::ConstBool { result, .. }
         | Instruction::ConstI64 { result, .. }
+        | Instruction::ConstBytes { result, .. }
         | Instruction::AddI64 { result, .. }
         | Instruction::LtI64 { result, .. }
+        | Instruction::BytesLen { result, .. }
+        | Instruction::BytesAt { result, .. }
+        | Instruction::BytesSlice { result, .. }
+        | Instruction::BytesEqual { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -522,6 +587,12 @@ fn verify_instruction(
         Instruction::ConstUnit { .. } => Ok(UNIT_TYPE),
         Instruction::ConstBool { .. } => Ok(BOOL_TYPE),
         Instruction::ConstI64 { .. } => Ok(I64_TYPE),
+        Instruction::ConstBytes { value, .. } => {
+            if value.len() > MAXIMUM_BYTE_LITERAL_BYTES {
+                return Err(invalid("Core byte literal exceeds the literal policy"));
+            }
+            Ok(BYTES_TYPE)
+        }
         Instruction::AddI64 { lhs, rhs, .. } => {
             require_local(function, local, *lhs, I64_TYPE)?;
             require_local(function, local, *rhs, I64_TYPE)?;
@@ -530,6 +601,31 @@ fn verify_instruction(
         Instruction::LtI64 { lhs, rhs, .. } => {
             require_local(function, local, *lhs, I64_TYPE)?;
             require_local(function, local, *rhs, I64_TYPE)?;
+            Ok(BOOL_TYPE)
+        }
+        Instruction::BytesLen { value, .. } => {
+            require_local(function, local, *value, BYTES_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::BytesAt { value, index, .. } => {
+            require_local(function, local, *value, BYTES_TYPE)?;
+            require_local(function, local, *index, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::BytesSlice {
+            value,
+            start,
+            length,
+            ..
+        } => {
+            require_local(function, local, *value, BYTES_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *length, I64_TYPE)?;
+            Ok(BYTES_TYPE)
+        }
+        Instruction::BytesEqual { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, BYTES_TYPE)?;
+            require_local(function, local, *rhs, BYTES_TYPE)?;
             Ok(BOOL_TYPE)
         }
         Instruction::Call {
@@ -833,8 +929,20 @@ mod tests {
                     shape: LayoutShape::Primitive,
                 },
             },
+            CoreType {
+                origin: None,
+                kind: CoreTypeKind::Bytes,
+                layout: ValueLayout {
+                    size: 4,
+                    align: 4,
+                    cells: 1,
+                    shape: LayoutShape::Primitive,
+                },
+            },
         ]
     }
+    const PRODUCT_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32);
+    const SUM_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32 + 1);
     fn aggregate_program() -> CoreProgram {
         let field = CoreField {
             origin: node(11),
@@ -867,7 +975,7 @@ mod tests {
             },
             CoreVariant {
                 origin: node(22),
-                payload: Some(CoreTypeId(3)),
+                payload: Some(PRODUCT_TYPE),
                 discriminant: 1,
             },
         ];
@@ -913,10 +1021,10 @@ mod tests {
                 result: UNIT_TYPE,
                 value_types: vec![
                     I64_TYPE,
-                    CoreTypeId(3),
-                    CoreTypeId(4),
+                    PRODUCT_TYPE,
+                    SUM_TYPE,
                     UNIT_TYPE,
-                    CoreTypeId(3),
+                    PRODUCT_TYPE,
                     UNIT_TYPE,
                 ],
                 frame_cells: 5,
@@ -934,13 +1042,13 @@ mod tests {
                             Instruction::ConstructProduct {
                                 origin: node(33),
                                 result: ValueId(1),
-                                ty: CoreTypeId(3),
+                                ty: PRODUCT_TYPE,
                                 fields: vec![ValueId(0)],
                             },
                             Instruction::ConstructVariant {
                                 origin: node(34),
                                 result: ValueId(2),
-                                sum: CoreTypeId(4),
+                                sum: SUM_TYPE,
                                 variant: 1,
                                 payload: Some(ValueId(1)),
                             },
@@ -991,9 +1099,142 @@ mod tests {
         }
     }
 
+    fn bytes_program() -> CoreProgram {
+        CoreProgram {
+            types: primitives(),
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin: node(50),
+                parameters: vec![],
+                result: BOOL_TYPE,
+                value_types: vec![
+                    BYTES_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, BYTES_TYPE,
+                    BOOL_TYPE,
+                ],
+                frame_cells: 8,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin: node(51),
+                    parameters: vec![],
+                    instructions: vec![
+                        Instruction::ConstBytes {
+                            origin: node(52),
+                            result: ValueId(0),
+                            value: ByteString::from_slice(b"abcd").unwrap(),
+                        },
+                        Instruction::BytesLen {
+                            origin: node(53),
+                            result: ValueId(1),
+                            value: ValueId(0),
+                        },
+                        Instruction::ConstI64 {
+                            origin: node(54),
+                            result: ValueId(2),
+                            value: 1,
+                        },
+                        Instruction::BytesAt {
+                            origin: node(55),
+                            result: ValueId(3),
+                            value: ValueId(0),
+                            index: ValueId(2),
+                        },
+                        Instruction::ConstI64 {
+                            origin: node(56),
+                            result: ValueId(4),
+                            value: 1,
+                        },
+                        Instruction::ConstI64 {
+                            origin: node(57),
+                            result: ValueId(5),
+                            value: 2,
+                        },
+                        Instruction::BytesSlice {
+                            origin: node(58),
+                            result: ValueId(6),
+                            value: ValueId(0),
+                            start: ValueId(4),
+                            length: ValueId(5),
+                        },
+                        Instruction::BytesEqual {
+                            origin: node(59),
+                            result: ValueId(7),
+                            lhs: ValueId(6),
+                            rhs: ValueId(6),
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        origin: node(60),
+                        value: ValueId(7),
+                    },
+                }],
+            }],
+        }
+    }
+
     #[test]
     fn verifier_accepts_exact_aggregate_table_instructions_and_switch() {
         verify(&aggregate_program()).expect("valid aggregate Core");
+    }
+
+    #[test]
+    fn verifier_accepts_bytes_and_rejects_every_malformed_bytes_contract() {
+        verify(&bytes_program()).expect("valid byte Core");
+        let mut cases = Vec::new();
+
+        let mut length_operand = bytes_program();
+        let Instruction::BytesLen { value, .. } =
+            &mut length_operand.functions[0].blocks[0].instructions[1]
+        else {
+            unreachable!()
+        };
+        *value = ValueId(2);
+        cases.push(length_operand);
+
+        let mut index_type = bytes_program();
+        let Instruction::BytesAt { index, .. } =
+            &mut index_type.functions[0].blocks[0].instructions[3]
+        else {
+            unreachable!()
+        };
+        *index = ValueId(0);
+        cases.push(index_type);
+
+        let mut slice_result = bytes_program();
+        slice_result.functions[0].value_types[6] = BOOL_TYPE;
+        cases.push(slice_result);
+
+        let mut equality_type = bytes_program();
+        let Instruction::BytesEqual { rhs, .. } =
+            &mut equality_type.functions[0].blocks[0].instructions[7]
+        else {
+            unreachable!()
+        };
+        *rhs = ValueId(2);
+        cases.push(equality_type);
+
+        let mut literal = bytes_program();
+        let Instruction::ConstBytes { value, .. } =
+            &mut literal.functions[0].blocks[0].instructions[0]
+        else {
+            unreachable!()
+        };
+        *value = ByteString::new(vec![0; MAXIMUM_BYTE_LITERAL_BYTES + 1]).unwrap();
+        cases.push(literal);
+
+        let mut primitive_layout = bytes_program();
+        primitive_layout.types[BYTES_TYPE.0 as usize].layout.cells = 2;
+        cases.push(primitive_layout);
+
+        let mut frame_range = bytes_program();
+        frame_range.functions[0].frame_cells -= 1;
+        cases.push(frame_range);
+
+        for case in cases {
+            assert_eq!(
+                verify(&case).expect_err("malformed byte Core").code,
+                ErrorCode::CoreIrInvalid
+            );
+        }
     }
 
     #[test]
@@ -1003,13 +1244,16 @@ mod tests {
         primitive.types[1].layout.cells = 2;
         cases.push(primitive);
         let mut order = aggregate_program();
-        order.types.swap(3, 4);
+        order
+            .types
+            .swap(PRIMITIVE_TYPE_COUNT, PRIMITIVE_TYPE_COUNT + 1);
         cases.push(order);
         let mut layout = aggregate_program();
-        layout.types[3].layout.cells = 2;
+        layout.types[PRIMITIVE_TYPE_COUNT].layout.cells = 2;
         cases.push(layout);
         let mut dependency = aggregate_program();
-        let CoreTypeKind::Product { fields } = &mut dependency.types[3].kind else {
+        let CoreTypeKind::Product { fields } = &mut dependency.types[PRIMITIVE_TYPE_COUNT].kind
+        else {
             unreachable!()
         };
         fields[0].ty = CoreTypeId(99);
@@ -1053,7 +1297,8 @@ mod tests {
         arms[1].arguments.clear();
         cases.push(payload);
         let mut field_offset = aggregate_program();
-        let CoreTypeKind::Product { fields } = &mut field_offset.types[3].kind else {
+        let CoreTypeKind::Product { fields } = &mut field_offset.types[PRIMITIVE_TYPE_COUNT].kind
+        else {
             unreachable!()
         };
         fields[0].cell_offset = 1;
@@ -1148,7 +1393,7 @@ mod tests {
             kind: CoreTypeKind::Product {
                 fields: vec![CoreField {
                     origin: node(26),
-                    ty: CoreTypeId(4),
+                    ty: SUM_TYPE,
                     cell_offset: 0,
                 }],
             },
@@ -1167,7 +1412,7 @@ mod tests {
         });
         verify(&program).expect("transitive product to sum to product closure");
         assert_eq!(
-            program.types[3..]
+            program.types[PRIMITIVE_TYPE_COUNT..]
                 .iter()
                 .map(|ty| ty.origin.expect("nominal origin"))
                 .collect::<Vec<_>>(),
@@ -1178,14 +1423,15 @@ mod tests {
     #[test]
     fn verifier_rejects_nominal_cycles_independently() {
         let mut program = aggregate_program();
-        let CoreTypeKind::Product { fields } = &mut program.types[3].kind else {
+        let CoreTypeKind::Product { fields } = &mut program.types[PRIMITIVE_TYPE_COUNT].kind else {
             unreachable!()
         };
-        fields[0].ty = CoreTypeId(4);
-        let CoreTypeKind::Sum { variants } = &mut program.types[4].kind else {
+        fields[0].ty = SUM_TYPE;
+        let CoreTypeKind::Sum { variants } = &mut program.types[PRIMITIVE_TYPE_COUNT + 1].kind
+        else {
             unreachable!()
         };
-        variants[1].payload = Some(CoreTypeId(3));
+        variants[1].payload = Some(PRODUCT_TYPE);
         assert_eq!(
             verify(&program).expect_err("cycle").code,
             ErrorCode::CoreIrInvalid

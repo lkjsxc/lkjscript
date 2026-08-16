@@ -14,15 +14,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::io::{self, Write};
 
-pub const JSON_ENVELOPE_VERSION: u16 = 6;
+pub const JSON_ENVELOPE_VERSION: u16 = 7;
 pub const MAX_JSON_INPUT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_JSON_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v6";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v7";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
-const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v6";
+const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v7";
 const MAX_BOUNDARY_ERROR_MESSAGE_BYTES: usize = 1024;
 const BOUNDARY_ERROR_FALLBACK: &[u8] =
-    b"{\"version\":6,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
+    b"{\"version\":7,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -444,6 +444,17 @@ fn scalar_types() -> Vec<MachineScalarDescription> {
         boolean("bool"),
         string("string"),
         signed("i64", i64::MIN, i64::MAX),
+        MachineScalarDescription {
+            name: "bytes_string".into(),
+            json_kind: JsonScalarKind::String,
+            domain: MachineScalarDomain::CanonicalUrlSafeBase64 {
+                padding: false,
+                whitespace: false,
+                canonical_trailing_bits: true,
+                maximum_decoded_bytes: crate::schema::MAXIMUM_BYTE_STRING_BYTES as u64,
+                maximum_encoded_bytes: crate::schema::MAXIMUM_BYTE_STRING_ENCODED_BYTES as u64,
+            },
+        },
         unsigned("u8", u8::MIN.into(), u8::MAX.into()),
         unsigned("u16", u16::MIN.into(), u16::MAX.into()),
         unsigned("u32", u32::MIN.into(), u32::MAX.into()),
@@ -704,12 +715,43 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
         C::ConstUnit => (PayloadShapeKind::Unit, None, vec![]),
         C::ConstBool => (PayloadShapeKind::Newtype, Some(T::Bool), vec![]),
         C::ConstI64 => (PayloadShapeKind::Newtype, Some(T::I64), vec![]),
+        C::ConstBytes => (PayloadShapeKind::Newtype, Some(T::Bytes), vec![]),
         C::AddI64 | C::LtI64 => (
             PayloadShapeKind::Record,
             None,
             vec![
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::BytesEqual => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::BytesLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::BytesAt => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::BytesSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("length", T::Value, true, false),
             ],
         ),
         C::Call => (
@@ -798,12 +840,43 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
         C::ConstUnit => (PayloadShapeKind::Unit, None, vec![]),
         C::ConstI64 => (PayloadShapeKind::Newtype, Some(T::I64), vec![]),
         C::ConstBool => (PayloadShapeKind::Newtype, Some(T::Bool), vec![]),
+        C::ConstBytes => (PayloadShapeKind::Newtype, Some(T::Bytes), vec![]),
         C::AddI64 | C::LtI64 => (
             PayloadShapeKind::Record,
             None,
             vec![
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::BytesEqual => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::BytesLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::BytesAt => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::BytesSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("length", T::Value, true, false),
             ],
         ),
         C::Call => (
@@ -910,6 +983,12 @@ fn type_variants() -> Vec<DraftVariantDescription> {
             fields: Vec::new(),
         },
         DraftVariantDescription {
+            name: "bytes".into(),
+            shape: PayloadShapeKind::Unit,
+            newtype: None,
+            fields: Vec::new(),
+        },
+        DraftVariantDescription {
             name: "nominal".into(),
             shape: PayloadShapeKind::Newtype,
             newtype: Some(T::NodeTarget),
@@ -968,6 +1047,7 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("unit", unit_payload()),
                 variant_payload("bool", unit_payload()),
                 variant_payload("i64", unit_payload()),
+                variant_payload("bytes", unit_payload()),
                 variant_payload("nominal", newtype_payload("node_id")),
             ],
         ),
@@ -1063,6 +1143,24 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("result", "semantic_type", true),
                         ("arms", "list<canonical_match_arm>", true),
                     ]),
+                ),
+                variant_payload("const_bytes", newtype_payload("bytes_string")),
+                variant_payload("bytes_len", record_payload(&[("value", "value_ref", true)])),
+                variant_payload(
+                    "bytes_at",
+                    record_payload(&[("value", "value_ref", true), ("index", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "bytes_slice",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("length", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "bytes_equal",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
             ],
         ),
@@ -1291,6 +1389,7 @@ fn run_variants() -> Vec<NamedVariantDescription> {
             variant_payload("unit", unit_payload()),
             variant_payload("bool", newtype_payload("bool")),
             variant_payload("i64", newtype_payload("i64")),
+            variant_payload("bytes", newtype_payload("bytes_string")),
             variant_payload("product", newtype_payload("runtime_product_data")),
             variant_payload("sum", newtype_payload("runtime_sum_data")),
         ],
@@ -1871,6 +1970,7 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("i64", newtype_payload("i64")),
                 variant_payload("bool", newtype_payload("bool")),
                 variant_payload("expected_type", newtype_payload("semantic_type")),
+                variant_payload("bytes", newtype_payload("bytes_string")),
             ],
         ),
         named_variant(
@@ -1895,6 +1995,7 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("i64", newtype_payload("i64")),
                 variant_payload("bool", newtype_payload("bool")),
                 variant_payload("type", newtype_payload("semantic_type")),
+                variant_payload("bytes", newtype_payload("bytes_string")),
             ],
         ),
         named_variant(
@@ -2432,6 +2533,13 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("maximum_runtime_value_depth", "u32", true),
                 ("maximum_runtime_value_items", "u64", true),
                 ("maximum_runtime_value_bytes", "u64", true),
+                ("maximum_byte_literal_bytes", "u64", true),
+                ("maximum_transaction_byte_literal_bytes", "u64", true),
+                ("maximum_runtime_byte_value_bytes", "u64", true),
+                ("maximum_run_argument_byte_bytes", "u64", true),
+                ("maximum_run_managed_visible_bytes", "u64", true),
+                ("maximum_run_retained_backing_bytes", "u64", true),
+                ("maximum_run_managed_objects", "u64", true),
                 ("maximum_error_related_ids", "u32", true),
                 ("maximum_boundary_error_message_bytes", "u64", true),
                 ("maximum_persistence_head_bytes", "u64", true),
@@ -2649,6 +2757,16 @@ fn schema_discovery_variants(
                     record_payload(&[("encoded_bytes", "u8", true)]),
                 ),
                 variant_payload(
+                    "canonical_url_safe_base64",
+                    record_payload(&[
+                        ("padding", "bool", true),
+                        ("whitespace", "bool", true),
+                        ("canonical_trailing_bits", "bool", true),
+                        ("maximum_decoded_bytes", "u64", true),
+                        ("maximum_encoded_bytes", "u64", true),
+                    ]),
+                ),
+                variant_payload(
                     "node_id",
                     record_payload(&[
                         ("workspace_bytes", "u8", true),
@@ -2684,8 +2802,9 @@ fn schema_discovery_variants(
                 ("none", 1),
                 ("bool", 2),
                 ("i64", 3),
-                ("product", 4),
-                ("sum", 5),
+                ("bytes", 4),
+                ("product", 5),
+                ("sum", 6),
             ],
         ),
         unit_variants(
@@ -2717,7 +2836,7 @@ fn schema_discovery_variants(
                 ),
             ],
         ),
-        unit_variants("operand_use", [("copy", 1)]),
+        unit_variants("operand_use", [("read", 1)]),
         unit_variants(
             "literal_field",
             [
@@ -2727,6 +2846,7 @@ fn schema_discovery_variants(
                 ("result_type", 4),
                 ("carried_type", 5),
                 ("positive_step", 6),
+                ("bytes_value", 7),
             ],
         ),
         unit_variants(
@@ -3004,6 +3124,7 @@ pub fn schema_description() -> SchemaDescription {
                         crate::interpret::RuntimeValueCode::Unit => RuntimeValuePayload::None,
                         crate::interpret::RuntimeValueCode::Bool => RuntimeValuePayload::Bool,
                         crate::interpret::RuntimeValueCode::I64 => RuntimeValuePayload::I64,
+                        crate::interpret::RuntimeValueCode::Bytes => RuntimeValuePayload::Bytes,
                         crate::interpret::RuntimeValueCode::Product => RuntimeValuePayload::Product,
                         crate::interpret::RuntimeValueCode::Sum => RuntimeValuePayload::Sum,
                     },
@@ -3011,6 +3132,7 @@ pub fn schema_description() -> SchemaDescription {
                         crate::interpret::RuntimeValueCode::Unit => vec![],
                         crate::interpret::RuntimeValueCode::Bool => vec![MachineFieldDescription { name: "data".into(), type_expression: "bool".into(), required: true }],
                         crate::interpret::RuntimeValueCode::I64 => vec![MachineFieldDescription { name: "data".into(), type_expression: "i64".into(), required: true }],
+                        crate::interpret::RuntimeValueCode::Bytes => vec![MachineFieldDescription { name: "data".into(), type_expression: "bytes_string".into(), required: true }],
                         crate::interpret::RuntimeValueCode::Product => vec![MachineFieldDescription { name: "data".into(), type_expression: "runtime_product_data".into(), required: true }],
                         crate::interpret::RuntimeValueCode::Sum => vec![MachineFieldDescription { name: "data".into(), type_expression: "runtime_sum_data".into(), required: true }],
                     },
@@ -3025,6 +3147,10 @@ pub fn schema_description() -> SchemaDescription {
                             "payload is absent for nullary variants and present with the exact payload type otherwise".into(),
                             "compiler discriminants and dense type or variant indexes are forbidden".into(),
                         ],
+                        crate::interpret::RuntimeValueCode::Bytes => vec![
+                            "equality and behavior depend only on visible ordered octets; backing, view, sharing, and runtime handles are unobservable".into(),
+                            "data is canonical unpadded URL-safe base64 with no whitespace and canonical trailing bits".into(),
+                        ],
                         _ => vec!["value must have the exact primitive semantic type".into()],
                     },
                 })
@@ -3033,9 +3159,12 @@ pub fn schema_description() -> SchemaDescription {
             variants: run_variants(),
             limit_scope: vec![
                 "argument count applies to the complete Run arguments list".into(),
-                "runtime value depth applies per nested value root; item and encoded-byte limits aggregate across all Run arguments".into(),
-                "live-cell policy applies to peak frame arenas plus argument, edge, return, and public flatten scratch before allocation or copy".into(),
-                "fuel charges before work: one base per instruction or transfer plus max(1, materialized cells) for every logically copied value; variant construction charges its full canonical sum cells".into(),
+                "runtime value depth applies per nested value root; item and structural-byte limits aggregate across all Run arguments".into(),
+                "live-cell policy applies to peak frame arrays plus argument, edge, return, and public flatten scratch before allocation or cell transfer".into(),
+                "fuel charges before work: one base per instruction or transfer plus max(1, materialized cells) for every logical value transfer; variant construction charges its full canonical sum cells".into(),
+                "bytes_slice additionally charges one logical view unit without charging per visible octet".into(),
+                "bytes_equal additionally charges one fuel unit per compared octet and stops at the first mismatch; differing lengths compare no octets".into(),
+                "decoded byte values, invocation visible bytes, distinct retained backing bytes, and managed object count have independent limits".into(),
             ],
         },
         queries: QueryCode::ALL
@@ -3102,6 +3231,13 @@ pub fn schema_description() -> SchemaDescription {
             maximum_runtime_value_depth: crate::interpret::MAX_RUNTIME_VALUE_DEPTH as u32,
             maximum_runtime_value_items: crate::interpret::MAX_RUNTIME_VALUE_ITEMS as u64,
             maximum_runtime_value_bytes: crate::interpret::MAX_RUNTIME_VALUE_BYTES as u64,
+            maximum_byte_literal_bytes: crate::schema::MAXIMUM_BYTE_LITERAL_BYTES as u64,
+            maximum_transaction_byte_literal_bytes: crate::schema::MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES as u64,
+            maximum_runtime_byte_value_bytes: crate::schema::MAXIMUM_BYTE_STRING_BYTES as u64,
+            maximum_run_argument_byte_bytes: crate::interpret::MAX_RUN_ARGUMENT_BYTE_BYTES as u64,
+            maximum_run_managed_visible_bytes: crate::interpret::MAX_RUN_MANAGED_VISIBLE_BYTES as u64,
+            maximum_run_retained_backing_bytes: crate::interpret::MAX_RUN_RETAINED_BACKING_BYTES as u64,
+            maximum_run_managed_objects: crate::interpret::MAX_RUN_MANAGED_OBJECTS as u64,
             maximum_error_related_ids: crate::error::MAX_ERROR_RELATED_IDS as u32,
             maximum_boundary_error_message_bytes: MAX_BOUNDARY_ERROR_MESSAGE_BYTES as u64,
             maximum_persistence_head_bytes: crate::persistence::MAXIMUM_HEAD_BYTES as u64,
@@ -4210,9 +4346,9 @@ mod tests {
         assert_eq!(decode_request(&bytes).expect("decode"), request);
         let text = String::from_utf8(bytes).expect("UTF-8");
         for invalid in [
-            text.replacen("\"version\":6", "\"version\":5", 1),
+            text.replacen("\"version\":7", "\"version\":6", 1),
             text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-            text.replacen("{\"version\":6", "{\"unknown\":0,\"version\":6", 1),
+            text.replacen("{\"version\":7", "{\"unknown\":0,\"version\":7", 1),
             format!("{text} {{}}"),
             text.replacen(
                 &workspace.to_string(),
@@ -4265,7 +4401,7 @@ mod tests {
                 "{expression} accepted {value}"
             );
         }
-        assert_eq!(schema.scalar_types.len(), 17);
+        assert_eq!(schema.scalar_types.len(), 18);
         assert_eq!(
             schema
                 .scalar_types
@@ -4299,6 +4435,7 @@ mod tests {
                 SemanticType::Unit,
                 SemanticType::Bool,
                 SemanticType::I64,
+                SemanticType::Bytes,
                 SemanticType::Nominal(node),
             ],
         );
@@ -4381,6 +4518,21 @@ mod tests {
                     variant: other,
                     region: node,
                 }],
+            },
+            OperationKind::ConstBytes(crate::schema::ByteString::from_slice(b"LKJM").unwrap()),
+            OperationKind::BytesLen { value },
+            OperationKind::BytesAt {
+                value,
+                index: value,
+            },
+            OperationKind::BytesSlice {
+                value,
+                start: value,
+                length: value,
+            },
+            OperationKind::BytesEqual {
+                lhs: value,
+                rhs: value,
             },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
@@ -4556,6 +4708,7 @@ mod tests {
                 LiteralValue::I64(1),
                 LiteralValue::Bool(true),
                 LiteralValue::ExpectedType(SemanticType::I64),
+                LiteralValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
             ],
         );
         assert_family_samples(
@@ -4576,6 +4729,7 @@ mod tests {
                 ScalarValue::I64(1),
                 ScalarValue::Bool(true),
                 ScalarValue::Type(SemanticType::I64),
+                ScalarValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
             ],
         );
         let changes = vec![
@@ -4714,6 +4868,13 @@ mod tests {
                     maximum: u64::MAX,
                 },
                 MachineScalarDomain::LowercaseHex { encoded_bytes: 16 },
+                MachineScalarDomain::CanonicalUrlSafeBase64 {
+                    padding: false,
+                    whitespace: false,
+                    canonical_trailing_bits: true,
+                    maximum_decoded_bytes: crate::schema::MAXIMUM_BYTE_STRING_BYTES as u64,
+                    maximum_encoded_bytes: crate::schema::MAXIMUM_BYTE_STRING_ENCODED_BYTES as u64,
+                },
                 MachineScalarDomain::NodeId {
                     workspace_bytes: 16,
                     minimum_serial: 1,
@@ -4746,6 +4907,7 @@ mod tests {
                 RuntimeValuePayload::None,
                 RuntimeValuePayload::Bool,
                 RuntimeValuePayload::I64,
+                RuntimeValuePayload::Bytes,
                 RuntimeValuePayload::Product,
                 RuntimeValuePayload::Sum,
             ],
@@ -4784,7 +4946,7 @@ mod tests {
                 },
             ],
         );
-        assert_family_samples(&schema, "operand_use", &[OperandUse::Copy]);
+        assert_family_samples(&schema, "operand_use", &[OperandUse::Read]);
         assert_family_samples(
             &schema,
             "literal_field",
@@ -4795,6 +4957,7 @@ mod tests {
                 LiteralField::ResultType,
                 LiteralField::CarriedType,
                 LiteralField::PositiveStep,
+                LiteralField::BytesValue,
             ],
         );
         assert_family_samples(
@@ -5660,7 +5823,7 @@ mod tests {
             owner_block: other,
             owner_function: node,
             expected_type: SemanticType::I64,
-            use_mode: OperandUse::Copy,
+            use_mode: OperandUse::Read,
         };
         let visible = VisibleValue {
             value: value_ref,
@@ -5681,7 +5844,7 @@ mod tests {
             result_type: SemanticType::Nominal(node),
             operand_count: 1,
             operand_types: vec![SemanticType::I64],
-            operand_uses: vec![OperandUse::Copy],
+            operand_uses: vec![OperandUse::Read],
             literal_fields: vec![],
             call_target: Some(other),
             declaration: Some(node),
@@ -5766,7 +5929,7 @@ mod tests {
             operation_code: OperationCode::Hole,
             operand_index: Some(0),
             expected_type: SemanticType::I64,
-            use_mode: Some(OperandUse::Copy),
+            use_mode: Some(OperandUse::Read),
             current_value: Some(value_ref),
             current_actual_type: Some(SemanticType::I64),
             owner_block: other,
@@ -5975,6 +6138,23 @@ mod tests {
                     body: yielding.clone(),
                 }],
             },
+            ExpressionKindDraft::ConstBytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
+            ExpressionKindDraft::BytesLen {
+                value: value.clone(),
+            },
+            ExpressionKindDraft::BytesAt {
+                value: value.clone(),
+                index: value.clone(),
+            },
+            ExpressionKindDraft::BytesSlice {
+                value: value.clone(),
+                start: value.clone(),
+                length: value.clone(),
+            },
+            ExpressionKindDraft::BytesEqual {
+                lhs: value.clone(),
+                rhs: value.clone(),
+            },
         ];
         assert_eq!(expression_samples.len(), ExpressionDraftCode::ALL.len());
         for (sample, code) in expression_samples.iter().zip(ExpressionDraftCode::ALL) {
@@ -6048,6 +6228,23 @@ mod tests {
                     region: target,
                 }],
             },
+            OperationDraft::ConstBytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
+            OperationDraft::BytesLen {
+                value: value.clone(),
+            },
+            OperationDraft::BytesAt {
+                value: value.clone(),
+                index: value.clone(),
+            },
+            OperationDraft::BytesSlice {
+                value: value.clone(),
+                start: value.clone(),
+                length: value.clone(),
+            },
+            OperationDraft::BytesEqual {
+                lhs: value.clone(),
+                rhs: value.clone(),
+            },
         ];
         assert_eq!(operation_samples.len(), OperationCode::ALL.len());
         for (sample, code) in operation_samples.iter().zip(OperationCode::ALL) {
@@ -6083,6 +6280,7 @@ mod tests {
             RuntimeValue::Unit,
             RuntimeValue::Bool(true),
             RuntimeValue::I64(1),
+            RuntimeValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
             RuntimeValue::Product {
                 ty: node,
                 fields: vec![RuntimeFieldValue {
@@ -6119,6 +6317,7 @@ mod tests {
             TypeDraft::Unit,
             TypeDraft::Bool,
             TypeDraft::I64,
+            TypeDraft::Bytes,
             TypeDraft::Nominal(target),
         ];
         assert_eq!(
@@ -7342,6 +7541,27 @@ mod tests {
                     )
                 })
             }
+            MachineScalarDomain::CanonicalUrlSafeBase64 {
+                padding,
+                whitespace,
+                canonical_trailing_bits,
+                maximum_decoded_bytes,
+                maximum_encoded_bytes,
+            } => {
+                if *padding || *whitespace || !*canonical_trailing_bits {
+                    return Err("machine bytes scalar describes a noncanonical policy".into());
+                }
+                let text = value.as_str().ok_or_else(|| "expected string".to_owned())?;
+                if u64::try_from(text.len()).unwrap_or(u64::MAX) > *maximum_encoded_bytes {
+                    return Err("encoded byte string exceeds policy".into());
+                }
+                let parsed = serde_json::from_value::<crate::schema::ByteString>(value.clone())
+                    .map_err(|error| error.to_string())?;
+                if u64::try_from(parsed.len()).unwrap_or(u64::MAX) > *maximum_decoded_bytes {
+                    return Err("decoded byte string exceeds policy".into());
+                }
+                Ok(())
+            }
             MachineScalarDomain::NodeId {
                 workspace_bytes,
                 minimum_serial,
@@ -8330,7 +8550,7 @@ mod tests {
         assert_named_variant_counts(
             &first.semantic_variants,
             &[
-                ("semantic_type", 4),
+                ("semantic_type", 5),
                 ("value_ref", 3),
                 ("region_role", 4),
                 ("operation_kind", OperationCode::ALL.len()),
@@ -8358,9 +8578,9 @@ mod tests {
                 ("visible_cursor_purpose", VisibleCursorPurpose::ALL.len()),
                 ("layout_failure", 3),
                 ("definition_slot", 12),
-                ("literal_value", 3),
+                ("literal_value", 4),
                 ("dependency_fact", 2),
-                ("scalar_value", 3),
+                ("scalar_value", 4),
                 ("change_kind", 11),
             ],
         );
@@ -8373,14 +8593,14 @@ mod tests {
                 ("schema_definition_body", 14),
                 ("payload_shape_kind", 3),
                 ("json_scalar_kind", 3),
-                ("machine_scalar_domain", 7),
+                ("machine_scalar_domain", 8),
                 ("run_field_type", 7),
-                ("runtime_value_payload", 5),
+                ("runtime_value_payload", 6),
                 ("draft_field_type", DraftFieldType::ALL.len()),
                 ("operand_arity", 4),
                 ("region_arity", 2),
                 ("operand_use", 1),
-                ("literal_field", 6),
+                ("literal_field", 7),
                 ("block_argument_role", 3),
                 ("type_rule", 16),
             ],
@@ -8397,11 +8617,23 @@ mod tests {
         assert_eq!(RegionRole::ALL_STATIC.len() + 1, 4);
         assert_codes(
             &first.semantic_types,
-            [("unit", 1), ("bool", 2), ("i64", 3), ("nominal", 4)],
+            [
+                ("unit", 1),
+                ("bool", 2),
+                ("i64", 3),
+                ("bytes", 5),
+                ("nominal", 4),
+            ],
         );
         assert_variants(
             &first.structured_authoring.type_variants,
-            [("unit", 1), ("bool", 2), ("i64", 3), ("nominal", 4)],
+            [
+                ("unit", 1),
+                ("bool", 2),
+                ("i64", 3),
+                ("bytes", 0),
+                ("nominal", 4),
+            ],
         );
         assert_eq!(
             first
@@ -8437,13 +8669,13 @@ mod tests {
             assert_eq!(field.nullable, !field.required, "{}", field.name);
         }
         assert!(
-            first.structured_authoring.type_variants[..3]
+            first.structured_authoring.type_variants[..4]
                 .iter()
                 .all(|variant| variant.shape == PayloadShapeKind::Unit
                     && variant.newtype.is_none()
                     && variant.fields.is_empty())
         );
-        let nominal = &first.structured_authoring.type_variants[3];
+        let nominal = &first.structured_authoring.type_variants[4];
         assert_eq!(nominal.shape, PayloadShapeKind::Newtype);
         assert_eq!(nominal.newtype, Some(DraftFieldType::NodeTarget));
         assert!(nominal.fields.is_empty());
@@ -8614,6 +8846,7 @@ mod tests {
                 ("unit", RuntimeValuePayload::None),
                 ("bool", RuntimeValuePayload::Bool),
                 ("i64", RuntimeValuePayload::I64),
+                ("bytes", RuntimeValuePayload::Bytes),
                 ("product", RuntimeValuePayload::Product),
                 ("sum", RuntimeValuePayload::Sum),
             ]
@@ -8652,7 +8885,7 @@ mod tests {
                 .run
                 .limit_scope
                 .iter()
-                .any(|scope| scope.contains("peak frame arenas plus"))
+                .any(|scope| scope.contains("peak frame arrays plus"))
         );
         assert_eq!(
             first.structured_authoring.maximum_request_depth,
@@ -9159,8 +9392,8 @@ mod tests {
             sizes,
             vec![
                 ("manifest", None, 1_241, 1_319),
-                ("selected_agent_task_roots", Some(111), 81_418, 81_496),
-                ("full", None, 125_995, 126_073),
+                ("selected_agent_task_roots", Some(112), 85_827, 85_905),
+                ("full", None, 133_774, 133_852),
                 ("unchanged", None, 105, 183),
             ]
         );

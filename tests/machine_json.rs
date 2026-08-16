@@ -36,6 +36,33 @@ fn ids() -> (WorkspaceId, NodeId, NodeId) {
 }
 
 #[test]
+fn public_byte_value_encoding_is_one_canonical_strict_shape() {
+    let canonical = br#"{"kind":"bytes","data":"_w"}"#;
+    assert_eq!(
+        serde_json::from_slice::<RuntimeValue>(canonical).unwrap(),
+        RuntimeValue::Bytes(ByteString::from_slice(&[0xff]).unwrap())
+    );
+    assert_eq!(
+        serde_json::to_vec(&RuntimeValue::Bytes(
+            ByteString::from_slice(&[0xff]).unwrap()
+        ))
+        .unwrap(),
+        canonical
+    );
+    for malformed in [
+        br#"{"kind":"bytes","data":"_w="}"#.as_slice(),
+        br#"{"kind":"bytes","data":"_x"}"#.as_slice(),
+        br#"{"kind":"bytes","data":"_ w"}"#.as_slice(),
+        br#"{"kind":"bytes","data":1}"#.as_slice(),
+        br#"{"kind":"bytes","data":"_w","extra":0}"#.as_slice(),
+        br#"{"kind":"bytes","data":"_w","data":"_w"}"#.as_slice(),
+        br#"{"kind":"unknown","data":"_w"}"#.as_slice(),
+    ] {
+        assert!(serde_json::from_slice::<RuntimeValue>(malformed).is_err());
+    }
+}
+
+#[test]
 fn every_closed_machine_variant_round_trips() {
     let (workspace, first, second) = ids();
     let existing = NodeTarget::Existing(first);
@@ -126,6 +153,23 @@ fn every_closed_machine_variant_round_trips() {
                 region: local,
             }],
         },
+        OperationDraft::ConstBytes(ByteString::from_slice(b"LKJM").unwrap()),
+        OperationDraft::BytesLen {
+            value: value.clone(),
+        },
+        OperationDraft::BytesAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::BytesSlice {
+            value: value.clone(),
+            start: value.clone(),
+            length: value.clone(),
+        },
+        OperationDraft::BytesEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     assert_eq!(drafts.len(), OperationCode::ALL.len());
     for (draft, code) in drafts.iter().zip(OperationCode::ALL) {
@@ -201,6 +245,23 @@ fn every_closed_machine_variant_round_trips() {
                 body: yielding(36),
             }],
         },
+        ExpressionKindDraft::ConstBytes(ByteString::from_slice(b"LKJM").unwrap()),
+        ExpressionKindDraft::BytesLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::BytesAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::BytesSlice {
+            value: value.clone(),
+            start: value.clone(),
+            length: value.clone(),
+        },
+        ExpressionKindDraft::BytesEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
         round_trip(&ExpressionDraft {
@@ -255,6 +316,23 @@ fn every_closed_machine_variant_round_trips() {
                 variant: first,
                 region: second,
             }],
+        },
+        OperationKind::ConstBytes(ByteString::from_slice(b"LKJM").unwrap()),
+        OperationKind::BytesLen {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::BytesAt {
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::BytesSlice {
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            length: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::BytesEqual {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
         },
     ] {
         round_trip(&kind);
@@ -384,6 +462,7 @@ fn every_closed_machine_variant_round_trips() {
         TypeDraft::Unit,
         TypeDraft::Bool,
         TypeDraft::I64,
+        TypeDraft::Bytes,
         TypeDraft::Nominal(NodeTarget::Draft(DraftSymbol::new("s14"))),
         TypeDraft::Nominal(NodeTarget::Existing(first)),
     ] {
@@ -472,6 +551,7 @@ fn every_closed_machine_variant_round_trips() {
         LiteralValue::I64(1),
         LiteralValue::Bool(true),
         LiteralValue::ExpectedType(SemanticType::I64),
+        LiteralValue::Bytes(ByteString::from_slice(b"x").unwrap()),
     ] {
         round_trip(&literal);
     }
@@ -665,6 +745,7 @@ fn every_closed_machine_variant_round_trips() {
         ScalarValue::I64(1),
         ScalarValue::Bool(true),
         ScalarValue::Type(SemanticType::I64),
+        ScalarValue::Bytes(ByteString::from_slice(b"x").unwrap()),
     ] {
         round_trip(&scalar);
     }
@@ -672,6 +753,7 @@ fn every_closed_machine_variant_round_trips() {
         RuntimeValue::Unit,
         RuntimeValue::Bool(true),
         RuntimeValue::I64(1),
+        RuntimeValue::Bytes(ByteString::from_slice(b"x").unwrap()),
     ] {
         round_trip(&value);
     }
@@ -1009,11 +1091,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":6,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":7,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":6", "\"version\":5", 1),
+        valid.replacen("\"version\":7", "\"version\":6", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

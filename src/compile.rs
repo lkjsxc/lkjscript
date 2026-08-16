@@ -1,7 +1,7 @@
 use crate::core_ir::{
     self, BOOL_TYPE, BlockId, CoreBlock, CoreField, CoreFunction, CoreProgram, CoreType,
     CoreTypeId, CoreTypeKind, CoreVariant, FunctionId, I64_TYPE, Instruction, SwitchArgument,
-    SwitchArm, Terminator, UNIT_TYPE, ValueId,
+    SwitchArm, Terminator, ValueId,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
@@ -134,26 +134,28 @@ fn build_type_table(
     snapshot: &Snapshot,
     declarations: &[NodeId],
 ) -> Result<(Vec<CoreType>, BTreeMap<SemanticType, CoreTypeId>)> {
-    let primitive = |kind, size, align, cells| CoreType {
-        origin: None,
-        kind,
-        layout: ValueLayout {
-            size,
-            align,
-            cells,
-            shape: LayoutShape::Primitive,
-        },
-    };
-    let mut types = vec![
-        primitive(CoreTypeKind::Unit, 0, 1, 0),
-        primitive(CoreTypeKind::Bool, 1, 1, 1),
-        primitive(CoreTypeKind::I64, 8, 8, 1),
-    ];
-    let mut ids = BTreeMap::from([
-        (SemanticType::Unit, UNIT_TYPE),
-        (SemanticType::Bool, BOOL_TYPE),
-        (SemanticType::I64, I64_TYPE),
-    ]);
+    let mut types = Vec::with_capacity(SemanticType::PRIMITIVES.len() + declarations.len());
+    let mut ids = BTreeMap::new();
+    for semantic in SemanticType::PRIMITIVES {
+        let id = CoreTypeId(dense_u32(types.len(), snapshot.root(), "primitive type")?);
+        let kind = match semantic {
+            SemanticType::Unit => CoreTypeKind::Unit,
+            SemanticType::Bool => CoreTypeKind::Bool,
+            SemanticType::I64 => CoreTypeKind::I64,
+            SemanticType::Bytes => CoreTypeKind::Bytes,
+            SemanticType::Nominal(_) => {
+                return Err(invalid(snapshot.root(), "primitive type is nominal"));
+            }
+        };
+        let layout = type_layout::primitive_layout(semantic)
+            .ok_or_else(|| invalid(snapshot.root(), "primitive layout is absent"))?;
+        ids.insert(semantic, id);
+        types.push(CoreType {
+            origin: None,
+            kind,
+            layout,
+        });
+    }
     for declaration in declarations {
         let id = CoreTypeId(dense_u32(types.len(), *declaration, "type")?);
         ids.insert(SemanticType::Nominal(*declaration), id);
@@ -963,6 +965,11 @@ fn lower_instruction(
             result,
             value: *value,
         },
+        OperationKind::ConstBytes(value) => Instruction::ConstBytes {
+            origin,
+            result,
+            value: value.clone(),
+        },
         OperationKind::AddI64 { lhs, rhs } => Instruction::AddI64 {
             origin,
             result,
@@ -970,6 +977,34 @@ fn lower_instruction(
             rhs: lower_value(environment, *rhs)?,
         },
         OperationKind::LtI64 { lhs, rhs } => Instruction::LtI64 {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::BytesLen { value } => Instruction::BytesLen {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::BytesAt { value, index } => Instruction::BytesAt {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            index: lower_value(environment, *index)?,
+        },
+        OperationKind::BytesSlice {
+            value,
+            start,
+            length,
+        } => Instruction::BytesSlice {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            length: lower_value(environment, *length)?,
+        },
+        OperationKind::BytesEqual { lhs, rhs } => Instruction::BytesEqual {
             origin,
             result,
             lhs: lower_value(environment, *lhs)?,
@@ -1057,7 +1092,12 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
     Ok(match operation {
         OperationKind::ConstUnit => SemanticType::Unit,
         OperationKind::ConstBool(_) | OperationKind::LtI64 { .. } => SemanticType::Bool,
-        OperationKind::ConstI64(_) | OperationKind::AddI64 { .. } => SemanticType::I64,
+        OperationKind::ConstI64(_)
+        | OperationKind::AddI64 { .. }
+        | OperationKind::BytesLen { .. }
+        | OperationKind::BytesAt { .. } => SemanticType::I64,
+        OperationKind::ConstBytes(_) | OperationKind::BytesSlice { .. } => SemanticType::Bytes,
+        OperationKind::BytesEqual { .. } => SemanticType::Bool,
         OperationKind::Call { function, .. } => match snapshot.node(*function)? {
             Node::Function { result, .. } => *result,
             _ => return Err(invalid(*function, "call target is not a function")),
@@ -1381,8 +1421,11 @@ mod tests {
         let valid = id(8);
         let entry = id(5);
         let program = compile(&prepared.snapshot, entry).expect("nominal Core");
-        assert_eq!(program.types.len(), 4);
-        assert_eq!(program.types[3].origin, Some(product));
+        assert_eq!(program.types.len(), core_ir::PRIMITIVE_TYPE_COUNT + 1);
+        assert_eq!(
+            program.types[core_ir::PRIMITIVE_TYPE_COUNT].origin,
+            Some(product)
+        );
         let value = RuntimeValue::Product {
             ty: product,
             fields: vec![
@@ -1659,10 +1702,13 @@ mod tests {
         let program = compile(&prepared.snapshot, id(6)).expect("match Core");
         assert_eq!(
             program.types.len(),
-            4,
+            core_ir::PRIMITIVE_TYPE_COUNT + 1,
             "unreachable nominal declaration omitted"
         );
-        assert_eq!(program.types[3].origin, Some(id(3)));
+        assert_eq!(
+            program.types[core_ir::PRIMITIVE_TYPE_COUNT].origin,
+            Some(id(3))
+        );
         assert!(matches!(
             program.functions[0].blocks[0].terminator,
             Terminator::SwitchVariant { .. }

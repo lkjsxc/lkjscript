@@ -6,7 +6,8 @@ use crate::ids::{
 };
 use crate::query;
 use crate::schema::{
-    MatchArm, MatchArmOperationDraft, Node, NodeKind, OperationCode, OperationDraft, OperationKind,
+    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES, MatchArm,
+    MatchArmOperationDraft, Node, NodeKind, OperationCode, OperationDraft, OperationKind,
     ProductFieldValue, ProductFieldValueDraft, RegionArity, SemanticType, TypeDraft, ValueDraft,
     ValueRef,
 };
@@ -129,9 +130,14 @@ pub enum ExpressionDraftCode {
     ProjectField,
     ConstructVariant,
     MatchSum,
+    ConstBytes,
+    BytesLen,
+    BytesAt,
+    BytesSlice,
+    BytesEqual,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 18] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -145,6 +151,11 @@ impl ExpressionDraftCode {
         Self::ProjectField,
         Self::ConstructVariant,
         Self::MatchSum,
+        Self::ConstBytes,
+        Self::BytesLen,
+        Self::BytesAt,
+        Self::BytesSlice,
+        Self::BytesEqual,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -161,6 +172,11 @@ impl ExpressionDraftCode {
             Self::ProjectField => "project_field",
             Self::ConstructVariant => "construct_variant",
             Self::MatchSum => "match_sum",
+            Self::ConstBytes => "const_bytes",
+            Self::BytesLen => "bytes_len",
+            Self::BytesAt => "bytes_at",
+            Self::BytesSlice => "bytes_slice",
+            Self::BytesEqual => "bytes_equal",
         }
     }
 
@@ -179,6 +195,11 @@ impl ExpressionDraftCode {
             Self::ProjectField => OperationCode::ProjectField,
             Self::ConstructVariant => OperationCode::ConstructVariant,
             Self::MatchSum => OperationCode::MatchSum,
+            Self::ConstBytes => OperationCode::ConstBytes,
+            Self::BytesLen => OperationCode::BytesLen,
+            Self::BytesAt => OperationCode::BytesAt,
+            Self::BytesSlice => OperationCode::BytesSlice,
+            Self::BytesEqual => OperationCode::BytesEqual,
         }
     }
 
@@ -242,6 +263,11 @@ impl ExpressionKindDraft {
             Self::ProjectField { .. } => ExpressionDraftCode::ProjectField,
             Self::ConstructVariant { .. } => ExpressionDraftCode::ConstructVariant,
             Self::MatchSum { .. } => ExpressionDraftCode::MatchSum,
+            Self::ConstBytes(_) => ExpressionDraftCode::ConstBytes,
+            Self::BytesLen { .. } => ExpressionDraftCode::BytesLen,
+            Self::BytesAt { .. } => ExpressionDraftCode::BytesAt,
+            Self::BytesSlice { .. } => ExpressionDraftCode::BytesSlice,
+            Self::BytesEqual { .. } => ExpressionDraftCode::BytesEqual,
         }
     }
 
@@ -321,11 +347,28 @@ pub enum ExpressionKindDraft {
     ConstUnit,
     ConstBool(bool),
     ConstI64(i64),
+    ConstBytes(ByteString),
     AddI64 {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
     LtI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    BytesLen {
+        value: ValueDraft,
+    },
+    BytesAt {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    BytesSlice {
+        value: ValueDraft,
+        start: ValueDraft,
+        length: ValueDraft,
+    },
+    BytesEqual {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
@@ -1294,6 +1337,14 @@ fn expand_transaction(
                         operation: OperationDraft::ConstI64(value),
                     })
                 }
+                ExpressionKindDraft::ConstBytes(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstBytes(value),
+                    })
+                }
                 ExpressionKindDraft::AddI64 { lhs, rhs } => {
                     edits.push(CanonicalEdit::CreateOperation {
                         symbol: expression_symbol,
@@ -1308,6 +1359,44 @@ fn expand_transaction(
                         block,
                         before,
                         operation: OperationDraft::LtI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::BytesLen { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::BytesLen { value },
+                    })
+                }
+                ExpressionKindDraft::BytesAt { value, index } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::BytesAt { value, index },
+                    })
+                }
+                ExpressionKindDraft::BytesSlice {
+                    value,
+                    start,
+                    length,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::BytesSlice {
+                        value,
+                        start,
+                        length,
+                    },
+                }),
+                ExpressionKindDraft::BytesEqual { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::BytesEqual { lhs, rhs },
                     })
                 }
                 ExpressionKindDraft::Call {
@@ -1540,10 +1629,27 @@ fn extract_inline_children(
         ExpressionKindDraft::ConstUnit
         | ExpressionKindDraft::ConstBool(_)
         | ExpressionKindDraft::ConstI64(_)
+        | ExpressionKindDraft::ConstBytes(_)
         | ExpressionKindDraft::Hole { .. } => {}
-        ExpressionKindDraft::AddI64 { lhs, rhs } | ExpressionKindDraft::LtI64 { lhs, rhs } => {
+        ExpressionKindDraft::AddI64 { lhs, rhs }
+        | ExpressionKindDraft::LtI64 { lhs, rhs }
+        | ExpressionKindDraft::BytesEqual { lhs, rhs } => {
             extract(lhs, "lhs".to_owned())?;
             extract(rhs, "rhs".to_owned())?;
+        }
+        ExpressionKindDraft::BytesLen { value } => extract(value, "value".to_owned())?,
+        ExpressionKindDraft::BytesAt { value, index } => {
+            extract(value, "value".to_owned())?;
+            extract(index, "index".to_owned())?;
+        }
+        ExpressionKindDraft::BytesSlice {
+            value,
+            start,
+            length,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(length, "length".to_owned())?;
         }
         ExpressionKindDraft::Call { arguments, .. } => {
             for (index, value) in arguments.iter_mut().enumerate() {
@@ -1669,20 +1775,49 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
         Inline(&'a ExpressionKindDraft, usize, usize, String),
         Body(&'a [ExpressionDraft], &'a ValueDraft, usize, usize, String),
     }
-    struct DraftBudget(usize);
+    #[derive(Default)]
+    struct DraftBudget {
+        items: usize,
+        byte_literals: usize,
+    }
     impl DraftBudget {
         fn add(&mut self, count: usize, source: usize) -> Result<()> {
-            self.0 = self.0.checked_add(count).ok_or_else(|| {
+            self.items = self.items.checked_add(count).ok_or_else(|| {
                 LkError::new(
                     ErrorCode::PolicyExceeded,
                     "structured draft item count overflow",
                 )
                 .at_operation(source)
             })?;
-            if self.0 > MAX_STRUCTURED_DRAFT_ITEMS {
+            if self.items > MAX_STRUCTURED_DRAFT_ITEMS {
                 return Err(LkError::new(
                     ErrorCode::PolicyExceeded,
                     "structured draft exceeds request item policy",
+                )
+                .at_operation(source));
+            }
+            Ok(())
+        }
+
+        fn add_byte_literal(&mut self, value: &ByteString, source: usize) -> Result<()> {
+            if value.len() > MAXIMUM_BYTE_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::ByteLiteralTooLarge,
+                    "byte literal exceeds the per-literal policy",
+                )
+                .at_operation(source));
+            }
+            self.byte_literals = self.byte_literals.checked_add(value.len()).ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::ByteLiteralTooLarge,
+                    "aggregate byte literal size overflows",
+                )
+                .at_operation(source)
+            })?;
+            if self.byte_literals > MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::ByteLiteralTooLarge,
+                    "transaction exceeds the aggregate byte literal policy",
                 )
                 .at_operation(source));
             }
@@ -1813,9 +1948,28 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             OperationDraft::ConstUnit
             | OperationDraft::ConstI64(_)
             | OperationDraft::ConstBool(_) => {}
-            OperationDraft::AddI64 { lhs, rhs } | OperationDraft::LtI64 { lhs, rhs } => {
+            OperationDraft::ConstBytes(value) => budget.add_byte_literal(value, source)?,
+            OperationDraft::AddI64 { lhs, rhs }
+            | OperationDraft::LtI64 { lhs, rhs }
+            | OperationDraft::BytesEqual { lhs, rhs } => {
                 value_reference(lhs, source, references)?;
                 value_reference(rhs, source, references)?;
+            }
+            OperationDraft::BytesLen { value } => {
+                value_reference(value, source, references)?;
+            }
+            OperationDraft::BytesAt { value, index } => {
+                value_reference(value, source, references)?;
+                value_reference(index, source, references)?;
+            }
+            OperationDraft::BytesSlice {
+                value,
+                start,
+                length,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(length, source, references)?;
             }
             OperationDraft::Call {
                 function,
@@ -1910,7 +2064,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
     let mut kinds = BTreeMap::new();
     let mut references = Vec::<(DraftSymbol, DraftReferenceKind, usize)>::new();
     let mut stack = Vec::new();
-    let mut budget = DraftBudget(0);
+    let mut budget = DraftBudget::default();
     for (source, operation) in operations.iter().enumerate() {
         budget.add(1, source)?;
         match operation {
@@ -2167,7 +2321,12 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             ExpressionKindDraft::ConstUnit
             | ExpressionKindDraft::ConstBool(_)
             | ExpressionKindDraft::ConstI64(_) => {}
-            ExpressionKindDraft::AddI64 { lhs, rhs } | ExpressionKindDraft::LtI64 { lhs, rhs } => {
+            ExpressionKindDraft::ConstBytes(value) => {
+                budget.add_byte_literal(value, source)?;
+            }
+            ExpressionKindDraft::AddI64 { lhs, rhs }
+            | ExpressionKindDraft::LtI64 { lhs, rhs }
+            | ExpressionKindDraft::BytesEqual { lhs, rhs } => {
                 structured_value(
                     rhs,
                     depth,
@@ -2184,6 +2343,44 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     &mut stack,
                     &mut references,
                 )?;
+            }
+            ExpressionKindDraft::BytesLen { value } => {
+                structured_value(
+                    value,
+                    depth,
+                    source,
+                    child_draft_path(&path, "value", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+            }
+            ExpressionKindDraft::BytesAt { value, index } => {
+                for (value, segment) in [(index, "index"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::BytesSlice {
+                value,
+                start,
+                length,
+            } => {
+                for (value, segment) in [(length, "length"), (start, "start"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
             }
             ExpressionKindDraft::Call {
                 function,
@@ -3544,11 +3741,32 @@ fn resolve_operation(
         OperationDraft::ConstUnit => OperationKind::ConstUnit,
         OperationDraft::ConstI64(value) => OperationKind::ConstI64(*value),
         OperationDraft::ConstBool(value) => OperationKind::ConstBool(*value),
+        OperationDraft::ConstBytes(value) => OperationKind::ConstBytes(value.clone()),
         OperationDraft::AddI64 { lhs, rhs } => OperationKind::AddI64 {
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
         OperationDraft::LtI64 { lhs, rhs } => OperationKind::LtI64 {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::BytesLen { value } => OperationKind::BytesLen {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::BytesAt { value, index } => OperationKind::BytesAt {
+            value: resolve_value(value, allocations, workspace)?,
+            index: resolve_value(index, allocations, workspace)?,
+        },
+        OperationDraft::BytesSlice {
+            value,
+            start,
+            length,
+        } => OperationKind::BytesSlice {
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            length: resolve_value(length, allocations, workspace)?,
+        },
+        OperationDraft::BytesEqual { lhs, rhs } => OperationKind::BytesEqual {
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
@@ -3704,6 +3922,7 @@ fn resolve_type_draft(
         TypeDraft::Unit => SemanticType::Unit,
         TypeDraft::Bool => SemanticType::Bool,
         TypeDraft::I64 => SemanticType::I64,
+        TypeDraft::Bytes => SemanticType::Bytes,
         TypeDraft::Nominal(target) => {
             SemanticType::Nominal(resolve(target, allocations, workspace)?)
         }
@@ -4293,6 +4512,258 @@ mod tests {
             artifact::encode(&explicit.snapshot).expect("explicit artifact"),
             artifact::encode(&inline.snapshot).expect("inline artifact")
         );
+    }
+
+    fn equal_bytes_request(id: WorkspaceId, inline_values: bool) -> ApplyTransactionRequest {
+        let operations = if inline_values {
+            vec![draft_expression(
+                9,
+                ExpressionKindDraft::BytesEqual {
+                    lhs: inline(ExpressionKindDraft::BytesSlice {
+                        value: inline(ExpressionKindDraft::ConstBytes(
+                            ByteString::from_slice(b"LKJMpayload").expect("literal"),
+                        )),
+                        start: inline(ExpressionKindDraft::ConstI64(0)),
+                        length: inline(ExpressionKindDraft::ConstI64(4)),
+                    }),
+                    rhs: inline(ExpressionKindDraft::ConstBytes(
+                        ByteString::from_slice(b"LKJM").expect("literal"),
+                    )),
+                },
+            )]
+        } else {
+            vec![
+                draft_expression(
+                    4,
+                    ExpressionKindDraft::ConstBytes(
+                        ByteString::from_slice(b"LKJMpayload").expect("literal"),
+                    ),
+                ),
+                draft_expression(5, ExpressionKindDraft::ConstI64(0)),
+                draft_expression(6, ExpressionKindDraft::ConstI64(4)),
+                draft_expression(
+                    7,
+                    ExpressionKindDraft::BytesSlice {
+                        value: draft_result(4),
+                        start: draft_result(5),
+                        length: draft_result(6),
+                    },
+                ),
+                draft_expression(
+                    8,
+                    ExpressionKindDraft::ConstBytes(
+                        ByteString::from_slice(b"LKJM").expect("literal"),
+                    ),
+                ),
+                draft_expression(
+                    9,
+                    ExpressionKindDraft::BytesEqual {
+                        lhs: draft_result(7),
+                        rhs: draft_result(8),
+                    },
+                ),
+            ]
+        };
+        let mut request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateFunction {
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
+                    name: "magic_matches".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::Bool,
+                    body: Some(FunctionBodyDraft {
+                        operations,
+                        return_value: draft_result(9),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: draft_symbol(1),
+                    function: draft_symbol(3),
+                },
+            ],
+        );
+        request.response.return_symbols = [1, 2, 3, 9]
+            .into_iter()
+            .map(DraftSymbol::generated)
+            .collect();
+        request
+    }
+
+    #[test]
+    fn explicit_and_inline_byte_expressions_produce_identical_authority_and_result() {
+        let id = WorkspaceId::from_bytes([0xb4; 16]);
+        let explicit = Workspace::new(id)
+            .expect("explicit workspace")
+            .prepare_transaction(&equal_bytes_request(id, false))
+            .expect("explicit bytes proposal");
+        let inline = Workspace::new(id)
+            .expect("inline workspace")
+            .prepare_transaction(&equal_bytes_request(id, true))
+            .expect("inline bytes proposal");
+        assert_eq!(explicit.receipt, inline.receipt);
+        assert_eq!(explicit.snapshot.hash(), inline.snapshot.hash());
+        assert_eq!(
+            artifact::encode(&explicit.snapshot).expect("explicit artifact"),
+            artifact::encode(&inline.snapshot).expect("inline artifact")
+        );
+        let entry = explicit.receipt.returned_bindings[2].1;
+        let run = crate::interpret::compile_and_run(
+            &explicit.snapshot,
+            entry,
+            &[],
+            crate::interpret::RunPolicy {
+                fuel: 100,
+                maximum_frames: 16,
+            },
+        )
+        .expect("byte expression execution");
+        assert_eq!(run.value, crate::interpret::RuntimeValue::Bool(true));
+    }
+
+    fn literal_budget_request(id: WorkspaceId, lengths: &[usize]) -> ApplyTransactionRequest {
+        let operations = lengths
+            .iter()
+            .enumerate()
+            .map(|(index, length)| {
+                draft_expression(
+                    100 + u32::try_from(index).expect("bounded test index"),
+                    ExpressionKindDraft::ConstBytes(
+                        ByteString::new(vec![0xa5; *length]).expect("public byte bound"),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateFunction {
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
+                name: "literal_budget".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::Bytes,
+                body: Some(FunctionBodyDraft {
+                    operations,
+                    return_value: draft_result(100),
+                }),
+            }],
+        )
+    }
+
+    #[test]
+    fn byte_literal_and_transaction_aggregate_limits_reject_before_identity_consumption() {
+        let id = WorkspaceId::from_bytes([0xb5; 16]);
+        let exact = vec![MAXIMUM_BYTE_LITERAL_BYTES; 16];
+        Workspace::new(id)
+            .expect("exact workspace")
+            .prepare_transaction(&literal_budget_request(id, &exact))
+            .expect("exact aggregate byte literal limit");
+
+        for (name, lengths) in [
+            ("one literal", vec![MAXIMUM_BYTE_LITERAL_BYTES + 1]),
+            (
+                "aggregate literals",
+                exact.into_iter().chain([1]).collect::<Vec<_>>(),
+            ),
+        ] {
+            let workspace = Workspace::new(id).expect("rejecting workspace");
+            let error = workspace
+                .prepare_transaction(&literal_budget_request(id, &lengths))
+                .expect_err(name);
+            assert_eq!(error.code, ErrorCode::ByteLiteralTooLarge);
+            assert_eq!(workspace.head_revision(), Revision::INITIAL);
+            assert_eq!(workspace.head().expect("head").next_serial(), 2);
+        }
+    }
+
+    #[test]
+    fn byte_hole_rejects_wrong_type_and_refines_without_identity_churn() {
+        let id = WorkspaceId::from_bytes([0xb7; 16]);
+        let mut workspace = Workspace::new(id).expect("workspace");
+        let mut initial = structured_semantic_request(
+            id,
+            vec![TransactionOp::CreateFunction {
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
+                name: "repair_bytes".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::Bytes,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![draft_expression(
+                        4,
+                        ExpressionKindDraft::Hole {
+                            expected: TypeDraft::Bytes,
+                        },
+                    )],
+                    return_value: draft_result(4),
+                }),
+            }],
+        );
+        initial.response.return_symbols = vec![DraftSymbol::generated(4)];
+        let prepared = workspace
+            .prepare_transaction(&initial)
+            .expect("incomplete byte function");
+        let hole = prepared.receipt.returned_bindings[0].1;
+        workspace.publish(prepared.snapshot).expect("publish hole");
+        let next_serial = workspace.head().expect("head").next_serial();
+
+        let refinement = |mode, replacement| ApplyTransactionRequest {
+            transaction: Transaction {
+                workspace: id,
+                base_revision: Revision::new(1),
+                idempotency_key: None,
+                mode,
+                operations: vec![TransactionOp::RefineHole {
+                    hole: NodeTarget::Existing(hole),
+                    replacement,
+                }],
+            },
+            response: TransactionResponseSpec::default(),
+        };
+        let error = workspace
+            .prepare_transaction(&refinement(
+                TransactionMode::Commit,
+                OperationDraft::ConstI64(1),
+            ))
+            .expect_err("wrong byte repair type");
+        assert_eq!(error.code, ErrorCode::TypeMismatch);
+        assert_eq!(error.expected_type, Some(SemanticType::Bytes));
+        assert_eq!(error.actual_type, Some(SemanticType::I64));
+        assert_eq!(workspace.head_revision(), Revision::new(1));
+        assert_eq!(workspace.head().expect("head").next_serial(), next_serial);
+
+        let replacement = OperationDraft::ConstBytes(
+            ByteString::from_slice(b"repaired").expect("byte replacement"),
+        );
+        let predicted = workspace
+            .prepare_transaction(&refinement(
+                TransactionMode::ValidateOnly,
+                replacement.clone(),
+            ))
+            .expect("validate byte repair");
+        assert_eq!(predicted.receipt.created_count, 0);
+        assert!(!predicted.receipt.published);
+        assert_eq!(workspace.head_revision(), Revision::new(1));
+        assert_eq!(workspace.head().expect("head").next_serial(), next_serial);
+
+        let committed = workspace
+            .prepare_transaction(&refinement(TransactionMode::Commit, replacement))
+            .expect("commit byte repair");
+        assert_eq!(committed.receipt.revision, Revision::new(2));
+        assert_eq!(committed.receipt.created_count, 0);
+        assert_eq!(
+            committed.snapshot.node(hole).expect("refined hole").kind(),
+            NodeKind::Operation
+        );
+        let Node::Operation { operation, .. } = committed.snapshot.node(hole).expect("operation")
+        else {
+            panic!("refined byte hole kind")
+        };
+        assert!(
+            matches!(operation, OperationKind::ConstBytes(value) if value.as_slice() == b"repaired")
+        );
+        assert_eq!(committed.snapshot.next_serial(), next_serial);
     }
 
     #[test]
@@ -6889,7 +7360,7 @@ mod tests {
         };
         assert_eq!(
             second_field_context.use_mode,
-            Some(crate::schema::OperandUse::Copy)
+            Some(crate::schema::OperandUse::Read)
         );
 
         let arms = prepared
@@ -7656,7 +8127,7 @@ mod tests {
     }
 
     #[test]
-    fn product_second_operand_is_copy_and_oversized_constructor_requirements_are_bounded() {
+    fn product_second_operand_is_read_and_oversized_constructor_requirements_are_bounded() {
         let id = WorkspaceId::from_bytes([0xa5; 16]);
         let workspace = Workspace::new(id).expect("workspace");
         let fields = (0..65)

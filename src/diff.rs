@@ -1,12 +1,14 @@
 use crate::graph::Snapshot;
 use crate::ids::{ChangeDigest, NodeId};
 use crate::query;
-use crate::schema::{Node, NodeKind, OperationCode, OperationKind, SemanticType, ValueRef};
+use crate::schema::{
+    ByteString, Node, NodeKind, OperationCode, OperationKind, SemanticType, ValueRef,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
-const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v2\0";
+const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v3\0";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -90,6 +92,7 @@ pub enum ScalarValue {
     I64(i64),
     Bool(bool),
     Type(SemanticType),
+    Bytes(ByteString),
 }
 
 impl ChangeKind {
@@ -255,6 +258,11 @@ fn hash_scalar_value(hasher: &mut blake3::Hasher, value: &ScalarValue) {
             hasher.update(&[3]);
             hash_type(hasher, *value);
         }
+        ScalarValue::Bytes(value) => {
+            hasher.update(&[4]);
+            hasher.update(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(value.as_slice());
+        }
     }
 }
 
@@ -268,9 +276,29 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
         OperationKind::ConstBool(value) => {
             hasher.update(&[u8::from(*value)]);
         }
-        OperationKind::AddI64 { lhs, rhs } | OperationKind::LtI64 { lhs, rhs } => {
+        OperationKind::ConstBytes(value) => {
+            hasher.update(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(value.as_slice());
+        }
+        OperationKind::AddI64 { lhs, rhs }
+        | OperationKind::LtI64 { lhs, rhs }
+        | OperationKind::BytesEqual { lhs, rhs } => {
             hash_value(hasher, *lhs);
             hash_value(hasher, *rhs);
+        }
+        OperationKind::BytesLen { value } => hash_value(hasher, *value),
+        OperationKind::BytesAt { value, index } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *index);
+        }
+        OperationKind::BytesSlice {
+            value,
+            start,
+            length,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *length);
         }
         OperationKind::Call {
             function,
@@ -520,6 +548,12 @@ fn scalar_operation_change(
         }
         (OperationKind::ConstBool(left), OperationKind::ConstBool(right)) if left != right => {
             Some((ScalarValue::Bool(*left), ScalarValue::Bool(*right)))
+        }
+        (OperationKind::ConstBytes(left), OperationKind::ConstBytes(right)) if left != right => {
+            Some((
+                ScalarValue::Bytes(left.clone()),
+                ScalarValue::Bytes(right.clone()),
+            ))
         }
         (OperationKind::Hole { expected: left }, OperationKind::Hole { expected: right })
             if left != right =>

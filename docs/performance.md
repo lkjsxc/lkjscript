@@ -1,5 +1,271 @@
 # Performance evidence
 
+## Managed-bytes campaign: sealed baseline and preimplementation decision
+
+This campaign began on `main` at `5c07498a2dbb8c0a45973769eb1af1e460ac6921`
+(`Complete inline expression authoring campaign`) with only the user-supplied root-policy replacement
+and `prompts/202608162043.md` present. The starting checkout exactly matched `origin/main`. The old
+root policy was 541 lines, 30,252 bytes, and SHA-256
+`8b9b85aa70fb7d9b68195d1162374f1d340a54b550571a45fa0d7f5995628e39`; the supplied durable
+replacement is 1,086 lines, 40,860 bytes, and SHA-256
+`d0a3159967ffefddbd907901dfc6ceb9c7761ef86e1e1537d03cded6e92df767`. The increase is 545
+lines and 10,608 bytes and establishes durable value-class, managed-handle, memory-accounting,
+cleanup, effect, and resource policy rather than duplicating this campaign. The one-time campaign
+prompt is 5,780 lines, 173,581 bytes, and SHA-256
+`319f1a9aaeaf9d538dead25cabe996b1115a8cfd06562aa8c1624752d9d700f0`; bytes are not token
+counts.
+
+The audited environment is stable `rustc 1.96.0` and `cargo 1.96.0`, Linux 7.0.0-29 x86-64 with
+glibc 2.39, 20 available CPUs, a 32 GiB cgroup memory ceiling, an 8 MiB process stack limit, and ZFS.
+`/usr/bin/time`, stable-toolchain Miri, `cargo-fuzz`, `cargo-llvm-cov`, and provider token/price telemetry are
+unavailable; Clang is installed. The package has five direct normal dependencies, forbids local
+unsafe Rust, and has no project build script, FFI, or generated native code.
+
+The sealed normal boundary passed formatting, all-target/all-feature Clippy, 172 active tests with
+nine deliberate manual tests ignored, an optimized build, and diff checking. The job-policy,
+named-data, and release-channel production examples passed. The seed-1 deterministic
+10,000-case malformed-boundary release smoke passed in 0.03 seconds of test time; it is mutation
+testing, not coverage-guided fuzzing. A fresh release target took 85.332 seconds, occupied
+117,687,644 bytes, and produced 5,061,888-byte `lkjscript` and 3,854,832-byte `lkjscriptd`
+binaries; its unchanged rebuild took 0.021 seconds. A separate fresh all-target test build took
+15.413 seconds and occupied 1,689,306,710 bytes. These are single build observations without RSS.
+
+The sealed release-channel replay used 33 semantic CLI launches and 33 daemon connections excluding
+lifecycle, 42,467 request bytes, and 242,355 response bytes including discovery. Its task-root
+schema response was 81,493 bytes, full response 126,070 bytes, unchanged response 180 bytes, and
+manifest response 1,316 bytes. Provider telemetry was unavailable.
+
+### Release-manifest consumer decision
+
+The retained target is a pure 32-byte binary release manifest:
+
+| Offset | Meaning | Accepted contract |
+|---|---|---|
+| `0..4` | magic | exact octets `LKJM` |
+| `4` | format | `1` |
+| `5` | channel | `0` stable, `1` preview; every other value is forbidden |
+| `6` | target | `1` Linux x86-64 or `2` WebAssembly; other values reject |
+| `7` | policy flags | exact accepted values are `0` and `1` |
+| `8..24` | payload policy bytes | all sixteen octets are nonzero, checked by a bounded loop |
+| `24..31` | reserved policy bytes | accepted but currently ignored by the pure classifier |
+| `31` | terminal marker | `0xa5` |
+
+The result is a named `Decision = accept(ReleaseClass) | reject(RejectReason)`. It distinguishes
+wrong length, wrong magic, unsupported format, unsupported target, forbidden channel, invalid flags,
+and invalid payload policy, plus accepted stable and preview classes. The public workflow saves a
+reachable incomplete payload-policy check, rejects a `bytes` repair at that `bool` hole without
+allocator movement, validates and commits an identity-preserving call to the bounded payload scanner,
+queries the exact diff, runs every decision, exercises an explicit byte-bounds trap and low-fuel
+laziness, renames one presentation member, restarts, and runs old and current complete revisions.
+
+The current language cannot express this task naturally. `i64` parameters cannot preserve exact
+arbitrary binary length or octet order, nominal values cannot carry an opaque variable payload, and
+host preprocessing would move accepted behavior outside the one semantic execution route.
+
+| Alternative | Decision | Reason and reversal condition |
+|---|---|---|
+| dedicated immutable `bytes` | retain | exactly matches one binary value class and the five consumer operations |
+| generic `sequence<T>` | reject | adds element polymorphism, general layouts, and collection semantics with no second consumer; reopen after multiple element types need the same abstraction |
+| fixed 32-byte array | reject | cannot represent wrong-length runtime inputs or checked general slices and indexes |
+| nominal wrapper | reject | current named values have no field capable of carrying the payload |
+| user-defined recursive list | reject | requires recursive managed values and a broader reclamation contract before the byte consumer |
+| host parser or opaque host blob | reject | bypasses language semantics and the verified runtime route |
+| postponement | reject | leaves the concrete retained classifier inexpressible and preserves known fixed-layout assumptions |
+
+The retained operation set is `const_bytes`, `bytes_len`, `bytes_at`, `bytes_slice`, and
+`bytes_equal`. Each has a consumer in the classifier or exact public bounds matrix. Concatenation,
+hashing, text decoding, compression, iterators, mutation, general sequences, and parsing frameworks
+are rejected until a separate retained consumer exists.
+
+### Semantic, encoding, and limit decision
+
+Bytes are immutable ordinary values with no observable allocation identity. Equality is exact visible
+octet equality; duplication may share physical backing. Empty bytes are valid. Slicing selects one
+contiguous range and may create a root-backing view. Index and slice operands are signed `i64`;
+negative, host-unrepresentable, overflowing, or out-of-range values trap deterministically.
+
+The selected JSON spelling is canonical unpadded URL-safe base64. For the 32-byte manifest it uses
+43 payload characters, compared with 64 lowercase hexadecimal characters; an integer array is still
+larger and spends one JSON item per octet. Only the URL-safe alphabet is accepted, padding and
+whitespace reject, nonzero unused trailing bits reject, and decode followed by canonical re-encode
+must reproduce the input. Empty bytes are `""`. Artifact encoding is raw checked length-delimited
+octets, never base64. The implementation decision is to use the small mature Rust `base64` crate
+only after confirming its locked dependency/build/unsafe impact; a bespoke decoder remains the
+reversal if that audit is disproportionate.
+
+The initial evidence-bounded policies are:
+
+- one semantic byte literal: 4,096 decoded bytes;
+- all decoded byte literals in one transaction: 65,536 bytes;
+- one public runtime byte value: 65,536 visible bytes;
+- all decoded byte arguments to one Run: 65,536 bytes;
+- one invocation arena: 1,048,576 cumulatively allocated visible bytes, 262,144 distinct retained
+  backing bytes, and 4,096 combined backing and view objects;
+- one public byte result: 65,536 visible bytes plus the existing runtime depth/item and 32 MiB JSON
+  output boundaries;
+- output materialization scratch: at most the exact accepted visible result bytes.
+
+The existing 65,536 live-cell policy remains independent: bytes contributes one fixed handle cell,
+not its payload length. Every size sum and base64 length calculation is checked. Exact maximum and
+maximum-plus-one tests own every boundary; representative evidence may narrow or widen a limit only
+through a later direct semantic cutover.
+
+Fuel remains logical and representation-independent: every instruction keeps its base unit;
+`bytes_len` and `bytes_at` add no per-octet charge; `bytes_slice` adds the ordinary result-handle
+transfer work; and `bytes_equal` adds one unit for every compared octet, with zero octets compared
+when lengths differ and exact early mismatch behavior. Public decode and encode remain separately
+bounded boundary work.
+
+### Memory-strategy decision
+
+The selected first managed representation is an invocation-scoped arena with opaque checked
+nonzero handles. It owns immutable boxed backing buffers and constant-depth views `(backing, start,
+length)`. Nested slices canonicalize to the root backing. Handle indexes are monotonic and never
+reused during one Run; every access validates nonzero domain, host conversion, table bound, backing
+kind, and checked view range. Flat cells carry only the handle newtype. Public input is copied into
+owned backing; public output is preflighted and materialized into an owned value before arena drop.
+
+Visible allocated bytes, distinct retained backing bytes, backing retained by views, combined backing/view
+count, fixed cells, and output scratch remain distinct facts. Reusing a handle in calls, branches,
+products, variants, projections, or repeated semantic reads adds no backing and no view. A slice adds
+one view and its visible logical length but no backing. A one-byte view still retains and is charged
+for the complete backing once. Rust scope drop reclaims the entire arena on success, trap, fuel or
+frame exhaustion, and output-policy failure.
+
+| Strategy | Decision | Reason and next trigger |
+|---|---|---|
+| deep payload copy | reject | multiplies call/branch/aggregate cost and peak memory; retain only as a narrow test oracle if useful |
+| `Arc<[u8]>` everywhere | reject | safe but adds atomic count traffic and ignores the known Run lifetime |
+| invocation arena | retain | exact nonescaping lifetime, handle-only copies, deterministic bulk cleanup, no cycles |
+| pervasive or precise RC | reject now | no value can outlive the arena; reopen for escaping cycle-free managed values |
+| tracing collection | reject | no managed cycles or long-lived heap; reopen only for a real cyclic retained value class |
+| lexical region inference | defer | reopen if long Runs show invocation retention is a measured peak-memory problem |
+| hybrid by value class | retain as direction | immediate/fixed values stay flat and bytes uses the invocation class; future resources or cycles require separate mechanisms |
+
+No derived retain/release, ownership, escape, last-use, or uniqueness analysis is retained because
+the current Run boundary proves the only lifetime and no current optimization consumes finer facts.
+No surface move, borrow, lifetime, region, locality, or uniqueness annotation is added. External
+resources remain a separate future affine-cleanup gate.
+
+The direct cutover plan is protocol/JSON 7, machine schema `lkjscript-machine-schema-v7`, artifact
+format 4, semantic schema `lkjscript-spg004`, `LKJHEAD6`, and a v7 transaction fingerprint domain.
+Existing stable tags remain fixed; bytes and its operations receive new tags. Old artifact, HEAD,
+protocol, JSON, and schema identities reject, with no compatibility reader or dual path.
+
+### Retained implementation evidence
+
+The plan above is implemented as one direct path. A code-owned primitive descriptor now supplies
+semantic kind, stable tag, machine name, deterministic Core ordering, storage class, fixed layout,
+cell footprint, and runtime value form for four primitives. The previous literal primitive count and
+`types[3..]`/`skip(3)` assumptions were replaced by the descriptor-derived boundary. `OperandUse::Copy`
+was directly replaced by `OperandUse::Read`; no dormant move/borrow/consume variants were added.
+
+Core IR has a private bytes type and exact `ConstBytes`, `BytesLen`, `BytesAt`, `BytesSlice`, and
+`BytesEqual` instructions. Its verifier independently checks primitive descriptors, storage class,
+one-cell managed layout, literal bounds, operands, results, ranges, initialization, calls, and
+aggregate composition. Products count a byte field as one cell and sums count a byte payload as one
+payload cell; neither layout reports handle width as semantic payload size. Static result preflight
+bounds mandatory structural metrics, compiler/verifier stages establish fixed cell layouts, and
+actual managed output is checked and owned dynamically.
+
+Focused arena tests prove nonzero and out-of-range handles reject without access, kind mismatch
+rejects, nested views stay at one root-backing hop, a one-byte view pins and reports its complete
+backing, repeated handle copies add no backing or view, equal distinct inputs remain distinct
+backings, and exact visible/backing/object maxima accept while maximum-plus-one rejects. Drop
+witnesses cover success, bounds trap, fuel exhaustion, frame exhaustion, and output-policy failure;
+successful byte output remains valid after the arena is gone. These are deterministic internal
+accounting facts, not allocator RSS measurements.
+
+The `base64 0.23.1` dependency is locked with default features disabled and only `std` enabled. It
+has no direct/transitive package dependency or build script in this configuration. The crate contains
+optional SIMD source that uses unsafe Rust, but its `simd-unsafe` feature is disabled and the compiled
+configuration activates the crate's own `forbid(unsafe_code)`. Strict repository tests still re-encode after decode
+and reject padding, whitespace, invalid alphabet, impossible length, noncanonical trailing bits,
+duplicate fields, and exact maximum-plus-one input. This review does not claim the dependency or Rust
+toolchain is formally verified.
+
+The retained release-manifest production replay used 40 counted CLI launches and 40 daemon
+connections, 38,809 JSON request bytes, and 119,453 JSON response bytes. Its 12-root response was
+85,902 bytes and closed over 112 definitions. Revisions 1/2/3 occupied 10,858 / 10,882 / 10,888
+artifact bytes and HEAD occupied 81 bytes. One observed run reported 5.478 ms cold daemon readiness,
+5.439 ms restart readiness, 1.436 ms summed compile time and 0.444 ms summed execution time across
+the decision and historical-revision runs. These are one warm-cache workflow observation, not latency
+distributions.
+
+The active compact manifest, 12-root, full, and unchanged results are 1,241, 85,827, 133,774, and
+105 JSON bytes respectively (1,319, 85,905, 133,852, and 183 bytes when encoded as production
+responses in the focused schema measurement). Relative to the sealed compact v6 results, roots grew
+4,409 bytes and full grew 7,779 bytes. Provider tokens and price telemetry remained unavailable;
+these byte counts are not token estimates.
+
+### Same-vocabulary session decision
+
+The retained session mode reads one bounded JSON value per line, invokes the same decoder, client,
+and encoder, opens one existing single-request daemon connection, flushes one response, and continues
+after line-local JSON or transport errors. Focused tests cover blank/malformed/oversized lines, clean
+EOF, response ordering and flushing, unavailable-then-available daemon state, shutdown, fatal stdout
+failure, and a published mutation whose dropped response is not retried. It introduces no daemon
+transport change or second DTO vocabulary.
+
+In one 32-`CreateWorkspace` release-binary comparison, one-shot and session paths both forwarded
+2,135 request bytes, returned 10,295 response bytes, produced equal response shapes, and opened 32
+daemon connections. One-shot used 32 client processes and 354,852,115 ns; session used one client
+process and 326,823,898 ns. The retained benefit is the exact 31-process reduction; the single
+elapsed observation is only 7.9 percent lower and is not a general throughput claim. The installed
+Codex execution harness can keep the process alive and exchange later input, so the mode has a real
+consumer. A persistent daemon connection and MCP adapter remain rejected.
+
+### Controlled protocol-v7 agent trial
+
+A fresh isolated coding agent received no inherited conversation context and was limited to the root
+policy, README, status, roadmap, public CLI help and schema, production release binaries, and an
+external deterministic oracle. It read no implementation, tests, examples, specifications,
+performance evidence, prompts, history, prior payloads, or parent solution and changed no repository
+file. It used the retained session projection against a nonblocking ready daemon, discovered
+`lkjscript-machine-schema-v7` with digest
+`0769404611296589a21b29f504c0ec84e7ebe372c978a161d5de76f998eb4276`, saved a reachable
+`bool` hole, obtained bounded repair context,
+rejected an `i64` repair, and observed identical validate-only candidate ID `:11` before and after
+the rejection. A `bytes_equal` refinement preserved hole ID `:9`, published no created or deleted
+node, and produced exact results `LKJM -> true`, `LKJN -> false`, and `LKJ -> false`. Shutdown was
+acknowledged and the owned temporary state was removed.
+
+The revision-current confirmation used 13 daemon requests, 4,298 compact JSON request bytes, and
+10,084 compact JSON response bytes, excluding newline delimiters and the local manifest call. It had
+no unexpected failure or semantic correction. Provider token, cache, price, and hidden-reasoning
+telemetry were unavailable. This is one controlled interface observation, not a model benchmark.
+
+### Final managed-bytes verification and build observations
+
+The final stable-toolchain boundary passed formatting, locked all-target/all-feature Clippy, 188
+active tests with nine deliberate measurement or mutation tests ignored, and the optimized build.
+All four production examples passed. The release-manifest replay used the exact v7 schema digest
+above, and the seed-1 10,000-case deterministic malformed-boundary release smoke passed in 0.03
+seconds of reported test time. Focused corruption, old-format rejection, rollback, restart,
+managed-handle, exact memory-policy, cleanup, and nested nominal byte tests also passed.
+
+A fresh current release target took 86 seconds, occupied 121,537,115 bytes, and produced a
+5,265,840-byte `lkjscript` and 4,014,360-byte `lkjscriptd`; its unchanged rebuild took 0.02 seconds.
+A separate fresh all-target test compile took 15.36 seconds and occupied 1,781,416,239 bytes. Against
+the separately measured audited baseline, the client grew 203,952 bytes (4.0 percent), the daemon
+grew 159,528 bytes (4.1 percent), the fresh release target grew 3,849,471 bytes (3.3 percent), and
+the fresh test target grew 92,109,529 bytes (5.5 percent). These are single build observations with
+different dirty source trees, not distributions or equal-work runtime comparisons.
+
+Current Rust source is 1,685,443 bytes under `src/` and 300,943 bytes under `tests/` (1,986,386
+combined), versus 1,854,416 combined bytes at the audited commit. Current Python and shell example
+source is 138,270 bytes, versus 99,478 bytes at the audited commit; the delta includes the retained
+release-manifest workflow. The locked package now has six direct normal dependencies. The only new
+one is `base64 0.23.1` under the reviewed configuration described above.
+
+Although Miri is absent from the active stable toolchain, installed nightly Miri passed the arena
+accounting/handle, cleanup/failure, byte-operation/fuel, and canonical codec tests. Nightly
+AddressSanitizer with leak detection passed all 12 interpreter tests. No retained coverage-guided
+fuzzer or `cargo-fuzz`/`cargo-llvm-cov` command was available. `/usr/bin/time` was unavailable, so no
+RSS or allocator-capacity measurement is claimed. Safe Rust, Miri, and AddressSanitizer are evidence,
+not a proof of the compiler, dependencies, allocator, kernel, or complete trusted computing base;
+ordinary Rust allocation abort behavior remains outside typed recovery guarantees.
+
 ## Protocol-v6 inline-authoring campaign
 
 The campaign began on `main` at `66e45c69143c1a1720e9ccc2b6682786f9475c8b`

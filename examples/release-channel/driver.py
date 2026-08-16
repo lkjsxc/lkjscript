@@ -26,7 +26,7 @@ readiness_nanoseconds = []
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 6, "request_id": request_id, "request": request}
+    envelope = {"version": 7, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -44,7 +44,7 @@ def rpc(request, purpose, counted=True):
     if completed.stderr:
         raise RuntimeError(f"CLI wrote stderr for {purpose}: {completed.stderr.decode()}")
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 6 or response_envelope.get("request_id") != request_id:
+    if response_envelope.get("version") != 7 or response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response envelope mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,

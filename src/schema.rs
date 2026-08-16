@@ -1,6 +1,147 @@
 use crate::ids::NodeId;
 use crate::transaction::{ExpressionKindDraft, NodeTarget};
-use serde::{Deserialize, Serialize};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::fmt;
+
+pub const MAXIMUM_BYTE_STRING_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_BYTE_STRING_ENCODED_BYTES: usize = (MAXIMUM_BYTE_STRING_BYTES / 3) * 4
+    + match MAXIMUM_BYTE_STRING_BYTES % 3 {
+        0 => 0,
+        1 => 2,
+        2 => 3,
+        _ => 0,
+    };
+pub const MAXIMUM_BYTE_LITERAL_BYTES: usize = 4 * 1024;
+pub const MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ByteString(Box<[u8]>);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ByteStringTooLarge;
+
+impl fmt::Display for ByteStringTooLarge {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("byte string exceeds decoded byte policy")
+    }
+}
+
+impl std::error::Error for ByteStringTooLarge {}
+
+impl ByteString {
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Result<Self, ByteStringTooLarge> {
+        let bytes = bytes.into();
+        if bytes.len() > MAXIMUM_BYTE_STRING_BYTES {
+            return Err(ByteStringTooLarge);
+        }
+        Ok(Self(bytes.into_boxed_slice()))
+    }
+
+    pub fn from_slice(bytes: &[u8]) -> Result<Self, ByteStringTooLarge> {
+        if bytes.len() > MAXIMUM_BYTE_STRING_BYTES {
+            return Err(ByteStringTooLarge);
+        }
+        Ok(Self(bytes.into()))
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0.into_vec()
+    }
+}
+
+impl Serialize for ByteString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&URL_SAFE_NO_PAD.encode(&self.0))
+    }
+}
+
+struct ByteStringVisitor;
+
+fn unpadded_base64_decoded_length(encoded: usize) -> Option<usize> {
+    let complete = (encoded / 4).checked_mul(3)?;
+    complete.checked_add(match encoded % 4 {
+        0 => 0,
+        2 => 1,
+        3 => 2,
+        _ => return None,
+    })
+}
+
+impl<'de> de::Visitor<'de> for ByteStringVisitor {
+    type Value = ByteString;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("canonical unpadded URL-safe base64")
+    }
+
+    fn visit_str<E>(self, encoded: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let decoded_length = unpadded_base64_decoded_length(encoded.len())
+            .ok_or_else(|| E::custom("byte string has an invalid unpadded base64 length"))?;
+        if encoded.len() > MAXIMUM_BYTE_STRING_ENCODED_BYTES
+            || decoded_length > MAXIMUM_BYTE_STRING_BYTES
+        {
+            return Err(E::custom("byte string exceeds decoded byte policy"));
+        }
+        let decoded = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| E::custom("byte string is not canonical unpadded URL-safe base64"))?;
+        if decoded.len() > MAXIMUM_BYTE_STRING_BYTES || URL_SAFE_NO_PAD.encode(&decoded) != encoded
+        {
+            return Err(E::custom(
+                "byte string is not canonical unpadded URL-safe base64",
+            ));
+        }
+        Ok(ByteString(decoded.into_boxed_slice()))
+    }
+}
+
+impl<'de> Deserialize<'de> for ByteString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ByteStringVisitor)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueStorageClass {
+    ZeroCell,
+    Immediate,
+    FixedAggregate,
+    ManagedHandle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PrimitiveDescriptor {
+    pub ty: SemanticType,
+    pub machine_name: &'static str,
+    pub stable_tag: u8,
+    pub storage_class: ValueStorageClass,
+    pub physical_slot_size: u64,
+    pub physical_slot_align: u64,
+    pub cells: u64,
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -8,18 +149,69 @@ pub enum SemanticType {
     Unit,
     Bool,
     I64,
+    Bytes,
     Nominal(NodeId),
 }
 
 impl SemanticType {
-    pub const PRIMITIVES: [Self; 3] = [Self::Unit, Self::Bool, Self::I64];
-    pub const ALL: [Self; 3] = Self::PRIMITIVES;
+    pub const PRIMITIVES: [Self; 4] = [Self::Unit, Self::Bool, Self::I64, Self::Bytes];
+    pub const ALL: [Self; 4] = Self::PRIMITIVES;
+
+    pub const PRIMITIVE_DESCRIPTORS: [PrimitiveDescriptor; 4] = [
+        PrimitiveDescriptor {
+            ty: Self::Unit,
+            machine_name: "unit",
+            stable_tag: 1,
+            storage_class: ValueStorageClass::ZeroCell,
+            physical_slot_size: 0,
+            physical_slot_align: 1,
+            cells: 0,
+        },
+        PrimitiveDescriptor {
+            ty: Self::Bool,
+            machine_name: "bool",
+            stable_tag: 2,
+            storage_class: ValueStorageClass::Immediate,
+            physical_slot_size: 1,
+            physical_slot_align: 1,
+            cells: 1,
+        },
+        PrimitiveDescriptor {
+            ty: Self::I64,
+            machine_name: "i64",
+            stable_tag: 3,
+            storage_class: ValueStorageClass::Immediate,
+            physical_slot_size: 8,
+            physical_slot_align: 8,
+            cells: 1,
+        },
+        PrimitiveDescriptor {
+            ty: Self::Bytes,
+            machine_name: "bytes",
+            stable_tag: 5,
+            storage_class: ValueStorageClass::ManagedHandle,
+            physical_slot_size: 4,
+            physical_slot_align: 4,
+            cells: 1,
+        },
+    ];
+
+    pub const fn primitive_descriptor(self) -> Option<&'static PrimitiveDescriptor> {
+        match self {
+            Self::Unit => Some(&Self::PRIMITIVE_DESCRIPTORS[0]),
+            Self::Bool => Some(&Self::PRIMITIVE_DESCRIPTORS[1]),
+            Self::I64 => Some(&Self::PRIMITIVE_DESCRIPTORS[2]),
+            Self::Bytes => Some(&Self::PRIMITIVE_DESCRIPTORS[3]),
+            Self::Nominal(_) => None,
+        }
+    }
 
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::Unit => "unit",
             Self::Bool => "bool",
             Self::I64 => "i64",
+            Self::Bytes => "bytes",
             Self::Nominal(_) => "nominal",
         }
     }
@@ -29,6 +221,7 @@ impl SemanticType {
             Self::Unit => 1,
             Self::Bool => 2,
             Self::I64 => 3,
+            Self::Bytes => 5,
             Self::Nominal(_) => 4,
         }
     }
@@ -38,6 +231,7 @@ impl SemanticType {
             1 => Some(Self::Unit),
             2 => Some(Self::Bool),
             3 => Some(Self::I64),
+            5 => Some(Self::Bytes),
             _ => None,
         }
     }
@@ -56,6 +250,7 @@ pub enum TypeDraft {
     Unit,
     Bool,
     I64,
+    Bytes,
     Nominal(NodeTarget),
 }
 
@@ -65,6 +260,7 @@ impl From<SemanticType> for TypeDraft {
             SemanticType::Unit => Self::Unit,
             SemanticType::Bool => Self::Bool,
             SemanticType::I64 => Self::I64,
+            SemanticType::Bytes => Self::Bytes,
             SemanticType::Nominal(target) => Self::Nominal(NodeTarget::Existing(target)),
         }
     }
@@ -223,7 +419,7 @@ impl NameUniquenessGroup {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OperandUse {
-    Copy,
+    Read,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -284,10 +480,15 @@ pub enum OperationCode {
     ProjectField,
     ConstructVariant,
     MatchSum,
+    ConstBytes,
+    BytesLen,
+    BytesAt,
+    BytesSlice,
+    BytesEqual,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 20] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -303,6 +504,11 @@ impl OperationCode {
         Self::ProjectField,
         Self::ConstructVariant,
         Self::MatchSum,
+        Self::ConstBytes,
+        Self::BytesLen,
+        Self::BytesAt,
+        Self::BytesSlice,
+        Self::BytesEqual,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -326,6 +532,11 @@ impl OperationCode {
             13 => Some(Self::ProjectField),
             14 => Some(Self::ConstructVariant),
             15 => Some(Self::MatchSum),
+            16 => Some(Self::ConstBytes),
+            17 => Some(Self::BytesLen),
+            18 => Some(Self::BytesAt),
+            19 => Some(Self::BytesSlice),
+            20 => Some(Self::BytesEqual),
             _ => None,
         }
     }
@@ -351,6 +562,11 @@ impl OperationCode {
             Self::ProjectField => &PROJECT_FIELD_DESCRIPTOR,
             Self::ConstructVariant => &CONSTRUCT_VARIANT_DESCRIPTOR,
             Self::MatchSum => &MATCH_SUM_DESCRIPTOR,
+            Self::ConstBytes => &CONST_BYTES_DESCRIPTOR,
+            Self::BytesLen => &BYTES_LEN_DESCRIPTOR,
+            Self::BytesAt => &BYTES_AT_DESCRIPTOR,
+            Self::BytesSlice => &BYTES_SLICE_DESCRIPTOR,
+            Self::BytesEqual => &BYTES_EQUAL_DESCRIPTOR,
         }
     }
 }
@@ -390,6 +606,7 @@ pub enum LiteralField {
     ResultType,
     CarriedType,
     PositiveStep,
+    BytesValue,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -465,6 +682,7 @@ const NO_REGIONS: &[RegionDescriptor] = &[];
 const UNIT_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Unit)];
 const I64_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::I64)];
 const BOOL_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Bool)];
+const BYTES_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Bytes)];
 const PAYLOAD_RESULT: &[TypeRule] = &[TypeRule::PayloadExpected];
 const STRUCTURED_RESULT: &[TypeRule] = &[TypeRule::PayloadResult];
 const CARRIED_RESULT: &[TypeRule] = &[TypeRule::PayloadCarried];
@@ -475,62 +693,101 @@ const VARIANT_RESULT: &[TypeRule] = &[TypeRule::VariantOwnerResult];
 const MATCH_RESULT: &[TypeRule] = &[TypeRule::MatchResult];
 const PRODUCT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::ProductFieldType,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const PROJECT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::ProjectionOwner,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const VARIANT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::VariantPayload,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const MATCH_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::MatchScrutinee,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const I64_BINARY_OPERANDS: &[OperandDescriptor] = &[
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
-        use_mode: OperandUse::Copy,
+        use_mode: OperandUse::Read,
     },
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
-        use_mode: OperandUse::Copy,
+        use_mode: OperandUse::Read,
     },
 ];
 const CALL_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::CallTargetParameter,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const IF_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::Fixed(SemanticType::Bool),
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const FOR_OPERANDS: &[OperandDescriptor] = &[
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
-        use_mode: OperandUse::Copy,
+        use_mode: OperandUse::Read,
     },
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
-        use_mode: OperandUse::Copy,
+        use_mode: OperandUse::Read,
     },
     OperandDescriptor {
         ty: TypeRule::PayloadCarried,
-        use_mode: OperandUse::Copy,
+        use_mode: OperandUse::Read,
     },
 ];
 const RETURN_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::OwnerFunctionResult,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
 const YIELD_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::OwningRegionYield,
-    use_mode: OperandUse::Copy,
+    use_mode: OperandUse::Read,
 }];
+const BYTES_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::Fixed(SemanticType::Bytes),
+    use_mode: OperandUse::Read,
+}];
+const BYTES_AT_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bytes),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const BYTES_SLICE_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bytes),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const BYTES_BINARY_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bytes),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bytes),
+        use_mode: OperandUse::Read,
+    },
+];
 const I64_LITERAL: &[LiteralField] = &[LiteralField::I64Value];
 const BOOL_LITERAL: &[LiteralField] = &[LiteralField::BoolValue];
+const BYTES_LITERAL: &[LiteralField] = &[LiteralField::BytesValue];
 const EXPECTED_LITERAL: &[LiteralField] = &[LiteralField::ExpectedType];
 const IF_LITERALS: &[LiteralField] = &[LiteralField::ResultType];
 const FOR_LITERALS: &[LiteralField] = &[LiteralField::PositiveStep, LiteralField::CarriedType];
@@ -783,6 +1040,71 @@ static MATCH_SUM_DESCRIPTOR: OperationDescriptor = OperationDescriptor {
     terminator: false,
     complete: true,
 };
+descriptor!(
+    CONST_BYTES_DESCRIPTOR,
+    ConstBytes,
+    "const_bytes",
+    16,
+    OperandArity::Fixed(0),
+    NO_OPERANDS,
+    BYTES_RESULT,
+    BYTES_LITERAL,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    BYTES_LEN_DESCRIPTOR,
+    BytesLen,
+    "bytes_len",
+    17,
+    OperandArity::Fixed(1),
+    BYTES_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    BYTES_AT_DESCRIPTOR,
+    BytesAt,
+    "bytes_at",
+    18,
+    OperandArity::Fixed(2),
+    BYTES_AT_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    BYTES_SLICE_DESCRIPTOR,
+    BytesSlice,
+    "bytes_slice",
+    19,
+    OperandArity::Fixed(3),
+    BYTES_SLICE_OPERANDS,
+    BYTES_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    BYTES_EQUAL_DESCRIPTOR,
+    BytesEqual,
+    "bytes_equal",
+    20,
+    OperandArity::Fixed(2),
+    BYTES_BINARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(
@@ -845,11 +1167,28 @@ pub enum OperationDraft {
     ConstUnit,
     ConstI64(i64),
     ConstBool(bool),
+    ConstBytes(ByteString),
     AddI64 {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
     LtI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    BytesLen {
+        value: ValueDraft,
+    },
+    BytesAt {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    BytesSlice {
+        value: ValueDraft,
+        start: ValueDraft,
+        length: ValueDraft,
+    },
+    BytesEqual {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
@@ -906,8 +1245,13 @@ impl OperationDraft {
             Self::ConstUnit => OperationCode::ConstUnit,
             Self::ConstI64(_) => OperationCode::ConstI64,
             Self::ConstBool(_) => OperationCode::ConstBool,
+            Self::ConstBytes(_) => OperationCode::ConstBytes,
             Self::AddI64 { .. } => OperationCode::AddI64,
             Self::LtI64 { .. } => OperationCode::LtI64,
+            Self::BytesLen { .. } => OperationCode::BytesLen,
+            Self::BytesAt { .. } => OperationCode::BytesAt,
+            Self::BytesSlice { .. } => OperationCode::BytesSlice,
+            Self::BytesEqual { .. } => OperationCode::BytesEqual,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -947,11 +1291,28 @@ pub enum OperationKind {
     ConstUnit,
     ConstI64(i64),
     ConstBool(bool),
+    ConstBytes(ByteString),
     AddI64 {
         lhs: ValueRef,
         rhs: ValueRef,
     },
     LtI64 {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    BytesLen {
+        value: ValueRef,
+    },
+    BytesAt {
+        value: ValueRef,
+        index: ValueRef,
+    },
+    BytesSlice {
+        value: ValueRef,
+        start: ValueRef,
+        length: ValueRef,
+    },
+    BytesEqual {
         lhs: ValueRef,
         rhs: ValueRef,
     },
@@ -1008,8 +1369,13 @@ impl OperationKind {
             Self::ConstUnit => OperationCode::ConstUnit,
             Self::ConstI64(_) => OperationCode::ConstI64,
             Self::ConstBool(_) => OperationCode::ConstBool,
+            Self::ConstBytes(_) => OperationCode::ConstBytes,
             Self::AddI64 { .. } => OperationCode::AddI64,
             Self::LtI64 { .. } => OperationCode::LtI64,
+            Self::BytesLen { .. } => OperationCode::BytesLen,
+            Self::BytesAt { .. } => OperationCode::BytesAt,
+            Self::BytesSlice { .. } => OperationCode::BytesSlice,
+            Self::BytesEqual { .. } => OperationCode::BytesEqual,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1046,8 +1412,20 @@ impl OperationKind {
 
     pub fn operand(&self, index: usize) -> Option<ValueRef> {
         match (self, index) {
-            (Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. }, 0) => Some(*lhs),
-            (Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. }, 1) => Some(*rhs),
+            (
+                Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. } | Self::BytesEqual { lhs, .. },
+                0,
+            ) => Some(*lhs),
+            (
+                Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. } | Self::BytesEqual { rhs, .. },
+                1,
+            ) => Some(*rhs),
+            (Self::BytesLen { value }, 0) => Some(*value),
+            (Self::BytesAt { value, .. }, 0) => Some(*value),
+            (Self::BytesAt { index, .. }, 1) => Some(*index),
+            (Self::BytesSlice { value, .. }, 0) => Some(*value),
+            (Self::BytesSlice { start, .. }, 1) => Some(*start),
+            (Self::BytesSlice { length, .. }, 2) => Some(*length),
             (Self::Call { arguments, .. }, index) => arguments.get(index).copied(),
             (Self::If { condition, .. }, 0) => Some(*condition),
             (Self::ForI64 { start, .. }, 0) => Some(*start),
@@ -1115,8 +1493,20 @@ impl OperationKind {
             return false;
         };
         match (self, index) {
-            (Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. }, 0) => *lhs = replacement,
-            (Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. }, 1) => *rhs = replacement,
+            (
+                Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. } | Self::BytesEqual { lhs, .. },
+                0,
+            ) => *lhs = replacement,
+            (
+                Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. } | Self::BytesEqual { rhs, .. },
+                1,
+            ) => *rhs = replacement,
+            (Self::BytesLen { value }, 0) => *value = replacement,
+            (Self::BytesAt { value, .. }, 0) => *value = replacement,
+            (Self::BytesAt { index, .. }, 1) => *index = replacement,
+            (Self::BytesSlice { value, .. }, 0) => *value = replacement,
+            (Self::BytesSlice { start, .. }, 1) => *start = replacement,
+            (Self::BytesSlice { length, .. }, 2) => *length = replacement,
             (Self::Call { arguments, .. }, index) if index < arguments.len() => {
                 arguments[index] = replacement
             }
@@ -1634,7 +2024,71 @@ pub fn owner_kind_is_valid(child: NodeKind, owner: NodeKind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use std::collections::BTreeSet;
+
+    fn decode_bytes(encoded: &str) -> Result<ByteString, serde_json::Error> {
+        serde_json::from_value(serde_json::Value::String(encoded.to_owned()))
+    }
+
+    #[test]
+    fn canonical_byte_strings_are_unique_strict_and_exact_at_the_limit() {
+        for (bytes, encoded) in [
+            (&b""[..], ""),
+            (&b"\xff"[..], "_w"),
+            (&b"\xff\xee"[..], "_-4"),
+            (&b"\xff\xee\xdd"[..], "_-7d"),
+        ] {
+            let value = decode_bytes(encoded).expect("canonical bytes");
+            assert_eq!(value.as_slice(), bytes);
+            assert_eq!(serde_json::to_value(&value).unwrap(), encoded);
+        }
+        for malformed in ["A", "/w", "_w=", "_w==", "_ w", "_w\n", "_x"] {
+            assert!(decode_bytes(malformed).is_err(), "accepted {malformed:?}");
+        }
+
+        let maximum = ByteString::new(vec![0xa5; MAXIMUM_BYTE_STRING_BYTES]).unwrap();
+        let encoded = URL_SAFE_NO_PAD.encode(maximum.as_slice());
+        assert_eq!(encoded.len(), MAXIMUM_BYTE_STRING_ENCODED_BYTES);
+        assert_eq!(decode_bytes(&encoded).unwrap(), maximum);
+
+        let decoded_too_large = URL_SAFE_NO_PAD.encode(vec![0; MAXIMUM_BYTE_STRING_BYTES + 1]);
+        assert!(decode_bytes(&decoded_too_large).is_err());
+        assert!(decode_bytes(&"A".repeat(MAXIMUM_BYTE_STRING_ENCODED_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn primitive_descriptors_own_stable_tags_storage_and_layout_facts() {
+        assert_eq!(SemanticType::PRIMITIVES.len(), 4);
+        assert_eq!(SemanticType::PRIMITIVE_DESCRIPTORS.len(), 4);
+        let mut tags = BTreeSet::new();
+        for (ty, descriptor) in SemanticType::PRIMITIVES
+            .into_iter()
+            .zip(SemanticType::PRIMITIVE_DESCRIPTORS)
+        {
+            assert_eq!(descriptor.ty, ty);
+            assert!(tags.insert(descriptor.stable_tag));
+            assert_eq!(ty.primitive_descriptor(), Some(&descriptor));
+        }
+        let bytes = SemanticType::Bytes.primitive_descriptor().unwrap();
+        assert_eq!(bytes.machine_name, "bytes");
+        assert_eq!(bytes.storage_class, ValueStorageClass::ManagedHandle);
+        assert_eq!(
+            (
+                bytes.physical_slot_size,
+                bytes.physical_slot_align,
+                bytes.cells
+            ),
+            (4, 4, 1)
+        );
+        assert!(
+            SemanticType::Nominal(
+                NodeId::new(crate::ids::WorkspaceId::from_bytes([1; 16]), 1).unwrap()
+            )
+            .primitive_descriptor()
+            .is_none()
+        );
+    }
 
     #[test]
     fn operation_descriptors_are_unique_and_structured_contracts_are_exact() {

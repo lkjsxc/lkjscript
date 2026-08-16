@@ -39,8 +39,8 @@ pub use machine::{
 };
 pub use protocol::{Request, RequestCode, Response, ResponseCode};
 pub use schema::{
-    BlockArgumentDescriptor, BlockArgumentRole, DirectReference, LiteralField, MatchArm,
-    MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,
+    BlockArgumentDescriptor, BlockArgumentRole, ByteString, DirectReference, LiteralField,
+    MatchArm, MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,
     OperationCode, OperationDescriptor, OperationDraft, OperationKind, ProductFieldValue,
     ProductFieldValueDraft, RegionArity, RegionDescriptor, RegionRole, SemanticType, TypeDraft,
     TypeReferenceSlot, TypeRule, ValueDraft, ValueRef,

@@ -1,14 +1,15 @@
 use crate::compile;
 use crate::core_ir::{
-    self, BOOL_TYPE, BlockId, CoreProgram, CoreTypeId, CoreTypeKind, FunctionId, I64_TYPE,
-    Instruction, SwitchArgument, Terminator, ValueId,
+    self, BOOL_TYPE, BYTES_TYPE, BlockId, CoreProgram, CoreTypeId, CoreTypeKind, FunctionId,
+    I64_TYPE, Instruction, SwitchArgument, Terminator, ValueId,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
-use crate::schema::{Node, SemanticType};
+use crate::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, Node, SemanticType};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU32;
 use std::time::Instant;
 
 pub const MAX_RUN_ARGUMENTS: usize = 1_024;
@@ -18,6 +19,10 @@ pub const MAX_RUN_LIVE_CELLS: usize = 65_536;
 pub const MAX_RUNTIME_VALUE_DEPTH: usize = 24;
 pub const MAX_RUNTIME_VALUE_ITEMS: usize = 4_096;
 pub const MAX_RUNTIME_VALUE_BYTES: usize = 64 * 1024;
+pub const MAX_RUN_ARGUMENT_BYTE_BYTES: usize = 64 * 1024;
+pub const MAX_RUN_MANAGED_VISIBLE_BYTES: usize = 1024 * 1024;
+pub const MAX_RUN_RETAINED_BACKING_BYTES: usize = 256 * 1024;
+pub const MAX_RUN_MANAGED_OBJECTS: usize = 4_096;
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +42,7 @@ pub enum RuntimeValue {
     Unit,
     Bool(bool),
     I64(i64),
+    Bytes(ByteString),
     Product {
         ty: NodeId,
         fields: Vec<RuntimeFieldValue>,
@@ -54,16 +60,25 @@ pub(crate) enum RuntimeValueCode {
     Unit,
     Bool,
     I64,
+    Bytes,
     Product,
     Sum,
 }
 impl RuntimeValueCode {
-    pub const ALL: [Self; 5] = [Self::Unit, Self::Bool, Self::I64, Self::Product, Self::Sum];
+    pub const ALL: [Self; 6] = [
+        Self::Unit,
+        Self::Bool,
+        Self::I64,
+        Self::Bytes,
+        Self::Product,
+        Self::Sum,
+    ];
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::Unit => "unit",
             Self::Bool => "bool",
             Self::I64 => "i64",
+            Self::Bytes => "bytes",
             Self::Product => "product",
             Self::Sum => "sum",
         }
@@ -76,6 +91,7 @@ impl RuntimeValue {
             Self::Unit => RuntimeValueCode::Unit,
             Self::Bool(_) => RuntimeValueCode::Bool,
             Self::I64(_) => RuntimeValueCode::I64,
+            Self::Bytes(_) => RuntimeValueCode::Bytes,
             Self::Product { .. } => RuntimeValueCode::Product,
             Self::Sum { .. } => RuntimeValueCode::Sum,
         }
@@ -85,6 +101,7 @@ impl RuntimeValue {
             Self::Unit => SemanticType::Unit,
             Self::Bool(_) => SemanticType::Bool,
             Self::I64(_) => SemanticType::I64,
+            Self::Bytes(_) => SemanticType::Bytes,
             Self::Product { ty, .. } | Self::Sum { ty, .. } => SemanticType::Nominal(*ty),
         }
     }
@@ -133,19 +150,30 @@ pub(crate) fn compile_and_run(
                     .ok_or_else(|| invalid_ir("entry argument cell count overflowed"))
             })?;
     ensure_peak_cells(frame_cells(entry_function)?, argument_cells, 0, entry)?;
+    let mut managed = InvocationArena::default();
     let mut flat_arguments = Vec::with_capacity(arguments.len());
     for (value, parameter) in arguments.iter().zip(&entry_function.parameters) {
         flat_arguments.push(to_flat(
             &program,
+            &mut managed,
             value,
             core_ir::value_type(entry_function, *parameter)?,
             1,
+            entry_function.origin,
         )?);
     }
     let execute_started = Instant::now();
-    let flat = interpret(&program, flat_arguments, policy)?;
-    let value = from_flat(&program, &flat, 1)?;
+    let flat = interpret_with_arena(&program, flat_arguments, policy, &mut managed)?;
+    preflight_flat_output(&program, &managed, &flat, entry)?;
+    let value = from_flat(&program, &managed, &flat, 1, entry)?;
     validate_runtime_value(snapshot, &value, result_type, entry)?;
+    if runtime_byte_value_bytes(&value)? > MAXIMUM_BYTE_STRING_BYTES {
+        return Err(LkError::new(
+            ErrorCode::ResultBytePolicyExceeded,
+            "run result exceeds the decoded byte output policy",
+        )
+        .for_node(entry));
+    }
     let execute_nanoseconds = nanos(execute_started.elapsed().as_nanos());
     Ok(RunResult {
         value,
@@ -200,6 +228,7 @@ fn validate_invocation(
     }
     let mut total_items = 0_usize;
     let mut total_bytes = 0_usize;
+    let mut total_byte_values = 0_usize;
     for (argument, parameter) in arguments.iter().zip(parameters) {
         let Node::Parameter { ty, .. } = snapshot.node(*parameter)? else {
             return Err(invalid_ir("entry parameter slot is not a parameter").for_node(*parameter));
@@ -219,8 +248,18 @@ fn validate_invocation(
         if total_bytes > MAX_RUNTIME_VALUE_BYTES {
             return Err(value_policy(
                 *parameter,
-                "run arguments exceed encoded runtime value byte policy",
+                "run arguments exceed structural runtime value byte policy",
             ));
+        }
+        total_byte_values = total_byte_values
+            .checked_add(runtime_byte_value_bytes(argument)?)
+            .ok_or_else(|| value_policy(*parameter, "runtime byte input accounting overflowed"))?;
+        if total_byte_values > MAX_RUN_ARGUMENT_BYTE_BYTES {
+            return Err(LkError::new(
+                ErrorCode::RuntimeByteInputTooLarge,
+                "run arguments exceed decoded byte input policy",
+            )
+            .for_node(*parameter));
         }
     }
     Ok(*result)
@@ -253,6 +292,7 @@ pub(crate) fn runtime_value_policy_metrics(root: &RuntimeValue) -> Result<(usize
             RuntimeValue::Unit => 1,
             RuntimeValue::Bool(_) => 2,
             RuntimeValue::I64(_) => 9,
+            RuntimeValue::Bytes(_) => 16,
             RuntimeValue::Product { fields, .. } => {
                 for field in fields.iter().rev() {
                     stack.push((&field.value, depth + 1));
@@ -284,11 +324,44 @@ pub(crate) fn runtime_value_policy_metrics(root: &RuntimeValue) -> Result<(usize
         if bytes > MAX_RUNTIME_VALUE_BYTES {
             return Err(LkError::new(
                 ErrorCode::PolicyExceeded,
-                "runtime value exceeds encoded byte policy",
+                "runtime value exceeds structural byte policy",
             ));
         }
     }
     Ok((items, bytes))
+}
+
+pub(crate) fn runtime_byte_value_bytes(root: &RuntimeValue) -> Result<usize> {
+    let mut total = 0_usize;
+    let mut stack = vec![root];
+    while let Some(value) = stack.pop() {
+        match value {
+            RuntimeValue::Bytes(value) => {
+                if value.len() > MAXIMUM_BYTE_STRING_BYTES {
+                    return Err(LkError::new(
+                        ErrorCode::RuntimeByteInputTooLarge,
+                        "one runtime byte value exceeds its decoded byte policy",
+                    ));
+                }
+                total = total.checked_add(value.len()).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::RuntimeByteInputTooLarge,
+                        "runtime byte input accounting overflowed",
+                    )
+                })?;
+            }
+            RuntimeValue::Product { fields, .. } => {
+                stack.extend(fields.iter().rev().map(|field| &field.value));
+            }
+            RuntimeValue::Sum { payload, .. } => {
+                if let Some(payload) = payload {
+                    stack.push(payload);
+                }
+            }
+            RuntimeValue::Unit | RuntimeValue::Bool(_) | RuntimeValue::I64(_) => {}
+        }
+    }
+    Ok(total)
 }
 
 fn validate_runtime_value(
@@ -321,7 +394,10 @@ fn validate_runtime_value(
             .with_types(expected, value.semantic_type()));
         }
         match value {
-            RuntimeValue::Unit | RuntimeValue::Bool(_) | RuntimeValue::I64(_) => {}
+            RuntimeValue::Unit
+            | RuntimeValue::Bool(_)
+            | RuntimeValue::I64(_)
+            | RuntimeValue::Bytes(_) => {}
             RuntimeValue::Product { ty, fields } => {
                 let Node::ProductType {
                     fields: expected_fields,
@@ -445,7 +521,7 @@ fn preflight_result(snapshot: &Snapshot, result: SemanticType, origin: NodeId) -
     if metric.bytes > MAX_RUNTIME_VALUE_BYTES {
         return Err(value_policy(
             origin,
-            "mandatory result exceeds encoded runtime value policy",
+            "mandatory result exceeds structural runtime value policy",
         ));
     }
     Ok(())
@@ -605,19 +681,266 @@ fn metric_of(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ByteHandle(NonZeroU32);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BackingHandle(NonZeroU32);
+
+#[derive(Clone, Copy, Debug)]
+struct ByteView {
+    backing: BackingHandle,
+    start: usize,
+    length: usize,
+}
+
+#[derive(Debug)]
+struct ByteBacking {
+    bytes: Box<[u8]>,
+    retained_by_view: bool,
+}
+
+#[derive(Default)]
+struct InvocationArena {
+    backings: Vec<ByteBacking>,
+    views: Vec<ByteView>,
+    visible_bytes: usize,
+    retained_backing_bytes: usize,
+    retained_by_views: usize,
+    #[cfg(test)]
+    drop_witness: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
+}
+
+impl Drop for InvocationArena {
+    fn drop(&mut self) {
+        #[cfg(test)]
+        if let Some(witness) = &self.drop_witness {
+            witness.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+impl InvocationArena {
+    fn allocate_backing(&mut self, bytes: &[u8], origin: NodeId) -> Result<ByteHandle> {
+        let visible = self.checked_visible(bytes.len(), origin)?;
+        let retained = self
+            .retained_backing_bytes
+            .checked_add(bytes.len())
+            .ok_or_else(|| {
+                retained_policy(origin, "retained backing byte accounting overflowed")
+            })?;
+        if retained > MAX_RUN_RETAINED_BACKING_BYTES {
+            return Err(retained_policy(
+                origin,
+                "invocation retained backing byte policy exceeded",
+            ));
+        }
+        self.preflight_objects(2, origin)?;
+        self.backings
+            .try_reserve(1)
+            .map_err(|_| allocation_error(origin))?;
+        self.views
+            .try_reserve(1)
+            .map_err(|_| allocation_error(origin))?;
+        let mut owned = Vec::new();
+        owned
+            .try_reserve_exact(bytes.len())
+            .map_err(|_| allocation_error(origin))?;
+        owned.extend_from_slice(bytes);
+        let backing = BackingHandle(nonzero_handle(self.backings.len(), origin)?);
+        self.backings.push(ByteBacking {
+            bytes: owned.into_boxed_slice(),
+            retained_by_view: false,
+        });
+        let view = ByteHandle(nonzero_handle(self.views.len(), origin)?);
+        self.views.push(ByteView {
+            backing,
+            start: 0,
+            length: bytes.len(),
+        });
+        self.visible_bytes = visible;
+        self.retained_backing_bytes = retained;
+        Ok(view)
+    }
+
+    fn slice(
+        &mut self,
+        source: ByteHandle,
+        start: i64,
+        length: i64,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
+        let start = usize::try_from(start).map_err(|_| slice_error(origin))?;
+        let length = usize::try_from(length).map_err(|_| slice_error(origin))?;
+        let view = self.view(source, origin)?;
+        let relative_end = start
+            .checked_add(length)
+            .ok_or_else(|| slice_error(origin))?;
+        if start > view.length || relative_end > view.length {
+            return Err(slice_error(origin));
+        }
+        let absolute_start = view
+            .start
+            .checked_add(start)
+            .ok_or_else(|| slice_error(origin))?;
+        let visible = self.checked_visible(length, origin)?;
+        self.preflight_objects(1, origin)?;
+        self.views
+            .try_reserve(1)
+            .map_err(|_| allocation_error(origin))?;
+        let backing_index = handle_index(view.backing.0, origin)?;
+        let backing = self
+            .backings
+            .get_mut(backing_index)
+            .ok_or_else(|| invalid_handle(origin, "byte view names an absent backing"))?;
+        if !backing.retained_by_view {
+            self.retained_by_views = self
+                .retained_by_views
+                .checked_add(backing.bytes.len())
+                .ok_or_else(|| retained_policy(origin, "view retention accounting overflowed"))?;
+            backing.retained_by_view = true;
+        }
+        let handle = ByteHandle(nonzero_handle(self.views.len(), origin)?);
+        self.views.push(ByteView {
+            backing: view.backing,
+            start: absolute_start,
+            length,
+        });
+        self.visible_bytes = visible;
+        Ok(handle)
+    }
+
+    fn bytes(&self, handle: ByteHandle, origin: NodeId) -> Result<&[u8]> {
+        let view = self.view(handle, origin)?;
+        let backing = self
+            .backings
+            .get(handle_index(view.backing.0, origin)?)
+            .ok_or_else(|| invalid_handle(origin, "byte view names an absent backing"))?;
+        let end = view
+            .start
+            .checked_add(view.length)
+            .ok_or_else(|| invalid_handle(origin, "byte view range overflows"))?;
+        backing
+            .bytes
+            .get(view.start..end)
+            .ok_or_else(|| invalid_handle(origin, "byte view range exceeds its backing"))
+    }
+
+    fn view(&self, handle: ByteHandle, origin: NodeId) -> Result<ByteView> {
+        self.views
+            .get(handle_index(handle.0, origin)?)
+            .copied()
+            .ok_or_else(|| invalid_handle(origin, "managed byte handle is out of bounds"))
+    }
+
+    fn checked_visible(&self, added: usize, origin: NodeId) -> Result<usize> {
+        let visible = self.visible_bytes.checked_add(added).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ManagedVisibleBytePolicyExceeded,
+                "managed visible byte accounting overflowed",
+            )
+            .for_node(origin)
+        })?;
+        if visible > MAX_RUN_MANAGED_VISIBLE_BYTES {
+            return Err(LkError::new(
+                ErrorCode::ManagedVisibleBytePolicyExceeded,
+                "invocation managed visible byte policy exceeded",
+            )
+            .for_node(origin));
+        }
+        Ok(visible)
+    }
+
+    fn preflight_objects(&self, added: usize, origin: NodeId) -> Result<()> {
+        if self
+            .backings
+            .len()
+            .checked_add(self.views.len())
+            .and_then(|value| value.checked_add(added))
+            .is_none_or(|value| value > MAX_RUN_MANAGED_OBJECTS)
+        {
+            return Err(LkError::new(
+                ErrorCode::ManagedObjectPolicyExceeded,
+                "invocation managed object policy exceeded",
+            )
+            .for_node(origin));
+        }
+        Ok(())
+    }
+}
+
+fn nonzero_handle(index: usize, origin: NodeId) -> Result<NonZeroU32> {
+    let one_based = index
+        .checked_add(1)
+        .and_then(|value| u32::try_from(value).ok())
+        .and_then(NonZeroU32::new)
+        .ok_or_else(|| invalid_handle(origin, "managed handle domain is exhausted"))?;
+    Ok(one_based)
+}
+
+fn handle_index(handle: NonZeroU32, origin: NodeId) -> Result<usize> {
+    usize::try_from(handle.get() - 1)
+        .map_err(|_| invalid_handle(origin, "managed handle overflows host indexes"))
+}
+
+fn invalid_handle(origin: NodeId, message: &str) -> LkError {
+    LkError::new(ErrorCode::InvalidManagedHandle, message).for_node(origin)
+}
+
+fn retained_policy(origin: NodeId, message: &str) -> LkError {
+    LkError::new(ErrorCode::RetainedBytePolicyExceeded, message).for_node(origin)
+}
+
+fn slice_error(origin: NodeId) -> LkError {
+    LkError::new(
+        ErrorCode::ByteSliceOutOfBounds,
+        "byte slice start and length must select a valid range",
+    )
+    .for_node(origin)
+}
+
+fn allocation_error(origin: NodeId) -> LkError {
+    LkError::new(
+        ErrorCode::ExecutionMemoryExhausted,
+        "managed invocation allocation could not be reserved",
+    )
+    .for_node(origin)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Cell {
+    Scalar(u64),
+    Bytes(ByteHandle),
+}
+
+impl Default for Cell {
+    fn default() -> Self {
+        Self::Scalar(0)
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<u64> for Cell {
+    fn eq(&self, other: &u64) -> bool {
+        matches!(self, Self::Scalar(value) if value == other)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct FlatValue {
     ty: CoreTypeId,
-    cells: Vec<u64>,
+    cells: Vec<Cell>,
 }
 fn to_flat(
     program: &CoreProgram,
+    managed: &mut InvocationArena,
     value: &RuntimeValue,
     expected: CoreTypeId,
     depth: usize,
+    origin: NodeId,
 ) -> Result<FlatValue> {
-    let mut cells = vec![0; core_ir::type_cells(program, expected)?];
-    write_flat(program, value, expected, depth, &mut cells)?;
+    let mut cells = vec![Cell::default(); core_ir::type_cells(program, expected)?];
+    write_flat(program, managed, value, expected, depth, origin, &mut cells)?;
     Ok(FlatValue {
         ty: expected,
         cells,
@@ -626,10 +949,12 @@ fn to_flat(
 
 fn write_flat(
     program: &CoreProgram,
+    managed: &mut InvocationArena,
     value: &RuntimeValue,
     expected: CoreTypeId,
     depth: usize,
-    destination: &mut [u64],
+    origin: NodeId,
+    destination: &mut [Cell],
 ) -> Result<()> {
     if depth > MAX_RUNTIME_VALUE_DEPTH {
         return Err(invalid_ir(
@@ -645,11 +970,15 @@ fn write_flat(
     match (&core.kind, value) {
         (CoreTypeKind::Unit, RuntimeValue::Unit) => Ok(()),
         (CoreTypeKind::Bool, RuntimeValue::Bool(value)) => {
-            destination[0] = u64::from(*value);
+            destination[0] = Cell::Scalar(u64::from(*value));
             Ok(())
         }
         (CoreTypeKind::I64, RuntimeValue::I64(value)) => {
-            destination[0] = *value as u64;
+            destination[0] = Cell::Scalar(*value as u64);
+            Ok(())
+        }
+        (CoreTypeKind::Bytes, RuntimeValue::Bytes(value)) => {
+            destination[0] = Cell::Bytes(managed.allocate_backing(value.as_slice(), origin)?);
             Ok(())
         }
         (
@@ -668,9 +997,11 @@ fn write_flat(
                 let count = core_ir::type_cells(program, expected_field.ty)?;
                 write_flat(
                     program,
+                    managed,
                     &field.value,
                     expected_field.ty,
                     depth + 1,
+                    expected_field.origin,
                     &mut destination[start..start + count],
                 )?;
             }
@@ -687,15 +1018,19 @@ fn write_flat(
                 .enumerate()
                 .find(|(_, candidate)| candidate.origin == *variant)
                 .ok_or_else(|| invalid_ir("validated runtime variant is absent from Core type"))?;
-            destination[0] = u64::try_from(ordinal)
-                .map_err(|_| invalid_ir("runtime discriminant overflows u64"))?;
+            destination[0] = Cell::Scalar(
+                u64::try_from(ordinal)
+                    .map_err(|_| invalid_ir("runtime discriminant overflows u64"))?,
+            );
             if let (Some(payload_ty), Some(payload)) = (selected.payload, payload) {
                 let count = core_ir::type_cells(program, payload_ty)?;
                 write_flat(
                     program,
+                    managed,
                     payload,
                     payload_ty,
                     depth + 1,
+                    selected.origin,
                     &mut destination[1..1 + count],
                 )?;
             }
@@ -707,15 +1042,121 @@ fn write_flat(
     }
 }
 
-fn from_flat(program: &CoreProgram, value: &FlatValue, depth: usize) -> Result<RuntimeValue> {
-    from_flat_cells(program, value.ty, &value.cells, depth)
+fn from_flat(
+    program: &CoreProgram,
+    managed: &InvocationArena,
+    value: &FlatValue,
+    depth: usize,
+    origin: NodeId,
+) -> Result<RuntimeValue> {
+    from_flat_cells(program, managed, value.ty, &value.cells, depth, origin)
+}
+
+fn preflight_flat_output(
+    program: &CoreProgram,
+    managed: &InvocationArena,
+    value: &FlatValue,
+    origin: NodeId,
+) -> Result<()> {
+    let visible = flat_visible_bytes(program, managed, value.ty, &value.cells, 1, origin)?;
+    if visible > MAXIMUM_BYTE_STRING_BYTES {
+        return Err(LkError::new(
+            ErrorCode::ResultBytePolicyExceeded,
+            "run result exceeds the decoded byte output policy",
+        )
+        .for_node(origin));
+    }
+    Ok(())
+}
+
+fn flat_visible_bytes(
+    program: &CoreProgram,
+    managed: &InvocationArena,
+    ty: CoreTypeId,
+    cells: &[Cell],
+    depth: usize,
+    origin: NodeId,
+) -> Result<usize> {
+    if depth > MAX_RUNTIME_VALUE_DEPTH {
+        return Err(LkError::new(
+            ErrorCode::ResultBytePolicyExceeded,
+            "run result byte preflight exceeds value depth policy",
+        )
+        .for_node(origin));
+    }
+    match &core_ir::type_at(program, ty)?.kind {
+        CoreTypeKind::Bytes => match cells.first().copied() {
+            Some(Cell::Bytes(handle)) => Ok(managed.bytes(handle, origin)?.len()),
+            _ => Err(invalid_handle(
+                origin,
+                "byte output cell has the wrong kind",
+            )),
+        },
+        CoreTypeKind::Product { fields } => fields.iter().try_fold(0_usize, |total, field| {
+            let start = usize::try_from(field.cell_offset)
+                .map_err(|_| invalid_ir("output field offset overflows host"))?;
+            let count = core_ir::type_cells(program, field.ty)?;
+            let child = cells
+                .get(start..start + count)
+                .ok_or_else(|| invalid_ir("output field cell range is malformed"))?;
+            total
+                .checked_add(flat_visible_bytes(
+                    program,
+                    managed,
+                    field.ty,
+                    child,
+                    depth + 1,
+                    origin,
+                )?)
+                .ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::ResultBytePolicyExceeded,
+                        "run result visible byte accounting overflowed",
+                    )
+                    .for_node(origin)
+                })
+        }),
+        CoreTypeKind::Sum { variants } => {
+            let ordinal = match cells.first().copied() {
+                Some(Cell::Scalar(value)) => usize::try_from(value)
+                    .map_err(|_| invalid_ir("output sum discriminant overflows host"))?,
+                _ => {
+                    return Err(invalid_handle(
+                        origin,
+                        "output sum discriminant has the wrong kind",
+                    ));
+                }
+            };
+            let variant = variants
+                .get(ordinal)
+                .ok_or_else(|| invalid_ir("output sum discriminant is out of bounds"))?;
+            if let Some(payload) = variant.payload {
+                let count = core_ir::type_cells(program, payload)?;
+                flat_visible_bytes(
+                    program,
+                    managed,
+                    payload,
+                    cells
+                        .get(1..1 + count)
+                        .ok_or_else(|| invalid_ir("output sum payload range is malformed"))?,
+                    depth + 1,
+                    origin,
+                )
+            } else {
+                Ok(0)
+            }
+        }
+        CoreTypeKind::Unit | CoreTypeKind::Bool | CoreTypeKind::I64 => Ok(0),
+    }
 }
 
 fn from_flat_cells(
     program: &CoreProgram,
+    managed: &InvocationArena,
     value_ty: CoreTypeId,
-    cells: &[u64],
+    cells: &[Cell],
     depth: usize,
+    origin: NodeId,
 ) -> Result<RuntimeValue> {
     if depth > MAX_RUNTIME_VALUE_DEPTH {
         return Err(invalid_ir(
@@ -726,18 +1167,54 @@ fn from_flat_cells(
     match &core.kind {
         CoreTypeKind::Unit => Ok(RuntimeValue::Unit),
         CoreTypeKind::Bool => Ok(RuntimeValue::Bool(
-            cells
+            match cells
                 .first()
                 .copied()
                 .ok_or_else(|| invalid_ir("bool result cell is absent"))?
-                != 0,
+            {
+                Cell::Scalar(value) => value != 0,
+                Cell::Bytes(_) => {
+                    return Err(invalid_handle(origin, "bool result contains a byte handle"));
+                }
+            },
         )),
         CoreTypeKind::I64 => Ok(RuntimeValue::I64(
-            cells
+            match cells
                 .first()
                 .copied()
-                .ok_or_else(|| invalid_ir("i64 result cell is absent"))? as i64,
+                .ok_or_else(|| invalid_ir("i64 result cell is absent"))?
+            {
+                Cell::Scalar(value) => value as i64,
+                Cell::Bytes(_) => {
+                    return Err(invalid_handle(origin, "i64 result contains a byte handle"));
+                }
+            },
         )),
+        CoreTypeKind::Bytes => {
+            let handle = match cells
+                .first()
+                .copied()
+                .ok_or_else(|| invalid_handle(origin, "byte result cell is absent"))?
+            {
+                Cell::Bytes(handle) => handle,
+                Cell::Scalar(_) => {
+                    return Err(invalid_handle(
+                        origin,
+                        "byte result cell has the wrong kind",
+                    ));
+                }
+            };
+            let bytes = managed.bytes(handle, origin)?;
+            Ok(RuntimeValue::Bytes(ByteString::from_slice(bytes).map_err(
+                |_| {
+                    LkError::new(
+                        ErrorCode::ResultBytePolicyExceeded,
+                        "byte result exceeds the public materialization policy",
+                    )
+                    .for_node(origin)
+                },
+            )?))
+        }
         CoreTypeKind::Product { fields } => {
             let ty = core
                 .origin
@@ -752,7 +1229,14 @@ fn from_flat_cells(
                     .ok_or_else(|| invalid_ir("product field cell range is malformed"))?;
                 result.push(RuntimeFieldValue {
                     field: field.origin,
-                    value: from_flat_cells(program, field.ty, field_cells, depth + 1)?,
+                    value: from_flat_cells(
+                        program,
+                        managed,
+                        field.ty,
+                        field_cells,
+                        depth + 1,
+                        origin,
+                    )?,
                 });
             }
             Ok(RuntimeValue::Product { ty, fields: result })
@@ -761,12 +1245,21 @@ fn from_flat_cells(
             let ty = core
                 .origin
                 .ok_or_else(|| invalid_ir("sum Core origin is absent"))?;
-            let ordinal = usize::try_from(
-                *cells
-                    .first()
-                    .ok_or_else(|| invalid_ir("sum discriminant cell is absent"))?,
-            )
-            .map_err(|_| invalid_ir("sum discriminant overflows host"))?;
+            let discriminant = match cells
+                .first()
+                .copied()
+                .ok_or_else(|| invalid_ir("sum discriminant cell is absent"))?
+            {
+                Cell::Scalar(value) => value,
+                Cell::Bytes(_) => {
+                    return Err(invalid_handle(
+                        origin,
+                        "sum discriminant has the wrong cell kind",
+                    ));
+                }
+            };
+            let ordinal = usize::try_from(discriminant)
+                .map_err(|_| invalid_ir("sum discriminant overflows host"))?;
             let variant = variants
                 .get(ordinal)
                 .ok_or_else(|| invalid_ir("sum discriminant is out of bounds"))?;
@@ -779,9 +1272,11 @@ fn from_flat_cells(
                         .ok_or_else(|| invalid_ir("sum payload cell range is malformed"))?;
                     Ok::<Box<RuntimeValue>, LkError>(Box::new(from_flat_cells(
                         program,
+                        managed,
                         payload_ty,
                         payload_cells,
                         depth + 1,
+                        origin,
                     )?))
                 })
                 .transpose()?;
@@ -802,16 +1297,27 @@ struct Frame {
     function: FunctionId,
     block: BlockId,
     instruction: usize,
-    arena: Vec<u64>,
+    cells: Vec<Cell>,
     offsets: Vec<usize>,
     initialized: Vec<bool>,
     continuation: Option<Continuation>,
 }
 
+#[cfg(test)]
 fn interpret(
     program: &CoreProgram,
     arguments: Vec<FlatValue>,
     policy: RunPolicy,
+) -> Result<FlatValue> {
+    let mut managed = InvocationArena::default();
+    interpret_with_arena(program, arguments, policy, &mut managed)
+}
+
+fn interpret_with_arena(
+    program: &CoreProgram,
+    arguments: Vec<FlatValue>,
+    policy: RunPolicy,
+    managed: &mut InvocationArena,
 ) -> Result<FlatValue> {
     core_ir::verify(program)?;
     validate_policy(policy)?;
@@ -875,6 +1381,20 @@ fn interpret(
                     I64_TYPE,
                     *value as u64,
                 )?,
+                Instruction::ConstBytes {
+                    origin,
+                    result,
+                    value,
+                } => {
+                    let handle = managed.allocate_backing(value.as_slice(), *origin)?;
+                    write_bytes_direct(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *result,
+                        handle,
+                    )?;
+                }
                 Instruction::AddI64 {
                     origin,
                     result,
@@ -908,6 +1428,136 @@ fn interpret(
                         *result,
                         BOOL_TYPE,
                         u64::from(value),
+                    )?;
+                }
+                Instruction::BytesLen {
+                    origin,
+                    result,
+                    value,
+                } => {
+                    let handle = require_bytes_handle(
+                        program,
+                        function,
+                        &frames[frame_index],
+                        *value,
+                        *origin,
+                    )?;
+                    let length = i64::try_from(managed.bytes(handle, *origin)?.len())
+                        .map_err(|_| invalid_handle(*origin, "byte length exceeds i64"))?;
+                    write_scalar_direct(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *result,
+                        I64_TYPE,
+                        length as u64,
+                    )?;
+                }
+                Instruction::BytesAt {
+                    origin,
+                    result,
+                    value,
+                    index,
+                } => {
+                    let handle = require_bytes_handle(
+                        program,
+                        function,
+                        &frames[frame_index],
+                        *value,
+                        *origin,
+                    )?;
+                    let requested = require_i64(program, function, &frames[frame_index], *index)?;
+                    let requested = usize::try_from(requested).map_err(|_| {
+                        LkError::new(
+                            ErrorCode::ByteIndexOutOfBounds,
+                            "byte index must be nonnegative and within the visible value",
+                        )
+                        .for_node(*origin)
+                    })?;
+                    let octet = managed
+                        .bytes(handle, *origin)?
+                        .get(requested)
+                        .copied()
+                        .ok_or_else(|| {
+                            LkError::new(
+                                ErrorCode::ByteIndexOutOfBounds,
+                                "byte index is outside the visible value",
+                            )
+                            .for_node(*origin)
+                        })?;
+                    write_scalar_direct(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *result,
+                        I64_TYPE,
+                        u64::from(octet),
+                    )?;
+                }
+                Instruction::BytesSlice {
+                    origin,
+                    result,
+                    value,
+                    start,
+                    length,
+                } => {
+                    let handle = require_bytes_handle(
+                        program,
+                        function,
+                        &frames[frame_index],
+                        *value,
+                        *origin,
+                    )?;
+                    let start = require_i64(program, function, &frames[frame_index], *start)?;
+                    let length = require_i64(program, function, &frames[frame_index], *length)?;
+                    let slice = managed.slice(handle, start, length, *origin)?;
+                    write_bytes_direct(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *result,
+                        slice,
+                    )?;
+                }
+                Instruction::BytesEqual {
+                    origin,
+                    result,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = require_bytes_handle(
+                        program,
+                        function,
+                        &frames[frame_index],
+                        *lhs,
+                        *origin,
+                    )?;
+                    let rhs = require_bytes_handle(
+                        program,
+                        function,
+                        &frames[frame_index],
+                        *rhs,
+                        *origin,
+                    )?;
+                    let left = managed.bytes(lhs, *origin)?;
+                    let right = managed.bytes(rhs, *origin)?;
+                    let mut equal = left.len() == right.len();
+                    if equal {
+                        for (left, right) in left.iter().zip(right) {
+                            consume_fuel(&mut fuel, 1, *origin)?;
+                            if left != right {
+                                equal = false;
+                                break;
+                            }
+                        }
+                    }
+                    write_scalar_direct(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *result,
+                        BOOL_TYPE,
+                        u64::from(equal),
                     )?;
                 }
                 Instruction::Call {
@@ -1013,7 +1663,7 @@ fn interpret(
                 ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
                 let returned = read_value(program, function, &frames[frame_index], *value)?;
                 let continuation = frames[frame_index].continuation;
-                let released = frames[frame_index].arena.len();
+                let released = frames[frame_index].cells.len();
                 frames.pop();
                 live_cells = live_cells
                     .checked_sub(released)
@@ -1108,7 +1758,16 @@ fn interpret(
                 consume_fuel(&mut fuel, 1, *origin)?;
                 let sum_ty = core_ir::value_type(function, *scrutinee)?;
                 let sum_range = value_range(&frames[frame_index], *scrutinee)?;
-                let ordinal = usize::try_from(frames[frame_index].arena[sum_range.start])
+                let discriminant = match frames[frame_index].cells[sum_range.start] {
+                    Cell::Scalar(value) => value,
+                    Cell::Bytes(_) => {
+                        return Err(invalid_handle(
+                            *origin,
+                            "sum discriminant contains a managed byte handle",
+                        ));
+                    }
+                };
+                let ordinal = usize::try_from(discriminant)
                     .map_err(|_| invalid_ir("sum discriminant overflows host"))?;
                 let arm = arms
                     .get(ordinal)
@@ -1138,7 +1797,7 @@ fn interpret(
                             let count = core_ir::type_cells(program, ty)?;
                             values.push(FlatValue {
                                 ty,
-                                cells: frames[frame_index].arena
+                                cells: frames[frame_index].cells
                                     [sum_range.start + 1..sum_range.start + 1 + count]
                                     .to_vec(),
                             });
@@ -1171,6 +1830,7 @@ fn instruction_copy_cells(
             program,
             core_ir::value_type(function, *result)?,
         )?),
+        Instruction::BytesSlice { .. } => Ok(1),
         Instruction::ConstructVariant { sum, payload, .. } => {
             let canonicalization = logical_copy_cost(core_ir::type_cells(program, *sum)?)?;
             payload.map_or(Ok(canonicalization), |payload| {
@@ -1292,7 +1952,24 @@ fn write_scalar_direct(
     if range.len() != 1 {
         return Err(invalid_ir("scalar runtime write has wrong cell count"));
     }
-    frame.arena[range.start] = value;
+    frame.cells[range.start] = Cell::Scalar(value);
+    mark_initialized(frame, result)
+}
+
+fn write_bytes_direct(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    result: ValueId,
+    handle: ByteHandle,
+) -> Result<()> {
+    let range = prepare_direct_write(program, function, frame, result, BYTES_TYPE)?;
+    if range.len() != 1 {
+        return Err(invalid_ir(
+            "managed byte runtime write has wrong cell count",
+        ));
+    }
+    frame.cells[range.start] = Cell::Bytes(handle);
     mark_initialized(frame, result)
 }
 
@@ -1309,7 +1986,7 @@ fn write_product_direct(
     for field in fields {
         let source = value_range(frame, *field)?;
         let count = source.len();
-        frame.arena.copy_within(source, destination);
+        frame.cells.copy_within(source, destination);
         destination = destination
             .checked_add(count)
             .ok_or_else(|| invalid_ir("product destination cell offset overflowed"))?;
@@ -1341,7 +2018,7 @@ fn project_field_direct(
     let count = core_ir::type_cells(program, field.ty)?;
     let source = source_value.start + field_offset..source_value.start + field_offset + count;
     let destination = prepare_direct_write(program, function, frame, result, field.ty)?;
-    frame.arena.copy_within(source, destination.start);
+    frame.cells.copy_within(source, destination.start);
     mark_initialized(frame, result)
 }
 
@@ -1355,11 +2032,11 @@ fn construct_variant_direct(
     payload: Option<ValueId>,
 ) -> Result<()> {
     let destination = prepare_direct_write(program, function, frame, result, sum)?;
-    frame.arena[destination.clone()].fill(0);
-    frame.arena[destination.start] = u64::from(variant);
+    frame.cells[destination.clone()].fill(Cell::default());
+    frame.cells[destination.start] = Cell::Scalar(u64::from(variant));
     if let Some(payload) = payload {
         let source = value_range(frame, payload)?;
-        frame.arena.copy_within(source, destination.start + 1);
+        frame.cells.copy_within(source, destination.start + 1);
     }
     mark_initialized(frame, result)
 }
@@ -1447,7 +2124,7 @@ fn new_frame(
         function: function_id,
         block: function.entry,
         instruction: 0,
-        arena: vec![0; next],
+        cells: vec![Cell::default(); next],
         offsets,
         initialized: vec![false; function.value_types.len()],
         continuation,
@@ -1516,7 +2193,7 @@ fn write_value(
     if *initialized {
         return Err(invalid_ir("runtime value was defined twice in one block"));
     }
-    frame.arena[range].copy_from_slice(&value.cells);
+    frame.cells[range].copy_from_slice(&value.cells);
     *initialized = true;
     Ok(())
 }
@@ -1529,7 +2206,7 @@ fn read_value(
     let ty = core_ir::value_type(function, id)?;
     let range = value_range(frame, id)?;
     let cells = frame
-        .arena
+        .cells
         .get(range)
         .ok_or_else(|| invalid_ir("runtime value cell range is out of bounds"))?
         .to_vec();
@@ -1551,7 +2228,13 @@ fn require_i64(
     if range.len() != core_ir::type_cells(program, I64_TYPE)? {
         return Err(invalid_ir("verified i64 value has a malformed cell range"));
     }
-    Ok(frame.arena[range.start] as i64)
+    match frame.cells[range.start] {
+        Cell::Scalar(value) => Ok(value as i64),
+        Cell::Bytes(_) => Err(invalid_handle(
+            function.origin,
+            "i64 runtime cell contains a managed byte handle",
+        )),
+    }
 }
 fn require_bool(
     program: &CoreProgram,
@@ -1568,7 +2251,42 @@ fn require_bool(
     if range.len() != core_ir::type_cells(program, BOOL_TYPE)? {
         return Err(invalid_ir("verified bool value has a malformed cell range"));
     }
-    Ok(frame.arena[range.start] != 0)
+    match frame.cells[range.start] {
+        Cell::Scalar(value) => Ok(value != 0),
+        Cell::Bytes(_) => Err(invalid_handle(
+            function.origin,
+            "bool runtime cell contains a managed byte handle",
+        )),
+    }
+}
+
+fn require_bytes_handle(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &Frame,
+    id: ValueId,
+    origin: NodeId,
+) -> Result<ByteHandle> {
+    if core_ir::value_type(function, id)? != BYTES_TYPE {
+        return Err(invalid_handle(
+            origin,
+            "verified byte value has a non-byte runtime type",
+        ));
+    }
+    let range = value_range(frame, id)?;
+    if range.len() != core_ir::type_cells(program, BYTES_TYPE)? {
+        return Err(invalid_handle(
+            origin,
+            "verified byte value has a malformed cell range",
+        ));
+    }
+    match frame.cells[range.start] {
+        Cell::Bytes(handle) => Ok(handle),
+        Cell::Scalar(_) => Err(invalid_handle(
+            origin,
+            "managed byte cell has the wrong runtime kind",
+        )),
+    }
 }
 fn consume_fuel(fuel: &mut u64, cost: u64, origin: NodeId) -> Result<()> {
     if *fuel < cost {
@@ -1599,10 +2317,11 @@ fn nanos(value: u128) -> u64 {
 mod tests {
     use super::*;
     use crate::core_ir::{
-        CoreBlock, CoreField, CoreFunction, CoreType, CoreVariant, SwitchArm, UNIT_TYPE,
+        CoreBlock, CoreField, CoreFunction, CoreType, CoreVariant, PRIMITIVE_TYPE_COUNT, SwitchArm,
+        UNIT_TYPE,
     };
     use crate::ids::{Revision, SnapshotHash, WorkspaceId};
-    use crate::schema::Node;
+    use crate::schema::{MAXIMUM_BYTE_LITERAL_BYTES, Node};
     use crate::type_layout::{FieldLayout, LayoutShape, ValueLayout, VariantLayout};
     fn node(serial: u64) -> NodeId {
         NodeId::new(WorkspaceId::from_bytes([0x51; 16]), serial).expect("node")
@@ -1639,8 +2358,20 @@ mod tests {
                     shape: LayoutShape::Primitive,
                 },
             },
+            CoreType {
+                origin: None,
+                kind: CoreTypeKind::Bytes,
+                layout: ValueLayout {
+                    size: 4,
+                    align: 4,
+                    cells: 1,
+                    shape: LayoutShape::Primitive,
+                },
+            },
         ]
     }
+    const PRODUCT_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32);
+    const SUM_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32 + 1);
     fn scalar_program() -> CoreProgram {
         CoreProgram {
             types: primitives(),
@@ -1724,7 +2455,7 @@ mod tests {
             Instruction::ConstructProduct {
                 origin: node(22),
                 result: ValueId(2),
-                ty: CoreTypeId(3),
+                ty: PRODUCT_TYPE,
                 fields: vec![ValueId(0), ValueId(1)],
             },
         ];
@@ -1735,7 +2466,7 @@ mod tests {
                 value: 0,
             });
         }
-        let mut value_types = vec![I64_TYPE, I64_TYPE, CoreTypeId(3)];
+        let mut value_types = vec![I64_TYPE, I64_TYPE, PRODUCT_TYPE];
         value_types.extend(std::iter::repeat_n(I64_TYPE, extra_i64_values));
         CoreProgram {
             types,
@@ -1743,7 +2474,7 @@ mod tests {
             functions: vec![CoreFunction {
                 origin: node(19),
                 parameters: vec![],
-                result: CoreTypeId(3),
+                result: PRODUCT_TYPE,
                 frame_cells: u64::try_from(4 + extra_i64_values).expect("frame cells"),
                 value_types,
                 entry: BlockId(0),
@@ -1765,6 +2496,557 @@ mod tests {
             fuel,
             maximum_frames: 10,
         }
+    }
+
+    fn one_function_program(
+        result: CoreTypeId,
+        value_types: Vec<CoreTypeId>,
+        instructions: Vec<Instruction>,
+        returned: ValueId,
+    ) -> CoreProgram {
+        let frame_cells = value_types
+            .iter()
+            .map(|ty| primitives()[ty.0 as usize].layout.cells)
+            .sum();
+        CoreProgram {
+            types: primitives(),
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin: node(100),
+                parameters: vec![],
+                result,
+                value_types,
+                frame_cells,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin: node(101),
+                    parameters: vec![],
+                    instructions,
+                    terminator: Terminator::Return {
+                        origin: node(199),
+                        value: returned,
+                    },
+                }],
+            }],
+        }
+    }
+
+    fn byte_length_program(bytes: &[u8]) -> CoreProgram {
+        one_function_program(
+            I64_TYPE,
+            vec![BYTES_TYPE, I64_TYPE],
+            vec![
+                Instruction::ConstBytes {
+                    origin: node(102),
+                    result: ValueId(0),
+                    value: ByteString::from_slice(bytes).unwrap(),
+                },
+                Instruction::BytesLen {
+                    origin: node(103),
+                    result: ValueId(1),
+                    value: ValueId(0),
+                },
+            ],
+            ValueId(1),
+        )
+    }
+
+    fn byte_index_program(bytes: &[u8], requested: i64) -> CoreProgram {
+        one_function_program(
+            I64_TYPE,
+            vec![BYTES_TYPE, I64_TYPE, I64_TYPE],
+            vec![
+                Instruction::ConstBytes {
+                    origin: node(104),
+                    result: ValueId(0),
+                    value: ByteString::from_slice(bytes).unwrap(),
+                },
+                Instruction::ConstI64 {
+                    origin: node(105),
+                    result: ValueId(1),
+                    value: requested,
+                },
+                Instruction::BytesAt {
+                    origin: node(106),
+                    result: ValueId(2),
+                    value: ValueId(0),
+                    index: ValueId(1),
+                },
+            ],
+            ValueId(2),
+        )
+    }
+
+    fn byte_slice_program(bytes: &[u8], start: i64, length: i64) -> CoreProgram {
+        one_function_program(
+            BYTES_TYPE,
+            vec![BYTES_TYPE, I64_TYPE, I64_TYPE, BYTES_TYPE],
+            vec![
+                Instruction::ConstBytes {
+                    origin: node(107),
+                    result: ValueId(0),
+                    value: ByteString::from_slice(bytes).unwrap(),
+                },
+                Instruction::ConstI64 {
+                    origin: node(108),
+                    result: ValueId(1),
+                    value: start,
+                },
+                Instruction::ConstI64 {
+                    origin: node(109),
+                    result: ValueId(2),
+                    value: length,
+                },
+                Instruction::BytesSlice {
+                    origin: node(110),
+                    result: ValueId(3),
+                    value: ValueId(0),
+                    start: ValueId(1),
+                    length: ValueId(2),
+                },
+            ],
+            ValueId(3),
+        )
+    }
+
+    fn byte_equality_program(left: &[u8], right: &[u8]) -> CoreProgram {
+        one_function_program(
+            BOOL_TYPE,
+            vec![BYTES_TYPE, BYTES_TYPE, BOOL_TYPE],
+            vec![
+                Instruction::ConstBytes {
+                    origin: node(111),
+                    result: ValueId(0),
+                    value: ByteString::from_slice(left).unwrap(),
+                },
+                Instruction::ConstBytes {
+                    origin: node(112),
+                    result: ValueId(1),
+                    value: ByteString::from_slice(right).unwrap(),
+                },
+                Instruction::BytesEqual {
+                    origin: node(113),
+                    result: ValueId(2),
+                    lhs: ValueId(0),
+                    rhs: ValueId(1),
+                },
+            ],
+            ValueId(2),
+        )
+    }
+
+    fn run_core_value(program: &CoreProgram, policy: RunPolicy) -> Result<RuntimeValue> {
+        let mut managed = InvocationArena::default();
+        let flat = interpret_with_arena(program, vec![], policy, &mut managed)?;
+        preflight_flat_output(program, &managed, &flat, program.functions[0].origin)?;
+        from_flat(program, &managed, &flat, 1, program.functions[0].origin)
+    }
+
+    #[test]
+    fn byte_operations_have_exact_content_bounds_and_logical_fuel() {
+        assert_eq!(
+            run_core_value(&byte_length_program(b""), policy(4)).unwrap(),
+            RuntimeValue::I64(0)
+        );
+        assert_eq!(
+            run_core_value(
+                &byte_length_program(&vec![0; MAXIMUM_BYTE_LITERAL_BYTES]),
+                policy(4)
+            )
+            .unwrap(),
+            RuntimeValue::I64(MAXIMUM_BYTE_LITERAL_BYTES as i64)
+        );
+        assert_eq!(
+            run_core_value(&byte_length_program(b"x"), policy(3))
+                .expect_err("one fuel below exact length cost")
+                .code,
+            ErrorCode::ExecutionFuelExhausted
+        );
+
+        for (index, expected) in [(0, 0), (2, 255)] {
+            assert_eq!(
+                run_core_value(&byte_index_program(&[0, 7, 255], index), policy(5)).unwrap(),
+                RuntimeValue::I64(expected)
+            );
+        }
+        for (bytes, index) in [
+            (&b"abc"[..], -1),
+            (&b"abc"[..], 3),
+            (&b"abc"[..], i64::MAX),
+            (&b""[..], 0),
+        ] {
+            assert_eq!(
+                run_core_value(&byte_index_program(bytes, index), policy(5))
+                    .expect_err("byte index bounds")
+                    .code,
+                ErrorCode::ByteIndexOutOfBounds
+            );
+        }
+
+        for (start, length, expected) in [
+            (0, 0, &b""[..]),
+            (4, 0, &b""[..]),
+            (0, 4, &b"abcd"[..]),
+            (1, 2, &b"bc"[..]),
+        ] {
+            assert_eq!(
+                run_core_value(&byte_slice_program(b"abcd", start, length), policy(7)).unwrap(),
+                RuntimeValue::Bytes(ByteString::from_slice(expected).unwrap())
+            );
+            assert_eq!(
+                run_core_value(&byte_slice_program(b"abcd", start, length), policy(6))
+                    .expect_err("one fuel below exact slice cost")
+                    .code,
+                ErrorCode::ExecutionFuelExhausted
+            );
+        }
+        for (start, length) in [(5, 0), (-1, 0), (0, -1), (i64::MAX, 1), (3, 2)] {
+            assert_eq!(
+                run_core_value(&byte_slice_program(b"abcd", start, length), policy(6))
+                    .expect_err("byte slice bounds")
+                    .code,
+                ErrorCode::ByteSliceOutOfBounds
+            );
+        }
+
+        for (left, right, expected, compared) in [
+            (&b""[..], &b""[..], true, 0),
+            (&b"abc"[..], &b"abc"[..], true, 3),
+            (&b"abc"[..], &b"xbc"[..], false, 1),
+            (&b"abc"[..], &b"abx"[..], false, 3),
+            (&b"abc"[..], &b"ab"[..], false, 0),
+        ] {
+            let fuel = 5 + compared;
+            assert_eq!(
+                run_core_value(&byte_equality_program(left, right), policy(fuel)).unwrap(),
+                RuntimeValue::Bool(expected)
+            );
+            assert_eq!(
+                run_core_value(&byte_equality_program(left, right), policy(fuel - 1))
+                    .expect_err("one fuel below equality work")
+                    .code,
+                ErrorCode::ExecutionFuelExhausted
+            );
+        }
+    }
+
+    #[test]
+    fn arena_handles_views_and_physical_accounting_are_bounded_and_canonical() {
+        let origin = node(200);
+        let mut arena = InvocationArena::default();
+        let root = arena
+            .allocate_backing(&vec![0xa5; MAX_RUN_RETAINED_BACKING_BYTES], origin)
+            .expect("exact retained backing maximum");
+        assert_eq!(arena.visible_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
+        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
+        assert_eq!(arena.backings.len() + arena.views.len(), 2);
+        assert_eq!(
+            arena.allocate_backing(&[0], origin).unwrap_err().code,
+            ErrorCode::RetainedBytePolicyExceeded
+        );
+
+        let one = arena.slice(root, 17, 1, origin).unwrap();
+        assert_eq!(arena.bytes(one, origin).unwrap(), &[0xa5]);
+        assert_eq!(arena.retained_by_views, MAX_RUN_RETAINED_BACKING_BYTES);
+        let nested = arena.slice(one, 1, 0, origin).unwrap();
+        assert_eq!(arena.bytes(nested, origin).unwrap(), b"");
+        assert_eq!(
+            arena.view(nested, origin).unwrap().backing,
+            arena.view(root, origin).unwrap().backing
+        );
+        let mut deeply_nested = nested;
+        for _ in 0..128 {
+            deeply_nested = arena.slice(deeply_nested, 0, 0, origin).unwrap();
+            assert_eq!(
+                arena.view(deeply_nested, origin).unwrap().backing,
+                arena.view(root, origin).unwrap().backing
+            );
+        }
+        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
+
+        let copies = vec![Cell::Bytes(root); 1_000];
+        assert!(copies.iter().all(|cell| *cell == Cell::Bytes(root)));
+        assert_eq!(arena.backings.len(), 1);
+        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
+
+        let invalid = ByteHandle(NonZeroU32::new(u32::MAX).unwrap());
+        assert_eq!(
+            arena.bytes(invalid, origin).unwrap_err().code,
+            ErrorCode::InvalidManagedHandle
+        );
+        assert!(NonZeroU32::new(0).is_none());
+
+        let wrong_kind_program = CoreProgram {
+            types: primitives(),
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin,
+                parameters: vec![ValueId(0)],
+                result: BYTES_TYPE,
+                value_types: vec![BYTES_TYPE],
+                frame_cells: 1,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin,
+                    parameters: vec![ValueId(0)],
+                    instructions: vec![],
+                    terminator: Terminator::Return {
+                        origin,
+                        value: ValueId(0),
+                    },
+                }],
+            }],
+        };
+        let wrong_kind = new_frame(
+            &wrong_kind_program,
+            FunctionId(0),
+            &[FlatValue {
+                ty: BYTES_TYPE,
+                cells: vec![Cell::Scalar(0)],
+            }],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            require_bytes_handle(
+                &wrong_kind_program,
+                &wrong_kind_program.functions[0],
+                &wrong_kind,
+                ValueId(0),
+                origin
+            )
+            .unwrap_err()
+            .code,
+            ErrorCode::InvalidManagedHandle
+        );
+
+        let mut visible = InvocationArena::default();
+        let root = visible
+            .allocate_backing(&vec![0; MAX_RUN_RETAINED_BACKING_BYTES], origin)
+            .unwrap();
+        for _ in 0..3 {
+            visible
+                .slice(root, 0, MAX_RUN_RETAINED_BACKING_BYTES as i64, origin)
+                .unwrap();
+        }
+        assert_eq!(visible.visible_bytes, MAX_RUN_MANAGED_VISIBLE_BYTES);
+        assert_eq!(
+            visible.slice(root, 0, 1, origin).unwrap_err().code,
+            ErrorCode::ManagedVisibleBytePolicyExceeded
+        );
+        assert_eq!(visible.retained_by_views, MAX_RUN_RETAINED_BACKING_BYTES);
+
+        let mut objects = InvocationArena::default();
+        for _ in 0..(MAX_RUN_MANAGED_OBJECTS / 2) {
+            objects.allocate_backing(b"", origin).unwrap();
+        }
+        assert_eq!(
+            objects.backings.len() + objects.views.len(),
+            MAX_RUN_MANAGED_OBJECTS
+        );
+        assert_eq!(
+            objects.allocate_backing(b"", origin).unwrap_err().code,
+            ErrorCode::ManagedObjectPolicyExceeded
+        );
+
+        let mut distinct = InvocationArena::default();
+        let left = distinct.allocate_backing(b"same", origin).unwrap();
+        let right = distinct.allocate_backing(b"same", origin).unwrap();
+        assert_eq!(
+            distinct.bytes(left, origin).unwrap(),
+            distinct.bytes(right, origin).unwrap()
+        );
+        assert_ne!(left, right);
+        assert_eq!(distinct.retained_backing_bytes, 8);
+    }
+
+    fn arena_with_witness(
+        witness: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> InvocationArena {
+        let mut arena = InvocationArena::default();
+        arena.drop_witness = Some(witness);
+        arena
+    }
+
+    fn byte_pair_output_program() -> CoreProgram {
+        let pair = CoreType {
+            origin: Some(node(220)),
+            kind: CoreTypeKind::Product {
+                fields: vec![
+                    CoreField {
+                        origin: node(221),
+                        ty: BYTES_TYPE,
+                        cell_offset: 0,
+                    },
+                    CoreField {
+                        origin: node(222),
+                        ty: BYTES_TYPE,
+                        cell_offset: 1,
+                    },
+                ],
+            },
+            layout: ValueLayout {
+                size: 8,
+                align: 4,
+                cells: 2,
+                shape: LayoutShape::Product {
+                    fields: vec![
+                        FieldLayout {
+                            field: node(221),
+                            offset: 0,
+                            cells: 1,
+                        },
+                        FieldLayout {
+                            field: node(222),
+                            offset: 4,
+                            cells: 1,
+                        },
+                    ],
+                },
+            },
+        };
+        let mut types = primitives();
+        types.push(pair);
+        CoreProgram {
+            types,
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin: node(223),
+                parameters: vec![ValueId(0)],
+                result: PRODUCT_TYPE,
+                value_types: vec![BYTES_TYPE, PRODUCT_TYPE],
+                frame_cells: 3,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin: node(224),
+                    parameters: vec![ValueId(0)],
+                    instructions: vec![Instruction::ConstructProduct {
+                        origin: node(225),
+                        result: ValueId(1),
+                        ty: PRODUCT_TYPE,
+                        fields: vec![ValueId(0), ValueId(0)],
+                    }],
+                    terminator: Terminator::Return {
+                        origin: node(226),
+                        value: ValueId(1),
+                    },
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn invocation_arena_drops_on_success_trap_fuel_frame_and_output_failures() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let success_witness = Arc::new(AtomicUsize::new(0));
+        let owned_output;
+        {
+            let program = byte_slice_program(b"abcd", 1, 2);
+            let mut arena = arena_with_witness(Arc::clone(&success_witness));
+            let flat = interpret_with_arena(&program, vec![], policy(7), &mut arena).unwrap();
+            preflight_flat_output(&program, &arena, &flat, program.functions[0].origin).unwrap();
+            owned_output = from_flat(&program, &arena, &flat, 1, program.functions[0].origin)
+                .expect("owned public result before arena drop");
+        }
+        assert_eq!(success_witness.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            owned_output,
+            RuntimeValue::Bytes(ByteString::from_slice(b"bc").unwrap())
+        );
+
+        let trap_witness = Arc::new(AtomicUsize::new(0));
+        {
+            let program = byte_index_program(b"abc", -1);
+            let mut arena = arena_with_witness(Arc::clone(&trap_witness));
+            assert_eq!(
+                interpret_with_arena(&program, vec![], policy(5), &mut arena)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ByteIndexOutOfBounds
+            );
+        }
+        assert_eq!(trap_witness.load(Ordering::SeqCst), 1);
+
+        let fuel_witness = Arc::new(AtomicUsize::new(0));
+        {
+            let program = byte_equality_program(b"abc", b"abc");
+            let mut arena = arena_with_witness(Arc::clone(&fuel_witness));
+            assert_eq!(
+                interpret_with_arena(&program, vec![], policy(7), &mut arena)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ExecutionFuelExhausted
+            );
+        }
+        assert_eq!(fuel_witness.load(Ordering::SeqCst), 1);
+
+        let frame_witness = Arc::new(AtomicUsize::new(0));
+        {
+            let recursive = one_function_program(
+                BYTES_TYPE,
+                vec![BYTES_TYPE, BYTES_TYPE],
+                vec![
+                    Instruction::ConstBytes {
+                        origin: node(227),
+                        result: ValueId(0),
+                        value: ByteString::from_slice(b"allocated").unwrap(),
+                    },
+                    Instruction::Call {
+                        origin: node(228),
+                        result: ValueId(1),
+                        function: FunctionId(0),
+                        arguments: vec![],
+                    },
+                ],
+                ValueId(1),
+            );
+            let mut arena = arena_with_witness(Arc::clone(&frame_witness));
+            assert_eq!(
+                interpret_with_arena(
+                    &recursive,
+                    vec![],
+                    RunPolicy {
+                        fuel: 100,
+                        maximum_frames: 1,
+                    },
+                    &mut arena,
+                )
+                .unwrap_err()
+                .code,
+                ErrorCode::ExecutionFrameExhausted
+            );
+        }
+        assert_eq!(frame_witness.load(Ordering::SeqCst), 1);
+
+        let output_witness = Arc::new(AtomicUsize::new(0));
+        {
+            let program = byte_pair_output_program();
+            core_ir::verify(&program).unwrap();
+            let mut arena = arena_with_witness(Arc::clone(&output_witness));
+            let argument = to_flat(
+                &program,
+                &mut arena,
+                &RuntimeValue::Bytes(ByteString::new(vec![0; 40 * 1024]).unwrap()),
+                BYTES_TYPE,
+                1,
+                program.functions[0].origin,
+            )
+            .unwrap();
+            let flat = interpret_with_arena(&program, vec![argument], policy(10), &mut arena)
+                .expect("pure product construction");
+            assert_eq!(arena.retained_backing_bytes, 40 * 1024);
+            assert_eq!(
+                preflight_flat_output(&program, &arena, &flat, program.functions[0].origin)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ResultBytePolicyExceeded
+            );
+        }
+        assert_eq!(output_witness.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -2016,7 +3298,7 @@ mod tests {
                     },
                     CoreVariant {
                         origin: node(15),
-                        payload: Some(CoreTypeId(3)),
+                        payload: Some(PRODUCT_TYPE),
                         discriminant: 1,
                     },
                     CoreVariant {
@@ -2066,7 +3348,7 @@ mod tests {
                 origin: node(30),
                 parameters: vec![ValueId(0), ValueId(1)],
                 result: UNIT_TYPE,
-                value_types: vec![UNIT_TYPE, CoreTypeId(3), CoreTypeId(4)],
+                value_types: vec![UNIT_TYPE, PRODUCT_TYPE, SUM_TYPE],
                 frame_cells: 5,
                 entry: BlockId(0),
                 blocks: vec![],
@@ -2094,7 +3376,7 @@ mod tests {
                 &Instruction::ConstructVariant {
                     origin: node(32),
                     result: ValueId(2),
-                    sum: CoreTypeId(4),
+                    sum: SUM_TYPE,
                     variant: 0,
                     payload: None,
                 },
@@ -2109,7 +3391,7 @@ mod tests {
                 &Instruction::ConstructVariant {
                     origin: node(33),
                     result: ValueId(2),
-                    sum: CoreTypeId(4),
+                    sum: SUM_TYPE,
                     variant: 1,
                     payload: Some(ValueId(1)),
                 },
@@ -2124,7 +3406,7 @@ mod tests {
                 &Instruction::ConstructVariant {
                     origin: node(34),
                     result: ValueId(2),
-                    sum: CoreTypeId(4),
+                    sum: SUM_TYPE,
                     variant: 2,
                     payload: Some(ValueId(0)),
                 },
@@ -2143,7 +3425,7 @@ mod tests {
             arguments: vec![SwitchArgument::Payload, SwitchArgument::Value(ValueId(0))],
         };
         assert_eq!(
-            switch_edge_cost_and_cells(&program, function, &payload_arm, Some(CoreTypeId(3)),)
+            switch_edge_cost_and_cells(&program, function, &payload_arm, Some(PRODUCT_TYPE),)
                 .expect("selected match payload fuel"),
             (3, 2)
         );
@@ -2188,7 +3470,7 @@ mod tests {
         let mut instructions = vec![Instruction::ConstructVariant {
             origin: node(42),
             result: ValueId(0),
-            sum: CoreTypeId(3),
+            sum: PRODUCT_TYPE,
             variant: 0,
             payload: None,
         }];
@@ -2203,7 +3485,7 @@ mod tests {
                 origin: node(39),
                 parameters: vec![],
                 result: UNIT_TYPE,
-                value_types: std::iter::once(CoreTypeId(3))
+                value_types: std::iter::once(PRODUCT_TYPE)
                     .chain(std::iter::repeat_n(UNIT_TYPE, ARM_ARGUMENTS * 2))
                     .collect(),
                 frame_cells: 1,
@@ -2467,7 +3749,7 @@ mod tests {
         let args = vec![
             FlatValue {
                 ty: I64_TYPE,
-                cells: vec![0]
+                cells: vec![Cell::Scalar(0)]
             };
             MAX_RUN_LIVE_CELLS + 1
         ];

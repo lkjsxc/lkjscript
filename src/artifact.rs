@@ -2,12 +2,15 @@ use crate::codec::{CodecError, CodecErrorKind, Reader, TagDomain, Writer};
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::{ArtifactVersion, NodeId, Revision, SchemaId, SnapshotHash, WorkspaceId};
-use crate::schema::{Node, OperationCode, OperationKind, SemanticType, ValueRef};
+use crate::schema::{
+    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, Node, OperationCode, OperationKind, SemanticType,
+    ValueRef,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x03";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(3);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg003");
+pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x04";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(4);
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg004");
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
@@ -435,9 +438,34 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
         OperationKind::ConstUnit => {}
         OperationKind::ConstI64(value) => writer.i64(*value),
         OperationKind::ConstBool(value) => writer.bool(*value),
-        OperationKind::AddI64 { lhs, rhs } | OperationKind::LtI64 { lhs, rhs } => {
+        OperationKind::ConstBytes(value) => {
+            if value.len() > MAXIMUM_BYTE_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::ByteLiteralTooLarge,
+                    "artifact byte literal exceeds the semantic literal policy",
+                ));
+            }
+            writer.bytes(value.as_slice()).map_err(artifact_codec)?
+        }
+        OperationKind::AddI64 { lhs, rhs }
+        | OperationKind::LtI64 { lhs, rhs }
+        | OperationKind::BytesEqual { lhs, rhs } => {
             put_value(writer, *lhs);
             put_value(writer, *rhs);
+        }
+        OperationKind::BytesLen { value } => put_value(writer, *value),
+        OperationKind::BytesAt { value, index } => {
+            put_value(writer, *value);
+            put_value(writer, *index);
+        }
+        OperationKind::BytesSlice {
+            value,
+            start,
+            length,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *length);
         }
         OperationKind::Call {
             function,
@@ -530,11 +558,40 @@ pub(crate) fn read_operation(
         OperationCode::ConstBool => Ok(OperationKind::ConstBool(
             reader.bool().map_err(artifact_codec)?,
         )),
+        OperationCode::ConstBytes => {
+            let bytes = reader
+                .bytes(MAXIMUM_BYTE_LITERAL_BYTES)
+                .map_err(artifact_codec)?;
+            Ok(OperationKind::ConstBytes(
+                ByteString::from_slice(bytes).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        "artifact byte literal exceeds the decoded value policy",
+                    )
+                })?,
+            ))
+        }
         OperationCode::AddI64 => Ok(OperationKind::AddI64 {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
         OperationCode::LtI64 => Ok(OperationKind::LtI64 {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::BytesLen => Ok(OperationKind::BytesLen {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::BytesAt => Ok(OperationKind::BytesAt {
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+        }),
+        OperationCode::BytesSlice => Ok(OperationKind::BytesSlice {
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            length: read_value(reader, workspace)?,
+        }),
+        OperationCode::BytesEqual => Ok(OperationKind::BytesEqual {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
@@ -950,6 +1007,32 @@ mod tests {
                     region: second,
                 }],
             },
+            OperationKind::ConstBytes(ByteString::from_slice(b"LKJM").unwrap()),
+            OperationKind::BytesLen {
+                value: ValueRef::BlockArgument(second),
+            },
+            OperationKind::BytesAt {
+                value: ValueRef::BlockArgument(second),
+                index: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+            },
+            OperationKind::BytesSlice {
+                value: ValueRef::BlockArgument(second),
+                start: ValueRef::OperationResult {
+                    operation: first,
+                    output: 0,
+                },
+                length: ValueRef::OperationResult {
+                    operation: second,
+                    output: 0,
+                },
+            },
+            OperationKind::BytesEqual {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
@@ -966,12 +1049,61 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_two_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format three artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x02");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&2_u16.to_le_bytes());
+    fn byte_literal_artifact_boundary_is_raw_bounded_and_preflighted() {
+        let workspace = WorkspaceId::from_bytes([0x5b; 16]);
+        let maximum = OperationKind::ConstBytes(
+            ByteString::new(vec![0xa5; MAXIMUM_BYTE_LITERAL_BYTES]).unwrap(),
+        );
+        let mut writer = Writer::new();
+        put_operation(&mut writer, &maximum).expect("maximum byte literal");
+        let encoded = writer.finish();
+        assert_eq!(encoded[0], OperationCode::ConstBytes.stable_tag());
         assert_eq!(
-            decode(&bytes).expect_err("format two must reject").code,
+            u64::from_le_bytes(encoded[1..9].try_into().unwrap()),
+            MAXIMUM_BYTE_LITERAL_BYTES as u64
+        );
+        assert_eq!(
+            read_operation(&mut Reader::new(&encoded), workspace).unwrap(),
+            maximum
+        );
+
+        let oversized = OperationKind::ConstBytes(
+            ByteString::new(vec![0; MAXIMUM_BYTE_LITERAL_BYTES + 1]).unwrap(),
+        );
+        assert_eq!(
+            put_operation(&mut Writer::new(), &oversized)
+                .expect_err("oversized byte literal")
+                .code,
+            ErrorCode::ByteLiteralTooLarge
+        );
+
+        let mut declared_oversized = Writer::new();
+        declared_oversized.u8(OperationCode::ConstBytes.stable_tag());
+        declared_oversized.u64((MAXIMUM_BYTE_LITERAL_BYTES + 1) as u64);
+        assert_eq!(
+            read_operation(&mut Reader::new(&declared_oversized.finish()), workspace)
+                .expect_err("declared literal policy")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+
+        let mut truncated = encoded;
+        truncated.pop();
+        assert_eq!(
+            read_operation(&mut Reader::new(&truncated), workspace)
+                .expect_err("truncated byte literal")
+                .code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
+
+    #[test]
+    fn artifact_format_three_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format four artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x03");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&3_u16.to_le_bytes());
+        assert_eq!(
+            decode(&bytes).expect_err("format three must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }

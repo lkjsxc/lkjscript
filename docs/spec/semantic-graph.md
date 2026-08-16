@@ -45,7 +45,7 @@ addresses never determine identity. A `DraftSymbol` is a transaction-local propo
 
 Allocation is staged. A rejected or validate-only request changes no published allocator state.
 Persistent identity non-reuse is the semantic contract: a deleted serial can never identify a later
-entity. Artifact format 3 currently proves this by physically retaining deletion tombstones and all
+entity. Artifact format 4 currently proves this by physically retaining deletion tombstones and all
 saved snapshots; that representation and full-retention strategy are not themselves a mandate for
 future physical storage. Under the active format, every serial below the allocator frontier is live
 or tombstoned. Adjacent history requires stable root identity, monotonic allocation and tombstones,
@@ -94,9 +94,10 @@ private implied nodes. Shared or forward-referenced expression results require a
 
 A structured value position may contain an anonymous inline expression. The retained inline set is
 derived from the same operation descriptors as graph validation: `const_unit`, `const_bool`,
-`const_i64`, `add_i64`, `lt_i64`, `call`, `construct_product`, `project_field`, and
-`construct_variant` are complete, non-terminating, single-result operations with no owned region and
-may be inline. `hole`, `if`, `for_i64`, and `match_sum` remain explicit. An inline expression has one
+`const_i64`, `const_bytes`, `add_i64`, `lt_i64`, `call`, `construct_product`, `project_field`,
+`construct_variant`, `bytes_len`, `bytes_at`, `bytes_slice`, and `bytes_equal` are complete,
+non-terminating, single-result operations with no owned region and may be inline. `hole`, `if`,
+`for_i64`, and `match_sum` remain explicit. An inline expression has one
 use by construction, has no public draft symbol, cannot be selected in the receipt, and normalizes
 to an ordinary persistent operation with an ordinary stable Node ID. Shared values, repairable
 placeholders, receipt selections, and maintenance targets remain explicitly bound.
@@ -108,6 +109,11 @@ their contained semantics, and keeps owned-region bodies after their owning oper
 return and structured-region yield values follow the same inline-child rule before the implied
 terminator. The complete nested proposal is discarded. No proposal path, nesting, or anonymous name
 is retained in semantic state.
+
+`ConstBytes` stores exact immutable literal octets in the operation node. One literal is limited to
+4,096 octets and the checked aggregate across explicit and inline literals in one transaction is
+65,536 octets. These limits apply before persistent identity allocation. Public base64 is only a
+proposal/transport spelling; it is not retained as semantic state.
 
 An explicit operation sequence in that canonical postorder and its inline spelling allocate the
 same persistent Node IDs and produce the same authoritative snapshot, artifact bytes, semantic
@@ -166,9 +172,11 @@ definitions do not block an otherwise complete entry.
 
 ## Artifact and durable HEAD
 
-A `.lkjscript` artifact uses format version 3 and semantic schema identity `lkjscript-spg003`;
-format-2 and older artifact bytes reject without a compatibility reader. It has fixed magic and semantic schema ID, little-endian integers, checked u64
-counts, canonical node/tombstone order, allocator/root state, and a BLAKE3 snapshot hash. The exact
+A `.lkjscript` artifact uses format version 4 and semantic schema identity `lkjscript-spg004`;
+format-3 and older artifact bytes reject without a compatibility reader. It has fixed magic and
+semantic schema ID, little-endian integers, checked u64 counts, canonical node/tombstone order,
+allocator/root state, and a BLAKE3 snapshot hash. `ConstBytes` stores a checked canonical length
+followed by raw octets; public base64 and runtime handles are absent. The exact
 artifact/decode policy accepts at most 67,108,864 bytes (64 MiB) for the complete artifact and at
 most 1,048,576 UTF-8 bytes (1 MiB) for each encoded name. Commit preflight applies the same artifact
 policy before publication. Decode rejects policy overflow, truncation, integer overflow, invalid
@@ -179,12 +187,13 @@ ceiling. Durable workspace IDs and revision file names must use their one canoni
 Accepted decode followed by encode is byte-identical. Core IR, machine code, caches, profiles,
 receipts, and protocol frames are absent.
 
-`LKJHEAD5` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD4`
-rejects because protocol-v6 canonical JSON and inline value proposals changed the persisted
+`LKJHEAD6` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD5`
+rejects because protocol-v7 canonical JSON, byte proposals, and runtime values changed the persisted
 idempotency fingerprint meaning. It
 is a checked, independently bounded (16 KiB) non-semantic publication record containing head
 revision/hash and, when present, one compact keyed fingerprint/receipt with exact bounded symbolic
-returned bindings. This final unreleased HEAD5 grammar has no numeric-symbol interpretation and
+returned bindings. The HEAD6 grammar has no numeric-symbol interpretation and
 stores enough receipt data for exact idempotency replay. It never contains a full diff or allocation map.
 Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
-receipt facts against retained snapshots before accepting HEAD. Corrupt or old HEAD bytes reject.
+receipt facts against retained snapshots before accepting HEAD. The fingerprint uses the v7 domain.
+Corrupt or old HEAD bytes reject.

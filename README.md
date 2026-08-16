@@ -68,13 +68,22 @@ task through the same public path. A separate isolated coding-agent trial author
 opening implementation sources; it is evidence about this interface, not a production-readiness or
 model-quality benchmark.
 
+The [release-manifest classifier](examples/release-manifest/) is the first managed-value consumer.
+It classifies an exact binary manifest using immutable bytes, checked indexing and slicing, content
+equality, and a bounded payload scan. Byte values behave like ordinary immutable values; the runtime
+may share their storage, and callers never see an address or allocation identity.
+
 ## How coding agents interact
 
 `lkjscriptd` is the only live writer of durable workspace state. For RPC commands, the generic
-`lkjscript` CLI accepts one strict version-6 JSON envelope, sends the same closed typed JSON request
+`lkjscript` CLI accepts one strict version-7 JSON envelope, sends the same closed typed JSON request
 in a bounded length frame over private local Unix IPC, and writes one typed JSON response. The separate `schema`
 command derives the machine contract locally from the same executable definitions. JSON is
 transport, not a second program representation.
+
+For repeated requests, `lkjscript --state DIRECTORY session` accepts one compact version-7 envelope
+per bounded line and flushes one compact response per line. It reuses the CLI process while retaining
+the daemon's existing one-request-per-connection publication boundary and the same request vocabulary.
 
 Begin with the compact machine-contract manifest:
 
@@ -117,28 +126,34 @@ The current Linux x86-64 implementation provides:
   variant;
 - structured functions, parameters, identity-targeted calls, conditions, counted loops, constants,
   checked integer addition and comparison, typed placeholders, yields, and returns;
+- immutable `bytes` values with canonical public encoding, checked length/index/slice/equality
+  operations, byte literals, and composition inside records and variants;
 - atomic commit and validate-only transactions, bounded transaction-local symbolic labels, anonymous
   one-use inline value expressions, selected returned bindings, compact receipts,
   identity-preserving placeholder repair, paginated semantic diffs, and bounded repair context;
 - direct deterministic lowering from one immutable revision to one private Core IR, independent IR
   verification, and an explicit-frame interpreter;
-- exact public `unit`, `bool`, `i64`, record, and variant values identified by semantic Node IDs;
+- exact public `unit`, `bool`, `i64`, `bytes`, record, and variant values identified by semantic Node IDs;
 - strict generic JSON projection over private synchronous local IPC;
+- a bounded invocation-scoped byte arena whose validated opaque handles occupy fixed runtime cells,
+  with deterministic cleanup and separately checked cells, visible bytes, retained backing, views,
+  objects, and result materialization;
 - package-wide `unsafe_code = "forbid"` for this Rust package, checked untrusted boundaries, and
   explicit resource policies.
 
 These are current verified implementation choices, not universal architecture mandates: one Rust
 package, synchronous requests, maps and vectors, full snapshot cloning, full scans, full artifact
 rewrites, flat runtime cells, and interpretation. Future storage, indexing, concurrency, memory
-management, frontends, or acceleration require a real consumer and evidence while preserving one
+strategies beyond the current invocation arena, frontends, or acceleration require a real consumer and evidence while preserving one
 program authority and one semantic execution route.
 
 ## Current limitations
 
 There is no source frontend, public network service, sandbox, package ecosystem, effect system or
-host operation, permission-value system, resource-owning value, managed heap, debugger, native
+host operation, permission-value system, resource-owning value, general managed heap, debugger, native
 backend, optimizer tier, daemon request concurrency, or cross-platform support. Programs currently
-operate only on pure primitives and acyclic immutable named values. The local access boundary relies
+operate only on pure primitives and acyclic immutable named values; managed bytes cannot escape one
+`Run`. The local access boundary relies
 on operating-system directory and socket permissions.
 
 The package forbids local unsafe Rust, but this is not a formal proof or a claim that every dependency
@@ -159,9 +174,10 @@ From the repository root:
 ./examples/job-policy/run.sh
 ./examples/named-data/run.sh
 ./examples/release-channel/run.sh
+./examples/release-manifest/run.sh
 ```
 
-All three scripts build production release binaries, create private temporary state, communicate only
+All four scripts build production release binaries, create private temporary state, communicate only
 through the production CLI and service, perform typed shutdown and restart, and remove only state
 they created. They require a current stable Rust toolchain, a POSIX shell, and Python 3.
 

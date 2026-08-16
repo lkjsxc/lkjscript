@@ -761,6 +761,15 @@ fn validate_operation(
         }
         _ => {}
     }
+    if let OperationKind::ConstBytes(value) = operation
+        && value.len() > crate::schema::MAXIMUM_BYTE_LITERAL_BYTES
+    {
+        return Err(LkError::new(
+            ErrorCode::ByteLiteralTooLarge,
+            "const_bytes literal exceeds the semantic literal policy",
+        )
+        .for_node(operation_id));
+    }
     if let OperationKind::ForI64 { step, .. } = operation
         && *step <= 0
     {

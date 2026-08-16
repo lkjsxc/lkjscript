@@ -46,10 +46,20 @@ pub enum ErrorCode {
     WrongWorkspace,
     ByValueTypeCycle,
     TypeLayoutUnrepresentable,
+    ByteLiteralTooLarge,
+    RuntimeByteInputTooLarge,
+    ManagedObjectPolicyExceeded,
+    ManagedVisibleBytePolicyExceeded,
+    RetainedBytePolicyExceeded,
+    ByteIndexOutOfBounds,
+    ByteSliceOutOfBounds,
+    InvalidManagedHandle,
+    ResultBytePolicyExceeded,
+    ExecutionMemoryExhausted,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 43] = [
         Self::ArtifactCorrupt,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
@@ -83,6 +93,16 @@ impl ErrorCode {
         Self::ExecutionFrameExhausted,
         Self::ByValueTypeCycle,
         Self::TypeLayoutUnrepresentable,
+        Self::ByteLiteralTooLarge,
+        Self::RuntimeByteInputTooLarge,
+        Self::ManagedObjectPolicyExceeded,
+        Self::ManagedVisibleBytePolicyExceeded,
+        Self::RetainedBytePolicyExceeded,
+        Self::ByteIndexOutOfBounds,
+        Self::ByteSliceOutOfBounds,
+        Self::InvalidManagedHandle,
+        Self::ResultBytePolicyExceeded,
+        Self::ExecutionMemoryExhausted,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -119,6 +139,16 @@ impl ErrorCode {
             Self::WrongWorkspace => "wrong_workspace",
             Self::ByValueTypeCycle => "by_value_type_cycle",
             Self::TypeLayoutUnrepresentable => "type_layout_unrepresentable",
+            Self::ByteLiteralTooLarge => "byte_literal_too_large",
+            Self::RuntimeByteInputTooLarge => "runtime_byte_input_too_large",
+            Self::ManagedObjectPolicyExceeded => "managed_object_policy_exceeded",
+            Self::ManagedVisibleBytePolicyExceeded => "managed_visible_byte_policy_exceeded",
+            Self::RetainedBytePolicyExceeded => "retained_byte_policy_exceeded",
+            Self::ByteIndexOutOfBounds => "byte_index_out_of_bounds",
+            Self::ByteSliceOutOfBounds => "byte_slice_out_of_bounds",
+            Self::InvalidManagedHandle => "invalid_managed_handle",
+            Self::ResultBytePolicyExceeded => "result_byte_policy_exceeded",
+            Self::ExecutionMemoryExhausted => "execution_memory_exhausted",
         }
     }
 }

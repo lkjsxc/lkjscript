@@ -72,26 +72,12 @@ pub struct VariantLayout {
 }
 
 pub fn primitive_layout(ty: SemanticType) -> Option<ValueLayout> {
-    Some(match ty {
-        SemanticType::Unit => ValueLayout {
-            size: 0,
-            align: 1,
-            cells: 0,
-            shape: LayoutShape::Primitive,
-        },
-        SemanticType::Bool => ValueLayout {
-            size: 1,
-            align: 1,
-            cells: 1,
-            shape: LayoutShape::Primitive,
-        },
-        SemanticType::I64 => ValueLayout {
-            size: 8,
-            align: 8,
-            cells: 1,
-            shape: LayoutShape::Primitive,
-        },
-        SemanticType::Nominal(_) => return None,
+    let descriptor = ty.primitive_descriptor()?;
+    Some(ValueLayout {
+        size: descriptor.physical_slot_size,
+        align: descriptor.physical_slot_align,
+        cells: descriptor.cells,
+        shape: LayoutShape::Primitive,
     })
 }
 

@@ -558,6 +558,13 @@ pub enum MachineScalarDomain {
     LowercaseHex {
         encoded_bytes: u8,
     },
+    CanonicalUrlSafeBase64 {
+        padding: bool,
+        whitespace: bool,
+        canonical_trailing_bits: bool,
+        maximum_decoded_bytes: u64,
+        maximum_encoded_bytes: u64,
+    },
     NodeId {
         workspace_bytes: u8,
         minimum_serial: u64,
@@ -659,6 +666,7 @@ pub enum RuntimeValuePayload {
     None,
     Bool,
     I64,
+    Bytes,
     Product,
     Sum,
 }
@@ -716,6 +724,7 @@ pub enum DraftFieldType {
     FunctionBody,
     YieldingBody,
     Bool,
+    Bytes,
     Expression,
     TypeDraft,
     ProductFieldList,
@@ -725,7 +734,7 @@ pub enum DraftFieldType {
     OperationMatchArmList,
 }
 impl DraftFieldType {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::DraftSymbol,
         Self::NodeTarget,
         Self::NodeId,
@@ -741,6 +750,7 @@ impl DraftFieldType {
         Self::FunctionBody,
         Self::YieldingBody,
         Self::Bool,
+        Self::Bytes,
         Self::Expression,
         Self::TypeDraft,
         Self::ProductFieldList,
@@ -767,6 +777,7 @@ impl DraftFieldType {
             Self::FunctionBody => "function_body",
             Self::YieldingBody => "yielding_body",
             Self::Bool => "bool",
+            Self::Bytes => "bytes",
             Self::Expression => "expression",
             Self::TypeDraft => "type_draft",
             Self::ProductFieldList => "product_field_list",
@@ -794,6 +805,7 @@ impl DraftFieldType {
             Self::FunctionBody => "function_body",
             Self::YieldingBody => "yielding_body",
             Self::Bool => "bool",
+            Self::Bytes => "bytes_string",
             Self::Expression => "expression",
             Self::TypeDraft => "type_draft",
             Self::ProductFieldList => "list<product_field>",
@@ -897,6 +909,13 @@ pub struct BoundaryLimits {
     pub maximum_runtime_value_depth: u32,
     pub maximum_runtime_value_items: u64,
     pub maximum_runtime_value_bytes: u64,
+    pub maximum_byte_literal_bytes: u64,
+    pub maximum_transaction_byte_literal_bytes: u64,
+    pub maximum_runtime_byte_value_bytes: u64,
+    pub maximum_run_argument_byte_bytes: u64,
+    pub maximum_run_managed_visible_bytes: u64,
+    pub maximum_run_retained_backing_bytes: u64,
+    pub maximum_run_managed_objects: u64,
     pub maximum_error_related_ids: u32,
     pub maximum_boundary_error_message_bytes: u64,
     pub maximum_persistence_head_bytes: u64,

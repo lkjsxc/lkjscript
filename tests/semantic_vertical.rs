@@ -6,14 +6,14 @@ use lkjscript::query::{
     RepairTarget, VisibleCursorPurpose,
 };
 use lkjscript::{
-    ApplyTransactionRequest, Client, DraftSymbol, ErrorCode, ExpressionDraft, ExpressionKindDraft,
-    FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, NodeId, NodeTarget, OperationDraft,
-    ProductFieldDraft, QueryId, Request, RequestId, Response, Revision, RuntimeFieldValue,
-    RuntimeValue, SemanticType, Transaction, TransactionMode, TransactionOp,
-    TransactionResponseSpec, TypeDraft, ValueDraft, WorkspaceId, YieldingBodyDraft,
+    ApplyTransactionRequest, ByteString, Client, DraftSymbol, ErrorCode, ExpressionDraft,
+    ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, NodeId,
+    NodeTarget, OperationDraft, ProductFieldDraft, QueryId, Request, RequestId, Response, Revision,
+    RuntimeFieldValue, RuntimeValue, SemanticType, SumVariantDraft, Transaction, TransactionMode,
+    TransactionOp, TransactionResponseSpec, TypeDraft, ValueDraft, WorkspaceId, YieldingBodyDraft,
 };
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -73,6 +73,166 @@ impl Drop for RunningDaemon {
             let _ = self.child.wait();
         }
     }
+}
+
+fn session_exchange(stdin: &mut impl Write, stdout: &mut impl BufRead, request: &[u8]) -> Vec<u8> {
+    stdin.write_all(request).expect("write session request");
+    stdin.write_all(b"\n").expect("terminate session request");
+    stdin.flush().expect("flush session request");
+    let mut response = Vec::new();
+    let count = stdout
+        .read_until(b'\n', &mut response)
+        .expect("read flushed session response");
+    assert!(count > 0, "session ended before its response");
+    assert_eq!(response.pop(), Some(b'\n'));
+    response
+}
+
+#[test]
+fn cli_session_preserves_one_request_semantics_and_recovers_per_line() {
+    let temporary = tempfile::tempdir().expect("state");
+    let mut session = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "--state",
+            temporary.path().to_str().expect("UTF-8 state"),
+            "session",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn session CLI");
+    let mut stdin = session.stdin.take().expect("session stdin");
+    let mut stdout = BufReader::new(session.stdout.take().expect("session stdout"));
+
+    let unavailable = session_exchange(
+        &mut stdin,
+        &mut stdout,
+        &lkjscript::machine::encode_request(RequestId::new(1), &Request::CreateWorkspace)
+            .expect("request JSON"),
+    );
+    let unavailable: serde_json::Value =
+        serde_json::from_slice(&unavailable).expect("transport boundary JSON");
+    assert_eq!(unavailable["version"], 7);
+    assert_eq!(unavailable["request_id"], 1);
+    assert_eq!(unavailable["error"]["kind"], "transport");
+
+    let mut daemon = RunningDaemon::start(temporary.path());
+    let first = session_exchange(
+        &mut stdin,
+        &mut stdout,
+        &lkjscript::machine::encode_request(RequestId::new(2), &Request::CreateWorkspace)
+            .expect("first request JSON"),
+    );
+    assert!(matches!(
+        lkjscript::machine::decode_response(&first)
+            .expect("first response")
+            .response,
+        Response::WorkspaceCreated(_)
+    ));
+
+    let malformed = session_exchange(&mut stdin, &mut stdout, b"{");
+    let malformed: serde_json::Value =
+        serde_json::from_slice(&malformed).expect("malformed boundary JSON");
+    assert_eq!(malformed["error"]["kind"], "invalid_json");
+    let blank = session_exchange(&mut stdin, &mut stdout, b"");
+    let blank: serde_json::Value = serde_json::from_slice(&blank).expect("blank boundary JSON");
+    assert_eq!(blank["error"]["kind"], "invalid_json");
+
+    let second = session_exchange(
+        &mut stdin,
+        &mut stdout,
+        &lkjscript::machine::encode_request(RequestId::new(3), &Request::CreateWorkspace)
+            .expect("second request JSON"),
+    );
+    let second = lkjscript::machine::decode_response(&second).expect("second response");
+    assert_eq!(second.request_id, RequestId::new(3));
+    assert!(matches!(second.response, Response::WorkspaceCreated(_)));
+
+    let shutdown = session_exchange(
+        &mut stdin,
+        &mut stdout,
+        &lkjscript::machine::encode_request(RequestId::new(4), &Request::Shutdown)
+            .expect("shutdown JSON"),
+    );
+    assert_eq!(
+        lkjscript::machine::decode_response(&shutdown)
+            .expect("shutdown response")
+            .response,
+        Response::Acknowledged
+    );
+    assert!(daemon.child.wait().expect("daemon shutdown wait").success());
+
+    let after_shutdown = session_exchange(
+        &mut stdin,
+        &mut stdout,
+        &lkjscript::machine::encode_request(RequestId::new(5), &Request::CreateWorkspace)
+            .expect("post-shutdown request JSON"),
+    );
+    let after_shutdown: serde_json::Value =
+        serde_json::from_slice(&after_shutdown).expect("post-shutdown boundary JSON");
+    assert_eq!(after_shutdown["request_id"], 5);
+    assert_eq!(after_shutdown["error"]["kind"], "transport");
+
+    drop(stdin);
+    let mut trailing = Vec::new();
+    stdout
+        .read_to_end(&mut trailing)
+        .expect("session clean EOF");
+    assert!(trailing.is_empty());
+    drop(stdout);
+    assert!(session.wait().expect("session exit").success());
+    let mut stderr = Vec::new();
+    session
+        .stderr
+        .take()
+        .expect("session stderr")
+        .read_to_end(&mut stderr)
+        .expect("read session stderr");
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn cli_session_stdout_failure_is_fatal_and_does_not_retry_a_published_mutation() {
+    let temporary = tempfile::tempdir().expect("state");
+    let daemon = RunningDaemon::start(temporary.path());
+    let mut session = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+        .args([
+            "--state",
+            temporary.path().to_str().expect("UTF-8 state"),
+            "session",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn session CLI");
+    drop(session.stdout.take().expect("session stdout"));
+    let mut stdin = session.stdin.take().expect("session stdin");
+    stdin
+        .write_all(
+            &lkjscript::machine::encode_request(RequestId::new(20), &Request::CreateWorkspace)
+                .expect("mutation request"),
+        )
+        .expect("write mutation");
+    stdin.write_all(b"\n").expect("terminate mutation");
+    drop(stdin);
+    let status = session.wait().expect("session output failure exit");
+    assert_eq!(status.code(), Some(4));
+    let mut stderr = String::new();
+    session
+        .stderr
+        .take()
+        .expect("session stderr")
+        .read_to_string(&mut stderr)
+        .expect("read session stderr");
+    assert!(stderr.contains("cannot write session machine response"));
+    let workspaces = fs::read_dir(temporary.path().join("workspaces"))
+        .expect("workspace directory")
+        .collect::<std::io::Result<Vec<_>>>()
+        .expect("workspace entries");
+    assert_eq!(workspaces.len(), 1, "session must not retry the mutation");
+    daemon.shutdown();
 }
 
 #[test]
@@ -234,6 +394,179 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
         panic!("Run response after restart")
     };
     assert_eq!(result.value, expected);
+    restarted.shutdown();
+}
+
+#[test]
+fn real_daemon_persists_managed_bytes_in_products_and_variants_across_restart() {
+    let temporary = tempfile::tempdir().expect("state");
+    let daemon = RunningDaemon::start(temporary.path());
+    let client = daemon.client();
+    let Response::WorkspaceCreated(created) = client
+        .request(RequestId::new(100), &Request::CreateWorkspace)
+        .expect("create workspace")
+    else {
+        panic!("workspace response")
+    };
+    let workspace = created.workspace;
+    let local = |value| NodeTarget::Draft(DraftSymbol::new(&format!("b{value}")));
+    let request = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace,
+            base_revision: Revision::INITIAL,
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::CreatePackage {
+                    symbol: DraftSymbol::new("b1"),
+                    name: "app".into(),
+                },
+                TransactionOp::CreateModule {
+                    symbol: DraftSymbol::new("b2"),
+                    package: local(1),
+                    name: "root".into(),
+                },
+                TransactionOp::CreateSumType {
+                    symbol: DraftSymbol::new("b3"),
+                    module: local(2),
+                    name: "Payload".into(),
+                    variants: vec![
+                        SumVariantDraft {
+                            symbol: DraftSymbol::new("b4"),
+                            name: "empty".into(),
+                            payload: None,
+                        },
+                        SumVariantDraft {
+                            symbol: DraftSymbol::new("b5"),
+                            name: "data".into(),
+                            payload: Some(TypeDraft::Bytes),
+                        },
+                    ],
+                },
+                TransactionOp::CreateProductType {
+                    symbol: DraftSymbol::new("b6"),
+                    module: local(2),
+                    name: "Envelope".into(),
+                    fields: vec![
+                        ProductFieldDraft {
+                            symbol: DraftSymbol::new("b7"),
+                            name: "payload".into(),
+                            ty: TypeDraft::Nominal(local(3)),
+                        },
+                        ProductFieldDraft {
+                            symbol: DraftSymbol::new("b8"),
+                            name: "raw".into(),
+                            ty: TypeDraft::Bytes,
+                        },
+                    ],
+                },
+                TransactionOp::CreateFunction {
+                    symbol: DraftSymbol::new("b9"),
+                    module: local(2),
+                    name: "identity".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        symbol: DraftSymbol::new("b10"),
+                        name: "envelope".into(),
+                        ty: TypeDraft::Nominal(local(6)),
+                    }],
+                    result: TypeDraft::Nominal(local(6)),
+                    body: Some(FunctionBodyDraft {
+                        operations: vec![],
+                        return_value: ValueDraft::FunctionParameter(local(10)),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: local(1),
+                    function: local(9),
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_symbols: (3..=9)
+                .map(|value| DraftSymbol::new(&format!("b{value}")))
+                .collect(),
+        },
+    };
+    let Response::TransactionReceipt(receipt) = client
+        .request(RequestId::new(101), &Request::ApplyTransaction(request))
+        .expect("create managed nominal program")
+    else {
+        panic!("transaction response")
+    };
+    let id = |symbol: u32| {
+        receipt
+            .returned_bindings
+            .iter()
+            .find_map(|(candidate, node)| {
+                (candidate == &DraftSymbol::new(&format!("b{symbol}"))).then_some(*node)
+            })
+            .expect("binding")
+    };
+    let bytes = ByteString::new(vec![0, 1, 2, 0xfe, 0xff]).expect("bounded bytes");
+    let input = RuntimeValue::Product {
+        ty: id(6),
+        fields: vec![
+            RuntimeFieldValue {
+                field: id(8),
+                value: RuntimeValue::Bytes(bytes.clone()),
+            },
+            RuntimeFieldValue {
+                field: id(7),
+                value: RuntimeValue::Sum {
+                    ty: id(3),
+                    variant: id(5),
+                    payload: Some(Box::new(RuntimeValue::Bytes(bytes))),
+                },
+            },
+        ],
+    };
+    let run = |client: &Client, request_id, value: RuntimeValue| {
+        let Response::Run(result) = client
+            .request(
+                RequestId::new(request_id),
+                &Request::Run {
+                    workspace,
+                    revision: Revision::new(1),
+                    entry: id(9),
+                    arguments: vec![value],
+                    policy: lkjscript::RunPolicy {
+                        fuel: 100,
+                        maximum_frames: 10,
+                    },
+                },
+            )
+            .expect("managed nominal Run")
+        else {
+            panic!("Run response")
+        };
+        result.value
+    };
+    let expected = RuntimeValue::Product {
+        ty: id(6),
+        fields: vec![
+            RuntimeFieldValue {
+                field: id(7),
+                value: RuntimeValue::Sum {
+                    ty: id(3),
+                    variant: id(5),
+                    payload: Some(Box::new(RuntimeValue::Bytes(
+                        ByteString::new(vec![0, 1, 2, 0xfe, 0xff]).expect("bounded bytes"),
+                    ))),
+                },
+            },
+            RuntimeFieldValue {
+                field: id(8),
+                value: RuntimeValue::Bytes(
+                    ByteString::new(vec![0, 1, 2, 0xfe, 0xff]).expect("bounded bytes"),
+                ),
+            },
+        ],
+    };
+    assert_eq!(run(&client, 102, input.clone()), expected);
+    daemon.shutdown();
+
+    let restarted = RunningDaemon::start(temporary.path());
+    assert_eq!(run(&restarted.client(), 103, input), expected);
     restarted.shutdown();
 }
 

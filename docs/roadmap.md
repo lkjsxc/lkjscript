@@ -113,16 +113,36 @@ The generic CLI remains the sole retained Codex surface. Reopen adapter work onl
 agent task shows a specific shell or lifecycle failure that a generated, stable tool projection can
 remove without becoming another protocol authority.
 
-## Next gate: one bounded immutable byte-value consumer
+## Complete: bounded immutable bytes and inferred invocation lifetime
 
-Do not begin with a general sequence or universal memory manager. First retain a concrete pure
-application that classifies a bounded binary release manifest through public runtime input and needs
-length, checked indexing or iteration, comparison, a derived typed decision, and explicit bounds
-failure. Then compare a dedicated immutable `bytes` value with a generic sequence and postponement;
-specify canonical JSON encoding, semantic copy/share behavior, logical and physical memory accounting,
-Core IR verification, artifact/schema cutover, and old-revision behavior before implementation. Stop
-again if the application is only echo, the operation set is contrived, or accounting requires a
-runtime rewrite.
+The retained release-manifest classifier justifies one dedicated immutable `bytes` primitive and
+exactly five operations: constant, length, checked index, checked slice, and visible-content equality.
+Protocol/JSON 7 uses one strict unpadded URL-safe base64 spelling; artifact 4 / SPG004 stores raw
+bounded literals; HEAD6 binds the v7 fingerprint domain. Old forms reject directly.
+
+Core types now distinguish zero-cell, immediate, fixed aggregate, and managed-handle storage without
+magic primitive counts. The explicit-frame interpreter keeps immutable backing and canonical
+root-based views in one bounded invocation arena. Opaque nonzero handles are validated, never
+serialized or reused, and are copied through calls and named values without copying payload. Visible
+allocation, retained backing, backing/view objects, cells, fuel, and result materialization remain separate.
+Scope-owned cleanup and owned output conversion cover success, bounds traps, fuel/frame exhaustion,
+and result-policy failure. No reference counting, tracing, borrow syntax, finalizer, or general heap
+was added.
+
+The same-vocabulary CLI session is retained as a process-lifecycle projection. In the measured
+32-request task it reduced client processes from 32 to one while retaining 32 daemon connections and
+byte-identical response shapes; it does not alter daemon framing or silently retry mutations.
+
+## Next gate: a real escaping managed-value consumer
+
+Do not add precise reference counting, ownership IR, or another region solely to generalize bytes.
+First retain a value that must outlive one `Run`, or reproduce a long-running pure workload where
+invocation-wide backing retention is the measured limiting cost. For an escaping cycle-free value,
+compare caller-region placement, exact ownership/borrow inference, and precise reference counting
+against the current safe arena oracle. For retention without escape, compare inferred lexical regions.
+Require exact cleanup, peak-memory, loop/join/call verification, and reversal evidence before either
+mechanism is retained. Real cycles reopen isolated tracing only then; external resources remain a
+separate affine-ownership and effects gate.
 
 ## Later evidence gates
 
