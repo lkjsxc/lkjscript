@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nominal products, closed sums, exhaustive lazy match, and repair via the public CLI."""
+"""Named records, fixed variants, complete lazy handling, and repair via the public CLI."""
 
 import json
 import os
@@ -334,7 +334,7 @@ def run_oracles(workspace, ids):
 
 def main():
     global state
-    with tempfile.TemporaryDirectory(prefix="lkjscript-nominal-match-") as directory:
+    with tempfile.TemporaryDirectory(prefix="lkjscript-named-data-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
         start_daemon()

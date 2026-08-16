@@ -15,8 +15,9 @@ strict JSON CLI projection (optional)
     -> Core IR verifier -> interpreter -> typed response
 ```
 
-The daemon is the only live graph writer. `graph.rs` owns immutable snapshots and retained history;
-`schema.rs` owns closed node contracts and static operation descriptors; `transaction.rs` owns
+The local service process is the only live program-model writer. `graph.rs` owns immutable snapshots
+and saved history; `schema.rs` owns closed node contracts and static operation descriptors;
+`transaction.rs` owns
 staging, transaction-local nominal target resolution, and compact receipts; `validate.rs` owns graph
 acceptance; `type_layout.rs` owns iterative by-value dependency validation and checked derived
 layouts; `diff.rs` owns deterministic change facts/digests; `artifact.rs` owns canonical semantic
@@ -37,6 +38,14 @@ description consume those facts without runtime registration or heap allocation 
 is no second graph, type authority, function body, evaluator, mutable client workspace, or persisted
 compiler representation.
 
+Normative program-model, identity, transaction, history, and artifact facts belong to
+[`docs/spec/semantic-graph.md`](spec/semantic-graph.md). Language and execution semantics belong to
+[`docs/spec/language.md`](spec/language.md); protocol and machine-interface facts belong to
+[`docs/spec/protocol.md`](spec/protocol.md). This document owns component responsibility and trust
+boundaries. [`docs/status.md`](status.md) owns implemented reality,
+[`docs/performance.md`](performance.md) owns measurements, and [`docs/roadmap.md`](roadmap.md) owns
+future evidence gates.
+
 Queries are pure over one retained immutable revision (or two exact revisions for diff). Incoming
 uses/references, dependencies, visible values, legal constructors, blockers, and repair contexts use
 full deterministic scans. Legal-constructor and owner-chain pagination streams and counts candidates
@@ -45,9 +54,10 @@ counting the exact total. Repair context is a bounded composition of typed facts
 ranking. There is deliberately no reverse-reference index, query engine, or cache; full scans
 remain both implementation and oracle until representative repeated cost justifies a narrow index.
 
-The generic CLI is not another service. It strictly decodes one bounded JSON envelope, converts to
-the same closed Rust request, sends one private binary IPC request, and strictly encodes one typed
-response. JSON never becomes semantic state. Local `schema` and daemon `DescribeSchema` derive a
+The generic CLI is not another service. Its RPC command strictly decodes one bounded JSON envelope,
+converts to the same closed Rust request, sends one private binary IPC request, and strictly encodes
+one typed response. JSON never becomes semantic state. The separate local `schema` command and daemon
+`DescribeSchema` derive a
 compact manifest, canonical digest, exact multi-section projections, explicit full projection, and
 matching-digest `unchanged` response from one complete executable description and the protocol's
 canonical schema-facts encoder. Projection is recomputed per request; there is no schema cache,
@@ -80,7 +90,7 @@ Corrupt or ambiguous durable state is rejected, not repaired heuristically.
   request correlation, request-side EOF before dispatch, and response-side EOF before acceptance;
 - **artifact and HEAD bytes:** separate bounded canonical decoders, hashes/checksums, graph/history
   validation, strict trailing-byte policy;
-- **AI proposals:** only closed typed requests reach deterministic validators;
+- **agent proposals:** untrusted model output reaches deterministic validators only as closed typed requests;
 - **runtime:** verified Core IR only, exact revision-bound primitive/product/sum values, bounded
   nesting/items/encoded bytes/result projection, positive bounded fuel and frame policy, and one
   non-recursive interpreter loop over explicit frames; each frame uses a flat cell arena with separate
@@ -89,11 +99,51 @@ Corrupt or ambiguous durable state is rejected, not repaired heuristically.
   charged before work as one base per instruction/transfer plus `max(1,cells)` per logical value copy,
   with full-sum charging for variant canonicalization plus the active payload's logical copy. The 65,536-cell peak covers live arenas plus
   exact argument/edge/return/public-flatten scratch and prospective callee arenas before allocation or
-  copy; no native code, ambient host capability, or foreign boundary.
+  copy; the language runtime generates no program machine code and exposes no implicit host access or
+  foreign program boundary.
 
 User-scalable graph traversals use loops and explicit work collections rather than unbounded native
-recursion. Operational page/frame/context limits protect boundaries and do not constrain semantic
-program size.
+recursion. Operational page/frame/context limits protect specific boundaries; they are resource
+policies, not claims that memory-safe execution is unbounded or that semantic programs are infinite.
+
+## Memory safety and trusted computing base
+
+Memory safety is an enduring requirement. The active Rust package applies
+`unsafe_code = "forbid"` to the library, both binaries, and package tests; the current language has no
+unchecked memory operation, and current decoders, artifact loaders, compiler, and runtime validate
+lengths, counts, conversions, indexes, tags, layouts, and allocation policies before use. Safe Rust
+is an implementation control, not a complete proof. In particular, it does not by itself prevent
+resource exhaustion, process stack exhaustion from an accidentally recursive algorithm, logic
+errors, corrupt external components, or misuse inside trusted dependencies.
+
+The current trusted computing base includes the Rust compiler and standard library, Cargo and build
+tooling, the operating system, filesystem and Unix-socket implementations, CPU-specific code selected
+by dependencies, and every resolved dependency. Direct normal dependencies have these consumers:
+
+- `blake3` provides artifact, change, transaction, and machine-contract hashing;
+- `fs2` provides exclusive workspace/service file locking through platform interfaces;
+- `getrandom` provides workspace identity entropy through operating-system facilities;
+- `serde` and `serde_json` provide the closed strict JSON transport and generated descriptions;
+- `tempfile` is development-only and owns isolated test directories.
+
+The exact resolved `blake3`, `getrandom`, `serde`, and `serde_json` packages include custom build
+targets. Resolved dependency source also contains unsafe or platform-specific implementation code;
+`blake3` ships CPU-specific Rust and native source, while `fs2` and `getrandom` reach operating-system
+interfaces. Fresh builds execute dependency build targets (including the `cc` build dependency used
+by the resolved hashing package); the repository has no project-owned build script. This repository
+does not claim an unsafe-free or native-code-free transitive build. `Cargo.lock`, dependency review,
+boundary tests, and platform scoping are part of the evidence.
+
+Future FFI, generated machine code, native runtime workers, foreign memory, or native dependencies
+would extend the trusted computing base and require an explicit isolated boundary, validation before
+entry, a documented safety invariant, and applicable Miri, sanitizer, fuzz, or differential evidence.
+None exists in the current implementation. The local service is not a sandbox.
+
+Memory safety, resource exhaustion, resource ownership, deterministic cleanup, aliasing,
+concurrency safety, and permission security are separate contracts. Current pure immutable values use
+flat cells and copying. No universal future heap or lifetime-management mechanism has been selected;
+real sharing, cycles, mutation, external resources, latency, memory, concurrency, and agent-authoring
+workloads must drive that choice.
 
 ## Deliberate restraint
 

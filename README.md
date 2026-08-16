@@ -1,74 +1,84 @@
 # lkjscript
 
-`lkjscript` is an experimental, source-free programming system designed primarily for programs built
-and maintained by AI coding agents. Its canonical program is a closed, strongly typed Semantic
-Program Graph owned by one local daemon—not a source file, syntax tree, or arbitrary property graph.
+`lkjscript` is an experimental programming system built primarily for coding agents.
 
-The project exists to test a different programming interface: an agent discovers an exact machine
-schema, proposes bounded typed changes, receives deterministic validation and repair facts, and runs
-immutable retained revisions without generating or round-tripping source text. Humans remain the
-users at the level of intent, review, governance, and operation; they are not expected to hand-author
-the canonical graph.
+Instead of treating source files as the program's source of truth, it stores each program as a
+typed, versioned model managed by a local background service (`lkjscriptd`). An agent discovers the
+operations the service accepts, submits a bounded typed change, receives deterministic validation
+facts, and runs an immutable saved revision.
 
-## What is unusual
+Textual source, diagrams, and other views may exist in the future. They would remain views or import
+formats: program meaning has one authoritative stored form, and normal editing never depends on
+rendering and reparsing text.
+
+The formal name of this model is the **Semantic Program Graph** (SPG). “Graph” describes semantic
+entities and relations such as containment, ordered children, value uses, and direct references. It
+does not require a pointer graph or graph database as the physical storage layout.
+
+## Why build this?
+
+Coding agents usually edit text designed for humans, reconstruct compiler context, and infer whether
+a patch preserves identity and type rules. `lkjscript` tests a different product boundary: the
+service owns stable identities and accepted program state, while agents work through exact typed
+operations and bounded queries.
+
+Humans remain first-class users. They state intent, choose goals, review changes and explanations,
+govern permissions, operate applications, and own product decisions. Coding agents discover the
+machine contract, construct and revise programs, inspect focused context, submit proposals, and
+receive deterministic acceptance or rejection. Removing hand-authored source as the authority does
+not remove human agency.
+
+## The current product path
 
 ```text
-human intent
-    -> AI coding agent
-    -> typed versioned requests
-    -> lkjscriptd (sole graph writer)
-    -> immutable .lkjscript revisions
+human intent and governance
+    -> coding agent
+    -> bounded typed operations and queries
+    -> local service (`lkjscriptd`)
+    -> validated immutable program revisions
     -> verified Core IR -> explicit-frame interpreter
 ```
 
-Names and JSON are presentation or transport. Stable graph identities survive rename and exact
-identity-preserving hole refinement. Nominal products, closed sums, exhaustive match, calls,
-structured conditionals, and counted loops lower directly from an immutable graph snapshot to one
-private verified Core IR. The interpreter uses explicit call frames plus bounded fuel, frame count,
-and aggregate live cells rather than user-depth native recursion.
+Stable Node IDs do not depend on names, source positions, hashes, compiler indexes, or addresses.
+Renaming preserves identity. A typed placeholder can be filled by a contract-defined operation while
+preserving its identity, owner, body position, output, and existing uses. Rejected and validate-only
+proposals publish nothing and consume no persistent IDs.
 
-A human typically asks an AI coding agent to create or change a program, reviews the compact receipt
-and semantic diff, and runs the selected revision. The agent can query bounded repair context instead
-of reconstructing a workspace from source files or requesting a whole-graph dump.
-
-The following is **explanatory pseudocode, not lkjscript source syntax and not canonical data**:
+The following is **explanatory pseudocode, not lkjscript source syntax**:
 
 ```text
-product Reading { value: i64, valid: bool }
-closed sum Input { sample(Reading), missing, override(i64) }
+record Resources { cpu: i64, memory: i64, trusted: bool }
+variant Decision { accept(i64), reject(RejectReason) }
 
-evaluate(input: Input) -> i64:
-  match input exhaustively:
-    sample(reading): if reading.valid then reading.value else 0
-    missing: 0
-    override(value): value
+decide(job, limits):
+    if job exceeds limits: reject(the_reason)
+    otherwise: accept(a_deterministic_score)
 ```
 
-`Reading` and each of its fields have persistent identity. So do `Input` and its three variants.
-Product construction supplies every exact field. Match supplies exactly one arm per variant, binds a
-payload only where declared, and executes only the selected arm.
+The retained [job-admission policy](examples/job-policy/) creates this broader application through
+the public service path. It saves an incomplete revision, rejects an invalid repair, fills a typed
+placeholder without identity churn, runs accepted and rejected outcomes, renames a field, restarts,
+and checks old and current revisions.
 
-The retained [nominal data and match example](examples/nominal-match/) creates this application through
-one typed structured transaction, discovers a `Reading`-typed hole, rejects an invalid product repair,
-refines it without changing identity, exercises exact nominal Run input/output and lazy match, and
-verifies both retained revisions after a daemon restart.
+The focused [named-data example](examples/named-data/) demonstrates immutable records, variants with
+a fixed alternative set, complete lazy handling, named runtime input/output, and placeholder repair.
 
-## How agents interact
+## How coding agents interact
 
-`lkjscriptd` is a private local daemon and the only live writer of durable workspace state. The
-production `lkjscript` CLI accepts one strict version-4 JSON envelope, sends the corresponding closed
-binary request over local Unix IPC, and emits one typed JSON response. JSON is transport only; it is
-never persisted as a second program representation.
+`lkjscriptd` is the only live writer of durable workspace state. For RPC commands, the generic
+`lkjscript` CLI accepts one strict version-4 JSON envelope, sends the corresponding closed binary
+request over private local Unix IPC, and writes one typed JSON response. The separate `schema`
+command derives the machine contract locally from the same executable definitions. JSON is
+transport, not a second program representation.
 
-From the repository root, agents should begin with the compact runtime schema manifest:
+Begin with the compact machine-contract manifest:
 
 ```sh
 cargo run --quiet --locked --bin lkjscript -- schema
 ```
 
-The manifest supplies the canonical digest and seven closed section names. Request only the facts
-needed for a task, request a complete capture explicitly, or avoid rediscovery when a digest is
-already known:
+Request only relevant contract sections, ask for the full description explicitly, or reuse a known
+machine-contract fingerprint:
 
 ```sh
 cargo run --quiet --locked --bin lkjscript -- schema \
@@ -77,70 +87,83 @@ cargo run --quiet --locked --bin lkjscript -- schema --full --pretty
 cargo run --quiet --locked --bin lkjscript -- schema --known-digest DIGEST
 ```
 
-An installed or otherwise absolute `lkjscript` binary path can be used from elsewhere. Local CLI and
-daemon projections derive from one executable description. A matching lowercase 64-hex digest
-returns only `unchanged`; a mismatch returns the requested manifest, sections, or full description.
-Agents can then create structured functions, query exact revision-bound context, refine holes, query
-paginated semantic diffs, and run entries with exact primitive or nominal arguments.
+The local command and service response derive from the same executable contract. A matching digest
+returns the compact `unchanged` result. Exact request, response, strictness, and limit contracts are
+owned by the [protocol specification](docs/spec/protocol.md).
 
 ## What is a `.lkjscript` file?
 
-A `.lkjscript` file is a canonical, checksummed immutable Semantic Program Graph snapshot for one
-workspace revision. It records program meaning, stable identities, ownership, ordered child slots,
-typed operations, and explicit holes. It is not source code, a JSON document, bytecode, or a mutable
-compiler cache. Private dense Core IR is derived again from a selected complete revision and is not
-serialized into the semantic artifact.
+A `.lkjscript` file is an immutable saved revision of the typed program model. It records program
+meaning, stable identities, containment, ordered child slots, typed operations, direct references,
+and typed placeholders. It is not source text, JSON, bytecode, or a mutable compiler cache.
+
+The current artifact has deterministic checked bytes. Private dense Core IR is derived again from a
+selected complete revision and is never stored as program authority.
 
 ## Current implementation
 
-The current Linux x86-64 bootstrap implements:
+The current Linux x86-64 implementation provides:
 
-- durable workspaces with immutable revisions, stable IDs, tombstones, strict artifact format 3,
-  semantic schema `lkjscript-spg003`, and compact `LKJHEAD3` publication;
-- canonical nominal product and closed-sum declarations with stable field/variant identity, atomic
-  structured creation, forward nominal type targets, immutable shape, cycle rejection, derived
-  deterministic layouts, exact product/variant construction and projection, and exhaustive match;
-- direct structured authoring for functions, parameters, calls, `if`, `for_i64`, constants, checked
-  `add_i64`, `lt_i64`, typed holes, yields, and returns;
-- atomic commit and validate-only transactions, bounded receipts, idempotent committed retry, and
-  exact identity-preserving scalar or nominal hole refinement;
-- revision-bound paginated queries, semantic diff, legal constructors, visible values, incoming uses,
-  and bounded nested repair context;
-- exact reachable private Core type/function closure, aggregate instructions, exhaustive variant
-  switches, deterministic layouts, and independent verification;
-- exact revision-bound primitive/product/sum Run values, canonical semantic-ID output, flat-cell
-  aggregate execution, calls, bounded recursion, lazy branches and match arms, loops, checked
-  overflow traps, and exact fuel/frame/live-cell exhaustion;
-- strict generic JSON CLI projection over private version-4 local IPC, persistence, and restart.
+- durable workspaces, immutable revisions, stable IDs, deletion history, atomic publication, restart,
+  and strict corruption rejection;
+- named immutable record types and variant types with a fixed set of alternatives, stable field and
+  variant identity, acyclic by-value layout, field projection, construction, and handling of every
+  variant;
+- structured functions, parameters, identity-targeted calls, conditions, counted loops, constants,
+  checked integer addition and comparison, typed placeholders, yields, and returns;
+- atomic commit and validate-only transactions, selected returned bindings, compact receipts,
+  identity-preserving placeholder repair, paginated semantic diffs, and bounded repair context;
+- direct deterministic lowering from one immutable revision to one private Core IR, independent IR
+  verification, and an explicit-frame interpreter;
+- exact public `unit`, `bool`, `i64`, record, and variant values identified by semantic Node IDs;
+- strict generic JSON projection over private synchronous local IPC;
+- package-wide `unsafe_code = "forbid"` for this Rust package, checked untrusted boundaries, and
+  explicit resource policies.
 
-It does **not** currently provide a source language or parser, public network service, sandbox,
-native backend or JIT, optimizer tiers, package ecosystem, effects or host capabilities, generics,
-ownership-bearing values, managed heap, debugger, daemon
-request concurrency, or a production-ready platform. The daemon relies on local filesystem/socket
-permissions; executed pure programs have no ambient host authority. The supported bootstrap platform
-is Linux x86-64 with a current stable Rust toolchain.
+These are current verified implementation choices, not universal architecture mandates: one Rust
+package, synchronous requests, maps and vectors, full snapshot cloning, full scans, full artifact
+rewrites, flat runtime cells, and interpretation. Future storage, indexing, concurrency, memory
+management, frontends, or acceleration require a real consumer and evidence while preserving one
+program authority and one semantic execution route.
 
-## Try the real product path
+## Current limitations
 
-From the repository root, run the retained end-to-end example:
+There is no source frontend, public network service, sandbox, package ecosystem, effect system or
+host operation, permission-value system, resource-owning value, managed heap, debugger, native
+backend, optimizer tier, daemon request concurrency, or cross-platform support. Programs currently
+operate only on pure primitives and acyclic immutable named values. The local access boundary relies
+on operating-system directory and socket permissions.
+
+The package forbids local unsafe Rust, but this is not a formal proof or a claim that every dependency
+contains no unsafe implementation. Memory safety still trusts the Rust toolchain, standard library,
+operating system, and resolved dependencies. Resource exhaustion is handled by explicit operational
+limits and is distinct from memory unsafety. See [architecture and trust
+boundaries](docs/architecture.md) for the claim boundary.
+
+`lkjscript` is bootstrap research software, not a production-ready platform. Performance and agent
+interaction claims are limited to reproduced observations in [performance
+evidence](docs/performance.md).
+
+## Try the real service path
+
+From the repository root:
 
 ```sh
-./examples/nominal-match/run.sh
+./examples/job-policy/run.sh
+./examples/named-data/run.sh
 ```
 
-From another directory, invoke `run.sh` by its absolute repository path.
+Both scripts build production release binaries, create private temporary state, communicate only
+through the production CLI and service, perform typed shutdown and restart, and remove only state
+they created. They require a current stable Rust toolchain, a POSIX shell, and Python 3.
 
-It builds production release binaries, uses a private temporary state directory, drives typed JSON
-through the generic CLI, prints typed results, shuts down and restarts the daemon, and cleans only its
-own state. It requires a POSIX shell and Python 3 standard library in addition to Rust.
-
-## Project documentation
+## Documentation
 
 - [Language semantics](docs/spec/language.md)
-- [Semantic graph, identity, transactions, and artifacts](docs/spec/semantic-graph.md)
-- [Daemon and machine protocol](docs/spec/protocol.md)
-- [Architecture and trust boundaries](docs/architecture.md)
-- [Implemented status and limitations](docs/status.md)
+- [Program model, identity, transactions, history, and artifacts](docs/spec/semantic-graph.md)
+- [Local service and machine protocol](docs/spec/protocol.md)
+- [Components, trusted computing base, and trust boundaries](docs/architecture.md)
+- [Implemented status and exact limitations](docs/status.md)
 - [Performance and interaction-cost evidence](docs/performance.md)
 - [Evidence-gated roadmap](docs/roadmap.md)
 
@@ -153,8 +176,8 @@ cargo test --workspace --all-targets --all-features --locked
 cargo build --workspace --release --locked
 ```
 
-The larger deterministic malformed-boundary smoke is an ignored release test and is explicitly not
-coverage-guided fuzzing:
+The larger deterministic malformed-boundary smoke is an ignored release test. It is deterministic
+mutation testing, not coverage-guided fuzzing:
 
 ```sh
 LKJSCRIPT_MUTATION_SEED=1 LKJSCRIPT_MUTATION_CASES=10000 \

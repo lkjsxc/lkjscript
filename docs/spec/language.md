@@ -27,8 +27,32 @@ Products lay out fields in declaration order with checked alignment; sums use de
 discriminant, the smallest 1/2/4/8-byte tag width, and maximum payload size/alignment/cells. Layout
 overflow is an explicit derived unrepresentable fact and does not invalidate the graph.
 
-Values currently retain copy semantics. Operation contracts record `copy` operand use;
-ownership-bearing values and borrow rules do not exist yet.
+Current primitive and named immutable values have copy semantics. Operation contracts record `copy`
+operand use. This is the accepted contract for the implemented pure value classes, not a decision
+that future resource-owning or move-only values must copy. No resource ownership or borrow rules are
+currently accepted.
+
+## Memory-safety surface
+
+A valid program in the current language cannot express raw pointers, arbitrary addresses, unchecked
+loads or stores, pointer arithmetic, unchecked casts, arbitrary byte reinterpretation, direct
+foreign-memory access, explicit deallocation, or shared mutable memory. It therefore cannot express
+use-after-free, double free, invalid pointer dereference, out-of-bounds pointer access, type confusion,
+or a data race through an accepted operation. Primitive values and acyclic named immutable values
+are lowered through independently verified layouts; the current interpreter stores them in bounded
+flat cells.
+
+This language-level exclusion is one layer of the memory-safety contract, not a formal proof about
+the implementation or its trusted computing base. Resource exhaustion is distinct: fuel, frames,
+runtime-value depth/items/bytes, and live cells may reject under documented operational policy.
+User-scalable calls, control, aggregate traversal, validation, and decoding must use explicit frames
+or work collections rather than consuming unbounded native stack.
+
+No universal future lifetime-management strategy is selected here. A future heap, shared value,
+cycle, mutable object, foreign value, or external resource must add implemented and verified aliasing,
+lifetime, cleanup, concurrency, and permission semantics appropriate to that data class. Tracing
+collection, reference counting, affine ownership, regions, stable handles, borrowing, copy-on-write,
+and hybrids remain evidence-gated implementation and language-design options.
 
 ## Pure operation contracts
 
@@ -136,5 +160,5 @@ branch, and return charge every transferred value. Variant construction charges 
 neither execution work nor copy fuel. Frame/live-cell exhaustion, fuel exhaustion, and arithmetic
 overflow are distinct structured failures and do not mutate daemon state.
 
-There are no general patterns, generics, effects, capabilities, host operations, ownership-bearing
-values, native execution, or source syntax.
+There are currently no general patterns, generics, effects, permission values, host operations,
+resource-owning or move-only values, native execution, or source syntax.

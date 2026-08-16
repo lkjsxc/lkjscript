@@ -1,63 +1,78 @@
 # Roadmap
 
 Work advances through dependency-closed evidence gates, not compatibility milestones or promises.
+Program meaning must keep one authoritative typed model; implementation mechanisms remain open when
+evidence justifies them.
 
-## Complete: agent-native repair and structured pure programs
+## Complete: agent-facing repair and structured pure programs
 
-The source-free vertical now lets an external agent use the real generic CLI and daemon to:
+An external coding agent can use the real generic CLI and local service to discover the closed
+machine contract; create functions, parameters, calls, conditions, loops, and typed placeholders;
+inspect bounded repair context; reject invalid changes atomically; fill a scalar placeholder without
+identity churn; query saved-revision diffs; run arguments through one verified Core IR and
+explicit-frame interpreter; and continue after restart. Retained measurements cover bytes, round
+trips, artifacts, build/test cost, runtime policy, and deterministic malformed-boundary mutation.
 
-- discover the closed runtime schema and submit one structured transaction for multiple functions,
-  parameters, calls, conditionals, loops, holes, and entry selection;
-- inspect bounded nested repair context, including persistent loop-index and loop-carried identities;
-- reject invalid repairs atomically and refine a scalar hole while preserving identity and uses;
-- query exact retained-revision semantic diffs and execute ordered scalar arguments;
-- run calls, lazy branches, loops, and bounded recursion through one verified Core IR and explicit
-  interpreter frame vector;
-- restart and query both incomplete and repaired immutable revisions with unchanged IDs;
-- observe distinct argument, policy, trap, fuel, and frame failures without losing daemon usability;
-- measure real JSON and binary bytes, round trips, artifact size, CLI wall time, repeated product-path
-  latency, fresh build/test cost, and deterministic malformed-boundary mutation.
+## Complete: named immutable data
 
-The retained representative example and principal integration produce `main() = 5050`,
-`normalize_and_sum(-3) = 0`, and `normalize_and_sum(11) = 55`. Full scans remain the correctness
-oracle and implementation; current measurements do not justify an index, cache, journal, database,
-async runtime, or second executable route. No model tokens were measured and no token claim is made.
+Persistent named records, variants with fixed alternatives, stable members, atomic forward-resolving
+declarations, acyclic by-value layouts, exact construction/projection, complete lazy variant handling,
+named query/repair context, and exact public named Run values work through the same durable service
+and executable route. The focused Reading/Input example remains a public-path oracle. Digest-aware
+manifest/section/full/unchanged machine-contract discovery derives from one executable authority.
 
-## Complete: nominal immutable products, sums, and matching
+## Complete: broader application, plain product model, and safety contract
 
-The nominal gate is verified end to end: persistent product/sum/member identities, atomic
-forward-resolving declaration drafts, immutable shape, by-value cycle rejection, deterministic
-derived layouts, format/protocol/JSON cutovers, exact aggregate operations, exhaustive lazy match,
-nominal query/repair context, one verified aggregate Core/interpreter route, and exact public nominal
-Run values. Digest-aware schema manifest/section/full/unchanged projections derive from one executable
-authority. The retained Reading/Input application proves structured creation, invalid and valid
-identity-preserving repair, semantic diff, all sum arms, nominal Run input/output, selected versus
-unselected overflow, restart, and retained revisions through the real daemon and generic CLI.
+The retained job-admission policy uses only the accepted language and public production path. It
+combines seven named types and seven functions with nested data, calls, conditions, a counted loop,
+nested complete variant handling, a typed placeholder, rejected and valid repair, exact semantic
+diff, accepted and domain-rejected results, presentation-only rename, old revisions, and restart. It
+proved no missing language operation.
 
-Measurements retain schema and application bytes, round trips, artifacts and HEAD, layout,
-compile/execute time, repeated request distributions, fresh build/test cost, and boundary/runtime
-evidence. Full scans remain the correctness oracle; this evidence does not justify an index, cache,
-journal, database, async runtime, or second executable route. No model telemetry was collected and no
-token claim is made.
+Human-facing documentation now explains the positive architecture before the formal Semantic Program
+Graph term: coding agents edit a typed, versioned program model through a local service, and optional
+future text cannot become another source of truth. Current implementation baselines are separated
+from enduring invariants and evidence-gated choices.
 
-## Next gate: broader application and agent-cost evidence
+The memory-safety contract now distinguishes accepted language operations, the package-wide unsafe
+Rust prohibition, the trusted computing base, resource limits, stack safety, resource ownership,
+cleanup, aliasing, concurrency, and permission security. The current flat-cell runtime remains a
+verified baseline; no universal future memory-management strategy was selected.
 
-Before adding new language semantics, exercise the existing nominal pure system on a broader
-representative application authored through the machine interface. Measure model-facing request and
-response bytes, round trips, repeated schema discovery, repair attempts, selected bindings, elapsed
-workflow time, artifact growth, compile/execute cost, and actual model telemetry when available.
-Use that evidence to identify the smallest missing capability or interaction bottleneck. Keep the
-full-scan implementation as oracle and do not add generics, effects, capabilities, ownership, a heap,
-native code, package infrastructure, indexes, or caches merely to anticipate that workload.
+The complete job workflow measures every generic-CLI request, JSON and binary bytes, round trips,
+selected bindings, rejected proposals, artifact growth, startup/restart, compile/interpreter
+observations, and active repository instruction/document size. Exact observations belong to
+[`docs/performance.md`](performance.md). No token claim is inferred from bytes.
+
+## Current decision: retain machine-contract sections
+
+The job task still obtains six existing task-relevant sections. A new task-scoped projection was
+investigated but not selected. Transitive named-definition closure would require descriptor dependency
+machinery; narrower feature groups or exact variant selection would add a second discovery vocabulary
+and broad protocol/test cutover while the job workflow uses most request, transaction, expression,
+query, runtime, error, and limit families. The known-fingerprint path already makes repeat discovery
+compact; exact bytes remain in performance evidence.
+
+Keep the current manifest, seven sections, explicit full result, and unchanged result until a real
+agent task demonstrates repeated over-fetch and a self-contained derived projection removes at least
+a material share without creating parallel schema truth. No prototype code remains.
+
+## Next gate: controlled coding-agent task evidence
+
+Run a controlled authorized coding agent against the current public machine interface and the
+job-policy task (or an equally broad current-semantics change). Capture the exact task boundary,
+contract discovery, tool calls, proposals, retries, success oracle, elapsed time, and provider-reported
+tokens/cost only when genuinely available. Compare failure and repeated-discovery evidence, not model
+marketing. Use the result to choose the smallest interface correction, if any.
+
+A task-scoped machine-contract projection, smaller structured authoring payload, or more focused
+repair context is eligible only when this evidence identifies it as material. Do not add model
+orchestration to the service.
 
 ## Later evidence gates
 
-Explicit generics follow real repeated nominal-type consumers. Pure semantics precede effects and
-exact daemon-granted capabilities. Real external resources precede ownership, borrow, cleanup, and
-memory strategy. Useful libraries precede multi-package dependency closure. Repeated measured work
-precedes incremental validation, indexes, caches, journals, or databases. Stable representative
-interpreter workloads precede evaluation of a mature native backend. Isolation and daemon
-concurrency follow real workload pressure.
-
-Native optimization, runtime cells, ambient host I/O, package networks, public networking,
-cross-platform expansion, and self-hosting are not current work.
+Real application needs may justify a pure collection, effects with explicit permission values,
+resource-owning values, packages, large-value memory strategy, a narrow query index, persistence
+compaction, concurrent request handling, process isolation, or a mature native acceleration tier.
+None is preselected. Each gate needs a named consumer, safety and durability obligations, before/after
+evidence, one preserved semantic route, and a reversal condition.

@@ -3,7 +3,9 @@
 ## Authority and closed schema
 
 The Semantic Program Graph (SPG) is the only mutable program authority, and `lkjscriptd` is its
-only live writer. A published `Snapshot` is immutable and revision-labelled. Canonical semantic
+only live writer. The SPG specifies typed semantic entities, containment, ordering, and references;
+it does not require a generic property graph, pointer graph, or graph database as the physical
+storage layout. A published `Snapshot` is immutable and revision-labelled. Authoritative semantic
 state is workspace identity, stable node identity, ownership and ordered child slots, typed
 operation data, direct value references, allocator state, tombstones, revision, and selected
 package entry. Names are presentation and lookup metadata stored in the snapshot; they are not
@@ -42,9 +44,12 @@ addresses never determine identity. A `LocalHandle` is a u32 transaction-local s
 enters semantic state.
 
 Allocation is staged. A rejected or validate-only request changes no published allocator state.
-Deletion tombstones every owned ID, retained snapshots preserve deleted nodes, and later nodes
-never reuse tombstones. Every serial below the allocator frontier is live or tombstoned. Adjacent
-history requires stable root identity, monotonic allocation and tombstones, no resurrection, stable
+Persistent identity non-reuse is the semantic contract: a deleted serial can never identify a later
+entity. Artifact format 3 currently proves this by physically retaining deletion tombstones and all
+saved snapshots; that representation and full-retention strategy are not themselves a mandate for
+future physical storage. Under the active format, every serial below the allocator frontier is live
+or tombstoned. Adjacent history requires stable root identity, monotonic allocation and tombstones,
+no resurrection, stable
 kind/owner/child continuity for surviving nodes, unchanged relative order for surviving body
 children, and no clearing of a selected entry from a surviving package. `SetEntryFunction` may
 select or replace an entry. Rename and a compatible same-constructor scalar/operand update preserve identity. A surviving

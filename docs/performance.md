@@ -3,6 +3,188 @@
 No performance leadership claim is made. These are bootstrap baselines whose purpose is to expose
 costs before optimization.
 
+## Plain-language and job-policy campaign
+
+### Environment and method
+
+Measurements were retained on 2026-08-16 from the dirty campaign worktree based on
+`456ef91b692336ce0e8eaafc49bdf61d84a2db44` on `main`: `devbox`, Linux
+7.0.0-29-generic x86-64, AMD Ryzen 9 9955HX, 20 logical CPUs visible, 32 GiB memory,
+`rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The cgroup memory ceiling was
+34,359,738,368 B, CPU quota was unlimited, shell stack limit was 8 MiB, and virtual memory was
+unlimited. Product-path measurements used optimized release binaries. `/usr/bin/time` remains
+unavailable, so maximum RSS is unmeasured. The deterministic job-policy driver invokes no model, so
+its request bytes are not tokens or API cost. Supplemental telemetry for the parent coding-agent
+campaign session is reported separately below.
+
+The retained public-path measurement is:
+
+```sh
+cargo test --release --test job_policy_json \
+  job_policy_agent_interaction_cost_measurement --locked -- \
+  --ignored --nocapture --test-threads=1
+```
+
+It invokes `examples/job-policy/driver.py`, which starts the real service and launches the strict
+generic CLI once per request. Compact JSON request bytes exclude a newline; JSON stdout bytes include
+the production newline. Binary columns use the production framed request/response codecs. Wall time
+uses `time.monotonic_ns` around each CLI process and includes local IPC and service work. Typed
+shutdowns are lifecycle operations and excluded from the 44 agent-workflow totals. The retained test
+prints every row as one machine-readable `JOB_POLICY_AGENT_COST` record.
+
+### Complete job-policy interaction observation
+
+| Purpose | Outcome / returned items | JSON request | JSON stdout | Binary request | Binary response | CLI + service wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| schema manifest | success / 7 | 107 B | 814 B | 17 B | 736 B | 2,327,648 ns |
+| task contract sections | success / 6 | 269 B | 86,084 B | 31 B | 86,006 B | 2,504,260 ns |
+| known fingerprint unchanged | success / 1 | 185 B | 180 B | 49 B | 48 B | 1,840,441 ns |
+| workspace creation | success / 1 | 66 B | 322 B | 15 B | 120 B | 10,873,952 ns |
+| job policy incomplete creation | success / 1; 32 bindings | 19,274 B | 1,926 B | 3,131 B | 1,050 B | 9,825,019 ns |
+| score repair context | success / 1 | 373 B | 12,054 B | 98 B | 3,993 B | 714,694 ns |
+| allocator probe before invalid repair | success / 1; 1 binding | 305 B | 531 B | 90 B | 182 B | 773,034 ns |
+| invalid score repair | expected `type_mismatch` / 1 | 588 B | 352 B | 137 B | 161 B | 438,946 ns |
+| allocator probe after invalid repair | success / 1; 1 binding | 305 B | 531 B | 90 B | 182 B | 655,082 ns |
+| workspace after invalid repair | success / 1 | 189 B | 481 B | 56 B | 162 B | 333,617 ns |
+| incomplete main run | expected `compile_incomplete` / 1 | 233 B | 340 B | 83 B | 170 B | 350,910 ns |
+| valid identity preserving score repair | success / 1 | 630 B | 486 B | 138 B | 154 B | 8,279,082 ns |
+| post repair identity context | success / 4 | 575 B | 5,030 B | 168 B | 1,643 B | 910,502 ns |
+| refinement semantic diff | success / 1 | 223 B | 1,322 B | 69 B | 360 B | 541,659 ns |
+| revision two main case h | success / 1 | 233 B | 282 B | 83 B | 90 B | 699,726 ns |
+| revision two case a linux check | success / 1 | 1,296 B | 282 B | 512 B | 90 B | 654,782 ns |
+| revision two case b wasm build | success / 1 | 1,296 B | 281 B | 512 B | 90 B | 570,613 ns |
+| revision two case c cpu rejection | success / 1 | 1,296 B | 372 B | 512 B | 131 B | 551,878 ns |
+| revision two case d memory rejection | success / 1 | 1,297 B | 372 B | 512 B | 131 B | 518,996 ns |
+| revision two case e target rejection | success / 1 | 1,296 B | 372 B | 512 B | 131 B | 518,385 ns |
+| revision two case f untrusted release | success / 1 | 1,297 B | 372 B | 512 B | 131 B | 504,589 ns |
+| revision two case g trusted release | success / 1 | 1,296 B | 281 B | 512 B | 90 B | 508,527 ns |
+| revision two lazy unsupported target | success / 1 | 1,303 B | 372 B | 512 B | 131 B | 496,304 ns |
+| revision two lazy untrusted release | success / 1 | 1,304 B | 372 B | 512 B | 131 B | 506,734 ns |
+| runtime named type context | success / 7 | 1,009 B | 6,143 B | 313 B | 2,530 B | 500,662 ns |
+| resources memory display rename | success / 1 | 349 B | 485 B | 103 B | 154 B | 8,509,084 ns |
+| rename diff and named type | success / 2 | 347 B | 1,242 B | 107 B | 505 B | 627,530 ns |
+| renamed revision main | success / 1 | 233 B | 282 B | 83 B | 90 B | 877,190 ns |
+| restart revision one identities | success / 32 | 3,468 B | 12,666 B | 1,135 B | 4,204 B | 516,832 ns |
+| restart revision two identities | success / 32 | 3,468 B | 12,665 B | 1,135 B | 4,204 B | 441,270 ns |
+| restart revision three identities | success / 32 | 3,481 B | 12,684 B | 1,135 B | 4,210 B | 457,220 ns |
+| restart incomplete revision name | success / 1 | 268 B | 888 B | 85 B | 356 B | 380,986 ns |
+| restart repaired revision name | success / 1 | 268 B | 888 B | 85 B | 356 B | 397,778 ns |
+| restart renamed revision name | success / 1 | 268 B | 894 B | 85 B | 362 B | 362,272 ns |
+| restart incomplete main | expected `compile_incomplete` / 1 | 233 B | 340 B | 83 B | 170 B | 576,524 ns |
+| restart repaired main | success / 1 | 233 B | 282 B | 83 B | 90 B | 905,453 ns |
+| restart current case a linux check | success / 1 | 1,296 B | 282 B | 512 B | 90 B | 675,600 ns |
+| restart current case b wasm build | success / 1 | 1,296 B | 282 B | 512 B | 90 B | 841,803 ns |
+| restart current case c cpu rejection | success / 1 | 1,296 B | 372 B | 512 B | 131 B | 592,064 ns |
+| restart current case d memory rejection | success / 1 | 1,297 B | 374 B | 512 B | 131 B | 884,564 ns |
+| restart current case e target rejection | success / 1 | 1,296 B | 373 B | 512 B | 131 B | 859,677 ns |
+| restart current case f untrusted release | success / 1 | 1,297 B | 374 B | 512 B | 131 B | 757,675 ns |
+| restart current case g trusted release | success / 1 | 1,296 B | 282 B | 512 B | 90 B | 648,540 ns |
+| restart current main case h | success / 1 | 233 B | 281 B | 83 B | 90 B | 529,656 ns |
+| **agent-workflow total** | **44 launches/round trips; 1 rejected proposal** | **58,168 B** | **165,890 B** | **16,962 B** | **114,228 B** | **66,241,760 ns** |
+
+The two allocation probes are successful validate-only requests around the one rejected semantic
+repair. Their predicted revision, hash, created count, and selected Node ID are identical. The two
+`compile_incomplete` Runs are expected execution attempts, not rejected mutation proposals. Two typed
+shutdowns add two lifecycle CLI launches but are excluded from the totals above. Two additional
+1,000-fuel Runs use `cpu=100000` on unsupported-target and untrusted-release inputs. Both return the
+expected rejection; accidentally entering `triangular(100000)` would exhaust fuel, so these are
+public-path evidence that unselected match and condition work remains lazy.
+
+The creation request has 17 public transaction operations, 110 explicit handles, and 32 selected
+returned bindings. It creates 188 nodes, of which 78 are implied by structured expansion; the saved
+model has 189 nodes including the initial workspace root, seven named declarations, seven functions,
+and 87 canonical operation/terminator nodes. Revision artifacts are 8,354 B incomplete, 8,373 B
+repaired, and 8,379 B renamed; `LKJHEAD3` is 1,164 B. One cold readiness observation was 16,058,182 ns
+and one restart readiness observation was 6,437,077 ns.
+
+The revision-2 main Run returned exact `Decision.accept(25)` and observed 127,830 ns for
+validation/lowering/Core IR verification plus 24,075 ns for interpretation. The seven direct Cases
+A-G together observed 561,977 ns compile and 77,989 ns interpretation. Eight current-revision Runs
+after restart together observed 1,201,749 ns compile and 182,454 ns interpretation. These are one
+workflow's unequal-work sums, not distributions or runtime speed comparisons.
+
+### Machine-contract investigation
+
+Program meaning, protocol, and executable descriptors did not change, so the active digest remains
+`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`, protocol/JSON remain version 4,
+and artifact format 3 / `lkjscript-spg003` / `LKJHEAD3` remain unchanged. The direct compact-result
+projection measurements remain 739 B manifest, 86,009 B for the six selected task sections, 126,888
+B full, and 105 B unchanged (all without the local CLI newline).
+
+The six-section response is material, but no public replacement was selected. A transitive
+named-definition closure would first require dependency metadata across the executable descriptor.
+Narrower feature groups or exact variant selection would add a second discovery vocabulary and a
+protocol/CLI/test cutover while this application uses workspace lifecycle, declarations,
+transactions, every current expression family except scalar unit, queries/repair/diff, named runtime
+values, errors, and limits. The known-fingerprint response already removes repeat detail discovery.
+There is no dead prototype. Revisit when controlled agent tasks prove repeated over-fetch and a
+self-contained derived projection can remove material bytes with less contract surface than it adds.
+
+### Repository instruction and documentation cost
+
+The audited root policy at `456ef91b` was 50,989 B, 1,409 lines, 7,126 whitespace-delimited words,
+and 40 second-level sections. The supplied steady-state replacement is 40,812 B, 566 lines, 5,384
+words, and 30 second-level sections: 10,177 B, 843 lines, 1,742 words, and 10 sections fewer. These
+are direct file measurements, not token estimates.
+
+For the active task-reading set—root policy, README, status, roadmap, and all three specifications—the
+audited checkout total was 113,289 B / 2,287 lines / 15,334 words. The final set is 105,520 B / 1,513
+lines / 13,940 words. The product explanation and safety contract grew while duplicated policy was
+removed; the net change is -7,769 B, -774 lines, and -1,394 words. Files use LF endings. Architecture
+and performance remain linked fact owners rather than required wholesale task preamble.
+
+### Supplemental coding-agent session telemetry
+
+The active harness exposed provider-reported telemetry for this campaign's parent coding-agent
+session. The task boundary is the user campaign prompt in this session. At the retained cutoff
+`2026-08-15T17:37:07.377Z` (before the final completion response), `openai-codex/gpt-5.6-sol` with
+reported reasoning level `max` had 141 assistant provider responses and 167 tool calls over
+2,369.301 s wall time. Provider usage fields were:
+
+| Provider field | Reported value |
+| --- | ---: |
+| uncached input tokens | 473,353 |
+| cached input tokens | 22,298,624 |
+| cache-write tokens | 0 |
+| output tokens | 74,261 |
+| reasoning tokens (reported subset) | 25,389 |
+| total tokens | 22,846,238 |
+| input cost | $2.366765 |
+| cached-input cost | $11.149312 |
+| output cost | $2.227830 |
+| total cost | $15.743907 |
+
+No explicit provider retry count was surfaced. These values exclude separate reviewer-subagent
+sessions and the final response, and they do not isolate model quality from tools, repository state,
+prompt size, or orchestration. They are direct provider telemetry, not a byte conversion and not a
+model comparison. The deterministic job-policy transport measurement remains independent of this
+model session.
+
+### Fresh build, test, and binaries
+
+Fresh target directories under `/tmp` were newly allocated and removed only after recording sizes:
+
+```sh
+TIMEFORMAT='fresh_release_build_elapsed_s=%3R'
+time CARGO_TARGET_DIR="$FRESH_RELEASE_TARGET" \
+  cargo build --workspace --release --locked
+
+time CARGO_TARGET_DIR="$FRESH_TEST_TARGET" \
+  cargo test --workspace --all-targets --all-features --locked
+```
+
+The final fresh release build took 58.545 s and occupied 52,207 KiB. Release binaries are unchanged at
+3,779,472 B (`lkjscript`) and 2,245,680 B (`lkjscriptd`). The separate final fresh full test took
+19.396 s, occupied 439,411 KiB, and reported 167 active passes with nine ignored manual
+measurements/smokes.
+The new active job-policy test itself completed in 0.19 s in that debug-profile boundary. These are
+single build observations; no regression ratio is claimed against an unequal prior checkout.
+
+`cargo miri --version` was attempted and failed because the Miri component is unavailable for the
+installed `stable-x86_64-unknown-linux-gnu` toolchain. No nightly configuration was added. A source
+audit found no package `unsafe` block, unsafe-code lint exception, foreign linkage, or project
+`build.rs`; dependency internals remain part of the trusted computing base described in architecture.
+
 ## Nominal-data campaign environment
 
 Measurements were retained on 2026-08-15 from the dirty campaign working tree based on starting
@@ -153,7 +335,7 @@ below, these are accepted capability/build regressions, not equal-work performan
 The full boundary specifically passed malformed Core aggregate/switch rejection, exhaustive selected-arm
 execution, strict malformed JSON and protocol rejection, exact aggregate copy fuel, selected-large-arm
 fuel exhaustion, entry/callee/live-cell exhaustion, nominal restart, exact cycle-participant
-selection, and iterative deep match/type traversal tests. `examples/nominal-match/run.sh` additionally
+selection, and iterative deep match/type traversal tests. `examples/named-data/run.sh` additionally
 proves an overflowing arm is lazy when
 unselected and traps when selected through the public Run path. The final deterministic boundary command was:
 

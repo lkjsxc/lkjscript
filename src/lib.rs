@@ -2,7 +2,7 @@
 // Public typed diagnostics intentionally remain rich values at every deterministic boundary.
 #![allow(clippy::result_large_err)]
 
-//! Source-free semantic graph kernel, durable daemon, compiler, and interpreter.
+//! A programming system for coding agents that validates, saves, compiles, and runs typed program revisions.
 
 pub mod artifact;
 mod codec;
